@@ -403,3 +403,125 @@ The current install already has a signed-in sidebar, so most of §2 is verified.
 8. On the Chromium side: with Arc quit, copy `User Data/Default/Favicons` and dump its schema (it was locked in this session), and confirm whether an `Extensions/` folder appears once an unpacked extension exists.
 
 Until items 1–3 are done, the importer should ship with archive, Boost, and multi-profile support disabled and visibly reported as "not imported", not silently skipped.
+
+---
+
+## Archive and session files (observed)
+
+Source: read-only copies of `~/Library/Application Support/Arc/*.json`. Before: `.re/runtime/appsupport/*.json` (copied 21:07 PDT). After: `.re/runtime/appsupport/session1/*.json` (copied 21:35 PDT), right after a live UI session on 2026-10-24, 21:30–21:35 PDT (frames: `.re/runtime/sessions/20261024-213009-session-full/`). Tools: `python3 -I analysis/schema.py <file>`, `python3 -I analysis/redact.py <file>`, and our cross-file scripts `.re/runtime/analysis-20261024/schema/scripts/{archive,session,sbdiff,more,win,tla,theme,cbr,tabsids,order}.py` (outputs in `out-*.txt` next to them). Binary names: `strings -a .re/bin/Arc-arm64` → `.re/runtime/analysis-20261024/schema/arc-strings.txt`. Marks: **confirmed (disk)**, **confirmed (binary)**, **guess**. "Space 1–4" = position in `sidebar.containers[1].spaces`. Space 4 is the untitled default Space.
+
+Time check: Storable `Time` + 978307200 = Unix seconds (§2). Example: `archivedAt` 814595546.33 → 2026-10-25 04:32:26 UTC = 21:32:26 PDT. Every time set during the session lands in 21:30:27–21:34:57 PDT (**confirmed (disk)**, `out-archive.txt`, `out-win.txt`).
+
+### A. `StorableArchiveItems.json` (new, 2468 bytes, 3 entries)
+
+```ts
+// confirmed (disk) shape. Enum lists marked "binary" come from arc-strings.txt lines 233651–233665.
+interface StorableArchivedItems {        // type name confirmed (binary)
+  version: 1;
+  items: FlatArray<ArchivedItem>;         // [itemId, entry, …]; key == entry.sidebarItem.id in 3/3
+}
+interface ArchivedItem {                  // all 4 keys present in 3/3
+  sidebarItem: SidebarItem;               // full §2.2 item, same 8 keys
+  reason: ArchiveReason;                  // plain string (raw-value enum), NOT a single-key object
+  archivedAt: Time;
+  source: ArchivedItemSource;             // single-key enum object
+}
+type ArchiveReason = "manual"             // 3 of 3 on disk
+  | "auto" | "clearButton" | "clearTabGroup";       // binary only
+type ArchivedItemSource =
+  | { space: { _0: string } }             // 3 of 3; _0 = a Space id
+  | { littleArc: unknown } | { standaloneSidebar: unknown } | { unknown: unknown }; // binary only, payloads unknown
+```
+
+- Full tab snapshot: yes. `data.tab.savedURL` and `savedTitle` are in 3/3 entries. `title` null 3/3, `isUnread` false 3/3, `childrenIds` [] 3/3. Optional tab keys vary as in the sidebar: `timeLastActiveAt` 2/3, `savedMuteStatus` 1/3, `referrerID` 1/3, `activeTabBeforeCreationID` 1/3. One entry has only `savedURL` + `savedTitle`.
+- `sidebarItem.parentID` is null in 3/3, even for the entry that had a parent before. The old container is lost. Only `source` says where the item lived.
+- No snapshot image or favicon field. guess: these live in `ArchiveSnapshotCache/` and `ArchiveItemsFaviconCache/`, keyed by item id (strings `ArchiveSnapshotCache`, `ArchiveItemsFaviconCache`, `faviconItemID` sit next to the archive types).
+- §2.7 guessed a key `archiveReason`. The stored key is `reason`. The strings `archiveReason`, `autoArchived`, `manuallyArchived` exist in the binary but not in the file. guess: they are a close-action parameter and Archive-UI filter names (arc-strings.txt lines 244486, 245275).
+- `spaceID_legacy` follows `items` in the same string run. guess: an older encoding of `source`. Parse leniently.
+
+ID links (`archive.py`, matched by exact id):
+
+| Entry | Key | Before sidebar | After sidebar | Notes |
+|---|---|---|---|---|
+| 1 | seeded `sameEnergy` | yes, child of the `topApps` (Favorites) container | gone | `createdAt` and `savedURL` equal the before item. Only `parentID` (→ null) and `tab.timeLastActiveAt` differ. |
+| 2 | UUID | no | no | Created 21:32:57, archived 21:33:00. `referrerID` = `activeTabBeforeCreationID` = seeded tab `importLoginsAndBookmarks` (in both sidebars). |
+| 3 | UUID | no | no | Created and archived 21:33:24. No `timeLastActiveAt`. |
+
+- Result: 1 of 3 ids matched a before-sidebar item. 0 of 3 match the after sidebar, after `sidebarSyncState.items`, `StorableWindows.json`, or `StorableSessionRestorationData.json`.
+- `source.space._0` = `thebrowser.company.defaultPersonalSpaceID` in 3/3. It is a valid Space id in both files. Entry 1 came from Favorites, not a Space container, yet its source is a Space. guess: `source` records the window's focused Space at archive time. Capture frame `0081-213221` shows the main window on Space 4 from 21:32:21.
+- `originatingDevice`: null on the seeded item. Entries 2–3 carry the same device UUID as all 8 items created in this session.
+- Reasons. All 3 are `manual`. guess: `manual` = the user closed or removed the item (entries 2–3 look like short-lived Peek or Little Arc tabs); `auto` = the auto-archive timer; `clearButton` = Today's "Clear"; `clearTabGroup` = clearing one group. Only `manual` is verified.
+- Archived ids stay referenced. The first new Today tab's `activeTabBeforeCreationID` = the archived `sameEnergy` id (`out-sbdiff.txt`). Importer: tolerate dangling ids.
+- `StorableArchive.json` is byte-identical before and after. `autoArchiveStartTime` = 20:54:22 PDT, before the session.
+
+Importer: entries = odd indices of `items`. Display title = `sidebarItem.title ?? data.tab.savedTitle`. Restore target = `source.space._0`, else the first Space. Sort by `archivedAt`. Skip unknown `reason` and `source` cases; do not fail.
+
+### B. `StorableSessionRestorationData.json` (new, 3894 bytes)
+
+```ts
+// confirmed (disk)
+interface StorableSessionRestorationData {
+  version: 1;
+  mapping: { keysToValues: (RestorationKey | number)[] }; // alternating [key, int, …]; 10 pairs; keys are OBJECTS
+}
+interface RestorationKey {
+  browser: {
+    windowID: string;                     // = StorableWindows.windows[].id (10/10, one window)
+    contextID: {
+      contextType: { normal: {} };        // 10/10; "incognito" is the other case in the same string run (binary)
+      profile: ProfileRef;                // { default: true } 10/10
+    };
+  };
+  itemId: string;                         // = an after-sidebar item id (10/10, all `tab` items)
+}
+```
+
+- `itemId` targets (`session.py`): 6 new Today tabs of Space 1, 1 pinned tab of Space 1, the new Favorite copy (D), and 2 seeded tabs in the Arc Basics folder (`arcMaxTutorial`, `importLoginsAndBookmarks`). 3 of 10 existed before the session. 0 are archived. 9 of 10 also appear in the window's `itemLastActiveDates`.
+- Values: integers 541791020–541791031, 10 distinct, gaps at …021 and …029. They are not times. guess (strong): Chromium `SessionID`s of each item's WebContents. Evidence: `User Data/Default/Sessions/Tabs_<µs since 1601>` (SNSS header, Chromium's closed-tab store, file time 21:32:28 PDT) holds the int32 values …029, …035, …037 and none of the 10 mapped values (`tabsids.py`, counts only, nothing decoded). The binary logs "Web content came to SessionRestorationBrowserDelegate that doesn't have window id set. It would be impossible to bind later…" (**confirmed (binary)**). So the file binds Chromium tabs to Arc sidebar items per window and profile.
+- No blob, base64, or Chromium session bytes in this file. Chromium's own files exist: `Sessions/Tabs_*` 4865 B and `Sessions_Encrypted/Tabs_*` 4985 B, both SNSS. There is no `Session_*` file. guess: Arc restores windows from its own Storable files and uses Chromium only for closed-tab history. Not decoded.
+- Importer: ignore. The ints are Chromium runtime ids and mean nothing to Open.
+
+### C. `StorableMembershipCard.json` (new, 242 bytes)
+
+```ts
+// confirmed (disk); values withheld
+{ version: 1; title: string; shapeName: string; paletteNumber: number; backgroundBlobInfo: number[] /* 15 small ints */ }
+```
+
+Binary: `ARC/Sources/MembershipCard/StorableMembershipCardState+Dependencies.swift`, `AnimatingCardBlob`, "One year with Arc!" (**confirmed (binary)**). guess: the cosmetic Arc member card. `title` may be personal. Out of scope. Never import or log.
+
+### D. What changed between before and after (structure only)
+
+`StorableSidebar.json`, 319310 → 374405 bytes (`sbdiff.py`, `more.py`, `order.py`):
+
+- Unchanged: top-level keys, `containers` keys, Space ids, Space order, the favorites container id.
+- Items by `data` kind: tab 33 → 39, welcomeToArc 1 → 2, itemContainer 9 → 9, list 1 → 1, splitView 1 → 1, easel 1 → 1. Total 46 → 53: 8 new, 1 removed (archived `sameEnergy`, see A).
+- Section children, pinned / today: Space 1 10/0 → 10/6. Space 2 9/1 → 9/1. Space 3 2/0 → 2/0. Space 4 1/0 → 1/1. Favorites 6 → 6.
+- New Today tabs: 6 in Space 1, created 21:31:15–21:31:54. Each `activeTabBeforeCreationID` = the tab created just before it, a chain. The first one points to the then-active favorite. None has `referrerID`.
+- Favorite swap: the seeded favorite in slot 6 was archived. A new UUID tab with the same `savedURL` and `savedTitle` took slot 6 (created 21:32:21, no `timeLastActiveAt`).
+- In the same second, `thebrowser.company.arcGettingStarted` (`welcomeToArc`) moved from the Arc Basics folder to Space 4's today container (`parentID` changed). A new UUID `welcomeToArc` item with the same `tabType: "legacy"` took its index 0 in the folder. guess: the first visit to Space 4 forks some seeded items into UUID copies. Other seeded tabs (`arcMaxTutorial`, `importLoginsAndBookmarks`) were opened and kept their ids.
+- Edits on existing items: `timeLastActiveAt` added or changed on 4 items. One seeded tab's `savedTitle` changed. No new keys inside any `data` kind. No new `data` cases.
+- Space 4 gained `customInfo.windowTheme` (it had only `iconType`). New enum cases vs runtime-observations §3.3: background style `blendedSingleColor: { _0: { color: Color; modifiers: { overlay: "grain"; noiseFactor; intensityFactor }; translucencyStyle: "light" } }` (one color, no `baseColors`, `overlayColors`, or `wheel`), and `contentOverBackgroundAppearance: "dark"` (`out-theme.txt`; string `blendedSingleColor` **confirmed (binary)**). guess: the user picked a color in the theme editor.
+- Split view item unchanged (`itemWidthFactors: []`, `focusItemID: null`). No new `splitView` item. guess: a Split View made in the session was not kept.
+- `sidebarSyncState.items` 92 → 106 array entries (53 items, mirrors the sidebar). `lastSuccessfulSyncDate` → 21:34:57 PDT. `firebaseSyncState` same shape (`syncHealthStatus: {off: {}}`).
+
+`StorableWindows.json`, 1235 → 2731 bytes (`win.py`, `tla.py`):
+
+- `windows[]`: 1 → 1, same window id. Extra browser windows show in capture frames at 21:32:52 and 21:33:10 (`windows.tsv`), but the file at 21:35 has none of them. guess: closed windows are dropped.
+- `lastFocusedSpaceID` and `windows[0].focusedSpaceID`: Space 1 → `thebrowser.company.defaultPersonalSpaceID`.
+- `sidebarWidth`: 228 → 500, in `sidebarViewPreferences` and in the window. guess: 500 is the drag maximum (verify with runtime-observations §7 item 14).
+- `expandedItems`: [] → `["thebrowser.company.arcBasicsFolderID", {expanded: {}}]`. It is an alternating map: item id → single-key enum. guess: folders absent from the map are collapsed.
+- `itemCreatedDates`: [] → 8 pairs `[itemId, Time]`. The id set equals the 8 new sidebar items exactly. Each value equals the item's `createdAt`.
+- `itemLastActiveDates`: [] → 10 pairs `[itemId, Time]`. Each value equals the item's `timeLastActiveAt` in the sidebar (10/10, difference 0). guess: a per-window copy of activity.
+- `contents.windowContents`: still 1 entry, with a new content UUID that is not a sidebar id. `splitViewState.windowContentIDs` = [that id] and `focusedContentID` = that id. `windowContentSidebarItemMap.keysToValues`: [] → `[contentId, "importLoginsAndBookmarks"]`, so content id → shown sidebar item id.
+- Unchanged: `spacesWithCollapsedPinnedSections: []`, `style: {standard: …}`, `stayOnTop: false`. No `littleArc` style was saved.
+
+Other top-level files (`cmp`, byte size, parsed-key diff):
+
+| File | Bytes before → after | Key-level change |
+|---|---|---|
+| `StorableCommandBarAdditionalRanking.json` | 47 → 2271 | `dataByProfile: {}` → `{ Default: { queriesToSelectedArchetype: {}, recentlySwitchedToTabs: [itemId, {elements: Time[], maxSize: 10}], typeTravelUsage: [{typeTravel: {_0: string}}, {executed: {elements: Time[], maxSize: 15}, frequency: number}, …] } }`. 1 switched-to item (= `sameEnergy`, at 21:32:21), 5 type-travel strings (typed text; withheld). The profile key is the Chromium folder name `Default`. |
+| `StorablePreviewsDataClient.json` | 360 → 362 | Same keys. `lastRefreshed` and `currentDate` moved to 21:34:56 PDT. |
+| `StorableLiveData.json` | 52 → 52 | Bytes differ; parsed JSON is equal (key order only). |
+| `StorableArchive`, `AuthState`, `DefaultBrowserPrompts`, `FirebaseEncryptionKey`, `Home`, `KeyBindings`, `LinkRouting` | same | Byte-identical. |
+| `StorableArchiveItems`, `StorableSessionRestorationData`, `StorableMembershipCard` | absent → 2468 / 3894 / 242 | New files (A–C). |
