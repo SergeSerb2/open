@@ -6,8 +6,9 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 
 ## Locked decisions
 
-- Engine: CEF (Chromium Embedded Framework) behind our own engine layer, so a later move to an own Chromium fork needs no shell rewrite.
-- Chrome Web Store extensions must work in v1.
+- Engine: our own Chromium fork. Base: Chromium 156.0.8078.48 (the same version as Arc) with CEF branch 8078's embedding layer inside the fork, plus our own patches. The repo stores pinned versions and patch files, not a Chromium mirror. Local source tree: `~/Developer/open-engine/chromium_git` (shared; never run `gclient sync` or a build there unless your task says so).
+- The Swift shell talks only to the `OpenEngine` layer, never to Chromium or CEF directly.
+- Chrome Web Store extensions must work in v1 at Arc level: our own toolbar actions and popups, and `chrome.tabs` that sees our sidebar tabs.
 - Platform: macOS 26+ only. Native Swift 6 + AppKit. SwiftUI only where it is cheap and does not hurt performance. Keep Arc's look, not Liquid Glass.
 - v1 scope: sidebar, Spaces, pinned and today tabs, favorites, folders, auto-archive, command bar, all Arc hotkeys, Split View, Peek, Little Arc, Profiles, Air Traffic Control, Boosts, Zap, Site Control Center, ad blocking, Import from Arc, extensions. Out of scope: Easels, Notes, Arc Max AI, Arc accounts, sync.
 
