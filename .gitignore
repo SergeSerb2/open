@@ -1,0 +1,11 @@
+.DS_Store
+# Raw reverse-engineering output. Never commit Arc-derived files.
+.re/
+# Build output
+build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+# Downloaded CEF binary distribution
+Vendor/cef/
