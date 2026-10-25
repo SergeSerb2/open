@@ -11,7 +11,7 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 |---|---|---|
 | Arc main binary, arm64 slice | `.re/bin/Arc-arm64` | 80 MB. Use this, not the fat binary. |
 | ArcCore, arm64 slice | `.re/bin/ArcCore-arm64` | 239 MB Chromium fork. |
-| Ghidra project for Arc main | `.re/ghidra/ArcMain.gpr` | Built once with `analyzeHeadless`. Query it with `analyzeHeadless .re/ghidra ArcMain -process Arc-arm64 -noanalysis -readOnly -postScript <script>`. Never re-import. |
+| Ghidra project for Arc main | `~/Library/Caches/OpenRE/ghidra/ArcMain.gpr` | Ghidra rejects paths with dot folders (`.t3`, `.re`), so the project lives outside the repo. Build log: `.re/logs/ghidra-arcmain.log`. Query it with `GHIDRA_HEADLESS_MAXMEM=16G $GHIDRA_INSTALL_DIR/support/analyzeHeadless $OPEN_GHIDRA_DIR ArcMain -process Arc-arm64 -noanalysis -readOnly -scriptPath <dir> -postScript <script>`. Scripts must also live in a path without dot folders. Never re-import. |
 
 `rea` CLI calls that use Ghidra (`search`, `decompile`, `function`, `xrefs`) re-analyze the whole binary on every call. Do not use them on the two large binaries. Use the saved Ghidra project instead.
 
@@ -24,5 +24,7 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `menus-and-hotkeys.md` | Every menu item and keyboard shortcut |
 | `design-tokens.md` | Colors, sizes, spacing, radii, fonts, motion timing |
 | `data-model.md` | Sidebar, Spaces, tabs, and archive file schemas (for Import from Arc) |
-| `features.md` | Behavior and settings of each v1 feature |
+| `features-core.md` | Sidebar, Spaces, tab lifecycle, command bar, profiles, routing, settings, windows |
+| `features-advanced.md` | Split View, Peek, Little Arc, Boosts, Zap, Site Control Center, ad blocking, PiP, AppleScript |
+| `runtime-observations.md` | Live data from the signed-in Arc: files, preferences, measured layout |
 | `arccore-engine.md` | ArcCore API surface, Chromium changes, extension UI hosting |
