@@ -9,3 +9,6 @@ DerivedData/
 xcuserdata/
 # Downloaded CEF binary distribution
 Vendor/cef/
+
+# SwiftPM build output
+.build/
