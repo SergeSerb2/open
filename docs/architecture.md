@@ -14,7 +14,7 @@ Status: draft v1 (2026-10-24). The engine spike (`docs/engine-spike.md`) and the
 |---|---|---|
 | 80 MB Swift binary, many SwiftUI hosting views | AppKit views for the window chrome, sidebar, rows, and command bar. SwiftUI only for low-frequency panels (settings, editors). | SwiftUI list diffing and hosting views are the main source of sidebar lag. |
 | Firebase, gRPC, Datadog, LaunchDarkly, Sentry, CloudKit sync | None in v1 | No account, no telemetry, no feature flags. Smaller binary, less launch work. |
-| Own Chromium fork (591 MB framework) | CEF behind `OpenEngine` | Prebuilt engine, easy Chromium updates. The engine layer keeps a fork possible later. |
+| Own Chromium fork (591 MB framework) | Own Chromium fork too, but built on CEF's embedding layer, behind `OpenEngine` | We can patch anything (extensions UI, tab bridge). CEF's layer saves us from rewriting process, view-hosting, and dialog plumbing. Our patches stay small and are kept as files. |
 | All tabs as live web contents | Lazy load, plus sleep after inactivity | Most tab memory goes to tabs nobody looks at. |
 
 ## Process and module layout
@@ -23,7 +23,7 @@ Status: draft v1 (2026-10-24). The engine spike (`docs/engine-spike.md`) and the
 Open.app
 ├── Contents/MacOS/Open                     Swift app (AppKit)
 ├── Contents/Frameworks/
-│   ├── Chromium Embedded Framework.framework
+│   ├── Chromium Embedded Framework.framework   (built from our fork)
 │   ├── OpenEngine (ObjC++, the only code that includes CEF headers)
 │   └── Open Helper (GPU|Renderer|Plugin|Alerts).app
 ```
