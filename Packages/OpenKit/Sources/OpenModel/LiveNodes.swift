@@ -1,0 +1,115 @@
+import Foundation
+import Observation
+
+// MARK: - Runtime-only tab state (never persisted)
+
+@MainActor
+@Observable
+public final class TabLiveState {
+    public var isLoading: Bool = false
+    public var progress: Double = 0
+    public var isAudible: Bool = false
+    public var isCrashed: Bool = false
+    public var canGoBack: Bool = false
+    public var canGoForward: Bool = false
+    public var faviconPNG: Data?
+
+    public init() {}
+}
+
+// MARK: - Tab
+
+@MainActor
+@Observable
+public final class Tab {
+    public let id: ItemID
+    public var url: URL
+    public var title: String
+    public var customTitle: String?
+    /// Set when the tab is pinned or a favorite. Nil for plain today tabs.
+    public var pinnedURL: URL?
+    /// Emoji or SF Symbol name.
+    public var customIcon: String?
+    public var createdAt: Date
+    public var lastActiveAt: Date
+    public var isMuted: Bool
+    public var openerID: ItemID?
+    public var isUnread: Bool
+
+    public let live = TabLiveState()
+
+    public var displayTitle: String { customTitle ?? title }
+
+    public init(
+        id: ItemID = ItemID(), url: URL, title: String = "",
+        customTitle: String? = nil, pinnedURL: URL? = nil, customIcon: String? = nil,
+        createdAt: Date = Date(), lastActiveAt: Date = Date(),
+        isMuted: Bool = false, openerID: ItemID? = nil, isUnread: Bool = false
+    ) {
+        self.id = id; self.url = url; self.title = title
+        self.customTitle = customTitle; self.pinnedURL = pinnedURL
+        self.customIcon = customIcon; self.createdAt = createdAt
+        self.lastActiveAt = lastActiveAt; self.isMuted = isMuted
+        self.openerID = openerID; self.isUnread = isUnread
+    }
+}
+
+// MARK: - Folder
+
+@MainActor
+@Observable
+public final class Folder {
+    public let id: ItemID
+    public var title: String
+    public var isExpanded: Bool
+    public var customIcon: String?
+    public var children: [SidebarNode]
+
+    public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, children: [SidebarNode] = []) {
+        self.id = id; self.title = title; self.isExpanded = isExpanded
+        self.customIcon = customIcon; self.children = children
+    }
+}
+
+// MARK: - Split
+
+public enum SplitOrientation: String, Codable, Sendable {
+    case horizontal, vertical
+}
+
+@MainActor
+@Observable
+public final class Split {
+    public let id: ItemID
+    public var orientation: SplitOrientation
+    /// One fraction per pane, normalized to sum 1. Empty means equal panes.
+    public var fractions: [Double]
+    public var panes: [Tab]
+    public var focusedPaneID: ItemID?
+
+    public init(id: ItemID = ItemID(), orientation: SplitOrientation = .horizontal, fractions: [Double] = [], panes: [Tab] = [], focusedPaneID: ItemID? = nil) {
+        self.id = id; self.orientation = orientation; self.fractions = fractions
+        self.panes = panes; self.focusedPaneID = focusedPaneID
+    }
+}
+
+// MARK: - SidebarNode
+
+@MainActor
+public enum SidebarNode {
+    case tab(Tab)
+    case folder(Folder)
+    case split(Split)
+
+    public var id: ItemID {
+        switch self {
+        case .tab(let t): return t.id
+        case .folder(let f): return f.id
+        case .split(let s): return s.id
+        }
+    }
+
+    public var tab: Tab? { if case .tab(let t) = self { return t }; return nil }
+    public var folder: Folder? { if case .folder(let f) = self { return f }; return nil }
+    public var split: Split? { if case .split(let s) = self { return s }; return nil }
+}
