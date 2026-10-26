@@ -41,3 +41,4 @@ Small items found during review and verification. Each line: area — issue — 
   the symbol/string evidence and confirm the tooltip text/case with S9.
 
 - Offscreen text anti-aliasing is nondeterministic between builds (row-title color metrics only); investigate font smoothing in the shared Renderer.
+- Site Control Center — the Boost row icon's sparkles and the Site Control button's sparkles twinkle in Arc, but session 2 cannot time them (frame pairs 1.6–2.5 s apart, no video of the panel). Open draws them static (Q15 ruling). Capture ≥ 30 fps video of the panel open on a Boosted site, measure period, fade curve, and per-sparkle phase, then add the animation as pure Core Animation (no timers, no main-thread work per frame, panel sparkles only while the panel is open, removed on close). — PR #107 lead ruling Q15, 2026-10-26
