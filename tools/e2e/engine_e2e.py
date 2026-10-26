@@ -1904,6 +1904,208 @@ def startup_failure_checks(factory, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Fork patch P2: toolbar actions and popups from Chrome's model (run with
+# --style chrome). Extensions: tools/e2e/fixtures/action-probe and Bitwarden.
+
+ACTION_PROBE = "jihnllejimhgcmfmcnchbekapeajboik"  # tools/e2e/fixtures/action-probe
+
+
+def actions_checks(app, results):
+    def actions():
+        return app.call("actions")
+
+    def action(ext):
+        hits = [x for x in actions()["actions"] if x["id"] == ext]
+        return hits[0] if hits else None
+
+    def popup_eval(state, js):
+        return app.eval(state["page"]["identifier"], js, timeout=20)
+
+    def open_popup(ext):
+        """Runs the action; the open popup once its extension page loaded."""
+        app.call("events")
+        app.call("ext-run", extension=ext)
+
+        def loaded():
+            s = app.call("ext-popup")
+            if not (s.get("open") and s["page"]["live"] and s["page"]["url"].startswith("chrome-extension://")):
+                return None
+            return s if popup_eval(s, "document.readyState") == "complete" else None
+        return wait_until(loaded, timeout=20)
+
+    def close_popup():
+        app.call("popup-close")
+        wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
+
+    ready = wait_until(lambda: actions()["ready"] and action(ACTION_PROBE), timeout=40)
+    # Bitwarden opens its welcome page after install; let that happen first.
+    wait_until(lambda: [t for t in app.call("tabs") if "bitwarden.com" in t["url"]], timeout=15)
+    time.sleep(1)
+    first = app.call("tabs")[0]["id"]
+    a = new_tab(app, "https://example.com/?a")
+    b = new_tab(app, "https://example.org/?b")
+    app.call("select", tab=a)
+    time.sleep(1)
+    probe = action(ACTION_PROBE)
+    results["actions_list"] = {
+        "ok": bool(ready) and bool(probe) and probe["name"] == "Open action probe" and probe["title"] == "Action probe"
+              and probe["hasPopup"] and probe["toolbarImage"]["bytes"] > 0 and probe["icon"]["bytes"] > 0
+              and probe["toolbarImage"]["width"] == 28 and probe["icon"]["width"] == 16,
+        "probe": probe, "ids": [x["id"] for x in actions()["actions"]]}
+
+    # The popup is a Chrome extension popup: getViews lists it, its tab query
+    # sees the page under it, and it reports ready and its size.
+    state = open_popup(ACTION_PROBE)
+    info = {"opened": bool(state)}
+    if state:
+        info["source"] = state["source"]
+        wait_until(lambda: popup_eval(state, "window.currentTab !== undefined"), timeout=20)
+        info["popup_views"] = popup_eval(state, "window.popupViews")
+        info["current_tab"] = popup_eval(state, "window.currentTab && window.currentTab.url")
+        events = []
+
+        def got():
+            events.extend(app.call("events"))
+            popup = [e for e in events if e["type"] == "extensionPopup"]
+            return [e for e in popup if e.get("ready")] and [e for e in popup if "resize" in e]
+        wait_until(got, timeout=15)
+        info["ready"] = bool([e for e in events if e["type"] == "extensionPopup" and e.get("ready")])
+        sizes = [e["resize"] for e in events if e["type"] == "extensionPopup" and "resize" in e]
+        info["last_size"] = sizes[-1] if sizes else None
+        info["document_size"] = popup_eval(state, "[document.documentElement.scrollWidth,"
+                                                  " document.documentElement.scrollHeight]")
+        info["showing_popup"] = action(ACTION_PROBE)["showingPopup"]
+    results["popup_is_chrome_popup"] = {
+        "ok": bool(state) and info.get("source") == "user" and info.get("popup_views") == 1
+              and (info.get("current_tab") or "").startswith("https://example.com/?a") and info.get("ready")
+              and info.get("last_size") is not None and info.get("last_size") == info.get("document_size")
+              and info["last_size"][0] == 320 and info.get("showing_popup"),
+        **info}
+
+    # Per-tab state set by the extension shows for the active tab only.
+    ids = {"a": app.page(a)["chromeTabId"], "b": app.page(b)["chromeTabId"]}
+    if state:
+        popup_eval(state, "Promise.all(["
+                          "chrome.action.setBadgeText({tabId: %(a)d, text: '7'}),"
+                          "chrome.action.setBadgeBackgroundColor({tabId: %(a)d, color: '#ff0000'}),"
+                          "chrome.action.setTitle({tabId: %(a)d, title: 'Probe A'}),"
+                          "chrome.action.setIcon({tabId: %(a)d, imageData: {32: solidIcon(220, 40, 40)}}),"
+                          "chrome.action.disable(%(b)d)]).then(() => true)" % ids)
+    close_popup()
+    app.call("select", tab=a)
+    on_a = wait_until(lambda: (lambda x: x if x and x["badge"] == "7" else None)(action(ACTION_PROBE)), timeout=10)
+    app.call("select", tab=b)
+    on_b = wait_until(lambda: (lambda x: x if x and not x["enabled"] else None)(action(ACTION_PROBE)), timeout=10)
+    results["per_tab_state"] = {
+        "ok": bool(on_a) and on_a["title"] == "Probe A" and on_a["badgeColor"] == "#ff0000ff" and on_a["enabled"]
+              and bool(on_b) and on_b["badge"] == "" and on_b["title"] == "Action probe"
+              and on_a["toolbarImage"]["hash"] != on_b["toolbarImage"]["hash"]
+              and on_a["icon"]["hash"] != on_b["icon"]["hash"],
+        "tab_a": on_a and {k: on_a[k] for k in ("badge", "badgeColor", "title", "enabled")},
+        "tab_b": on_b and {k: on_b[k] for k in ("badge", "title", "enabled")}}
+
+    # Running a popup-less action fires chrome.action.onClicked.
+    app.call("select", tab=a)
+    time.sleep(0.5)
+    state = open_popup(ACTION_PROBE)
+    if state:
+        popup_eval(state, "chrome.storage.session.set({clicks: 0})"
+                          ".then(() => chrome.action.setPopup({tabId: %(a)d, popup: ''})).then(() => true)" % ids)
+    close_popup()
+    no_popup = wait_until(lambda: (lambda x: x if x and not x["hasPopup"] else None)(action(ACTION_PROBE)), timeout=10)
+    app.call("ext-run", extension=ACTION_PROBE)
+    time.sleep(1)
+    popup_after_click = app.call("ext-popup").get("open")
+    app.call("select", tab=first)
+    time.sleep(0.5)
+    state = open_popup(ACTION_PROBE)
+    clicks = popup_eval(state, "chrome.storage.session.get(['clicks', 'lastClickTab'])") if state else None
+    results["on_clicked"] = {
+        "ok": bool(no_popup) and not popup_after_click and bool(clicks)
+              and clicks.get("clicks") == 1 and clicks.get("lastClickTab") == ids["a"],
+        "popup_less_on_tab": bool(no_popup), "popup_opened": popup_after_click, "storage": clicks}
+
+    # chrome.action.openPopup(): Chrome opens the popup only for an active
+    # window. The suite does not activate Open (no focus change), so either
+    # the popup opens with source API (the window still counts as active), or
+    # the call is refused with Chrome's inactive-window message.
+    api = {}
+    if state:
+        popup_eval(state, "chrome.storage.session.set({openPopup: ''})"
+                          ".then(() => chrome.runtime.sendMessage('open-popup'))"
+                          ".then(() => { setTimeout(() => window.close(), 50); return true; })")
+
+        def api_popup():
+            s = app.call("ext-popup")
+            if s.get("open") and s["source"] == "api" and s["page"]["url"].startswith("chrome-extension://"):
+                return s
+        opened = wait_until(api_popup, timeout=6)
+        if opened:
+            api["source"] = opened["source"]
+            api["result"] = wait_until(lambda: popup_eval(opened, "chrome.storage.session.get('openPopup')"
+                                                                  ".then(r => r.openPopup)"), timeout=5)
+            close_popup()
+        else:
+            state = open_popup(ACTION_PROBE)
+            api["result"] = popup_eval(state, "chrome.storage.session.get('openPopup').then(r => r.openPopup)") if state else None
+            close_popup()
+    results["open_popup_api"] = {
+        "ok": (api.get("source") == "api" and api.get("result") == "ok")
+              or (not api.get("source") and (api.get("result") or "").startswith("Cannot show popup for an inactive window")),
+        **api}
+    # Running the action whose popup is open closes it (Chrome's toolbar).
+    if not app.call("ext-popup").get("open"):
+        open_popup(ACTION_PROBE)
+    app.call("ext-run", extension=ACTION_PROBE)
+    toggled = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
+    results["run_again_closes_popup"] = {"ok": bool(toggled)}
+
+    # window.close() in the popup closes it.
+    state = open_popup(ACTION_PROBE)
+    if state:
+        popup_eval(state, "setTimeout(() => window.close(), 50); true")
+    closed = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
+    results["window_close_closes_popup"] = {"ok": bool(state) and bool(closed)}
+
+    # Pin and order: pinned actions first, in pinned order; moves and unpins.
+    app.call("ext-pin", extension=ACTION_PROBE, pinned=True)
+    app.call("ext-pin", extension=EXT["bitwarden"], pinned=True)
+    pinned = wait_until(lambda: (lambda ids: ids if ids[:2] == [ACTION_PROBE, EXT["bitwarden"]] else None)(
+        [x["id"] for x in actions()["actions"]]), timeout=10)
+    app.call("ext-move", extension=EXT["bitwarden"], index=0)
+    moved = wait_until(lambda: (lambda xs: xs if [x["id"] for x in xs][:2] == [EXT["bitwarden"], ACTION_PROBE]
+                                and xs[0]["pinnedIndex"] == 0 and xs[1]["pinnedIndex"] == 1 else None)(
+        actions()["actions"]), timeout=10)
+    results["pin_and_move"] = {"ok": bool(pinned) and bool(moved), "after_pin": pinned,
+                               "after_move": moved and [(x["id"], x["pinnedIndex"]) for x in moved[:3]]}
+
+    # The context menu is Chrome's (extension name, pin, options, ...); its
+    # pin item unpins.
+    menu = app.call("ext-menu", extension=ACTION_PROBE)
+    titles = [x["title"] for x in menu if not x["separator"]]
+    unpin = [t for t in titles if "unpin" in t.lower()]
+    if unpin:
+        app.call("ext-menu", extension=ACTION_PROBE, select=unpin[0])
+    unpinned = wait_until(lambda: (lambda x: x if x and not x["pinned"] else None)(action(ACTION_PROBE)), timeout=10)
+    results["context_menu"] = {"ok": "Open action probe" in titles and bool(unpin) and bool(unpinned), "items": titles}
+
+    # Bitwarden's popup is a real popup now: it takes its fixed width.
+    app.call("select", tab=a)
+    time.sleep(0.5)
+    state = open_popup(EXT["bitwarden"])
+    widths = []
+
+    def wide():
+        widths.extend(e["resize"][0] for e in app.call("events") if e["type"] == "extensionPopup" and "resize" in e)
+        return widths and max(widths) >= 350
+    wait_until(wide, timeout=20)
+    views = popup_eval(state, "chrome.extension.getViews({type: 'popup'}).length") if state else None
+    close_popup()
+    results["bitwarden_popup_width"] = {"ok": bool(state) and views == 1 and bool(widths) and max(widths) >= 350,
+                                        "widths": widths[-5:], "popup_views": views}
+
+
+# ----------------------------------------------------------------------------
 # Measurements (run with --config Release)
 
 
@@ -1991,7 +2193,8 @@ def main():
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek"],
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
+                                       "actions"],
                     required=True)
     opts = ap.parse_args()
 
@@ -2006,6 +2209,11 @@ def main():
         dirs = [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "1password", "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "actions":
+        dirs = [os.path.join(ROOT, "tools", "e2e", "fixtures", "action-probe"), os.path.join(opts.extensions, "bitwarden")]
+        if not all(os.path.isdir(d) for d in dirs):
+            sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "tabstrip":
         dirs = [os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"), os.path.join(opts.extensions, "bitwarden")]
@@ -2050,6 +2258,8 @@ def main():
                     extension_checks(app, opts.style, results["extensions"])
                 elif opts.only == "tabstrip":
                     tabstrip_checks(app, results["tabstrip"])
+                elif opts.only == "actions":
+                    actions_checks(app, results["actions"])
                 else:
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
@@ -2057,18 +2267,18 @@ def main():
     except Exception as error:
         results.setdefault(opts.only, {})["suite"] = {"ok": False, "error": str(error)}
         traceback.print_exc()
-    name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
+    name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip", "actions")
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "actions"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek", "actions")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)

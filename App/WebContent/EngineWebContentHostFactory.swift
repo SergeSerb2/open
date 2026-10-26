@@ -392,8 +392,11 @@ extension EngineWebContentHostFactory {
     guard app.engineReady else { return }
     extensionBar.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for action in focusedBrowser?.extensionActions ?? [] {
+      // Fork patch P2: Chrome's toolbar image (badge, disabled state).
+      // A copy: the snapshot's image keeps its own size.
       let image =
-        action.icon ?? NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!
+        (action.toolbarImage ?? action.icon)?.copy() as? NSImage
+        ?? NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!
       image.size = NSSize(width: 18, height: 18)
       let button = NSButton(image: image, target: self, action: #selector(extensionButtonClicked(_:)))
       button.bezelStyle = .accessoryBarAction
@@ -875,12 +878,18 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
   }
 
   func browser(_ browser: OEBrowser, didResizeExtensionPopup popup: OEWebContent, to size: NSSize) {
+    record("extensionPopup", popup, ["resize": [size.width, size.height]])
     guard let panel = popupPanel else { return }
     let frame = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size))
     var f = panel.frame
     f.origin.y += f.height - frame.height
     f.size = frame.size
     panel.setFrame(f, display: true)
+  }
+
+  /// Fork patch P2: the popup's first load stopped.
+  func browser(_ browser: OEBrowser, extensionPopupIsReady popup: OEWebContent) {
+    record("extensionPopup", popup, ["ready": true])
   }
 
   func browser(_ browser: OEBrowser, didCloseExtensionPopup popup: OEWebContent) {

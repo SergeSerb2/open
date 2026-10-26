@@ -26,26 +26,64 @@ OE_EXPORT @interface OEExtension : NSObject
 @property(nonatomic, readonly, copy) NSArray<NSString*>* hostPermissions;
 @end
 
+/// Site access of an action for the active tab (Chrome's
+/// PermissionsManager): what the extension may do on this site.
+typedef NS_ENUM(NSInteger, OEExtensionSiteAccess) {
+  /// No host permission for this site.
+  OEExtensionSiteAccessNone = 0,
+  /// Runs when the user clicks (UserSiteAccess::kOnClick).
+  OEExtensionSiteAccessOnClick = 1,
+  /// On this site (kOnSite).
+  OEExtensionSiteAccessOnSite = 2,
+  /// On all sites (kOnAllSites).
+  OEExtensionSiteAccessOnAllSites = 3,
+  /// The user blocked all extensions on this site.
+  OEExtensionSiteAccessBlocked = 4,
+} NS_SWIFT_NAME(OEExtensionAction.SiteAccess);
+
 /// Immutable snapshot of one toolbar action (ADK ExtensionToolbarAction),
-/// for drawing our own button. Rebuilt whenever it changes; see
-/// -[OEBrowserDelegate browserDidUpdateExtensionActions:].
+/// for drawing our own button, for the window's active tab. Rebuilt whenever
+/// it changes; see -[OEBrowserDelegate browser:didUpdateExtensionAction:].
 ///
-/// Stock CEF has no action model, so the snapshot comes from the manifest:
-/// title, icon, and popup are the manifest defaults, and badgeText is nil.
-/// Dynamic chrome.action.setIcon/setTitle/setBadgeText/setPopup need fork
-/// patch P2 (docs/engine-patches.md).
+/// With fork patch P2 (Chrome style windows) the values come from Chrome's
+/// toolbar action model, including chrome.action.setIcon/setTitle/
+/// setBadgeText/setPopup and per-tab state. Without it (Alloy style, or
+/// before the window has a tab) the snapshot comes from the manifest: title,
+/// icon, and popup are the manifest defaults, and badgeText is nil.
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEExtensionAction : NSObject
 @property(nonatomic, readonly, copy) NSString* extensionIdentifier;
+/// The action title (chrome.action.setTitle, else the manifest's
+/// default_title, else the extension name).
 @property(nonatomic, readonly, copy) NSString* title;
+/// The extension's name.
+@property(nonatomic, readonly, copy) NSString* extensionName;
+/// Title plus badge, for accessibility (ExtensionActionViewModel).
+@property(nonatomic, readonly, copy) NSString* accessibleName;
+@property(nonatomic, readonly, copy) NSString* tooltip;
+/// The 16x16 pt plain action icon (no badge), for menus.
 @property(nonatomic, readonly, nullable) NSImage* icon;
+/// The 28x28 pt image Chrome's toolbar draws: icon, badge, disabled
+/// grayscale, and the wants-to-run decoration (P2; nil without it).
+@property(nonatomic, readonly, nullable) NSImage* toolbarImage;
 @property(nonatomic, readonly, copy, nullable) NSString* badgeText;
 @property(nonatomic, readonly, copy, nullable) NSColor* badgeBackgroundColor;
+/// nil means automatic contrast.
+@property(nonatomic, readonly, copy, nullable) NSColor* badgeTextColor;
 @property(nonatomic, readonly, getter=isEnabled) BOOL enabled;
 /// The action opens a popup page. NO means a click fires
-/// chrome.action.onClicked (needs patch P2).
+/// chrome.action.onClicked.
 @property(nonatomic, readonly) BOOL hasPopup;
+/// The manifest popup (without P2 only; nil with it).
 @property(nonatomic, readonly, copy, nullable) NSURL* popupURL;
+/// Pinned to the toolbar (the profile's extensions.pinned_extensions).
+@property(nonatomic, readonly, getter=isPinned) BOOL pinned;
+/// -1 when unpinned.
+@property(nonatomic, readonly) NSInteger pinnedIndex;
+/// The extension has blocked scripts on this page that a click runs.
+@property(nonatomic, readonly) BOOL wantsToRun;
+@property(nonatomic, readonly) OEExtensionSiteAccess siteAccess;
+@property(nonatomic, readonly, getter=isShowingPopup) BOOL showingPopup;
 @end
 
 NS_SWIFT_UI_ACTOR

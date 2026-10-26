@@ -239,6 +239,16 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _oe_hostBrowserIdentifier = browser ? browser.identifier : 0;
 }
 
+- (instancetype)initOEForExtensionPopupInBrowser:(OEBrowser*)browser
+                                       extension:(NSString*)extensionIdentifier {
+  if ((self = [self initOEForChromiumTabInBrowser:browser])) {
+    // Not a tab: it never joins the strip; resize and close go to `browser`.
+    self.oe_popupOwner = browser;
+    self.oe_popupExtension = extensionIdentifier;
+  }
+  return self;
+}
+
 - (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser {
   OEWebContentConfiguration* config =
       [[OEWebContentConfiguration alloc] initWithContext:browser.context];

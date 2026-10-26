@@ -33,6 +33,7 @@
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
+#include "open/browser/extensions/open_extensions_toolbar.h"
 #include "open/browser/tab_strip/hidden_browser.h"
 #include "open/browser/tab_strip/open_browser_window.h"
 #include "open/browser/tab_strip/open_hosted_platform_delegate.h"
@@ -56,15 +57,10 @@ OpenTabStrip::OpenTabStrip(CefRefPtr<CefRequestContextImpl> request_context,
       request_context_(request_context),
       handler_(handler) {
   Strips()[id_] = this;
-  if (Profile* profile = CefRequestContextImpl::GetProfile(request_context_)) {
-    if (auto* dispatcher =
-            extensions::ExtensionActionDispatcher::Get(profile)) {
-      action_observation_.Observe(dispatcher);
-    }
-  }
 }
 
 OpenTabStrip::~OpenTabStrip() {
+  toolbar_.reset();
   Strips().erase(id_);
   if (browser_) {
     browser_->tab_strip_model()->RemoveObserver(this);
@@ -380,35 +376,86 @@ bool OpenTabStrip::IsExtensionActionEnabled(const CefString& extension_id) {
   return action && action->GetIsVisible(tab_id);
 }
 
-void OpenTabStrip::OnExtensionActionUpdated(
-    extensions::ExtensionAction* extension_action,
-    content::WebContents* web_contents,
-    content::BrowserContext* browser_context) {
-  Profile* profile = CefRequestContextImpl::GetProfile(request_context_);
-  if (!handler_ || closed_ || !extension_action || !profile ||
-      Profile::FromBrowserContext(browser_context)->GetOriginalProfile() !=
-          profile->GetOriginalProfile()) {
-    return;
-  }
-  // A change for one tab only matters if it is one of this strip's tabs.
-  if (web_contents && (!browser_ || browser_->tab_strip_model()
-                                           ->GetIndexOfWebContents(
-                                               web_contents) ==
-                                       TabStripModel::kNoTab)) {
-    return;
-  }
-  CEF_POST_TASK(CEF_UIT, base::BindOnce(&OpenTabStrip::DeliverActionUpdate,
-                                        weak_ptr_factory_.GetWeakPtr(),
-                                        extension_action->extension_id()));
+CefRefPtr<CefRequestContextImpl> OpenTabStrip::request_context() const {
+  return request_context_;
 }
 
-void OpenTabStrip::OnShuttingDown() {
-  action_observation_.Reset();
+content::WebContents* OpenTabStrip::ActiveContents() const {
+  return browser_ ? browser_->tab_strip_model()->GetActiveWebContents()
+                  : nullptr;
 }
 
-void OpenTabStrip::DeliverActionUpdate(const std::string& extension_id) {
-  if (handler_ && !closed_) {
-    handler_->OnExtensionActionUpdated(this, extension_id);
+bool OpenTabStrip::AreExtensionActionsReady() {
+  CEF_REQUIRE_UIT_RETURN(false);
+  return toolbar_ && toolbar_->IsReady();
+}
+
+void OpenTabStrip::GetExtensionActionIds(
+    std::vector<CefString>& extension_ids) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  extension_ids.clear();
+  if (toolbar_) {
+    for (const auto& id : toolbar_->ActionIds()) {
+      extension_ids.push_back(id);
+    }
+  }
+}
+
+CefRefPtr<CefDictionaryValue> OpenTabStrip::GetExtensionActionState(
+    const CefString& extension_id) {
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  return toolbar_ ? toolbar_->State(extension_id) : nullptr;
+}
+
+CefRefPtr<CefImage> OpenTabStrip::GetExtensionActionImage(
+    const CefString& extension_id,
+    int size,
+    bool toolbar) {
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  return toolbar_ ? toolbar_->Image(extension_id, size, toolbar) : nullptr;
+}
+
+void OpenTabStrip::SetExtensionActionPinned(const CefString& extension_id,
+                                            bool pinned) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  if (toolbar_) {
+    toolbar_->SetPinned(extension_id, pinned);
+  }
+}
+
+void OpenTabStrip::MoveExtensionAction(const CefString& extension_id,
+                                       int pinned_index) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  if (toolbar_) {
+    toolbar_->MovePinned(extension_id, pinned_index);
+  }
+}
+
+bool OpenTabStrip::ExecuteExtensionAction(const CefString& extension_id,
+                                          int source) {
+  CEF_REQUIRE_UIT_RETURN(false);
+  return toolbar_ && toolbar_->Execute(extension_id, source);
+}
+
+void OpenTabStrip::CloseExtensionPopup() {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  if (toolbar_) {
+    toolbar_->ClosePopup();
+  }
+}
+
+CefRefPtr<CefListValue> OpenTabStrip::GetExtensionActionMenu(
+    const CefString& extension_id,
+    int source) {
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  return toolbar_ ? toolbar_->Menu(extension_id, source) : nullptr;
+}
+
+void OpenTabStrip::RunExtensionActionMenuCommand(const CefString& extension_id,
+                                                 int command_id) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  if (toolbar_) {
+    toolbar_->RunMenuCommand(extension_id, command_id);
   }
 }
 
@@ -527,6 +574,7 @@ Browser* OpenTabStrip::EnsureBrowser() {
   window_->SetBrowser(browser_);
   window_->SetHostView(host_view_);
   browser_->tab_strip_model()->AddObserver(this);
+  toolbar_ = std::make_unique<OpenExtensionsToolbar>(this, browser_);
   did_close_subscription_ =
       browser_->RegisterBrowserDidClose(base::BindRepeating(
           &OpenTabStrip::OnBrowserDidClose, weak_ptr_factory_.GetWeakPtr()));
@@ -538,6 +586,7 @@ void OpenTabStrip::OnBrowserDidClose(BrowserWindowInterface* browser) {
     return;
   }
   // Chrome deletes the Browser (and its window) on the next turn.
+  toolbar_.reset();
   browser_->tab_strip_model()->RemoveObserver(this);
   did_close_subscription_ = {};
   browser_ = nullptr;

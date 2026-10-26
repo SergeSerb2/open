@@ -123,6 +123,28 @@
 
 @implementation OEContextMenuItem
 
+- (instancetype)initOEWithDictionary:(CefRefPtr<CefDictionaryValue>)item {
+  if ((self = [super init])) {
+    _separator = item->GetBool("separator");
+    _commandIdentifier = item->GetInt("command");
+    _title = [OEString(item->GetString("label"))
+        stringByReplacingOccurrencesOfString:@"&"
+                                  withString:@""];
+    _enabled = item->GetBool("enabled");
+    _checked = item->GetBool("checked");
+    NSMutableArray* sub = [NSMutableArray array];
+    CefRefPtr<CefListValue> list =
+        item->HasKey("submenu") ? item->GetList("submenu") : nullptr;
+    for (size_t i = 0; list && i < list->GetSize(); ++i) {
+      if (CefRefPtr<CefDictionaryValue> child = list->GetDictionary(i)) {
+        [sub addObject:[[OEContextMenuItem alloc] initOEWithDictionary:child]];
+      }
+    }
+    _submenu = sub;
+  }
+  return self;
+}
+
 - (instancetype)initOEWithModel:(CefRefPtr<CefMenuModel>)model
                            index:(size_t)index {
   if ((self = [super init])) {

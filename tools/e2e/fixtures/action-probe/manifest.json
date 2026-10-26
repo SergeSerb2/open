@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Open action probe",
+  "version": "1.0",
+  "description": "End-to-end probe for toolbar actions and popups (tools/e2e/engine_e2e.py --only actions).",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Action probe",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt2Sm7P0sN9Ad/nh4zWWQYRVyfDKW6vYZLOz9PqntdDrp/SNJEHRnYvi//Q7sftB/j91LV6YaEYdLW5bCiZ2VCtAGBZI7ndH4UlMjdsdn/YSqGvkW7AEcszbVWOO1jrdU2fThn5CRnofY9zTup/ms5lta/5GMBjUeda1rZu83DrlBOeR3cTyeEdYLAfVZh75p4VXGmikT9mooFpncWcOna8LgW8HPv6JPZORd49V5k9qoDJRB6YM0WVO5jJm22isLrwOzhvMXxNuScu1TsP8NV0sxvogM3wGLhhpmEtoyyNNItwjlpv2Dcxdu40ngv1wp/+GdJWqVzb+87UDWQlusHQIDAQAB"
+}
