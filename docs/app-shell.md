@@ -384,3 +384,75 @@ for a non-default profile. The sidebar suite proves switching to the correct
 live page and wrapper context, not durable non-default engine storage. That
 engine-owned follow-up is recorded in docs/followups.md. No Engine/ changes are
 added in B beyond inheriting A's approved null guard.
+
+
+## Step B fork refresh — 2026-10-25
+
+Merged #45 head `78d4ddbc252fa27c2ef4ae87407c5c3bd58f626a` and `origin/main`
+through `f41955c` (fork bring-up, real Settings target, polish, release notes).
+The real Settings presenters are integrated in Step C, on top of this layer.
+The split controller retains model-owned selection after a two-pane collapse;
+separating from a larger split still selects the detached sibling.
+
+Engine: **fork**. Debug and Release builds are clean under Swift 6. Embedded
+and vendor UUIDs match `4C4C44FE-5555-3144-A175-7398C5A1D4B4`; each phase-named
+JSON records the source and UUIDs. No engine build or source sync was run.
+
+| Suite / engine | Debug / fork | Release / fork | Evidence |
+|---|---|---|---|
+| window | 38/38 PASS; 2 named timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-b-fork-debug.json), [Release](engine-spike/results-window-step-b-fork-release.json) |
+| sidebar | 18/18 PASS; durable profile storage BLOCKED | 18/18 PASS; durable profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-b-fork-debug.json), [Release](engine-spike/results-sidebar-step-b-fork-release.json) |
+| peek | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-b-fork-debug.json), [Release](engine-spike/results-peek-step-b-fork-release.json) |
+| shell | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-b-fork-debug.json), [Release](engine-spike/results-shell-step-b-fork-release.json) |
+
+| Release median, n=5 each / fork | Sidebar drawn (≤250 ms) | First paint (≤700 ms) |
+|---|---:|---:|
+| Cold, fresh profile | 218 PASS | 473 PASS |
+| Warm, existing profile | 232 PASS | 490 PASS |
+
+Load average [10.58203125, 9.14892578125, 10.0693359375] on 18 CPUs: shared-machine observations,
+not controlled idle acceptance. The older CDN 261/253 ms sidebar misses remain
+recorded above and in their immutable CDN JSON; this fork run does not erase them.
+
+| Static live comparison / fork | Count | Worst position | Worst ΔE00 | Result |
+|---|---:|---:|---:|---|
+| F0001 sidebar + window | 31 | 1 pt | 1.61 | PASS |
+| Empty panel fill | 11 samples | native geometry passes | max 1.05 | PASS |
+| Native traffic-light centers | 3 | 0 pt | — | PASS |
+
+Method and privacy limits remain those above (docs/design.md §7). Only Open's
+own windows were captured. `sidebar-render check` passed 125/125;
+`features-render check` passed 147/147. Durable per-profile engine storage stays
+BLOCKED on the CEF `root_cache_path` follow-up. No unit tests or desktop input.
+
+### Review round 1 — current fork verification
+
+| Finding | Final behavior | End-to-end proof |
+|---|---|---|
+| 1 Peek identity | Adopt rebinds ID and rekeys both factory sets | Expand preserves live content; mirror contains new ID; sidebar close returns host counts |
+| 2 Live-state writers | Host emits callbacks; guarded container is the writer | Evicted row stays unloaded; shared-host close preserves the other window |
+| 3 Profile ownership | Explicit Space profile teardown; source Space/context determines requests | Profile switch closes old hosts; background page opens in its own Space/profile |
+| 4 Frame save work | DTO capture deferred to debounce; frame events skip tree/mirror | Burst capture counters and tree/mirror counters |
+| 5 Mirror active/order | Selected model host only, live all-Spaces sidebar order | Peek excluded; second-window Space switch leaves order stable |
+| 6 Sidebar drag | No whole-sidebar mouseDown drag override | Sidebar flows plus 125/125 render and live comparison |
+| 7 Harness honesty | Wrapper row, durable storage BLOCKED, kernel row, named Debug SKIPs | Both JSONs retain their actual statuses |
+
+Rule 10: merged origin/main, then full tools/verify-all.sh, 15 PASS, no SKIP.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 70 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 12 |
+| commands-dump | PASS | 1 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 45 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 15 |
+| boosts | PASS | 3 |
