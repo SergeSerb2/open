@@ -104,13 +104,14 @@ Arc keeps its springs in compiled code. The capture has about 0.47 s between fra
 
 | Token | Value | Evidence |
 |---|---|---|
-| Space switch slide | spring, response 0.30 s, critically damped | fitted with the cross-fade to both progress pairs |
+| Space switch slide | spring, response 0.30 s, critically damped | fitted with the cross-fade to both progress pairs; session 2 video: the sidebar changes for 0.28–0.29 s (interaction-states §10) |
 | Space theme cross-fade | linear, 0.21 s | model gives slide 0.645 / fade 0.50 and 0.855 / 0.78; measured 0.65 / 0.53 (A0222) and 0.88 / 0.77 (A0227) |
 | Swipe snap | spring, response 0.26 s, damping 0.92 | guess |
 | Hover fade / selection fade | 0.08 s / 0.12 s | guess |
-| Row insert, remove, folder expand | 0.22 s, AppKit outline slide | measured "< 0.5 s" |
+| Row insert, remove, folder expand | 0.22 s, AppKit outline slide | measured "< 0.5 s"; session 2 video: 0.20–0.24 s (interaction-states §7) |
 | Tooltip fade | 0.12 s, delay 0.6 s | guess; fade-out seen (F0026) |
-| Hover-reveal card slide | spring, response 0.30 s, critically damped (`Motion.sidebarToggle`); transform of the card layer, its shadow, and the traffic lights only | guess: A0439 and A0440 are 1 s apart |
+| Hover-reveal card slide | spring, response 0.30 s, critically damped (`Motion.sidebarToggle`); transform of the card layer, its shadow, and the traffic lights only | guess: A0439 and A0440 are 1 s apart. Session 2 video: Arc's card comes in over ≈ 0.14 s with a 3 pt overshoot and goes out in ≈ 0.10 s (interaction-states §13.1). Not applied yet (`docs/followups.md`). |
+| Sidebar hide and show (Cmd+S) | 0.22 s AppKit frame animation with an alpha fade | guess. Session 2 video: ≈ 0.1 s each way, and the show starts ≈ 0.29 s after the key (interaction-states §13.1). Not applied yet (`docs/followups.md`). |
 | Hover-reveal dwell, exit | 0.15 s, 0.15 s | dwell decoded (§16); exit guess |
 
 ## 3. Space themes
@@ -520,9 +521,10 @@ The F0001 static comparison (§8, 31 elements) is unchanged: it has six favorite
 
 | Difference | Size | Why |
 |---|---|---|
-| Card fill near its bottom | ΔE00 10.8 (`#180E3A` vs `#2C2336`); the top, right, and bottom strokes differ with it (2.2, 2.7, 8.4) | Arc's card background darkens toward its bottom; our theme field over the card's tall aspect does not. The stroke matches where the fill matches (left edge 0.79). The theme field was fitted on landscape windows (§3.2). |
+| Card fill near its bottom | ΔE00 10.8 (`#180E3A` vs `#2C2336`); the top, right, and bottom strokes differ with it (2.2, 2.7, 8.4) | Capture session 2 (item 5) shows the cause: Arc's card is translucent, not a gradient. Its fill is ≈ 0.885 × a theme tint + 0.115 × the page under the card, blurred (Gaussian σ ≈ 25 px; RMS 1.06 levels over two pages). Over a white page it is 1.5–2 levels lighter than the anchored sidebar; over a dark page (`#101418`) it is 26 levels darker. F0129's dark bottom sat over dark page content. Open's card is opaque. The same blend over black matches Arc's inactive window (interaction-states §13.1). Followup in `docs/followups.md`. |
 | Space header without favorites | ours 8 pt below the URL field; A0361 1–3 pt | Fitted to Arc's 8 pt rhythm. Arc's real zero-favorites state is its favorites empty-state card (not captured); A0361 is the window-only sidebar, a different header. |
-| Card slide timing | — | Not captured between A0439 and A0440; the spring is `Motion.sidebarToggle`. |
+| Card slide timing | Arc: in ≈ 0.14 s with a 3 pt overshoot, settled by 0.24 s (fit: response 0.164 s, damping 0.86); out ≈ 0.10 s. Open: `Motion.sidebarToggle` (0.3 s, critically damped): 62 % at 0.1 s, settled at 0.36 s | Measured in the session 2 video (interaction-states §13.1). Not changed here; followup in `docs/followups.md`. |
+| Cmd+S hide and show timing | Arc: ≈ 0.1 s each way; the show starts ≈ 0.29 s after the key. Open: 0.22 s, no delay | Same source and followup. |
 | Reveal zone unit and exit delay | — | Guesses: the unit (10) comes from a view-store value; the exit delay reuses the 0.15 s debounce. |
 
 ### 16.5 Verification
@@ -559,8 +561,9 @@ The user decided that the window buttons use Arc's grey look in every window sta
 | Arc's custom control | `otool -ov`: `_TtC3Arc19WindowControlButton : NSControl` with `mouseEntered:`, `mouseExited:`, `mouseDown:`, `rightMouseDown:`, `mouseUp:`, `mouseDragged:`, `resetCursorRects`, `updateLayer`; fields `iconImageView`, `trackingArea`, `isHovered`, `isPressed`, `onClick`, `onRightClick`, `onDragBegin`, `cursor` | No AX override, so it cannot be the F0001 buttons. guess: other window controls (`LeftAccessoryType.windowControls`, `TopBarConfiguration.shouldShowWindowControls`). |
 | macOS's own inactive look differs | Open's window when not key (macOS 27) | `#E6A78E` over `#E49678` (lighter, light content); white ≈ 0.18 (dark) |
 | Active window, session 2 (fact) | `sessions/20261026-100848-03-active-window/` frames 0003–0019, ICC to sRGB | Active and key, pointer on the page: grey, fill alpha 0.326–0.331, colored rings. Pointer over the group: system colors and glyphs. Back / Forward / Reload hovers: grey. Inactive (Finder frontmost): same fill alpha over a darker underlay, no ring. Session 1's values equal the active ones, so its frames were active. |
+| Reveal card, session 2 (fact) | `sessions/20261026-101324-05-reveal-card/` frames 0009, 0018, 0021, 0029, 0034, ICC to sRGB | Centers (25, 29), (48, 29), (71, 29) ±0.05 px. At rest: fill alpha 0.327–0.331 over the card fill in both Spaces, with the rings. Pointer on the buttons (0018): system colors and glyphs. Interaction-states §13.1. |
 
-`rea inspect-native-dispatch-metadata` refused the 80 MB binary (its 64 MiB input budget), so the method lists come from `otool -ov`. No Ghidra analysis was run. guess: Arc dims system buttons with `DimmedWindowControls`; how it hides their color is not visible in metadata. The look while Arc is key is not captured.
+`rea inspect-native-dispatch-metadata` refused the 80 MB binary (its 64 MiB input budget), so the method lists come from `otool -ov`. No Ghidra analysis was run. guess: Arc dims system buttons with `DimmedWindowControls`; how it hides their color is not visible in metadata. Capture session 2 shows the look while Arc is key, in the window and on the card.
 
 ### 17.2 Choice
 
@@ -613,4 +616,4 @@ New `window` suite rows: `traffic_light_look` (the rest look against the expecte
 
 Behaviors checked through the automation layer: Option-click on the green button zooms (`[0, 0, 2560, 1410]`) and restores; a click enters full screen; `performClose:` (the window-close checks) works at rest. The tiling menu could not be reached (above). The first run of the suite failed three window-close rows with the buttons at alpha 0, which is why the rest alpha is 0.001.
 
-In the suite runs on the merged head, every row this change touches passed each time (`traffic_light_look` fill error ≤ 1.7 levels at rest, not key, and on the card; `traffic_light_actions`; the reveal and card rows; the F0001 comparison, worst 1.0 pt and ΔE00 1.55). The only failures were the Release launch budgets while other builds loaded the machine (load average 12–14, `sidebarDrawn` median 277–289 ms against 250 ms).
+Six Release window-suite runs on 2026-10-26 (load average 9–16 from other builds): runs 1, 2, and 5 passed 48 of 48. Run 4 missed the warm launch budget (`sidebarDrawn` median 262 ms against 250 ms) and run 6 the cold one (269 ms); run 6 then lost a launch to an engine crash, and run 3 stopped at `html_fullscreen_in_native` (`OEErrorWebContentClosed`). Neither failure involves the window buttons (`docs/followups.md`). The five runs that reached them passed `traffic_lights`, `traffic_light_look` (fill error ≤ 1.7 levels at rest, not key, and on the card), and `traffic_light_actions`, and the reveal and card rows; the F0001 comparison passed in the four runs that reached it (worst 1.0 pt, ΔE00 1.55). An earlier set of three runs failed `traffic_light_look` in the dark window that is not key because the check tested for the colored ring there (a shadowed variable in the check, fixed); the pixels had no ring, which is correct.
