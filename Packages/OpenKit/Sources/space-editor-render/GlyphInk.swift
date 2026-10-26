@@ -8,6 +8,7 @@ enum GlyphInk {
         let background: [Double]
         let color: [Double]
         let contrast: Double
+        let minimumContrast: Double
         let count: Int
         let masked: Int
         let darkInk: Bool
@@ -49,11 +50,14 @@ enum GlyphInk {
             let value = 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]
             return (darkInk ? bg - value : value - bg) / max(1, darkInk ? bg : 255 - bg)
         }
-        // R3: stroke-interior median, never a maximum/99%-peak selector.
+        // R3: median of the stroke plateau after masking dots; never a peak.
         let threshold = 0.8 * (disabled ? 0.5 * 0.32 : 0.5)
-        let core = pixels.filter { contrast($0) >= threshold }
+        let stroke = pixels.map(contrast).filter { $0 >= threshold }.sorted()
+        let plateau = median(Array(stroke.suffix(max(1, stroke.count / 2))))
+        let minimum = max(threshold, 0.95 * plateau)
+        let core = pixels.filter { contrast($0) >= minimum }
         return Sample(background: background,
                       color: (0..<3).map { channel in median(core.map { $0[channel] }) },
-                      contrast: median(core.map(contrast)), count: core.count, masked: masked, darkInk: darkInk)
+                      contrast: median(core.map(contrast)), minimumContrast: minimum, count: core.count, masked: masked, darkInk: darkInk)
     }
 }
