@@ -11,6 +11,7 @@ final class EditorScene {
     let owner: NSWindow
     let controller: ThemeEditorController
     let undo: UndoManager
+    var backdropOverride: RGBA?
     var view: ThemeEditorContentView { controller.panel.editorView }
     var panel: ThemeEditorPanel { controller.panel }
     var space: Space { model.spaces[0] }
@@ -91,7 +92,10 @@ final class EditorScene {
         controller.flushPreviewFrame()
     }
     func snapshot() -> CGImage {
-        controller.prepareForSnapshot(); OffscreenRenderer.settle(view)
+        controller.prepareForSnapshot()
+        let light = panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        panel.backdrop = backdropOverride ?? RGBA(hex: light ? 0xFCFBFC : 0x2E3237)
+        OffscreenRenderer.settle(view)
         return OffscreenRenderer().snapshot(view, scale: panel.renderScale ?? 1)
     }
     static func render(_ args: [String]) throws {
@@ -101,7 +105,7 @@ final class EditorScene {
         let style = try RenderCLI.value(args, "--style").map { try JSONDecoder().decode(SpaceStyle.self, from: Data($0.utf8)) }
         let scene = try EditorScene(style: args.contains("--empty") ? nil : style ?? capturedStyle,
                                     scale: scale, light: RenderCLI.value(args, "--appearance") == "light")
-        if let hex = RenderCLI.value(args, "--backdrop"), let color = UInt32(hex, radix: 16) { scene.panel.backdrop = RGBA(hex: color) }
+        if let hex = RenderCLI.value(args, "--backdrop"), let color = UInt32(hex, radix: 16) { scene.backdropOverride = RGBA(hex: color) }
         if let page = RenderCLI.value(args, "--page").flatMap(Int.init) { scene.controller.apply(.setPresetPage(page)) }
         let buttons = ["automatic": scene.view.modes.buttons[0], "light": scene.view.modes.buttons[1],
                        "dark": scene.view.modes.buttons[2], "remove": scene.view.remove, "add": scene.view.add,
