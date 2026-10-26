@@ -100,7 +100,9 @@ class Open:
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
             # verified PID; a bundle identifier can name another Open worktree.
-            subprocess.run([self.activator, str(self.pid), self.executable], check=True, timeout=10)
+            activation = subprocess.run([self.activator, str(self.pid), self.executable], capture_output=True, text=True, timeout=10)
+            if activation.returncode:
+                raise RuntimeError("Exact-PID activation refused: " + activation.stdout.strip() + " " + activation.stderr.strip())
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(self.sock)
