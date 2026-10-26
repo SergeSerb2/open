@@ -25,6 +25,11 @@ class GURL;
 
 namespace open_engine {
 
+// adblock-fork §7.7: a check matches at most this much of a URL (16 KiB).
+// Step 4 measures its gates at 8 and 16 KiB; the cap becomes 8 KiB only if a
+// gate fails at 16 KiB.
+inline constexpr uint32_t kOpenAdBlockMatchCapBytes = 16 * 1024;
+
 // One per CefBrowserContext (one Open Profile): the current adblock engine,
 // the master switch, and the excluded sites (docs/plans/adblock-fork.md §6).
 //
@@ -57,10 +62,13 @@ class OpenAdBlockService {
   // generation, whose manifest lists the inputs. Every input is verified
   // before use, also before a DAT load. Asynchronous: the new engine
   // replaces the old one when it is ready; on failure the old one stays.
-  // |done| (optional) runs on the UI thread after that.
-  void LoadFromDirectory(base::FilePath adblock_root,
-                         bool prefer_dat,
-                         base::OnceClosure done = {});
+  // |done| (optional) runs on the UI thread after that, once, with the
+  // result: also for a load that a newer one replaced (kStale), and after
+  // Shutdown() or the service's destruction (kCancelled).
+  void LoadFromDirectory(
+      base::FilePath adblock_root,
+      bool prefer_dat,
+      base::OnceCallback<void(AdBlockLoadResult)> done = {});
   // Loads the root of the last LoadFromDirectory() again.
   void ReloadLists();
 
@@ -112,7 +120,14 @@ class OpenAdBlockService {
 
  private:
   std::shared_ptr<const EngineHolder> CurrentEngine() const;
-  void OnBuilt(uint64_t load_id, base::OnceClosure done, BuildResult result);
+  // The reply of a load: runs |done| even when |service| is gone.
+  static void OnBuiltReply(base::WeakPtr<OpenAdBlockService> service,
+                           uint64_t load_id,
+                           base::OnceCallback<void(AdBlockLoadResult)> done,
+                           BuildResult result);
+  void OnBuilt(uint64_t load_id,
+               base::OnceCallback<void(AdBlockLoadResult)> done,
+               BuildResult result);
   // Destroys |engine| on the build runner: freeing an engine takes 15 to
   // 18 ms, too long for the UI thread (review 100-2).
   void ReleaseOnBuildRunner(std::shared_ptr<const EngineHolder> engine);
@@ -135,6 +150,14 @@ class OpenAdBlockService {
 
   mutable std::mutex status_mutex_;
   AdBlockStatus status_;  // Guarded by status_mutex_.
+  // CosmeticResources() runs on any thread: its counters are summed here and
+  // copied into the status by GetStatus().
+  mutable std::atomic<uint64_t> cosmetic_dropped_procedural_{0};
+  mutable std::atomic<uint64_t> cosmetic_dropped_unsafe_{0};
+  mutable std::atomic<uint64_t> cosmetic_dropped_style_{0};
+  mutable std::atomic<uint64_t> cosmetic_dropped_remove_{0};
+  mutable std::atomic<uint64_t> cosmetic_dropped_scriptlet_{0};
+  mutable std::atomic<uint64_t> cosmetic_dropped_over_cap_{0};
   base::RepeatingCallback<void(const AdBlockStatus&)> status_callback_;
 
   base::WeakPtrFactory<OpenAdBlockService> weak_ptr_factory_{this};

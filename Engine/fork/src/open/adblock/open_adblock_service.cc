@@ -446,12 +446,13 @@ bool OpenAdBlockService::IsExcluded(const GURL& top_level_url) const {
   return false;
 }
 
-void OpenAdBlockService::LoadFromDirectory(base::FilePath adblock_root,
-                                           bool prefer_dat,
-                                           base::OnceClosure done) {
+void OpenAdBlockService::LoadFromDirectory(
+    base::FilePath adblock_root,
+    bool prefer_dat,
+    base::OnceCallback<void(AdBlockLoadResult)> done) {
   if (shut_down_) {
     if (done) {
-      std::move(done).Run();
+      std::move(done).Run(AdBlockLoadResult::kCancelled);
     }
     return;
   }
@@ -460,8 +461,34 @@ void OpenAdBlockService::LoadFromDirectory(base::FilePath adblock_root,
   build_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&BuildOnBackground, std::move(adblock_root), prefer_dat),
-      base::BindOnce(&OpenAdBlockService::OnBuilt,
+      base::BindOnce(&OpenAdBlockService::OnBuiltReply,
                      weak_ptr_factory_.GetWeakPtr(), load_id, std::move(done)));
+}
+
+// static
+void OpenAdBlockService::OnBuiltReply(
+    base::WeakPtr<OpenAdBlockService> service,
+    uint64_t load_id,
+    base::OnceCallback<void(AdBlockLoadResult)> done,
+    BuildResult result) {
+  if (service) {
+    service->OnBuilt(load_id, std::move(done), std::move(result));
+    return;
+  }
+  // Shut down or destroyed: no build runner is left, so free the engine on
+  // a pool thread, not here on the UI thread (review 100-2).
+  if (result.engine) {
+    base::ThreadPool::PostTask(
+        FROM_HERE,
+        {base::TaskPriority::BEST_EFFORT,
+         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+        base::BindOnce([](std::unique_ptr<EngineHolder>) {},
+                       std::move(result.engine)));
+  }
+  VLOG(1) << "OpenAdBlock: load " << load_id << " cancelled";
+  if (done) {
+    std::move(done).Run(AdBlockLoadResult::kCancelled);
+  }
 }
 
 void OpenAdBlockService::ReloadLists() {
@@ -470,16 +497,22 @@ void OpenAdBlockService::ReloadLists() {
   }
 }
 
-void OpenAdBlockService::OnBuilt(uint64_t load_id,
-                                 base::OnceClosure done,
-                                 BuildResult result) {
+void OpenAdBlockService::OnBuilt(
+    uint64_t load_id,
+    base::OnceCallback<void(AdBlockLoadResult)> done,
+    BuildResult result) {
   // A newer load started: its result wins. The dropped engine is freed on
   // the build runner.
   if (shut_down_ || load_id != load_id_) {
     VLOG(1) << "OpenAdBlock: dropped the result of load " << load_id;
     ReleaseOnBuildRunner(std::move(result.engine));
+    if (done) {
+      std::move(done).Run(shut_down_ ? AdBlockLoadResult::kCancelled
+                                     : AdBlockLoadResult::kStale);
+    }
     return;
   }
+  const bool loaded = !!result.engine;
   {
     std::lock_guard lock(status_mutex_);
     status_.last_build_ms = result.build_ms;
@@ -506,7 +539,8 @@ void OpenAdBlockService::OnBuilt(uint64_t load_id,
           << " ms" << (result.error.empty() ? "" : ", " + result.error);
   NotifyStatus();
   if (done) {
-    std::move(done).Run();
+    std::move(done).Run(loaded ? AdBlockLoadResult::kLoaded
+                               : AdBlockLoadResult::kFailed);
   }
 }
 
@@ -526,7 +560,8 @@ open_adblock::OpenBlockerResult OpenAdBlockService::Check(
   }
   const GURL& source = source_url.is_valid() ? source_url : url;
   return open_adblock::open_adblock_check(*holder->engine, url.spec(),
-                                          source.spec(), request_type);
+                                          source.spec(), request_type,
+                                          kOpenAdBlockMatchCapBytes);
 }
 
 open_adblock::OpenCosmeticResources OpenAdBlockService::CosmeticResources(
@@ -535,7 +570,16 @@ open_adblock::OpenCosmeticResources OpenAdBlockService::CosmeticResources(
   if (!holder || !url.is_valid()) {
     return {};
   }
-  return open_adblock::open_adblock_cosmetic(*holder->engine, url.spec());
+  open_adblock::OpenCosmeticResources resources =
+      open_adblock::open_adblock_cosmetic(*holder->engine, url.spec());
+  constexpr auto kRelaxed = std::memory_order_relaxed;
+  cosmetic_dropped_procedural_.fetch_add(resources.dropped_procedural, kRelaxed);
+  cosmetic_dropped_unsafe_.fetch_add(resources.dropped_unsafe, kRelaxed);
+  cosmetic_dropped_style_.fetch_add(resources.dropped_style, kRelaxed);
+  cosmetic_dropped_remove_.fetch_add(resources.dropped_remove, kRelaxed);
+  cosmetic_dropped_scriptlet_.fetch_add(resources.dropped_scriptlet, kRelaxed);
+  cosmetic_dropped_over_cap_.fetch_add(resources.dropped_over_cap, kRelaxed);
+  return resources;
 }
 
 std::vector<std::string> OpenAdBlockService::HiddenSelectors(
@@ -572,8 +616,19 @@ std::vector<std::string> OpenAdBlockService::HiddenSelectors(
 }
 
 AdBlockStatus OpenAdBlockService::GetStatus() const {
-  std::lock_guard lock(status_mutex_);
-  return status_;
+  AdBlockStatus status;
+  {
+    std::lock_guard lock(status_mutex_);
+    status = status_;
+  }
+  constexpr auto kRelaxed = std::memory_order_relaxed;
+  status.cosmetic_dropped_procedural = cosmetic_dropped_procedural_.load(kRelaxed);
+  status.cosmetic_dropped_unsafe = cosmetic_dropped_unsafe_.load(kRelaxed);
+  status.cosmetic_dropped_style = cosmetic_dropped_style_.load(kRelaxed);
+  status.cosmetic_dropped_remove = cosmetic_dropped_remove_.load(kRelaxed);
+  status.cosmetic_dropped_scriptlet = cosmetic_dropped_scriptlet_.load(kRelaxed);
+  status.cosmetic_dropped_over_cap = cosmetic_dropped_over_cap_.load(kRelaxed);
+  return status;
 }
 
 void OpenAdBlockService::SetStatusCallback(
