@@ -102,7 +102,8 @@ Marks: **fact** (string, symbol, field, or pixel proves it), **derived** (follow
 | Tracker | `SidebarPreviewHoverTracker{lastMouseLocation, lastHovered, lastCommittedHover, extendedPresentationItemIDs, trackingArea, menuTrackingToken, showPreviewTask, viewWithHoverableItems, isEnabled}` | fact: reflection. derived: a delayed show task; no preview while a menu tracks; after one committed preview, nearby items can present at once (guess from `extendedPresentationItemIDs`). |
 | Views | `PreviewView{backgroundView: PreviewBackgroundView, folderPreviewHostView, dataProvider, previewPresenter, previewContent: NSView}`, `FolderPreviewView{contentViewHeight, selectedItemID, searchQuery, previewPresenter}`, `StandardPreviewViewHost` | fact: reflection |
 | Color | `PreviewBackgroundColor`: light `#FFFFFF`, dark `#212222` (main `Assets.car`) | fact: `.re/design/all-colors.txt` |
-| Look, size, delay | Not captured | guess |
+| Settings sheet (runtime) | General ▸ "Previews Settings…" (the row has no switch) opens a 422 x 370 sheet: "Show Arc Previews:", the copy above with a "Learn more" link, and 7 checkboxes, all on by default: Arc Folders · Google Calendar · Google Mail · Outlook Calendar · Outlook Mail · Recent pages on Linear, Notion, and Figma · Notion Calendar; then "Done". | measured: capture session 2, S2 02/0050 AX (`interaction-states.md` §20.13) |
+| Look, size, delay | Not captured. In capture session 2 the folder preview did not appear for synthetic pointer events (5 s on a collapsed folder with Arc Folders on). | guess; notes 10:23:34 (`interaction-states.md` §20.4) |
 
 Note: Arc's pinned and favorite previews are site-specific glance views (mail, calendar, recent pages). Peek (`features-advanced.md` §2) is a different feature.
 
@@ -133,6 +134,7 @@ Note: Arc's pinned and favorite previews are site-specific glance views (mail, c
 | Hint text | SF Pro 14 Medium (NCC 0.965 / 0.964 for both halves), white `#F1F0F3`. "You can use" ink starts 12 pt from the left edge; the last ink ends 14 pt from the right edge. Lowercase ink rows 25–32 → baseline at toast y + 28. | measured: `fontmatch.py` |
 | Hint keycap | Plate `[x + 98, y + 10, 37, 27]` relative to the toast, radius ≈ 6, white ≈ 0.10 over the fill; "⌘S" ink 19 pt wide, centered; 8 pt gap after "You can use", 6 pt before "to easily…" | measured |
 | Hint lifetime | Present A0438–A0446 (21:33:45–21:33:50), gone at A0447 | measured: ≈ 5–6 s |
+| Hint trigger (session 2) | No hint on any path: the toolbar button, Cmd+S, and View ▸ Hide Sidebar, each held 7 s. Consistent with a once-per-install hint that already showed in session 1. | measured: S2 04/0001–0094; notes 10:11:20. guess: `hasHiddenSidebarWithGesture` was already set (not read; reading it would need `defaults`, skipped) |
 | Haptics | `tabReorderingHapticsDisabled` (default false → haptics on), `hapticFeedbackWhenReordering`, `isDragDropHapticFeedbackEnabled`, `dropHapticSubject`, `performsPageDetentHaptics`, `NSHapticFeedbackPerformer` | fact. derived: a haptic plays on drop and on page detents (Space paging). The feedback pattern is not proven. |
 | Sounds | `SoundEffectClient{play, preload, isEnabled, setIsEnabled}`, `Sounds.swift`, two files (`capture`, `event`); user default `playUserInterfaceSoundsDisabled` | fact. derived: the polarity ("disabled") means sounds are on by default. Which events play `event` is not proven. |
 | Gesture hide | `hideSidebarWithGesture`, `setIsPreviewingGestureHiddenSidebar`, `isPreviewingGestureHiddenSidebar`, next to `updateSidebarWidth` and `sidebarResizeGestureDidComplete`; recognizers `handleSidebarResizePanGestureRecognizer:` | fact. derived: the gesture is the sidebar resize pan. Dragging below the minimum previews the hidden sidebar (A0422 shows the sidebar sliding out) and release hides it. guess: no separate trackpad swipe exists (no string names one). |
@@ -140,3 +142,22 @@ Note: Arc's pinned and favorite previews are site-specific glance views (mail, c
 ## 11. Open questions for a capture session
 
 See `docs/plans/sidebar-completion.md` §9 for the exact steps. In short: multi-select look and its menus; Space Manager page; both delete alerts; hover previews on a folder, a pinned tab, and a favorite; the unread dot; the "Back to Pinned URL" affordance and the key that turns it into "Separate From Pinned Tab"; the Clear control with Option held; the gesture hide at slow speed; the auto-archive banner (only if it can still be triggered).
+
+## 12. Capture session 2 results (2026-10-26)
+
+Measured in `interaction-states.md` §20 (frames in `.re/runtime/sessions/20261026-*`, notation there):
+
+| Topic | Result | Evidence |
+|---|---|---|
+| Minimum width and drag-to-hide | The resize drag stops at 164 pt. Dragging further left slides the sidebar out while the button is still down; release keeps it hidden. Cmd+S then restores the width from before the drag (228), not 164. | S2 06/0029, 0035, 0066 |
+| Maximum width | 500 pt. | S2 06/0072 |
+| Double-click on the resize edge | Resets the width to 228 (from 364 and from 500). | S2 06/0009, 0088 |
+| Compact toolbar | At 207 pt and below: Back, Forward, and "More options" (28 x 28), no toggle and no Reload. | S2 06/0025–0029 |
+| "Archive Tabs Above" and "Archive Other Tabs" (Q16, C8) | They are the ⌥ alternates of "Archive Tabs Below" and "Archive Tab" in the Today tab menu (AX: each pair shares one frame). | S2 07/0242, 0255 |
+| Folder placement | "New Folder" on the Space menu puts the folder above the Today divider. | S2 08/0100 |
+| Collapsed folder with a child | A collapsed folder can show one child (the last active one); its glyph then shows "•••". On disk: `expandedItems` `{peeked: {_0: [childID]}}`. A click collapses it fully, the next click expands it. | S2 08/0090, 0100; V 46.49–55.04 s |
+| Folder row hover | White 0.10 fill and a "—" glyph at the right (no AX element). | S2 08/0090 |
+| Favorites empty state | Dashed card "Drag to add Favorites" with a dismiss button. | S2 07/0001 (§20.3) |
+| Auto-archive banner (C6, Q12) | Not captured: the Profile's "Archive tabs after" offers 12 hours, 24 hours, 7 days, and 30 days only, so it could not trigger within the session. | S2 02/0034; notes 10:07:27 |
+| Previews (C4, Q3) | The 7-source sheet above. The folder preview card was not captured. | S2 02/0050 |
+

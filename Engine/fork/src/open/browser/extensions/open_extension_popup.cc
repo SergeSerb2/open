@@ -158,8 +158,10 @@ bool OpenExtensionPopup::HandleKeyboardEvent(
   // Keys the page did not consume (ExtensionViewHost already took Escape).
   // ExtensionViewHost, not CEF, is the popup's WebContentsDelegate, so CEF
   // never sees them on its own: hand them to the popup's CEF client
-  // (CefKeyboardHandler::OnKeyEvent), as for a tab. There is no pre-page
-  // hook (OnPreKeyEvent): ExtensionViewHost sends those to the Browser.
+  // (CefKeyboardHandler::OnKeyEvent), as for a tab. Before the page, the
+  // client's OnPreKeyEvent already runs: ExtensionViewHost pre-handles keys
+  // through the hidden Browser's delegate, which is CEF's, and CEF finds
+  // this popup's host.
   if (closing_ || !browser_) {
     return false;
   }
