@@ -1,19 +1,19 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
-    "embeddedUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
+    "distributionUUID": "4C4C445F-5555-3144-A102-DCAE08CB84C9",
+    "embeddedUUID": "4C4C445F-5555-3144-A102-DCAE08CB84C9",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001810"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793002718"
   },
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 64744,
+    "pid": 87879,
     "root": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome/Profiles"
   },
-  "started": "2026-10-26 01:07:25",
+  "started": "2026-10-26 01:19:36",
   "style": "chrome",
   "tabstrip": {
     "badge_text": {
@@ -259,43 +259,43 @@
         [
           "today",
           "https://www.iana.org/help/example-domains",
-          157046759,
-          157046755
+          760416066,
+          760416062
         ],
         [
           "today",
           "https://example.org/",
-          157046758,
-          157046755
+          760416065,
+          760416062
         ],
         [
           "today",
           "https://bitwarden.com/browser-start/",
-          157046757,
-          157046755
+          760416064,
+          760416062
         ],
         [
           "today",
           "https://example.com/",
-          157046756,
-          157046755
+          760416063,
+          760416062
         ]
       ]
     },
     "new_window_outlives_opener": {
       "command_found": true,
-      "new_window": "9460D2B9-AA94-45F6-90EE-1EE0746281B4",
+      "new_window": "0BC58E62-3AD6-4C89-B043-984F5A70D748",
       "new_window_tabs": [
         {
-          "id": 157046834,
+          "id": 760416141,
           "url": "https://example.com/?new-window",
-          "windowId": 157046833
+          "windowId": 760416140
         }
       ],
       "ok": true,
       "page_after_close": {
-        "chromeTabId": 157046834,
-        "chromeWindowId": 157046833,
+        "chromeTabId": 760416141,
+        "chromeWindowId": 760416140,
         "live": true,
         "style": "chrome",
         "url": "https://example.com/?new-window"
@@ -305,8 +305,8 @@
     "no_cross_window_moves": {
       "chrome_window": {
         "ok": {
-          "id": 157046772,
-          "tab": 157046773
+          "id": 760416079,
+          "tab": 760416080
         }
       },
       "group_in_chrome_window": {
@@ -328,15 +328,28 @@
         "error": "Tabs cannot be moved between windows in this browser."
       }
     },
+    "no_tab_groups": {
+      "folder": "FFC8EF13-CBD0-4626-8EE6-1E315E538EDC",
+      "folder_tab": [
+        {
+          "groupId": -1,
+          "id": 760416066,
+          "pinned": true
+        }
+      ],
+      "group_call": "Grouping is not supported by tabs in this window.",
+      "ok": true,
+      "tab_groups": 0
+    },
     "on_activated": {
-      "events_before": 16,
-      "expected_tab": 157046758,
+      "events_before": 15,
+      "expected_tab": 760416065,
       "new_events": [
         {
-          "tabId": 157046758,
-          "time": 1793002057451,
+          "tabId": 760416065,
+          "time": 1793002791341,
           "type": "activated",
-          "windowId": 157046755
+          "windowId": 760416062
         }
       ],
       "ok": true
@@ -344,7 +357,7 @@
     "peek_link_opens_chrome_tab": {
       "ok": true,
       "tab": {
-        "chromeTabId": 157046780,
+        "chromeTabId": 760416087,
         "style": "chrome",
         "url": ""
       }
@@ -365,7 +378,7 @@
       ],
       "ok": true,
       "promoted": {
-        "chromeTabId": 157046782,
+        "chromeTabId": 760416089,
         "style": "chrome",
         "url": "https://example.com/?peek-expand"
       }
@@ -392,25 +405,25 @@
       "opener_sees_closed": true
     },
     "query_active_current_window": {
-      "expected_tab": 157046757,
+      "expected_tab": 760416064,
       "ok": true,
       "result": [
         {
-          "id": 157046757,
+          "id": 760416064,
           "url": "https://bitwarden.com/browser-start/",
-          "windowId": 157046755
+          "windowId": 760416062
         }
       ]
     },
     "second_space": {
       "activation_switched_space": true,
       "mirror": [
-        157046765,
-        157046764,
-        157046762,
-        157046759,
-        157046757,
-        157046778
+        760416072,
+        760416071,
+        760416069,
+        760416066,
+        760416064,
+        760416085
       ],
       "mirror_matches_chrome_tabs": true,
       "ok": true,
@@ -418,13 +431,13 @@
     },
     "tabs_create": {
       "extension_result": {
-        "id": 157046761,
-        "windowId": 157046755
+        "id": 760416068,
+        "windowId": 760416062
       },
       "note": "tabs.create ignores pinned, index and openerTabId (documented P1 gap).",
       "ok": true,
       "sidebar_tab": {
-        "id": "90496FED-CDB2-4DB8-A940-F8688977ED06",
+        "id": "775C3FCD-3E0C-4941-A75F-A7A0D829E3AF",
         "section": "today",
         "url": "https://example.net/?from=extension",
         "visible": true
@@ -434,30 +447,30 @@
       "background": {
         "ok": {
           "discarded": false,
-          "id": 157046763
+          "id": 760416070
         }
       },
       "background_unloaded_in_place": true,
       "ok": true,
       "visible": {
-        "error": "Cannot discard tab with id: 157046757."
+        "error": "Cannot discard tab with id: 760416064."
       }
     },
     "tabs_move": {
       "ok": true,
       "today_after": [
-        "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02",
-        "90496FED-CDB2-4DB8-A940-F8688977ED06",
-        "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
-        "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
-        "AFE8D79F-B897-4ABF-A85A-5BF57B246778"
+        "0A3811D7-7E3A-47B1-8EB7-24BD9F571914",
+        "775C3FCD-3E0C-4941-A75F-A7A0D829E3AF",
+        "BFE80BB1-9A11-4F53-A2ED-4CB56BB85918",
+        "2F926E93-3206-474D-8611-5BED147806B2",
+        "B62B466F-6D28-4A62-8DE4-3CFD2651500F"
       ],
       "today_before": [
-        "90496FED-CDB2-4DB8-A940-F8688977ED06",
-        "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
-        "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
-        "AFE8D79F-B897-4ABF-A85A-5BF57B246778",
-        "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02"
+        "775C3FCD-3E0C-4941-A75F-A7A0D829E3AF",
+        "BFE80BB1-9A11-4F53-A2ED-4CB56BB85918",
+        "2F926E93-3206-474D-8611-5BED147806B2",
+        "B62B466F-6D28-4A62-8DE4-3CFD2651500F",
+        "0A3811D7-7E3A-47B1-8EB7-24BD9F571914"
       ]
     },
     "tabs_move_exact": {
@@ -470,15 +483,15 @@
       },
       "ok": true,
       "today_after": [
-        "36BA4A50-B614-4274-9448-4D4C84BA6E32",
-        "23B7E1A8-37C2-469A-81DA-D3E777A50BE6",
-        "14EEFFFF-6F23-49D1-9C40-8E22D821054F",
-        "AC7112F9-D1BC-4211-AEFA-017D4B8799ED",
-        "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02",
-        "90496FED-CDB2-4DB8-A940-F8688977ED06",
-        "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
-        "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
-        "AFE8D79F-B897-4ABF-A85A-5BF57B246778"
+        "BA9C88EA-51F2-4A48-BCC6-5DE869E36DB9",
+        "EFFE68CD-7BEC-4499-95ED-5774BBF342D3",
+        "A028F944-5D32-4347-90B2-2529B1B6BC75",
+        "EDDB6821-503C-4226-B434-C2BD71C2CBC2",
+        "0A3811D7-7E3A-47B1-8EB7-24BD9F571914",
+        "775C3FCD-3E0C-4941-A75F-A7A0D829E3AF",
+        "BFE80BB1-9A11-4F53-A2ED-4CB56BB85918",
+        "2F926E93-3206-474D-8611-5BED147806B2",
+        "B62B466F-6D28-4A62-8DE4-3CFD2651500F"
       ]
     },
     "tabs_remove": {
@@ -506,51 +519,51 @@
       "ok": true,
       "sidebar_rows": [
         [
-          "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
-          157046759
+          "BFE80BB1-9A11-4F53-A2ED-4CB56BB85918",
+          760416066
         ],
         [
-          "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
-          157046758
+          "2F926E93-3206-474D-8611-5BED147806B2",
+          760416065
         ],
         [
-          "AFE8D79F-B897-4ABF-A85A-5BF57B246778",
-          157046757
+          "B62B466F-6D28-4A62-8DE4-3CFD2651500F",
+          760416064
         ],
         [
-          "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02",
-          157046756
+          "0A3811D7-7E3A-47B1-8EB7-24BD9F571914",
+          760416063
         ]
       ],
       "windows": [
         {
           "focused": false,
-          "id": 157046755,
+          "id": 760416062,
           "tabs": [
             {
               "active": false,
-              "id": 157046759,
+              "id": 760416066,
               "index": 0,
               "pinned": false,
               "url": "https://www.iana.org/help/example-domains"
             },
             {
               "active": false,
-              "id": 157046758,
+              "id": 760416065,
               "index": 1,
               "pinned": false,
               "url": "https://example.org/"
             },
             {
               "active": true,
-              "id": 157046757,
+              "id": 760416064,
               "index": 2,
               "pinned": false,
               "url": "https://bitwarden.com/browser-start/"
             },
             {
               "active": false,
-              "id": 157046756,
+              "id": 760416063,
               "index": 3,
               "pinned": false,
               "url": "https://example.com/"
@@ -567,9 +580,9 @@
           "refused": true,
           "request": "close",
           "tab": "",
-          "time": 1793002068.926975,
+          "time": 1793002802.706908,
           "type": "window-request",
-          "window": 157046755
+          "window": 760416062
         }
       ],
       "live_tabs": 5,
