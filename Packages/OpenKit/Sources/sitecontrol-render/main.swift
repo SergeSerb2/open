@@ -15,7 +15,7 @@ enum CLI {
     static let motionNames = ["open", "close", "grow", "shrink"]
     static let motionTimes = [0.0, 0.04, 0.08, 0.26]
     static let sccNames = ["scc-basic", "scc-insecure", "scc-adblock-excluded", "scc-adblock-unavailable", "scc-no-boosts", "scc-boosts-off", "scc-incognito", "scc-internal-page", "scc-many", "scc-pane-anchor", "scc-dark", "scc-reload", "scc-hover", "scc-keyboard-focus", "scc-menu", "scc-picker", "scc-tooltip-on", "scc-tooltip-off", "scc-tooltip-unavailable", "scc-tooltip-private"]
-    static let editorNames = ["editor-interstitial", "editor-simple", "editor-advanced-color", "editor-neutral-page", "editor-not-active", "editor-global-off", "editor-legacy", "editor-menu"]
+    static let editorNames = ["editor-interstitial", "editor-simple", "editor-advanced-color", "editor-neutral-page", "editor-not-active", "editor-global-off", "editor-legacy", "editor-menu", "editor-scope-host", "editor-scope-ip", "editor-rename", "editor-reset", "editor-delete", "editor-double-banner", "editor-hover-side", "editor-pressed-side", "editor-focus-side", "editor-hover-chip", "editor-pressed-chip", "editor-focus-chip", "editor-hover-tile", "editor-pressed-tile", "editor-focus-tile"]
     static let names = sccNames + editorNames
     static func value(_ args: [String], _ name: String) -> String? {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
@@ -33,7 +33,7 @@ enum CLI {
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
             let image: CGImage
             if state.hasPrefix("editor-") { let editor = EditorStage(state: state,scale: scale,appearance: appearance); image = withExtendedLifetime(editor) { editor.render() } }
-            else { image = Stage(state: state, scale: scale, appearance: appearance).render(scale: scale) }
+            else { let stage = Stage(state: state,scale: scale,appearance: appearance); image = withExtendedLifetime(stage) { stage.render(scale: scale) } }
             OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
             print("wrote \(out) (\(image.width)×\(image.height))")
         case "ax":
@@ -115,7 +115,7 @@ enum CLI {
                 autoreleasepool {
                 let image: CGImage
                 if state.hasPrefix("editor-") { let editor = EditorStage(state: state,scale: scale,appearance: appearance); image = withExtendedLifetime(editor) { editor.render() } }
-                else { image = Stage(state: state,scale: scale,appearance: appearance).render(scale: scale) }
+                else { let stage = Stage(state: state,scale: scale,appearance: appearance); image = withExtendedLifetime(stage) { stage.render(scale: scale) } }
                 OffscreenRenderer.writePNG(image, to: directory.appendingPathComponent("\(state)-\(appearance.rawValue)@\(Int(scale))x.png"))
                 }
             } } }

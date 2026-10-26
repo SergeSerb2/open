@@ -17,6 +17,16 @@ enum EditorBench {
             if i >= 10 { events.append((CACurrentMediaTime()-start)*1000) }
         }
         stage.mouse(.leftMouseUp,point: CGPoint(x: 100,y: 64),in: wheel)
+        var frames: [Double] = []
+        stage.mouse(.leftMouseDown,point: CGPoint(x: 64,y: 30),in: wheel)
+        for i in 0..<110 {
+            let a = Double(i)*0.03, start = CACurrentMediaTime()
+            stage.mouse(.leftMouseDragged,point: CGPoint(x: 64+sin(a)*40,y: 64-cos(a)*40),in: wheel)
+            OffscreenRenderer.settle(stage.panel.contentView!)
+            if i >= 10 { frames.append((CACurrentMediaTime()-start)*1000) }
+        }
+        stage.mouse(.leftMouseUp,point: CGPoint(x: 100,y: 64),in: wheel)
+        print(String(format: "Editor full drag frame (native event + display): p95 %.3f ms, max %.3f ms (100 frames; diagnostic, no separate plan budget)",p95(frames),frames.max()!))
         stage.host.previews = []; stage.host.previewTimes = []
         let dragStart = CACurrentMediaTime()
         stage.mouse(.leftMouseDown,point: CGPoint(x: 64,y: 30),in: wheel)

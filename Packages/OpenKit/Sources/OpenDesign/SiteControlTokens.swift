@@ -22,16 +22,21 @@ public enum BoostEditorMetrics {          // §4
     public static let codeDefault = CGSize(width: 560, height: 640), codeMinimum = CGSize(width: 420, height: 360)
     public static let gutterWidth: CGFloat = 36, codeFontSize: CGFloat = 12, codeLineHeight: CGFloat = 16
     public static let contentInset: CGFloat = 12   // from the web panel's top-right corner
-    public static let cornerRadius: CGFloat = 12, shadowPadding: CGFloat = 24
+    public static let cornerRadius: CGFloat = 12, shadowSide: CGFloat = 30, shadowTop: CGFloat = 24, shadowBottom: CGFloat = 36
     public static let wheelY: CGFloat = 60, sideButtonsY: CGFloat = 240, bannerHeight: CGFloat = 28
     public static let fontGap: CGFloat = 6, fontStripHeight: CGFloat = 44, blockGap: CGFloat = 12
+    public static let fontEdgeInset: CGFloat = 4, fontViewport: CGFloat = 232, fontFade: CGFloat = 12
+    public static let noteY: CGFloat = 215, slidersY: CGFloat = 268, sliderLabelY: CGFloat = 275, sliderLabelWidth: CGFloat = 102, fontsY: CGFloat = 280
+    public static let fontStep: CGFloat = 62
+    public static let sliderX: CGFloat = 124, sliderWidth: CGFloat = 130
     public static let colorDuration: CFTimeInterval = 0.22
     public static let interstitialHeight: CGFloat = 326, interstitialFooter: CGFloat = 64, illustration: CGFloat = 70
 }
 public enum BoostEditorColors {           // BO-22 values (facts); usage per §4 (guess)
     public static let segmentBackground = DesignColor(light: .black(0.07), dark: .white(0.10))
     public static let segmentSelection = DesignColor(light: .white(1), dark: .white(0.30))
-    public static let sliderTrack = DesignColor(RGBA(hex: 0x3B3746, alpha: 0.05))
+    public static let sliderTrack = DesignColor(light: RGBA(hex: 0x3B3746, alpha: 0.05), dark: .white(0.12))
+    public static let headerButton = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9), dark: .white(0.9))
     public static let sliderTint = DesignColor(RGBA(hex: 0x017AFF))
     public static let warning = DesignColor(RGBA(hex: 0xFF5A5F))
     public static let puck = DesignColor(RGBA(hex: 0xFAFBFF))

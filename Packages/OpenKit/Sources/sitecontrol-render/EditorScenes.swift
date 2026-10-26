@@ -13,6 +13,7 @@ final class EditorHost: BoostEditorHost {
     let root: URL
     let boostStore: BoostStore
     var url = URL(string: "https://news.example.com/news/story")!
+    var snapshotDelay: TimeInterval = 0
     var snapshots: Data?
     var previews: [InjectionPlan] = [], previewTimes: [Double] = []
     var refreshes = 0, exits = 0, libraries = 0
@@ -48,7 +49,7 @@ final class EditorHost: BoostEditorHost {
         }
         refreshDurations.append((CACurrentMediaTime()-start)*1000)
     }
-    func pageSnapshot(tabID: ItemID) async -> Data? { snapshots }
+    func pageSnapshot(tabID: ItemID) async -> Data? { if snapshotDelay > 0 { try? await Task.sleep(for: .seconds(snapshotDelay)) }; return snapshots }
     func enterZap(boostID: BoostID,tabID: ItemID) -> Bool { false }
     func exitZap(tabID: ItemID) { exits += 1 }
     func removeZapFromSession(_ selector: String,tabID: ItemID) {}
@@ -84,14 +85,16 @@ final class EditorStage {
     var session: BoostEditorSession { controller.session! }
     var view: BoostEditorView { controller.view! }
     var panel: NSPanel { controller.panel! }
-    init(state: String = "editor-simple",scale: CGFloat = 1,appearance: ContentAppearance = .light,isNew: Bool = false,url: URL? = nil,boost: Boost? = nil) {
+    init(state: String = "editor-simple",scale: CGFloat = 1,appearance: ContentAppearance = .light,isNew: Bool = false,url: URL? = nil,boost: Boost? = nil,waitForColors: Bool = true) {
         self.scale = scale; self.state = state
-        host = EditorHost(neutral: state == "editor-neutral-page"); if let url { host.url = url }
+        host = EditorHost(neutral: state == "editor-neutral-page"); if let url { host.url = url }; if !waitForColors { host.snapshotDelay = 0.2 }
+        if state == "editor-scope-ip" { host.url = URL(string: "http://127.0.0.1/other/page")! }
         suite = "open.harness.editor."+UUID().uuidString; defaults = UserDefaults(suiteName: suite)!
         defaults.set(state != "editor-interstitial",forKey: "open.boosts.hasDismissedInterstitial")
-        defaults.set(state != "editor-global-off",forKey: "open.advanced.enableBoosts"); host.globallyEnabled = state != "editor-global-off"
+        defaults.set(!["editor-global-off","editor-double-banner"].contains(state),forKey: "open.advanced.enableBoosts"); host.globallyEnabled = !["editor-global-off","editor-double-banner"].contains(state)
         var seed = boost ?? Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000004"),name: "My Boost",siteMatch: SiteMatch(domain: host.url.host!))
-        if state == "editor-not-active" { seed.siteMatch = SiteMatch(domain: "other.example.com") }
+        if ["editor-not-active","editor-double-banner"].contains(state) { seed.siteMatch = SiteMatch(domain: "other.example.com") }
+        if state == "editor-scope-ip" { seed.siteMatch = SiteMatch(domain: "127.0.0.1",pathPrefix: "/news") }
         if state == "editor-legacy" { seed.colorAdjustment = ColorAdjustment(brightness: 2,invert: 0.5) }
         initialID = seed.id; if !isNew { _ = host.boostStore.upsert(seed) }
         backdrop.appearance = appearance.nsAppearance
@@ -101,9 +104,23 @@ final class EditorStage {
         precondition(controller.present(parent: parent,contentRect: CGRect(x: 228,y: 10,width: 762,height: 740),context: context,boostID: isNew ? nil : seed.id))
         // Resolve only the real asynchronous snapshot path, never patch the session.
         let deadline = Date().addingTimeInterval(3)
-        while !session.colorsReady && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
+        while waitForColors && !session.colorsReady && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
         settle()
         if state == "editor-advanced-color" { tap("editor.color.advanced"); tap("editor.color.invert"); settle(0.3) }
+        if state.hasPrefix("editor-hover-") || state.hasPrefix("editor-pressed-") || state.hasPrefix("editor-focus-") {
+            let id = state.hasSuffix("side") ? "editor.color.invert" : state.hasSuffix("chip") ? "editor.font.3" : "editor.tool.case"
+            if let control = view.control(id: id) {
+                control.scrollToVisible(control.bounds); settle()
+                if state.contains("-hover-") {
+                    let event = NSEvent.enterExitEvent(with: .mouseEntered,location: .zero,modifierFlags: [],timestamp: CACurrentMediaTime(),windowNumber: panel.windowNumber,context: nil,eventNumber: 0,trackingNumber: 0,userData: nil)!
+                    control.mouseEntered(with: event)
+                } else if state.contains("-pressed-") { mouse(.leftMouseDown,point: CGPoint(x: control.bounds.midX,y: control.bounds.midY),in: control) }
+                else { for _ in 0..<40 { key(48,"\t"); if panel.firstResponder === control { break } } }
+            }
+        }
+        if state == "editor-rename" { menu("Rename this Boost…") }
+        if state == "editor-reset" { tap("editor.tool.case"); menu("Reset all Edits") }
+        if state == "editor-delete" { menu("Delete this Boost") }
         settle()
     }
     isolated deinit { controller.close(); parent.contentView = nil; parent.close(); defaults.removePersistentDomain(forName: suite); CATransaction.flush() }
@@ -141,10 +158,17 @@ final class EditorStage {
         for i in 0..<events { let t = Double(i)*0.09; mouse(.leftMouseDragged,point: CGPoint(x: 64+sin(t)*40,y: 64-cos(t)*40),in: wheel); if delay > 0 { RunLoop.main.run(until: Date().addingTimeInterval(delay)) } }
         mouse(.leftMouseUp,point: CGPoint(x: 104,y: 64),in: wheel); settle()
     }
+    private func captureNative(_ view: NSView) -> CGImage {
+        func mark(_ v: NSView) { v.wantsLayer = true; v.needsDisplay = true; v.subviews.forEach(mark) }
+        mark(view); OffscreenRenderer.settle(view)
+        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,pixelsWide: Int(ceil(view.bounds.width*scale)),pixelsHigh: Int(ceil(view.bounds.height*scale)),bitsPerSample: 8,samplesPerPixel: 4,hasAlpha: true,isPlanar: false,colorSpaceName: .deviceRGB,bytesPerRow: 0,bitsPerPixel: 0)!
+        bitmap.size = view.bounds.size; view.cacheDisplay(in: view.bounds,to: bitmap)
+        return bitmap.cgImage!
+    }
     func render() -> CGImage {
         func mark(_ view: NSView) { view.needsDisplay = true; view.subviews.forEach(mark) }
         mark(panel.contentView!); settle()
-        if state == "editor-menu" && menuLayer == nil {
+        if ["editor-menu","editor-scope-host","editor-scope-ip"].contains(state) && menuLayer == nil {
             var timer: Timer?
             controller.onMenu = { [weak self] menu in
                 self?.activeMenu = menu
@@ -156,7 +180,7 @@ final class EditorStage {
                             if let content = window.contentView {
                                 content.wantsLayer = true; OffscreenRenderer.settle(content)
                                 if content.layer != nil {
-                                    let captured = OffscreenRenderer().snapshot(content,scale: self.scale)
+                                    let captured = self.captureNative(content)
                                     let layer = CALayer(); layer.contents = captured; layer.contentsScale = self.scale
                                     // CARenderer has no WindowServer backdrop for NSVisualEffectView.
                                     layer.backgroundColor = Core.popoverBackground.cgColor(self.backdrop.contentAppearance)
@@ -170,7 +194,7 @@ final class EditorStage {
                 }
                 RunLoop.main.add(timer!,forMode: .eventTracking)
             }
-            tap("editor.more"); timer?.invalidate(); controller.onMenu = nil
+            tap(state == "editor-menu" ? "editor.more" : "editor.scope"); timer?.invalidate(); controller.onMenu = nil
         }
         settle(); let surface = panel.contentView!
         let panelImage = OffscreenRenderer().snapshot(surface,scale: scale)
@@ -182,10 +206,19 @@ final class EditorStage {
             // AppKit constrains its menu window to the real display, even when
             // the owning fixture is offscreen. Place its actual captured layers
             // beside the fixture anchor for this contact sheet only.
-            menuLayer.frame = CGRect(x: frame.maxX-24-menuFrame.width,y: backdrop.bounds.height-frame.maxY+60,width: menuFrame.width,height: menuFrame.height)
+            menuLayer.frame = CGRect(x: frame.minX-menuFrame.width-12,y: backdrop.bounds.height-frame.maxY+90,width: menuFrame.width,height: menuFrame.height)
             backdrop.layer?.addSublayer(menuLayer)
         }
-        defer { panelLayer.removeFromSuperlayer(); menuLayer?.removeFromSuperlayer() }
+        var sheetLayer: CALayer?
+        if let alert = controller.activeAlert, let content = alert.window.contentView {
+            mark(content); OffscreenRenderer.settle(content)
+            let image = captureNative(content), layer = CALayer()
+            layer.contents = image; layer.contentsScale = scale
+            layer.frame = CGRect(x: max(245,frame.minX-CGFloat(image.width)/scale-12),y: 150,width: CGFloat(image.width)/scale,height: CGFloat(image.height)/scale)
+            layer.backgroundColor = Core.popoverBackground.cgColor(backdrop.contentAppearance); layer.cornerRadius = 12; layer.masksToBounds = true
+            backdrop.layer?.addSublayer(layer); sheetLayer = layer
+        }
+        defer { panelLayer.removeFromSuperlayer(); menuLayer?.removeFromSuperlayer(); sheetLayer?.removeFromSuperlayer() }
         return OffscreenRenderer().snapshot(backdrop,scale: scale)
     }
 

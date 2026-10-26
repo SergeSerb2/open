@@ -44,6 +44,15 @@ public final class BoostStore: @unchecked Sendable {
     }
 
     public func load() -> [Boost] {
+        // load precedes mutation. Only our abandoned atomic-write files are removed.
+        queue.sync {
+            let directory = fileURL.deletingLastPathComponent(), prefix = fileURL.lastPathComponent + ".tmp-"
+            let siblings = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey])) ?? []
+            for sibling in siblings where sibling.lastPathComponent.hasPrefix(prefix) {
+                let values = try? sibling.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                if values?.isRegularFile == true && values?.isSymbolicLink != true { try? FileManager.default.removeItem(at: sibling) }
+            }
+        }
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             lock.withLock { boosts = [:]; sorted = nil; loadedSchemaVersion = 1 }
             return []

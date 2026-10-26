@@ -510,7 +510,7 @@ identity (→ colorAdjustment = nil, colorWheel = nil) when ρ < 0.02, !invertLi
   weight is < 2 % of the pixel count, `h0 = nil` (a neutral page). Store `h0` in
   `colorWheel.baseHue`; never re-sample while `colorWheel` exists (the page is already recolored).
 - Neutral page (`h0 == nil`): the wheel still works on colored elements. Under the wheel a 11 pt
-  hint shows: "This page has few colors. Try Invert lightness." (Open choice.)
+  hint shows: "Few colors here. Try Invert lightness." on one centered line (Open choice; lead decision, 2026-10-26 09:32 America/Vancouver).
 - Reset to original colors: `colorWheel = nil`, `colorAdjustment = nil`; puck animates to the
   center (0.22 s ease-out); advanced sliders reset to 1.
 - Invert lightness toggles `colorWheel.invertLightness` (creating `colorWheel` with `ρ = 0` if
@@ -534,7 +534,7 @@ never convert the legacy filter. The legacy round-trip is checked through the ed
 
 | Part | Value |
 |---|---|
-| Font strip | y after the color block + 12. Height 44: a horizontal scroll of chips 56×36, gap 6, inset 14, inside a track filled `BoostEditorColors.segmentBackground` radius 10. Each chip draws "Aa" 17 pt in its family (fallback system font when not installed; then hidden), with the family name as tooltip and AX label. Selected chip: `BoostEditorColors.segmentSelection` fill (white / white 30 %) with shadow black 0.10 radius 2. Scroll with trackpad, Shift+wheel, or arrow keys. |
+| Font strip | y after the color block + 12. Height 44: a horizontal scroll of chips 56×36, gap 6, inside a track inset 14. The viewport starts at x 18 and is 232 pt wide (4 pt edge inset); keep 56 pt chips and scroll (lead decision, 2026-10-26 10:00 America/Vancouver). Show a 12 pt trailing fade while more chips remain, and fully reveal the keyboard-focused chip. The track is filled `BoostEditorColors.segmentBackground` radius 10. Each chip draws "Aa" 17 pt in its family (fallback system font when not installed; then hidden), with the family name as tooltip and AX label. Selected chip: `BoostEditorColors.segmentSelection` fill (white / white 30 %) with shadow black 0.10 radius 2. Scroll with trackpad, Shift+wheel, or arrow keys. |
 | Fonts | "Original" (no override, `fontFamily = nil`), "System" (`system-ui, -apple-system, sans-serif`), then Helvetica Neue, Avenir, Futura, DIN Alternate, PT Mono, Courier, Times New Roman, Charter, Baskerville, Hoefler Text, Palatino, Chalkboard, SignPainter, Snell Roundhand, Papyrus, Apple Chancery, Luminari, Wingdings (BO-18 list; each written as `<Family>, <generic>` with generic serif / sans-serif / monospace / cursive / fantasy). Values contain no quotes or semicolons (the planner rejects `;{}"` and newlines, boosts-zap §3.5). |
 | Tool tiles | y after the font strip + 12. Four square tiles 54×54, gap 8, inset 14 (4 × 54 + 3 × 8 = 240 = 268 − 28). Radius 12. Fill = accent color (Zap `Yellow`, Code `Blue`, Text size `Pink`, Text case `Green`; BO-22 colors, guess on Arc's mapping) at 100 % when on, 14 % when off; glyph 18 pt + label 10 pt Semibold below it; label color `BoostEditorColors.label` (white) when on, `Core.foregroundPrimary` when off. |
 
@@ -545,7 +545,7 @@ Tool tiles:
 | Zap | `bolt.fill` | "Zap" | Toggle Zap mode (§4.6) | — (Zaps write on commit) |
 | Code | `chevron.left.forwardslash.chevron.right` | "Code" | Switch to code mode (§4.8) | — |
 | Text size | `textformat.size` | current option: "Small", "Normal", "Medium", "Large", "Larger" | Cycle forward (Shift-click: back). Right-click: menu with the five options. | `textZoom`: small 0.9, normal nil, medium 1.1, large 1.25, larger 1.5 (BO-18 names; values guess) |
-| Text case | `textformat` | "Aa", "Abc" (capitalize), "AB" (uppercase), "ab" (lowercase) | Cycle none → capitalize → uppercase → lowercase → none. Right-click: menu. | `textTransform`: nil / "capitalize" / "uppercase" / "lowercase" |
+| Text case | `textformat` | "Original", "Abc" (capitalize), "AB" (uppercase), "ab" (lowercase) | Cycle none → capitalize → uppercase → lowercase → none. Right-click: menu. | `textTransform`: nil / "capitalize" / "uppercase" / "lowercase" |
 
 A tile is "on" when its value is not the default (Zap: picker active).
 
@@ -560,7 +560,7 @@ Entry and exit (D-8):
 | Zap tile off | `coordinator.exitZap(for:)`; send. |
 | Picker exits by itself (`picker:exited` esc / done) | Editor turns the tile off. |
 | Editor close, tab switch, navigation, frame destruction, transport loss | `exitZap` or `invalidate(pageID:)` per `docs/boosts.md`. |
-| Before P7 | The Zap tile is disabled with tooltip "Zap needs the isolated script world (engine patch P7)." and the adapter's Zap send path carries the `// Blocked on P7: isolated world` marker (app-shell D8). The list still shows and removes stored Zaps. |
+| Before P7 | The Zap tile is disabled with tooltip "Zap isn’t available yet."; the Code tile tooltip is "Code editing isn’t available yet." (lead decision, 2026-10-26 09:32 America/Vancouver) and the adapter's Zap send path carries the `// Blocked on P7: isolated world` marker (app-shell D8). The list still shows and removes stored Zaps. |
 
 Zaps list (Open's form of Arc's shelf, BO-20; placed in the editor, not over the page — D-8):
 
@@ -1231,3 +1231,14 @@ Long Setting tile titles wrap to two lines (baselines 19 and 33), omitting the s
 Reload and global-off note baselines are row top + 20. Focus rings indicate keyboard focus only.
 Fill, edge, clip and shadow use one continuous r16 path. Geometry and palette remain guesses
 until capture session 2; F0137 supplies geometry only.
+
+
+Round-2 editor clarifications (lead review, 2026-10-26; all layout values remain guesses until capture session 2):
+- Child-window shadow padding is 30 pt at the sides, 24 pt above, and 36 pt below; body anchoring stays 12 pt from the web content's top-right.
+- Header name and scope draw at Core Text x 40. Header glyph alpha is 0.9; scope uses the secondary token's alpha.
+- Interstitial title/body use the primary/secondary theme colors; the footer label keeps #2E2740 on #CEDBFC in both themes.
+- Banners have 14 pt text insets, 7 pt vertical padding, 11 pt Medium primary text, and 28/42 pt heights for one/two lines. Controls below move by the actual height.
+- Advanced sliders start at x 124, width 130; the dark track is white 0.12. Focus rings follow the control's shape, outset 2 pt, and show only for keyboard focus.
+- Slider and wheel keyboard/AX repeats coalesce for 1 s and commit on focus loss. Each control owns its interaction; starting a different control ends the preceding group.
+- Closing or deleting flushes the existing BoostStore with saveNow; no second store. Startup load removes only abandoned sibling atomic-write files.
+- A saved pathPrefix is always offered and checked even if the page is on a different path or at `/`. The derived path choice remains available when non-root. This completes the lead's IP/path scope decision of 2026-10-26 09:26.

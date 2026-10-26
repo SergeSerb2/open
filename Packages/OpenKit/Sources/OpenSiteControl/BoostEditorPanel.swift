@@ -28,10 +28,10 @@ public final class BoostEditorController: NSObject, NSTextFieldDelegate {
     isolated deinit { colorTask?.cancel(); if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }; session?.finish() }
     @discardableResult public func present(parent: NSWindow, contentRect: CGRect, context: SiteControlContext, boostID: BoostID? = nil) -> Bool {
         guard !context.isIncognito else { return false }
-        close(); self.parent = parent; self.contentRect = contentRect; panelOffset = .zero
         let store = host.store(for: context.profileID)
         let existing = boostID.flatMap { store.boost(id: $0) }
         if boostID != nil && existing == nil { return false }
+        close(); self.parent = parent; self.contentRect = contentRect; panelOffset = .zero
         let boost: Boost
         if let existing { boost = existing }
         else {
@@ -85,17 +85,18 @@ public final class BoostEditorController: NSObject, NSTextFieldDelegate {
     public func layout(contentRect: CGRect) { self.contentRect = contentRect; if let view { resize(height: view.frame.height,animated: false) } }
     private func rememberOffset() {
         guard let panel, let parent else { return }
-        let ideal = parent.convertToScreen(CGRect(x: contentRect.maxX-12-268-24,y: contentRect.maxY-12+24,width: 0,height: 0)).origin
+        let ideal = parent.convertToScreen(CGRect(x: contentRect.maxX-12-268-BoostEditorMetrics.shadowSide,y: contentRect.maxY-12+BoostEditorMetrics.shadowTop,width: 0,height: 0)).origin
         panelOffset = CGPoint(x: panel.frame.minX-ideal.x,y: panel.frame.maxY-ideal.y)
     }
     private func resize(height: CGFloat, animated: Bool) {
         guard let panel, let parent else { return }
-        let pad = BoostEditorMetrics.shadowPadding, h = min(height,max(100,contentRect.height-24))
-        let origin = parent.convertToScreen(CGRect(x: contentRect.maxX-12-268-pad,y: contentRect.maxY-12+pad,width: 0,height: 0)).origin
-        var rect = CGRect(x: origin.x+panelOffset.x,y: origin.y+panelOffset.y-h-pad*2,width: 268+pad*2,height: h+pad*2)
+        let side = BoostEditorMetrics.shadowSide, top = BoostEditorMetrics.shadowTop, bottom = BoostEditorMetrics.shadowBottom
+        let h = min(height,max(100,contentRect.height-24))
+        let origin = parent.convertToScreen(CGRect(x: contentRect.maxX-12-268-side,y: contentRect.maxY-12+top,width: 0,height: 0)).origin
+        var rect = CGRect(x: origin.x+panelOffset.x,y: origin.y+panelOffset.y-h-top-bottom,width: 268+side*2,height: h+top+bottom)
         let allowed = parent.convertToScreen(contentRect)
-        rect.origin.x = min(max(rect.minX,allowed.minX-pad),allowed.maxX-rect.width+pad)
-        rect.origin.y = min(max(rect.minY,allowed.minY-pad),allowed.maxY-rect.height+pad)
+        rect.origin.x = min(max(rect.minX,allowed.minX-side),allowed.maxX-rect.width+side)
+        rect.origin.y = min(max(rect.minY,allowed.minY-bottom),allowed.maxY-rect.height+top)
         panel.setFrame(rect,display: true,animate: false)
         if let surface = panel.contentView as? EditorSurface { surface.contentHeight = height; surface.needsLayout = true }
 
@@ -117,17 +118,18 @@ public final class BoostEditorController: NSObject, NSTextFieldDelegate {
             let order = view.focusOrder; guard !order.isEmpty else { return true }
             let i = order.firstIndex { $0 === panel.firstResponder }
             let next = i.map { ($0+(event.modifierFlags.contains(.shift) ? order.count-1 : 1))%order.count } ?? (event.modifierFlags.contains(.shift) ? order.count-1 : 0)
-            order[next].scrollToVisible(order[next].bounds); panel.makeFirstResponder(order[next]); return true
+            view.focus(order[next]); return true
         }
         if [123,124].contains(event.keyCode), let b = panel.firstResponder as? SiteControlButton,b.controlID.hasPrefix("editor.tool.") {
             let tools = view.focusOrder.filter { ($0 as? SiteControlButton)?.controlID.hasPrefix("editor.tool.") == true }
-            if let i = tools.firstIndex(of: b) { panel.makeFirstResponder(tools[(i+(event.keyCode == 123 ? tools.count-1 : 1))%tools.count]); return true }
+            if let i = tools.firstIndex(of: b) { view.focus(tools[(i+(event.keyCode == 123 ? tools.count-1 : 1))%tools.count]); return true }
         }
         return false
     }
     public func beginInlineRename() {
         guard let view, let session else { return }
         let original = session.boost.name; inlineOriginal = nil; view.nameField.stringValue = original
+        view.nameField.textColor = Core.foregroundPrimary.nsColor; view.needsDisplay = true
         view.nameField.isEditable = true; view.nameField.isSelectable = true; view.nameField.target = self; view.nameField.action = #selector(finishInlineRename)
         panel?.makeFirstResponder(view.nameField); view.nameField.selectText(nil)
         inlineOriginal = original
@@ -149,6 +151,7 @@ public final class BoostEditorController: NSObject, NSTextFieldDelegate {
             let item = NSMenuItem(title: title,action: #selector(menuAction(_:)),keyEquivalent: i < 2 ? "z" : ""); item.target = self; item.tag = i
             if i == 0 { item.isEnabled = session.undoManager.canUndo }
             if i == 1 { item.isEnabled = session.undoManager.canRedo; item.keyEquivalentModifierMask = [.command,.shift] }
+            if i == 4 { item.isEnabled = session.colorsReady }
             if i == 5 { item.isEnabled = !session.boost.isEmpty }
             menu.addItem(item)
         }
@@ -207,7 +210,7 @@ private final class EditorSurface: NSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func layout() {
-        super.layout(); let rect = bounds.insetBy(dx: 24,dy: 24)
+        super.layout(); let rect = CGRect(x: BoostEditorMetrics.shadowSide,y: BoostEditorMetrics.shadowTop,width: bounds.width-BoostEditorMetrics.shadowSide*2,height: bounds.height-BoostEditorMetrics.shadowTop-BoostEditorMetrics.shadowBottom)
         scroll.frame = rect; editor.frame = CGRect(origin: .zero,size: CGSize(width: 268,height: contentHeight))
         scroll.wantsLayer = true; scroll.layer?.cornerRadius = 12; scroll.layer?.cornerCurve = .continuous; scroll.layer?.masksToBounds = true
         panelShadow.frame = bounds; panelShadow.shadowPath = SiteControlShape.path(in: rect,radius: 12)

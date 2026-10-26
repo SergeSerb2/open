@@ -10,6 +10,12 @@ public struct BoostScopeChoice: Sendable, Equatable {
     public init(title: String, match: SiteMatch) { self.title = title; self.match = match }
 }
 
+/// Each control owns its repeat/drag group. A stale timer cannot commit another control.
+public struct BoostEditorInteractionOwner: Hashable, Sendable {
+    private let id = UUID()
+    public init() {}
+}
+
 @MainActor
 public final class BoostEditorSession {
     public let context: SiteControlContext
@@ -24,6 +30,8 @@ public final class BoostEditorSession {
     private let host: BoostEditorHost
     private let store: BoostStore
     private var interactiveBefore: Boost?
+    private var interactiveOwner: BoostEditorInteractionOwner?
+    public var isInteracting: Bool { interactiveBefore != nil }
     private var interactiveName = "Change Boost"
     private var previewWork: DispatchWorkItem?
     private var lastPreview: TimeInterval = -.infinity
@@ -90,19 +98,22 @@ public final class BoostEditorSession {
         sampledHue = hue ?? nil; colorsReady = true; sampleTask = nil
         onChange?()
     }
-    public func beginInteractive(_ name: String = "Change colors") {
-        guard isEditable, interactiveBefore == nil else { return }
-        interactiveBefore = boost; interactiveName = name
+    public func beginInteractive(_ name: String = "Change colors", owner: BoostEditorInteractionOwner) {
+        guard isEditable else { return }
+        if interactiveBefore != nil && interactiveOwner != owner { endInteractive() }
+        guard interactiveBefore == nil else { return }
+        interactiveBefore = boost; interactiveName = name; interactiveOwner = owner
     }
-    public func endInteractive() {
+    public func endInteractive(owner: BoostEditorInteractionOwner? = nil) {
+        if let owner, owner != interactiveOwner { return }
         guard let before = interactiveBefore else { return }
-        interactiveBefore = nil; previewWork?.cancel(); previewWork = nil
+        interactiveBefore = nil; interactiveOwner = nil; previewWork?.cancel(); previewWork = nil
         commit(before: before, name: interactiveName)
     }
-    @discardableResult public func editWheel(_ edit: (inout BoostColorWheel) -> Void, name: String = "Change colors") -> Bool {
+    @discardableResult public func editWheel(owner: BoostEditorInteractionOwner? = nil, _ edit: (inout BoostColorWheel) -> Void, name: String = "Change colors") -> Bool {
         guard isEditable, colorsReady else { return false }
-        let standalone = interactiveBefore == nil
-        if standalone { beginInteractive(name) }
+        let standalone = owner == nil
+        beginInteractive(name, owner: owner ?? BoostEditorInteractionOwner())
         var wheel = displayWheel; edit(&wheel)
         boost.colorWheel = wheel.clamped()
         boost = BoostStore.normalizedForPreview(boost)
@@ -120,7 +131,7 @@ public final class BoostEditorSession {
     public static let textSizes: [Double?] = [0.9, nil, 1.1, 1.25, 1.5]
     public static let textSizeNames = ["Small", "Normal", "Medium", "Large", "Larger"]
     public static let textCases: [String?] = [nil, "capitalize", "uppercase", "lowercase"]
-    public static let textCaseNames = ["Aa", "Abc", "AB", "ab"]
+    public static let textCaseNames = ["Original", "Abc", "AB", "ab"]
     public var textSizeIndex: Int { Self.textSizes.firstIndex(of: boost.textZoom) ?? 1 }
     public var textCaseIndex: Int { Self.textCases.firstIndex(of: boost.textTransform) ?? 0 }
     public func setTextSize(index: Int) { guard Self.textSizes.indices.contains(index) else { return }; change("Change text size") { $0.textZoom = Self.textSizes[index] } }
@@ -145,7 +156,8 @@ public final class BoostEditorSession {
     public func delete() {
         guard isEditable else { return }
         previewWork?.cancel(); sampleTask?.cancel(); deleted = true
-        _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
+        previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
+        _ = store.delete(id: boost.id); store.saveNow(); host.refresh(profile: context.profileID)
         onDelete?()
     }
     public func finish() {
@@ -156,6 +168,7 @@ public final class BoostEditorSession {
         if isNew && boost.isEmpty && !deleted {
             _ = store.delete(id: boost.id); host.refresh(profile: context.profileID)
         }
+        store.saveNow()
         undoManager.removeAllActions()
         isClosed = true
     }
@@ -180,6 +193,10 @@ public final class BoostEditorSession {
             choices.append(BoostScopeChoice(title: "Only pages under /" + segment,
                 match: SiteMatch(domain: boost.siteMatch.domain, pathPrefix: "/" + segment)))
         }
+        if let prefix = boost.siteMatch.pathPrefix,
+           !choices.contains(where: { $0.match == boost.siteMatch }) {
+            choices.append(BoostScopeChoice(title: "Only pages under " + prefix, match: boost.siteMatch))
+        }
         return choices
     }
     private func change(_ name: String, edit: (inout Boost) -> Void) {
@@ -203,7 +220,7 @@ public final class BoostEditorSession {
     }
     private func restore(_ value: Boost, name: String) {
         guard isEditable else { return }
-        previewWork?.cancel(); previewWork = nil; interactiveBefore = nil
+        previewWork?.cancel(); previewWork = nil; interactiveBefore = nil; interactiveOwner = nil
         let inverse = boost
         undoManager.registerUndo(withTarget: self) { target in
             MainActor.assumeIsolated { target.restore(inverse, name: name) }
