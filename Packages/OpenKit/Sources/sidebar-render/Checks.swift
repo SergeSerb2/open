@@ -149,7 +149,7 @@ enum Checks {
         check(sidebar.menuTitles(nodeID: pinnedTab.id) == ["Copy Link", "Share…", "—", "Change Icon…", "Rename…", "Mute", "Customize Page…", "Edit Pinned Page", "—", "Add Split View", "Duplicate", "Move to", "—", "Remove Pin"],
               "pinned tab menu (F0116 order): \(sidebar.menuTitles(nodeID: pinnedTab.id).joined(separator: " · "))")
         if let todayTab = space.today.first {
-            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "—", "Open in Split View", "Move to", "—", "Archive Item"], "Today tab menu (F0115 order)")
+            check(sidebar.menuTitles(nodeID: todayTab.id) == ["Copy Link", "—", "Open in Split View", "Move to", "—", "Archive Tab", "Archive Tabs Below"], "Today tab menu (capture session 2 frame 0050)")
         }
         check(sidebar.menuTitles(nodeID: folder.id).first == "Share Folder…" && sidebar.menuTitles(nodeID: folder.id).last == "Delete", "folder menu (F0119 order)")
         check(sidebar.menuTitles(nodeID: nil).first == "Change Space Icon…" && sidebar.menuTitles(nodeID: nil).last == "Delete Space", "Space menu on empty space (F0117 order)")
@@ -277,6 +277,9 @@ enum Checks {
         MediaChecks.runRowIndicators()
         ReviewChecks.run()
         VisualFinishChecks.run()
+        CompletionChecks.run()
+        SpaceManagerChecks.run()
+        PreviewChecks.run()
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil
