@@ -117,7 +117,7 @@ public final class BrowserModel {
     private static let noRevert: Revert = { _ in false }
     private typealias PinnedURLs = [(tab: Tab, url: URL?)]
 
-    public init(profiles: [Profile] = [], spaces: [Space] = [], windows: [BrowserWindowState] = [], routingRules: [RoutingRule] = [], defaultDestination: DefaultDestination = .mostRecentSpace) {
+    public init(profiles: [Profile] = [], spaces: [Space] = [], windows: [BrowserWindowState] = [], routingRules: [RoutingRule] = [], defaultDestination: DefaultDestination = .littleOpen) {
         self.profiles = profiles; self.spaces = spaces; self.windows = windows
         self.routingRules = routingRules; self.defaultDestination = defaultDestination
         rebuildIndex()

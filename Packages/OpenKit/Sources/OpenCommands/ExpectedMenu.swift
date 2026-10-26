@@ -35,9 +35,10 @@ public enum ExpectedMenu {
 
     /// Intentional product names for the remaining in-scope Arc menu titles.
     /// Global and reserved command titles have no built menu row to compare.
-    public static let titleRenames: [String: String] = [
-        "New Little Arc Window": "New Little Open Window",
-        "Open Little Arc or Peek in…": "Move Little Open or Peek to Space…",
+    public static let titleRenames: [(id: String, arcTitle: String, openTitle: String)] = [
+        ("new-little-open-window", "New Little Arc Window", "New Little Open Window"),
+        ("little-open-global", "Show Little Arc (Global)", "Show Little Open (Global)"),
+        ("open-in-current-space", "Open Little Arc or Peek in…", "Open Little Open or Peek in…"),
     ]
 
     /// Extra built titles the comparison allows: system and dynamic rows that
@@ -74,7 +75,12 @@ public enum MenuComparator {
     ) -> MenuComparison {
         var renamed: [(item: ExpectedMenuItem, title: String)] = []
         let expected = expected.map { item in
-            guard let title = ExpectedMenu.titleRenames[item.title] else { return item }
+            guard let rename = ExpectedMenu.titleRenames.first(where: { rename in
+                rename.arcTitle == item.title && built.contains(where: {
+                    $0.commandID == rename.id && $0.title == rename.openTitle && $0.path == item.path
+                })
+            }) else { return item }
+            let title = rename.openTitle
             renamed.append((item, title))
             var mapped = item
             mapped.title = title

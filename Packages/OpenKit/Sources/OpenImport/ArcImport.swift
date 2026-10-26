@@ -494,7 +494,7 @@ public struct ArcImporter {
                 let focusedArc = w["focusedSpaceID"] as? String
                 let focused = focusedArc.flatMap { arcSpaceIDToOpen[$0] } ?? spaces[0].id
                 let style: WindowStyle
-                if let styleDict = w["style"] as? [String: Any], styleDict.keys.contains("littleArc") { style = .littleArc } else { style = .standard }
+                if let styleDict = w["style"] as? [String: Any], styleDict.keys.contains("littleArc") { style = .littleOpen } else { style = .standard }
                 let arcWindowID = w["id"] as? String
                 let windowID = arcWindowID.map { WindowID(rawValue: Self.deterministicUUID(for: $0, namespace: "window")) } ?? WindowID()
                 let window = BrowserWindowState(
@@ -516,10 +516,10 @@ public struct ArcImporter {
 
         // Routing.
         var rules: [RoutingRule] = []
-        var defaultDestination: DefaultDestination = .mostRecentSpace
+        var defaultDestination: DefaultDestination = .littleOpen
         if let routeData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableLinkRouting.json")),
            let routeRoot = try? JSONSerialization.jsonObject(with: routeData) as? [String: Any] {
-            defaultDestination = parseDestination(routeRoot["defaultDestination"], arcSpaceIDToOpen: arcSpaceIDToOpen) ?? .mostRecentSpace
+            defaultDestination = parseDestination(routeRoot["defaultDestination"], arcSpaceIDToOpen: arcSpaceIDToOpen) ?? .littleOpen
             for rawRule in (routeRoot["rules"] as? [[String: Any]]) ?? [] {
                 guard let components = rawRule["sourceComponents"] as? [[String: Any]] else { report.skippedRoutingRules += 1; continue }
                 var importedRule = false
@@ -536,7 +536,7 @@ public struct ArcImporter {
                     guard let dest = parseDestination(rawRule["destination"], arcSpaceIDToOpen: arcSpaceIDToOpen) else { continue }
                     let destination: RoutingDestination
                     switch dest {
-                    case .littleArc: destination = .littleArc
+                    case .littleOpen: destination = .littleOpen
                     case .mostRecentSpace: destination = .mostRecentSpace
                     case .space(let sid): destination = .space(sid)
                     }
@@ -764,7 +764,7 @@ public struct ArcImporter {
             if let s = spaceDict["_0"] as? String, let openID = arcSpaceIDToOpen[s] { return .space(openID) }
             return .mostRecentSpace
         }
-        if dict["littleArc"] != nil { return .littleArc }
+        if dict["littleArc"] != nil { return .littleOpen }
         return nil
     }
 }
