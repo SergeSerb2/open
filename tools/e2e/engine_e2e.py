@@ -2405,6 +2405,18 @@ def actions_checks(app, results):
     def actions():
         return app.call("actions")
 
+    def make_key():
+        """Open's window as the key window (Chrome's "active window"). macOS
+        refuses NSApp.activate() from a background app, so ask LaunchServices
+        to bring this exact bundle to the front first (the suite holds the
+        on-screen lock, so taking focus is expected)."""
+        bundle = os.path.dirname(os.path.dirname(os.path.dirname(app.proc.args[0])))
+
+        def key():
+            subprocess.run(["open", "-a", bundle], capture_output=True)
+            return app.call("activate")["key"]
+        return bool(wait_until(key, timeout=10, step=1))
+
     def action(ext):
         hits = [x for x in actions()["actions"] if x["id"] == ext]
         return hits[0] if hits else None
@@ -2543,7 +2555,7 @@ def actions_checks(app, results):
     api = {}
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
-        api["key"] = bool(wait_until(lambda: app.call("activate")["key"], timeout=5))
+        api["key"] = make_key()
         popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
                           ".then(() => { setTimeout(() => window.close(), 50); return true; })")
 
@@ -2570,7 +2582,7 @@ def actions_checks(app, results):
     state = open_popup(ACTION_PROBE)
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
-        refusal["key"] = bool(wait_until(lambda: app.call("activate")["key"], timeout=5))
+        refusal["key"] = make_key()
         popup_eval(state, "chrome.runtime.sendMessage('open-popup-now').then(() => true)")
         refusal["result"] = wait_until(lambda: popup_eval(state, "chrome.storage.session.get('openPopup')"
                                                                  ".then(r => r.openPopup)"), timeout=6)
@@ -2780,7 +2792,18 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
         **keep}
 
     # Extension update and reload with the popup open: the popup closes, the
-    # action comes back (same pin), and the new version runs.
+    # action comes back (same pin), and the new version runs. A reloaded
+    # command-line extension comes back as an unpacked one, which Chrome keeps
+    # disabled without developer mode (DISABLE_UNSUPPORTED_DEVELOPER_EXTENSION),
+    # so turn developer mode on first, through Chrome's own extensions page,
+    # as a developer who reloads an unpacked extension has it.
+    page = new_tab(app, "chrome://extensions")
+    wait_until(lambda: app.eval(page, "typeof chrome.developerPrivate") == "object", timeout=20)
+    results["developer_mode_on"] = {"ok": app.eval(page, "new Promise(done => chrome.developerPrivate.updateProfileConfiguration("
+                                                         "{inDeveloperMode: true}, () => done(!chrome.runtime.lastError)))") is True}
+    app.call("close", tab=page)
+    app.call("select", tab=tab)
+
     def reload_with_popup(bump):
         r = {}
         if bump:
