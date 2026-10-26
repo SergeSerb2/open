@@ -250,10 +250,11 @@ class Open:
             self.activation_trace = self.call("activation-events")
         except Exception:
             pass
+        self.quit_report = {}
         try:
-            self.call("quit")
-        except Exception:
-            pass
+            self.quit_report["reply"] = self.call("quit")
+        except Exception as error:
+            self.quit_report["error"] = str(error)
         # The launch waiter may have been interrupted independently of its app.
         # Wait for the actual app PID too, and never kill another executable.
         def still_ours():
@@ -261,12 +262,17 @@ class Open:
                 return False
             path = ctypes.create_string_buffer(4096)
             libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
-            return (libproc.proc_pidpath(self.pid, path, len(path)) > 0
-                    and os.path.realpath(os.fsdecode(path.value)) == os.path.realpath(self.executable))
+            size = libproc.proc_pidpath(self.pid, path, len(path))
+            actual = os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
+            if "observedExecutable" not in self.quit_report:
+                self.quit_report["observedExecutable"] = actual
+                self.quit_report["expectedExecutable"] = os.path.realpath(self.executable)
+            return size > 0 and actual == os.path.realpath(self.executable)
         deadline = time.monotonic() + 15
         while still_ours() and time.monotonic() < deadline:
             time.sleep(.05)
-        if still_ours():
+        self.quit_report["forced"] = still_ours()
+        if self.quit_report["forced"]:
             os.kill(self.pid, signal.SIGKILL)
         try:
             self.proc.wait(2)
@@ -1598,16 +1604,21 @@ def shutdown_order_checks(factory, results, tmp):
         assert pending, app.call('async-engine-state')
     finally:
         app.quit()
-    with open(path) as stream: trace = json.load(stream)
+    def completed_trace():
+        if not os.path.exists(path): return None
+        with open(path) as stream: value = json.load(stream)
+        return value if value and value[-1]['phase'] == 'engineShutdownEnd' else None
+    trace = wait_until(completed_trace, timeout=10, step=.02)
+    assert trace, {'quit': app.quit_report, 'traceExists': os.path.exists(path)}
     phases = [r['phase'] for r in trace]
     expected = ['prepare', 'hostsClosed', 'engineShutdownBegin', 'engineShutdownEnd']
     closed = trace[1:]
-    results['quit_order_owned_work'] = {'ok': phases == expected
+    results['quit_order_owned_work'] = {'ok': phases == expected and not app.quit_report.get('forced', False)
         and trace[0]['captureTasks'] > 0 and trace[0]['backgroundTasks'] > 0
         and all(r['captureTasks'] == r['backgroundTasks'] == r['selectionTasks'] == r['hosts'] == 0
                 and r['closedFactories'] == r['factories'] and r['lateAsyncEngineCalls'] == 0 for r in closed)
         and all(a['uptime'] <= b['uptime'] for a, b in zip(trace, trace[1:]))
-        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'trace': trace}
+        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
 def window_checks(app_factory, results, tmp, config):
