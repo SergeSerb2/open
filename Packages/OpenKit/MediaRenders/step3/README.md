@@ -86,3 +86,9 @@ Increase Contrast uses a diagnostics override of the normal accessibility path.
 | increase-contrast | [PNG](increase-contrast-light-228.png) | [PNG](increase-contrast-dark-228.png) |
 
 57 PNGs total. [Review-r1 runtime receipt](evidence/review-r1-check.txt).
+
+Update 2026-10-26: the two tooltip PNGs were re-rendered with the same
+`render-scenes.py` arguments after the default-theme tooltip fill changed from
+the guess `#1C1B22` to the measured `#0A0D4F` (`docs/re/interaction-states.md` §5).
+Only the capsule pixels changed (box x 46–170, y 46–100 at 2x). The other PNGs
+were not re-rendered.
