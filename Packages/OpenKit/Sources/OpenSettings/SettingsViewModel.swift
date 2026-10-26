@@ -1,0 +1,116 @@
+import Foundation
+import Observation
+import OpenModel
+import OpenRouting
+import OpenStore
+import OpenCommands
+import OpenAdBlock
+
+@MainActor @Observable public final class SettingsViewModel {
+    public typealias PaneID = OpenSettings.PaneID
+    public var selectedPane: PaneID { didSet { defaults.set(selectedPane.rawValue, forKey: "open.settings.lastPane") } }
+    public var selectedProfileID: ProfileID { didSet { adBlock?.refresh(); links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours } }
+    public let model: BrowserModel
+    public let actions: any SettingsActions
+    public let defaults: UserDefaults
+    public let root: URL
+    public let snapshot: SnapshotStore
+    public var links: LinksSettingsModel
+    /// Optional deep link into a long pane; used by the renderer and app presenters.
+    public var scrollTarget: String?
+    public var statusText = ""
+    public var linksError = ""
+    public var preferenceRevision = 0
+    public var adBlock: AdBlockSettingsModel?
+    @ObservationIgnored public private(set) lazy var shortcuts = ShortcutsViewModel(root: self)
+    public func attach(adBlockStore: AdBlockStore) { adBlock = AdBlockSettingsModel(root: self, store: adBlockStore) }
+    public var showsPreviews = false
+    public var showsImport = false
+    public var showsSearchEngines = false
+    @ObservationIgnored public private(set) lazy var profiles = ProfilesViewModel(root: self)
+    @ObservationIgnored public private(set) lazy var general = GeneralViewModel(root: self)
+    @ObservationIgnored public private(set) lazy var advanced = AdvancedViewModel(root: self)
+    @ObservationIgnored public private(set) lazy var appIcon = AppIconViewModel(root: self)
+    public func bool(_ key: String) -> Bool { _ = preferenceRevision; return defaults.object(forKey: key) as? Bool ?? (SettingsDefaults.values[key] as? Bool ?? false) }
+    public func string(_ key: String) -> String { _ = preferenceRevision; return defaults.string(forKey: key) ?? (SettingsDefaults.values[key] as? String ?? "") }
+    public func set(_ value: Any, for key: String) { defaults.set(value, forKey: key); defaults.synchronize(); preferenceRevision &+= 1 }
+
+    public init(model: BrowserModel, actions: any SettingsActions, defaults: UserDefaults, root: URL, snapshot: SnapshotStore, focusedProfileID: ProfileID? = nil) {
+        SettingsDefaults.register(in: defaults)
+        self.model = model; self.actions = actions; self.defaults = defaults; self.root = root
+        self.snapshot = snapshot
+        selectedPane = PaneID(rawValue: defaults.string(forKey: "open.settings.lastPane") ?? "") ?? .general
+        selectedProfileID = focusedProfileID ?? model.windows.first.flatMap { model.space(id: $0.focusedSpaceID)?.profileID } ?? model.defaultProfile?.id ?? ProfileID()
+        links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: model.windows.map { RoutingWindowSnapshot(id: $0.id, kind: $0.style == .littleOpen ? .littleOpen : .standard, focusedSpaceID: $0.focusedSpaceID) }, rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: defaults.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults)
+        refreshLinks()
+    }
+    @ObservationIgnored private var keyBindingStamp = "unread"
+    @ObservationIgnored private var cachedKeyBindings = KeyBindingStore.empty
+    @ObservationIgnored public private(set) var keyBindingLoadCount = 0
+    public var shortcutsStore: KeyBindingStore {
+        let url=root.appendingPathComponent("State/keybindings.json")
+        let attributes=try? FileManager.default.attributesOfItem(atPath:url.path)
+        let stamp="\((attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)|\(attributes?[.size] as? NSNumber ?? 0)|\(attributes?[.systemFileNumber] as? NSNumber ?? 0)"
+        if stamp != keyBindingStamp {
+            cachedKeyBindings=(try? KeyBindingStore.load(from:url)) ?? .empty
+            keyBindingStamp=stamp; keyBindingLoadCount += 1
+        }
+        return cachedKeyBindings
+    }
+    public var routingSpaces: [RoutingSpaceSnapshot] { model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) } }
+    @discardableResult public func commitLinks() -> Bool {
+        let oldHotkey = bool("open.links.littleOpenHotkeyEnabled")
+        set(links.externalLinksInLittleOpen, for: "open.links.externalInLittleOpen")
+        set(links.littleOpenHotkeyEnabled, for: "open.links.littleOpenHotkeyEnabled")
+        set(links.optionCommandClickLittleOpen, for: "open.links.optionCommandClickLittleOpen")
+        if oldHotkey != links.littleOpenHotkeyEnabled { actions.keyBindingsDidChange(store: shortcutsStore) }
+        if let profile = model.profile(id: selectedProfileID), profile.settings.littleOpenAutoArchiveAfter != links.littleOpenAutoArchiveAfter {
+            var settings = profile.settings; settings.littleOpenAutoArchiveAfter = links.littleOpenAutoArchiveAfter
+            model.updateProfileSettings(id: selectedProfileID, settings: settings); save()
+        }
+        guard !links.issues().contains(where: \.isError) else {
+            linksError="Routes could not be saved. Check each pattern and choose an existing Space for every rule."
+            return false
+        }
+        let oldRules=model.routingRules,oldDestination=model.defaultDestination
+        let copy=links.currentRouting();model.routingRules=copy.rules;model.defaultDestination=copy.defaultDestination
+        do {try snapshot.saveNow(model:model);linksError="";return true}
+        catch {model.routingRules=oldRules;model.defaultDestination=oldDestination;linksError="Routes could not be saved. Try again when your data folder is available.";return false}
+    }
+    /// The sheet keeps its local draft open if another rule or the durable save fails.
+    @discardableResult public func saveLinkRule(_ draft: RuleDraft) -> Bool {
+        if let index=links.drafts.firstIndex(where:{$0.id == draft.id}) {links.drafts[index]=draft}
+        else {links.drafts.append(draft)}
+        return commitLinks()
+    }
+    public var linkTestSummary: String? {
+        guard let decision=links.testDecision else {return nil}
+        let target:String
+        switch decision.resolved {
+        case .littleOpen: target="Little Open"
+        case .space(let id,_): target=model.space(id:id).map{model.displayTitle(for:$0)} ?? "the selected Space"
+        case nil: return "This link cannot be opened. Use an http or https address."
+        }
+        if let rule=decision.traces.first(where:{$0.outcome == .matched})?.rule {
+            let pattern:String,kind:String
+            switch rule.match {case .hostContains(let value):pattern=value;kind="Host contains";case .hostEquals(let value):pattern=value;kind="Host equals";case .urlPrefix(let value):pattern=value;kind="URL starts with"}
+            return "Opens in \(target) · matched “\(pattern)” (\(kind))"
+        }
+        return "Opens in \(target) · default destination"
+    }
+    public func refreshLinks(preserveDrafts: Bool = false) {
+        let previous = links
+        links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: [], rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: bool("open.links.externalInLittleOpen")), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults)
+        links.littleOpenHotkeyEnabled = bool("open.links.littleOpenHotkeyEnabled")
+        links.optionCommandClickLittleOpen = bool("open.links.optionCommandClickLittleOpen")
+        links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours
+        if preserveDrafts {
+            links.drafts = previous.drafts; links.defaultDestinationKind = previous.defaultDestinationKind; links.defaultSpaceID = previous.defaultSpaceID
+            links.testURLString = previous.testURLString; links.testSourceBundleID = previous.testSourceBundleID; links.testMostRecentSpaceID = previous.testMostRecentSpaceID
+            if previous.testDecision != nil { links.runTest() }
+        }
+    }
+    public func refreshExternalState() { general.refresh(); profiles.refresh(); adBlock?.refresh(); refreshLinks(preserveDrafts: true) }
+    public func save() { snapshot.scheduleSave(model: model) }
+    public func flush() throws { try snapshot.saveNow(model: model) }
+}

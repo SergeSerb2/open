@@ -5,6 +5,8 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenSettings", targets: ["OpenSettings"]),
+        .executable(name: "settings-preview", targets: ["settings-preview"]),
         .library(name: "OpenFeatures", targets: ["OpenFeatures"]),
         .executable(name: "features-render", targets: ["features-render"]),
         .library(name: "OpenModel", targets: ["OpenModel"]),
@@ -27,6 +29,8 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport"]),
+        .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
         .target(name: "OpenModel"),
         .target(name: "OpenFeatures", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands"]),
         .executableTarget(name: "features-render", dependencies: ["OpenModel", "OpenStore", "OpenFeatures", "OpenDesign", "OpenSleep"], sources: ["Scene", "main.swift", "Checks.swift", "FeatureCompare.swift", "OffscreenRenderer.swift", "Compare.swift", "RenderCLI.swift"]),
