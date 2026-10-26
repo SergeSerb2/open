@@ -8,6 +8,7 @@ import OpenModel
 /// read change.
 @MainActor
 final class TextLabel: NSView {
+    private(set) var lastDrawnText = ""
     var text: @MainActor () -> String = { "" } { didSet { needsDisplay = true } }
     var color: @MainActor () -> NSColor = { .labelColor } { didSet { needsDisplay = true } }
     var font: NSFont = Typography.tabTitle.font { didSet { needsDisplay = true } }
@@ -38,6 +39,7 @@ final class TextLabel: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
+        lastDrawnText = ""
         guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
         var line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
@@ -57,6 +59,7 @@ final class TextLabel: NSView {
         ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
         ctx.textPosition = CGPoint(x: x, y: baseline)
         CTLineDraw(line, ctx)
+        lastDrawnText = string
         ctx.restoreGState()
     }
 }
