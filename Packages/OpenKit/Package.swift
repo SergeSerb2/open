@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "OpenModel", targets: ["OpenModel"]),
         .library(name: "OpenRouting", targets: ["OpenRouting"]),
+        .library(name: "OpenSleep", targets: ["OpenSleep"]),
         .library(name: "OpenStore", targets: ["OpenStore"]),
         .library(name: "OpenImport", targets: ["OpenImport"]),
         .library(name: "OpenSuggest", targets: ["OpenSuggest"]),
@@ -19,6 +20,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "OpenModel"),
+        .target(name: "OpenSleep", dependencies: ["OpenModel"]),
         .target(name: "OpenBoosts", dependencies: ["OpenModel"], exclude: ["Harness"], resources: [.copy("Resources/boost-applier.js"), .copy("Resources/zap-picker.js")]),
         .target(name: "OpenRouting", dependencies: ["OpenModel"]),
         .target(name: "OpenStore", dependencies: ["OpenModel"], linkerSettings: [.linkedLibrary("sqlite3")]),
@@ -28,6 +30,7 @@ let package = Package(
         .target(name: "OpenScripting", dependencies: ["OpenModel", "OpenCommands"]),
         .target(name: "OpenAdBlock", dependencies: ["OpenModel", "OpenRouting"], resources: [.copy("Resources")]),
         .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenAdBlock"]),
+        .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenSleep"], resources: [.copy("Resources/sleep-schema1.json")]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
     ]
 )

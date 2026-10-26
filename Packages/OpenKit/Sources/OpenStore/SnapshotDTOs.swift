@@ -29,15 +29,17 @@ public struct ProfileSettingsDTO: Codable, Sendable {
     public var autoArchiveAfter: String
     public var littleOpenAutoArchiveAfter: String
     public var searchEngineID: String
+    public var sleepMode: String?
 
-    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String) {
+    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String, sleepMode: String? = nil) {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchEngineID = searchEngineID
+        self.sleepMode = sleepMode
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
 
@@ -48,6 +50,7 @@ public struct ProfileSettingsDTO: Codable, Sendable {
             ?? container.decodeIfPresent(String.self, forKey: .littleArcAutoArchiveAfter)
             ?? AutoArchiveInterval.sixHours.rawValue
         searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
+        sleepMode = try container.decodeIfPresent(String.self, forKey: .sleepMode)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -55,6 +58,7 @@ public struct ProfileSettingsDTO: Codable, Sendable {
         try container.encode(autoArchiveAfter, forKey: .autoArchiveAfter)
         try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
         try container.encode(searchEngineID, forKey: .searchEngineID)
+        try container.encodeIfPresent(sleepMode, forKey: .sleepMode)
     }
 }
 
@@ -285,14 +289,14 @@ public enum SnapshotMapper {
     static func profileDTO(_ p: Profile) -> ProfileDTO {
         ProfileDTO(id: p.id.rawValue.uuidString, name: p.name, icon: iconDTO(p.icon),
                    favorites: p.favorites.map { .tab(tabDTO($0)) },
-                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID),
+                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue),
                    dataDirectoryName: p.dataDirectoryName)
     }
 
     static func profile(from dto: ProfileDTO) -> Profile {
         Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
                 favorites: dto.favorites.compactMap { if case .tab(let t) = $0 { return tab(from: t) }; return nil },
-                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID),
+                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced),
                 dataDirectoryName: dto.dataDirectoryName)
     }
 
