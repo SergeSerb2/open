@@ -1,0 +1,48 @@
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+index 4342bf00084aa90cf2b24ac803e4d9b46dbb8c56..e3d894ee6b5526424ec0a87d10873051ae4865ca 100644
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -1053,10 +1053,14 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+               *browser_, browser_);
+     }
+ 
+-    qrcode_window_controller_ =
+-        GetUserDataFactory()
+-            .CreateInstance<qrcode_generator::QRCodeWindowController>(*browser,
+-                                                                      browser);
++    // Open: the QR code bubble anchors to the toolbar, which hidden tab-strip
++    // Browsers do not have. ShowBubble accepts a missing controller.
++    if (browser_view) {
++      qrcode_window_controller_ =
++          GetUserDataFactory()
++              .CreateInstance<qrcode_generator::QRCodeWindowController>(
++                  *browser, browser);
++    }
+ 
+     send_tab_to_self_toolbar_bubble_controller_ =
+         GetUserDataFactory()
+@@ -1145,7 +1149,10 @@ void BrowserWindowFeatures::InitPostBrowserViewConstruction(
+ void BrowserWindowFeatures::InitPostTabModelConstruction(
+     BrowserWindowInterface* interface) {
+   auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+-  CHECK(browser_view);
++  // Open: hidden tab-strip Browsers have no BrowserView.
++  if (!browser_view) {
++    return;
++  }
+ 
+   auto* browser = browser_view->browser();
+   const bool supports_toolbar = IsNormalBrowser(browser);
+@@ -1165,10 +1172,8 @@ void BrowserWindowFeatures::OnWebContentsCreated(
+     BrowserWindowInterface* interface,
+     content::WebContents* target_contents) {
+ #if BUILDFLAG(ENABLE_CEF)
+-  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+-  CHECK(browser_view);
+-
+-  if (auto cef_delegate = browser_view->browser()->cef_delegate()) {
++  // Open: hidden tab-strip Browsers have no BrowserView.
++  if (auto cef_delegate = interface->cef_delegate()) {
+     cef_delegate->OnWebContentsCreated(target_contents);
+   }
+ #endif

@@ -32,12 +32,15 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 /// How a web content is hosted inside Chromium.
 ///
 /// - Alloy: a content-layer WebContents placed directly in our NSView. Any
-///   number per window, any position, no Chrome UI. The default.
-/// - Chrome: a Chrome-UI browser. Stock CEF on macOS can host it only in its
-///   own Views window (CEF issue #3294), so the engine glues that window over
-///   the content's view as a borderless child window. Chrome style is what
-///   makes chrome.tabs and the Web Store install prompt work in stock CEF; the
-///   fork patches in docs/engine-patches.md remove the need for it.
+///   number per window, any position, no Chrome UI. Chromium's tab APIs do
+///   not see it. Used for extension action popups until fork patch P2.
+/// - Chrome: a tab of Chrome's browser layer. With fork patch P1 a Chrome
+///   style content that is in an OEBrowser when its page is created becomes
+///   a tab of that window's hidden Chrome window, hosted in our NSView, so
+///   chrome.tabs and chrome.windows see it (docs/engine-patches.md). Any
+///   other Chrome style content (and every one on stock CEF) gets its own
+///   Views window, glued over the content's view as a borderless child
+///   window (CEF issue #3294); the Web Store install prompt needs that today.
 typedef NS_ENUM(NSInteger, OERuntimeStyle) {
   OERuntimeStyleAlloy = 0,
   OERuntimeStyleChrome = 1,

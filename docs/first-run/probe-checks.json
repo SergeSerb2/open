@@ -1,0 +1,62 @@
+{
+  "PASS": true,
+  "receipts": [
+    {
+      "case": "hand-built",
+      "seconds": 0.005463,
+      "spaces": 2,
+      "items": 9,
+      "archive": 2,
+      "rawArchive": 3,
+      "history": 3,
+      "secretRows": 3,
+      "sidebarFound": true
+    },
+    {
+      "case": "empty",
+      "seconds": 0.00212,
+      "spaces": null,
+      "items": null,
+      "archive": null,
+      "rawArchive": null,
+      "history": null,
+      "secretRows": null,
+      "sidebarFound": false
+    },
+    {
+      "case": "WAL-locked",
+      "seconds": 0.005566,
+      "spaces": 2,
+      "items": 9,
+      "archive": 2,
+      "rawArchive": 3,
+      "history": 4,
+      "secretRows": 3,
+      "sidebarFound": true
+    },
+    {
+      "case": "malformed-sidebar",
+      "seconds": 0.005357,
+      "spaces": null,
+      "items": null,
+      "archive": 2,
+      "rawArchive": 3,
+      "history": 4,
+      "secretRows": 3,
+      "sidebarFound": true
+    },
+    {
+      "case": "10000-sidebar-100000-visits",
+      "seconds": 0.081159,
+      "spaces": 2,
+      "items": 10000,
+      "archive": 2,
+      "rawArchive": 3,
+      "history": 100000,
+      "secretRows": 3,
+      "sidebarFound": true
+    }
+  ],
+  "sourceUnchanged": true,
+  "keychain": "not requested"
+}
