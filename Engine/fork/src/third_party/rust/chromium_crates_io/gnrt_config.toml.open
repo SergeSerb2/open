@@ -5,9 +5,9 @@
 # Lead decisions 2026-10-26: docs/engine-patches.md "Security review".
 
 # Chromium: group = 'test' (imported only for libafl). adblock needs regex
-# in the browser process. Built without its perf features (crate patches
-# adblock-v0_8 and libafl-v0_15), so aho-corasick keeps Chromium's
-# allow_unsafe = false and leaves the build.
+# in the browser process. Built without perf-literal (crate patches
+# adblock-v0_8 and libafl-v0_15; review 97-1 keeps the other perf engines),
+# so aho-corasick keeps Chromium's allow_unsafe = false and leaves the build.
 [crate.regex]
 group = 'safe'
 allow_first_party_usage = false
@@ -27,4 +27,12 @@ extra_kv = { allow_unsafe = false }
 extra_kv = { allow_unsafe = false }
 
 [crate."idna@v1"]
+extra_kv = { allow_unsafe = true }
+
+# Two epochs: itertools 0.10 (adblock, no unsafe; review 97-3) and 0.14
+# (Chromium).
+[crate."itertools@v0_10"]
+extra_kv = { allow_unsafe = false }
+
+[crate."itertools@v0_14"]
 extra_kv = { allow_unsafe = true }
