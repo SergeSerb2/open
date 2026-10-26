@@ -688,8 +688,8 @@ in one FULL-synchronous transaction. Repeat opens are inert. Diagnostic switch
 `OPENKIT_DEBUG_ARCHIVE_MIGRATION_CRASH=alter|version` exits 86 before commit so the
 real CLI runner can verify rollback and recovery. Existing row payloads are not
 rewritten. Folder restore skips live child IDs, uses the original parent or section,
-then focused Today, and refreshes activity. One undo writes the folder row back.
-The Library saves the sidebar snapshot before deleting the archive row and rolls
+then a Today Space in the archived Profile (using the same fallback as tabs), and refreshes activity. One undo writes the folder row back.
+Library folder child counts are decoded once per loaded page and cached by row ID; reload clears them. The Library saves the sidebar snapshot before deleting the archive row and rolls
 back insertion on a save failure. It shows a folder glyph, a recursive tab count,
 and "Folder restored to <Space>. Click to view." with View.
 
@@ -697,6 +697,17 @@ Release harness verification: `commands-demo` 166/166 including FA1–FA7 and th
 M1 checks; `settings-preview check --only library-folder-archive` PASS for L2/L3,
 View, durable save failure, and legacy row meaning. No unit tests or desktop input.
 App restore-last-closed dispatch by record kind remains App-lane wiring.
+
+### M2 Muse review corrections (2026-10-26)
+
+Merged main after M1's squash merge; the PR diff contains only the M2 files. Folder
+restore now preserves the archive Profile when the original Space is gone. FA3
+uses two Profiles with A visible and a surviving B Space. FA4 also keeps one
+archived split pane live in another split and checks the single-pane collapse.
+FA7 checks the snapshot roundtrip only; the unrelated ArchiveStore before/after
+comparison was removed. Library folder counts decode once per page load, cache
+by row ID, and clear on reload. A failed archive-row deletion after folder restore
+says "Folder restored", with a real SQLite delete-failure CLI scenario.
 
 ## Sidebar completion M3 (2026-10-26)
 
@@ -718,6 +729,27 @@ The 13 capture-state comparisons could not run: `.re/vf/run-states.sh` and its
 capture-time inputs are absent from this checkout and the current project/worktrees.
 The full `sidebar-render check` remains part of verify-all; lane S owns TT1/TT2.
 No claim of capture parity is made for this step.
+
+## Sidebar M1 Muse follow-up (2026-10-26)
+
+Bulk moves build one original-slot map per parent and use prefix removal counts to
+update positions without per-node list searches. The primitive validates a supplied
+slot before removal; the existing single-node path retains its normal lookup.
+Same-slot nodes emit no move. Move to Space marks unread only on descendants of
+actually relocated nodes and leaves every flag untouched with markUnread false.
+Bulk archive builds each parent position map once, sorts by those values, and
+removes known slots from highest to lowest (split collapse retains its existing path).
+
+The CLI now asserts exact B4 removal IDs/order, B7 fresh IDs at every depth plus
+split focus/fractions/orientation, and unread true/false through folders and splits
+from two source Spaces. It also checks a same-slot pin stays read and a middle drop
+with selected nodes on both sides. `commands-demo` passes 156/156 on the M1 base.
+
+`openkit bench` runs 20 real command/undo rounds at 50 and 500 nodes, with exact
+event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
+Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
+500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
+new target, dependency, timer, App edit, or desktop input was added.
 
 ## Sidebar completion M4 (2026-10-26)
 
