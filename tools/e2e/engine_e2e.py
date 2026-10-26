@@ -1853,17 +1853,23 @@ def reveal_card_and_wait(app, x=3, y=400):
 
 
 def card_pair(app, private, name):
-    """Snapshot with the card settled and the same view after it left: (card PNG, base PNG, card frame)."""
+    """Snapshot with the card settled and the same view after it left: (card PNG, base PNG, card frame).
+
+    Both snapshots need the same window state: an inactive window lightens the theme
+    underlay, so the window is made key again right before each one."""
+    wid = app.call("window-state")["id"]
     settled = reveal_card_and_wait(app)
     if not settled:
         return None
     card = settled["state"]["reveal"]["card"]
     png = os.path.join(private, name + ".png")
     app.call("mouse", action="move", x=120, y=400)
+    app.call("window-focus", id=wid, activate=True)
     app.call("snapshot", path=png)
     app.call("mouse", action="move", x=700, y=400)
     wait_card(app, False)
     base = os.path.join(private, name + "-base.png")
+    app.call("window-focus", id=wid, activate=True)
     app.call("snapshot", path=base)
     return png, base, card
 
@@ -1970,6 +1976,7 @@ def window_chrome_checks(factory, results, tmp):
         no_flicker = all(p == "shown" for _, _, p, _, _ in samples) and held["phase"] == "shown" \
             and held["shows"] == shown["reveal"]["shows"] and held["hides"] == shown["reveal"]["hides"]
         card_png = os.path.join(private, "card.png")
+        app.call("window-focus", id=wid, activate=True)
         app.call("snapshot", path=card_png)
         t1 = time.time()
         app.call("mouse", action="move", x=700, y=400)
@@ -1977,6 +1984,7 @@ def window_chrome_checks(factory, results, tmp):
         exit_s = round(time.time() - t1, 3)
         gone = wait_card(app, False)
         base_png = os.path.join(private, "card-base.png")
+        app.call("window-focus", id=wid, activate=True)
         app.call("snapshot", path=base_png)
         results["reveal_timing"] = {"ok": lights_hidden and no_quick_reveal and bool(settled) and 0.13 <= dwell <= 0.35
                                     and lights_card_ok and no_flicker and bool(leaving) and 0.13 <= exit_s <= 0.6 and bool(gone),
@@ -2035,22 +2043,26 @@ def themed_card_checks(factory, results, private):
             png = os.path.join(private, "render-card-%dx-%d.png" % (scale, space))
             base = os.path.join(private, "render-base-%dx-%d.png" % (scale, space))
             common = ["render", "--snapshot", synth, "--size", "1280x800", "--scale", str(scale), "--space", str(space), "--hidden", "--page"]
-            # Offscreen renders sometimes come back with garbage tiles (docs/design.md
-            # section 15.1, about one in four at 2x here). With --page the page area is
-            # opaque white, so a render with anything else there is drawn again.
-            # Away from the card (x >= 300 pt), the two renders must match pixel for pixel,
-            # the theme strip under the page included; a pair that does not is drawn again.
-            for attempts in range(1, 7):
-                subprocess.run([binary] + common + ["--reveal", "--out", png], check=True, stdout=subprocess.DEVNULL)
-                subprocess.run([binary] + common + ["--no-lights", "--out", base], check=True, stdout=subprocess.DEVNULL)
-                _, _, pc = read_image(png)
-                _, _, pb = read_image(base)
-                points = [(x, y) for y in list(range(20, 790, 30)) + [792, 795, 798] for x in range(300, 1270, 30)]
-                if all(min(pc(x * scale, y * scale)) >= 245 for x, y in points if y < 785) \
-                        and all(max(abs(a - b) for a, b in zip(pc(x * scale, y * scale), pb(x * scale, y * scale))) <= 6 for x, y in points):
-                    break
+            # Offscreen renders sometimes come back with garbage or missing (black) tiles
+            # (docs/design.md section 15.1; about one in four at 2x here, more under memory
+            # pressure). A render is accepted once two in a row come out byte for byte the
+            # same and nothing near the card's edges is black (these scenes have no black).
+            attempts = 0
+            regions = [(x, y) for y in list(range(0, 46, 3)) + list(range(754, 800, 3)) for x in list(range(0, 46, 3)) + list(range(190, 250, 3))]
+            regions += [(x, y) for y in range(46, 754, 24) for x in (0, 3, 6, 228, 231, 234, 237)]
+            for out, extra in ((png, ["--reveal"]), (base, ["--no-lights"])):
+                previous = None
+                for _ in range(10):
+                    attempts += 1
+                    subprocess.run([binary] + common + extra + ["--out", out], check=True, stdout=subprocess.DEVNULL)
+                    data = open(out, "rb").read()
+                    _, _, px = read_image(out)
+                    clean = all(max(px(x * scale, y * scale)) >= 8 for x, y in regions)
+                    if clean and data == previous:
+                        break
+                    previous = data if clean else None
             row = card_edges(png, base, [5, 5, 228, 790], scale, tolerance=1.0)
-            row["render_pairs"] = attempts
+            row["renders"] = attempts
             rows["space %d (offscreen render, %dx)" % (space + 1, scale)] = row
     results["card_edges_themed"] = {"ok": all(v.get("ok") for v in rows.values()), "rows": rows}
 

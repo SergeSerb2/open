@@ -74,7 +74,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 | Divider row | 17 pt; 1 pt line at y + 7 from x 18 to W − 18; with "Clear" the line ends at W − 66, arrow `[W − 58, y + 3, 12, 9]`, label x W − 46 | measured |
 | Bottom bar | 50 pt; Home `[8, 9, 32, 32]`; plus `[W − 40, 9, 32, 32]`; switcher items 36×34 at pitch 34, centered in `[42, 0, W − 84, 50]`; plate = item inset 1 | measured |
 | Web panel | `[W, 10, winW − W − 10, winH − 20]`, radius 6, shadow black 0.25 radius 3 offset 1; hidden sidebar `[10, 10, winW − 20, winH − 20]` | measured |
-| Hover-reveal card | `[5, 5, W, H − 10]`, radius 10 continuous; 1 pt stroke `SidebarBorderColor` (white 0.30) on the outermost pixels inside the card; shadow black 0.17, σ 4 pt, no offset | measured (F0129, F0130); shadow fitted against F0128 |
+| Hover-reveal card | `[5, 5, W, H − 10]`, radius 12 circular; 1 pt stroke `SidebarBorderColor` (white 0.30) on the outermost pixels inside the card; shadow black 0.17, σ 4 pt, no offset | measured (F0129, F0130); corner and shadow fitted (§16) |
 | Hover-reveal zones | dwell 0.15 s (outer edge 0.16 s) in: the left edge (x 0…6, held −20…15), the strip left of the window (50 pt, held 250), the top-left corner (40 pt wide, −15…20), the traffic-light region (to y 50); the card stays while the pointer is on it or in a zone and hides 0.15 s after it leaves | decoded (§16); zone unit 10 and exit delay guess |
 | Sidebar width | default 228; 500 is the widest seen; minimum 180 | 500 guess as max; minimum guess |
 
@@ -458,3 +458,68 @@ The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktre
 Worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because the re-derived script skips the URL copy and Site Control buttons there. Element counts differ in six states (F0016, F0024, F0027, F0031, F0063, F0066): the re-derived script skips URL-host, button, and row-title elements whose text or state differs between the snapshot and the capture. The known differences in §9 remain (Home hover 2 pt, F0063/F0066 selected fill ≈ 2.0, blue grain 2.38).
 
 Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone, up to three times; then the outputs matched. The bottom-band glitch got more frequent under machine load.
+
+
+## 16. Window chrome polish (2026-10-26)
+
+The user tested the real window on `main` (app-shell #45 and #52) and reported three problems: the traffic lights sat too far top-left and were badly spaced; the Space title had little or no space below the URL field, worst on hover; and the hover-reveal card was glitchy and rough at its edges. This section gives the causes, the fixes, and the evidence. Raw frames, our private PNGs, and RE output stay in `.re/`.
+
+### 16.1 Causes
+
+| Report | Cause |
+|---|---|
+| Traffic lights | §2.2 gave the 16 pt button frames (`[12/35/58, 16]`). The window placed the button *centers* there. AppKit then laid the title bar out again and put the buttons back at its own spots, (16, 16), (39, 16), (62, 16). Arc's circles are centered at (20, 24), (43, 24), (66, 24). |
+| Space title and URL field | With no favorites, the favorites section was 0 pt, so the Space header band began at y 82, where the URL field ends. Its hover fill touched the field. The offscreen compare passes because F0001 has six favorites. The real window has no title bar or safe-area offset: the URL field measures `[8, 46, 212, 36]` there, as in the renders. Arc also darkens the URL field on hover (F0033); Open did not. |
+| Hover reveal | The trigger was x 0…8 and the card starts at x 5, so a pointer at x < 5 sat outside the card: it hid after 0.25 s and the edge showed it again 0.35 s later, a loop. Any pointer event outside the zone cancelled a pending reveal; AppKit's mouse-moved event at the real pointer, sent after the sidebar hides, did that, which made the window suite's first reveal after a hide flaky. The card appeared without motion. Each reveal built a new theme background, which renders its field on the next display tick, so the first frame was empty. |
+| Card edges | No shadow: AppKit owns the shadow of a view's backing layer, and the card layer clips. The system traffic lights stayed at their window position, on the card's corner and stroke. The corner was continuous radius 10; Arc's is circular radius 12 (§16.3). |
+
+### 16.2 Changes
+
+| Area | Change | Where |
+|---|---|---|
+| Traffic lights | Centers (20, 24), (43, 24), (66, 24); on the card +5/+5; hidden while the sidebar is hidden. They are placed after AppKit's own title bar layout (`BrowserWindow.layoutIfNeeded` / `displayIfNeeded`) and on every button frame change. Moving one button during AppKit's layout makes it move the others back (seen after the pointer crossed the corner), so placement during layout alone does not hold. | `OpenFeatures/BrowserWindowController.swift` |
+| Space header | An empty favorites section keeps one 8 pt inset, so the header band starts at y 90 and its hover fill sits 8 pt below the URL field, as it sits 8 pt below the tiles. | `OpenDesign/Metrics.swift` (`FavoritesMetrics.sectionHeight`) |
+| URL field hover | `SidebarItemHoveredBackground` under the pointer, same frame; the field tracks its own bounds (views that do not clip report a visible rect larger than the field). | `OpenSidebar/ChromeViews.swift` |
+| Hover reveal | `SidebarRevealController`: Arc's zones and dwell (table below), widened zones while pending or shown, hold over the card or any zone, hide 0.15 s after leaving them all, no re-reveal after a dismissal until the pointer leaves the zones, hide when Open stops being the active app. | `OpenFeatures/SidebarRevealController.swift` |
+| Card | Frame and presentation set once, then only the card layer, its shadow, and the traffic lights move (a `transform.translation.x` spring on the render server, `Motion.sidebarToggle`); no layout runs during the slide. The card's theme background is built before the card shows and kept between reveals. Circular radius 12 clip, the 1 pt stroke drawn by the clipping layer inside its bounds, and `RevealCardShadowView` below it. | `OpenSidebar/SidebarView.swift`, `OpenDesign/RevealCardShadowView.swift` |
+| Automation | Tagged synthetic pointer events (the reveal then ignores the hardware pointer), `mouse action=hover` (tracking-area enter/move/exit), `appearance`, `window-state` chrome geometry, reveal state, traffic-light frames, `id`, and the pointer position; snapshots composite AppKit overlays over page pixels; `window-frame unconstrained`. | `App/Automation/*`, `docs/automation.md` |
+
+Reveal zones (root coordinates, y down; Arc's `WindowHoverTracker`, interaction-states §13):
+
+| Zone | Rest | Held (pending or shown) | Dwell | Evidence |
+|---|---|---|---|---|
+| Left edge | x 0 … 6 | x −20 … 15 | 0.15 s | `0x10002fbd4`; unit 10 is a guess |
+| Left of the window | 50 pt | 250 pt | 0.16 s | `0x1000301f8` |
+| Top-left corner | x 0 … 40, y −15 … 20 | same | 0.15 s | `0x10002fed0`, `0x10002ff7c` |
+| Traffic lights | x 0 … 86, y 0 … 50 | same | 0.15 s | `0x100030390` |
+| Card | — | the card frame | exit 0.15 s (guess) | "ArcSidebar" region |
+
+### 16.3 Arc evidence and comparison
+
+Method §7: Arc's frames converted from their display profile to sRGB, our live window at 2216 × 1394 and sidebar 228 (500 for the card), 1x, the capture-time snapshot. The card uses Space 4 without its later theme (F0137), like F0129. Element names only.
+
+| Element | Arc | Open | Position error | ΔE00 |
+|---|---|---|---|---|
+| Traffic light at x 20: circle centroid, px (Arc AX center 20, 24) | (19.96, 24.00) | (19.99, 23.95) | 0.05 | — |
+| Traffic light at x 43 | (43.00, 23.99) | (43.00, 23.88) | 0.11 | — |
+| Traffic light at x 66 | (65.95, 23.89) | (66.00, 23.96) | 0.07 | — |
+| URL field fill, rest (F0032) | `#DA8F74` | `#D98E74` | — | 0.34 |
+| URL field fill, hovered (F0033) | `#CF896F` | `#CF8870` | — | 0.28 |
+| URL field edges, hovered (rows at x 150) | 46, 82 | 46, 82 | 0 | — |
+| Card stroke, left edge | `#696774` | `#696674` | — | 0.79 |
+| Card fill inside the stroke (y 700) | `#29253A` | `#292438` | — | 0.66 |
+| Card shadow over the page, luminance ratio at +0.5 … +9.5 px | 0.925 0.941 0.957 0.969 0.980 0.984 0.992 0.996 1.000 1.000 | 0.925 0.941 0.953 0.965 0.980 0.984 0.988 0.992 0.996 1.000 | max Δ 0.004 | — |
+| Card shadow above / left of / below the card, ratio | 0.948 / 0.949 / 0.961 | 0.948 / 0.949 / 0.949 | max Δ 0.012 | — |
+| Card corners, edge x per row (4 corners) | 7.8–8.1, 5.7–5.9, 4.2–4.4, 3.1–3.2, 2.2–2.4, 1.6–1.8, 1.0–1.1, 0.6–0.8 | 8.2, 6.0, 4.4, 3.3, 2.4, 1.8, 1.1–1.2, 0.7–0.8 | max Δ 0.36 px | — |
+| Traffic lights on the card (centers) | (25, 29) (48, 29) (71, 29) (AX) | (25, 29) (48, 29) (71, 29) | 0 | — |
+
+The F0001 static comparison (§8, 31 elements) is unchanged: it has six favorites, and the chrome changes do not move any of its elements.
+
+### 16.4 Remaining differences
+
+| Difference | Size | Why |
+|---|---|---|
+| Card fill near its bottom | ΔE00 10.8 (`#180E3A` vs `#2C2336`); the top, right, and bottom strokes differ with it (2.2, 2.7, 8.4) | Arc's card background darkens toward its bottom; our theme field over the card's tall aspect does not. The stroke matches where the fill matches (left edge 0.79). The theme field was fitted on landscape windows (§3.2). |
+| Space header without favorites | ours 8 pt below the URL field; A0361 1–3 pt | Fitted to Arc's 8 pt rhythm. Arc's real zero-favorites state is its favorites empty-state card (not captured); A0361 is the window-only sidebar, a different header. |
+| Card slide timing | — | Not captured between A0439 and A0440; the spring is `Motion.sidebarToggle`. |
+| Reveal zone unit and exit delay | — | Guesses: the unit (10) comes from a view-store value; the exit delay reuses the 0.15 s debounce. |
