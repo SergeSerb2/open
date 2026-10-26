@@ -1,6 +1,6 @@
 # Open v1 status inventory
 
-Audit date: 2026-10-25 (America/Vancouver). Base: `origin/main` at `724e35d` (includes PR #46 fork bring-up, PR #50 M4 visual finish, and two PRs that merged during the audit: #51 Settings + Library and #54 release locales).
+Audit date: 2026-10-25 (America/Vancouver). Base: `origin/main` at `c95be65` (includes PR #46 fork bring-up, PR #50 M4 visual finish, and three PRs that merged during the audit: #51 Settings + Library, #54 release locales, #56 Settings polish).
 Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #53 `a03d2a5`, plus the titles and file lists of PRs #55–#57.
 
 This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.md v1 scope, and the platform basics a browser needs. For each item it names the plan, the library code, the App wiring, and the evidence. It is an inventory. It changes no code.
@@ -36,7 +36,7 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 | App shell Step B (real window, live sidebar) | PR #52, branch `t3/app-shell-real-window` (includes Step A) | in PR |
 | App shell Step C (menus, keys, command bar) | uncommitted edits in worktree `t3-d8b5b30a`, branch `t3/app-shell-commands` (no commits beyond PR #52) | planned (in progress); not counted as wired |
 | Settings + Library | PR #51, merged to `main` as `dc62e65` during this audit; changes no `App/` file | planned (library on `main`; App wiring in app-shell §4.11 and settings Step 8) |
-| Settings polish | PR #56, branch `m5/settings-polish` | in PR (`OpenSettings` only) |
+| Settings polish | PR #56, merged to `main` as `c95be65` during this audit (`OpenSettings` only) | counted with Settings + Library |
 | Release Steps 1/3 | PR #54, merged to `main` as `724e35d` during this audit (`tools/release-locales.txt`) | planned (partial) |
 | Release Steps 9, 11 | PR #55 (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`), PR #57 (`tools/release.sh`) | in PR |
 | Extensions P1 tab-strip bridge | PR #53, branch `m7/ext-p1-tabstrip` | in PR |
@@ -672,7 +672,7 @@ Design reviews of Settings, the first-run screens, and the Links pane belong to 
 
 ## 6. Evidence for this audit
 
-The audit started on `42bba0b`. PR #51 merged during the audit, so the branch was fast-forwarded to `dc62e65` and the checks marked "both" ran again. PR #54 (a text file and a plan line) merged next; `tools/verify-all.sh` ran a third time on the final merge. No unit tests, no Arc launch, no desktop input, and no Arc user data were used.
+The audit started on `42bba0b`. PR #51 merged during the audit, so the branch was fast-forwarded to `dc62e65` and the checks marked "both" ran again. PR #54 (a text file and a plan line) and PR #56 (`OpenSettings` polish) merged next; `tools/verify-all.sh` ran again on the final merge. No unit tests, no Arc launch, no desktop input, and no Arc user data were used.
 
 | Command | Tree | Result |
 |---|---|---|
@@ -683,7 +683,7 @@ The audit started on `42bba0b`. PR #51 merged during the audit, so the branch wa
 | `.build/release/commandbar-render check` | both | 78/78 passed |
 | `.build/release/settings-preview check` (inside verify-all) | `dc62e65` | 28 checks passed, 0 failed |
 | `.build/release/sidebar-render bench --rows 1000` | `42bba0b` | scroll p95 3.67 ms; moveNode p95 4.84 ms; Space switch 7.6–14.8 ms (load 8.5) |
-| `tools/verify-all.sh` | all | `42bba0b`: 14 PASS; `dc62e65`: 15 PASS (adds `settings-preview`); final merge with `724e35d`: 15 PASS; no SKIP |
+| `tools/verify-all.sh` | all | `42bba0b`: 14 PASS; `dc62e65`: 15 PASS (adds `settings-preview`); merge with `724e35d`: 15 PASS; final merge with `c95be65`: 15 PASS; no SKIP |
 | Coverage join (§2) with a fresh `commands-dump --markdown` | both | Same counts on both trees |
 | `git grep` for library types in `App/` on `origin/main` and `origin/t3/app-shell-real-window` | both | No App use of `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `BoostStore`, `AdBlockStore`, `SleepController`, `ScriptHost`, `RoutingEvaluator`, `GlobalHotkeyService`, `archiveExpiredTabs` |
 | Diff of the MH menu tables against `expected-menu.json` | both | 1 Arc item missing (Reveal Tab in Sidebar); 2 extra standard macOS items |
