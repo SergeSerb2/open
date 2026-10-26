@@ -20,6 +20,7 @@ do {
     case "commands-demo":
         try await runCommandsDemo(args: rest)
     case "suggest", "suggest-check": await runSuggestCommand(command, args: rest)
+    case "favicons": try await runFavicons(args: rest)
     default:
         print("unknown command: \(command)")
         exit(2)
