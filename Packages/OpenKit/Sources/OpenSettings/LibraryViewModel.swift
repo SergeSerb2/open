@@ -157,7 +157,7 @@ import OpenStore
             do {
                 try await store.delete(ids: ownedIDs)
                 for id in ownedIDs { actions.deleteArchived(id: id) }
-                archiveResults[owner] = "Deleted \(ownedIDs.count)."
+                archiveResults[owner] = "Deleted \(ownedIDs.count.formatted())."
             } catch { archiveResults[owner] = "Failed: \(error.localizedDescription)" }
         }
         let missing=ids.contains{archiveOwners[$0] == nil}

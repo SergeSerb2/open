@@ -22,14 +22,41 @@ public struct ImportPlan: Sendable {
     public mutating func skipSecrets() { secretsRequested = false; secretsConsented = false }
     public mutating func consentToSecrets() { secretsRequested = true; secretsConsented = true }
 }
+enum ImportCountCopy {
+    static func phrase(_ count:Int,singular:String,plural:String)->String {
+        "\(count.formatted()) \(count == 1 ? singular:plural)"
+    }
+    static func displayCategory(_ category:String)->String {category == "Search settings" ? "Search engine":category}
+}
+
 public struct ImportOutcome: Sendable {
     public var counts: [String: Int]
     public var errorText: String?
-    public init(counts: [String: Int] = [:], errorText: String? = nil) { self.counts = counts; self.errorText = errorText }
+    public var failures: [String: String]
+    public init(counts: [String: Int] = [:], errorText: String? = nil, failures: [String: String] = [:]) { self.counts = counts; self.errorText = errorText; self.failures = failures }
 }
 
-@MainActor public protocol SettingsActions: AnyObject {
+/// One import action and capability shared by Settings and first run.
+/// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
+public enum ImportOutcomeKeys {
+    public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies"]
+}
+public extension ImportOutcome {
+    func importedCount(_ category:String)->Int {
+        let aliases:[String:[String]]=["Spaces":[ImportOutcomeKeys.spaces,"Spaces"],"Imported tabs":["Imported tabs",ImportOutcomeKeys.tabs,"Pinned and Today tabs"],"Pinned and Today tabs":["Pinned and Today tabs",ImportOutcomeKeys.tabs],"Archive":[ImportOutcomeKeys.archive,"Archive"],"History":[ImportOutcomeKeys.history,"History"]]
+        return (aliases[category] ?? [category]).compactMap{counts[$0]}.first ?? 0
+    }
+    var didImportAnything:Bool {ImportOutcomeKeys.imported.contains {counts[$0,default:0] > 0}}
+}
+
+@MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
+    func runImport(plan: ImportPlan) async -> ImportOutcome
+}
+public extension ImportActions { var canImportPasswordsAndCookies: Bool { false } }
+
+@MainActor public protocol SettingsActions: ImportActions {
     func setAsDefaultBrowser() -> String?
     func isDefaultBrowser() -> Bool
     func checkForUpdates()
@@ -42,8 +69,6 @@ public struct ImportOutcome: Sendable {
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage)
     func openPreviewsSettings()
     func keyBindingsDidChange(store: KeyBindingStore)
-    /// Phase 2 uses countOnly, even after consent, until the engine secret writer exists.
-    func runImport(plan: ImportPlan) async -> ImportOutcome
     func setAdBlockEnabled(_ on: Bool, profileID: ProfileID)
     func setEnabledBlockLists(_ ids: [String], profileID: ProfileID)
     func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID)
@@ -56,11 +81,10 @@ public struct ImportOutcome: Sendable {
     func openHelp(topic: String)
     func copyText(_ text: String)
     func openLibrary()
-    /// The Library hosts this native view; OpenSettings has no sidebar dependency.
+    /// The Library hosts this native view without importing OpenSidebar.
     func makeSpaceManagerView() -> NSView?
 }
 
 public extension SettingsActions {
-    var canImportPasswordsAndCookies: Bool { false }
     func makeSpaceManagerView() -> NSView? { nil }
 }
