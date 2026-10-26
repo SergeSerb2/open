@@ -24,13 +24,17 @@ Read first, in this order:
    `Engine/fork/src/cef/include/cef_tab_strip.h`, its `docs/engine-patches.md`
    section "Status: implemented".
 4. `docs/re/features-advanced.md` §11 (the evidence for this plan,
-   items EX-1 … EX-18) and §6 (Site Control Center).
+   items EX-1 … EX-20) and §6 (Site Control Center).
 5. `docs/re/arccore-engine.md` §4 and `docs/re/menus-and-hotkeys.md`
    (Extensions menu).
 6. `docs/plans/app-shell.md` §2, §4.3, §4.9, §4.12, §4.13 and
    `docs/plans/m4-split-peek-littleopen.md` §3.5 (pane top bar).
 7. `docs/plans/site-control-boost-editor.md` (written in parallel; it
    owns the Site Control Center popover and reuses §3.9 of this plan).
+8. `docs/status.md` §3.3 gap 37 (extension shortcuts in Settings ▸
+   Shortcuts; extension omnibox keywords in the command bar), covered by
+   §3.14 and §6.3; `docs/suggest.md` (providers, Site Search scope) and
+   `docs/re/features-core.md` §4.2 rule 4, §4.4, §4.6.
 
 ## Goal
 
@@ -48,7 +52,9 @@ Ship Arc's extension UI on Open's own views:
 6. Install, remove, and permission prompts as Open sheets (no Chrome
    dialogs).
 7. Extension keyboard shortcuts (`chrome.commands`) and Arc's own
-   extension shortcut.
+   extension shortcut, with their place in Settings ▸ Shortcuts.
+8. Extensions in the command bar: run an extension by name, and
+   `chrome.omnibox` keywords as a scoped mode.
 
 ## Success criteria
 
@@ -70,6 +76,11 @@ Ship Arc's extension UI on Open's own views:
 - Idle cost is zero: no timers, no polling. With 20 extensions installed,
   a tab switch adds at most 1 ms of main-thread time for extension UI
   (§9).
+- An omnibox keyword (`action-probe`'s "probe") enters a scoped mode in
+  the command bar, shows the extension's suggestions, and sends the
+  accepted text to the extension (X-22–X-25).
+- Settings ▸ Shortcuts reaches `chrome://extensions/shortcuts` and shows
+  extension shortcuts that Open's own shortcuts switched off (X-27).
 - No unit tests (AGENTS.md rule 6).
 
 ## Non-goals (do not build)
@@ -140,6 +151,8 @@ independent pieces of evidence; "guess" = one weak piece.
 | EX-12–13 | One popup manager per window; action updates are batched | strong |
 | EX-14 | Badge is baked into the action image by Chromium | strong |
 | EX-15 | Prompts are window sheets with Arc's own text | strong |
+| EX-19 | The command bar has a result source for extension omnibox keywords; the engine runs Chromium's keyword path | strong (source name, selectors); look guess |
+| EX-20 | The command bar can run an extension's action by name | strong (strings); row look guess |
 
 ## 3. Surfaces
 
@@ -623,6 +636,60 @@ Behavior:
 | Popup page crashed | The popup closes (engine `didCloseExtensionPopup`). No sad view in the panel. guess. |
 | Extension system not ready yet (early launch) | Strips are empty and take no space; they fill on the first `browserDidUpdateExtensionActions`. |
 
+### 3.14 Command bar: extension actions and omnibox keywords (status gap 37)
+
+Owner: `OpenSuggest` (providers) and `OpenCommandBar` (scope chip,
+intents). Both stay engine-free: they use the protocol
+`ExtensionCommandBarSource` (§8.5), which the App implements over the
+engine.
+
+#### 3.14.1 Run an extension by name (EX-20)
+
+- Provider `ExtensionActionsProvider` (local, synchronous, < 0.2 ms with
+  50 extensions). Only outside a scope.
+- Source data: the key window's action list (E1), enabled actions only.
+- Match: the query against the extension name with the same folding and
+  match quality as browser actions (`docs/suggest.md` "Match quality").
+  Score: the actions weight (`docs/suggest.md` "Score").
+- Row: kind `.extensionAction` (new), title = extension name, subtitle
+  "Extension" (guess), icon `IconHint.extension(id)` (new; the command
+  bar draws the engine's 16 pt `icon` through a provider closure, like
+  favicons), trailing keycaps = the `_execute_action` shortcut if any.
+- Return: the bar closes, then intent `.runExtensionAction(id)`: the
+  action runs with source `.menuEntry`; its popup anchors per §3.7 A4.
+
+#### 3.14.2 Omnibox keywords (`chrome.omnibox`, EX-19)
+
+An extension with `"omnibox": {"keyword": "…"}` in its manifest gets a
+scoped mode in the command bar. It works like Site Search (FC §4.6
+rule 15; `docs/suggest.md` §7), so the gestures are the same:
+
+| Step | User action | UI | Engine call (E12) |
+|---|---|---|---|
+| Hint | Type text that equals a keyword (folded) | The Site Search trailing hint (`CommandBarInput.trailing = .siteSearchHint(name:space:)`) with the extension's name; Space is allowed because the match is exact | — |
+| Enter scope | Tab or Space | Chip with the extension's 16 pt icon and name (the Site Search chip view); placeholder `CommandBarText.siteSearchPlaceholder(name)` | `omniboxStartSession(extension)` |
+| Type | Each keystroke | Row 1: the default row (the typed text; title = the extension's default suggestion with `%s` replaced, else the typed text; subtitle = extension name). Then the extension's suggestions in its order (title = description without markup, `match` ranges in semibold; subtitle = content when it differs), at most 5 rows in all (`CommandBarMetrics.maxVisibleRows`) | `omniboxInputChanged(text)` → suggestions arrive async; rows for an older text are dropped |
+| Accept | Return on a row | The bar closes | `omniboxInputEntered(row content, disposition)` |
+| Leave | Esc, Backspace on an empty query, closing the bar, or another window | Chip goes | `omniboxInputCancelled` (once per session) |
+| Delete | Shift+Delete on a row the extension marked deletable | Row goes | `omniboxDeleteSuggestion(content)` |
+
+Rules:
+
+1. Disposition: a bar opened for a new tab (Cmd+T) → new foreground tab;
+   a bar opened on the current tab (Cmd+L, URL field) → current tab;
+   Cmd+Return → new background tab. Same mapping as the bar's existing
+   `CommandBarDestination` and modifiers. The extension then navigates
+   or opens tabs itself (`chrome.tabs`, P1).
+2. Keywords come from the key window's profile only (E8/E12 keyword
+   list, rebuilt on registry events).
+3. Conflict: a keyword equal to a Site Search name or keyword loses; the
+   Site Search scope wins (Open choice; Q9).
+4. An extension that never answers leaves only the default row. Return
+   still sends `omniboxInputEntered`.
+5. Ranking inside the scope: no reranking; the extension's order is kept.
+6. Recording: the command bar records nothing about extension rows in
+   history (the page the extension opens is recorded as usual).
+
 ## 4. State matrix (what each surface shows)
 
 | State | URL field strip | Pane bar strip | SCC section | Menu bar menu | Little Open |
@@ -708,6 +775,48 @@ engine.
    `GlobalAcceleratorListenerMac`). The shell does nothing but list them.
 6. Editing: "Extension Shortcuts" opens `chrome://extensions/shortcuts`
    (§3.12). No native editor in v1.
+
+### 6.3 Settings ▸ Shortcuts and the command registry (status gap 37)
+
+Arc's Shortcuts pane has "Extension Shortcuts" (MH "Custom shortcuts")
+as a menu item that opens Chromium's page (EX-11: `extensions/shortcuts`
+sits in Arc's list of Chromium settings sub-pages next to
+`settings/languages`, `settings/searchEngines`, and others). Open does
+the same and adds one notice for conflicts.
+
+Registry fit (one store per fact):
+
+| Kind | Where it lives | Edited in | In `CommandRegistry`? |
+|---|---|---|---|
+| Open commands (`open-extensions-picker`, `extension-shortcuts`, `manage-extensions`, `add-extension`) | `CommandRegistry` + user overrides in `State/keybindings.json` (`KeyBindingStore`) | Settings ▸ Shortcuts list | yes |
+| Extension commands (`chrome.commands`) | Chromium pref `extensions.commands` per profile (`CommandService`) | `chrome://extensions/shortcuts` | no: dynamic, per profile; `ExtensionShortcutTable` (§6.2) |
+
+`KeyBindingStore` never stores an extension shortcut, and
+`CommandRegistry` never lists one. `commands-dump` and
+`expected-menu.json` stay static.
+
+Pane changes (`Packages/OpenKit/Sources/OpenSettings/ShortcutsPane.swift`):
+
+1. The pane's "…" menu gets "Extension Shortcuts" after "Shortcut Help".
+   It calls `model.root.actions.openURL(URL(string: "chrome://extensions/shortcuts")!, profileID: model.root.selectedProfileID)`
+   (`SettingsViewModel.actions`, `.selectedProfileID`).
+   The App opens it as a selected Today tab with the singleton rule
+   (§3.12).
+2. Conflict notice: `SettingsActions` gains
+   `func extensionShortcutConflicts(profileID: ProfileID) -> [ExtensionShortcutConflict]`
+   (default implementation returns `[]`; the App answers from
+   `ExtensionShortcutTable`). `ExtensionShortcutConflict` (OpenSettings):
+   `extensionName`, `commandDescription`, `shortcut:
+   OpenCommands.KeyboardShortcut`, `openCommandID`. When the list is not
+   empty, the pane shows one 11 pt secondary line per conflict under the
+   status area: "<extension>: <⇧⌘Y> is used by <Open command title>, so
+   it is off." and one link button "Extension Shortcuts…" (same action as
+   item 1). Open choice; Arc has no such notice in its strings.
+3. Recording an Open shortcut that equals an active extension shortcut
+   is allowed (Open wins, §6.2 rule 3). After the save, the conflict
+   notice lists that extension command.
+4. The pane does not list extension commands as rows (Arc does not;
+   Chromium's page is the editor).
 
 ## 7. Engine API contract (requests for the P2/P3 queue)
 
@@ -1033,7 +1142,66 @@ The Web Store install must work from a hosted P1 tab
 `ChromeBrowserDelegate` / `Browser::Create(TYPE_POPUP)` in the P1
 tab-strip code (ArcCore's equivalent is `createPopupBrowser:withDelegate:`).
 
-### E12. Not requested (and why)
+### E12. Omnibox keywords (P3) — `OEExtension`, `OEBrowser`
+
+```objc
+// OEExtension
+@property(nonatomic, readonly, copy, nullable) NSString* omniboxKeyword;
+
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEOmniboxSuggestion : NSObject
+@property(nonatomic, readonly, copy) NSString* content;          // sent back on accept
+@property(nonatomic, readonly, copy) NSString* descriptionText;  // markup removed
+@property(nonatomic, readonly, copy) NSArray<NSValue*>* matchRanges; // NSRange values styled "match"
+@property(nonatomic, readonly, copy) NSArray<NSValue*>* dimRanges;
+@property(nonatomic, readonly, copy) NSArray<NSValue*>* urlRanges;
+@property(nonatomic, readonly, getter=isDeletable) BOOL deletable;
+@end
+
+typedef NS_ENUM(NSInteger, OEOmniboxDisposition) {
+  OEOmniboxDispositionCurrentTab,
+  OEOmniboxDispositionNewForegroundTab,
+  OEOmniboxDispositionNewBackgroundTab,
+};
+
+// OEBrowser (the key window; "entered" acts on its active tab)
+- (void)omniboxStartSessionForExtension:(NSString*)extensionIdentifier;
+/// NO when the extension has no onInputChanged listener. The completion
+/// runs at most once, on the main thread, and only for the latest text.
+- (BOOL)omniboxInputChanged:(NSString*)text
+               forExtension:(NSString*)extensionIdentifier
+                 completion:(void (^)(NSArray<OEOmniboxSuggestion*>* suggestions))completion;
+/// The extension's setDefaultSuggestion, with "%s" still in it; nil = none.
+- (nullable OEOmniboxSuggestion*)omniboxDefaultSuggestionForExtension:(NSString*)extensionIdentifier;
+- (void)omniboxInputEntered:(NSString*)text
+               forExtension:(NSString*)extensionIdentifier
+                disposition:(OEOmniboxDisposition)disposition;
+- (void)omniboxInputCancelledForExtension:(NSString*)extensionIdentifier;
+- (void)omniboxDeleteSuggestion:(NSString*)content forExtension:(NSString*)extensionIdentifier;
+
+// OEBrowserDelegate
+- (void)browser:(OEBrowser*)browser omniboxDefaultSuggestionDidChangeForExtension:(NSString*)extensionIdentifier;
+```
+
+Sources: `OmniboxInfo::GetKeyword`
+(`chrome/common/extensions/api/omnibox/omnibox_handler.h:27`);
+`ExtensionOmniboxEventRouter::OnInputStarted`, `OnInputChanged`,
+`OnInputEntered`, `OnInputCancelled`, `OnDeleteSuggestion`
+(`chrome/browser/extensions/api/omnibox/omnibox_api.h:64-90`);
+`OmniboxSuggestionsWatcher::Observer::OnOmniboxSuggestionsReady` and
+`OnOmniboxDefaultSuggestionChanged`
+(`components/omnibox/browser/omnibox_suggestions_watcher.h:22,27`);
+`ApplyDefaultSuggestionForExtensionKeyword` and
+`StyleTypesToACMatchClassifications` (`omnibox_api.h:220,228`); the
+template is `KeywordExtensionsDelegateImpl::OnOmniboxSuggestionsReady`
+(`chrome/browser/autocomplete/keyword_extensions_delegate_impl.cc:141`).
+Arc's equivalents: `ArcExtensionInfo.omniboxKeyword`,
+`-[ArcBrowser triggerExtensionOmniboxInput:inputText:disposition:]`, and
+`autocomplete:…keyword:…` (`arccore-engine.md` §2). Open does not run
+Chromium's `AutocompleteController`; OpenSuggest is the command bar
+backend, so the engine exposes the omnibox events directly.
+
+### E13. Not requested (and why)
 
 - Site-access setters: the context menu (E7) covers them, as in Arc.
 - `ExtensionsMenuViewModel` (`chrome/browser/ui/extensions/extensions_menu_view_model.h`,
@@ -1159,6 +1327,7 @@ App/Extensions/ExtensionPromptPresenter.swift   OEExtensionManagerDelegate → E
 App/Extensions/ExtensionShortcutTable.swift     §6.2 table and router hook
 App/Extensions/ExtensionsMainMenuProvider.swift §3.5.1 menuNeedsUpdate injection
 App/Extensions/ExtensionWindowController.swift  §3.8 popup windows (E11)
+App/Extensions/EngineCommandBarSource.swift     §3.14 ExtensionCommandBarSource over OEBrowser (E1, E12)
 ```
 
 These join the app-shell file list (app-shell §2.3 says "no others
@@ -1179,6 +1348,41 @@ Everything in this plan runs on the main actor. Engine callbacks arrive
 on the main thread (`docs/engine-api.md`). `ExtensionImage` holds an
 immutable `CGImage`; build it once per engine image change, never per
 draw.
+
+### 8.5 Command bar and Settings glue (§3.14, §6.3)
+
+```swift
+// OpenSuggest/ExtensionProviders.swift (new)
+@MainActor public protocol ExtensionCommandBarSource: AnyObject {
+    var actions: [ExtensionCommandBarAction] { get }        // id, name, shortcutKeys; enabled only
+    var keywords: [ExtensionKeyword] { get }                // id, name, keyword
+    func startSession(extensionID: String)
+    func inputChanged(_ text: String, extensionID: String) async -> [ExtensionOmniboxRow]?
+    func defaultRow(extensionID: String, text: String) -> ExtensionOmniboxRow
+    func cancelSession(extensionID: String)
+    func deleteSuggestion(_ content: String, extensionID: String)
+}
+public struct ExtensionOmniboxRow: Sendable, Hashable {
+    public var content: String; public var title: String; public var boldRanges: [Range<Int>]
+    public var deletable: Bool
+}
+public struct ExtensionActionsProvider: SuggestProvider { … }   // §3.14.1, id "extensions"
+public struct ExtensionOmniboxProvider: SuggestProvider { … }   // §3.14.2, id "extension-omnibox"; asyncOperation for inputChanged
+```
+
+- `SuggestTypes.swift`: kinds `.extensionAction`, `.extensionKeywordHint`,
+  `.extensionSuggestion`; field `extensionID: String?`;
+  `IconHint.extension(String)`; `SuggestContext.extensionScopeID`.
+- `SuggestEngine`: registers both providers when a source is set
+  (`SuggestEngine.extensionSource`, weak).
+- `OpenCommandBar/CommandBarController.swift`: the extension scope uses
+  the Site Search chip, hint, Tab/Space, and Backspace code paths; new
+  intents `.runExtensionAction(extensionID:)` and
+  `.extensionOmnibox(extensionID:, content:, CommandBarDestination, CommandBarModifiers)`.
+- `App/Extensions/EngineCommandBarSource.swift` (new):
+  `ExtensionCommandBarSource` over `OEBrowser` (E1, E12) for the key
+  window; bridges the E12 completion to `async`.
+- `OpenSettings/SettingsActions.swift`, `ShortcutsPane.swift`: §6.3.
 
 ## 9. Performance rules
 
@@ -1245,6 +1449,22 @@ layout and placement code and prints one row per check:
 Add `extensions-render` to `NAMES` in `tools/verify-all.sh` (build, then
 `all` and `check`) in Step 1.
 
+Command bar and Settings checks run in the existing CLIs (all in
+`verify-all.sh`):
+
+- `openkit suggest-check` gains scenarios with a synthetic
+  `ExtensionCommandBarSource`: `ext-action-by-name` (row kind and rank
+  next to browser actions), `ext-keyword-hint` (hint row for an exact
+  keyword), `ext-scope-default` (default row with `%s` replaced),
+  `ext-scope-async` (async rows replace nothing but follow the default
+  row; a late answer for old text is dropped), `ext-keyword-conflict`
+  (Site Search wins).
+- `commandbar-render` gains scenes `extension-action-row` and
+  `extension-scope` (chip, default row, 3 suggestions with bold match
+  ranges), light and dark.
+- `settings-preview` gains the Shortcuts pane with two conflict lines
+  and the "…" menu item (its title check).
+
 ### 10.2 Automation channel additions (`App/Automation/AutomationController.swift`, `docs/automation.md`)
 
 | Command | Args | Result |
@@ -1257,7 +1477,8 @@ Add `extensions-render` to `NAMES` in `tools/verify-all.sh` (build, then
 | `ext-popup-state` | — | panel visible, key, frame, content size, anchor frame |
 | `ext-prompt` | `answer` (`accept`/`cancel`), `hold` | returns the pending prompt (type, title, buttons, permission lines) and answers it |
 | `ext-picker` | `keys` | sends keys to the open picker; returns `focusedID` |
-| `ext-commands` | — | the shortcut table (§6.2) |
+| `ext-commands` | — | the shortcut table (§6.2), including dropped conflicts |
+| `commandbar` (new or extended, owned with the command bar) | `text`, `keys` | opens the bar, types, sends keys (Tab, Return, Esc, Backspace), returns rows (kind, title, extension id) and the chip |
 | `snapshot` (exists) | `window` | use with the popup panel number for pixels |
 
 ### 10.3 End-to-end suite `--only extensions-ui` (`tools/e2e/engine_e2e.py`)
@@ -1272,7 +1493,11 @@ fixture `tools/e2e/fixtures/action-probe` (per-tab `setBadgeText`,
 `setBadgeBackgroundColor`, `setTitle`, `setIcon`, `disable`/`enable`, a
 popup-less `onClicked` counter, `chrome.action.openPopup()`, two
 commands: `_execute_action` Cmd+Shift+Y and a named command
-Cmd+Shift+U, one optional permission for `chrome.permissions.request`).
+Cmd+Shift+U, one optional permission for `chrome.permissions.request`,
+and `"omnibox": {"keyword": "probe"}` with `setDefaultSuggestion`
+"Probe: %s", suggestions "alpha"/"beta" (deletable), and
+`onInputEntered` → `chrome.tabs.update`/`create` to
+`https://example.com/?q=<text>`).
 Install Bitwarden, uBO Lite, and Dark Reader through the Web Store page
 in a P1 tab (X-1), not with `--load-extension`.
 
@@ -1299,6 +1524,12 @@ in a P1 tab (X-1), not with `--load-extension`.
 | X-19 | Little Open | Little Open window with an extension installed: Extensions button visible; menu runs an action; popup anchors to the button |
 | X-20 | Popup window | Bitwarden "pop out" → an `ExtensionWindowController` window, not a Chrome Views window; `chrome.windows.getAll()` includes it as type popup |
 | X-21 | Idle | 10 s idle with all extensions loaded: 0 extension UI redraws (signpost counter) |
+| X-22 | Run by name | command bar "action pro" → `.extensionAction` row "Action Probe"; Return → popup opens anchored per A4 |
+| X-23 | Omnibox scope | type "probe", Tab → chip "Action Probe"; type "al" → rows: default "Probe: al", then "alpha"; Esc → the fixture records `onInputCancelled` once |
+| X-24 | Omnibox accept | in scope, "beta" + Return from a Cmd+L bar → the current tab loads `https://example.com/?q=beta`; from a Cmd+T bar → a new selected Today tab |
+| X-25 | Omnibox stale rows | type fast ("a", "al", "alp"): the rows match "alp" only (the fixture answers "a" late on purpose) |
+| X-26 | Keyword conflict | an extension keyword "yt" → Tab enters Site Search YouTube, not the extension (Q9) |
+| X-27 | Settings ▸ Shortcuts | the "…" menu item "Extension Shortcuts" opens one `chrome://extensions/shortcuts` tab; with the fixture's Cmd+Shift+U also bound to an Open command, the pane shows the conflict line (`settings-preview` scene with a fake `SettingsActions`, and the real app) |
 
 Screenshots for the PR: one per surface in light and dark, Open's own
 windows only.
@@ -1324,6 +1555,7 @@ for P2/P1+.
 | 5 | P2 arrives: E1–E7 wired; context menu; pin/move; `toolbarImage` replaces the fallback badge; `extensionPopupIsReady` replaces S4's guess path | X-2, X-5, X-9, X-10, X-11, X-21 |
 | 6 | P3 arrives: prompts (`ExtensionPromptSheet`, `ExtensionPromptPresenter`), live registry, commands (`ExtensionShortcutTable`), install toast; delete the M1 extension code | X-1, X-12, X-14, X-15 |
 | 7 | P1+ arrives: `ExtensionWindowController` (E11) | X-20 |
+| 8 | Command bar and Settings (§3.14, §6.3): `ExtensionActionsProvider` first (needs only E1), then `ExtensionOmniboxProvider` when E12 lands; Shortcuts pane menu item and conflict notice | `suggest-check`, `commandbar-render`, `settings-preview` scenarios; X-22–X-27 |
 
 Every PR: merge `origin/main`, run `tools/verify-all.sh`, paste the
 table (AGENTS.md rule 10).
@@ -1374,3 +1606,4 @@ measuring.
 | Q6 | `chrome.sidePanel` in v1? Arc has it behind `extension-side-panel-enabled` | Not in v1; separate plan if users need it |
 | Q7 | Manage page URL: show `chrome://extensions`, or add an `open://extensions` alias like Arc's `arc://extensions`? | `chrome://extensions`; an alias adds WebUI work for no user value |
 | Q8 | Engine order: E11 (popup windows) with P1+ or after P3? | With P1+ (small; Bitwarden's pop-out needs it) |
+| Q9 | An extension omnibox keyword equal to a Site Search name or keyword: which wins? | Site Search (built in, predictable); the extension stays reachable by name (§3.14.1) |
