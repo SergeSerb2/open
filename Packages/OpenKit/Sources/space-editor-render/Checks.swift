@@ -189,6 +189,15 @@ enum Checks {
         try store.saveNow(model: reloaded)
         guard let edited = try store.load() else { throw CLIError(description: "P1 edited reload failed") }
         check(SnapshotMapper.structurallyEqual(reloaded, edited), "P1 editor style and both icon overrides round trip")
+
+        // Exercise real creation and persistence, without an editor write.
+        let newSpace = edited.createSpace(title: "Unthemed Space", profileID: edited.spaces[0].profileID)
+        try store.saveNow(model: edited)
+        guard let createdSnapshot = try store.load(), let created = createdSnapshot.space(id: newSpace.id) else {
+            throw CLIError(description: "P1 new Space reload failed")
+        }
+        check(created.theme == SpaceTheme() && SpaceStyle.seed(from: created.theme) == nil,
+              "P1 new Space creation persists no theme and seeds an empty editor")
     }
 
     static func run() throws {
