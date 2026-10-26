@@ -50,6 +50,8 @@ final class RenderScene: NSView {
     override func layout() {
         super.layout()
         let w = sidebar.context.sidebarWidth
+        let context = sidebar.context
+        lights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
         background.frame = bounds
         panelHost.frame = bounds
         let hidden = options.sidebarHidden
@@ -72,6 +74,8 @@ final class RenderScene: NSView {
 @MainActor
 final class TrafficLightsView: NSView {
     private let dimmed = DimmedTrafficLightsView()
+    /// The Space's content appearance (set by the scene), as in the window.
+    var tone: ContentAppearance = .light { didSet { needsLayout = true } }
     override var isFlipped: Bool { true }
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -85,12 +89,7 @@ final class TrafficLightsView: NSView {
         dimmed.frame = bounds
         // The dimmed view is not flipped: measure its centers from the bottom.
         dimmed.centers = ChromeMetrics.trafficLightCenters.map { CGPoint(x: $0.x, y: bounds.height - $0.y) }
-        dimmed.tone = ContentAppearance(effectiveAppearance)
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsLayout = true
+        dimmed.tone = tone
     }
 }
 
