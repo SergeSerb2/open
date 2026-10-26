@@ -25,7 +25,7 @@
         ]
       },
       "ok": true,
-      "work_dir": "Profile-10005156"
+      "work_dir": "Profile-D2E1FA23"
     },
     "extension_isolation": {
       "default_profile_probe_sees": {
@@ -33,7 +33,7 @@
           "https://example.com/?profile=default"
         ],
         "windows": [
-          1912881456
+          1032754262
         ]
       },
       "ok": true,
@@ -42,7 +42,7 @@
           "https://example.com/?profile=work"
         ],
         "windows": [
-          1912881452
+          1032754258
         ]
       }
     },
@@ -124,6 +124,6 @@
       ]
     }
   },
-  "started": "2026-10-26 01:27:32",
+  "started": "2026-10-26 01:39:39",
   "style": "chrome"
 }
