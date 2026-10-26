@@ -136,6 +136,7 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
         case "down": return "\u{F701}"
         case "delete": return "\u{7F}"
         default:
+            if key.hasPrefix("f"),let number=Int(key.dropFirst()),(1...35).contains(number),let scalar=UnicodeScalar(0xF704+number-1) {return String(scalar)}
             if key.count == 1 { return key.lowercased() }
             return key
         }
@@ -180,6 +181,7 @@ public struct KeyboardShortcut: Hashable, Sendable, Codable, CustomStringConvert
                 case 0xF703: key = "right"
                 case 0xF700: key = "up"
                 case 0xF701: key = "down"
+                case 0xF704...0xF726: key = "f\(scalar.value - 0xF704 + 1)"
                 default: key = raw.lowercased()
                 }
             } else if raw.isEmpty {

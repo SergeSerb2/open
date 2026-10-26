@@ -59,7 +59,7 @@ What this means: everything that runs inside the extension system works in Alloy
 | Request filter (ad-block hook) | pass | a matched request is blocked, then loads after the filter is cleared |
 | Profiles | pass | a second Space with a new profile "Work" gets its own context in `Profiles/<dir>/Engine` (the M5 layout): no cookie, no localStorage from Default |
 | Ad-block control | pass | without extensions the ad URLs load (so the DNR result above is real) |
-| Codecs | pass (as expected) | VP9, AV1, Opus, MP3 yes; H.264, AAC, HEVC no in stock CEF (the fork's GN args turn on proprietary codecs: P4) |
+| Codecs | pass (as expected) | VP9, AV1, Opus, MP3 yes; H.264, AAC, HEVC no in stock CEF (the fork's GN args turn on proprietary codecs: P4). Fork build: H.264, AAC, HEVC yes (`results-features-alloy-fork.json`) |
 | Widevine | pass, once the CDM is downloaded | Chromium's component updater fetched the Widevine CDM (4.10.3112.0) into `Profiles/WidevineCdm`; then EME was available and a Widevine-encrypted test stream played (123 frames in 5 s). In three earlier runs the CDM had not arrived within the 120 s wait and EME was unavailable. v1 does not ship Widevine by lead decision (`Engine/fork/gn/release.args.gn`: `enable_widevine=false`). |
 | Renderer crash | pass | crash state reaches the model; reload recovers |
 
@@ -106,6 +106,27 @@ With one tab there are two renderer processes; the second is probably Chromium's
 
 Idle CPU with 10 pages loaded, 10 s window: 1.3 % of one core in total (Chromium task manager, all processes; Hacker News, GitHub, and MDN keep timers running).
 
+### Fork vs prebuilt (2026-10-25)
+
+Same machine, same harness (`--only measure --config Release`), back to back at a load average of about 10 on 18 cores. Before each run, one throwaway launch warmed the new framework, so the first-launch check after a rebuild is not counted. Fork: our dev build (`Engine/fork/gn/dev.args.gn`: `is_official_build=false`, no ThinLTO, no PGO) from `engine-distrib`. Prebuilt: the CDN build of the same CEF commit, an official build. Files: `results-measure-release-fork.json`, `results-measure-release-cdn.json`.
+
+| Measure | Fork (dev args) | Prebuilt (CDN, official) |
+|---|---|---|
+| `CefInitialize` returned (median of 3) | 256 ms | 179 ms |
+| Window and sidebar shown | 386 ms | 299 ms |
+| Restored tab: first contentful paint | **584 ms** | **450 ms** |
+| Fresh profile: first contentful paint | 517 ms | 424 ms |
+| Memory, 1 page (total footprint, 6 processes) | 239 MB | 235 MB |
+| Memory, 10 pages (15 processes) | 1210 MB | 1215 MB |
+| Idle CPU, 10 pages, 10 s | 1.2 % | 1.0 % |
+| Framework binary | 455 MB (`__TEXT` 257 MB, `__LINKEDIT` 186 MB: 1.33 M local symbols) | 226 MB (`__TEXT` 221 MB, `__LINKEDIT` 2 MB) |
+| Open.app, all locales | 545 MB | 329 MB |
+
+- Launch: the fork is about 80–130 ms slower at each mark. This is what a non-official build costs (no ThinLTO, no PGO). The release args (`gn/release.args.gn`) build the shipping engine officially; that build waits for the PGO profile (docs/engine-fork.md, Step 10).
+- Memory and idle CPU: equal within run-to-run noise. A first round without the warm-up launch gave 1552 MB (fork) and 1265 MB (CDN) for 10 pages, with the GPU process at 618 and 495 MB: page content (ads, animations) moves this number more than the engine does.
+- Size: dev builds keep local symbols (for readable crash stacks during patch work) and are not stripped. Official builds strip them (`enable_stripping = is_official_build`). Do not ship a dev framework.
+- First launch after a rebuild: in the first round, the prebuilt's fresh-profile launch spent 1514 ms in `CefInitialize`, right after its framework was copied and re-signed; with a warmed framework the same fresh-profile launch took 186 ms. So the "fresh profile costs about 1.3 s more" result above is mostly the first launch of a new framework binary, not first-run profile work (guess: macOS scans the new 226–455 MB binary once).
+
 ### Bundle size
 
 | Part | Size |
@@ -127,7 +148,7 @@ What can go:
 ## Build
 
 - From a clean clone: `git clone …` then `OPEN_KEEP_LOCALES="en" tools/build.sh Release` took 1 min 20 s on this loaded machine with the CDN download and extraction cached in `~/Library/Caches/Open/cef` (2 min 8 s when the extraction is not cached yet). The result is 279 MB, passes `codesign -v --deep` (ad-hoc), leaves `git status` clean, and loads `https://example.com` (title read through the DevTools endpoint).
-- `CEF_SOURCE=fork tools/fetch-cef.sh` hands over to `tools/fetch-engine.sh --run` (docs/engine-fork.md), which copies the fork's recorded distribution into `Vendor/cef/`; then the wrapper is rebuilt. Not exercised end to end yet: no fork distribution is recorded until the running fork build finishes. Its error paths are checked (no recorded distribution, unknown source, CDN pin not matching `Engine/fork/VERSIONS`).
+- `tools/fetch-cef.sh` (default `CEF_SOURCE=fork`) hands over to `tools/fetch-engine.sh --run` (docs/engine-fork.md), which copies the fork's recorded distribution into `Vendor/cef/`; then the wrapper is rebuilt. Exercised end to end on 2026-10-25: `tools/build.sh Release` against the fork took 57 s, the shell and feature suites pass on our framework (`results-shell-release-fork.json`, `results-features-alloy-fork.json`), and the Measurements section compares it with the CDN build. `CEF_SOURCE=cdn` switches back for comparisons.
 
 ## Bugs found and fixed on the way
 
