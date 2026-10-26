@@ -37,7 +37,7 @@ if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_QUIT_BEFORE_ENGINE"] == 
   RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
 }
 if let input = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_NAVIGATION"] {
-  appDelegate.windowControllers.first?.navigateBeforeEngineForAutomation(input)
+  appDelegate.frontWindowController.flatMap { appDelegate.hostFactories[$0.windowID] }?.navigateBeforeEngineForAutomation(input)
 }
 #endif
 while !firstFrame.presented && !firstFrame.timedOut && !appDelegate.terminationRequested { CFRunLoopRun() }

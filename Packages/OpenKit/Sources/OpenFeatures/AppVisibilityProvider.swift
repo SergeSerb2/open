@@ -30,7 +30,7 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
                 state = window.isMiniaturized ? .minimized : (!window.isVisible ? .closed : (window.occlusionState.contains(.visible) ? .visible : .occluded))
             } else { state = .closed }
             windows[c.windowID] = state
-            if state == .visible, c.peekController.isShown, let id = c.peekController.stack.last?.hostTabID { peek.insert(id) }
+            if state == .visible, c.hasPeekController, c.peekController.isShown, let id = c.peekController.stack.last?.hostTabID { peek.insert(id) }
         }
         for s in littleOpenCoordinator?.sessions ?? [] where s.windowIsVisible { little.insert(s.tab.id) }
         return SleepVisibilitySnapshot(windows: windows, peek: peek, littleOpen: little, splitPanes: [], pictureInPicture: pipTabIDs)
@@ -56,7 +56,7 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
     /// Future App quit ordering: capture all live histories before closing any cached hosts.
     public func tearDownAfterQuitCapture(_ capture: () async -> Void) async {
         await capture()
-        for c in browserWindowControllers { c.peekController.dismissAll(); c.container.closeAll() }
+        for c in browserWindowControllers { if c.hasPeekController { c.peekController.dismissAll() }; c.container.closeAll() }
         littleOpenCoordinator?.closeAll()
     }
 }

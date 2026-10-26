@@ -33,7 +33,7 @@ enum FeatureCLI {
         } else { model = synthetic() }
         let factory = FakeWebContentHostFactory(), defaults = defaults()
         if cmd == "little" {
-            let little = LittleOpenCoordinator(model: model, archiveSink: nil) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil) as! FakeWebContentHost }
+            let little = LittleOpenCoordinator(model: model, archiveSink: nil) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil)! as! FakeWebContentHost }
             little.presentWindows = false; little.defaults = defaults; little.open(url: URL(string: RenderCLI.value(args, "--url") ?? "https://example.com")!, profileHint: nil)
             guard let c = little.sessions.first.flatMap({ little.controllers[$0.id] }) else { throw CLIError(description: "no Little Open session") }
             c.contentView.frame.size = size; c.window?.setContentSize(size)

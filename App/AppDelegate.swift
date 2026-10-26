@@ -2,32 +2,37 @@ import AppKit
 import OpenEngine
 import OpenModel
 import OpenStore
+import OpenFeatures
 import QuartzCore
 
 /// Owns the model, its stores, and the windows.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBrowserContextDelegate {
   var options = LaunchOptions(arguments: [])
   private(set) var model: BrowserModel!
   private(set) var snapshotStore: SnapshotStore!
   private(set) var archiveSink: ProfileArchiveSink!
   private(set) var directories: ProfileDirectories!
+  private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
   private(set) var windowControllers: [BrowserWindowController] = []
   let undoManager = UndoManager()
   private(set) var engineReady = false
   private(set) var terminationRequested = false
+  private var activeWindowID: WindowID?
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
     private var automation: AutomationServer?
   #endif
 
   var frontWindowController: BrowserWindowController? {
-    windowControllers.first { $0.window?.isKeyWindow == true } ?? windowControllers.first
+    windowControllers.first { $0.windowID == activeWindowID }
+      ?? windowControllers.first { $0.window?.isKeyWindow == true } ?? windowControllers.first
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     LaunchTiming.shared.mark("didFinishLaunching")
     NSApp.mainMenu = MainMenu.build()
+    MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     NSApp.setActivationPolicy(.regular)
     // The window and sidebar come from the snapshot and do not wait for the
     // engine (docs/architecture.md, launch tactics). Pages created before
@@ -36,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-    frontWindowController?.showWindow(nil)
+    if let frontWindowController { frontWindowController.showWindow(nil) }
+    else { showWindowsIfNeeded() }
     return false
   }
 
@@ -104,9 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
     guard windowControllers.isEmpty else { return }
     let states = model.windows.filter { $0.style == .standard }
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
-      let controller = BrowserWindowController(app: self, windowState: state)
-      windowControllers.append(controller)
-      controller.showWindow(nil)
+      createWindowController(state: state)
     }
     LaunchTiming.shared.mark("windowShown")
   }
@@ -120,11 +124,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
     }
     CATransaction.flush()
     startupEvidence = [
-      "sidebarClass": windowControllers.first?.sidebarClassName ?? "",
+      "sidebarClass": windowControllers.first.map { String(reflecting: type(of: $0.sidebar)) } ?? "",
       "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
       "contextsBeforeEngine": OEEngine.shared.contexts.count,
       "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
     ]
+  }
+
+  @discardableResult
+  private func createWindowController(state: BrowserWindowState) -> BrowserWindowController {
+    let factory = EngineWebContentHostFactory(app: self, state: state)
+    hostFactories[state.id] = factory
+    let controller = BrowserWindowController(model: model, windowID: state.id, factory: factory, snapshotStore: snapshotStore)
+    factory.attach(controller)
+    windowControllers.append(controller)
+    activeWindowID = state.id
+    MainMenu.targetWindowCommands(factory)
+    controller.showWindow(nil)
+    if engineReady { factory.engineDidBecomeReady() }
+    return controller
+  }
+
+  @discardableResult
+  func makeWindow(focusedSpaceID: SpaceID? = nil) -> BrowserWindowController? {
+    // Closing the final window keeps its state for reopen and relaunch.
+    if windowControllers.isEmpty, let state = model.windows.first(where: { $0.style == .standard }) {
+      return createWindowController(state: state)
+    }
+    guard let spaceID = focusedSpaceID ?? frontWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
+      let state = model.createWindow(focusedSpaceID: spaceID) else { return nil }
+    let offset = Double(windowControllers.count * 24)
+    state.frameX += offset; state.frameY -= offset
+    let controller = createWindowController(state: state)
+    scheduleSave(); return controller
+  }
+
+  @objc func newWindow(_ sender: Any?) { makeWindow() }
+
+  func focusWindow(_ id: WindowID, activate: Bool = false) {
+    didFocusWindow(id)
+    windowControllers.first { $0.windowID == id }?.window?.makeKeyAndOrderFront(nil)
+    if activate { NSApp.activate() }
+  }
+
+  func didFocusWindow(_ id: WindowID) {
+    activeWindowID = id
+    MainMenu.targetWindowCommands(hostFactories[id])
+  }
+
+  func windowDidClose(_ id: WindowID) {
+    if model.windows.filter({ $0.style == .standard }).count > 1 {
+      model.closeWindow(windowID: id)
+    }
+    windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
+    if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
+    MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
+    scheduleSave()
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -157,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
     LaunchTiming.shared.mark("engineInitialized")
     engineReady = true
     showWindowsIfNeeded()
-    for controller in windowControllers { controller.engineDidBecomeReady() }
+    for factory in hostFactories.values { factory.engineDidBecomeReady() }
     #if OPEN_AUTOMATION
       let socket =
         options.automationSocket
@@ -174,12 +229,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   }
 
   func engineWebContent(forUnownedOpenRequest request: OEOpenRequest) -> OEWebContent? {
-    frontWindowController?.adoptUnownedRequest(request)
+    frontWindowController.flatMap { hostFactories[$0.windowID]?.adoptUnownedRequest(request) }
   }
 
   func engineWillShutDown() {
     #if OPEN_AUTOMATION
       automation?.stop()
     #endif
+  }
+
+  private func downloadOwner(_ download: OEDownload) -> EngineWebContentHostFactory? {
+    if let page = download.webContent {
+      return hostFactories.values.first { $0.tabID(for: page) != nil || $0.auxiliaryPages.contains { $0.content === page } }
+    }
+    return frontWindowController.flatMap { hostFactories[$0.windowID] }
+  }
+
+  func browserContext(_ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String, completion: @escaping @MainActor (URL?) -> Void) {
+    guard let owner = downloadOwner(download) else { completion(nil); return }
+    owner.browserContext(context, decideDestinationFor: download, suggestedFilename: suggestedFilename, completion: completion)
+  }
+
+  func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
+    downloadOwner(download)?.browserContext(context, downloadDidUpdate: download)
   }
 }

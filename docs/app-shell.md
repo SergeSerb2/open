@@ -161,3 +161,298 @@ Rule 10: full verification after merging `c95be65`; 15 PASS, no SKIP.
 | sidebar-render | PASS | 18 |
 | commandbar-render | PASS | 14 |
 | boosts | PASS | 2 |
+
+
+## Step B — real window
+
+Uses `OpenFeatures.BrowserWindowController` as the sole standard window
+controller. `App/BrowserWindowController.swift` is deleted. App engine wiring
+lives in `EngineWebContentHost`, `EngineWebContentHostFactory`, and
+`TabStripMirror`; OpenKit does not import OpenEngine. Step A review fixes are
+inherited, including the monotonic presented-frame mark, early Quit, the real
+failure alert, guarded/queued navigation, and close without loading.
+
+### Window and engine behavior
+
+- Standard titled system window, transparent hidden titlebar, system traffic
+  lights at centers (12,16), (35,16), (58,16), 640×480 minimum.
+- One production sidebar per window. Resize is 228–500 pt, with a rubber-band
+  region below 228 and hide below 180. Width commits once on drag end. Cmd+S
+  animates hide/show over 0.22 s, with Reduce Motion support.
+- Hidden sidebar reveals the same view as a floating card after 0.35 s in the
+  left 8 pt. Leaving for 0.25 s or selecting dismisses it. It works in full
+  screen. An existing Peek suppresses reveal.
+- WebContentContainer uses PanelMetrics insets, radius 6, continuous clipping,
+  shadow, and the 10% white empty panel. Hosts are created only on selection
+  or an explicit engine request. Hidden hosts throttle; at most eight hidden
+  hosts stay cached. Closing removes a host immediately. Empty selection
+  hides and detaches old visible slots.
+- Each window has its own factory, sidebar context, host cache and engine
+  strips. The model and stores are shared. New/closed window states are named
+  model commands. Closing a window keeps its tabs. Closing the final window
+  retains its state for reopen and relaunch; lifecycle automation remains
+  available with no visible windows. Normal frames, sidebar
+  width/mode, focused Space, and selections persist in the model snapshot.
+  Full-screen transitions do not overwrite the normal frame.
+- HTML fullscreen hides the sidebar and removes the panel inset without
+  changing the saved sidebar mode. Exiting keeps an existing native full-screen
+  window full screen; it restores the normal frame if the page initiated it.
+- The sidebar delegates selection, new tabs, archive/unload, pin/unpin,
+  structure moves, folders, Clear Today, and Space/profile changes to the
+  model and the live engine. URL/title/loading/favicon events update model
+  slices. Closed host generations reject callbacks.
+
+### M1 port inventory
+
+| Existing behavior | Step B owner/status |
+|---|---|
+| ensureContent / makeContent / dropContent | Factory + EngineWebContentHost + container cache |
+| syncTabStrips | TabStripMirror, per window/profile, sidebar order and pin state |
+| showSelection / select / focus Space | Factory + OpenFeatures selection/container |
+| openNewTab / adoptUnownedRequest | Factory; background model rows stay lazy |
+| Extension actions and popup panels | Factory; basic toolbar and existing native popup lifecycle retained |
+| Auxiliary window.open pages | Factory; sized panels, opener flow, close cleanup |
+| close / restore / neighbor selection | Factory; pinned unload, Today archive, shared archive sink |
+| togglePin / addSplitView | Model commands and OpenFeatures split controller |
+| Print / reload / stop / back / forward / zoom / DevTools | Factory menu actions and engine delegate routing |
+| Find | Lazy native search field, engine results, panel-relative layout |
+| Address entry | Temporary lazy URL editor retained until Step C; early input queues safely |
+| Full screen | Standard window and page callback; page fills the screen; normal frame and prior native full-screen mode preserved |
+| Status text | Dropped: no measured status area exists in the real panel |
+| content(forAutomationHandle), event record/drain, pending dialogs | Factory; automation remains inside Open |
+| JS dialogs, permissions, context menus, downloads | Existing delegate bodies ported; downloads route to their owning window |
+| Peek/toast | Library ownership retained; Peek stays lazy; transient hosts survive unrelated model edits |
+
+### Review round 1
+
+A's timeout fix is inherited from `f11822bc240139d5b2052e43967ec23e909374a1`.
+Main's M4 visual finish (`39fb0ed`) is merged with both sides' behavior kept.
+
+| Finding | Fix | Real-interface evidence |
+|---|---|---|
+| 1. Peek identity | `rebind(tabID:)` plus factory adopt hook re-keys hosts and modelHostIDs before container binding | Same engine identifier and JS state through promotion; strip contains the new tab; sidebar close returns retained/engine counts to baseline |
+| 2. Two live-state writers | Host emits callbacks only; container applies live state behind generation and cache-identity checks | Evicted row stays unloaded in six later samples; another window's remaining host keeps its model row live |
+| 3. Profile changes / background opener | Explicit Space-profile teardown, full runtime reset, owning-Space/request-context creation, no profile force unwraps | Old page replaced, inactive row fully reset, background Space window.open creates its child in the correct Space/context |
+| 4. Frame-save cost | Dirty scheduling defers folder preparation and DTO capture to the debounce; saveNow stays synchronous; frame notifications skip factory/mirror work | Twelve moves produce zero immediate captures, one debounced capture, correct saved frame, and no tree/mirror counter change |
+| 5. Active strip / order | Active page is the selected model tab and must belong to its browser strip | Peek does not become active in the strip; a second window's Space changes preserve the first window's order |
+| 6. Sidebar event interception | Removed SidebarView.mouseDown drag override; background drag remains in the root's empty top strip | Sidebar native flow passes; sidebar-render check 125/125 |
+| 7. Honest harness rows | Wrapper-specific name, explicit durable-storage BLOCKED row, independent kernel timestamp row, named Debug timing SKIPs | Both configurations print their exact pass/fail/blocked/skip status |
+| Early host safety | Optional factory/context/content returns refuse before readiness and queue navigation | Startup probe calls all three paths before readiness, confirms refusal, and then loads one queued page |
+| M4 page color | Guarded post-load renderer color query emits the new host callback | A real split pane changes its bar from lavender to blue after navigation; no engine color-change event exists yet |
+| M4 selection / binding | Model owns collapse selection; all visible split panes bind on refresh; one-pane duplicate refresh stays removed | features-render check 147/147 |
+| Lazy Peek | Passive key and navigation checks use existing Peek storage | Escape with no Peek keeps it unconstructed; native startup check passes |
+
+The all-Spaces strip order is intentional (locked engine decision, 2026-10-25):
+favorites first, then Spaces in model order, each in sidebar order (pinned then
+Today, folders and split panes flattened). Each window/profile strip contains
+its own loaded subset. Space focus does not change that order. Peek hosts stay
+outside the strip until promotion.
+
+The initial Step B review evidence below used **CDN CEF**. The current fork
+refresh is recorded separately below.
+
+### End-to-end evidence
+
+| Suite / build | Result | Evidence |
+|---|---|---|
+| Release `--only window` | 38 functional PASS; 2 sidebar timing FAIL (38/40) | [Raw results](engine-spike/results-window-step-b-cdn-release.json) |
+| Release `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-step-b-cdn-release.json) |
+| Release `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-step-b-cdn-release.json) |
+| Release `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-step-b-cdn-release.json) |
+| Debug `--only window` | 38/38 PASS; 2 named Release-only SKIPs | [Raw results](engine-spike/results-window-step-b-cdn-debug.json) |
+| Debug `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-step-b-cdn-debug.json) |
+| Debug `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-step-b-cdn-debug.json) |
+| Debug `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-step-b-cdn-debug.json) |
+| Debug / Release builds | PASS; no Swift warnings | `nice -n 10 tools/build.sh Debug/Release` |
+| sidebar-render / features-render | 125/125 and 147/147 PASS | Real library executables |
+| tools/verify-all.sh | 14 PASS; no SKIP | Summary below |
+
+The window suite checks native chrome, drag resize to 300 pt, the 228/500 pt
+limits, drag-to-hide, hover reveal and dismissal, Cmd+S, Cmd+N, two independent
+windows, native and HTML fullscreen, and exact restore of both normal frames,
+sidebar states, Spaces and selections. Closing a window preserves its tabs.
+Closing the final window preserves its own state through reopen and relaunch,
+with the correct page shown. Only the two restored selected tabs get hosts.
+The Step A lifecycle, early-navigation and host-counter regressions also pass.
+
+The sidebar suite checks selection against the live DOM, visible host and
+engine active page; new background tabs without hosts; pin/unpin against the
+engine pin flag; Today archive against the real archive store; pinned unload
+and wake; production reorder intent against model and engine order; folder
+collapse, Clear Today, Space/profile selection, a refused invalid move, and the
+eight-hidden-host cache limit. No unit tests or mocked engines are used.
+
+### Release timing with the real window
+
+Five fresh and five warm launches use the same monotonic kernel clock and
+presented-frame method as A. OS caches stay intact. Values are milliseconds.
+
+| Case | Sidebar median (≤250) | First paint median (≤700) | Slowest first paint | Verdict |
+|---|---:|---:|---:|---|
+| Fresh profile (5 launches) | 261 | 521 | 2237 | Sidebar FAIL; paint PASS |
+| Warm relaunch (5 launches) | 253 | 493 | 659 | Sidebar FAIL; paint PASS |
+
+**The current Release sidebar budgets fail.** All 38 functional window checks
+pass. The main marks are 152/146 ms; modelLoaded is 154/148 ms. Those intermediate
+50/120 ms targets also miss. A large part of the elapsed time is already present
+at the main mark (which includes OEApplication initialization); this observation
+does not establish a cause. The first fresh paint outlier of 2,237 ms stays in
+the median. Maximum paint-clock mapping uncertainty is 0.17 ms. Load averages
+were 8.61/7.85/7.12 on 18 CPUs. This is not controlled idle-machine acceptance.
+
+The prior review attempt measured sidebar medians 258/244 ms and also found an
+eager Peek from passive key routing. That failure remains in
+[results-window-step-b-review-before-lazy-peek-fix.json](engine-spike/results-window-step-b-review-before-lazy-peek-fix.json).
+The passive getter bug is fixed and a new key-path check verifies it. The later
+261/253 ms result remains a timing failure; it is not relabeled as a pass.
+
+An earlier real-window run missed the warm sidebar budget at 252 ms. Removing
+redundant single-pane placeholder updates and repeated host-view reattachment
+improved that path. Its original measurements remain in
+[results-window-step-b-before-single-pane-optimization.json](engine-spike/results-window-step-b-before-single-pane-optimization.json).
+A later run passed 33/34 checks but intermittently missed full-screen hover.
+Automation now queues mouse motion through AppKit's native event dequeue path,
+and fullscreen checks wait for native completion notifications. The earlier
+failure remains in
+[results-window-step-b-before-native-event-queue.json](engine-spike/results-window-step-b-before-native-event-queue.json).
+The final Debug and Release suites above both pass that functional check.
+
+Own synthetic screenshots: [sidebar](engine-spike/sidebar-window.png),
+[window](engine-spike/window-startup.png), [second window](engine-spike/window-multiple.png), [Peek](engine-spike/peek-window.png).
+All test windows close after each run.
+
+### Repository verification
+
+`origin/main` merged through `39fb0edc8cece28f5a443925b9dc4746b9b47070` before final builds and verification. The full default suite reports no SKIP rows.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 1 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 1 |
+| suggest-check | PASS | 11 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 13 |
+| boosts | PASS | 3 |
+
+### Static window comparison
+
+The suite launches the real app with the capture-time snapshot, no selected
+page, 2216×1394 pt window, 228 pt sidebar, and the F0001 Today-state edit. It
+captures only Open's window, converts the live image to 1×, and runs the exact
+`sidebar-render compare` method from design.md §7. Captures, imported private
+state, Open's matching private screenshot, and side-by-side/diff images stay in
+`.re/app-shell-comparison-*`. No browser titles, URLs, icons, or Arc pixels are
+committed; the table contains element names and measurements only.
+
+| Comparison | Elements | Worst position | Worst ΔE00 | Result |
+|---|---:|---:|---:|---|
+| Live static sidebar + empty panel vs F0001 | 31 | 1.0 pt | 1.61 | PASS |
+| Empty web panel fill | 11 sample points | — | mean 0.42; max 1.05 | PASS |
+| System traffic-light centers | 3 | 0 pt | System drawn; color masked | PASS |
+
+[Sidebar comparison table](engine-spike/comparison-sidebar.md).
+[Window comparison table](engine-spike/comparison-window.md).
+
+### Limits and later steps
+
+The temporary URL editor and the small existing menu set remain until Step C.
+Full command-bar/registry integration is not part of A/B. Site Control,
+Library/settings and Space/theme/icon/profile editor surfaces, sharing/export,
+Boost customization, duplicate/folder-conversion/move-to-new-Space entries are
+explicitly refused (`false`) until their owning later step supplies them. No
+silent successful no-op is used for those App intents. Existing model-only
+intents keep the library's implementation.
+
+Reorder verification sends the production SidebarDelegate move intent and
+checks model order, engine strip order, and the page still shown. It does not
+synthesize the macOS drag session; native resize does use own-window drag
+NSEvents. Functional screenshots use synthetic titles. Static comparison is
+one measured static state; animated states and two-window page transfers are
+not claimed here. Full M1 page-feature acceptance remains Step D; these A/B
+suites cover window/sidebar flows, Peek promotion/cleanup and live pane color.
+
+Stock CEF reports “Cannot create profile at path …/Profiles/Profile-<id>/Engine”
+for a non-default profile. The sidebar suite proves switching to the correct
+live page and wrapper context, not durable non-default engine storage. That
+engine-owned follow-up is recorded in docs/followups.md. No Engine/ changes are
+added in B beyond inheriting A's approved null guard.
+
+
+## Step B fork refresh — 2026-10-25
+
+Merged #45 head `78d4ddbc252fa27c2ef4ae87407c5c3bd58f626a` and `origin/main`
+through `f41955c` (fork bring-up, real Settings target, polish, release notes).
+The real Settings presenters are integrated in Step C, on top of this layer.
+The split controller retains model-owned selection after a two-pane collapse;
+separating from a larger split still selects the detached sibling.
+
+Engine: **fork**. Debug and Release builds are clean under Swift 6. Embedded
+and vendor UUIDs match `4C4C44FE-5555-3144-A175-7398C5A1D4B4`; each phase-named
+JSON records the source and UUIDs. No engine build or source sync was run.
+
+| Suite / engine | Debug / fork | Release / fork | Evidence |
+|---|---|---|---|
+| window | 38/38 PASS; 2 named timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-b-fork-debug.json), [Release](engine-spike/results-window-step-b-fork-release.json) |
+| sidebar | 18/18 PASS; durable profile storage BLOCKED | 18/18 PASS; durable profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-b-fork-debug.json), [Release](engine-spike/results-sidebar-step-b-fork-release.json) |
+| peek | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-b-fork-debug.json), [Release](engine-spike/results-peek-step-b-fork-release.json) |
+| shell | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-b-fork-debug.json), [Release](engine-spike/results-shell-step-b-fork-release.json) |
+
+| Release median, n=5 each / fork | Sidebar drawn (≤250 ms) | First paint (≤700 ms) |
+|---|---:|---:|
+| Cold, fresh profile | 218 PASS | 473 PASS |
+| Warm, existing profile | 232 PASS | 490 PASS |
+
+Load average [10.58203125, 9.14892578125, 10.0693359375] on 18 CPUs: shared-machine observations,
+not controlled idle acceptance. The older CDN 261/253 ms sidebar misses remain
+recorded above and in their immutable CDN JSON; this fork run does not erase them.
+
+| Static live comparison / fork | Count | Worst position | Worst ΔE00 | Result |
+|---|---:|---:|---:|---|
+| F0001 sidebar + window | 31 | 1 pt | 1.61 | PASS |
+| Empty panel fill | 11 samples | native geometry passes | max 1.05 | PASS |
+| Native traffic-light centers | 3 | 0 pt | — | PASS |
+
+Method and privacy limits remain those above (docs/design.md §7). Only Open's
+own windows were captured. `sidebar-render check` passed 125/125;
+`features-render check` passed 147/147. Durable per-profile engine storage stays
+BLOCKED on the CEF `root_cache_path` follow-up. No unit tests or desktop input.
+
+### Review round 1 — current fork verification
+
+| Finding | Final behavior | End-to-end proof |
+|---|---|---|
+| 1 Peek identity | Adopt rebinds ID and rekeys both factory sets | Expand preserves live content; mirror contains new ID; sidebar close returns host counts |
+| 2 Live-state writers | Host emits callbacks; guarded container is the writer | Evicted row stays unloaded; shared-host close preserves the other window |
+| 3 Profile ownership | Explicit Space profile teardown; source Space/context determines requests | Profile switch closes old hosts; background page opens in its own Space/profile |
+| 4 Frame save work | DTO capture deferred to debounce; frame events skip tree/mirror | Burst capture counters and tree/mirror counters |
+| 5 Mirror active/order | Selected model host only, live all-Spaces sidebar order | Peek excluded; second-window Space switch leaves order stable |
+| 6 Sidebar drag | No whole-sidebar mouseDown drag override | Sidebar flows plus 125/125 render and live comparison |
+| 7 Harness honesty | Wrapper row, durable storage BLOCKED, kernel row, named Debug SKIPs | Both JSONs retain their actual statuses |
+
+Rule 10: merged origin/main, then full tools/verify-all.sh, 15 PASS, no SKIP.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 70 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 12 |
+| commands-dump | PASS | 1 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 45 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 15 |
+| boosts | PASS | 3 |
