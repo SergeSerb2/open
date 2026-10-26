@@ -42,15 +42,15 @@ Runtime-only state lives in `tab.live: TabLiveState`: `isLoading`, `progress`, `
 `SpaceTheme` holds mapped light/dark background and foreground colors, gradient stops, and `importedArcThemeJSON: Data?` for the raw Arc theme.
 
 `Profile`: `id`, `name`, `icon`, `favorites: [Tab]` (per profile, as in Arc), `settings`, `dataDirectoryName`.
-Settings: `autoArchiveAfter` (`never` / 1h / 6h / 12h / 24h / 7d / 30d, default 12h), `littleArcAutoArchiveAfter`, `searchEngineID`.
+Settings: `autoArchiveAfter` (`never` / 1h / 6h / 12h / 24h / 7d / 30d, default 12h), `littleOpenAutoArchiveAfter` (default 6h), `searchEngineID`.
 
-`BrowserWindowState`: `id`, `focusedSpaceID`, `selectedNodeBySpace`, `sidebarWidth` (default 228), `sidebarMode` (`.anchored` / `.hidden`), frame (`frameX/Y/Width/Height`), `style` (`.standard` / `.littleArc`), `stayOnTop`.
+`BrowserWindowState`: `id`, `focusedSpaceID`, `selectedNodeBySpace`, `sidebarWidth` (default 228), `sidebarMode` (`.anchored` / `.hidden`), frame (`frameX/Y/Width/Height`), `style` (`.standard` / `.littleOpen`), `stayOnTop`.
 
-Link routing: `RoutingRule { id, match, destination }`.
+Link routing: `RoutingRule { id, match, destination, sourceBundleID? }`. See [routing.md](routing.md) for the evaluator, settings data, CLI, and Phase A verification.
 Match: `.hostContains`, `.hostEquals`, `.urlPrefix`.
-Destination: `.space(SpaceID)`, `.littleArc`, `.mostRecentSpace`. A rule can target the most recent Space, as Arc rules do.
-`defaultDestination`: `.mostRecentSpace`, `.littleArc`, `.space(id)`.
-The snapshot DTOs stay at `schemaVersion` 1. `RoutingDestinationDTO.mostRecentSpace` was added after version 1 shipped. Files written before it hold only `space` / `littleArc` and still decode, because enum decoding needs only the cases in the payload. The Verification section shows this with a file from the M1 build.
+Destination: `.space(SpaceID)`, `.littleOpen`, `.mostRecentSpace`. A rule can target the most recent Space, as Arc rules do.
+`defaultDestination`: `.mostRecentSpace`, `.littleOpen`, `.space(id)`.
+The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` snapshot change is a **ONE-WAY migration**: new snapshots do not load in builds before this PR. This is acceptable because Open has no released users. Live and DTO routing destinations decode both `littleOpen` and legacy `littleArc`, and encode only `littleOpen`. The window mapper accepts the old style string. Live and DTO profile settings read the new auto-archive key, then the legacy key, then default to 6h. Explicit stored values are preserved. `RoutingRule.sourceBundleID` is optional; old snapshots decode it as nil. The mapper normalizes bundle ids to trimmed lowercase and writes no empty string. Fresh models default to `.littleOpen`; stored defaults are preserved.
 
 ### Commands
 
@@ -134,14 +134,14 @@ The restore flow is: `ArchiveStore.restore(id:)` returns the record, then `Brows
 ### HistoryStore (SQLite + FTS5)
 
 Tables: `urls(id, url UNIQUE, title, visit_count, typed_count, last_visit)`, `visits(id, url_id, time, transition)`, and external-content FTS5 `history_fts(title, url)` kept in sync by triggers. WAL mode is on.
-`recordVisit` upserts the URL and appends a visit. `recordVisitsBulk` is the fast path for import and bench.
+`recordVisit` upserts the URL and appends a visit. `recordVisitsBulk` remains the URL-only bench path. Phase 2 uses `importHistoryBatch` to write visits and recompute counts from those visits.
 `search(_:limit:) async -> [HistoryMatch]`: the query splits on non-alphanumerics. Each piece becomes an FTS5 prefix term, so `site-123` matches. Results rank by frecency: `(visit_count + 3 * typed_count) / (1 + age in days)`. If FTS finds nothing, a substring `LIKE` search runs as a fallback.
 Budget: under 5 ms on a 100k-URL database for selective command-bar queries. See the bench table. A broad query that matches most of the database (for example one common word) takes about 15–20 ms, because SQLite must score every match. The command bar sends selective queries in practice.
 
 ## OpenImport
 
 Read order: sidebar, windows, routing, archive, session.
-The importer reads only `StorableSidebar.json`, `StorableWindows.json`, `StorableLinkRouting.json`, `StorableArchiveItems.json` (if present), and `StorableSessionRestorationData.json` (if present). It never writes to the Arc folder.
+`ArcImporter` reads only `StorableSidebar.json`, `StorableWindows.json`, `StorableLinkRouting.json`, `StorableArchiveItems.json` (if present), and `StorableSessionRestorationData.json` (if present). It never writes to the Arc folder.
 Arc IDs map to stable Open IDs. A UUID Arc ID keeps its UUID. A sentinel string ID gets a deterministic UUID from the ID text. The same Arc item therefore maps to the same Open item on every import.
 
 Sidebar parsing follows [data-model.md](re/data-model.md):
@@ -185,10 +185,87 @@ Session restoration (`StorableSessionRestorationData.json`):
 - Ignored: the Chromium SessionID values (the report counts distinct values only), profile and context detail beyond the incognito check, incognito entries (counted), windows that are absent from `StorableWindows.json` (counted as unmapped windows), and items that are absent from the sidebar, for example archived items (counted as unmapped items). Chromium's own `Sessions/Tabs_*` files are not read.
 - The live file on this Mac at the last check held an empty mapping and `StorableWindows.json` held no windows. The session1 snapshot holds 10 pairs in one window and gives 2 applied selections.
 
+### Import from Arc, phase 2 (M8)
+
+Implemented from [import-phase2.md](plans/import-phase2.md), with its Lead decisions appendix and the implementation brief's safety limits.
+`ArcImporter`, `CLI.swift`, and suggestion ranking are unchanged.
+
+`ArcHistoryReader` copies History and its WAL, or the rollback journal in rollback mode, into a private mode-700 directory. It never copies SHM; SQLite rebuilds that file. Copy destinations are created exclusively with mode 600 before any bytes are written. The CLI removes user-owned import directories older than one hour at startup. SQLite opens and recovers only the private copy. A failed quick check gets one fresh-copy retry after 200 ms. The reader deletes its copy on success and failure. It accepts History meta versions 65–75, converts Chromium microseconds with integer epoch subtraction, keeps http/https/file visits, and filters internal schemes, subframes, invalid times, and times more than 24 hours ahead. It maps transition core bits and counts typed visits only for core 1. No source aggregate count overrides visit rows.
+
+The reader retains the plan's array-returning API and adds an awaited batch-consumer overload. The CLI uses that overload to keep at most one 5,000-visit batch in flight, plus the source URL map. `HistoryStore(fileURL:)` accepts a full destination path. The writer uses one checked transaction per batch, reuses prepared statements, and rolls back all changes on failure. `history_import_keys` deduplicates by source profile directory and Chromium visit ID. The new `(url_id, time)` index supports count recomputation. A result success flag also detects a bad destination for an empty import.
+
+The upsert skips unchanged or empty replacement titles. This preserves the specified title result and avoids redundant FTS trigger work. The first F2 run, before this guard, failed the timing gate at 3.307 s. The final streaming implementation passed at 1.443 s. Re-import updates no visit count by hand and inserts no duplicate visit.
+
+`ChromiumCrypto` implements consent-gated Keychain lookup, the prescribed probe order, PBKDF2-HMAC-SHA1, v10 AES-CBC decryption, explicit PKCS7 final-block validation, and the empty-password fallback. Passwords, keys, decrypted values, and failure buffers are cleared after use. The CLI calls no Keychain API unless `--allow-keychain-access` is present. Without the flag it counts rows only and reports `keychain: not requested`. No real Keychain lookup, prompt, or real secret decryption was run for this milestone.
+
+`ArcSecretsReader` parses passwords, cookies, addresses, form history, and cards in memory. It validates UTF-8 without making secret String copies, skips expired cookies, and counts blacklisted logins separately. The CLI uses `validateWithKey`; `readWithKey` lends one record at a time to typed callbacks and clears its secret buffer immediately afterward. No retaining API remains. Callbacks must not copy or retain records or fields. All four record types redact descriptions, debug descriptions, and reflection. Cookie schema 24 and later strips a matching SHA256 domain prefix. Valid UTF-8 values without a matching prefix remain eligible and increment `legacyNoHashPrefix`. Address use dates are Unix seconds. Evidence: local Chromium `net/extras/sqlite/sqlite_persistent_cookie_store.cc`, version-24 comment and `MakeCookiesFromSQLStatement`; `components/autofill/core/browser/webdata/addresses/address_autofill_table.cc`, `Time::FromTimeT` / `ToTimeT`; and the crypto sources listed in the plan's evidence index.
+
+Extensions are the union of Secure Preferences and installed payload folders. Classification uses path and payload rules. IDs never print. An explicit manifest request writes only candidate IDs, atomically with mode 600. The CLI omits the destination path from its success log to preserve counts-only output. It refuses destinations inside Arc data or a repository outside `.re/`. History destinations inside Arc data are also refused. Top Sites and site engagement are not read. No import code makes a network request. No secret writer exists; engine password-store, cookie-store, and autofill APIs remain the next gate.
+
+Verification on 2026-10-25, through the release `openkit` executable and the plan's throwaway synthetic Swift probes. Package builds used only `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`, in a separate session. Commands used `.build/release/openkit` after building, to prevent implicit unrestricted builds. Probes lived in `/tmp` and compiled the production reader/crypto sources with optimization and Swift 6. No unit tests were added. Output was reduced to counts and timings.
+
+| Verification | Result |
+|---|---|
+| Release package build | PASS; zero warnings, zero errors |
+| History F1, first / repeat | PASS; 6 source visits, 3 kept, 1 internal, 1 subframe, 1 invalid time; inserted 3 / 0, duplicates 0 / 3; read/write checks OK |
+| F1 stored aggregates and FTS | PASS; 3 visits, typed count 1; FTS matched the synthetic title |
+| History F2 | PASS; 5,000 URLs, 100,000 visits inserted in 1.443 s, below 3.000 s |
+| Real History, copied first | PASS; 12 URL rows, 24 visits; inserted 24 in 0.008 s; repeat inserted 0, duplicates 24 in 0.006 s; all accounting checks OK |
+| Real `suggest`, offline and redacted | PASS; history rows increased from 0 to 6 |
+| Missing History / out-of-range schema | PASS; exit 4; schema fixture version 99 refused |
+| Open WAL, empty source, source protection | PASS; 4 kept WAL visits; valid empty import succeeds; source destination refused without source change |
+| Write failure and empty invalid destination | PASS; exit 1; failed batch left 0 URLs, visits, and import keys; empty bad destination reports MISMATCH |
+| Known-answer key derivation / AES round trip | PASS / PASS; no key or plaintext printed |
+| Synthetic S1 | PASS; 1 login decrypted, 0 failed; no Keychain item created or accessed |
+| Synthetic S2 logins | PASS; 6 rows: 3 OK, 2 failed, 1 blacklisted; includes legacy text, invalid UTF-8, malformed cipher, and fallback |
+| Synthetic S2 cookies | PASS; 7 rows: 3 OK, 3 failed, 1 expired; domain hash, session, and plain-value paths covered |
+| Synthetic S2 cards / addresses / form history | PASS; 4 cards: 1 OK, 3 failed; 1 address with 1 field, 1 form row, 1 keyword row |
+| Live secrets without consent | PASS; 0 logins, 20 cookies, 0 addresses/cards, 27 keywords; Keychain not requested; stored 0 |
+| Secrets without `--dry-run` / empty / absent files | PASS; exit 3 / zero rows and stored 0 / exit 4 |
+| Live extension manifest | PASS; 3 total, 3 internal, 0 candidates; mode 600; manifest deleted |
+| Synthetic extension union | PASS; 5 total, 2 internal, 3 candidates, 1 missing manifest; mode 600; manifest deleted |
+| Existing `import-arc` / `roundtrip` | PASS / PASS; sidebar accounting and round trip OK |
+| Existing `commands-demo` | PASS; 67 OK checks, 0 failures |
+| Existing `suggest-check` | PASS; 31/31; local first-snapshot p95 1.919 ms |
+| Existing `bench` | PASS; 100k URL insert 1333.4 ms; search p50 2.678 ms, p95 3.268 ms; bulk/index checks OK |
+| Privacy and scope review | PASS; no new reads of Top Sites or site engagement, no network calls, no secret destination writes, no personal data staged |
+
+Deviations from the earlier plan text: the Lead safety rule replaced test-Keychain and live Allow/Deny exercises with a known in-memory fixture password. No Keychain item needed deletion because none was created. The live consent/prompt path remains unverified. The writer adds the FTS guard and empty-destination success flag. The reader adds streaming and per-file validation APIs while preserving the requested APIs. Crypto adds explicit padding and modern cookie hash validation. Copying also includes `-journal`, as required by the brief. The manifest success line reports only its count. No engine build, desktop automation, secret storage, or real secret decryption ran.
+
+All private source copies were deleted after reading. The real imported history and sidebar output were used only in a mode-700 temporary root and deleted after verification. Fixtures and manifests were never placed in the repository.
+
+### PR #24 security corrections (2026-10-25)
+
+Merged `origin/main` into `m8/import-phase2` first (`fb6d5aa`). The merge retains every package target and dependency, including OpenRouting and OpenScripting. The CLI help keeps both import commands and routing.
+
+| Finding | Fix | Result |
+|---|---|---|
+| BLOCKING: CLI-only consent gate | Public final `SecretsImportConsent` has a private initializer and one explicit `grantedByUser(reason:)` factory. All six public Keychain/decrypt/read APIs require the token. The CLI issues it only after `--allow-keychain-access`. Internal reads carry user consent or access bound to a generated synthetic fixture. | PASS: external `swiftc -c` against the release module rejected all six calls without `consent` and rejected direct initialization. The same signatures compiled with a token parameter. No object was executed; scratch sources and object were deleted. |
+| HIGH: unknown version prefixes accepted as plaintext | Every `v` plus two ASCII digits except `v10` throws `badPrefix`. Only unversioned blobs can use plaintext fallback. | PASS: generated login/cookie/card databases give `badPrefix=5` (v11 in each file, plus v20 and v99). Malformed v10 and invalid UTF-8 also fail; unversioned legacy values still pass. |
+| HIGH: probe could prompt before warning | Probe query includes `kSecUseAuthenticationUI: kSecUseAuthenticationUIFail` and an LAContext with `interactionNotAllowed=true`. The CLI prints and flushes “macOS may ask for Keychain access” before the first probe or fetch. | PASS by source inspection and external signature checks. Live Keychain prompt behavior remains UNVERIFIED under the Lead safety rule. |
+| MEDIUM: copying live SHM | Copy the main DB and WAL in WAL mode; copy the journal only in rollback mode, selected from the copied database header. Delete stale private SHM and let SQLite rebuild it. Keep the 200 ms retry and required `PRAGMA quick_check`. | PASS: background Python writer added 330,900 visits during a successful WAL import. Private-copy quick_check is mandatory; destination quick_check returned `ok`. A hot rollback journal also recovered on the private copy and imported 10,000 committed visits. |
+| MEDIUM: secret descriptions, retention, password copy | Redacted description/debug description and empty Mirror on login, cookie, address, and card records. Replace retaining arrays with borrowing callbacks. Swap byte ownership into each record and clear it after the callback. Derivation uses a mutable local password buffer and `withUnsafeMutableBytes`; deferred `zeroSecretBytes` uses `memset_s`. | PASS: real CLI fixture reports `redactedRecordKinds=4`, with `String(describing:)`, `String(reflecting:)`, and empty Mirror checks. Known PBKDF2 answer, AES round trips, and fallback paths pass. Buffer clearing is source-verified; this is not a heap-erasure proof. |
+| MEDIUM: legacy cookies in schema 24+ | Strip 32 bytes only for a matching SHA256(host) prefix. Accept other valid UTF-8 as legacy and count it separately. Reject invalid UTF-8. | PASS: schema-24 fixture gives 5 accepted cookies, including 3 correctly stripped hash-prefixed values and 2 legacy values (`legacyNoHashPrefix=2`). All delivered values match the synthetic value. |
+| LOW: temp-file creation and stale copies | Open destinations with `O_CREAT\|O_EXCL\|O_WRONLY\|O_NOFOLLOW`, mode 600, before copying. Startup sweep uses lstat, current-user ownership, directory type, prefix, and age >1 hour. Notices go to stderr to preserve JSON stdout. | PASS: CLI removed an old owned fixture directory and preserved a fresh directory, a symlink, and its target. Destination creation is source-verified; mode 700/600 was also observed during a real CLI copy of synthetic data. |
+| LOW: invalid secret dates | Use the same positive Unix time through now+24h bound as History, with overflow-safe integer Chromium epoch conversion. Keep zero cookie expiry as the session-cookie sentinel. Validate address and form-history Unix timestamps too. | PASS: fixture reports 3 invalid login dates, 2 invalid cookie dates, 3 invalid address dates, and 3 invalid form-history dates; valid and session dates pass. Dates beyond the bound are counted and skipped, including far-future cookie expiry. |
+
+The new `openkit verify-secrets-fixture` command generates its own example.com databases from a known in-memory password. It accepts no profile path, key, or ciphertext. Its public library entry point returns only counts and boolean results. It cannot be used to select real data or access the Keychain. The fixture covers the full database-copy → crypto → parser → borrowing-callback flow. It is a CLI verification command, with no unit-test target.
+
+Release build command: only `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`, in a separate process session. The build passed with zero errors and one SDK deprecation warning for the explicitly requested `kSecUseAuthenticationUIFail` constant. All commands used the prebuilt release executable. The final CLI-only rebuild also passed.
+
+Additional regression results: F1 kept 3 of 6 visits and inserted 3 / 0 on first/repeat import; F2 inserted 100,000 visits in 2.602 s (<3.000 s). Real History gave 12 URL rows and 24 visits: first inserted 24 in 0.008 s; repeat inserted 0, duplicates 24 in 0.009 s. Existing `import-arc` accounted for 46/46 items; `roundtrip` passed; `commands-demo` passed 66/66; `suggest-check` passed 31/31 (local first-snapshot CPU p95 0.625 ms); `bench` passed (100k URL insert 2328.3 ms; search p50/p95 3.571/9.346 ms). Routing A1–A17 passed using only a synthetic commands-demo snapshot; A12–A17 exercised 35/48/3/11/4/6 CLI decisions. A11 used this synthetic snapshot, not the earlier routing review's private snapshot.
+
+The external compile command used `xcrun swiftc -c -target arm64-apple-macos26.0 -I Packages/OpenKit/.build/out/Products/Release` with a tiny scratch source. The source called fetch, existence probe, pair probe, blob decrypt, readWithKey, and validateWithKey without a token. All six failed with `missing argument for parameter 'consent' in call`. The direct initializer failed with `private` protection. A separate unexecuted function that accepted a token compiled successfully.
+
+No real Keychain item was read or created. No real Login Data, Cookies, or Web Data was decrypted or opened for this correction pass. No real secret consent run was attempted. All real sidebar and history output databases were deleted after verification. Counts-only receipts and synthetic driver files remain outside the repository under `/tmp/open-pr24-security-a9kcykir`; no personal data or generated data files are committed.
+
 ## openkit CLI
 
 ```text
 openkit import-arc [--arc-dir PATH] --out DIR [--show-titles]
+openkit import-arc-history --arc-user-data DIR --db PATH [--profile NAME]
+openkit import-arc-secrets --arc-user-data DIR [--profile NAME] --dry-run [--allow-keychain-access] [--out-manifest PATH]
+openkit verify-secrets-fixture
 openkit archive-list DIR [--limit N]
 openkit dump DIR
 openkit roundtrip DIR

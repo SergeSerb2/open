@@ -260,7 +260,7 @@ public enum CommandRegistry {
                           defaultShortcuts: [.cmdShift("e")]),
         CommandDefinition(id: "join-meeting", title: "Join Meeting", menuPath: ["Tabs"],
                           defaultShortcuts: [KeyboardShortcut(key: "j", modifiers: [.command, .control])]),
-        CommandDefinition(id: "open-in-current-space", title: "Move Little Open or Peek to Space…", menuPath: ["Tabs"],
+        CommandDefinition(id: "open-in-current-space", title: "Open Little Open or Peek in…", menuPath: ["Tabs"],
                           defaultShortcuts: [.cmd("o")], enabledKey: EnabledKey.currentTab),
     ]
 
