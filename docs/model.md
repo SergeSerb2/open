@@ -636,3 +636,25 @@ public welcome page rather than Arc's native onboarding controller.
 1. Restore position. A restored tab goes to the top of its parent, because the record stores the parent but not the index. Arc's exact position is not verified.
 2. `focusSpace` and `selectNode` register undo. Arc probably does not undo navigation. If not, Cmd-Z after a click would undo the click, not the last edit. Verify in Arc, then drop their undo.
 3. `closeTab` archives pinned tabs and favorites too. In Arc, closing a pinned tab or a favorite may only unload it (guess). The UI layer must pick the right command until this is verified.
+
+## Sidebar completion M1 (2026-10-26)
+
+The bulk commands `moveNodes`, `archiveNodes`, `setPinned`, and `duplicateNodes`
+use one undo step and per-node structural events. Bulk drop indexes count in the
+destination before removal; single-node `moveNode` keeps its existing contract.
+Selections skip duplicate IDs and descendants of selected containers. Split panes
+are refused by moves and close through the existing collapse primitive on archive.
+That primitive also emits a parent reload when a split collapses.
+
+`createFolder` accepts an insertion index. Space commands expand/collapse every
+folder, reset navigated pinned tabs, separate a navigated pin into Today, and turn
+a Space into a folder in another Space. Clear can keep selected nodes or their
+ancestors. Background tab creation and Move to Space support persisted unread
+flags; undo restores old flags. The model adds no UI action names.
+
+Release CLI verification: `commands-demo` 151/151; B1–B14 and unread/Clear flows
+PASS; `roundtrip` PASS on the sidebar fixture. The existing `openkit bench` move
+averages were 3.42 → 3.15 µs with undo and 2.29 → 2.08 µs without undo (within
+10%); undo restored the tree and index. No unit tests, App edits, or desktop input.
+The initial checkout did not yet have `iconOverride`; copies retain all fields
+present there. Final merged-main verification is recorded in the PR.
