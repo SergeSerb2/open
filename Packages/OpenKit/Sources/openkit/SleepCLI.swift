@@ -215,8 +215,8 @@ private final class SleepScenario {
         controller = SleepController(model: model, engine: engine, store: store, visibility: visibility, chromiumTag: "156.0.8078.48", now: { [clock] in clock.date })
         controller.onLog = { [weak self] in self?.logs.append($0) }
     }
-    func tab(age: TimeInterval = 0, pinned: Bool = false) -> Tab {
-        let tab = Tab(url: URL(string: "https://example.invalid/sleep")!, title: "Open sleep fixture",
+    func tab(age: TimeInterval = 0, pinned: Bool = false, url: String = "https://example.invalid/sleep") -> Tab {
+        let tab = Tab(url: URL(string: url)!, title: "Open sleep fixture",
                       pinnedURL: pinned ? URL(string: "https://example.invalid/pin") : nil,
                       lastActiveAt: clock.date.addingTimeInterval(-age))
         if pinned { space.pinned.append(.tab(tab)) } else { space.today.append(.tab(tab)) }
@@ -463,9 +463,104 @@ func runSleepDemo(args: [String]) async throws {
     check("SQLite/open failures surface onError and keep CLI running", !invalidStore.errors.isEmpty)
 
     try await runSleepReviewScenarios(root: root, check: check)
+    await runKeepAliveScenarios(root: root.appendingPathComponent("keep-alive"), check: check)
     try await runSleepControllerBench(root: root.appendingPathComponent("bench"), check: check)
     print("sleep-demo \(failed == 0 ? "OK" : "FAIL"): \(passed) checks passed, \(failed) failed")
     if failed != 0 { throw SleepCLIError.checksFailed(failed) }
+}
+
+@MainActor
+private func runKeepAliveScenarios(root: URL, check: (String, Bool) -> Void) async {
+    let s = SleepScenario(root: root)
+    // Independent service URLs exercise the shipped resource through the controller.
+    let liveURLs = [
+        "https://twitter.com/", "https://x.com/", "https://app.slack.com/client/team",
+        "https://mail.google.com/mail/u/0", "https://calendar.google.com/calendar/u/0",
+        "https://notion.so/", "https://www.notion.so/", "https://dev.notion.so/", "https://stg.notion.so/",
+        "https://app.notion.com/", "https://dropbox.com/", "https://aws.amazon.com/",
+        "https://open.spotify.com/", "https://linear.app/", "https://instagram.com/",
+        "https://messenger.com/", "https://facebook.com/", "https://web.whatsapp.com/",
+        "https://sentry.io/", "https://figma.com/file/design", "https://figma.com/file/",
+        "https://docs.google.com/document/d/doc", "https://docs.google.com/presentation/d/deck",
+        "https://docs.google.com/spreadsheets/d/sheet", "https://outlook.live.com/mail/0",
+        "https://outlook.live.com/calendar/0", "http://www.mail.google.co.uk:8080/mail/u/0",
+        "https://www.app.slack.net/client/team", "https://www.twitter.net/",
+    ]
+    let live = liveURLs.map { s.tab(url: $0) }
+    let normalURLs = [
+        "https://mail.google.com/", "https://mail.google.com/search?next=/mail",
+        "https://google.com/mail", "https://app.slack.com/other", "https://calendar.google.com/other",
+        "https://figma.com/file", "https://figma.com/files/design", "https://docs.google.com/forms",
+        "https://outlook.live.com/other", "https://notion.net/", "https://notion.com/",
+        "https://linear.com/", "https://sentry.net/", "https://x.net/",
+        "https://evilmail.google.com/mail", "https://mail.google/mail", "https://mail.google.com/Mail",
+        "https://example.invalid/mail.google.com/mail", "file://mail.google.com/mail",
+    ]
+    let normal = normalURLs.map { s.tab(url: $0) }
+    let defaults = KeepAliveRules.defaults(for: s.profile.id)
+    defer { defaults.removeObject(forKey: KeepAliveRules.settingsKey) }
+    defaults.set(["notify.example.invalid/inbox", "", "https://bad.invalid", "*.invalid", "bad..invalid"],
+                 forKey: KeepAliveRules.settingsKey)
+    let userTab = s.tab(url: "https://team.notify.example.invalid/inbox/messages")
+    let userOutside = s.tab(url: "https://notify.example.invalid/other")
+    // Same host and path in another profile must use that profile's empty list.
+    let other = Profile(name: "Keep-alive isolation")
+    let otherTab = Tab(url: userTab.url, lastActiveAt: s.clock.date)
+    other.favorites = [otherTab]
+    s.model.profiles.append(other); s.model.rebuildIndex(); s.controller.contentCreated(tabID: otherTab.id)
+    for seconds in [0, 30, 300, 86700, 172800] {
+        s.clock.date = Date(timeIntervalSince1970: 1_700_000_000 + Double(seconds))
+        await s.controller.tick()
+        if seconds == 30 {
+            check("outside-scope URLs and user path exclusion freeze normally", (normal + [userOutside, otherTab]).allSatisfy { $0.live.sleepPhase == .frozen })
+        }
+    }
+    for (url, tab) in zip(liveURLs, live) {
+        check("keep-alive stays live through 48 h: \(url)", tab.live.sleepPhase == .live && s.controller.liveContent.contains(tab.id)
+              && !s.trace.ids("freeze").contains(tab.id) && !s.trace.ids("discard").contains(tab.id))
+    }
+    check("outside-scope URLs sleep and destroy normally", normal.allSatisfy { $0.live.sleepPhase == .sleeping && !s.controller.liveContent.contains($0.id) })
+    check("persisted per-profile user rule stays live for 48 h", userTab.live.sleepPhase == .live && KeepAliveRules.defaults(for: s.profile.id).stringArray(forKey: KeepAliveRules.settingsKey)?.first == "notify.example.invalid/inbox")
+    check("user rules preserve path scope and profile isolation", userOutside.live.sleepPhase == .sleeping && otherTab.live.sleepPhase == .sleeping)
+    for tab in live + [userTab] { await s.controller.debugSleepNow(tabID: tab.id) }
+    await s.controller.handleMemoryPressure(.warning); await s.controller.handleMemoryPressure(.critical)
+    check("keep-alive blocks debug discard and both pressure levels", (live + [userTab]).allSatisfy { $0.live.sleepPhase == .live && !s.trace.ids("freeze").contains($0.id) && !s.trace.ids("discard").contains($0.id) })
+
+    let navigated = live[3]
+    navigated.url = URL(string: "https://example.invalid/after-mail")!
+    s.controller.tabDidCommit(navigated.id)
+    // Reset the normal hide clock through the same show/hide hooks used by the app.
+    await s.select(navigated); await s.select(nil)
+    s.clock.advance(29); await s.controller.tick()
+    check("leaving Gmail stays live before the normal freeze delay", navigated.live.sleepPhase == .live)
+    s.clock.advance(1); await s.controller.tick()
+    check("leaving Gmail freezes at the normal 30 s delay", navigated.live.sleepPhase == .frozen)
+    s.clock.advance(269); await s.controller.tick()
+    check("leaving Gmail waits for the normal discard delay", navigated.live.sleepPhase == .frozen)
+    s.clock.advance(1); await s.controller.tick()
+    check("leaving Gmail discards at the normal 300 s delay", navigated.live.sleepPhase == .sleeping)
+
+    defaults.set([], forKey: KeepAliveRules.settingsKey)
+    await s.controller.tick(); await s.controller.tick()
+    check("removing a user rule invalidates the cached match", userTab.live.sleepPhase == .sleeping)
+    let added = s.tab(age: 400, url: "https://new.example.invalid/chat")
+    await s.controller.tick()
+    defaults.set(["new.example.invalid/chat"], forKey: KeepAliveRules.settingsKey)
+    await s.controller.tick(); await s.controller.handleMemoryPressure(.warning)
+    check("adding a user rule protects an already frozen tab from discard", added.live.sleepPhase == .frozen && !s.trace.ids("discard").contains(added.id))
+
+    let race = SleepScenario(root: root.appendingPathComponent("navigation-race"))
+    let racing = race.tab(age: 400)
+    race.engine.pauseDiscard = true
+    let pending = Task { await race.controller.debugSleepNow(tabID: racing.id) }
+    while race.engine.continuation == nil { await Task.yield() }
+    racing.url = URL(string: "https://mail.google.com/mail/u/0")!
+    race.controller.tabDidCommit(racing.id)
+    race.engine.continuation?.resume(); race.engine.continuation = nil
+    await pending.value
+    check("navigation to Gmail during async discard recovers background content", racing.live.sleepPhase == .live
+          && !race.engine.discarded.contains(racing.id) && race.trace.ids("show") == [racing.id]
+          && race.trace.ids("hide") == [racing.id])
 }
 
 @MainActor

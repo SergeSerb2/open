@@ -1,0 +1,27 @@
+{
+  "_comment": "Evidence: /Applications/Arc.app/Contents/Resources/ARC_WebContentBehaviorConfigurationClient.bundle/Contents/Resources/web_content_behavior.json, keepaliveAllowList and tabSuspensionBlocklist. Open host-suffix rules; x.com is an Open addition.",
+  "rules": [
+    { "host": "twitter.*" },
+    { "host": "x.com" },
+    { "host": "app.slack.*", "path": "/client" },
+    { "host": "mail.google.*", "path": "/mail" },
+    { "host": "calendar.google.*", "path": "/calendar" },
+    { "host": "notion.so" },
+    { "host": "app.notion.com" },
+    { "host": "dropbox.*" },
+    { "host": "aws.amazon.*" },
+    { "host": "open.spotify.*" },
+    { "host": "linear.app" },
+    { "host": "instagram.*" },
+    { "host": "messenger.*" },
+    { "host": "facebook.*" },
+    { "host": "web.whatsapp.*" },
+    { "host": "sentry.io" },
+    { "host": "figma.*", "path": "/file/" },
+    { "host": "docs.google.*", "path": "/document" },
+    { "host": "docs.google.*", "path": "/presentation" },
+    { "host": "docs.google.*", "path": "/spreadsheets" },
+    { "host": "outlook.live.*", "path": "/mail" },
+    { "host": "outlook.live.*", "path": "/calendar" }
+  ]
+}

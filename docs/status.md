@@ -170,8 +170,8 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Reveal Current Tab (Ctrl+Space) and Reveal Tab in Sidebar | MH View, Tabs | app-shell §4.3 (`reveal-current-tab`) | registry has `reveal-current-tab`; Tabs ▸ "Reveal Tab in Sidebar" is not registered | none | `commands-dump` cannot see the missing item (§2.3) | planned (partial) | |
 | Lazy loading: only the selected tab loads at launch | `docs/architecture.md` tactics | app-shell §5 | `OpenFeatures/WebContentContainer.swift` | main, PR #52 | e2e `shell` (main); e2e `window` (PR #52) | done | |
 | Placeholder for unloaded and sleeping tabs | `docs/memory-design.md` §2 | app-shell §3.4 | `OpenFeatures/PlaceholderContentView.swift` | PR #52 | `features-render check`; e2e `sidebar` | in PR | |
-| Tab sleeping: freeze 30 s, discard by mode, never-sleep gates | FC §3.4 r16; memory-design §5 | app-shell §4.7 (Step G); memory-fork S1–S6 | `OpenSleep/SleepPolicy.swift`, `SleepController.swift` | none | verify-all `sleep-demo` (105/105) | planned | |
-| Keep-alive sites never discarded (Gmail, Slack, Notion, Spotify, calendar, chat) | FC §3.4 r16 (`keepaliveAllowList`) | none: the memory-design §5 never-sleep list has no site list | none | none | none | unplanned | See §3, gap 5. |
+| Tab sleeping: freeze 30 s, discard by mode, never-sleep gates | FC §3.4 r16; memory-design §5 | app-shell §4.7 (Step G); memory-fork S1–S6 | `OpenSleep/SleepPolicy.swift`, `SleepController.swift` | none | verify-all `sleep-demo` (146/146) | planned | |
+| Keep-alive sites never frozen or discarded (Gmail, Slack, Notion, Spotify, calendar, chat) | FC §3.4 r16 (`keepaliveAllowList`) | sleep.md; settings-library §2 | `OpenSleep/KeepAliveRules.swift`, `SleepPolicy.swift`, `SleepController.swift` | app-shell Step G | verify-all `sleep-demo` | done in this PR (library) | Built-in rules plus x.com and per-profile additions. Native notifications remain unverified. See §3, gap 5. |
 | Battery Saver uses the aggressive discard time | FC §3.4 r17 | memory-design §5 | — | none | none | planned | |
 
 ### 1.4 Favorites
@@ -540,7 +540,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 ### 3.2 P1
 
 4. **Today auto-archive never runs.** Code exists: `BrowserModel.archiveExpiredTabs(now:)` with per-profile thresholds; only `openkit` calls it. No App timer is planned; app-shell §4.4 plans only the Little Open sweeper. Evidence: FC §3.3 r10–13. Belongs in: app-shell Step G or H (one timer, same cadence as the Little Open sweeper, plus a sweep at launch).
-5. **Sleeping discards Gmail, Slack, calendar, and chat tabs.** Arc keeps a keep-alive list so these tabs keep their notifications. Open's never-sleep list (memory-design §5) has no site list, so these tabs discard after 5 minutes. Evidence: FC §3.4 r16 (`keepaliveAllowList` in `web_content_behavior.json`). Belongs in: `OpenSleep/SleepPolicy.swift` and memory-fork (an Open-curated host list).
+5. **Done in this PR: sleep keep-alive site list.** `OpenSleep` has a built-in host/path table plus `x.com`, the `keepAlive` freeze + discard gate, and per-profile user additions in `open.sleep.keepAliveSites`. Evidence: FC §3.4 r16; the read-only `keepaliveAllowList` and Notion-only `tabSuspensionBlocklist` in Arc's `web_content_behavior.json`. `openkit sleep-demo` covers 48 h protection, path/TLD/subdomain scope, profile isolation, and navigation away. See `docs/sleep.md`. Settings UI is deferred to Site Control Center; native notifications remain unverified (gap 12).
 6. **Multi-select in the sidebar.** Shift/Cmd-click, New Folder from Selection, and bulk archive, move, and drag. Evidence: FC §1.5 r24 ("Supports multiselect to prefill the created folder"); MH "Gestures and mouse". The model already takes several nodes (`createFolder(withNodes:)`). Belongs in: `OpenSidebar` (design.md §5) and app-shell §4.1.
 7. **Reorder Spaces (Space Manager).** No view can reorder Spaces. The model command and intent exist (`moveSpace(id:to:)`). Evidence: FC §2.2 r8 ("Drag to Reorder Space", Spaces ▸ Manage Spaces…). Belongs in: the in-progress Space creation + theme editor plan, or `OpenSidebar` (drag in the switcher).
 8. **Page translation.** Offer bubble, translate, revert, other language, never translate a site, reset prompts. Evidence: FA §9.2 TR-1–3 (`ADKClient._translate`, `TranslateBubbleView`). Belongs in: an engine patch (Chromium translate in the fork) plus a small shell bubble; Settings already has the "Reset Translated-site Prompts" button (`OpenSettings/AdvancedPane.swift`).
@@ -589,7 +589,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 | 2 | Writing imported Arc passwords and cookies into Open | P0 |
 | 3 | System menu items (Cut, Copy, Paste, Quit…) have no dispatch once MenuBuilder lands | P0 |
 | 4 | Today auto-archive never runs in the App | P1 |
-| 5 | Sleep has no keep-alive list for Gmail, Slack, calendar, chat | P1 |
+| 5 | Sleep keep-alive list for Gmail, Slack, calendar, chat — done in this PR | P1 (done) |
 | 6 | Multi-select in the sidebar | P1 |
 | 7 | Reorder Spaces (Space Manager) | P1 |
 | 8 | Page translation | P1 |

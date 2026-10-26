@@ -147,6 +147,21 @@ still use the `object(forKey:) as? Bool ?? fallback` form where
 `docs/routing.md` already fixes the fallback (three `open.links.*`
 keys). Do not change those fallbacks.
 
+The sleep extension key is per-profile rather than app-wide:
+
+| Key | Type | Default | Scope and use |
+|---|---|---|---|
+| `open.sleep.keepAliveSites` | `[String]`, entries `host[/path]` | `[]` | `UserDefaults(suiteName: "open.profile.<ProfileID UUID>")`; OpenSleep freeze + discard exemption |
+
+`KeepAliveRules.defaults(for:)` opens that profile's suite. The same key
+and empty-array default are in `SettingsDefaults`; reads do not fall back
+to the app-wide value. Host suffixes include subdomains. A final `.*`
+allows any TLD, including multiple labels; the optional path is a
+case-sensitive prefix. Invalid entries are ignored. Built-in rules always
+remain active. No Settings UI ships with this key. The Site Control
+Center plan will add a per-site "Keep this site awake" toggle that writes
+the current profile's array. See [sleep.md](../sleep.md).
+
 ### 2.2 Per-profile scope — browser snapshot (`ProfileSettings` and friends)
 
 Owner: `BrowserModel` profiles, saved by `SnapshotStore` (1 s debounce,
