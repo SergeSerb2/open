@@ -12,7 +12,7 @@ Tool limits, stated plainly:
 
 - `rea inspect-asset-catalog` and `rea decode-interface-builder` rejected every `.car` and the single `MainMenu.nib` as "unsupported binary format". Asset names here come from `xcrun assetutil --info`. Menu structure comes from strings, not from a decoded nib.
 - `rea inspect-native-dispatch-metadata` cannot use `--token-limit` with structured output, and the 80 MB binary exceeds the snapshot budget on other agents' runs. Swift type evidence here comes from `strings` (mangled names, `*.swift` file paths, selector names) and `nm`, not from dispatch metadata.
-- The shared Ghidra project at `.re/ghidra/ArcMain` was still importing when this report was written (`.re/logs/ghidra-arcmain.log` ends inside the import). No `rea search` / `decompile` / `function` / `xrefs` call was run on the two large binaries. Behavior that only decompilation can prove is marked as a guess or an open question.
+- The shared Ghidra project at `.re/ghidra/ArcMain` was still importing when this report was written (`.re/logs/ghidra-arcmain.log` ends inside the import). No `rea search` / `decompile` / `function` / `xrefs` call was run on the two large binaries. Behavior that only decompilation can prove is marked as a guess or an open question. Update 2026-10-25: §4.7 and §6.5 add findings from two read-only batch runs on the finished shared project (`~/Library/Caches/OpenRE/ghidra/ArcMain.gpr`, `analyzeHeadless … -process Arc-arm64 -noanalysis -readOnly -postScript AdrpBatch.java <needles> <out>`; output `.re/features-advanced/scc-ghidra.txt` and `scc-ghidra2.txt`).
 - `defaults read` reflects one signed-in user's current values, not factory defaults. Where this report gives a "default", it says whether the value was observed on this machine or inferred from strings. Factory defaults that need a fresh profile are listed as open questions.
 
 Conventions in this spec:
@@ -239,6 +239,96 @@ Observed on this machine: no Boost defaults appear in `defaults read` output, so
 6. Do Boosts apply in Peek, Little Arc, and Split View panes? (Guess: yes, everywhere the helper runs.)
 7. Conflict order when two Boosts match one site.
 
+### 4.7 Editor findings from the shared Ghidra project (2026-10-25)
+
+Method: one instruction pass finds `adrp` + `add`/`ldr` pairs that compute a needle string's
+address (or the address minus 0x20, Swift's literal form), then the containing functions are
+decompiled. Short labels are Swift small strings: two 64-bit immediates, the first holding bytes
+0–7, the second bytes 8–14 plus a count byte (`0xE0 | n`, or `0xA0 | n` when non-ASCII), so
+`0x6c6553206b636950` + `0xed0000726f746365` reads "Pick Selector". Long labels are pointers
+(`0x8000000… + 0x20`) with a count word. Every long literal quoted below was re-read at its file
+offset in `.re/bin/Arc-arm64` (virtual address − 0x100000000), for example 0x39bbf40 = "Manage
+Boosts…". Field and case names come from Swift reflection strings, which `strings` prints in
+declaration order (`.re/features-advanced/strings-main.txt`).
+
+- **BO-14 — The editor is a window with two modalities.** Editor state fields, in order:
+  `modality` (cases `code`, `none`), `selectorPickerMode`, `showingAdvancedColorMapper`,
+  `interstitialType`, `codeEditingWindowSize`, `font`, `textTransform`, `textZoom`, `zaps`,
+  `colorScheme`, `type`, `boostID`, `boostData`, `changeStack`, `boostDataBeforeInteractiveUpdates`,
+  `zapToPreview`, `hasDismissedJSWarningBanner` (strings around line 231 530). The window classes
+  are `BoostsEditorWindowController` (`init(content:options:)`), `BoostsEditorWindowContent`, and a
+  separate `BoostsEditorShelfController` whose fields include `windowTheme`, `numTiles`, `tile`,
+  `tileSpacing`, `_showingOverflowControls` (so the Zap shelf is drawn with the window's Space theme;
+  its exact placement is a guess).
+- **BO-15 — Editor actions.** Reducer action names: `reloadBoost`, `editCSS`, `editJS`, `loadCSS`,
+  `loadJS`, `showAdvancedColorMapper`, `setModality`, `setCodeEditingWindowSize`, `setZapToPreview`,
+  `toggleDevTools`, `appendZap`, `removeZap`, `showSelectorPicker`, `copySelectorToPasteboard`,
+  `initialize`, `close`, `completeInterstitial`, `learnMore`, `undo`, `redo`, `delete`, `rename`,
+  `shuffle`, `report`, `resetAll`, `resetColorMapping`, `showAllBoosts`, `reloadPage`,
+  `hideSelectorPicker`, `dismissJSWarningBanner`, `openDeleteConfirmationDialog`,
+  `openRenamePromptDialog`, `closeEditor`. The change stack stores `before` / `after` pairs with a
+  `cursor` (undo and redo). Rule: every editor change is one undoable step; a drag records the
+  value from before the drag (`boostDataBeforeInteractiveUpdates`).
+- **BO-16 — Menu and dialogs.** `FUN_1012be060` builds the editor menu: "Rename this Boost…" (20-byte
+  literal), "Shuffle", "Delete this Boost", "Report Boost…" (only when a `canReport` flag is set),
+  "Reset all Edits", "All Boosts…"; `FUN_1012bdfb8` adds "Undo". The header view has fields
+  `canUndo`, `canReset`, `canRename`, `canDelete`, `canReport`. Rename alert buttons: "Done" and
+  "Cancel" (`FUN_1001649e4`, `FUN_100164a84`); delete alert: "Delete this Boost?" with "Delete"
+  (`FUN_10016452c`, `FUN_1001647e8`). Default title for a new Boost: "My Boost"
+  (`FUN_101151be0`); default author: "Anonymous" (`FUN_101151d7c`). The Home Boosts list subtitle
+  uses "Made for " plus the site, or "Edit and share your Boost for" (`FUN_1026256cc`).
+- **BO-17 — Color model and controls.** `BoostColorScheme` fields: kinds `colorWheelDriven` and
+  `themeDriven`; `primaryHueDegrees`, `primarySaturation`, `secondaryHueOffset`, `invertLightness`,
+  `baseAppearance` (`light`, `dark`), `advancedSettings` with `preservedSaturation`,
+  `preservedLightness`, `lightnessShift`, `secondarySaturation`, `primaryLightness`,
+  `secondaryLightness`, `primaryColorModel`, `secondaryColorModel`, plus `curves` / `points`. This is
+  a palette remap, not a CSS filter. The web-content helper keeps `colorSchemeOwnerMap` and
+  `textZoomOwnerMap` beside `hostPatternMap` (guess: when several Boosts match, one Boost owns the
+  color and one owns the zoom). Controls: tooltips "Invert lightness" (`lightbulb`), "Advanced color
+  controls" (`slider.horizontal.3`), "Reset to original colors" (`arrow.counterclockwise`)
+  (`FUN_1012c6a4c`); advanced sliders "Brightness", "Contrast", "Original Saturation"
+  (`FUN_1012d0f44`). Assets (`xcrun assetutil --info` on `ARC_BoostsEditor.bundle`): `HueRing`
+  256×256 px at 2x (a 128 pt ring), `AnalogousColorScheme` and `ComplementaryColorScheme` 18 pt,
+  `FontSizeIcon` 19×16 pt, `DotGrid` 8 pt, `InterstitialIcon` 70 pt, `SquigglyFooter` 355×194 pt.
+- **BO-18 — Text and font controls.** "Change text size" and "Change text case" (`FUN_1012c7f64`).
+  Text zoom options in order: `small`, `normal`, `medium`, `large`, `larger`; font kinds `custom`,
+  `system`; transforms `capitalize`, `uppercase`, `lowercase`. The font picker view has
+  `fontOptions` and per-option `selected` and `title`. A list of macOS font families sits in
+  `__cstring` between unrelated strings: Helvetica Neue, Avenir, Futura, DIN Alternate, PT Mono,
+  Courier, Times New Roman, Charter, Baskerville, Hoefler Text, Palatino, Chalkboard, SignPainter,
+  Snell Roundhand, Papyrus, Apple Chancery, Luminari, Wingdings (guess: this is the Boost font list;
+  no xref was traced). "Arial Rounded MT Bold" sits among the editor strings (guess: a label font).
+- **BO-19 — Code mode.** The code panel has a Monaco path (flag `boosts-v2-monaco-enabled`, field
+  `boostIDEBrowser`) and a native text-view path: `FUN_1012b734c` builds a placeholder attributed
+  string from an `NSFont` of 12 pt and a black color at alpha 0.3 with the text "your css here" or
+  "your javascript here" (the JS literal continues with two newlines and "!!! fyi: you cannot share
+  Boosts that contain javascript !!!"). `FUN_1012b83bc` builds the code tool bar: "Pick Selector" / "Hide Selector
+  Picker", "Refresh to Run" (tooltip "Refresh this Page"), "Show Developer Tools" / "Hide Developer
+  Tools", and the banner "FYI: for security reasons, Boosts with JavaScript can't be shared.". A 0.45
+  constant is passed with each button label (guess: text opacity). Rule: CSS applies live; JS needs a reload ("Refresh to Run").
+- **BO-20 — Zap UI text.** "Click elements on the page to " + "Zap" + " them" (`FUN_1012f5754`),
+  "Zap this" and "Copy selector for this" (`FUN_1012dfc00`), "Zap all related elements" and "Copy
+  selector for related" (`FUN_1012df4d0`). Hover-tracker states `none`, `fetching`,
+  `fetchingAndNeedsFetchAgainAfter`; candidate rows have `selector`, `matchCount`, `color`,
+  `title`. Rule: a click shows a small menu to zap this element or all related ones, or to copy
+  either selector; the shelf tiles preview a Zap on hover (`zapToPreview`).
+- **BO-21 — First-run interstitial.** "Edit the Internet with Boosts" (`FUN_1012c1920`) and the
+  button "Make your own!" (`FUN_1012c1b8c`, three small-string words), state
+  `hasDismissedBoostsInterstitial`, colors `InterstitialForeground #2E2740`,
+  `InterstitialFooter #CEDBFC`.
+- **BO-22 — Editor colors** (`ARC_BoostsEditor.bundle` asset catalog, `.re/design/all-colors.txt`):
+  `SegmentedControlBackground` black 0.07 / white 0.10; `SegmentedControlSelectionBackdrop` white /
+  white 0.30; `SliderBackground #3B3746` 0.05; `SliderTint #017AFF`; `WarningBackground #FF5A5F`;
+  `PuckBackground #FAFBFF`; `BoostsLabel` white / black 0.80; `ZapPreviewBackground #D9D9D9`;
+  `DarkModeBackground #3B3B3C`; `DarkModeForeground #FBFBFF`; `DisabledToolButtonForeground #F3F1FD`
+  0.30; `GrayButtonForeground #3A3A3B`; accents `BoostsBlue #300EFF`, `BoostsGreen #55B948` (P3),
+  `BoostsMagenta #DD0EFF`, `BoostsOrange #FF560E`, `BoostsPink #FF0E82`, `BoostsPurple #860EFF`,
+  `BoostsRed #FF0E0E`, `BoostsYellow #F1A23C` (P3). Where each color is used is not proven.
+
+Answers to §4.6: question 4 is partly answered by BO-18 (font list, guess on ownership). Question 5
+is answered by BO-17 (a palette remap with a primary hue, a secondary hue offset, and lightness
+controls, not a hue rotation). Question 7 has a lead: the owner maps in BO-17.
+
 ---
 
 ## 5. Zap
@@ -285,9 +375,9 @@ Module evidence: bundle `ARC_SiteControlCenter.bundle`; feature `SiteControlCent
 - **SC-1 — The Site Control Center is a popover panel for the current site, opened from the URL area.** Entry: the site icon / lock button in the sidebar URL bar ("Site Control Center Button", "Site Control Center button", "Accessibility label for command bar placeholder button that opens site control center", `onTapSiteControlCenterButton`, `siteControlCenterButton`, `siteControlCenterView`). The security affordance is labeled by state: "Title for the site control center security button on a secure site." and the matching insecure-site title. Rule: clicking the URL icon opens the panel anchored to the URL bar; in Split View it describes the focused pane's site (§1, SV-8); in Peek it is unavailable or describes the peeked site (guess — verify).
 - **SC-2 — Section 1: site settings (permissions).** `SiteControlCenterSettingsView` lists per-site settings for the current origin. The setting type is `ArcSiteSetting` / `SiteSetting` with display strings in `SiteSetting+Display.swift`; the write path is `setContentSettingsForOrigin:withContentSettingTypes:withSiteSetting:` and `setPermissionsForOrigin:withPermissionTypes:withSiteSetting:`, with callbacks `didChangeSiteSetting`, `onSiteSettingClick`, `advancedSiteSettingsClicked`, `reloadSiteSettings`. Permission prompt strings prove the categories are Chromium content settings (notifications, storage, multi-download, `mailto:` handling, idle detection, and the rest of the Chromium set). Rule: each row shows the current value for this origin (allow/block/ask, per Chromium) and lets the user change it; changes write through to the engine's content-settings store for that origin and profile. Header actions: "View Site Settings", "All Site Settings" (`onAllSiteSettingsClick`) opens the full settings page; `UserDefaultsClient.resetTranslateSettings` has a sibling reset here ("Reset Translated-site Prompts" belongs to Translation, §9.2).
 - **SC-3 — Section 2: Boosts for this site.** `SiteControlCenterBoostsView` / `SiteControlCenterBoostView` ("Title for Boosts section in site control center", "Text shown on hover of Boosts section in site control center", "Tooltip for the new Boost button in the site control center."). Rule: the section lists Boosts matching the current site with per-Boost enable toggles, an edit action that opens the Boost editor (§4), and a new-Boost button that creates a Boost scoped to this site and opens the simple editor.
-- **SC-4 — Section 3: extensions for this site.** `SiteControlCenterExtensionsView`, `SiteControlCenterExtensionButton`, `SiteControlCenterExtensionPinButton`. Rule: lists extensions that have access to (or request access to) the current site, with pin/unpin and per-site access controls, mirroring Chromium's extension site-access model. Exact row contents need runtime data.
+- **SC-4 — Section 3: extensions for this site.** `SiteControlCenterExtensionsView`, `SiteControlCenterExtensionButton`, `SiteControlCenterExtensionPinButton`. Rule: lists extensions that have access to (or request access to) the current site, with pin/unpin and per-site access controls, mirroring Chromium's extension site-access model. Exact row contents need runtime data. Revised in §6.5 (SC-14): no per-site access strings exist; the section is the window's extension buttons with pin/unpin.
 - **SC-5 — Footer actions.** `SiteControlCenterFooterView` plus `SiteControlCenterActionButton`. Tooltips prove the action set: "Tooltip for the capture button in the site control center." (§9.1), "Tooltip for the capture in Portrait Mode button in the site control center.", "Tooltip for the full-page capture button in the site control center.", "Tooltip for the copy URL button in the site control center.", "Tooltip for the share button in the site control center.". Rule: the footer offers Capture, Capture in Portrait Mode, Capture Full Page, Copy URL, and Share for the current page.
-- **SC-6 — Ad blocker toggle lives here.** The panel shows the native ad-block state for the site with a per-site disable. Evidence: `AdBlockDisableScopeAction`, `nativeAdBlockDisableScopeDialogAction`, `nativeAdBlockDisableScopeDialogShown`, and the reload follow-up `AdBlockReloadFollowUpAction` / `nativeAdBlockReloadFollowUpShown` (changing the state offers or performs a reload). Detail in §7. The disable scope dialog asks how broadly to disable (this site, or wider); exact options need runtime data.
+- **SC-6 — Ad blocker toggle lives here.** The panel shows the native ad-block state for the site with a per-site disable. Evidence: `AdBlockDisableScopeAction`, `nativeAdBlockDisableScopeDialogAction`, `nativeAdBlockDisableScopeDialogShown`, and the reload follow-up `AdBlockReloadFollowUpAction` / `nativeAdBlockReloadFollowUpShown` (changing the state offers or performs a reload). Detail in §7. The disable scope dialog asks how broadly to disable (this site, or wider); exact options need runtime data. Revised in §6.5 (SC-11, SC-17): the tile is "Block Ads & Trackers" with On/Off; the scope-dialog and reload enums sit among Dia analytics events, so their UI in Arc 1.170 is not proven.
 - **SC-7 — Security info.** The panel header shows connection security for the origin (secure versus insecure titles above). Guess: it also shows certificate details on click-through, following Chromium's page-info model. No certificate strings were found; verify at runtime and keep Open's first version to the secure/insecure state plus origin display if the detail is absent.
 - **SC-8 — Cookies and site data.** No cookie-specific strings were found in the Site Control Center module. Chromium content settings (SC-2) cover cookies as one setting type, but a dedicated cookie viewer is not evidenced. Open: expose cookies only through the content-settings row; do not invent a cookie browser. Marked as an open question.
 
@@ -311,6 +401,78 @@ Module evidence: bundle `ARC_SiteControlCenter.bundle`; feature `SiteControlCent
 3. Ad-block disable scope options (this page, this site, this session, everywhere?).
 4. Extension row actions (pin, remove, manage, site-access toggle labels).
 5. Does the panel open from the command bar as well as the URL icon?
+
+### 6.5 Findings from the shared Ghidra project (2026-10-25)
+
+Method as in §4.7. Functions are named by their address in the shared project.
+
+- **SC-9 — Presentation.** The view controller (`SiteControlCenterViewController`) keeps a store,
+  `_optionKeyDown`, `humanReadableHost`, and an `extensionPickerMonitor`; the view's actions include
+  `onPopoverClose`, so the panel is an `NSPopover`. State fields: `browserContextID`,
+  `webContentFrameIdentifier`, `isConnectionSecure`, `settings`. What Option changes is unknown.
+- **SC-10 — Section headers.** Each section view has `title`, `hoverAccessoryText`, and
+  `onHeaderClick`. Titles and accessories: "Settings" / "More" (`FUN_10138bc90`), "Boosts" /
+  "Manage" (`FUN_10137bad0`), "Extensions" / "Manage" (`FUN_10137d6d0`). Rule: hovering a header
+  shows its accessory text; clicking the header runs the matching action (all site settings, manage
+  Boosts, manage extensions).
+- **SC-11 — Setting rows.** The row enum (reflection order) is `contentSettings(type)`,
+  `sidebarPreview`, `developerMode`, `contentBlocking`, `popupBlocking`, with a state enum
+  `enabled`, `disabled`, `unavailable`. Titles (`FUN_10055e548`): "Preview", "Developer Mode",
+  "Block Ads & Trackers", "Block Pop-ups"; content settings use their display name. Subtitles
+  (`FUN_1013791bc`): a content setting reads "Allowed" when its Chromium value is 1 (allow) or 4
+  (session only) and "Blocked" otherwise; Preview reads "Enabled" / "Disabled"; Developer Mode reads
+  "On" / "Off"; content blocking reads "On" only in the `enabled` state, else "Off"; pop-up blocking
+  logs "Popup blocking is not supported in Arc." and returns an empty subtitle. Ad-block tooltips by
+  state (`FUN_10055e400` and neighbours): on for this site, disabled for this site, and off globally
+  with a pointer to Settings. Each row view has `symbol`, `icon`, `title`, `subtitle`, `state`,
+  `action`. Guess: rows are toggles drawn like macOS Control Center modules.
+- **SC-12 — Which settings appear.** The main binary calls `getChangedContentSettingsForOrigin:` and
+  `getContentSettingForOrigin:withContentSettingType:`; ArcCore has `ArcSiteSettingInfo` (`originUrl`,
+  `permissionType`, `contentSettingsType`, `siteSetting`). The Allowed/Blocked-only subtitle fits a
+  list of changed settings (guess: settings still at their default are not shown). Display names
+  come from one table (`FUN_10055c864`): location, camera, microphone, sensors, notifications,
+  javascript, images, popups, intrusive ads, background sync, sound, MIDI devices, clipboard, usb,
+  hid, serial port, fonts, bluetooth, hand tracking, idle detection, keyboard lock, pointer lock,
+  local network; the permission-prompt table (`FUN_10055d56c`) adds quota, download, storage,
+  ambient login.
+- **SC-13 — Boost rows.** `FUN_10137c7bc`: subtitle "Enabled" (active) / "Disabled" (inactive);
+  the row view has `_isHovered`, `onToggleClick`, `onEditClick`; icon `boost.sparkle.fill`.
+- **SC-14 — Extensions (revises SC-4).** Extension buttons have `extension`, `onClick`,
+  `onRightClick`, `onPinButtonClick`; the section has `rows`, `items`, `isPinned`, and an "Add
+  Extension" button (`FUN_10137f248`); pin tooltips "Pin" / "Unpin" (`FUN_101383090`). No string
+  for per-site extension access exists. Rule: the section is the window's extension actions with
+  click, right-click, and pin, plus Add Extension. Layouts `GridLayout` and `RowLayout` and the state
+  `ExtensionPickerState` sit with the feature's types (strings near line 86 161); a hidden binding
+  `openExtensionsPicker` ("Open pinned extensions picker.", line 130 474) drives the picker
+  (`focusedExtension`, `didFocus` / `didSelect` / `didCancel`). Per-site access comes from Chromium's
+  extension context menu on right-click (`ArcBrowser showExtensionContextMenu:`). Cross-check:
+  `docs/plans/extensions-ui.md`.
+- **SC-15 — Action buttons (refines SC-5).** Type enum order: `share`, `copyURL`, `newBoost`,
+  `capture`, `captureFullPage`, `capturePortraitMode`. Tooltips (`FUN_10137ae90`): "Share", "Copy
+  URL", "New Boost", "Capture a portion of this page", "Capture the full page", "Capture in
+  Portrait Mode". Each button has a `keyboardShortcut`. Icon assets (`ARC_SiteControlCenter.bundle`): `share`, `copy-url`,
+  `capture-full-page` 19 pt; `window-screenshot-icon` 18×14 pt; `boost.fill`, `boost.sparkle`,
+  `boost.sparkle.fill`, `icon-control-center`, `icon-control-center-fill` 18 pt (all Arc art; do not
+  copy).
+- **SC-16 — Footer.** The footer has `isSecure`, `onSecurityButtonClick`, and
+  `includeBoostsInContextMenu`. Security titles "Secure" / "Insecure" (`FUN_1013843f0`); ArcCore
+  offers `showCertificateDialog` and `ArcSecureContext`. Menu (`FUN_101384580`, build order): "Clear
+  Cache", "Clear Cookies", then — only when `includeBoostsInContextMenu` — a separator, "Manage
+  Boosts…", "New Boost…"; a separator, "Manage Extensions…", "Add Extension…"; a separator, "All
+  Site Settings…". ArcCore also has `clearSiteDataAndReload:` and `showBlockedPopups`. Guess: Boost
+  items move into the menu when the Boosts section is hidden.
+- **SC-17 — Ad-block scope and reload (revises SC-6).** `AdBlockDisableScopeAction` and
+  `AdBlockReloadFollowUpAction` are analytics enums listed with Dia events
+  (`nativeAdBlockToggled`, `nativeAdBlockDisableScopeDialogShown`, `diaCommandBarOpened`, …,
+  strings around line 228 376). No dialog text for a scope choice was found in the Site Control
+  Center module. Rule for Open: the tile toggles the site exclusion directly; any reload prompt is an
+  Open choice.
+
+Answers to §6.4: question 1 — order is header, Settings, Boosts, Extensions, footer (guess on the
+action row's place); sections show only when they have rows (guess). Question 3 — no scope options
+are proven for Arc 1.170 (SC-17). Question 4 — extension buttons run the action, right-click opens a
+menu, and a pin button toggles pinning (SC-14). Still open: certificate detail depth, and whether a
+command opens the panel.
 
 ---
 
