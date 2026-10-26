@@ -1,7 +1,30 @@
-# Open fragment. Merged into gnrt_config.toml by §7.4.
-# Add a [crate.adblock] table ONLY if gnrt vendor/gen requires one
-# (license file name, allow_unsafe, group). Default: no table.
-# The crate runs in the browser process. If the security review (F-11
-# checklist) finds the rule of 2 is not met, set group = "sandbox" here
-# and STOP — the ad-block design assumes browser-process execution;
-# a sandbox move needs a design change, not a config tweak.
+# Open fragment. Merged into gnrt_config.toml by the Rust step (fork-infra
+# §7.4). gnrt vendor also writes its own [crate.X] allow_unsafe entries for
+# the new crates; those are tool output, captured in
+# patches/rust/0001-adblock-vendor.patch, and not repeated here.
+# Lead decisions 2026-10-26: docs/engine-patches.md "Security review".
+
+# Chromium: group = 'test' (imported only for libafl). adblock needs regex
+# in the browser process. Built without its perf features (crate patches
+# adblock-v0_8 and libafl-v0_15), so aho-corasick keeps Chromium's
+# allow_unsafe = false and leaves the build.
+[crate.regex]
+group = 'safe'
+allow_first_party_usage = false
+extra_kv = { allow_unsafe = true }
+
+# Two epochs now: thiserror 1 (adblock) and 2 (Chromium). Only 2 has the
+# generated private.rs.
+[crate."thiserror@v1"]
+extra_kv = { allow_unsafe = false }
+
+[crate."thiserror@v2"]
+build_script_outputs = [ "private.rs" ]
+extra_kv = { allow_unsafe = false }
+
+# Two epochs: idna 0.2 (adblock, no unsafe) and 1 (url 2.5, uses unsafe).
+[crate."idna@v0_2"]
+extra_kv = { allow_unsafe = false }
+
+[crate."idna@v1"]
+extra_kv = { allow_unsafe = true }

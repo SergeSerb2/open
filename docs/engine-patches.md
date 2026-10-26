@@ -187,6 +187,42 @@ User Boost JavaScript runs in the main world on purpose (docs/boosts.md). Open's
 
 Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a `URLLoaderThrottle`, cosmetic delivery over `cef.mojom`). Until it lands, `OEBrowserContext.requestFilter` is the stepping stone that plan names (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
 
+### Security review (Step 1, 2026-10-26)
+
+The engine parses filter lists in the browser process, which is the most privileged process. These are the decisions that let it build there, and the limits on its input. Lead decisions of 2026-10-26.
+
+**Crate overrides** (`patches/rust/0001-adblock-vendor.patch`, intent in `src/third_party/rust/chromium_crates_io/*.open`):
+
+| Crate | Chromium 156 | Open | Why |
+|---|---|---|---|
+| `regex` 1.13.1 | `group = 'test'`, imported only for the libafl fuzzer (Chromium commit `e8fac8e9`, 2026-05-11) | `group = 'safe'` (shipped, security critical). `allow_first_party_usage` stays false | `adblock` cannot work without it: it is not an optional dependency. regex is one of the most widely audited Rust crates, and Brave ships the same setup in its browser process. Approved. |
+| `regex` features | `default` (all `perf-*`), because of libafl | `std` + `unicode` only. Crate patches `adblock-v0_8` and `libafl-v0_15` set `default-features = false` on their regex dependency (Cargo unifies features across the tree, so both are needed) | Keeps aho-corasick's SIMD code (`unsafe`) and regex-automata's lazy DFA, one-pass and backtracking engines out of the build. `aho-corasick` leaves the GN graph. The remaining engines keep regex's guarantees: worst-case `O(m * n)` search (`regex-v1/src/lib.rs:6-7`) and a 10 MiB compiled-NFA limit (`builders.rs:53`). adblock compiles list patterns with plain `Regex::new` / `RegexSet::new` and handles errors (`src/filters/network.rs:1228,1236`). |
+| `aho-corasick` | `safe`, `allow_unsafe = false` | Unchanged, and not built | Chromium's config. The override to `allow_unsafe = true` is approved as a fallback only: if the in-tree page-overhead check (adblock-fork §13.4, Step 9) misses its budget. Record the numbers if it is used. |
+| `thiserror`, `idna` | One unversioned config each | Per-epoch configs: `thiserror@v1` (adblock) and `@v2`; `idna@v0_2` (adblock, no `unsafe`) and `@v1` (via `url` 2.5, uses `unsafe`) | The unversioned config gave thiserror 1 a build-script output that only 2 has, and gave idna 1 `allow_unsafe = false`. |
+| New crates | — | `allow_unsafe` as `gnrt vendor` set it from its scan: `true` for adblock, url, idna 1, percent-encoding, form_urlencoded, unicode-bidi, unicode-normalization, rmp, rmp-serde, seahash; `false` for the rest | Tool output. Every crate has a row in `Engine/fork/licenses/THIRD_PARTY.md`. |
+| `seahash` 3.0.7 | — | Crate patch adds upstream's MIT license text | Published without a license file; upstream added it later (gitlab.redox-os.org/redox-os/seahash commit `3088c5c9`). |
+| `rmp` | — | Pinned `=0.8.11` | `rmp-serde` 0.15 needs it; gnrt would pick 0.8.15 (adblock-design §Benchmark). |
+
+**Cost of regex without `perf`** (bench at `/tmp/adblock-bench-open`, adblock 0.8.11 with plan D-3 features, Chromium's toolchain `rustc 1.100.0`, current official EasyList + EasyPrivacy, Apple M5 Pro, load about 6, median of 5 runs). The same 8 of 15 requests are blocked in both configs, with the same selector counts:
+
+| Measure | regex `perf` | regex `std` + `unicode` (shipped) | adblock-fork budget |
+|---|---|---|---|
+| Network match per request | 1.65 µs | 2.90 µs (worst URL 5.8 µs) | §13.4: ≤ 5 ms added per 200 requests (this is about 0.6 ms) |
+| Cosmetic query per page | 27.1 µs | 27.0 µs | ≤ 100 µs |
+| Engine build from text | 70 ms | 72 ms | ≤ 1500 ms |
+| DAT deserialize | 32 ms | 33 ms | ≤ 250 ms |
+
+The shipped config is slower than the design benchmark's ~2.15 µs reference (F-15) but well inside the pass/fail budget. `openkit adblock perf` (Swift allowlist lookups, not regex) stays at p95 0.11 ms per 1,000 lookups (budget 1 ms).
+
+**Untrusted input.** Filter lists (EasyList, EasyPrivacy and the 46-list catalog) are untrusted network input. The engine parses them in the browser process (`FilterSet::add_filter_list`, `Engine::from_filter_set`), and it reads the serialized engine (DAT) back from disk (`Engine::deserialize`). The limits that exist today, in the Swift store (docs/adblock-lists.md):
+- A source is capped at 16 MiB, and a combined list at 64 MiB. The cap is enforced while streaming, and the advertised size is checked.
+- Downloads are HTTPS only. Redirects stay on the source host unless the catalog allows the destination.
+- Each list generation has SHA-256 receipts. They are verified before every load, and a mismatch causes a fresh fetch.
+- Bundled seeds are pinned by SHA-256 (`tools/fetch-adblock-lists.sh`, also `--max-filesize 16 MiB`).
+- The engine is given only verified generation files, read with a size bound.
+
+The parsers are memory-safe Rust apart from the `unsafe` crates listed above. Follow-up (`docs/followups.md`): fuzz list parsing, resources parsing and DAT deserialization, and add a parse time and memory limit, before the first public release. adblock, regex and aho-corasick are on the release license and security review list (U-6).
+
 ## Decisions for the lead
 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).
