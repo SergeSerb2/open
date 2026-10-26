@@ -138,6 +138,7 @@ final class SwitcherItemView: PlateButton {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        context?.suppressPreviews(.drag, true)
         let operation = operation(for: sender.draggingPasteboard)
         guard !operation.isEmpty else { cancelSpringLoad(); return [] }
         let ids = SidebarPasteboard.nodeIDs(from: sender.draggingPasteboard)
@@ -165,12 +166,13 @@ final class SwitcherItemView: PlateButton {
         springPayload = nil
     }
 
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { cancelSpringLoad() }
-    override func draggingEnded(_ sender: any NSDraggingInfo) { cancelSpringLoad() }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { cancelSpringLoad(); context?.suppressPreviews(.drag, false) }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { cancelSpringLoad(); context?.suppressPreviews(.drag, false) }
     override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) { cancelSpringLoad() }
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool { !operation(for: sender.draggingPasteboard).isEmpty }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { context?.suppressPreviews(.drag, false) }
         cancelSpringLoad()
         guard !operation(for: sender.draggingPasteboard).isEmpty, let context else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: sender.draggingPasteboard) {

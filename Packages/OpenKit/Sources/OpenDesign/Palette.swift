@@ -208,3 +208,8 @@ public enum PiPRole {
     public static let topScrim = DesignColor(light: .black(0.5), dark: .black(0.5))
     public static let bottomScrim = DesignColor(light: .black(0.6), dark: .black(0.6))
 }
+
+/// PreviewBackgroundColor, SC §7: measured catalog values, no copied assets.
+public enum PreviewColors {
+    public static let background = DesignColor(light: RGBA(hex: 0xFFFFFF), dark: RGBA(hex: 0x212222))
+}

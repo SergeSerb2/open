@@ -37,6 +37,10 @@ public final class SidebarView: NSView {
     private var modelUpdateDepth = 0
     private var pendingChanges: [TreeChange] = []
     private var pendingRename: ItemID?
+    private var banner: SidebarBannerView?
+    private var bannerShown = false
+    private var bannerGeneration = 0
+    private var preferencesObserver: NSObjectProtocol?
 
     public init(context: SidebarContext) {
         self.context = context
@@ -75,8 +79,18 @@ public final class SidebarView: NSView {
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
         loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.peekSourceNodeID }) { [weak self] in self?.syncPeekDim() })
+        loops.append(ObservationLoop(read: { [weak self] in
+            guard let self else { return }
+            _ = self.context.autoArchiveBannerRequested
+            _ = self.context.focusedSpace?.profileID
+            _ = self.context.focusedSpace.flatMap { self.context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
+        }) { [weak self] in self?.syncBanner() })
+        preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncBanner() }
+        }
         syncTheme()
         syncPeekDim()
+        syncBanner()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -84,6 +98,8 @@ public final class SidebarView: NSView {
     isolated deinit {
         NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
         if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }
+        if let preferencesObserver { NotificationCenter.default.removeObserver(preferencesObserver) }
+        context.existingHoverPreviews?.dismiss()
         if let observerID { context.model.removeObserver(observerID) }
         loops.forEach { $0.cancel() }
     }
@@ -109,8 +125,16 @@ public final class SidebarView: NSView {
         let favH = favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
-        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, bottom - favTop - favH))
+        let bannerHeight = bannerShown ? banner?.height(for: max(0, w - 2 * BannerMetrics.inset)) ?? 0 : 0
+        let listBottom = bottom - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
+        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, listBottom - favTop - favH))
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
+        if bannerShown, let banner {
+            let height = banner.height(for: max(0, w - 2 * BannerMetrics.inset))
+            banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - BannerMetrics.inset - height,
+                                  width: max(0, w - 2 * BannerMetrics.inset), height: height)
+
+        }
     }
 
     public override func updateTrackingAreas() {
@@ -373,6 +397,10 @@ extension SidebarView {
         return convert(dot.frame, from: cell)
     }
 
+    public func drawnFolderGlyph(nodeID: ItemID) -> String? { (cell(nodeID: nodeID) as? FolderCellView)?.icon.lastDrawnGlyph }
+
+    public func folderIconView(nodeID: ItemID) -> NSView? { (cell(nodeID: nodeID) as? FolderCellView)?.icon }
+
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 
     public func resetAction(tabID: ItemID) -> NSView? {
@@ -446,4 +474,50 @@ public struct SidebarChromeGeometry: Sendable, Equatable {
     public var headerTitle: CGRect?
     public var headerTitleBaseline: CGFloat?
     public var headerHovered: Bool
+}
+
+
+extension SidebarView {
+    /// The App sets the request after an actual sweep. Preference checks remain
+    /// live so every window hides after the App persists the dismissal.
+    private func syncBanner() {
+        let preferences = context.previewPreferences
+        let eligible = preferences.object(forKey: "open.sidebar.autoArchiveBannerEligible") == nil || preferences.bool(forKey: "open.sidebar.autoArchiveBannerEligible")
+        let interval = context.focusedSpace.flatMap { context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
+        let wanted = context.autoArchiveBannerRequested && eligible && !preferences.bool(forKey: "open.sidebar.autoArchiveBannerDismissed") && interval != nil && interval != .never
+        guard wanted != bannerShown else { return }
+        bannerShown = wanted; bannerGeneration += 1
+        let generation = bannerGeneration
+        if wanted, banner == nil {
+            let view = SidebarBannerView(context: context)
+            view.onHeightChange = { [weak self] in self?.needsLayout = true }
+            banner = view; addSubview(view)
+        }
+        guard let banner else { return }
+        banner.layer?.removeAllAnimations()
+        if wanted {
+            banner.isHidden = false
+            needsLayout = true; layoutSubtreeIfNeeded()
+        } else { needsLayout = true }
+        guard animatesSidebarChanges else { banner.isHidden = !wanted; return }
+        let duration = wanted ? Motion.bannerIn : Motion.bannerOut
+        let opacity = CABasicAnimation(keyPath: "opacity")
+        opacity.fromValue = wanted ? 0 : 1; opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
+        let group = CAAnimationGroup(); group.animations = [opacity]; group.duration = duration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = wanted ? 12 : 0; slide.toValue = wanted ? 0 : 12; slide.duration = duration
+            group.animations?.append(slide)
+        }
+        CATransaction.begin()
+        if !wanted { CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
+            guard let self, self.bannerGeneration == generation else { return }; self.banner?.isHidden = true
+        } } }
+        banner.layer?.add(group, forKey: "banner")
+        CATransaction.commit()
+    }
+    public var autoArchiveBanner: SidebarBannerView? { bannerShown ? banner : nil }
+    public var bannerContentInset: CGFloat { 0 }
+    public func refreshAutoArchiveBanner() { syncBanner() }
 }

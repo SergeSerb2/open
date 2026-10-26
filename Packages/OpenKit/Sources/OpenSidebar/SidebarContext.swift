@@ -12,6 +12,23 @@ public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
     public let selection = SidebarSelection()
+    /// Preview/banner preferences; the App uses .standard, harnesses use a suite.
+    @ObservationIgnored public let previewPreferences: UserDefaults
+    @ObservationIgnored private var hoverPreviewStorage: HoverPreviewTracker?
+    var existingHoverPreviews: HoverPreviewTracker? { hoverPreviewStorage }
+    @ObservationIgnored var previewSuppressions: Set<HoverPreviewTracker.Suppression> = []
+    var previewsEnabled: Bool { previewPreferences.object(forKey: "open.general.previewsEnabled") == nil || previewPreferences.bool(forKey: "open.general.previewsEnabled") }
+    var canStartHoverPreview: Bool { previewsEnabled && previewSuppressions.isEmpty }
+    func suppressPreviews(_ reason: HoverPreviewTracker.Suppression, _ value: Bool) {
+        if value { previewSuppressions.insert(reason) } else { previewSuppressions.remove(reason) }
+        existingHoverPreviews?.setSuppressed(reason, value)
+    }
+    public var hoverPreviews: HoverPreviewTracker {
+        if let hoverPreviewStorage { return hoverPreviewStorage }
+        let tracker = HoverPreviewTracker(context: self); hoverPreviewStorage = tracker; return tracker
+    }
+    /// Set only after a real auto-archive sweep. Never persisted in the snapshot.
+    public var autoArchiveBannerRequested = false
     public let haptics = SidebarHaptics()
     @ObservationIgnored weak var manager: SpaceManagerView?
     var managerSpaceID: SpaceID?
@@ -62,13 +79,18 @@ public final class SidebarContext {
     /// so the Peek's URL or loading changes do not reach every row.
     public private(set) var peekSourceNodeID: ItemID?
 
+    /// Theme integration supplies iconOverride here until the model exposes that field.
+    /// Shared folder rendering resolves this before Folder.customIcon.
+    public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
+
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?
 
-    public init(model: BrowserModel, windowID: WindowID) {
+    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard) {
         self.model = model
         self.windowID = windowID
+        self.previewPreferences = previewPreferences
         selection.onChange = { [weak self] in
             guard let outline = self?.sidebar?.focusedOutline else { return }
             NSAccessibility.post(element: outline, notification: .selectedRowsChanged)
@@ -133,6 +155,10 @@ public final class SidebarContext {
 
     @discardableResult
     func send(_ intent: SidebarIntent) -> Bool {
+        switch intent {
+        case .hoverPreview: break
+        default: existingHoverPreviews?.dismiss()
+        }
         switch intent {
         case .select, .selectFavorite: selection.clear()
         default: break

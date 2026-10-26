@@ -82,6 +82,11 @@ public enum SidebarIntent: Equatable, Sendable {
     /// Model-only API; no Archive Folder menu item (lead decision Q1).
     case archiveFolder(folderID: ItemID)
 
+    // App-owned preview panels and auto-archive education.
+    case hoverPreview(SidebarHoverPreviewRequest?)
+    case openProfileSettings(ProfileID)
+    case dismissAutoArchiveBanner
+
     // Structure (drag and drop, "Move to")
     case move(nodeID: ItemID, to: NodeParent, index: Int?)
     case moveToSpace(nodeID: ItemID, space: SpaceID)

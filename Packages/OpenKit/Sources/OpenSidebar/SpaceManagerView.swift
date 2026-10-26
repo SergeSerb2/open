@@ -132,7 +132,7 @@ public final class SpaceManagerView: NSView {
     }
 
     func activate(_ space: Space) {
-        if context.managerSpaceID != space.id { context.selection.clear(); context.managerSpaceID = space.id }
+        if context.managerSpaceID != space.id { context.selection.clear(); context.existingHoverPreviews?.dismiss(); context.managerSpaceID = space.id }
     }
 
     func send(_ intent: SidebarIntent) -> Bool { onIntent?(intent) ?? ModelSidebarActions(context: context).perform(intent) }
@@ -178,6 +178,7 @@ public final class SpaceManagerView: NSView {
             if !began {
                 guard abs(x - start) >= 4 else { continue }
                 began = true
+                context.suppressPreviews(.drag, true)
                 reorder = Reorder(id: space.id, start: start, origin: column.frame.minX, slot: startSlot)
                 column.layer?.zPosition = 1
                 column.setLifted(true)
@@ -207,6 +208,7 @@ public final class SpaceManagerView: NSView {
     private func finishReorder(commit: Bool) {
         guard let state = reorder else { return }
         reorder = nil
+        context.suppressPreviews(.drag, false)
         if let column = columns[state.id] {
             column.layer?.zPosition = 0
             column.setLifted(false)

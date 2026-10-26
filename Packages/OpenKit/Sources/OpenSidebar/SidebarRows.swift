@@ -284,6 +284,7 @@ class SidebarCellView: NSView {
     /// Inline title editor (double-click or "Rename…").
     private var editor: NSTextField?
     func beginEditing(text: String, frame: NSRect, font: NSFont, commit: @escaping @MainActor (String) -> Void) {
+        page?.context.suppressPreviews(.rename, true)
         let field = RenameField(frame: frame)
         field.stringValue = text
         field.font = font
@@ -295,6 +296,7 @@ class SidebarCellView: NSView {
         field.onEnd = { [weak self, weak field] value in
             field?.removeFromSuperview()
             self?.editor = nil
+            self?.page?.context.suppressPreviews(.rename, false)
             self?.subviews.forEach { if $0 is TextLabel { $0.isHidden = false } }
             if let value { commit(value) }
         }
@@ -704,8 +706,10 @@ final class FolderCellView: SidebarCellView {
 /// (back panel plus a skewed front), tinted with the Space accent.
 @MainActor
 final class FolderIconView: NSView {
+    private(set) var lastDrawnGlyph: String?
     weak var folder: Folder? { didSet { needsDisplay = true } }
     weak var cell: SidebarCellView?
+    weak var context: SidebarContext?
 
     required override init(frame: NSRect) {
         super.init(frame: frame)
@@ -719,16 +723,32 @@ final class FolderIconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let folder else { return }
-        let (open, override, legacy) = tracked({ (folder.isExpanded, folder.iconOverride, folder.customIcon) }) { [weak self] in self?.needsDisplay = true }
-        let accent = cell?.page.map { $0.style.accentColor($0.contentAppearanceForSpace).nsColor } ?? Core.brandBlue.nsColor
-        if let icon = override ?? NodeIconRenderer.legacy(legacy) {
+        let context = context ?? cell?.context
+        let (open, icon, override, accent) = tracked({
+            let space = cell?.page?.space ?? context?.focusedSpace
+            let appearance = space.flatMap { context?.appearance(for: $0) } ?? contentAppearance
+            let accent = space.flatMap { context?.style(for: $0).accentColor(appearance).nsColor } ?? Core.brandBlue.resolved(appearance).nsColor
+            return (folder.isExpanded, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, folder.iconOverride, accent)
+        }) { [weak self] in self?.needsDisplay = true }
+        // Main's typed override takes precedence; keep the shared row/header
+        // renderer and its existing legacy/custom-icon appearance.
+        if let override {
+            switch override {
+            case .emoji(let value), .symbol(let value), .named(let value): lastDrawnGlyph = value
+            }
             let size = SpaceListMetrics.faviconInk
             let ink = backingAlignedRect(CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2,
                                                width: size, height: size), options: .alignAllEdgesNearest)
-            NodeIconRenderer.draw(icon, in: ink, tint: accent)
+            NodeIconRenderer.draw(override, in: ink, tint: accent)
             return
         }
-        CustomIcon.folder(open: open, in: bounds.insetBy(dx: 1.5, dy: 2.5), color: accent)
+        let ink = bounds.insetBy(dx: 1.5, dy: 2.5)
+        lastDrawnGlyph = icon ?? (open ? "folder.open" : "folder.closed")
+        if let icon {
+            if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) {
+                symbol.drawTinted(in: ink, color: accent)
+            } else { EmojiRenderer.draw(icon, in: bounds) }
+        } else { CustomIcon.folder(open: open, in: ink, color: accent) }
     }
 }
 

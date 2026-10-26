@@ -19,7 +19,10 @@ public struct ModelSidebarActions {
     public func perform(_ intent: SidebarIntent) -> Bool {
         switch intent {
         case .select(let id, let space):
-            model.selectNode(windowID: windowID, spaceID: space, nodeID: id)
+            if case .splitPane(let splitID) = model.parent(of: id) {
+                model.focusSplitPane(splitID: splitID, tabID: id)
+                model.selectNode(windowID: windowID, spaceID: space, nodeID: splitID)
+            } else { model.selectNode(windowID: windowID, spaceID: space, nodeID: id) }
         case .selectFavorite(let id):
             guard let space = context.focusedSpace else { return false }
             model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id)

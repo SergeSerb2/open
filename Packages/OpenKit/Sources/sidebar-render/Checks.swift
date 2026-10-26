@@ -279,6 +279,7 @@ enum Checks {
         VisualFinishChecks.run()
         CompletionChecks.run()
         SpaceManagerChecks.run()
+        PreviewChecks.run()
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil
