@@ -39,7 +39,10 @@ and the type list `ToastController`, `ToastWindow`, `ToastAnimator`,
   and the panel's top edge is at y 10, so the top inset is **8 pt**. The
   body's right edge is at x 2196 and the panel's right edge is at x 2206, so
   the trailing inset is **10 pt**. (§16 gives the AX text frame, which is
-  about 23 pt below the panel top; both agree.)
+  about 23 pt below the panel top; both agree.) The first-hide sidebar hint
+  is a different case: it sits at the window's top-right (x = W − 5 − w,
+  y = 4) on A0440 (`docs/re/sidebar-completion.md`, `docs/plans/sidebar-completion.md`
+  §3.12).
 - **PG-1.2 Size (measured).** Text-only toast ("110%"): x 2138–2197, y 18–59
   → **60 × 42 pt**. Toast with a button ("Copied Current URL" + Share): x
   2004–2195, y 18–63 → **192 × 46 pt**.
@@ -57,10 +60,14 @@ and the type list `ToastController`, `ToastWindow`, `ToastAnimator`,
   bottom is about 0.77 × the top in every channel. Rows 19 and 63 are darker
   by one step (raw (89,79,45) and (67,59,34)): a 1 px inner edge. The Space
   in that session had a single olive theme color; §16 reads `#6E5A2F`
-  color-managed. guess: the base is derived from the theme like the tooltip
-  fill (`SpaceThemeStyle.tooltipFill`).
+  color-managed. The hint toast measured on A0440 (default dark theme) has
+  the same shape of gradient, `#442B68` → `#332350` (bottom ≈ 0.75–0.81 ×
+  top), with a fitted 1 px rim of black 0.20 (sidebar-completion §3.12). guess:
+  the base is derived from the theme like the tooltip fill
+  (`SpaceThemeStyle.tooltipFill`).
 - **PG-1.6 Text (measured).** White (brightest pixel 255,255,255). 14 pt,
-  Medium or Semibold (§16, ink height).
+  Medium or Semibold (§16, ink height); the hint toast fits 14 pt Medium,
+  white 0.95 (sidebar-completion §3.12).
 - **PG-1.7 Lifetime.** The removal path `FUN_1018e22f8` (references "Toast
   will be removed.") holds one duration-sized double, **3.0**, and one 3600.0
   (`.re/page-platform/toast-funcs.txt`). Fast frames: zoom toast window 5404
