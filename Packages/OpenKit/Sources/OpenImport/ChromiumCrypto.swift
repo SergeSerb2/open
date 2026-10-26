@@ -4,6 +4,33 @@ import LocalAuthentication
 import CommonCrypto
 import Darwin
 
+/// Capability issued only at an explicit user-consent boundary. Never infer consent
+/// from a saved preference or from possession of a key. The reason records that boundary.
+public final class SecretsImportConsent: Sendable {
+    public let reason: String
+    private init(reason: String) { self.reason = reason }
+
+    /// Call only after the user explicitly approves secret import (CLI flag or app sheet).
+    public static func grantedByUser(reason: String) -> SecretsImportConsent {
+        precondition(!reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        return SecretsImportConsent(reason: reason)
+    }
+}
+
+/// Internal access proof. Synthetic access is bound to a fixture created by this
+/// module, with no caller-supplied path, blob, key, or Keychain operation.
+enum SecretsReadAccess {
+    case user(SecretsImportConsent)
+    case synthetic(SyntheticSecretsFixture)
+
+    func permits(_ directory: URL) -> Bool {
+        switch self {
+        case .user: return true
+        case .synthetic(let fixture): return directory == fixture.directory
+        }
+    }
+}
+
 public enum ChromiumCryptoError: Error {
     case keychainItemNotFound
     case keychainAccessDenied(OSStatus)
@@ -13,7 +40,7 @@ public enum ChromiumCryptoError: Error {
 }
 
 /// Call only after explicit consent. This never creates or updates an item.
-public func fetchKeychainPassword(service: String, account: String) throws -> [UInt8] {
+public func fetchKeychainPassword(service: String, account: String, consent: SecretsImportConsent) throws -> [UInt8] {
     let query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
@@ -37,7 +64,7 @@ public func fetchKeychainPassword(service: String, account: String) throws -> [U
 }
 
 /// Consent still gates this metadata probe. It must not cause a second prompt.
-public func keychainItemExists(service: String, account: String) -> Bool {
+public func keychainItemExists(service: String, account: String, consent: SecretsImportConsent) -> Bool {
     let context = LAContext()
     context.interactionNotAllowed = true
     let query: [String: Any] = [
@@ -48,22 +75,25 @@ public func keychainItemExists(service: String, account: String) -> Bool {
         kSecReturnData as String: false,
         kSecMatchLimit as String: kSecMatchLimitOne,
         kSecUseAuthenticationContext as String: context,
+        kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
     ]
     return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
 }
 
-public func probeChromiumKeychainPair() throws -> (service: String, account: String) {
+public func probeChromiumKeychainPair(consent: SecretsImportConsent) throws -> (service: String, account: String) {
     for pair in [("Arc Safe Storage", "Arc"), ("Chrome Safe Storage", "Chrome"), ("Chromium Safe Storage", "Chromium")] {
-        if keychainItemExists(service: pair.0, account: pair.1) { return pair }
+        if keychainItemExists(service: pair.0, account: pair.1, consent: consent) { return pair }
     }
     throw ChromiumCryptoError.keychainItemNotFound
 }
 
-/// The caller owns and clears the password immediately after derivation.
+/// Clears the local by-value password buffer. The caller must also clear its own buffer.
 public func deriveChromiumKey(passwordBytes: [UInt8]) -> [UInt8] {
+    var passwordBuffer = passwordBytes
+    defer { zeroSecretBytes(&passwordBuffer) }
     let salt = Array("saltysalt".utf8)
     var key = [UInt8](repeating: 0, count: 16)
-    let status = passwordBytes.withUnsafeBytes { password in
+    let status = passwordBuffer.withUnsafeMutableBytes { password in
         salt.withUnsafeBytes { saltBuffer in
             key.withUnsafeMutableBytes { output in
                 CCKeyDerivationPBKDF(CCPBKDFAlgorithm(kCCPBKDF2), password.baseAddress?.assumingMemoryBound(to: CChar.self), password.count,
@@ -85,9 +115,16 @@ public func zeroSecretBytes(_ bytes: inout [UInt8]) {
     bytes.removeAll(keepingCapacity: false)
 }
 
-public func decryptChromiumBlob(_ blob: [UInt8], key: [UInt8]) throws -> [UInt8] {
+public func decryptChromiumBlob(_ blob: [UInt8], key: [UInt8], consent: SecretsImportConsent) throws -> [UInt8] {
+    try decryptChromiumBlob(blob, key: key, access: .user(consent))
+}
+
+func decryptChromiumBlob(_ blob: [UInt8], key: [UInt8], access: SecretsReadAccess) throws -> [UInt8] {
     guard !blob.isEmpty else { throw ChromiumCryptoError.decryptFailed }
-    guard blob.starts(with: [0x76, 0x31, 0x30]) else { return blob }
+    let versioned = blob.count >= 3 && blob[0] == 0x76 &&
+        (0x30...0x39).contains(blob[1]) && (0x30...0x39).contains(blob[2])
+    if versioned && !blob.starts(with: [0x76, 0x31, 0x30]) { throw ChromiumCryptoError.badPrefix }
+    guard versioned else { return blob }
     guard key.count == 16, blob.count >= 19, (blob.count - 3) % 16 == 0 else { throw ChromiumCryptoError.decryptFailed }
     let iv = [UInt8](repeating: 0x20, count: 16)
     func decrypt(_ candidate: [UInt8]) -> (status: CCCryptorStatus, bytes: [UInt8]) {

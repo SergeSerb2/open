@@ -1,4 +1,10 @@
 import Foundation
+import OpenImport
+
+let sweptImportCopies = sweepStaleImportCopies()
+if sweptImportCopies > 0 {
+    FileHandle.standardError.write(Data("import cleanup: removed \(sweptImportCopies) stale copies\n".utf8))
+}
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
@@ -9,6 +15,8 @@ let rest = Array(arguments.dropFirst())
 
 do {
     switch command {
+    case "verify-secrets-fixture":
+        try runSyntheticSecretsFixture()
     case "import-arc-secrets":
         await Task.detached(priority: .utility) { runImportArcSecrets(args: rest) }.value
     case "import-arc-history":

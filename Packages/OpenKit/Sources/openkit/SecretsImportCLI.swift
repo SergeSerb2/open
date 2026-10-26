@@ -24,28 +24,30 @@ func runImportArcSecrets(args: [String]) {
         print("  addresses rows=\(counts.addressRows) cards rows=\(counts.cardRows) keywords rows=\(counts.keywordRows)")
         var matches = true
         if options.flags.contains("--allow-keychain-access") {
-            // No metadata probe or password fetch is reachable without this explicit flag.
-            let pair = try probeChromiumKeychainPair()
+            let consent = SecretsImportConsent.grantedByUser(reason: "CLI --allow-keychain-access")
+            print("macOS may ask for Keychain access. Choose Allow to continue.")
+            fflush(stdout)
+            let pair = try probeChromiumKeychainPair(consent: consent)
             print("  keychain: service=\(pair.service) found")
-            print("macOS will show a Keychain prompt. Choose Allow to continue.")
             let report: ArcSecretsReadReport
             do {
-                var password = try fetchKeychainPassword(service: pair.service, account: pair.account)
+                var password = try fetchKeychainPassword(service: pair.service, account: pair.account, consent: consent)
                 defer { zeroSecretBytes(&password) }
                 var key = deriveChromiumKey(passwordBytes: password)
                 zeroSecretBytes(&password)
                 defer { zeroSecretBytes(&key) }
-                report = try reader.validateWithKey(key)
+                report = try reader.validateWithKey(key, consent: consent)
             }
-            print("  logins decrypt ok=\(report.loginsDecryptOK) failed=\(report.loginsDecryptFailed)")
-            print("  cookies decrypt ok=\(report.cookiesDecryptOK) failed=\(report.cookiesDecryptFailed) expired=\(report.cookiesExpired)")
+            print("  logins decrypt ok=\(report.loginsDecryptOK) failed=\(report.loginsDecryptFailed) invalidTime=\(report.loginsInvalidTime)")
+            print("  cookies decrypt ok=\(report.cookiesDecryptOK) failed=\(report.cookiesDecryptFailed) expired=\(report.cookiesExpired) invalidTime=\(report.cookiesInvalidTime) legacyNoHashPrefix=\(report.legacyNoHashPrefix)")
             print("  cards decrypt ok=\(report.cardsDecryptOK) failed=\(report.cardsDecryptFailed)")
-            let logins = report.loginsDecryptOK + report.loginsDecryptFailed + report.loginsBlacklisted
-            let cookies = report.cookiesDecryptOK + report.cookiesDecryptFailed + report.cookiesExpired
+            print("  badPrefix=\(report.badPrefix) addressesInvalidTime=\(report.addressesInvalidTime) autofillInvalidTime=\(report.autofillInvalidTime)")
+            let logins = report.loginsDecryptOK + report.loginsDecryptFailed + report.loginsBlacklisted + report.loginsInvalidTime
+            let cookies = report.cookiesDecryptOK + report.cookiesDecryptFailed + report.cookiesExpired + report.cookiesInvalidTime
             let loginOK = logins == report.loginRows, cookieOK = cookies == report.cookieRows
             let cardOK = report.cardsDecryptOK + report.cardsDecryptFailed == report.cardRows
-            print("  check logins: ok+failed+blacklisted=\(logins) rows=\(report.loginRows) \(loginOK ? "OK" : "MISMATCH")")
-            print("  check cookies: ok+failed+expired=\(cookies) rows=\(report.cookieRows) \(cookieOK ? "OK" : "MISMATCH")")
+            print("  check logins: ok+failed+blacklisted+invalidTime=\(logins) rows=\(report.loginRows) \(loginOK ? "OK" : "MISMATCH")")
+            print("  check cookies: ok+failed+expired+invalidTime=\(cookies) rows=\(report.cookieRows) \(cookieOK ? "OK" : "MISMATCH")")
             print("  check cards: ok+failed=\(report.cardsDecryptOK + report.cardsDecryptFailed) rows=\(report.cardRows) \(cardOK ? "OK" : "MISMATCH")")
             matches = loginOK && cookieOK && cardOK
         } else {

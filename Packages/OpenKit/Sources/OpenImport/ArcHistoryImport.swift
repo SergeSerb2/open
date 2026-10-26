@@ -1,5 +1,6 @@
 import Foundation
 import SQLite3
+import Darwin
 
 public struct ArcHistoryVisitRecord: Sendable {
     public var chromiumVisitID: Int64
@@ -46,15 +47,21 @@ final class ArcSQLiteCopy {
             try fm.createDirectory(at: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             for attempt in 0..<2 {
                 do {
-                    for suffix in ["", "-wal", "-shm", "-journal"] {
-                        let source = URL(fileURLWithPath: fileURL.path + suffix)
-                        let destination = directory.appendingPathComponent(fileURL.lastPathComponent + suffix)
-                        if fm.fileExists(atPath: source.path) {
-                            try fm.copyItem(at: source, to: destination)
-                            try fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+                    let path = directory.appendingPathComponent(fileURL.lastPathComponent).path
+                    // SHM is process-local coordination state. Never copy it.
+                    try? fm.removeItem(atPath: path + "-shm")
+                    try copyPrivateSQLiteFile(from: fileURL.path, to: path)
+                    let header = try FileHandle(forReadingFrom: URL(fileURLWithPath: path))
+                    let bytes: Data
+                    do { bytes = try header.read(upToCount: 20) ?? Data(); try header.close() }
+                    catch { try? header.close(); throw error }
+                    guard bytes.count == 20 else { throw ArcHistoryImportError.copyFailed }
+                    let walMode = bytes[18] == 2 && bytes[19] == 2
+                    for suffix in walMode ? ["-wal"] : ["-journal"] {
+                        if fm.fileExists(atPath: fileURL.path + suffix) {
+                            try copyPrivateSQLiteFile(from: fileURL.path + suffix, to: path + suffix)
                         }
                     }
-                    let path = directory.appendingPathComponent(fileURL.lastPathComponent).path
                     guard sqlite3_open_v2(path, &connection, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
                         throw ArcHistoryImportError.openFailed
                     }
@@ -154,7 +161,6 @@ private final class ArcHistoryCursor {
     private var statement: OpaquePointer?
     private var urls: [Int64: (String, String)] = [:]
     private let limit: Int
-    private let latest = Date().addingTimeInterval(24 * 60 * 60).timeIntervalSince1970
     private let offsetMicros: Int64 = 11_644_473_600_000_000
     private let transitions = ["link", "typed", "bookmark", "subframe", "subframe", "generated", "toplevel", "form", "reload", "keyword", "keyword"]
     private(set) var report = ArcHistoryReadReport()
@@ -198,11 +204,65 @@ private final class ArcHistoryCursor {
             let micros = sqlite3_column_int64(row, 2)
             guard micros > offsetMicros else { report.skippedInvalidTime += 1; continue }
             let seconds = Double(micros - offsetMicros) / 1_000_000.0
-            guard seconds <= latest else { report.skippedInvalidTime += 1; continue }
+            guard let time = validatedImportDate(unixSeconds: seconds) else { report.skippedInvalidTime += 1; continue }
             batch.append(ArcHistoryVisitRecord(chromiumVisitID: sqlite3_column_int64(row, 0), urlString: url, title: title,
-                                               time: Date(timeIntervalSince1970: seconds), transition: core < transitions.count ? transitions[core] : "link", isTyped: core == 1))
+                                               time: time, transition: core < transitions.count ? transitions[core] : "link", isTyped: core == 1))
             report.keptVisits += 1
         }
         return batch
     }
+}
+
+/// Shared bound for history and secret timestamps. Zero is not a real date.
+func validatedImportDate(unixSeconds: Double) -> Date? {
+    guard unixSeconds.isFinite, unixSeconds > 0,
+          unixSeconds <= Date().timeIntervalSince1970 + 24 * 60 * 60 else { return nil }
+    return Date(timeIntervalSince1970: unixSeconds)
+}
+
+/// Creates the destination at its final private mode before the first byte is written.
+func copyPrivateSQLiteFile(from source: String, to destination: String) throws {
+    let input = Darwin.open(source, O_RDONLY | O_NOFOLLOW)
+    guard input >= 0 else { throw ArcHistoryImportError.copyFailed }
+    defer { Darwin.close(input) }
+    var info = stat()
+    guard fstat(input, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { throw ArcHistoryImportError.copyFailed }
+    let output = Darwin.open(destination, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW, 0o600)
+    guard output >= 0 else { throw ArcHistoryImportError.copyFailed }
+    defer { Darwin.close(output) }
+    var buffer = [UInt8](repeating: 0, count: 256 * 1024)
+    defer { zeroSecretBytes(&buffer) }
+    try buffer.withUnsafeMutableBytes { bytes in
+        while true {
+            let count = Darwin.read(input, bytes.baseAddress!, bytes.count)
+            if count < 0 && errno == EINTR { continue }
+            guard count >= 0 else { throw ArcHistoryImportError.copyFailed }
+            if count == 0 { return }
+            var offset = 0
+            while offset < count {
+                let written = Darwin.write(output, bytes.baseAddress!.advanced(by: offset), count - offset)
+                if written < 0 && errno == EINTR { continue }
+                guard written > 0 else { throw ArcHistoryImportError.copyFailed }
+                offset += written
+            }
+        }
+    }
+}
+
+/// CLI startup cleanup. Only old, user-owned directories with our prefix qualify.
+/// lstat excludes symlinks. Active copies younger than one hour are left alone.
+@discardableResult
+public func sweepStaleImportCopies() -> Int {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory
+    guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { return 0 }
+    let cutoff = Date().timeIntervalSince1970 - 3600
+    var removed = 0
+    for entry in entries where entry.lastPathComponent.hasPrefix("open-history-import-") {
+        var info = stat()
+        guard lstat(entry.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR,
+              info.st_uid == getuid(), Double(info.st_mtimespec.tv_sec) < cutoff else { continue }
+        do { try fm.removeItem(at: entry); removed += 1 } catch { continue }
+    }
+    return removed
 }

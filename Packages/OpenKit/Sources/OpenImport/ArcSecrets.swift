@@ -41,24 +41,53 @@ public struct ImportedCardRecord {
     public mutating func zeroSecrets() { zeroSecretBytes(&numberBytes) }
 }
 
-public struct ArcSecretsReadReport: Sendable {
-    public var loginRows: Int = 0
-    public var loginsDecryptOK: Int = 0
-    public var loginsDecryptFailed: Int = 0
-    public var loginsBlacklisted: Int = 0
-    public var cookieRows: Int = 0
-    public var cookiesDecryptOK: Int = 0
-    public var cookiesDecryptFailed: Int = 0
-    public var cookiesExpired: Int = 0
-    public var addressRows: Int = 0
-    public var cardRows: Int = 0
-    public var cardsDecryptOK: Int = 0
-    public var cardsDecryptFailed: Int = 0
-    public var keywordRows: Int = 0
-    public var autofillRows: Int = 0
+// Protect ordinary logs, debug logs, dump(), and reflection, including PII fields.
+// Explicit property access is reserved for the eventual engine writer.
+extension ImportedLoginRecord: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String { "ImportedLoginRecord(redacted)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+extension ImportedCookieRecord: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String { "ImportedCookieRecord(redacted)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+extension ImportedAddressRecord: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String { "ImportedAddressRecord(redacted)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
+}
+extension ImportedCardRecord: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String { "ImportedCardRecord(redacted)" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: [:]) }
 }
 
-public enum ArcSecretsImportError: Error { case missingFiles }
+public struct ArcSecretsReadReport: Sendable {
+    public var loginRows = 0
+    public var loginsDecryptOK = 0
+    public var loginsDecryptFailed = 0
+    public var loginsBlacklisted = 0
+    public var loginsInvalidTime = 0
+    public var cookieRows = 0
+    public var cookiesDecryptOK = 0
+    public var cookiesDecryptFailed = 0
+    public var cookiesExpired = 0
+    public var cookiesInvalidTime = 0
+    public var legacyNoHashPrefix = 0
+    public var addressRows = 0
+    public var addressesInvalidTime = 0
+    public var cardRows = 0
+    public var cardsDecryptOK = 0
+    public var cardsDecryptFailed = 0
+    public var keywordRows = 0
+    public var autofillRows = 0
+    public var autofillInvalidTime = 0
+    public var badPrefix = 0
+}
+
+public enum ArcSecretsImportError: Error { case missingFiles, invalidAccess }
 
 public struct ArcSecretsReader: Sendable {
     public let profileDirectory: URL
@@ -93,185 +122,183 @@ public struct ArcSecretsReader: Sendable {
         return report
     }
 
-    /// Retaining API for the future engine writer. The caller must clear every secret record.
-    /// The CLI uses validateWithKey instead, so file sets never overlap in memory.
-    public func readWithKey(_ key: [UInt8]) throws -> (report: ArcSecretsReadReport, logins: [ImportedLoginRecord], cookies: [ImportedCookieRecord], addresses: [ImportedAddressRecord], cards: [ImportedCardRecord]) {
-        try checkFiles()
-        var report = ArcSecretsReadReport()
-        var logins: [ImportedLoginRecord] = [], cookies: [ImportedCookieRecord] = [], cards: [ImportedCardRecord] = []
-        var complete = false
-        defer {
-            if !complete {
-                for i in logins.indices { logins[i].zeroSecrets() }
-                for i in cookies.indices { cookies[i].zeroSecrets() }
-                for i in cards.indices { cards[i].zeroSecrets() }
-            }
-        }
-        logins = try readLogins(key, report: &report)
-        cookies = try readCookies(key, report: &report)
-        let addresses = try readAddresses(report: &report)
-        cards = try readCards(key, report: &report)
-        complete = true
-        return (report, logins, cookies, addresses, cards)
+    /// Each callback borrows one record. Its byte buffer is cleared immediately
+    /// after the callback returns. Do not copy or retain records or their fields.
+    /// No retaining overload is needed before the engine writer exists.
+    public func readWithKey(_ key: [UInt8], consent: SecretsImportConsent,
+                            consumeLogin: (borrowing ImportedLoginRecord) -> Void = { _ in },
+                            consumeCookie: (borrowing ImportedCookieRecord) -> Void = { _ in },
+                            consumeAddress: (borrowing ImportedAddressRecord) -> Void = { _ in },
+                            consumeCard: (borrowing ImportedCardRecord) -> Void = { _ in }) throws -> ArcSecretsReadReport {
+        try readWithAccess(key, access: .user(consent), consumeLogin: consumeLogin, consumeCookie: consumeCookie,
+                           consumeAddress: consumeAddress, consumeCard: consumeCard)
     }
 
-    /// A dry run consumes, clears, and drops one file set before reading the next.
-    public func validateWithKey(_ key: [UInt8]) throws -> ArcSecretsReadReport {
+    public func validateWithKey(_ key: [UInt8], consent: SecretsImportConsent) throws -> ArcSecretsReadReport {
+        try readWithKey(key, consent: consent)
+    }
+
+    // Synthetic callers cannot supply a directory: only the module's fixture
+    // factory can issue synthetic access. All real-data entry points need consent.
+    func readWithAccess(_ key: [UInt8], access: SecretsReadAccess,
+                        consumeLogin: (borrowing ImportedLoginRecord) -> Void = { _ in },
+                        consumeCookie: (borrowing ImportedCookieRecord) -> Void = { _ in },
+                        consumeAddress: (borrowing ImportedAddressRecord) -> Void = { _ in },
+                        consumeCard: (borrowing ImportedCardRecord) -> Void = { _ in }) throws -> ArcSecretsReadReport {
+        guard access.permits(profileDirectory) else { throw ArcSecretsImportError.invalidAccess }
         try checkFiles()
         var report = ArcSecretsReadReport()
-        do {
-            var records = try readLogins(key, report: &report)
-            defer { for i in records.indices { records[i].zeroSecrets() } }
-            guard records.count == report.loginsDecryptOK else { throw ArcHistoryImportError.schemaMismatch }
-        }
-        do {
-            var records = try readCookies(key, report: &report)
-            defer { for i in records.indices { records[i].zeroSecrets() } }
-            guard records.count == report.cookiesDecryptOK else { throw ArcHistoryImportError.schemaMismatch }
-        }
-        _ = try readAddresses(report: &report)
-        do {
-            var records = try readCards(key, report: &report)
-            defer { for i in records.indices { records[i].zeroSecrets() } }
-            guard records.count == report.cardsDecryptOK else { throw ArcHistoryImportError.schemaMismatch }
-        }
+        try readLogins(key, access: access, report: &report, consume: consumeLogin)
+        try readCookies(key, access: access, report: &report, consume: consumeCookie)
+        try readAddresses(access: access, report: &report, consume: consumeAddress)
+        try readCards(key, access: access, report: &report, consume: consumeCard)
         return report
     }
 
-    private func readLogins(_ key: [UInt8], report: inout ArcSecretsReadReport) throws -> [ImportedLoginRecord] {
-        guard let db = try copy("Login Data") else { return [] }
-        var records: [ImportedLoginRecord] = []
-        var complete = false
-        defer { if !complete { for i in records.indices { records[i].zeroSecrets() } } }
+    private func readLogins(_ key: [UInt8], access: SecretsReadAccess, report: inout ArcSecretsReadReport,
+                            consume: (borrowing ImportedLoginRecord) -> Void) throws {
+        guard let db = try copy("Login Data") else { return }
         try db.rows("SELECT origin_url, action_url, username_value, password_value, signon_realm, date_created, blacklisted_by_user, times_used FROM logins") { row in
             report.loginRows += 1
             if sqlite3_column_int(row, 6) != 0 { report.loginsBlacklisted += 1; return }
+            guard let date = chromiumDate(sqlite3_column_int64(row, 5)) else { report.loginsInvalidTime += 1; return }
             var blob = db.bytes(row, 3)
             defer { zeroSecretBytes(&blob) }
             do {
-                var plain = try decryptChromiumBlob(blob, key: key)
-                var transferred = false
-                defer { if !transferred { zeroSecretBytes(&plain) } }
+                var plain = try decryptChromiumBlob(blob, key: key, access: access)
+                defer { zeroSecretBytes(&plain) }
                 guard validUTF8(plain) else { report.loginsDecryptFailed += 1; return }
                 let action = db.text(row, 1)
-                records.append(ImportedLoginRecord(originURLString: db.text(row, 0), actionURLString: action.isEmpty ? nil : action,
-                                                   username: db.text(row, 2), passwordBytes: plain, signonRealm: db.text(row, 4),
-                                                   dateCreated: chromiumDate(sqlite3_column_int64(row, 5)), isBlacklisted: false,
-                                                   timesUsed: Int(sqlite3_column_int64(row, 7))))
-                transferred = true
+                var record = ImportedLoginRecord(originURLString: db.text(row, 0), actionURLString: action.isEmpty ? nil : action,
+                    username: db.text(row, 2), passwordBytes: [], signonRealm: db.text(row, 4), dateCreated: date,
+                    isBlacklisted: false, timesUsed: Int(sqlite3_column_int64(row, 7)))
+                swap(&record.passwordBytes, &plain)
+                defer { record.zeroSecrets() }
+                consume(record)
                 report.loginsDecryptOK += 1
-            } catch { report.loginsDecryptFailed += 1 }
+            } catch {
+                if case ChromiumCryptoError.badPrefix = error { report.badPrefix += 1 }
+                report.loginsDecryptFailed += 1
+            }
         }
-        complete = true
-        return records
     }
 
-    private func readCookies(_ key: [UInt8], report: inout ArcSecretsReadReport) throws -> [ImportedCookieRecord] {
-        guard let db = try copy("Cookies") else { return [] }
+    private func readCookies(_ key: [UInt8], access: SecretsReadAccess, report: inout ArcSecretsReadReport,
+                             consume: (borrowing ImportedCookieRecord) -> Void) throws {
+        guard let db = try copy("Cookies") else { return }
         let version = try db.integer("SELECT value FROM meta WHERE key = 'version'")
-        var records: [ImportedCookieRecord] = []
-        var complete = false
-        defer { if !complete { for i in records.indices { records[i].zeroSecrets() } } }
         let now = Date()
         try db.rows("SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, has_expires FROM cookies") { row in
             report.cookieRows += 1
             let expiry = sqlite3_column_int64(row, 5)
-            let expires = expiry == 0 || sqlite3_column_int(row, 8) == 0 ? nil : chromiumDate(expiry)
-            if let expires, expires < now { report.cookiesExpired += 1; return }
+            var expires: Date?
+            if expiry != 0 && sqlite3_column_int(row, 8) != 0 {
+                guard let date = chromiumDate(expiry) else { report.cookiesInvalidTime += 1; return }
+                expires = date
+                if date < now { report.cookiesExpired += 1; return }
+            }
             var blob = db.bytes(row, 3)
             defer { zeroSecretBytes(&blob) }
             do {
-                var plain = blob.isEmpty ? db.bytes(row, 2) : try decryptChromiumBlob(blob, key: key)
-                var transferred = false
-                defer { if !transferred { zeroSecretBytes(&plain) } }
+                var plain = blob.isEmpty ? db.bytes(row, 2) : try decryptChromiumBlob(blob, key: key, access: access)
+                defer { zeroSecretBytes(&plain) }
                 let host = db.text(row, 0)
-                // Chromium schema 24+: encrypted values begin with SHA256(host_key).
-                // Evidence: net/extras/sqlite/sqlite_persistent_cookie_store.cc,
+                // Schema evidence: net/extras/sqlite/sqlite_persistent_cookie_store.cc,
                 // MakeCookiesFromSQLStatement and the version 24 schema comment.
-                if !blob.isEmpty && version >= 24 {
+                var legacy = false
+                if version >= 24 {
                     let digest = host.utf8CString.withUnsafeBytes { input -> [UInt8] in
                         var hash = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
                         _ = CC_SHA256(input.baseAddress, CC_LONG(input.count - 1), &hash)
                         return hash
                     }
-                    guard plain.starts(with: digest) else { report.cookiesDecryptFailed += 1; return }
-                    var value = Array(plain.dropFirst(digest.count))
-                    zeroSecretBytes(&plain)
-                    swap(&plain, &value)
+                    if plain.starts(with: digest) {
+                        var value = Array(plain.dropFirst(digest.count))
+                        zeroSecretBytes(&plain)
+                        swap(&plain, &value)
+                    } else { legacy = true }
                 }
                 guard validUTF8(plain) else { report.cookiesDecryptFailed += 1; return }
-                records.append(ImportedCookieRecord(hostKey: host, name: db.text(row, 1), valueBytes: plain, path: db.text(row, 4),
-                                                    expiresUTC: expires, isSecure: sqlite3_column_int(row, 6) != 0,
-                                                    isHTTPOnly: sqlite3_column_int(row, 7) != 0))
-                transferred = true
+                var record = ImportedCookieRecord(hostKey: host, name: db.text(row, 1), valueBytes: [], path: db.text(row, 4),
+                    expiresUTC: expires, isSecure: sqlite3_column_int(row, 6) != 0, isHTTPOnly: sqlite3_column_int(row, 7) != 0)
+                swap(&record.valueBytes, &plain)
+                defer { record.zeroSecrets() }
+                consume(record)
+                if legacy { report.legacyNoHashPrefix += 1 }
                 report.cookiesDecryptOK += 1
-            } catch { report.cookiesDecryptFailed += 1 }
+            } catch {
+                if case ChromiumCryptoError.badPrefix = error { report.badPrefix += 1 }
+                report.cookiesDecryptFailed += 1
+            }
         }
-        complete = true
-        return records
     }
 
-    private func readAddresses(report: inout ArcSecretsReadReport) throws -> [ImportedAddressRecord] {
-        guard let db = try copy("Web Data") else { return [] }
+    private func readAddresses(access: SecretsReadAccess, report: inout ArcSecretsReadReport,
+                               consume: (borrowing ImportedAddressRecord) -> Void) throws {
+        guard let db = try copy("Web Data") else { return }
         report.keywordRows = Int(try db.integer("SELECT COUNT(*) FROM keywords"))
-        var fields: [String: [Int: String]] = [:]
-        try db.rows("SELECT guid, type, value FROM address_type_tokens") { row in
-            fields[db.text(row, 0), default: [:]][Int(sqlite3_column_int(row, 1))] = db.text(row, 2)
-        }
-        var records: [ImportedAddressRecord] = []
         try db.rows("SELECT guid, use_count, use_date FROM addresses") { row in
-            let guid = db.text(row, 0)
-            // Chromium AddressAutofillTable uses Time::FromTimeT for use_date (Unix seconds).
-            records.append(ImportedAddressRecord(guid: guid, fields: fields[guid] ?? [:], useCount: Int(sqlite3_column_int64(row, 1)),
-                                                 useDate: Date(timeIntervalSince1970: Double(sqlite3_column_int64(row, 2)))))
             report.addressRows += 1
+            guard let date = validatedImportDate(unixSeconds: Double(sqlite3_column_int64(row, 2))) else {
+                report.addressesInvalidTime += 1; return
+            }
+            let guid = db.text(row, 0)
+            var fields: [Int: String] = [:]
+            let tokens = try db.prepare("SELECT type, value FROM address_type_tokens WHERE guid = ?")
+            defer { sqlite3_finalize(tokens) }
+            _ = guid.withCString { sqlite3_bind_text(tokens, 1, $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) }
+            while true {
+                let status = sqlite3_step(tokens)
+                if status == SQLITE_DONE { break }
+                guard status == SQLITE_ROW else { throw ArcHistoryImportError.schemaMismatch }
+                fields[Int(sqlite3_column_int(tokens, 0))] = db.text(tokens, 1)
+            }
+            let record = ImportedAddressRecord(guid: guid, fields: fields, useCount: Int(sqlite3_column_int64(row, 1)), useDate: date)
+            consume(record)
         }
-        // Parse form history without keeping or converting its value to String.
-        try db.rows("SELECT name, value, count, date_created, date_last_used FROM autofill") { row in
-            var value = db.bytes(row, 1)
-            defer { zeroSecretBytes(&value) }
-            _ = db.text(row, 0)
-            _ = sqlite3_column_int64(row, 2)
-            _ = sqlite3_column_int64(row, 3)
-            _ = sqlite3_column_int64(row, 4)
+        try db.rows("SELECT date_created, date_last_used FROM autofill") { row in
             report.autofillRows += 1
+            // Autofill form dates use Unix seconds, as do address use dates.
+            guard validatedImportDate(unixSeconds: Double(sqlite3_column_int64(row, 0))) != nil,
+                  validatedImportDate(unixSeconds: Double(sqlite3_column_int64(row, 1))) != nil else {
+                report.autofillInvalidTime += 1; return
+            }
         }
-        return records
     }
 
-    private func readCards(_ key: [UInt8], report: inout ArcSecretsReadReport) throws -> [ImportedCardRecord] {
-        guard let db = try copy("Web Data") else { return [] }
-        var records: [ImportedCardRecord] = []
-        var complete = false
-        defer { if !complete { for i in records.indices { records[i].zeroSecrets() } } }
+    private func readCards(_ key: [UInt8], access: SecretsReadAccess, report: inout ArcSecretsReadReport,
+                           consume: (borrowing ImportedCardRecord) -> Void) throws {
+        guard let db = try copy("Web Data") else { return }
         try db.rows("SELECT guid, name_on_card, expiration_month, expiration_year, card_number_encrypted FROM credit_cards") { row in
             report.cardRows += 1
             var blob = db.bytes(row, 4)
             defer { zeroSecretBytes(&blob) }
             do {
-                var plain = try decryptChromiumBlob(blob, key: key)
+                var plain = try decryptChromiumBlob(blob, key: key, access: access)
                 defer { zeroSecretBytes(&plain) }
                 var digits = plain.filter { $0 != 0x20 }
-                var transferred = false
-                defer { if !transferred { zeroSecretBytes(&digits) } }
+                defer { zeroSecretBytes(&digits) }
                 guard validUTF8(plain), (12...19).contains(digits.count), digits.allSatisfy({ (0x30...0x39).contains($0) }) else {
-                    report.cardsDecryptFailed += 1
-                    return
+                    report.cardsDecryptFailed += 1; return
                 }
-                records.append(ImportedCardRecord(guid: db.text(row, 0), nameOnCard: db.text(row, 1), expirationMonth: Int(sqlite3_column_int(row, 2)),
-                                                  expirationYear: Int(sqlite3_column_int(row, 3)), numberBytes: digits))
-                transferred = true
+                var record = ImportedCardRecord(guid: db.text(row, 0), nameOnCard: db.text(row, 1), expirationMonth: Int(sqlite3_column_int(row, 2)),
+                    expirationYear: Int(sqlite3_column_int(row, 3)), numberBytes: [])
+                swap(&record.numberBytes, &digits)
+                defer { record.zeroSecrets() }
+                consume(record)
                 report.cardsDecryptOK += 1
-            } catch { report.cardsDecryptFailed += 1 }
+            } catch {
+                if case ChromiumCryptoError.badPrefix = error { report.badPrefix += 1 }
+                report.cardsDecryptFailed += 1
+            }
         }
-        complete = true
-        return records
     }
 }
 
-private func chromiumDate(_ micros: Int64) -> Date {
-    let (unixMicros, overflow) = micros.subtractingReportingOverflow(11_644_473_600_000_000)
-    return overflow ? .distantPast : Date(timeIntervalSince1970: Double(unixMicros) / 1_000_000)
+private func chromiumDate(_ micros: Int64) -> Date? {
+    let offset: Int64 = 11_644_473_600_000_000
+    guard micros > offset else { return nil }
+    return validatedImportDate(unixSeconds: Double(micros - offset) / 1_000_000)
 }
 
 /// UTF-8 validation without making an immutable String copy of a secret.
