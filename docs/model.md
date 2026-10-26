@@ -42,15 +42,15 @@ Runtime-only state lives in `tab.live: TabLiveState`: `isLoading`, `progress`, `
 `SpaceTheme` holds mapped light/dark background and foreground colors, gradient stops, and `importedArcThemeJSON: Data?` for the raw Arc theme.
 
 `Profile`: `id`, `name`, `icon`, `favorites: [Tab]` (per profile, as in Arc), `settings`, `dataDirectoryName`.
-Settings: `autoArchiveAfter` (`never` / 1h / 6h / 12h / 24h / 7d / 30d, default 12h), `littleArcAutoArchiveAfter`, `searchEngineID`.
+Settings: `autoArchiveAfter` (`never` / 1h / 6h / 12h / 24h / 7d / 30d, default 12h), `littleOpenAutoArchiveAfter` (default 6h), `searchEngineID`.
 
-`BrowserWindowState`: `id`, `focusedSpaceID`, `selectedNodeBySpace`, `sidebarWidth` (default 228), `sidebarMode` (`.anchored` / `.hidden`), frame (`frameX/Y/Width/Height`), `style` (`.standard` / `.littleArc`), `stayOnTop`.
+`BrowserWindowState`: `id`, `focusedSpaceID`, `selectedNodeBySpace`, `sidebarWidth` (default 228), `sidebarMode` (`.anchored` / `.hidden`), frame (`frameX/Y/Width/Height`), `style` (`.standard` / `.littleOpen`), `stayOnTop`.
 
-Link routing: `RoutingRule { id, match, destination }`.
+Link routing: `RoutingRule { id, match, destination, sourceBundleID? }`. See [routing.md](routing.md) for the evaluator, settings data, CLI, and Phase A verification.
 Match: `.hostContains`, `.hostEquals`, `.urlPrefix`.
-Destination: `.space(SpaceID)`, `.littleArc`, `.mostRecentSpace`. A rule can target the most recent Space, as Arc rules do.
-`defaultDestination`: `.mostRecentSpace`, `.littleArc`, `.space(id)`.
-The snapshot DTOs stay at `schemaVersion` 1. `RoutingDestinationDTO.mostRecentSpace` was added after version 1 shipped. Files written before it hold only `space` / `littleArc` and still decode, because enum decoding needs only the cases in the payload. The Verification section shows this with a file from the M1 build.
+Destination: `.space(SpaceID)`, `.littleOpen`, `.mostRecentSpace`. A rule can target the most recent Space, as Arc rules do.
+`defaultDestination`: `.mostRecentSpace`, `.littleOpen`, `.space(id)`.
+The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` snapshot change is a **ONE-WAY migration**: new snapshots do not load in builds before this PR. This is acceptable because Open has no released users. Live and DTO routing destinations decode both `littleOpen` and legacy `littleArc`, and encode only `littleOpen`. The window mapper accepts the old style string. Live and DTO profile settings read the new auto-archive key, then the legacy key, then default to 6h. Explicit stored values are preserved. `RoutingRule.sourceBundleID` is optional; old snapshots decode it as nil. The mapper normalizes bundle ids to trimmed lowercase and writes no empty string. Fresh models default to `.littleOpen`; stored defaults are preserved.
 
 ### Commands
 

@@ -27,8 +27,35 @@ public struct ProfileDTO: Codable, Sendable {
 
 public struct ProfileSettingsDTO: Codable, Sendable {
     public var autoArchiveAfter: String
-    public var littleArcAutoArchiveAfter: String
+    public var littleOpenAutoArchiveAfter: String
     public var searchEngineID: String
+
+    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String) {
+        self.autoArchiveAfter = autoArchiveAfter
+        self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
+        self.searchEngineID = searchEngineID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID
+        case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        autoArchiveAfter = try container.decode(String.self, forKey: .autoArchiveAfter)
+        littleOpenAutoArchiveAfter = try container.decodeIfPresent(String.self, forKey: .littleOpenAutoArchiveAfter)
+            ?? container.decodeIfPresent(String.self, forKey: .littleArcAutoArchiveAfter)
+            ?? AutoArchiveInterval.sixHours.rawValue
+        searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(autoArchiveAfter, forKey: .autoArchiveAfter)
+        try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
+        try container.encode(searchEngineID, forKey: .searchEngineID)
+    }
 }
 
 public enum SpaceIconDTO: Codable, Sendable {
@@ -104,24 +131,116 @@ public enum RoutingMatchDTO: Codable, Sendable {
 }
 
 /// Schema version stays 1. The `mostRecentSpace` case was added after v1 shipped;
-/// files written before it contain only `space` / `littleArc` and still decode,
-/// because Swift's enum decoding only needs the cases present in the payload.
+/// Legacy destination spellings decode explicitly; new saves use `littleOpen`.
 public enum RoutingDestinationDTO: Codable, Sendable {
     case space(String)
-    case littleArc
+    case littleOpen
     case mostRecentSpace
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: RoutingDestinationDTOCodingKey.self)
+        guard let key = container.allKeys.first, container.allKeys.count == 1 else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "RoutingDestinationDTO: expected one key"))
+        }
+        switch key.stringValue {
+        case "space":
+            let nested = try container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: key)
+            self = .space(try nested.decode(String.self, forKey: .value))
+        case "littleOpen", "littleArc": // Legacy snapshots, decode only.
+            self = .littleOpen
+        case "mostRecentSpace":
+            self = .mostRecentSpace
+        default:
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "RoutingDestinationDTO: unknown key \(key.stringValue)"))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: RoutingDestinationDTOCodingKey.self)
+        switch self {
+        case .space(let id):
+            var nested = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .space)
+            try nested.encode(id, forKey: .value)
+        case .littleOpen:
+            _ = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .littleOpen)
+        case .mostRecentSpace:
+            _ = container.nestedContainer(keyedBy: RoutingDestinationDTOSpaceKey.self, forKey: .mostRecentSpace)
+        }
+    }
 }
 
-public enum DefaultDestinationDTO: Codable, Sendable {
-    case mostRecentSpace
-    case littleArc
-    case space(String)
+// String passthrough keeps unknown and legacy keys visible to the strict decoder.
+private struct RoutingDestinationDTOCodingKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+    static let space = Self(stringValue: "space")
+    static let littleOpen = Self(stringValue: "littleOpen")
+    static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
 }
+
+private enum RoutingDestinationDTOSpaceKey: String, CodingKey { case value = "_0" }
+
+public enum DefaultDestinationDTO: Codable, Sendable {
+    case space(String)
+    case littleOpen
+    case mostRecentSpace
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DefaultDestinationDTOCodingKey.self)
+        guard let key = container.allKeys.first, container.allKeys.count == 1 else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "DefaultDestinationDTO: expected one key"))
+        }
+        switch key.stringValue {
+        case "space":
+            let nested = try container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: key)
+            self = .space(try nested.decode(String.self, forKey: .value))
+        case "littleOpen", "littleArc": // Legacy snapshots, decode only.
+            self = .littleOpen
+        case "mostRecentSpace":
+            self = .mostRecentSpace
+        default:
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "DefaultDestinationDTO: unknown key \(key.stringValue)"))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: DefaultDestinationDTOCodingKey.self)
+        switch self {
+        case .space(let id):
+            var nested = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .space)
+            try nested.encode(id, forKey: .value)
+        case .littleOpen:
+            _ = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .littleOpen)
+        case .mostRecentSpace:
+            _ = container.nestedContainer(keyedBy: DefaultDestinationDTOSpaceKey.self, forKey: .mostRecentSpace)
+        }
+    }
+}
+
+// String passthrough keeps unknown and legacy keys visible to the strict decoder.
+private struct DefaultDestinationDTOCodingKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+    static let space = Self(stringValue: "space")
+    static let littleOpen = Self(stringValue: "littleOpen")
+    static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
+}
+
+private enum DefaultDestinationDTOSpaceKey: String, CodingKey { case value = "_0" }
 
 public struct RoutingRuleDTO: Codable, Sendable {
     public var id: String
     public var match: RoutingMatchDTO
     public var destination: RoutingDestinationDTO
+    public var sourceBundleID: String?
 }
 
 // MARK: - Mapping (call on MainActor for live model)
@@ -166,14 +285,14 @@ public enum SnapshotMapper {
     static func profileDTO(_ p: Profile) -> ProfileDTO {
         ProfileDTO(id: p.id.rawValue.uuidString, name: p.name, icon: iconDTO(p.icon),
                    favorites: p.favorites.map { .tab(tabDTO($0)) },
-                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleArcAutoArchiveAfter: p.settings.littleArcAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID),
+                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID),
                    dataDirectoryName: p.dataDirectoryName)
     }
 
     static func profile(from dto: ProfileDTO) -> Profile {
         Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
                 favorites: dto.favorites.compactMap { if case .tab(let t) = $0 { return tab(from: t) }; return nil },
-                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleArcAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleArcAutoArchiveAfter) ?? .twelveHours, searchEngineID: dto.settings.searchEngineID),
+                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID),
                 dataDirectoryName: dto.dataDirectoryName)
     }
 
@@ -237,7 +356,12 @@ public enum SnapshotMapper {
                                   selectedNodeBySpace: sel, sidebarWidth: dto.sidebarWidth,
                                   sidebarMode: SidebarMode(rawValue: dto.sidebarMode) ?? .anchored,
                                   frameX: dto.frameX, frameY: dto.frameY, frameWidth: dto.frameWidth, frameHeight: dto.frameHeight,
-                                  style: WindowStyle(rawValue: dto.style) ?? .standard, stayOnTop: dto.stayOnTop)
+                                  style: WindowStyle(rawValue: dto.style) ?? (dto.style == "littleArc" ? .littleOpen : .standard), stayOnTop: dto.stayOnTop)
+    }
+
+    private static func normalizedSourceBundleID(_ value: String?) -> String? {
+        let source = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return source?.isEmpty == false ? source : nil
     }
 
     static func ruleDTO(_ r: RoutingRule) -> RoutingRuleDTO {
@@ -250,10 +374,10 @@ public enum SnapshotMapper {
         let d: RoutingDestinationDTO
         switch r.destination {
         case .space(let id): d = .space(id.rawValue.uuidString)
-        case .littleArc: d = .littleArc
+        case .littleOpen: d = .littleOpen
         case .mostRecentSpace: d = .mostRecentSpace
         }
-        return RoutingRuleDTO(id: r.id.rawValue.uuidString, match: m, destination: d)
+        return RoutingRuleDTO(id: r.id.rawValue.uuidString, match: m, destination: d, sourceBundleID: normalizedSourceBundleID(r.sourceBundleID))
     }
 
     static func rule(from dto: RoutingRuleDTO) -> RoutingRule {
@@ -266,16 +390,16 @@ public enum SnapshotMapper {
         let d: RoutingDestination
         switch dto.destination {
         case .space(let s): d = .space(SpaceID(uuidString: s))
-        case .littleArc: d = .littleArc
+        case .littleOpen: d = .littleOpen
         case .mostRecentSpace: d = .mostRecentSpace
         }
-        return RoutingRule(id: RuleID(uuidString: dto.id), match: m, destination: d)
+        return RoutingRule(id: RuleID(uuidString: dto.id), match: m, destination: d, sourceBundleID: normalizedSourceBundleID(dto.sourceBundleID))
     }
 
     static func defaultDestinationDTO(_ d: DefaultDestination) -> DefaultDestinationDTO {
         switch d {
         case .mostRecentSpace: return .mostRecentSpace
-        case .littleArc: return .littleArc
+        case .littleOpen: return .littleOpen
         case .space(let id): return .space(id.rawValue.uuidString)
         }
     }
@@ -283,7 +407,7 @@ public enum SnapshotMapper {
     static func defaultDestination(from dto: DefaultDestinationDTO) -> DefaultDestination {
         switch dto {
         case .mostRecentSpace: return .mostRecentSpace
-        case .littleArc: return .littleArc
+        case .littleOpen: return .littleOpen
         case .space(let s): return .space(SpaceID(uuidString: s))
         }
     }
