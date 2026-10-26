@@ -854,7 +854,7 @@ public final class BrowserModel {
             if case .spacePinned? = NodeParent(archiveLocation: record.originalLocation) { return .spacePinned(spaceID) }
             return .spaceToday(spaceID)
         }
-        return targetSpace(forProfile: nil).map(NodeParent.spaceToday)
+        return targetSpace(forProfile: record.profileID).map(NodeParent.spaceToday)
     }
 
     @discardableResult
