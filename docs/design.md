@@ -609,7 +609,7 @@ exist and SKIPs only when those inputs are absent. `SIDEBAR_CAPTURE_ROOT` select
 a different private input root; `SIDEBAR_BASELINE_RENDERER` supplies a prebuilt
 main binary. The full local verification run passed every available row.
 
-## 17. Sidebar completion S2 (2026-10-26)
+## 18. Sidebar completion S2 (2026-10-26)
 
 Selection menus use the order in sidebar-completion §3.1. Tabs and splits offer
 bulk pin/unpin; mixed selections offer Delete for folders. No menu shows Archive
@@ -672,6 +672,6 @@ unhandled App confirmation. It uses no unit tests or substitute views/models.
 The drag fixture supplies event metadata; it does not create a global desktop
 drag session. `sidebar-render bench --rows 1000 --selection --bulk 50` enforces
 the selection and bulk budgets and verifies row consistency with no full reload.
-The 13-state runner from §16.1 remains the visual regression gate. CU5 additionally
+The 13-state runner from §17.1 remains the visual regression gate. CU5 additionally
 compares synthetic divider renders at rest and with Clear against main. Native
 App flow E1–E4 and alert/clipboard/form integration remain with the App lane.
