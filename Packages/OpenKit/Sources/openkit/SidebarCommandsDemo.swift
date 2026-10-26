@@ -87,6 +87,22 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
     check(await archive.count() == oldRows && model.node(id: nested.id) != nil && !undo.canUndo, "B4 undo restores nodes and discards archive rows")
 
     reset()
+    let beforePaneArchive = fingerprint(model)
+    check(model.archiveNodes(ids: [p1.id, p2.id, p1.id, ItemID()]) == 2
+          && Set(sink.lastBatch.map { $0.tab.id }) == Set([p1.id, p2.id]) && sink.lastFolders.isEmpty
+          && sink.lastBatch.allSatisfy { $0.spaceID == source.id && $0.profileID == profile.id && $0.originalLocation == NodeParent.splitPane(split.id).archiveLocation }
+          && model.node(id: p1.id) == nil && model.node(id: p2.id) == nil,
+          "B4 sink contains only detached panes and retains their original owner through split collapse")
+    composite.flushAll()
+    let archivedP1 = await archive.record(id: p1.id), archivedP2 = await archive.record(id: p2.id)
+    check(archivedP1?.spaceID == source.id && archivedP2?.profileID == profile.id,
+          "B4 both collapsed-pane records keep original ownership in SQLite")
+    undo.undo(); composite.flushAll()
+    let paneArchiveCount = await archive.count()
+    check(fingerprint(model) == beforePaneArchive && paneArchiveCount == oldRows && !undo.canUndo,
+          "B4 collapsed-pane bulk archive undoes as one exact tree restoration")
+
+    reset()
     let folder = model.createFolder(in: .spaceToday(source.id), at: 0, title: "Selection", withNodes: [b.id, c.id])!
     check(source.today.first?.id == folder.id && inserts() == [folder.id] && moves() == [b.id, c.id], "B5 folder inserts at the requested slot and moves its children")
     undo.undo(); check(model.node(id: folder.id) == nil && model.parent(of: b.id) == .folder(nested.id), "B5 one undo removes folder and restores children")
