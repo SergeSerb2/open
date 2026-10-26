@@ -1,0 +1,170 @@
+import AppKit
+import OpenDesign
+import OpenFeatures
+import OpenMedia
+import OpenWeb
+
+/// Complete native PiP windows; only the engine video host is fake (plan §8.3).
+@MainActor enum PiPChecks {
+    static func run(_ check: @MainActor (Bool, String) -> Void) async throws {
+        let rules = try PiPSiteRules.bundled()
+        var fixtures: [PictureInPictureWindowController] = []
+        var pasteboards: [ObjectIdentifier: NSPasteboard] = [:]
+        defer { fixtures.forEach { $0.dismiss(reason: .sourceGone) }; pasteboards.values.forEach { $0.releaseGlobally() } }
+        func make(_ size: CGSize = CGSize(width: 384, height: 216), url: URL? = URL(string: "https://www.example.test/video"), natural: CGSize? = nil) throws -> (PictureInPictureWindowController, FakePiPHost, MediaSettings) {
+            let host = FakePiPHost(); host.naturalSize = natural ?? size
+            let settings = MediaSettings(defaults: FeatureCLI.defaults()), board = NSPasteboard.withUniqueName()
+            guard let controller = PictureInPictureWindowController(host: host, sourceURL: url, settings: settings, rules: rules,
+                screenVisibleFrame: PiPScene.screen, pasteboard: board) else { throw CLIError(description: "PiP fixture creation failed") }
+            controller.presentWindows = false; controller.resize(to: size); fixtures.append(controller); pasteboards[ObjectIdentifier(controller)] = board
+            OffscreenRenderer.settle(controller.contentView, runLoop: 0.01)
+            return (controller, host, settings)
+        }
+        func pump(_ root: NSView, _ seconds: Double = 0.05) { OffscreenRenderer.settle(root, runLoop: seconds / 3) }
+        func click(_ view: NSView, window: NSWindow, label: String) {
+            let point = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            let down = PiPScene.event(.leftMouseDown, in: view, at: point)
+            check(window.contentView?.hitTest(down.locationInWindow) === view, "PP native hit test: \(label)")
+            window.sendEvent(down); window.sendEvent(PiPScene.event(.leftMouseUp, in: view, at: point))
+        }
+        func nativeAction(_ title: String, in menu: NSMenu) {
+            guard let index = menu.items.firstIndex(where: { $0.title == title }) else { check(false, "PP menu item exists: \(title)"); return }
+            menu.performActionForItem(at: index)
+        }
+        let (regular, host, settings) = try make()
+        let (compact, _, _) = try make(CGSize(width: 284, height: 160))
+        for (controller, p) in [(regular, CGFloat(10)), (compact, CGFloat(8))] {
+            let overlay = controller.overlay, width = controller.contentView.bounds.width
+            check(overlay.control(named: "close")?.view.frame == CGRect(x: p, y: p, width: 28, height: 28) &&
+                  overlay.control(named: "minimize")?.view.frame == CGRect(x: p + 32, y: p, width: 28, height: 28) &&
+                  overlay.control(named: "settings")?.view.frame == CGRect(x: width - p - 28, y: p, width: 28, height: 28), "PP1 corner frames at width \(width)")
+        }
+        check(compact.overlay.isCompact && compact.overlay.control(named: "play")?.pointSize == 22 && regular.overlay.control(named: "play")?.pointSize == 26,
+              "PP1 compact/regular play glyphs use 22/26 pt")
+        let (twitch, _, _) = try make(url: URL(string: "https://www.twitch.tv/channel"))
+        check(twitch.overlay.control(named: "play")?.view.isHidden == true && twitch.overlay.control(named: "back")?.view.isHidden == true &&
+              twitch.overlay.control(named: "forward")?.view.isHidden == true && twitch.overlay.scrubber.isHidden, "PP2 Twitch hides play, skip and scrubber")
+        let (meet, _, _) = try make(url: URL(string: "https://meet.google.com/example"))
+        check(meet.overlay.control(named: "close")?.view.isHidden == true, "PP2 Meet hides Close")
+        let (meeting, meetingHost, _) = try make(CGSize(width: 284, height: 160))
+        meetingHost.mediaState.actions = [.toggleMicrophone, .toggleCamera, .hangUp]; meetingHost.mediaState.microphoneMuted = false; meetingHost.mediaState.cameraOn = true
+        meeting.refresh(); pump(meeting.contentView)
+        let utility = ["tab", "mute"].compactMap { meeting.overlay.control(named: $0)?.view.frame }
+        check(["microphone", "camera", "hangup"].compactMap { meeting.overlay.control(named: $0)?.view.frame }.allSatisfy { frame in !utility.contains { $0.intersects(frame) } },
+              "PP compact meeting row does not overlap Back to Tab or Mute")
+        guard let panel = regular.window else { throw CLIError(description: "PiP fixture has no window") }
+        panel.orderBack(nil); pump(regular.contentView, 0.4)
+        check(panel.isVisible && panel.frame.maxX < 0, "PP panel stays offscreen")
+        regular.overlay.setControlsVisible(false, animated: false)
+        regular.overlay.mouseMoved(with: PiPScene.event(.mouseMoved, in: regular.overlay, at: CGPoint(x: 90, y: 70)))
+        pump(regular.contentView, 0.02)
+        let controlsLayer = regular.overlay.control(named: "play")?.view.superview?.layer
+        check(regular.overlay.controlsVisible && controlsLayer?.opacity == 1 && controlsLayer?.animation(forKey: "pip.controls") != nil,
+              "PP3 pointer movement starts the real control fade")
+        try await Task.sleep(for: .seconds(2.05)); pump(regular.contentView)
+        check(!regular.overlay.controlsVisible && controlsLayer?.opacity == 0, "PP3 actual 2 s work hides controls")
+        try await Task.sleep(for: .seconds(0.35)); pump(regular.contentView)
+        check(controlsLayer?.animationKeys()?.isEmpty != false, "PP3 fade leaves no animation keys")
+        check(!regular.overlay.scrubber.hasDisplayLink && !regular.overlay.hasScheduledHide,
+              "PP idle hidden controls have no display link or pending hide work")
+        func cpuSeconds() -> Double {
+            var time = timespec(); clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time)
+            return Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000
+        }
+        let cpuStart = cpuSeconds(), wallStart = CACurrentMediaTime()
+        try await Task.sleep(for: .seconds(2))
+        let idleCPU = 100 * (cpuSeconds() - cpuStart) / (CACurrentMediaTime() - wallStart)
+        check(idleCPU <= 0.5, String(format: "PP idle offscreen window CPU %.3f%% (budget 0.5%%)", idleCPU))
+        let heldMenu = regular.overlay.makeMenu()
+        heldMenu.delegate?.menuWillOpen?(heldMenu)
+        regular.overlay.mouseExited(with: PiPScene.event(.mouseMoved, in: regular.overlay, at: .zero)); try await Task.sleep(for: .seconds(2.2)); pump(regular.contentView)
+        check(regular.overlay.menuIsTracking && regular.overlay.controlsVisible && !regular.overlay.hasScheduledHide && controlsLayer?.opacity == 1,
+              "PP3 real menu delegate tracking keeps controls visible")
+        heldMenu.delegate?.menuDidClose?(heldMenu); try await Task.sleep(for: .seconds(0.35)); pump(regular.contentView)
+        check(!regular.overlay.menuIsTracking && !regular.overlay.controlsVisible, "PP3 menu close after pointer exit fades controls")
+        regular.overlay.setControlsVisible(true, animated: false); host.mediaState.duration = 120; host.currentTime = 12; host.positionUpdatedAt = Date(); regular.refresh(); pump(regular.contentView)
+        let scrubber = regular.overlay.scrubber, start = CGPoint(x: scrubber.bounds.width / 4, y: scrubber.bounds.midY)
+        panel.sendEvent(PiPScene.event(.leftMouseDown, in: scrubber, at: start))
+        check(host.calls.contains(where: { if case .scrub(let value) = $0 { return abs(value - 30) < 0.001 }; return false }) && host.mediaState.playback == .paused,
+              "PP4 mouse-down jumps to clicked time and pauses")
+        let drag = CGPoint(x: start.x + scrubber.bounds.width * 0.3, y: start.y - 80)
+        panel.sendEvent(PiPScene.event(.leftMouseDragged, in: scrubber, at: drag)); pump(regular.contentView)
+        check(scrubber.precisionText == "Seeking at 3× precision" && host.calls.contains(where: { if case .scrub(let value) = $0 { return abs(value - 42) < 0.001 }; return false }),
+              "PP4 click-to-jump then 80 pt up drag scrubs at 3× precision")
+        panel.sendEvent(PiPScene.event(.leftMouseUp, in: scrubber, at: drag)); pump(regular.contentView)
+        check(host.calls.contains(where: { if case .seek(let value) = $0 { return abs(value - 42) < 0.001 }; return false }) && host.mediaState.playback == .playing,
+              "PP4 release seeks and resumes playback")
+        let flatStart = CGPoint(x: scrubber.bounds.width / 2, y: scrubber.bounds.midY)
+        panel.sendEvent(PiPScene.event(.leftMouseDown, in: scrubber, at: flatStart))
+        panel.sendEvent(PiPScene.event(.leftMouseDragged, in: scrubber, at: CGPoint(x: flatStart.x + 20, y: flatStart.y)))
+        check(scrubber.precisionText == "Drag upwards to seek precisely", "PP4 flat drag shows the neutral hint")
+        panel.sendEvent(PiPScene.event(.leftMouseUp, in: scrubber, at: flatStart))
+        host.mediaState.playback = .paused; regular.refresh()
+        check(!scrubber.hasDisplayLink, "PP paused playback stops the display link")
+        panel.orderOut(nil); pump(regular.contentView)
+        check(!scrubber.hasDisplayLink && !regular.overlay.hasScheduledHide, "PP ordered-out window has no display link or hide work")
+        let menu = regular.overlay.makeMenu()
+        print("NATIVE MENU regular\n" + PiPScene.menuDump(menu) + "END NATIVE MENU")
+        check(menu.items.map(\.title) == ["Keep Window on Top", "", "Picture-in-picture on www.example.test:", "Open automatically", "Turn off", "", "Copy URL", "Mute"] &&
+              menu.items[1].isSeparatorItem && menu.items[5].isSeparatorItem && !menu.items[2].isEnabled && menu.items.allSatisfy { $0.keyEquivalent.isEmpty }, "PP5 exact native menu order, header, separators and no keys")
+        nativeAction("Turn off", in: menu)
+        let disabled = regular.overlay.makeMenu()
+        print("NATIVE MENU disabled\n" + PiPScene.menuDump(disabled) + "END NATIVE MENU")
+        check(disabled.items[4].state == .on && disabled.items[3].state == .off && settings.isAutoDisabled(host: "sub.example.test"), "PP5 native Turn off updates the shared site state")
+        nativeAction("Open automatically", in: disabled)
+        check(regular.overlay.makeMenu().items[3].state == .on && !settings.isAutoDisabled(host: "example.test"), "PP5 Open automatically restores the radio state")
+        nativeAction("Keep Window on Top", in: regular.overlay.makeMenu())
+        check(panel.level == .normal && !settings.keepOnTop, "PP5 Keep Window on Top updates the actual panel level")
+        nativeAction("Mute", in: regular.overlay.makeMenu())
+        check(host.calls.contains(.muted(true)) && regular.overlay.makeMenu().items.last?.title == "Unmute", "PP5 native Mute reaches the host")
+        nativeAction("Copy URL", in: regular.overlay.makeMenu())
+        check(pasteboards[ObjectIdentifier(regular)]?.string(forType: .string) == "https://www.example.test/video", "PP5 Copy URL uses the panel's real named pasteboard")
+        let (hostless, _, _) = try make(url: URL(string: "about:blank"))
+        print("NATIVE MENU hostless\n" + PiPScene.menuDump(hostless.overlay.makeMenu()) + "END NATIVE MENU")
+        check(hostless.overlay.makeMenu().items.map(\.title) == ["Keep Window on Top", "", "Mute"], "PP5 host-less menu has items 1, 2 and 4 only")
+        let privateDefaults = FeatureCLI.defaults(), privateSettings = MediaSettings(defaults: privateDefaults), privateSession = MediaSettings.PrivateHosts()
+        let before = privateDefaults.dictionaryRepresentation() as NSDictionary
+        let privateHost = FakePiPHost()
+        guard let privateController = PictureInPictureWindowController(host: privateHost, sourceURL: URL(string: "https://www.private.example.test/"), settings: privateSettings, rules: rules, privateSession: privateSession, screenVisibleFrame: PiPScene.screen) else { throw CLIError(description: "private PiP fixture creation failed") }
+        privateController.presentWindows = false; fixtures.append(privateController)
+        nativeAction("Turn off", in: privateController.overlay.makeMenu())
+        print("NATIVE MENU private-disabled\n" + PiPScene.menuDump(privateController.overlay.makeMenu()) + "END NATIVE MENU")
+        check(privateSession.disabled == ["private.example.test"] && before.isEqual(to: privateDefaults.dictionaryRepresentation()), "PP5 private Turn off writes only its in-memory session")
+        regular.resize(to: CGSize(width: 10, height: 10)); pump(regular.contentView)
+        check(panel.frame.width >= 284 && panel.frame.height >= 160 && abs(panel.frame.width / panel.frame.height - 16 / 9) < 0.01, "PP6 minimum landscape size preserves aspect")
+        let (portrait, _, _) = try make(CGSize(width: 900, height: 900), natural: CGSize(width: 900, height: 1600))
+        let portraitFrame = portrait.window!.frame
+        check(abs(portraitFrame.width - 253.125) <= 1 && abs(portraitFrame.height - 450) <= 1 && portrait.overlay.isCompact &&
+              portraitFrame.width <= PiPScene.screen.width / 2 && portraitFrame.height <= PiPScene.screen.height / 2 &&
+              portrait.window!.contentAspectRatio == CGSize(width: 900, height: 1600),
+              "PP6 9:16 on 900 pt screen caps at about 253x450 with compact controls: frame=\(portraitFrame), overlay=\(portrait.overlay.bounds), max=\(portrait.window!.contentMaxSize)")
+        portrait.resize(to: CGSize(width: 1, height: 1)); pump(portrait.contentView)
+        check(portrait.window!.frame.width >= 160 && portrait.window!.frame.height <= 450 && abs(portrait.window!.frame.width / portrait.window!.frame.height - 9 / 16) < 0.01,
+              "PP6 portrait relaxed short-side minimum stays within maximum")
+        let (square, _, _) = try make(CGSize(width: 900, height: 900), natural: CGSize(width: 100, height: 100))
+        check(square.window!.frame.size == CGSize(width: 450, height: 450), "PP6 1:1 on 900 pt screen caps at 450x450")
+        square.resize(to: CGSize(width: 1, height: 1)); pump(square.contentView)
+        check(square.window!.frame.size == CGSize(width: 284, height: 284) && square.overlay.isCompact, "PP6 square preserves aspect at its minimum")
+        for (id, reason, pause) in [("tab", PiPSession.Reason.backToTab, false), ("minimize", .minimized, false), ("close", .userClosed, true)] {
+            let (controller, actionHost, _) = try make(); controller.window?.orderBack(nil); pump(controller.contentView)
+            var returned = false, closed: PiPSession.Reason?
+            controller.onBackToTab = { returned = true }; controller.onClosed = { closed = $0 }
+            if let button = controller.overlay.control(named: id)?.view, let window = controller.window { click(button, window: window, label: id) }
+            check(actionHost.calls.last == .close(pause) && closed == reason && controller.window?.isVisible == false && (!pause || actionHost.mediaState.playback == .paused) && (id != "tab" || returned),
+                  "PP7 \(id) sends exactly the intended close/pause effect")
+        }
+        let documentHost = FakePiPHost()
+        guard let document = DocumentPiPWindowController(host: documentHost, sourceURL: URL(string: "https://meeting.example.test/"), requestedSize: CGSize(width: 400, height: 300), settings: MediaSettings(defaults: FeatureCLI.defaults()), screenVisibleFrame: PiPScene.screen) else { throw CLIError(description: "Document PiP fixture creation failed") }
+        defer { document.close() }
+        document.presentWindows = false; pump(document.contentView)
+        check(document.topBar.frame.height == 28 && document.window?.frame.height == 328 && document.topBar.layer?.backgroundColor == PiPRole.documentTopBar.cgColor(.dark), "PP8 Document PiP has its 28 pt #212123 top bar")
+        check(document.topBar.layer?.sublayers?.contains(where: { $0.backgroundColor == PiPRole.documentHairline.cgColor(.dark) && abs($0.frame.height - 1 / (document.window?.backingScaleFactor ?? 1)) < 0.01 }) == true,
+              "PP8 Document PiP uses the white 20% one-pixel hairline")
+        print("NATIVE MENU document\n" + PiPScene.menuDump(document.makeMenu()) + "END NATIVE MENU")
+        check(document.makeMenu().items.map(\.title) == ["Keep Window on Top", "", "Picture-in-picture on meeting.example.test:"], "PP8 native Document PiP menu has Keep on Top and host header")
+        document.window?.orderBack(nil); pump(document.contentView)
+        if let close = descendants(document.topBar).first(where: { $0.accessibilityIdentifier() == "pip.document.close" }), let window = document.window { click(close, window: window, label: "Document close") }
+        check(documentHost.calls == [.close(false)], "PP8 Document close returns the child without pausing")
+    }
+    private static func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+}

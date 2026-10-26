@@ -466,6 +466,9 @@ def main():
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
+    elif name == "features-render":
+        text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
+        matches(r"^features-render check: [1-9]\d* passed, 0 failed$", text)
     elif name == "boosts":
         boosts(root)
     elif name == "import-arc":

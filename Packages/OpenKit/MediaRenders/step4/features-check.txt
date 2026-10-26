@@ -1,0 +1,232 @@
+PASS C1 single pane has no bar
+PASS C1 measured panel insets
+PASS S1 horizontal 2 panes wide equal tiles
+PASS S1 horizontal 2 panes wide custom tiles
+PASS S1 horizontal 2 panes narrow equal tiles
+PASS S1 horizontal 2 panes narrow custom tiles
+PASS S1 horizontal 3 panes wide equal tiles
+PASS S1 horizontal 3 panes wide custom tiles
+PASS S1 horizontal 3 panes narrow equal tiles
+PASS S1 horizontal 3 panes narrow custom tiles
+PASS S1 horizontal 4 panes wide equal tiles
+PASS S1 horizontal 4 panes wide custom tiles
+PASS S1 horizontal 4 panes narrow equal tiles
+PASS S1 horizontal 4 panes narrow custom tiles
+PASS S1 vertical 2 panes wide equal tiles
+PASS S1 vertical 2 panes wide custom tiles
+PASS S1 vertical 2 panes narrow equal tiles
+PASS S1 vertical 2 panes narrow custom tiles
+PASS S1 vertical 3 panes wide equal tiles
+PASS S1 vertical 3 panes wide custom tiles
+PASS S1 vertical 3 panes narrow equal tiles
+PASS S1 vertical 3 panes narrow custom tiles
+PASS S1 vertical 4 panes wide equal tiles
+PASS S1 vertical 4 panes wide custom tiles
+PASS S1 vertical 4 panes narrow equal tiles
+PASS S1 vertical 4 panes narrow custom tiles
+PASS S2 C1 creates two real slots
+PASS S2 focus and colored host assignment in pane order
+PASS R8 divider updates frames without laying out the web subtree per event
+PASS S3 divider persists normalized widths
+PASS S3 snapshot reload preserves fractions
+PASS S3 one divider release undoes in one step
+PASS S3 divider redo restores drag result
+PASS S4 synthesized pane click focuses ring and sidebar URL source
+PASS S4 previous wraps to last
+PASS S4 next wraps to first
+PASS R9 web responder permits split-focus shortcut
+PASS R9 sidebar responder keeps split-focus shortcut
+PASS R9 text field retains split-focus shortcut
+PASS S5 maximize hides other slots
+PASS S5 Escape restores layout
+PASS S6 four-pane cap and disabled command
+PASS S6 fifth model add refuses without event
+PASS S6 orientation keeps order focus fractions
+PASS S3 invalid fractions change nothing
+PASS R1 four-to-three close drops removed share and preserves proportions
+PASS R1 four-pane undo restores exact fractions
+PASS S5 separated pane becomes selected sibling
+PASS R1 [0.5,0.3,0.2] close middle normalizes survivors in 5:2 proportions
+PASS R1 surviving pane layout clamps to 200 pt
+PASS R1 narrow surviving panes scale equally below 200 pt
+PASS R1 undo restores original three panes and exact previous fractions
+PASS R1 redo preserves normalized survivors
+PASS S5 close collapses to single no bar
+PASS S2 C2 edge drop handler accepts tab
+PASS S2 left drop preserves pane order
+PASS S2 C3 combine drop handler inserts at pane index
+PASS S2 combined pane order
+PASS S6 addPane undo restores ownership fractions focus
+PASS S6 addPane redo
+PASS P1 lead Q1 same registrable domain stays in tab
+PASS P1 pinned different registrable domain opens Peek
+PASS P2 F0090 panel geometry
+PASS P2 three control offsets
+PASS P2 Escape closes host without source navigation
+PASS P4 Undo reopens dismissed URL
+PASS P1 Today Shift opens Peek
+PASS P1 Opt+Cmd excluded before Peek (Step 8 intake deferred)
+PASS P1 fragment never Peeks
+PASS P1 toggles off navigate
+PASS R2 favorite opens visible Peek without Space selection
+PASS R4 favorite Split takes beep refusal path and keeps Peek with no new tab
+PASS R2 favorite Peek stays visible in another Space of its profile
+PASS R2 Escape dismisses favorite Peek and closes its host
+PASS R3 dismissed host releases even while all old callbacks remain retained
+PASS R3 retained stale callbacks cannot navigate or reopen a dismissed Peek
+PASS R7 unknown suffix internal uses last-two-label site heuristic
+PASS R7 unknown suffix internal distinguishes another site
+PASS R7 unknown suffix lan uses last-two-label site heuristic
+PASS R7 unknown suffix lan distinguishes another site
+PASS R7 unknown suffix 未知后缀 uses last-two-label site heuristic
+PASS R7 unknown suffix 未知后缀 distinguishes another site
+PASS R7 127.0.0.1 compares exactly
+PASS R7 [::1] compares exactly
+PASS R7 localhost compares exactly
+PASS P3 expand creates selected Today-top tab
+PASS P3 same host click count history and no reload
+PASS P4 cross-site nesting pushes
+PASS P4 Escape restores parent host
+PASS P4 depth cap five navigates top
+PASS P5 another selection hides Peek
+PASS P5 source selection restores same Peek
+PASS P3 lead Q4 Split promotes same host beside source
+PASS R6 unordered Little Open stays hidden after key deminiaturize and occlusion callbacks
+PASS R6 resurfacing an offscreen Little Open derives actual window visibility
+PASS L1 720x540 session without main window
+PASS L1 canonical URL resurface dedupe
+PASS L1 blank key session reused
+PASS L2 move creates main window and selected Today-top tab
+PASS L2 move dedupes existing Space tab
+PASS L3 stale profile threshold expires one session
+PASS L3 actual SQLite archive stores Little Open prefix
+PASS L3 fresh session stays
+PASS V1 all split panes Peek host and Little Open visible
+PASS V1 minimized main drops split and Peek
+PASS V1 PiP remains protected
+PASS R5 rapid duplicate notifications preserve queued newly visible wakes
+PASS R5 unchanged visible tabs are not stamped active again
+PASS R5 newly hidden panes reach SleepController once and keep hidden time
+PASS C1 sleeping placeholder creates no host
+PASS C1 wake swaps placeholder to host
+PASS C1 ninth hidden host evicted by LRU
+PASS C1 generation guard drops stale callback after eviction
+PASS C1 real CARenderer scene snapshot
+PASS VF1 Peek dim sits above the pages and below the sidebar; panel and buttons above all
+PASS VF2 sidebar gets the shown Peek and the source badge
+PASS VF2 URL field shows the Peek host (F0090)
+PASS VF3 a sidebar row takes clicks while a Peek is open
+PASS VF3 the dimmed page area takes clicks on the backdrop
+PASS VF3 the Peek panel keeps its clicks
+PASS VF4 the Peek page's favicon reaches the badge
+PASS VF5 another selection hides the Peek and keeps the badge (F0101)
+PASS VF5 the source row brings its Peek back
+PASS VF6 a click on the dim dismisses the Peek and its badge
+PASS VF7 unfocused pane shows back, forward, copy, host, close; focused shows all (F0081) (focused 1: ["Close This Pane,Copy Current URL,Go back,Go forward", "Close This Pane,Copy Current URL,Go back,Go forward,Reload,Site Control Center,Split View Menu"])
+PASS VF8 each pane bar takes its page's reported color
+PASS VF9 split-row Add Tab… adds a pane through the window controller
+PASS VF9 Add Tab… refuses a node that is not a split
+PASS VF10 four-pane bars at 1280 pt: no overlapping or clipped controls (0 overlaps, 0 outside)
+PASS VF10 narrow unfocused bars truncate their hosts; the focused bar drops the host group (3 truncated)
+PASS RR1 Separate from Split View: a selected two-pane split shows two panes
+PASS RR1 Separate from Split View on a two-pane split selects the surviving tab and the container shows it
+PASS RR1 Separate from Split View undo restores the split and its selection
+PASS RR1 Separate from Split View redo selects the surviving tab again
+PASS RR1 Archive Item: a selected two-pane split shows two panes
+PASS RR1 Archive Item on a two-pane split selects the surviving tab and the container shows it
+PASS RR1 Archive Item undo restores the split and its selection
+PASS RR1 Archive Item redo selects the surviving tab again
+PASS RR2 a Peek from a split pane belongs to the split row
+PASS RR1 Separate All Tabs selects the focused pane; the Peek of pane P waits
+PASS RR2 after Separate All Tabs, selecting the source tab shows its Peek again
+PASS RR2 Escape reaches the Peek
+PASS RR2 Escape dismisses the Peek and its badge
+PASS RR2 a Peek from a tab shows on that tab
+PASS RR2 after a split is made from the source tab, selecting the split shows the Peek again
+PASS RR3 a page color reported after the URL callback updates the pane bar
+PASS RR3 a page that changes its color later updates the pane bar
+PASS PP1 corner frames at width 384.0
+PASS PP1 corner frames at width 284.0
+PASS PP1 compact/regular play glyphs use 22/26 pt
+PASS PP2 Twitch hides play, skip and scrubber
+PASS PP2 Meet hides Close
+PASS PP compact meeting row does not overlap Back to Tab or Mute
+PASS PP panel stays offscreen
+PASS PP3 pointer movement starts the real control fade
+PASS PP3 actual 2 s work hides controls
+PASS PP3 fade leaves no animation keys
+PASS PP idle hidden controls have no display link or pending hide work
+PASS PP idle offscreen window CPU 0.025% (budget 0.5%)
+PASS PP3 real menu delegate tracking keeps controls visible
+PASS PP3 menu close after pointer exit fades controls
+PASS PP4 mouse-down jumps to clicked time and pauses
+PASS PP4 click-to-jump then 80 pt up drag scrubs at 3× precision
+PASS PP4 release seeks and resumes playback
+PASS PP4 flat drag shows the neutral hint
+PASS PP paused playback stops the display link
+PASS PP ordered-out window has no display link or hide work
+NATIVE MENU regular
+[0] title="Keep Window on Top" separator=false state=on enabled=true key="" modifiers=0x100000
+[1] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[2] title="Picture-in-picture on www.example.test:" separator=false state=off enabled=false key="" modifiers=0x100000
+[3] title="Open automatically" separator=false state=on enabled=true key="" modifiers=0x100000
+[4] title="Turn off" separator=false state=off enabled=true key="" modifiers=0x100000
+[5] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[6] title="Copy URL" separator=false state=off enabled=true key="" modifiers=0x100000
+[7] title="Mute" separator=false state=off enabled=true key="" modifiers=0x100000
+END NATIVE MENU
+PASS PP5 exact native menu order, header, separators and no keys
+NATIVE MENU disabled
+[0] title="Keep Window on Top" separator=false state=on enabled=true key="" modifiers=0x100000
+[1] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[2] title="Picture-in-picture on www.example.test:" separator=false state=off enabled=false key="" modifiers=0x100000
+[3] title="Open automatically" separator=false state=off enabled=true key="" modifiers=0x100000
+[4] title="Turn off" separator=false state=on enabled=true key="" modifiers=0x100000
+[5] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[6] title="Copy URL" separator=false state=off enabled=true key="" modifiers=0x100000
+[7] title="Mute" separator=false state=off enabled=true key="" modifiers=0x100000
+END NATIVE MENU
+PASS PP5 native Turn off updates the shared site state
+PASS PP5 Open automatically restores the radio state
+PASS PP5 Keep Window on Top updates the actual panel level
+PASS PP5 native Mute reaches the host
+PASS PP5 Copy URL uses the panel's real named pasteboard
+NATIVE MENU hostless
+[0] title="Keep Window on Top" separator=false state=on enabled=true key="" modifiers=0x100000
+[1] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[2] title="Mute" separator=false state=off enabled=true key="" modifiers=0x100000
+END NATIVE MENU
+PASS PP5 host-less menu has items 1, 2 and 4 only
+NATIVE MENU private-disabled
+[0] title="Keep Window on Top" separator=false state=on enabled=true key="" modifiers=0x100000
+[1] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[2] title="Picture-in-picture on www.private.example.test:" separator=false state=off enabled=false key="" modifiers=0x100000
+[3] title="Open automatically" separator=false state=off enabled=true key="" modifiers=0x100000
+[4] title="Turn off" separator=false state=on enabled=true key="" modifiers=0x100000
+[5] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[6] title="Copy URL" separator=false state=off enabled=true key="" modifiers=0x100000
+[7] title="Mute" separator=false state=off enabled=true key="" modifiers=0x100000
+END NATIVE MENU
+PASS PP5 private Turn off writes only its in-memory session
+PASS PP6 minimum landscape size preserves aspect
+PASS PP6 9:16 on 900 pt screen caps at about 253x450 with compact controls: frame=(-18736.0, -19984.0, 254.0, 450.0), overlay=(0.0, 0.0, 254.0, 450.0), max=(253.125, 450.0)
+PASS PP6 portrait relaxed short-side minimum stays within maximum
+PASS PP6 1:1 on 900 pt screen caps at 450x450
+PASS PP6 square preserves aspect at its minimum
+PASS PP native hit test: tab
+PASS PP7 tab sends exactly the intended close/pause effect
+PASS PP native hit test: minimize
+PASS PP7 minimize sends exactly the intended close/pause effect
+PASS PP native hit test: close
+PASS PP7 close sends exactly the intended close/pause effect
+PASS PP8 Document PiP has its 28 pt #212123 top bar
+PASS PP8 Document PiP uses the white 20% one-pixel hairline
+NATIVE MENU document
+[0] title="Keep Window on Top" separator=false state=on enabled=true key="" modifiers=0x100000
+[1] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[2] title="Picture-in-picture on meeting.example.test:" separator=false state=off enabled=false key="" modifiers=0x100000
+END NATIVE MENU
+PASS PP8 native Document PiP menu has Keep on Top and host header
+PASS PP native hit test: Document close
+PASS PP8 Document close returns the child without pausing
+features-render check: 191 passed, 0 failed

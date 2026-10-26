@@ -135,7 +135,13 @@ public enum PiPMetrics {
     public static let screenInset: CGFloat = 16
     public static let initialScreenFraction: CGFloat = 0.2
     public static let maximumScreenFraction: CGFloat = 0.5
+    public static let minimizedScale: CGFloat = 0.9
     public static let hoverScale: CGFloat = 1.08
+    public static let expandedControlGap: CGFloat = 6
+    public static let meetingButton: CGFloat = 32
+    public static let meetingGap: CGFloat = 12
+    public static let precisionLabelGap: CGFloat = 8
+    public static let precisionLabelHeight: CGFloat = 14
     public static let hideDelay: TimeInterval = 2
     public static let scrubberHeight: CGFloat = 4
     public static let scrubberHoverHeight: CGFloat = 6
@@ -143,6 +149,7 @@ public enum PiPMetrics {
     public static let precisionStep: CGFloat = 40
     public static let maximumPrecision: Double = 8
     public static let documentTopBar: CGFloat = 28
+    public static let documentTitleGap: CGFloat = 6 // guess pending S11
     public static let documentFavicon: CGFloat = 16
     public static let documentLeading: CGFloat = 10
     public static let documentButton: CGFloat = 20

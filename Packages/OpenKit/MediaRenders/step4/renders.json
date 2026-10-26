@@ -1,0 +1,258 @@
+[
+  {
+    "file": "compact-meeting@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "f78cd187e662df3aeea431684b3886c351fce7226038c92a69426694a499f1e6"
+  },
+  {
+    "file": "compact-meeting@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "5ca89e8c6c2bb533fdb2120889e62fb99d2d6f30968dedfc64f557a9d32c4971"
+  },
+  {
+    "file": "compact-paused@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "b0e0f28673838c0d160257f93a61529b654424479e44f8bd792b43d6a12fd40c"
+  },
+  {
+    "file": "compact-paused@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "025a2c5be059be22e86b22e21c16081fbbb208ab3a20d50c90084e9be94ebaef"
+  },
+  {
+    "file": "compact-playing@1x.png",
+    "pixels": [
+      284,
+      160
+    ],
+    "sha256": "078e4143adc7cc5e0e642dfebf8001857d4dfe855030b520c3159a8504d12d03"
+  },
+  {
+    "file": "compact-playing@2x.png",
+    "pixels": [
+      568,
+      320
+    ],
+    "sha256": "a278a1025be4ee29b17d956261cc492eb3099082ab70ebc921d6549f6025cc16"
+  },
+  {
+    "file": "controls-hidden@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "01fc792c488c098fef24fff9346ed33c167a674a0bcca0eef2db23156cf96f98"
+  },
+  {
+    "file": "controls-hidden@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "abae1561e68c0008079fcf26c9775e1dcc01b542c03aa90603dc2345c987a9e4"
+  },
+  {
+    "file": "document@1x.png",
+    "pixels": [
+      384,
+      300
+    ],
+    "sha256": "73412598da4dd1c69a706caeb657b08b8493918ac871e6ead69be0ccdc04ac48"
+  },
+  {
+    "file": "document@2x.png",
+    "pixels": [
+      768,
+      600
+    ],
+    "sha256": "aa9d9de5293d47cbec3e062897a3faaf42ecba44fb536554fd679ef2640e1fff"
+  },
+  {
+    "file": "meet@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "afd03f45cf3040460c94a30f511d82db4971901fb11795b18fab084aeb7ea127"
+  },
+  {
+    "file": "meet@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "cc59a578856946932f0de644366763f4e2757c1660f7f830d9c854217ec311ef"
+  },
+  {
+    "file": "portrait@1x.png",
+    "pixels": [
+      252,
+      448
+    ],
+    "sha256": "60468af1a1211e0df66ae5f9cfcf3d539fcb68ae32314b1d562bd274709c5a9f"
+  },
+  {
+    "file": "portrait@2x.png",
+    "pixels": [
+      504,
+      896
+    ],
+    "sha256": "411e10ebf0f9a5d03a53e54ca26bd78d18ec82d9c425ce651b7d5396e7078317"
+  },
+  {
+    "file": "precision-1@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "aabc37c218146374fe0d6b27afde777f6d4b2d7dff4eeef424314dc169fe21f4"
+  },
+  {
+    "file": "precision-1@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "dd94b9895d31580dcf6cfdc3ec5922fc3fef3321911a7f931410bcda73830cd1"
+  },
+  {
+    "file": "precision-3@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "3b234ba5f6c5d79a28eabb8848f898abdec6fb54b415f7a73f16e2143b25e6df"
+  },
+  {
+    "file": "precision-3@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "cbef2069e599653564703b803da6ca26856088a1d87a7db6bbbec107f4618faa"
+  },
+  {
+    "file": "precision-8@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "ea5aa189790eb1adea77cf77b4cd0d5aa8e579c348b5a4ca295f491b1be09eaa"
+  },
+  {
+    "file": "precision-8@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "05b391f001921a14c1a23abe36581f220d96e6bfc87d34f7a290175996d8e2dc"
+  },
+  {
+    "file": "regular-ended@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "1a5d59726b86571c0efe4ae8a90a811370dca68dbda8b17248b483d5ee48a3c5"
+  },
+  {
+    "file": "regular-ended@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "d00b234420a17b6fa4872ba6b447415c5663ce92084a3626af36878fe0f22c14"
+  },
+  {
+    "file": "regular-paused@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "5451827ec984aeced832c3ae2298ad4d49ff5ea7f47322c2278d3e2a772b73d1"
+  },
+  {
+    "file": "regular-paused@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "f6e89cacfadccb32d9d042f5320db2e0484166d1e67492c30467d1fd81dbd292"
+  },
+  {
+    "file": "regular-playing@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "71573189993f1f7a3c5af96944f33ca95ea893b659e7f23920cafba8b577492b"
+  },
+  {
+    "file": "regular-playing@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "866dd05654dda9c44b7e069bfd6dc4a09ddb1a70fd97c06b1fb48d5e19625f1e"
+  },
+  {
+    "file": "square@1x.png",
+    "pixels": [
+      450,
+      450
+    ],
+    "sha256": "f29d40958b7df2d7f7d81cc676d4fb5134529d53037fdde7c79f9b29712972ed"
+  },
+  {
+    "file": "square@2x.png",
+    "pixels": [
+      900,
+      900
+    ],
+    "sha256": "7afae02d473cbbb6c0f795190979b52b78bdd4bebf286bf1757135fb686da92d"
+  },
+  {
+    "file": "twitch@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "d6bfb11e2c8122a71f0b8b8130f5e9647acd9ad2646089f2acba89a96546da83"
+  },
+  {
+    "file": "twitch@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "ffbc986dc0f38e942da336c07e78f839d21da8e63274cddc745f951d871bf2e0"
+  },
+  {
+    "file": "youtube@1x.png",
+    "pixels": [
+      384,
+      216
+    ],
+    "sha256": "6c6220652f4f074ec46ac4a61560d4c5594c77be10510daaa75c76036027e5ca"
+  },
+  {
+    "file": "youtube@2x.png",
+    "pixels": [
+      768,
+      432
+    ],
+    "sha256": "b775a3c32e976fdb3e02b4162b57cf2067e0f84d1a6af874a924fb5399b8882e"
+  }
+]

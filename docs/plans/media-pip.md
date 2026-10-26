@@ -465,6 +465,14 @@ in the Step 6 PR.
 | Resize | `contentAspectRatio` = natural size; minimum 284×160 (Chromium `kMinWindowSize`, same file `:109`), maximum 50 % of `visibleFrame` in each dimension (guess). A natural-size change (`didChangePiPVideoResolution`) keeps the width and updates the height. |
 | Size class | Compact below 300 pt wide, regular otherwise (guess; Arc has `PIPSizeClassKey`). |
 
+Lead size decision (2026-10-26 02:47 America/Vancouver): keep the 50%
+maximum, preserve the video's aspect ratio, and never reject a valid video
+because its size limits conflict. When 284×160 cannot fit, relax the minimum:
+the shorter side is at least 160 pt and the longer side follows the aspect
+ratio. A 9:16 video on a screen with 900 pt visible height can use about
+253×450 pt (height capped at 50%). Widths below PiPMetrics.compactWidth use
+compact controls. PP6 covers 9:16 and 1:1 video on a 900 pt screen.
+
 #### 4.4.3 Overlay controls (`PiPOverlayView`)
 
 All glyphs white; plates black. Values are guesses except where marked
@@ -486,6 +494,10 @@ All glyphs white; plates black. Values are guesses except where marked
 | Skip Ad | Pill "Skip Ad", style as Back to Tab, bottom-right above Mute | When the session offers `skipAd` (Arc `skipAdButtonVisible`) |
 | Meeting row | 32×32 circles centered at the bottom, 12 pt apart: microphone, camera, hang up (plate `#F53714`, SF `phone.down.fill`) | When the PiP reports meeting controls; then the play group hides (Arc `showMeetingControls`) |
 
+Open layout detail (provisional until S1/S11): keep the meeting row centered
+near the bottom. If it would overlap the always-visible Back to Tab or Mute
+controls at a narrow width, stack it one row above them with the 6 pt gap.
+
 Visibility: fade in 0.15 s when the pointer enters or moves; fade out
 0.3 s when the pointer leaves, or 2.0 s after the last move while inside
 (Arc `movedRecently`, `sustainedMovement`; times guessed). While a menu
@@ -493,6 +505,11 @@ is open or the scrubber drags, controls stay. Keyboard focus or
 VoiceOver focus inside the window keeps them visible.
 
 #### 4.4.4 Scrubber (`PiPScrubberView`)
+
+Open design (lead decision, 2026-10-26 02:38 America/Vancouver): mouse-down
+jumps to the clicked time. Dragging then starts from that time and applies
+the precision math below. Confirm this behavior against S1/S2. PP4 also
+checks click-to-jump followed by a precision drag.
 
 - Bar: `[p, h − p − 4, w − 2p, 4]`, radius 2, track white 0.3, fill
   white 0.9; 6 pt tall while hovered. Hit area 20 pt tall (Arc
@@ -1193,6 +1210,13 @@ features-render pip --out FILE.png [--size 384x216] [--scale 1|2] [--state playi
 
 The fake video view paints a gradient with the size written in it.
 
+Lead decision (2026-10-26 03:11 America/Vancouver): `--menu` prints a text
+dump of the real system NSMenu and writes it beside the PNG as `.menu.txt`.
+Include titles in order, separators, checkmarks, enabled state, key
+equivalents/modifiers and submenu nesting. The PNG renders only the PiP
+window; do not draw a menu preview. PP checks invoke the real items/actions,
+and the PR attaches the native menu text for design review.
+
 | ID | Check |
 |---|---|
 | PP1 | Compact (284 wide) and regular (384 wide): corner buttons 28×28 at padding 8 and 10. |
@@ -1200,7 +1224,7 @@ The fake video view paints a gradient with the size written in it.
 | PP3 | Controls fade in on a synthesized pointer move and out 2.0 s later; stay while the menu is open. |
 | PP4 | Scrubber: a drag up 80 pt shows "Seeking at 3× precision"; a flat drag shows "Drag upwards to seek precisely"; the fake host gets `scrubTo` during and `seekTo` at the end, and play resumes. |
 | PP5 | Menu items and order equal §4.4.5 for a URL with a host, and items 1, 2, 4 only for one without; incognito "Turn off" does not write `UserDefaults`. |
-| PP6 | Resize keeps the aspect ratio; the window never gets smaller than 284×160. |
+| PP6 | Resize keeps the aspect ratio and the 50% screen maximum. Use the 284×160 minimum when it fits; otherwise use the relaxed short-side minimum from the lead decision in §4.4.2. Check 9:16 and 1:1 on a 900 pt screen, and compact controls below 300 pt. |
 | PP7 | Back to Tab, Close, Minimize send the right host calls (`closePausingVideo:` YES only for Close). |
 | PP8 | Document PiP: top bar 28 pt, colors from §4.6, menu has "Keep Window on Top" and the header. |
 
