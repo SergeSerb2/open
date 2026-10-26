@@ -1,0 +1,230 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "features": {
+    "adblock_control": {
+      "ok": true,
+      "without_extensions": {
+        "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "loaded",
+        "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "loaded"
+      }
+    },
+    "audio_state": {
+      "audible_after_pause": false,
+      "audible_while_playing": true,
+      "muted": {
+        "audible": true,
+        "muted": true
+      },
+      "ok": true
+    },
+    "codecs": {
+      "ok": true,
+      "support": {
+        "aac": true,
+        "av1": true,
+        "h264": true,
+        "hevc": true,
+        "mp3": "probably",
+        "opus": true,
+        "vp9": true
+      }
+    },
+    "context_menu": {
+      "items": [
+        "Copy",
+        "Copy Link to Highlight",
+        "Print\u2026",
+        "Open in Reading Mode",
+        "",
+        "Inspect"
+      ],
+      "ok": true
+    },
+    "crash_recovery": {
+      "after_reload": {
+        "crash": 0,
+        "url": "https://example.com/"
+      },
+      "crash_state": 1,
+      "model_crashed": true,
+      "ok": true
+    },
+    "downloads": {
+      "events": [
+        [
+          1,
+          0
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          1,
+          10
+        ],
+        [
+          2,
+          10
+        ]
+      ],
+      "ok": true
+    },
+    "find_in_page": {
+      "active": 0,
+      "final": true,
+      "matches": 134,
+      "ok": true
+    },
+    "fullscreen": {
+      "document_fullscreen": true,
+      "events": [
+        true
+      ],
+      "ok": true
+    },
+    "js_dialogs": {
+      "events": [
+        0,
+        1,
+        2
+      ],
+      "ok": true,
+      "result": [
+        true,
+        "hello"
+      ]
+    },
+    "pdf_viewer": {
+      "document": {
+        "body": "\n    \n  \n\n",
+        "embed": false,
+        "iframe": false,
+        "type": "application/pdf"
+      },
+      "ok": true,
+      "screenshot": "chrome-pdf-viewer.png",
+      "viewer_targets": [
+        "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
+      ]
+    },
+    "permissions": {
+      "events": [
+        {
+          "kinds": 8,
+          "origin": "https://en.wikipedia.org/"
+        }
+      ],
+      "geolocation": "not tested",
+      "notification": "granted",
+      "ok": true
+    },
+    "picture_in_picture": {
+      "ok": true,
+      "result": true,
+      "visible_windows": [
+        [
+          "BrowserWindow",
+          "{{80, 60}, {1360, 860}}"
+        ],
+        [
+          "NativeWidgetMacFramelessNSWindow",
+          "{{2027, 32}, {501, 282}}"
+        ]
+      ]
+    },
+    "popups_new_tabs": {
+      "new_sidebar_tabs": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "page_kinds": [
+        "popup",
+        "tab",
+        "tab",
+        "tab"
+      ]
+    },
+    "print_to_pdf": {
+      "bytes": 441131,
+      "ok": true
+    },
+    "profiles": {
+      "ok": true,
+      "work_engine_dir_exists": true,
+      "work_profile_sees": {
+        "cookie": "",
+        "storage": null
+      },
+      "work_space": "B5EBA95D-6EE4-4E6A-9716-2557B55CA590",
+      "work_tab_context": "Profile-18DE421B"
+    },
+    "request_filter": {
+      "ok": true,
+      "stats": {
+        "blocked": 1,
+        "recent": [
+          "https://example.org/?x=1"
+        ]
+      },
+      "with_filter": "blocked",
+      "without_filter": "loaded"
+    },
+    "user_scripts": {
+      "matched": {
+        "boost": "number",
+        "early": true,
+        "outline": "rgb(255, 0, 0)"
+      },
+      "ok": true,
+      "unmatched_site": "undefined"
+    },
+    "widevine": {
+      "cdm_versions": [
+        "4.10.3112.0"
+      ],
+      "eme": "available: com.widevine.alpha",
+      "ok": true,
+      "playback": {
+        "currentTime": 4.954377,
+        "frames": 123,
+        "keySystem": "com.widevine.alpha",
+        "track": "vp09.00.41.08"
+      }
+    },
+    "zoom": {
+      "innerWidth_100": 1122,
+      "innerWidth_zoomed": 935,
+      "level": 1,
+      "ok": true
+    }
+  },
+  "interrupted_attempts": [],
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "pid": 43334,
+    "root": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/e2e-features-chrome/user-data",
+    "userData": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/e2e-features-chrome/user-data/Profiles"
+  },
+  "started": "2026-10-26 13:28:07",
+  "style": "chrome"
+}
