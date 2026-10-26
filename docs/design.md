@@ -571,6 +571,11 @@ with the later App lane.
 
 ### 17.1 Durable 13-state comparison
 
+Lead waiver (review finding S1-1; originally §16.1 before the chrome merge):
+S1 retains byte-identical tables as a stricter interim rule. S4 (#99) replaces
+it with the lead gate in §15.1; SHA identity then becomes informational.
+S1 ships only as the base of S2 (#91), whose press/drag handling completes S1-5.
+
 The old git-ignored runners were lost. The committed replacement is
 `tools/verification/sidebar-compare-states.sh`, with a Python helper next to it.
 It reconstructs §15.1 with one state per render process, using absolute private
