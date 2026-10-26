@@ -5,23 +5,44 @@ import OpenSiteControl
 @MainActor
 final class Backdrop: NSView {
     var hits = 0
+    private let page = CALayer()
+    private let urlField = CALayer()
+    private let openLabel = NSTextField(labelWithString: "Open")
+    private let hostLabel = NSTextField(labelWithString: "news.example.com")
+    private let pageLabel = NSTextField(labelWithString: "A page for the Site Control Center harness")
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+    override var wantsUpdateLayer: Bool { true }
+    override init(frame: NSRect) {
+        super.init(frame: frame); wantsLayer = true
+        for child in [page, urlField] {
+            child.actions = ["position": NSNull(), "bounds": NSNull(), "backgroundColor": NSNull()]
+            layer?.addSublayer(child)
+        }
+        urlField.cornerRadius = 10; urlField.cornerCurve = .continuous
+        for label in [openLabel, hostLabel, pageLabel] {
+            label.font = NSFont.systemFont(ofSize: 14); label.textColor = Core.foregroundPrimary.nsColor
+            label.lineBreakMode = .byTruncatingTail; label.maximumNumberOfLines = 1
+            addSubview(label)
+        }
+    }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func mouseDown(with event: NSEvent) { hits += 1 }
-    override func draw(_ dirtyRect: NSRect) {
+    override func layout() {
+        super.layout()
+        page.frame = CGRect(x: 228, y: 10, width: bounds.width-238, height: bounds.height-20)
+        urlField.frame = CGRect(x: 8, y: 46, width: 212, height: 36)
+        for (label, x, baseline, width) in [(openLabel, CGFloat(22), CGFloat(36), CGFloat(180)),
+                                           (hostLabel, 18, 69, 164), (pageLabel, 278, 234, 500)] {
+            label.frame = CGRect(x: x, y: baseline-label.font!.ascender, width: width, height: label.intrinsicContentSize.height)
+        }
+    }
+    override func updateLayer() {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        (dark ? NSColor(calibratedRed: 0.12, green: 0.13, blue: 0.20, alpha: 1) : NSColor(calibratedRed: 0.84, green: 0.85, blue: 0.95, alpha: 1)).setFill(); bounds.fill()
-        (dark ? NSColor(calibratedWhite: 0.08, alpha: 1) : .white).setFill()
-        CGRect(x: 228, y: 10, width: bounds.width - 238, height: bounds.height - 20).fill()
-        SidebarColors.itemBackground.nsColor.setFill()
-        NSBezierPath(roundedRect: CGRect(x: 8, y: 46, width: 212, height: 36), xRadius: 10, yRadius: 10).fill()
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: Core.foregroundPrimary.nsColor]
-        ("Open" as NSString).draw(at: CGPoint(x: 24, y: 22), withAttributes: attrs)
-        ("news.example.com" as NSString).draw(at: CGPoint(x: 20, y: 54), withAttributes: attrs)
-        ("A page for the Site Control Center harness" as NSString).draw(at: CGPoint(x: 280, y: 220), withAttributes: attrs)
+        layer?.backgroundColor = (dark ? NSColor(calibratedRed: 0.12, green: 0.13, blue: 0.20, alpha: 1) : NSColor(calibratedRed: 0.84, green: 0.85, blue: 0.95, alpha: 1)).cgColor
+        page.backgroundColor = (dark ? NSColor(calibratedWhite: 0.08, alpha: 1) : .white).cgColor
+        urlField.backgroundColor = SidebarColors.itemBackground.cgColor(dark ? .dark : .light)
     }
 }
 
@@ -71,7 +92,12 @@ final class Stage {
         openCPU = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpu) / 1_000_000
         openWall = Double(DispatchTime.now().uptimeNanoseconds - wall) / 1_000_000
     }
-    isolated deinit { window.close() }
+    isolated deinit {
+        controller.view.removeFromSuperview()
+        window.contentView = nil
+        window.close()
+        CATransaction.flush()
+    }
     func key(code: UInt16, characters: String, modifiers: NSEvent.ModifierFlags = []) {
         let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,

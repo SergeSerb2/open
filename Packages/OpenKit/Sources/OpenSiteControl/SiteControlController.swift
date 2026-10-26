@@ -5,7 +5,7 @@ import OpenDesign
 import OpenBoosts
 
 @MainActor
-public final class SiteControlController: NSObject {
+public final class SiteControlController: NSObject, NSMenuDelegate {
     public let view = SiteControlView(frame: .zero)
     public private(set) var isPresented = false
     public private(set) var tabID: ItemID?
@@ -14,6 +14,7 @@ public final class SiteControlController: NSObject {
     public var geometry: ((SiteControlAnchor) -> SiteControlGeometry?)?
     public var onDismiss: ((SiteControlDismissReason) -> Void)?
     public var onUnavailable: ((ItemID) -> Void)?
+    /// Observes the native menu after it opens; it does not replace presentation.
     public var onMenu: ((NSMenu, String?) -> Void)?
     public private(set) var preferredMenuItemTitle: String?
     private let source: SiteControlDataSource
@@ -22,6 +23,7 @@ public final class SiteControlController: NSObject {
     private var unavailableTabs: Set<ItemID> = []
     private var changeObserver: SiteControlObservationToken?
     private var presentationGeneration = 0
+    private var activeMenu: NSMenu?
 
     public init(source: SiteControlDataSource, actions: SiteControlActions) {
         self.source = source; self.actions = actions
@@ -81,6 +83,7 @@ public final class SiteControlController: NSObject {
         preferredMenuItemTitle = mode == .extensionPicker && !view.panel.extensionsSectionVisible ? "Add Extension…" : nil
         presentationGeneration += 1
         isPresented = true; view.isHidden = false; view.isActive = true
+        view.clearStructureAnimations()
         view.panel.showsReload = false
         view.panel.apply(snapshot); configureKeys(); layout()
         guard isPresented else { return }
@@ -119,6 +122,7 @@ public final class SiteControlController: NSObject {
     public func dismiss(reason: SiteControlDismissReason, animated: Bool = true) {
         guard isPresented else { return }
         isPresented = false
+        activeMenu?.cancelTrackingWithoutAnimation()
         view.panel.controls.forEach { TooltipController.shared.cancel(for: $0) }
         presentationGeneration += 1
         let generation = presentationGeneration
@@ -171,14 +175,26 @@ public final class SiteControlController: NSObject {
         guard let snapshot = source.snapshot(for: tabID) else { reportUnavailable(tabID); return }
         let focusedID = (view.window?.firstResponder as? NSView)?.identifier?.rawValue
         let oldHeight = view.panel.frame.height
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let structure = animated && !reduceMotion ? view.captureStructure() : []
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         view.panel.apply(snapshot); configureKeys(); layout()
         guard isPresented else { return }
-        if let focusedID, let button = view.panel.control(id: focusedID), button.isEnabled { view.panel.focus(button) }
-        if animated, oldHeight != view.panel.frame.height, let layer = view.panel.layer {
-            let animation = CABasicAnimation(keyPath: "bounds.size.height")
-            animation.fromValue = oldHeight; animation.toValue = view.panel.frame.height
-            animation.duration = Motion.rowStructure; animation.timingFunction = Motion.easeInOut
-            layer.add(animation, forKey: "rows.height")
+        if let focusedID {
+            if let button = view.panel.control(id: focusedID), button.isEnabled { view.panel.focus(button) }
+            else { view.window?.makeFirstResponder(view) }
+        }
+        if animated, oldHeight != view.panel.frame.height {
+            // Resolve layer geometry and paths before assigning animation
+            // destinations. Keep display and animations in one transaction.
+            view.displayIfNeeded()
+            if reduceMotion {
+                for layer in view.presentationLayers {
+                    let fade = CATransition(); fade.type = .fade; fade.duration = Motion.rowStructure
+                    fade.timingFunction = Motion.easeInOut; layer.add(fade, forKey: "rows.fade")
+                }
+            } else { structure.forEach { $0.animate() } }
         }
     }
 
@@ -214,11 +230,15 @@ public final class SiteControlController: NSObject {
         default: dismiss(reason: .action, animated: false); actions.perform(command: id, tabID: tabID, anchor: nil)
         }
     }
+    public func menuWillOpen(_ menu: NSMenu) { onMenu?(menu, preferredMenuItemTitle) }
     private func showMenu(from button: NSView) {
-        let menu = makeMenu()
-        if let onMenu { onMenu(menu, preferredMenuItemTitle); return }
         guard button.window?.isVisible == true else { return }
-        menu.popUp(positioning: menu.items.first { $0.title == preferredMenuItemTitle }, at: CGPoint(x: button.bounds.minX, y: button.bounds.maxY), in: button)
+        let menu = makeMenu(); menu.delegate = self
+        activeMenu = menu
+        let selected = menu.popUp(positioning: menu.items.first { $0.title == preferredMenuItemTitle },
+                                  at: CGPoint(x: button.bounds.minX, y: button.bounds.maxY), in: button)
+        activeMenu = nil
+        if !selected && isPresented { dismiss(reason: .menuCancelled, animated: false) }
     }
     private func openSiteSettings(tabID: ItemID) {
         guard let context = source.snapshot(for: tabID)?.context,

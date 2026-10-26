@@ -158,7 +158,10 @@ public final class TooltipController {
         host.addSubview(content)
         panel.contentView = host
         panel.setFrame(NSRect(x: origin.x - margin, y: origin.y - margin, width: host.frame.width, height: host.frame.height), display: true)
-        if panel.parent == nil { window.addChildWindow(panel, ordered: .above) }
+        if panel.parent !== window {
+            panel.parent?.removeChildWindow(panel)
+            window.addChildWindow(panel, ordered: .above)
+        }
         panel.alphaValue = 0
         panel.orderFront(nil)
         NSAnimationContext.runAnimationGroup { ctx in

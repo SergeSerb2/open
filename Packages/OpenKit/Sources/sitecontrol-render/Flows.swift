@@ -5,6 +5,13 @@ import OpenModel
 @MainActor
 enum Flows {
     struct Check { let name: String; let pass: Bool }
+    @MainActor final class MenuObservation {
+        var opened = 0
+        var highlighted: String?
+        var timer: Timer?
+        weak var menu: NSMenu?
+        weak var picker: Stage?
+    }
     static func run() -> [Check] {
         var checks: [Check] = []
         let stage = Stage()
@@ -142,12 +149,39 @@ enum Flows {
         check("keyboard focus scrolls the long body", (scroll?.contentView.bounds.origin.y ?? 0) > 0 && many.controller.view.panelFrame.height == 640)
         basic.controller.present(anchor: .contentTopLeading, tabID: basic.source.tabID, mode: .extensionPicker, animated: false)
         check("extension picker falls back to Add Extension in More", basic.controller.mode == .standard && basic.controller.preferredMenuItemTitle == "Add Extension…" && basic.focusedID == "more" && !basic.controller.view.panel.extensionsSectionVisible)
+        let picker = Stage(state: "scc-no-boosts", open: false)
+        let observation = MenuObservation()
+        observation.picker = picker
+        picker.controller.onMenu = { menu, _ in
+            observation.opened += 1; observation.menu = menu
+            let timer = Timer(timeInterval: 0.03, repeats: false) { _ in
+                MainActor.assumeIsolated {
+                    observation.highlighted = observation.menu?.highlightedItem?.title
+                    observation.picker?.key(code: 53, characters: "\u{1b}")
+                }
+            }
+            observation.timer = timer
+            RunLoop.main.add(timer, forMode: .eventTracking)
+        }
+        picker.controller.present(anchor: .contentTopLeading, tabID: picker.source.tabID, mode: .extensionPicker, animated: false)
+        check("picker fallback focuses More without opening a menu", observation.opened == 0 && picker.focusedID == "more")
+        picker.key(code: 36, characters: "\r")
+        check("picker Return opens the native menu with Add Extension highlighted", observation.opened == 1 && observation.highlighted == "Add Extension…")
+        check("picker Escape closes the panel from the native menu", !picker.controller.isPresented)
+        picker.controller.onMenu = nil; observation.timer?.invalidate(); observation.timer = nil
         let ax = accessibilityDump(Stage().controller.view.panel)
         check("F21 all section, tile, row and action labels and roles", ["AXHeading label=Settings", "AXButton label=Settings, More", "AXCheckBox label=Block Ads & Trackers", "AXCheckBox label=Camera", "AXCheckBox label=Notifications", "AXGroup label=Calm news, Enabled", "AXCheckBox label=Enable Calm news", "AXButton label=Edit Calm news", "AXMenuButton label=More"].allSatisfy(ax.contains))
         let live = Stage(); live.source.value?.context.displayHost = "Updated host"; live.source.changed()
         check("live source updates the open panel", live.controller.isPresented && accessibilityDump(live.controller.view.panel).contains("Updated host"))
         live.source.value = nil; live.source.changed()
         check("closed anchor tab dismisses on source notification", !live.controller.isPresented)
+        let removal = Stage()
+        let removedID = removal.source.value!.boosts[0].id
+        removal.window.makeFirstResponder(removal.controller.view.panel.control(id: "boost.\(removedID).switch"))
+        removal.source.value?.boosts = []; removal.source.changed()
+        check("live Boost removal keeps keyboard input in the panel", removal.window.firstResponder === removal.controller.view)
+        removal.key(code: 48, characters: "\t")
+        check("Tab works after the focused Boost disappears", removal.focusedID == "action.share")
         let shortcut = Stage(); shortcut.key(code: 8, characters: "c", modifiers: [.command, .shift])
         check("Command shortcut dismisses and returns to normal routing", !shortcut.controller.isPresented && shortcut.source.calls.isEmpty)
         return result

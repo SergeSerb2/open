@@ -14,6 +14,16 @@ public final class SiteControlView: NSView {
     private let panelShadow = CALayer()
     public var panelFrame: CGRect { panel.frame }
     var presentationLayers: [CALayer] { [panel.layer, panelShadow].compactMap { $0 } }
+    func clearStructureAnimations() {
+        for state in captureStructure() {
+            for key in state.layer.animationKeys() ?? [] where key.hasPrefix("rows.") { state.layer.removeAnimation(forKey: key) }
+        }
+    }
+    func captureStructure() -> [SiteControlLayerState] {
+        var states = panel.captureStructure()
+        states.append(SiteControlLayerState(panelShadow, keys: ["bounds", "position", "shadowPath"]))
+        return states
+    }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
     public override var wantsUpdateLayer: Bool { true }
@@ -90,6 +100,7 @@ public final class SiteControlPanelView: NSView {
     private let fillLayer = CAShapeLayer()
     private let edgeLayer = CAShapeLayer()
     private let edgeClip = CAShapeLayer()
+    private let surfaceClip = CAShapeLayer()
     private var actions: [SiteControlButton] = []
     private var renderedReload = false
     private var lastFaviconPNG: Data?
@@ -101,6 +112,8 @@ public final class SiteControlPanelView: NSView {
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
         layer?.masksToBounds = false; layer?.cornerCurve = .continuous
+        surfaceClip.actions = ["path": NSNull(), "position": NSNull(), "bounds": NSNull()]
+        layer?.mask = surfaceClip
         fillLayer.actions = ["path": NSNull(), "fillColor": NSNull()]
         edgeLayer.actions = ["path": NSNull(), "strokeColor": NSNull()]; edgeLayer.fillColor = nil; edgeLayer.mask = edgeClip
         edgeClip.actions = ["path": NSNull()]
@@ -126,6 +139,7 @@ public final class SiteControlPanelView: NSView {
             if id == "capture" { button.toolTip = label; button.tooltipKeys = ["⇧", "⌘", "2"] }
             actions.append(button); addSubview(button)
         }
+        scroll.wantsLayer = true; scroll.layer?.masksToBounds = true
         scroll.drawsBackground = false; scroll.borderType = .noBorder
         scroll.hasVerticalScroller = true; scroll.scrollerStyle = .overlay; scroll.autohidesScrollers = true
         scroll.contentView.postsBoundsChangedNotifications = true
@@ -188,7 +202,7 @@ public final class SiteControlPanelView: NSView {
             let rows = (snapshot.tiles.count + 1) / 2
             y += CGFloat(rows) * SiteControlMetrics.tile.height + CGFloat(max(0, rows - 1)) * SiteControlMetrics.tileGap
             if showsReload {
-                let label = textLabel("Reload to apply changes.", font: Typography.tileTitle.font)
+                let label = textLabel("Reload to apply changes.", font: NSFont.systemFont(ofSize: SiteControlMetrics.bodySize, weight: .regular))
                 label.frame = CGRect(x: SiteControlMetrics.inset, y: y, width: SiteControlMetrics.width - 2 * SiteControlMetrics.inset, height: SiteControlMetrics.reloadRowHeight)
                 label.alignment = .left; body.addSubview(label)
                 let reload = SiteControlButton(id: "reload", label: "Reload", symbol: "", pointSize: SiteControlMetrics.bodySize)
@@ -264,6 +278,15 @@ public final class SiteControlPanelView: NSView {
         let row = (focused as? SiteControlBoostRow) ?? (focused.superview as? SiteControlBoostRow)
         guard let row, row.edit.isEnabled else { return false }; row.onEdit?(); return true
     }
+    func captureStructure() -> [SiteControlLayerState] {
+        var states = [fillLayer, edgeLayer, edgeClip, surfaceClip, separatorLayer].map {
+            SiteControlLayerState($0, keys: ["bounds", "position", "path"])
+        }
+        for layer in [layer, scroll.layer, security.layer, more.layer].compactMap({ $0 }) {
+            states.append(SiteControlLayerState(layer, keys: ["bounds", "position"]))
+        }
+        return states
+    }
     public override func layout() {
         super.layout(); let m = SiteControlMetrics.self
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -279,14 +302,16 @@ public final class SiteControlPanelView: NSView {
         let footerY = bounds.height - m.footerHeight + m.footerY
         security.frame = CGRect(x: m.footerInset, y: footerY, width: security.intrinsicContentSize.width, height: m.footerButton)
         more.frame = CGRect(x: bounds.width - m.footerInset - m.footerButton, y: footerY, width: m.footerButton, height: m.footerButton)
-        updateRowVisibility(); CATransaction.commit()
+        updateRowVisibility(); updateSurfaceLayers(); CATransaction.commit()
     }
     public override var wantsUpdateLayer: Bool { true }
-    public override func updateLayer() {
+    public override func updateLayer() { updateSurfaceLayers() }
+    private func updateSurfaceLayers() {
         let px = 1 / (window?.backingScaleFactor ?? 1)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let shape = SiteControlShape.path(in: bounds, radius: SiteControlMetrics.cornerRadius)
         fillLayer.frame = bounds; edgeLayer.frame = bounds; edgeClip.frame = bounds
+        surfaceClip.frame = bounds; surfaceClip.path = shape
         fillLayer.path = shape; fillLayer.fillColor = Core.popoverBackground.cgColor(contentAppearance)
         edgeClip.path = shape; edgeLayer.path = shape; edgeLayer.lineWidth = 2 * px; edgeLayer.strokeColor = CommandBarColors.hairlineDivider.cgColor(contentAppearance)
         layer?.cornerRadius = SiteControlMetrics.cornerRadius
@@ -328,5 +353,26 @@ private final class SiteControlFaviconView: NSImageView {
         image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         context.setBlendMode(.sourceIn); context.setFillColor(Core.foregroundSecondary.nsColor.cgColor); context.fill(rect)
         context.endTransparencyLayer(); context.restoreGState()
+    }
+}
+
+/// Capture the displayed geometry so successive live updates animate from what
+/// is on screen, including a transition that is already in progress.
+@MainActor
+struct SiteControlLayerState {
+    let layer: CALayer
+    let values: [String: Any]
+    init(_ layer: CALayer, keys: [String]) {
+        self.layer = layer
+        let displayed = layer.presentation() ?? layer
+        values = keys.reduce(into: [:]) { result, key in result[key] = displayed.value(forKeyPath: key) }
+    }
+    func animate() {
+        for (key, previous) in values {
+            let animation = CABasicAnimation(keyPath: key)
+            animation.fromValue = previous; animation.toValue = layer.value(forKeyPath: key)
+            animation.duration = Motion.rowStructure; animation.timingFunction = Motion.easeInOut
+            layer.add(animation, forKey: "rows." + key)
+        }
     }
 }

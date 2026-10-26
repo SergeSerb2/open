@@ -339,8 +339,9 @@ The panel has a presentation mode for keyboard use of the Extensions section (Ar
   extensionPicker }` and `enum SiteControlAnchor { case urlField, paneBar(ItemID), contentTopLeading }`.
 - `.extensionPicker`: the panel opens as usual, then sets keyboard focus on the first extension item
   (`ExtensionsSectionBody.focusedID`); arrow keys move, Return runs the focused item, Esc closes the
-  panel. With no extension items it opens in `.standard` mode with focus on "Add Extension…" in the
-  ⋯ menu button (Open choice).
+  panel. With no extension items it opens in `.standard` mode and focuses only the ⋯ button.
+  It does not open the menu on its own. Return opens the menu with "Add Extension…" highlighted;
+  Esc closes the panel. **Guess, to confirm against capture #22** (lead decision, 2026-10-26).
 - Anchor when the call comes from a key binding: `.urlField` when the sidebar is shown, else
   `.paneBar` for a focused split pane, else `.contentTopLeading` (panel at 12 pt from the web
   content's top-left, no arrow).

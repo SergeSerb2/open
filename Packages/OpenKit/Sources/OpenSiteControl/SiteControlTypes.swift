@@ -64,7 +64,7 @@ public enum BoostCodeTab: Sendable, Equatable { case css, js }
 public enum BoostEditorMode: Sendable, Equatable { case simple, code(BoostCodeTab) }
 public enum SiteControlPresentationMode: Sendable, Equatable { case standard, extensionPicker }
 public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(ItemID), contentTopLeading }
-public enum SiteControlDismissReason: Sendable, Equatable { case escape, outside, anchor, action, command, sourceUnavailable }
+public enum SiteControlDismissReason: Sendable, Equatable { case escape, outside, anchor, action, command, sourceUnavailable, menuCancelled }
 
 /// Registration identity, scoped to the source that returned it.
 public struct SiteControlObservationToken: Hashable, Sendable {

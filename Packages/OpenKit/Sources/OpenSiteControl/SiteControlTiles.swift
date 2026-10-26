@@ -50,7 +50,7 @@ public class SiteControlButton: NSView {
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label); identifier = NSUserInterfaceItemIdentifier(id); toolTip = label
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    public func performClick(_ sender: Any?) { guard isEnabled else { return }; invoke?() }
+    public func performClick(_ sender: Any?) { guard isEnabled else { return }; hideTooltip(); invoke?() }
     public override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; performClick(nil); return true }
     public override func mouseDown(with event: NSEvent) {
         guard isEnabled else { return }; window?.makeFirstResponder(self)
@@ -95,7 +95,8 @@ public class SiteControlButton: NSView {
         let color = resolved.withAlphaComponent(resolved.alphaComponent * (isEnabled || statusOnly ? 1 : m.disabledAlpha))
         let fill = hovered && isEnabled ? (isHighlighted ? SidebarColors.itemHoveredBackground : SidebarColors.itemBackground).cgColor(contentAppearance) : NSColor.clear.cgColor
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        layer?.backgroundColor = fill; layer?.cornerRadius = m.actionRadius; layer?.cornerCurve = .continuous
+        let radius = controlID == "security" ? m.securityRadius : m.actionRadius
+        layer?.backgroundColor = fill; layer?.cornerRadius = radius; layer?.cornerCurve = .continuous
         var captionX: CGFloat = 0
         if let raster = glyphRaster(symbol, color: color) {
             glyphLayer.contents = raster.image
@@ -103,12 +104,12 @@ public class SiteControlButton: NSView {
             glyphLayer.frame = CGRect(x: x, y: (bounds.height - raster.size.height) / 2, width: raster.size.width, height: raster.size.height)
             captionX = glyphLayer.frame.maxX + m.securityPadding
         } else { glyphLayer.contents = nil }
-        let font = NSFont.systemFont(ofSize: m.bodySize, weight: title.isEmpty ? .regular : .semibold)
+        let font = NSFont.systemFont(ofSize: m.bodySize, weight: controlID == "security" ? .medium : .semibold)
         let captionSize = CGSize(width: max(0, bounds.width - captionX), height: bounds.height)
         captionLayer.frame = CGRect(origin: CGPoint(x: captionX, y: 0), size: captionSize)
         captionLayer.contents = SiteControlDrawing.caption(title, size: captionSize, font: font, color: color, centered: symbol.isEmpty)
         buttonFocus.frame = bounds
-        buttonFocus.path = CGPath(roundedRect: bounds.insetBy(dx: m.focusWidth / 2, dy: m.focusWidth / 2), cornerWidth: m.actionRadius, cornerHeight: m.actionRadius, transform: nil)
+        buttonFocus.path = CGPath(roundedRect: bounds.insetBy(dx: m.focusWidth / 2, dy: m.focusWidth / 2), cornerWidth: radius + m.focusOutset, cornerHeight: radius + m.focusOutset, transform: nil)
         buttonFocus.strokeColor = window?.firstResponder === self ? Core.focusRing.cgColor(contentAppearance) : nil
         CATransaction.commit()
     }
