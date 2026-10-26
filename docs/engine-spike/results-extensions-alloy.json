@@ -1,0 +1,232 @@
+{
+  "config": "Debug",
+  "extensions": {
+    "chrome_extensions_page": {
+      "items": -1,
+      "ok": false,
+      "screenshot": "alloy-chrome-extensions.png"
+    },
+    "chrome_extensions_page_url": "",
+    "content_scripts": {
+      "darkreader": {
+        "mode": "dynamic",
+        "styles": 28
+      },
+      "isolated_worlds": [
+        "1Password \u2013 Password Manager",
+        "Bitwarden Password Manager",
+        "Dark Reader",
+        "uBlock Origin Lite"
+      ],
+      "ok": true,
+      "screenshot": "alloy-content-script-darkreader.png"
+    },
+    "dnr_blocking": {
+      "ok": true,
+      "probe": {
+        "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "blocked",
+        "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "blocked"
+      }
+    },
+    "enumerate": {
+      "actions": [
+        {
+          "badge": null,
+          "enabled": true,
+          "icon": 11992,
+          "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
+          "popup": true,
+          "title": "1Password"
+        },
+        {
+          "badge": null,
+          "enabled": true,
+          "icon": 997,
+          "id": "nngceckbapebfimnlniiiahkandclblb",
+          "popup": true,
+          "title": "Bitwarden"
+        },
+        {
+          "badge": null,
+          "enabled": true,
+          "icon": 2346,
+          "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+          "popup": true,
+          "title": "Dark Reader"
+        },
+        {
+          "badge": null,
+          "enabled": true,
+          "icon": 2159,
+          "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+          "popup": true,
+          "title": "uBlock Origin Lite"
+        }
+      ],
+      "extensions": [
+        {
+          "enabled": true,
+          "icon": "18x18",
+          "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
+          "name": "1Password \u2013 Password Manager",
+          "options": "",
+          "version": "8.12.42.36"
+        },
+        {
+          "enabled": true,
+          "icon": "128x128",
+          "id": "nngceckbapebfimnlniiiahkandclblb",
+          "name": "Bitwarden Password Manager",
+          "options": "",
+          "version": "2026.10.0"
+        },
+        {
+          "enabled": true,
+          "icon": "128x128",
+          "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+          "name": "Dark Reader",
+          "options": "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/ui/popup/index.html",
+          "version": "4.9.133"
+        },
+        {
+          "enabled": true,
+          "icon": "96x96",
+          "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+          "name": "uBlock Origin Lite",
+          "options": "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/dashboard.html",
+          "version": "2026.1021.1354"
+        }
+      ],
+      "ok": true
+    },
+    "options_pages": {
+      "ok": true,
+      "pages": {
+        "Dark Reader": {
+          "elements": 488,
+          "ok": true,
+          "screenshot": "alloy-options-darkreader.png",
+          "title": "Dark Reader settings",
+          "url": "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/ui/popup/index.html"
+        },
+        "uBlock Origin Lite": {
+          "elements": 300,
+          "ok": true,
+          "title": "uBO Lite \u2014 Dashboard",
+          "url": "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/dashboard.html"
+        }
+      }
+    },
+    "popups": {
+      "by_extension": {
+        "1password": {
+          "console_errors": [],
+          "ok": true,
+          "screenshot": "alloy-popup-1password.png",
+          "state": {
+            "elements": 40,
+            "h": 450,
+            "text": "",
+            "w": 600
+          },
+          "tabs_api": {
+            "active": [],
+            "all": [],
+            "current": "error: No current window",
+            "windows": 0
+          }
+        },
+        "bitwarden": {
+          "error": "timed out",
+          "ok": false
+        },
+        "darkreader": {
+          "error": "eval: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
+          "ok": false
+        },
+        "ublock": {
+          "console_errors": [],
+          "ok": false,
+          "screenshot": "alloy-popup-ublock.png",
+          "state": {
+            "elements": 3,
+            "h": 480,
+            "text": "",
+            "w": 360
+          },
+          "tabs_api": {
+            "error": "Cannot read properties of undefined (reading 'query')"
+          }
+        }
+      },
+      "ok": false
+    },
+    "service_workers": {
+      "all_target_types": [
+        "page",
+        "service_worker"
+      ],
+      "ok": true,
+      "workers": [
+        "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/background/background.js",
+        "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/js/background.js",
+        "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/background/index.js",
+        "chrome-extension://nngceckbapebfimnlniiiahkandclblb/background.js"
+      ]
+    },
+    "webstore_install": {
+      "button": "Add to Chrome",
+      "click": [
+        1010.0078125,
+        282
+      ],
+      "console": [
+        "State version: 86",
+        "Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.",
+        "Unrecognized Content-Security-Policy directive 'navigate-to'.",
+        "%c%s color: red; background: yellow; font-size: 24px; WARNING!",
+        "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand."
+      ],
+      "dialog_click": true,
+      "installed": false,
+      "new_windows": [
+        {
+          "attachedSheet": 0,
+          "class": "NativeWidgetMacNSWindow",
+          "firstResponder": "BridgedContentView",
+          "frame": "{{1056, 910}, {448, 196}}",
+          "key": false,
+          "level": 0,
+          "number": 4588,
+          "parent": 0,
+          "sheet": false,
+          "title": "",
+          "visible": true
+        }
+      ],
+      "ok": false,
+      "screenshot_dialog": "alloy-webstore-dialog.png",
+      "screenshot_store": "alloy-webstore-page.png",
+      "windows_after": [
+        [
+          "NSWindow",
+          "{{606, 8}, {1360, 1394}}"
+        ],
+        [
+          "NSPanel",
+          "{{636, 676}, {48, 632}}"
+        ]
+      ]
+    },
+    "welcome_tabs": []
+  },
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "pid": 57880,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-alloy",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-alloy/Profiles"
+  },
+  "started": "2026-10-25 19:15:19",
+  "style": "alloy"
+}

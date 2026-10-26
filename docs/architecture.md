@@ -1,6 +1,6 @@
 # Open architecture
 
-Status: draft v1 (2026-10-24). The engine spike (`docs/engine-spike.md`) and the reverse-engineering reports (`docs/re/`) will refine it.
+Status: draft v1 (2026-10-24), engine part updated 2026-10-25 by the M1 engine foundation: see `docs/engine-spike.md` (verdict and measurements), `docs/engine-api.md` (OpenEngine API), and `docs/engine-patches.md` (fork patch plan for extensions).
 
 ## Goals, in priority order
 
@@ -32,12 +32,14 @@ Source tree:
 
 ```
 App/                  App target: lifecycle, window controllers, wiring, menus
-Engine/OpenEngine/    ObjC++ CEF wrapper with a Swift-friendly API
+Engine/OpenEngine/    ObjC++ CEF wrapper with a Swift-friendly API (include/, src/)
+Engine/fork/          Fork pins, patches, overlay, scripts (docs/engine-fork.md)
+Helper/               Main and plists of the five CEF helper apps
 Packages/OpenKit/     SwiftPM package, engine-agnostic, one library per area:
   OpenModel           Value types: Profile, Space, SidebarItem (tab, folder, split), favorites, archive. Pure Swift, no AppKit.
   OpenStore           Persistence: sidebar snapshot (JSON, atomic, debounced), history and archive (SQLite + FTS5, system libsqlite3)
   OpenDesign          Design tokens (colors, metrics, fonts, motion), Space themes (gradients), our own icons and sounds
-  OpenWeb             Swift protocols over the engine (WebEngine, WebContent, ExtensionHost). App target bridges them to OpenEngine.
+  OpenWeb             Swift protocols over the engine (WebContent, WebProfile, ExtensionHost). App/EngineBridge.swift bridges them to OpenEngine.
   OpenSidebar         Sidebar views, rows, favorites grid, folders, drag and drop, Space switcher
   OpenCommandBar      Command bar panel, search sources, ranking, actions
   OpenFeatures        Split View, Peek, Little Open, Boosts, Zap, Site Control Center, ad blocking, Air Traffic Control
