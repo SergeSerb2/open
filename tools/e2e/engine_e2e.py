@@ -18,14 +18,17 @@ Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 import argparse
 import base64
 import json
+import re
 import os
 import shutil
 import socket
+import statistics
 import struct
 import subprocess
 import sys
 import time
 import traceback
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
@@ -40,11 +43,12 @@ CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",)):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
         self.user_data = user_data
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
         env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
@@ -54,9 +58,15 @@ class Open:
             try:
                 self.call("ping")
                 return
-            except OSError:
+            except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
-        raise RuntimeError("Open did not start")
+            if self.proc.poll() is not None:
+                self.log.close()
+                raise RuntimeError("Open exited before automation; see %s" % log_path)
+        self.proc.kill()
+        self.proc.wait()
+        self.log.close()
+        raise RuntimeError("Open did not start; see %s" % log_path)
 
     def call(self, cmd, timeout=120, **args):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -682,6 +692,151 @@ def shell_checks(app_factory, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Window startup checks (Step A; Step B extends this suite).
+
+
+def window_checks(app_factory, results, tmp):
+    # Local deterministic text paints without DNS, TLS, or external requests.
+    fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
+    runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
+    results["load_average"] = list(os.getloadavg())
+    results["cpu_count"] = os.cpu_count()
+    for i in range(5):
+        # Clear only this suite's own data root. Warm launches then restore a
+        # selected tab plus an unselected tab from the real saved snapshot.
+        app = app_factory(urls=(fixture,), fresh=True)
+        try:
+            tab = app.call("tabs")[0]
+            app.call("wait", tab=tab["id"])
+            wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
+            runs["cold_fresh_profile"].append(app.call("timing"))
+            evidence = app.call("startup")
+            results["window_before_engine_%d" % i] = {
+                "ok": evidence["pagesBeforeEngine"] == 0 and evidence["contextsBeforeEngine"] == 0
+                      and evidence["visibleWindows"] >= 1
+                      and evidence["sidebarClass"] == "OpenSidebar.SidebarView"
+                      and runs["cold_fresh_profile"][-1]["kernelProcessStart"] is True
+                      and runs["cold_fresh_profile"][-1]["firstFrameConfirmed"] is True
+                      and runs["cold_fresh_profile"][-1]["sidebarDrawn"] <= runs["cold_fresh_profile"][-1]["engineStart"],
+                "evidence": evidence}
+            # Create the second row, then return selection to the first row.
+            other = app.call("open", url="data:text/html,<title>Unselected</title><h1>Unselected</h1>")
+            app.call("select", tab=tab["id"])
+            app.call("save")
+            if i == 0:
+                results["window_png"] = {"ok": True, "file": shot(app, "window-startup.png", max_px=2560)}
+        finally:
+            app.quit()
+        app = app_factory(urls=())
+        try:
+            selected = next(t for t in app.call("tabs") if t["selected"])
+            app.call("wait", tab=selected["id"])
+            wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
+            runs["warm_existing_profile"].append(app.call("timing"))
+            tabs = app.call("tabs")
+            results["selected_only_%d" % i] = {
+                "ok": runs["warm_existing_profile"][-1]["kernelProcessStart"] is True
+                      and len(tabs) == 2 and len([t for t in tabs if t["loaded"]]) == 1
+                      and next(t for t in tabs if t["loaded"])["id"] == selected["id"],
+                "tabs": [{k: t[k] for k in ("title", "loaded", "selected")} for t in tabs]}
+        finally:
+            app.quit()
+    results["launch_runs"] = runs
+    for label, values in runs.items():
+        medians = {key: statistics.median([r[key] for r in values if key in r])
+                   if all(key in r for r in values) else None
+                   for key in ("main", "modelLoaded", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
+        results[label] = {"ok": medians["sidebarDrawn"] is not None and medians["sidebarDrawn"] <= 250
+                              and medians["firstContentfulPaint"] is not None and medians["firstContentfulPaint"] <= 700,
+                          "median_ms": medians, "samples": len(values)}
+        print(label, medians)
+    # A never-loaded pinned row must never pass through selection while
+    # closing or unloading. The counter is cumulative, so create-then-drop
+    # cannot look like zero retained hosts.
+    app = app_factory(urls=(), fresh=True)
+    try:
+        first = new_tab(app, "data:text/html,<title>Selected</title><h1>Selected</h1>")
+        pinned = app.call("open", url="data:text/html,<title>Never loaded</title><h1>Never loaded</h1>", background=True)["id"]
+        app.call("pin", tab=pinned)
+        before = app.call("host-counts")
+        app.call("close", tab=pinned)
+        after_close = app.call("host-counts")
+        app.call("sidebar-unload", tab=pinned)
+        after_unload = app.call("host-counts")
+        results["close_unloaded_pinned"] = {"ok": before == after_close == after_unload
+            and not app.tab(pinned)["loaded"] and app.tab(first)["selected"]
+            and app.eval(first, "document.title") == "Selected",
+            "before": before, "after_close": after_close, "after_unload": after_unload}
+    finally:
+        app.quit()
+    startup_failure_checks(app_factory, results, tmp)
+    results["comparison"] = {"status": "SKIP", "reason": "Step A startup only; static window comparison is Step B"}
+
+
+# ----------------------------------------------------------------------------
+# Early lifecycle failures go through the real NSApplication terminate and
+# NSAlert button paths, with own-process automation flags compiled out of
+# ordinary Release builds.
+
+
+def startup_failure_checks(factory, results, tmp):
+    app = factory(urls=(), fresh=True)
+    app_path = app.proc.args[0]
+    app.quit()
+    unconfirmed = factory(urls=("data:text/html,<title>Unconfirmed frame</title><h1>Unconfirmed frame</h1>",), fresh=True,
+                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1"})
+    try:
+        tab = unconfirmed.call("tabs")[0]
+        unconfirmed.call("wait", tab=tab["id"])
+        timing = unconfirmed.call("timing")
+        results["first_frame_timeout_continues"] = {"ok": timing["firstFrameConfirmed"] is False
+            and "sidebarDrawn" not in timing and timing["firstFrameWaitTimedOut"] >= 3000
+            and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
+            and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
+            "timing": timing, "hosts": unconfirmed.call("host-counts")}
+    finally:
+        unconfirmed.quit()
+    early_data = os.path.join(tmp, "early-quit")
+    log = os.path.join(tmp, "early-quit.log")
+    with open(log, "w") as stream:
+        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+            env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    text = open(log).read()
+    results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
+        and "engineStart" not in text and os.path.isfile(os.path.join(early_data, "State", "browser.json"))
+        and not os.path.exists(os.path.join(early_data, "State", "engine.log")), "exit": proc.returncode}
+    queued_page = Path(tmp) / "queued-navigation.html"
+    queued_page.write_text("<title>Queued</title><h1>Queued</h1>")
+    queued = factory(urls=("data:text/html,<title>Initial</title><h1>Initial</h1>",), fresh=True,
+                     extra_env={"OPEN_AUTOMATION_EARLY_NAVIGATION": queued_page.resolve().as_uri()})
+    try:
+        tab = queued.call("tabs")[0]
+        queued.call("wait", tab=tab["id"])
+        title = queued.eval(tab["id"], "document.title")
+        counts = queued.call("host-counts")
+        results["navigation_before_engine"] = {"ok": title == "Queued"
+            and queued.call("startup")["pagesBeforeEngine"] == 0 and counts["created"] == 1,
+            "title": title, "hosts": counts}
+    finally:
+        queued.quit()
+    # APFS clone of our own app, with its CEF library removed: exercise the
+    # actual library-load failure, not an injected engine success/failure.
+    bundle = os.path.dirname(os.path.dirname(os.path.dirname(app_path)))
+    failed_bundle = os.path.join(tmp, "MissingEngine.app")
+    subprocess.run(["cp", "-cR", bundle, failed_bundle], check=True)
+    shutil.rmtree(os.path.join(failed_bundle, "Contents", "Frameworks", "Chromium Embedded Framework.framework"))
+    failure_data = os.path.join(tmp, "engine-failure")
+    failure_log = os.path.join(tmp, "engine-failure.log")
+    with open(failure_log, "w") as stream:
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+            env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    text = open(failure_log).read()
+    results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
+        and "engine failure alert shown; button=Quit" in text, "exit": failed.returncode}
+    shutil.rmtree(failed_bundle)
+
+
+# ----------------------------------------------------------------------------
 # Measurements (run with --config Release)
 
 
@@ -750,12 +905,26 @@ def measure(app_factory, results, tmp):
     results["ok"] = True
 
 
+def engine_provenance(config):
+    def uuid(path):
+        result = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
+        match = re.search(r'UUID: ([0-9A-F-]+)', result.stdout)
+        return match.group(1) if match else ''
+    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    embedded = uuid(os.path.join(ROOT, 'build', config, 'Open.app/Contents/Frameworks', framework))
+    vendor = uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    stamp_file = Path(ROOT, 'Vendor/cef/.open-source')
+    stamp = stamp_file.read_text().strip() if stamp_file.exists() else ''
+    return {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed',
+            'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure"], required=True)
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "window"], required=True)
     opts = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
@@ -772,36 +941,50 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    def factory(urls=("about:blank",)):
-        return Open(opts.config, opts.style, user_data, extra, log, urls=urls)
+    def factory(urls=("about:blank",), fresh=False, extra_env=None):
+        if fresh:
+            shutil.rmtree(user_data, ignore_errors=True)
+        return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
-    if opts.only == "shell":
-        results["shell"] = {}
-        shell_checks(factory, results["shell"], tmp)
-    elif opts.only == "measure":
-        results["measure"] = {}
-        measure(factory, results["measure"], tmp)
-    else:
-        app = factory(urls=("https://example.com/",))
-        try:
-            results["ping"] = app.call("ping")
-            app.call("window-frame", frame=[80, 60, 1360, 860])
-            results[opts.only] = {}
-            if opts.only == "extensions":
-                extension_checks(app, opts.style, results["extensions"])
-            else:
-                feature_checks(app, opts.style, results["features"], tmp)
-        finally:
-            app.quit()
+    results["engine"] = engine_provenance(opts.config)
+    try:
+        if opts.only == "shell":
+            results["shell"] = {}
+            shell_checks(factory, results["shell"], tmp)
+        elif opts.only == "window":
+            results["window"] = {}
+            window_checks(factory, results["window"], tmp)
+        elif opts.only == "measure":
+            results["measure"] = {}
+            measure(factory, results["measure"], tmp)
+        else:
+            app = factory(urls=("https://example.com/",))
+            try:
+                results["ping"] = app.call("ping")
+                app.call("window-frame", frame=[80, 60, 1360, 860])
+                results[opts.only] = {}
+                if opts.only == "extensions":
+                    extension_checks(app, opts.style, results["extensions"])
+                else:
+                    feature_checks(app, opts.style, results["features"], tmp)
+            finally:
+                app.quit()
+    except Exception as error:
+        results.setdefault(opts.only, {})["suite"] = {"ok": False, "error": str(error)}
+        traceback.print_exc()
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features") else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure"):
+    for group in ("shell", "extensions", "features", "measure", "window"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
     print("wrote", os.path.join(OUT, name))
+    failures = [k for group in ("shell", "extensions", "features", "measure", "window")
+                for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
+    if failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -137,6 +137,10 @@ targets:
         product: OpenWeb
       - package: OpenKit
         product: OpenFeatures
+      - package: OpenKit
+        product: OpenSidebar
+      - package: OpenKit
+        product: OpenDesign
       - target: OpenHelper
         embed: false
         link: false
