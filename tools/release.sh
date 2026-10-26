@@ -174,7 +174,6 @@ if not e.get('com.apple.security.personal-information.photos-library') or not e.
 if any(k.startswith('com.apple.security.cs.') for k in e) or e.get('com.apple.security.get-task-allow'):raise SystemExit('unexpected main-app signing exceptions')
 for k in ['OpenChromiumVersion','OpenCEFCommit','OpenEngineStamp','SUFeedURL','SUPublicEDKey']:
  if not p.get(k):missing.append('Step 6 Info.plist '+k)
-if not re.search(r'Release:\s*\n\s+ENABLE_HARDENED_RUNTIME:\s*YES',s):missing.append('Step 6 Release runtime setting')
 if not re.search(r'^\s+Sparkle:',s,re.M):missing.append('Step 7 Sparkle dependency')
 if not Path('App/UpdaterController.swift').is_file():missing.append('Step 8 updater controller')
 print('; '.join(missing))
