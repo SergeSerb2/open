@@ -741,13 +741,26 @@ def tabstrip_checks(app, results):
         state = app.call("ext-popup")
         if popup_page["id"] is not None and state.get("open") and state["page"]["identifier"] == popup_page["id"]:
             return popup_page["id"]
+        # A popup that is still closing would be closed by running the action
+        # again (Chrome's toggle): wait for it to go first.
+        wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5, step=0.2)
         page = app.call("popup", extension=PROBE)["identifier"]
         wait_until(lambda: app.eval(page, "window.currentTab !== undefined", timeout=20), timeout=20)
         popup_page["id"] = page
         return page
 
     def ext_eval(page, js, timeout=20):
-        return app.eval(probe_popup() if page == pop else page, js, timeout=timeout)
+        if page != pop:
+            return app.eval(page, js, timeout=timeout)
+        for attempt in range(3):
+            try:
+                return app.eval(probe_popup(), js, timeout=timeout)
+            except RuntimeError as error:
+                # OEErrorWebContentClosed: the popup was closing (a tab switch
+                # just happened); reopen it and try again.
+                if "error 4." not in str(error) or attempt == 2:
+                    raise
+                popup_page["id"] = None
 
     op_seq = [0]
 
