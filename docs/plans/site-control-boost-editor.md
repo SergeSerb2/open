@@ -108,7 +108,7 @@ engine extension state. This plan adds no second store for any of those values (
 | D-11 | **Superseded 2026-10-26.** The panel has no header. Order: action row, Extensions, Boosts, Settings, footer. Rows replace tiles (§3.3). | S2 09/0010, 11/0005 (C2). |
 | D-12 | **New 2026-10-26.** The Boost color pad and the Space theme editor's pad share one AppKit core, `OpenDesign/ColorPad.swift` (plate, dot grid, knobs, drag and keyboard handling). Each owner supplies its geometry and color law. | Both pads are square dot-grid plates whose knob hue equals the screen angle, clockwise from 3 o'clock (theme: `space-theme-editor.md` §2.2; Boost: IS §20.15). One implementation, two styles. |
 
-## 1. Current state (verified 2026-10-26 on `origin/main` b4b8817; re-verify before you edit)
+## 1. Current state (verified 2026-10-26 on `origin/main` f965b20; re-verify before you edit)
 
 | Area | State | Evidence |
 |---|---|---|
@@ -119,7 +119,7 @@ engine extension state. This plan adds no second store for any of those values (
 | OpenBoosts | `Boost`, `SiteMatch`, `ColorAdjustment`, `ZappedElement`, `BoostStore`, `BoostMatcher`, `BoostInjectionPlanner`, `BoostPickerCoordinator`. No `colorWheel` on main (PR #103 adds it). | `Packages/OpenKit/Sources/OpenBoosts/*.swift`. |
 | Zap picker | In-page bar "Zap mode · Zap all related (N) · Undo · Done", Esc exits, Cmd/Ctrl+Z undoes. | `OpenBoosts/Resources/zap-picker.js`. |
 | OpenSiteControl | Not on main. Open PRs: #69 (Step 1 shell), #96 (Step 2 sections), #103 (Step 4 editor), stacked with merge commits (#96 contains #69; #103 contains both). They implement the 2026-10-25 version of this plan and must change (§12). | `gh pr view 69 / 96 / 103`. |
-| Space theme pad | Not on main. PR #86 adds `OpenSpaceEditor/ColorPadView.swift` (square plate, dot grid, knobs, relative/jump drag, arrow keys). | `origin/t3/space-editor-shell`. |
+| Space theme pad | The view is not on main: PR #86 adds `OpenSpaceEditor/ColorPadView.swift` (square plate, dot grid, knobs, relative/jump drag, arrow keys). Main has the theme color math in `OpenDesign/ThemeColorMath.swift` and the `space-editor-render` harness (#82). | `origin/t3/space-editor-shell`; main f965b20. |
 | OpenAdBlock, OpenWeb, Engine, Settings | Unchanged from the first version of this plan: `AdBlockStore` exclusions, `WebProfile` 12 permission kinds, `clearBrowsingData(origin:)`, `showDevTools()`, `takeSnapshot()`, `SettingsDefaults.values` with `open.advanced.enableBoosts`. | Source files named in `docs/engine-api.md` and `docs/plans/settings-library.md`. |
 
 ---
@@ -642,7 +642,7 @@ Boost side adds ring and guide layers that #86 does not have. `OpenSiteControl.B
 | Secondary knob | Always +45° on the same radius in both samples; darker fill. BO-17 names analogous and complementary scheme assets, but no scheme control is visible in the captured editor. Whether the offset can change, or the knob can be dragged, is unknown. | Fixed +45°, not draggable. |
 | Page remap | One color recolored white to a pale tint of the primary's hue and near-black to a saturated tint of the secondary's hue; images kept their colors (S2-22). Arc does this inside the engine (`arc.mojom.EffectsAgent`, "Boosts effects via `EffectsAgent`", `docs/re/arccore-engine.md`). Open's filters rotate hues and cannot tint white or grey (R-2). | Interim: filters (#103). v1: engine remap (Step 4R, Q12 ruling). |
 | Invert lightness, sliders | Effects not measured. Sliders sit at 50 = neutral. | Map 0…100 → brightness and contrast 0.5…1.5 and original saturation 0…2 (50 → 1). |
-| Theme pad law | Still being decoded in the Space editor lane; this plan reuses its geometry and angle law only. | Revisit both laws together. |
+| Theme pad law | `space-theme-editor.md` now marks its linear radius law as provisional, not a parity gate: capture session 2 contradicts it, and its Step 9 must decode Arc's knob-radius ↔ color function first (lead round-3 overrides, 2026-10-26). This plan reuses only the pad geometry, the angle law, and the 0.99 rim clamp. | Decode the Boost radius meaning in the same work as the theme Step 9; until then the §4.4.2 law is interim. |
 
 #### 4.4.5 Interim runtime math (unchanged until Step 4R) and notes
 
