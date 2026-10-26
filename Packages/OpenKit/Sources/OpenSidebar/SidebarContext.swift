@@ -66,6 +66,10 @@ public final class SidebarContext {
     public init(model: BrowserModel, windowID: WindowID) {
         self.model = model
         self.windowID = windowID
+        selection.onChange = { [weak self] in
+            guard let outline = self?.sidebar?.focusedOutline else { return }
+            NSAccessibility.post(element: outline, notification: .selectedRowsChanged)
+        }
     }
 
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }

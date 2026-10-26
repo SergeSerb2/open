@@ -415,7 +415,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func syncSelectionIndexes() {
-        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted else { return }
+        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted, !outline.trackingMouseDown else { return }
         let wanted = IndexSet(context.selection.ids.compactMap { id in
             guard let object = context.model.node(id: id)?.object else { return nil }
             let row = outline.row(forItem: object)
@@ -721,6 +721,7 @@ final class SidebarOutlineView: NSOutlineView {
     private(set) var keyboardItem: AnyObject?
     var didActivateMouseDown = false
     var dragWasStarted = false
+    var trackingMouseDown = false
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -738,6 +739,11 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        trackingMouseDown = true
+        defer {
+            trackingMouseDown = false
+            if !dragWasStarted { page?.syncSelectionIndexes() }
+        }
         keyboardItem = nil
         didActivateMouseDown = false
         dragWasStarted = false
@@ -790,7 +796,6 @@ final class SidebarOutlineView: NSOutlineView {
         case 125, 126: // Down, Up: focus only, leaving selection in the model.
             let extending = event.modifierFlags.contains(.shift)
             let selection = page.context.selection
-            let oldCount = selection.ids.count
             var from = current
             let candidates = extending ? rows.filter { itemID(of: item(atRow: $0)) != nil } : rows
             if extending {
@@ -802,7 +807,6 @@ final class SidebarOutlineView: NSOutlineView {
             let next = event.keyCode == 125 ? candidates.first(where: { $0 > from }) : candidates.last(where: { $0 < (from < 0 ? numberOfRows : from) })
             if let next { keyboardItem = item(atRow: next) as AnyObject?; scrollRowToVisible(next) }
             if extending, let id = itemID(of: keyboardItem) { selection.extend(to: id, order: page.selectableOrder) }
-            if extending, selection.ids.count != oldCount { NSAccessibility.post(element: self, notification: .selectedRowsChanged) }
         case 53: // Escape
             page.context.selection.clear()
         case 36, 49, 76: // Return, Space, keypad Enter

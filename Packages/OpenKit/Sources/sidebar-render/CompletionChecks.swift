@@ -70,7 +70,11 @@ enum CompletionChecks {
         check(context.selection.ids == Array(space.pinned.prefix(4).map(\.id)), "MS5 Shift+Down three times selects four rows")
         let selectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.pinned[1].id.description)!, makeIfNecessary: true)!
         let unselectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.today[0].id.description)!, makeIfNecessary: true)!
-        check(selectedRow.isAccessibilitySelected() && !unselectedRow.isAccessibilitySelected(), "MS5 accessibility exposes selected and unselected real rows")
+        // Ask AppKit's AX attribute dispatcher, rather than calling the row override.
+        func axSelected(_ row: NSView) -> Bool? {
+            row.perform(NSSelectorFromString("accessibilityAttributeValue:"), with: NSAccessibility.Attribute.selected.rawValue)?.takeUnretainedValue() as? Bool
+        }
+        check(axSelected(selectedRow) == true && axSelected(unselectedRow) == false, "MS5 AXSelected attribute API exposes selected and unselected real rows")
         key(53)
         check(context.selection.isEmpty, "MS5 Escape clears selection")
         key(125, .shift); key(126)
@@ -396,7 +400,7 @@ extension CompletionChecks {
         model.moveNode(id: nested.id, to: .folder(group.id), at: nil); pump()
         select([ids[0], group.id])
         let mixed = sidebar.contextMenu(nodeID: group.id)!
-        check(titles(mixed) == ["Copy Links", "Copy links as Markdown", "—", "New Folder with 2 Items", "Move to", "—", "Duplicate", "—", "Archive Item", "Delete"] &&
+        check(titles(mixed) == ["Copy Links", "Copy links as Markdown", "—", "New Folder with 2 Items", "Move to", "—", "Duplicate", "—", "Archive Items", "Delete"] &&
               !titles(mixed).contains(where: { $0.contains("Archive Folder") }), "MS7 mixed menu has Delete only and no pin action")
         delegate.log = []
         perform(mixed, "Delete")
@@ -405,8 +409,8 @@ extension CompletionChecks {
         delegate.log = []; key(51)
         check(delegate.log == [.deleteFolders(ids: [ids[0], group.id])], "Delete on a mixed selection requests one confirmation for one eventual bulk archive")
         select([ids[0], group.id])
-        perform(sidebar.contextMenu(nodeID: group.id)!, "Archive Item")
-        check(model.node(id: ids[0]) == nil && context.selection.ids == [group.id], "MS9 mixed Archive Item preserves its untouched selected folder")
+        perform(sidebar.contextMenu(nodeID: group.id)!, "Archive Items")
+        check(model.node(id: ids[0]) == nil && context.selection.ids == [group.id], "MS9 mixed Archive Items preserves its untouched selected folder")
         undo.undo(); pump()
         let secondFolder = model.createFolder(in: .spacePinned(space.id), title: "Other folder")!
         select([group.id, secondFolder.id])
@@ -543,10 +547,25 @@ extension CompletionChecks {
         check(space.today.map(\.id) == beforeClear, "CU4 one undo restores every cleared row")
         context.selection.clear(); context.forcedHover = nil; context.isOptionHeld = false; pump()
         let todayMenu = sidebar.contextMenu(nodeID: ordered[0])!
+        let below = todayMenu.item(withTitle: "Archive Tabs Below")!
+        let beforeBelow = space.today.map(\.id)
+        let belowIndex = beforeBelow.firstIndex(of: ordered[0])!
+        let belowIDs = Array(beforeBelow.dropFirst(belowIndex + 1))
+        check(todayMenu.item(withTitle: "Archive Tab") != nil && !below.isAlternate && below.isEnabled &&
+              todayMenu.indexOfItem(withTitle: "Archive Tabs Below") == todayMenu.indexOfItem(withTitle: "Archive Other Tabs") + 1,
+              "Q16 single Today menu has Archive Tab then normal Archive Tabs Below")
+        let beforeBelowBatches = archive.batches
+        perform(todayMenu, "Archive Tabs Below")
+        check(space.today.map(\.id) == Array(beforeBelow.prefix(belowIndex + 1)) && archive.batches == beforeBelowBatches + 1 &&
+              belowIDs.allSatisfy { model.node(id: $0) == nil }, "Q16 Archive Tabs Below archives only later Today rows in one batch")
+        undo.undo(); pump()
+        check(space.today.map(\.id) == beforeBelow, "Q16 one undo restores every tab below")
+        check(sidebar.contextMenu(nodeID: space.today.last!.id)!.item(withTitle: "Archive Tabs Below")?.isEnabled == false,
+              "Q16 last Today row keeps Archive Tabs Below visible and disabled")
         let alternate = todayMenu.item(withTitle: "Archive Other Tabs")!
         check(alternate.isAlternate && alternate.keyEquivalentModifierMask == .option &&
-              todayMenu.indexOfItem(withTitle: "Archive Other Tabs") == todayMenu.indexOfItem(withTitle: "Archive Item") + 1,
-              "CU3 Archive Other Tabs is the native Option alternate immediately after Archive Item")
+              todayMenu.indexOfItem(withTitle: "Archive Other Tabs") == todayMenu.indexOfItem(withTitle: "Archive Tab") + 1,
+              "CU3 Archive Other Tabs is the native Option alternate immediately after Archive Tab")
         perform(todayMenu, "Archive Other Tabs")
         check(space.today.map(\.id) == [ordered[0]], "CU3 Archive Other Tabs keeps its tab")
         undo.undo(); pump()
