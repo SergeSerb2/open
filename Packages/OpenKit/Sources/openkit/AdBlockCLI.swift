@@ -1,0 +1,155 @@
+import Foundation
+import OpenAdBlock
+import OpenModel
+
+@MainActor
+func runAdBlock(args: [String]) async throws {
+    var positional: [String] = [], options: [String: String] = [:]
+    var index = 0
+    let valued: Set<String> = ["--dir", "--profile", "--bundled-dir", "--proxy", "--timeout", "--max-bytes"]
+    while index < args.count {
+        let arg = args[index]
+        if valued.contains(arg) {
+            index += 1
+            guard index < args.count else { throw AdBlockError("missing value for \(arg)") }
+            options[arg] = args[index]
+        } else if arg == "--incognito" { options[arg] = "true" }
+        else if arg.hasPrefix("--") { throw AdBlockError("unknown option \(arg)") }
+        else { positional.append(arg) }
+        index += 1
+    }
+    guard let action = positional.first else {
+        throw AdBlockError("usage: openkit adblock <catalog|update|bundle|status|allowlist|toggle|list|perf> [--dir ROOT] [--profile UUID]")
+    }
+    if action == "catalog" {
+        let catalog = try AdBlockCatalog.load()
+        print("catalog version=\(catalog.version) lists=\(catalog.lists.count) default_on=\(catalog.defaultIDs.joined(separator: ","))")
+        for list in catalog.lists {
+            print("\(list.id) | \(list.displayName) | category=\(list.category) default_on=\(list.defaultEnabled) bundled=\(list.bundled) info=\(list.infoURL.absoluteString)")
+            for url in list.urls { print("  \(url.absoluteString)") }
+            if let reason = list.unavailableReason { print("  unavailable: \(reason)") }
+        }
+        return
+    }
+    guard let path = options["--dir"] else { throw AdBlockError("--dir ROOT is required") }
+    let root = URL(fileURLWithPath: path, isDirectory: true)
+    let profile: ProfileID
+    if let value = options["--profile"] {
+        guard let uuid = UUID(uuidString: value) else { throw AdBlockError("--profile must be a UUID") }
+        profile = ProfileID(rawValue: uuid)
+    } else { profile = ProfileID(rawValue: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!) }
+    var policy = AdBlockDownloadPolicy()
+    if let value = options["--timeout"] {
+        guard let seconds = Double(value), seconds > 0, seconds <= 300 else { throw AdBlockError("invalid timeout") }
+        policy.requestTimeout = seconds; policy.resourceTimeout = seconds
+    }
+    if let value = options["--max-bytes"] {
+        guard let bytes = Int(value), bytes > 0 else { throw AdBlockError("invalid size limit") }
+        policy.maximumSourceBytes = bytes; policy.maximumListBytes = bytes
+    }
+    let proxy: URL?
+    if let value = options["--proxy"] {
+        guard let parsed = URL(string: value), parsed.scheme == "http", parsed.host() != nil, parsed.port != nil else {
+            throw AdBlockError("proxy must be an HTTP host with a port")
+        }
+        proxy = parsed
+    } else { proxy = nil }
+    let bundle = options["--bundled-dir"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    let store = try AdBlockStore(root: root, bundledDefaultsDirectory: bundle,
+                                incognito: options["--incognito"] != nil, policy: policy, proxy: proxy)
+    var reloads = 0
+    store.onEngineEvent = { event in
+        if case .reload = event { reloads += 1 }
+    }
+    if action == "bundle" {
+        for result in try await store.prepareBundledDefaults(at: root) { printAdBlockResult(result) }
+        return
+    }
+    try await store.openProfile(profile, scheduleUpdates: false)
+    defer { try? store.closeProfile(profile) }
+    switch action {
+    case "update":
+        do { try await store.updateListsNow(profile: profile) }
+        catch {
+            for result in store.lastUpdateResults[profile] ?? [] { printAdBlockResult(result) }
+            throw error
+        }
+        for result in store.lastUpdateResults[profile] ?? [] { printAdBlockResult(result) }
+        print("reload_events=\(reloads)")
+    case "status":
+        print(store.debugInfo(profile: profile))
+        print("list_directory=\(store.listDirectory(for: profile).path)")
+    case "toggle":
+        guard positional.count == 2, ["on", "off"].contains(positional[1]) else { throw AdBlockError("toggle <on|off>") }
+        try store.setEnabled(positional[1] == "on")
+        print("global_enabled=\(store.isEnabled)")
+    case "list":
+        guard positional.count == 3, ["on", "off"].contains(positional[2]) else { throw AdBlockError("list <ID> <on|off>") }
+        try await store.setListEnabled(positional[1], positional[2] == "on", profile: profile)
+        print("enabled_lists=\(store.enabledListIDs(for: profile).joined(separator: ",")) reload_events=\(reloads)")
+    case "allowlist":
+        guard positional.count >= 2 else { throw AdBlockError("allowlist <add|remove|list|check> [HOST]") }
+        switch positional[1] {
+        case "list":
+            for domain in store.excludedDomains(for: profile) { print(domain) }
+        case "add", "remove":
+            guard positional.count == 3 else { throw AdBlockError("allowlist add/remove requires a host") }
+            try store.setExcluded(positional[2], excluded: positional[1] == "add", profile: profile)
+            print("allowlist=\(store.excludedDomains(for: profile).joined(separator: ","))")
+        case "check":
+            guard positional.count == 3 else { throw AdBlockError("allowlist check requires a host") }
+            let snapshot = store.siteSnapshot(for: profile)
+            print("allowlisted=\(try snapshot.isAllowlisted(host: positional[2])) should_block=\(try snapshot.shouldBlock(host: positional[2]))")
+        default: throw AdBlockError("unknown allowlist action")
+        }
+    case "perf":
+        // Real persisted model load + 10,000 lookups through the caller's immutable snapshot.
+        // Each measured group includes a fresh on-disk settings load; no seeded-list IO is timed.
+        try store.closeProfile(profile)
+        // Use a persisted model in an isolated directory; never alter a user's allowlist or copy
+        // their browsing data. Each timed group reopens it through the public store interface.
+        let benchRoot = FileManager.default.temporaryDirectory.appendingPathComponent("open-adblock-perf-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: benchRoot) }
+        do {
+            let seed = try AdBlockStore(root: benchRoot)
+            try await seed.openProfile(profile, scheduleUpdates: false)
+            try seed.setEnabled(true)
+            try seed.setExcluded("example.com", excluded: true, profile: profile)
+            try seed.setExcluded("bücher.de", excluded: true, profile: profile)
+            try seed.closeProfile(profile)
+        }
+        let hosts = (0..<1000).map { index in
+            ["news.example.com", "notexample.com", "xn--bcher-kva.de", "example.org"][index % 4]
+        }
+        var times: [Double] = [], loads: [Double] = [], lookups: [Double] = [], matches = 0
+        for _ in 0..<10 {
+            let start = DispatchTime.now().uptimeNanoseconds
+            let loaded = try AdBlockStore(root: benchRoot)
+            try await loaded.openProfile(profile, scheduleUpdates: false)
+            let snapshot = loaded.siteSnapshot(for: profile)
+            let loadedAt = DispatchTime.now().uptimeNanoseconds
+            for host in hosts { if snapshot.isAllowlisted(normalizedHost: host) { matches += 1 } }
+            let end = DispatchTime.now().uptimeNanoseconds
+            let duration = Double(end - start) / 1_000_000
+            times.append(duration)
+            loads.append(Double(loadedAt - start) / 1_000_000)
+            lookups.append(Double(end - loadedAt) / 1_000_000)
+            try loaded.closeProfile(profile)
+        }
+        times.sort()
+        let p95 = times[Int(ceil(Double(times.count) * 0.95)) - 1]
+        print(String(format: "settings_load_and_1000_lookups p95_ms=%.4f groups=10 lookups=10000 matches=%d budget_ms=1", p95, matches))
+        print("groups_ms=\(times.map { String(format: "%.4f", $0) }.joined(separator: ","))")
+        print(String(format: "load_max_ms=%.4f lookup_1000_max_ms=%.4f", loads.max() ?? 0, lookups.max() ?? 0))
+        guard p95 < 1, matches == 5000 else { throw AdBlockError("performance budget or match check failed") }
+    default: throw AdBlockError("unknown adblock action")
+    }
+}
+
+func printAdBlockResult(_ result: AdBlockUpdateResult) {
+    let status = result.statuses.isEmpty ? "pinned-local" : result.statuses.map(String.init).joined(separator: ",")
+    let integrity = result.repaired ? "failed-local-integrity;refetched" : "verified"
+    print(String(format: "%@ status=%@ changed=%@ integrity=%@ bytes=%d downloaded_bytes=%d sha256=%@ etag=%@ duration_ms=%.2f attempts=%d",
+        result.id, status, String(result.changed), integrity, result.bytes, result.downloadedBytes, result.sha256,
+        result.etags.joined(separator: ","), result.duration * 1000, result.attempts))
+}

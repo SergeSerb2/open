@@ -2,13 +2,14 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route> ...")
+    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|adblock> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
 
 do {
     switch command {
+    case "adblock": try await runAdBlock(args: rest)
     case "import-arc":
         try await runImportArc(args: rest)
     case "archive-list":

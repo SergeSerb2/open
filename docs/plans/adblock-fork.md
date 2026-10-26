@@ -2419,3 +2419,14 @@ python3 /tmp/open-adblock-check.py   # §13.3 driver (throwaway, in /tmp)
 - Approved as written. Q-2 (uBO resources format for adblock 0.8.11) is resolved at Step 7 by reading the crate source. R-3: if GN rejects the include path, move the cosmetic sender fully into the CEF patch.
 - Licensing: adblock-rust (MPL-2.0) and uBlock Origin resources/scriptlets (GPL-3.0) are allowed for development and private use. Both go on the pre-release license checklist (docs/followups.md) before any public release.
 - Phasing: the Swift-side, engine-independent parts (list catalog with the 46 upstream URLs, downloader with ETag + SHA-256 pins, on-disk list directory layout per profile, per-site allowlist and global toggle model, `AdBlockStore` contract) start now as an OpenKit target. Engine Steps 1–8 wait for the stock build and the fork scripts (PR #25).
+
+### Swift-slice implementation notes (2026-10-25)
+
+The Lead decisions Swift slice lands as `OpenAdBlock` in OpenKit. Its catalog and
+pins are package resources; `tools/fetch-adblock-lists.sh` reads those same pins.
+The source manifest has regional ID `dk` (not the prose's `ndk`) and 18 Korean
+sources (not 17). BCNYBlocklists' two mirror-relative paths have no public upstream
+host, so its catalog entry is explicitly unavailable rather than using the mirror
+or inventing a URL. The normative `lists/engine.dat` placement after the §9.2
+diagram is retained. See [adblock-lists.md](../adblock-lists.md) for the Swift store
+contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.

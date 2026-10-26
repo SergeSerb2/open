@@ -1,0 +1,122 @@
+import Foundation
+import CryptoKit
+import Darwin
+
+public struct BlockList: Codable, Sendable, Identifiable {
+    public let id: String
+    public let displayName: String
+    public let category: String
+    public let infoURL: URL
+    public let urls: [URL]
+    public let bundled: Bool
+    public let defaultEnabled: Bool
+    public let unavailableReason: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, category, urls, bundled
+        case displayName = "display_name", infoURL = "info_url"
+        case defaultEnabled = "default_enabled", unavailableReason = "unavailable_reason"
+    }
+}
+
+public struct AdBlockCatalog: Codable, Sendable {
+    public let version: Int
+    public let lists: [BlockList]
+    public var defaultIDs: [String] { lists.filter(\.defaultEnabled).map(\.id) }
+
+    private static let cached: Result<Self, any Error> = Result { try decodeCatalog() }
+
+    public static func load() throws -> Self { try cached.get() }
+
+    private static func decodeCatalog() throws -> Self {
+        let value = try JSONDecoder().decode(Self.self, from: Data(contentsOf: resource("catalog.json")))
+        guard value.version == 1, value.lists.count == 46,
+              Set(value.lists.map(\.id)).count == 46,
+              Set(value.defaultIDs) == ["EasyList", "EasyPrivacy"] else {
+            throw AdBlockError("catalog: invalid schema")
+        }
+        for list in value.lists {
+            guard !list.id.isEmpty, list.id.utf8.allSatisfy({
+                (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+            }), list.urls.allSatisfy({ $0.scheme == "https" && $0.host()?.contains(".") == true }),
+            !list.urls.isEmpty || list.unavailableReason != nil else {
+                throw AdBlockError("catalog: invalid list \(list.id)")
+            }
+        }
+        return value
+    }
+
+    public func list(_ id: String) throws -> BlockList {
+        guard let list = lists.first(where: { $0.id == id }) else { throw AdBlockError("unknown list ID") }
+        return list
+    }
+
+    static func resource(_ name: String) throws -> URL {
+        guard let url = Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "Resources") else {
+            throw AdBlockError("missing catalog resource")
+        }
+        return url
+    }
+
+    private static let cachedPins: Result<[String: String], any Error> = Result { try decodePins() }
+
+    public static func bundledPins() throws -> [String: String] { try cachedPins.get() }
+
+    private static func decodePins() throws -> [String: String] {
+        let text = try String(contentsOf: resource("list-pins.txt"), encoding: .utf8)
+        var pins: [String: String] = [:]
+        for line in text.split(separator: "\n") where !line.hasPrefix("#") {
+            let columns = line.split(whereSeparator: \.isWhitespace)
+            guard columns.count == 3, columns[2].count == 64 else { throw AdBlockError("invalid bundle pins") }
+            pins[String(columns[0])] = String(columns[2])
+        }
+        return pins
+    }
+}
+
+public struct AdBlockError: Error, Sendable, CustomStringConvertible {
+    public let description: String
+    public init(_ description: String) { self.description = description }
+}
+
+func digest(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+}
+
+func checkedList(_ data: Data, id: String, limit: Int) throws {
+    guard !data.isEmpty, data.count <= limit else { throw AdBlockError("\(id): empty or oversized list") }
+    let prefix = String(decoding: data.prefix(4096), as: UTF8.self)
+        .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{feff}")))
+    guard prefix.hasPrefix("[Adblock Plus") || prefix.hasPrefix("[uBlock") || prefix.hasPrefix("!") else {
+        throw AdBlockError("\(id): invalid filter-list header")
+    }
+}
+
+/// Foundation's atomic write stages beside the destination, then renames over it.
+func atomicWrite(_ data: Data, to url: URL) throws {
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: url, options: .atomic)
+}
+
+func writeJSON<T: Encodable>(_ value: T, to url: URL) throws {
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try atomicWrite(encoder.encode(value), to: url)
+}
+
+func readJSON<T: Decodable>(_ type: T.Type, at url: URL, fallback: T) throws -> T {
+    let descriptor = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+    guard descriptor >= 0 else {
+        if errno == ENOENT { return fallback }
+        throw AdBlockError("settings: open failed (\(errno))")
+    }
+    let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    defer { try? file.close() }
+    var info = stat()
+    let limit = 4 * 1024 * 1024
+    guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
+          info.st_size >= 0, info.st_size <= limit else { throw AdBlockError("settings: invalid file or size limit exceeded") }
+    let data = try file.read(upToCount: Int(info.st_size) + 1) ?? Data()
+    guard data.count <= limit else { throw AdBlockError("settings: file too large") }
+    return try JSONDecoder().decode(type, from: data)
+}
