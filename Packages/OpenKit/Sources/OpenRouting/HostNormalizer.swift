@@ -46,12 +46,15 @@ public enum HostNormalizer {
             return canonicalURLString(url)
         }
         // Scheme-less patterns match both HTTP and HTTPS; www remains literal.
-        guard var parts = URLComponents(string: "//" + pattern), let host = parts.host, !host.isEmpty else { return pattern }
+        let end = pattern.firstIndex(where: { "/?#".contains($0) }) ?? pattern.endIndex
+        let authority = String(pattern[..<end])
+        guard var parts = URLComponents(string: "//" + authority), let host = parts.host, !host.isEmpty else { return pattern }
         parts.host = prefixHost(host)
-        parts.user = nil; parts.password = nil; parts.fragment = nil
-        if parts.percentEncodedPath.isEmpty { parts.percentEncodedPath = "/" }
+        parts.user = nil; parts.password = nil
         guard let result = parts.string, result.hasPrefix("//") else { return pattern }
-        return String(result.dropFirst(2))
+        // Keep the supplied remainder verbatim, including an empty path. A bare
+        // scheme-less host prefix is still a literal prefix, not a host-equality rule.
+        return String(result.dropFirst(2)) + pattern[end...]
     }
 
     private static func prefixHost(_ raw: String) -> String {

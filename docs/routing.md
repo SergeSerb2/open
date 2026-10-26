@@ -15,7 +15,7 @@ Implements Steps 1–4 of [routing-little-open.md](plans/routing-little-open.md)
 - `RoutingDecisionFormatter.oneLine(_:spaceTitles:)` and `.report(_:spaces:)` serve the log, CLI, and Settings. Unknown Space names use an eight-character UUID. Profile hints use an eight-character profile UUID because the supplied snapshot has no profile names.
 - `RoutingDecisionLog` stores the last 200 complete decisions, oldest first, behind an `NSLock`. It is memory-only and safe across threads. Clicked URLs and source identities have history-entry sensitivity. It stores no fetched page content, cookies, or page titles.
 
-Host equality lowercases, strips ports and trailing dots, and removes one leading `www.` from each side. It does not match subdomains. Host containment is a literal substring test: `google.com` also matches `notgoogle.com`. URL prefixes are literal and case-sensitive in path/query, keep `www.`, drop fragments, and remove default ports. Scheme-less prefixes match HTTP and HTTPS. Unicode host patterns are not converted to punycode; callers should use the URL's ASCII host spelling. No network or file access occurs during evaluation.
+Host equality lowercases, strips ports and trailing dots, and removes one leading `www.` from each side. It does not match subdomains. Host containment is a literal substring test: `google.com` also matches `notgoogle.com`. URL prefixes are literal and case-sensitive in path/query and keep `www.`. Canonical request URLs and explicit-scheme patterns drop fragments and remove default ports. Scheme-less prefixes match HTTP and HTTPS and keep the supplied remainder verbatim, including an empty path or fragment. Unicode host patterns are not converted to punycode; callers should use the URL's ASCII host spelling. No network or file access occurs during evaluation.
 
 A rule that explicitly selects Little Open still wins when the external-links toggle is off. Only a Little Open **default** is suppressed by that toggle.
 
@@ -67,7 +67,7 @@ All package builds ran in `Packages/OpenKit`, in separate process sessions, with
 nice -n 10 swift build -c release -j 6
 ```
 
-Baseline and Steps 1, 2, 3, and 4 each built with zero warnings and zero errors. CLI checks used the resulting `.build/release/openkit` and `.build/release/commands-dump` executables; no implicit debug builds ran.
+Baseline, Steps 1, 2, 3, and 4, and the final prefix refinement each built with zero warnings and zero errors. CLI checks used the resulting `.build/release/openkit` and `.build/release/commands-dump` executables; no implicit debug builds ran.
 
 Before source changes, the main-source build at `47d83fed82383f9f120797b109ef45a5f23af73a` imported a temporary copy of the user's top-level JSON files with `openkit import-arc --arc-dir COPY --out OLD`. The resulting schema-1 snapshot contained a legacy Little Open destination and a rule without the new optional source field. An immutable original was kept; load, roundtrip, and edited fixtures used copies. The original hash remained unchanged. All copied user data and raw CLI output stayed outside the repo. Fixture Space names in routing reports were replaced with synthetic names.
 
@@ -100,7 +100,7 @@ For A1–A10, each routing case used a copy of that import with only its routing
 
 The Settings probe used the Swift interpreter against already-built release objects linked into a temporary library. No probe or test target was added to the repo.
 
-Additional real CLI checks passed: missing snapshot (1), invalid arguments/URL/Space override (2), expectation mismatch after printing (1), bare-host scheme convenience, source mismatch, title and UUID most-recent overrides, zero Spaces with Little Open on/off and a Space default, stale-rule fallback, literal prefix boundaries, scheme-less prefixes, path/query case and escaping, fragments, default/nondefault ports, empty patterns, and unknown or mixed destination keys. Compatibility roundtrips also passed for legacy rule destinations/window styles, explicit old thresholds, new-key precedence, missing-key six-hour fallback, and normalized source persistence.
+Additional real CLI checks passed: missing snapshot (1), invalid arguments/URL/Space override (2), expectation mismatch after printing (1), bare-host scheme convenience, source mismatch, title and UUID most-recent overrides, zero Spaces with Little Open on/off and a Space default, stale-rule fallback, literal prefix boundaries, scheme-less prefixes (including a bare host and verbatim fragment), path/query case and escaping, fragments, default/nondefault ports, empty patterns, and unknown or mixed destination keys. Compatibility roundtrips also passed for legacy rule destinations/window styles, explicit old thresholds, new-key precedence, missing-key six-hour fallback, and normalized source persistence.
 
 ## Plan differences and clarifications
 
