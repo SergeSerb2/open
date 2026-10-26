@@ -1,10 +1,10 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
-    "embeddedUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "distributionUUID": "4C4C4410-5555-3144-A12D-1F6DECA655A4",
+    "embeddedUUID": "4C4C4410-5555-3144-A12D-1F6DECA655A4",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001051"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793003176"
   },
   "profiles": {
     "durable_second_profile": {
@@ -25,7 +25,7 @@
         ]
       },
       "ok": true,
-      "work_dir": "Profile-12978A31"
+      "work_dir": "Profile-10005156"
     },
     "extension_isolation": {
       "default_profile_probe_sees": {
@@ -33,7 +33,7 @@
           "https://example.com/?profile=default"
         ],
         "windows": [
-          52582695
+          1912881456
         ]
       },
       "ok": true,
@@ -42,7 +42,7 @@
           "https://example.com/?profile=work"
         ],
         "windows": [
-          52582691
+          1912881452
         ]
       }
     },
@@ -124,6 +124,6 @@
       ]
     }
   },
-  "started": "2026-10-26 00:52:59",
+  "started": "2026-10-26 01:27:32",
   "style": "chrome"
 }
