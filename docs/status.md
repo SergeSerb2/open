@@ -1,7 +1,7 @@
 # Open v1 status inventory
 
-Audit date: 2026-10-25 (America/Vancouver). Base: `origin/main` at `dc62e65` (includes PR #46 fork bring-up, PR #50 M4 visual finish, and PR #51 Settings + Library, which merged during the audit).
-Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #53 `a03d2a5`, plus the titles and file lists of PRs #54–#57.
+Audit date: 2026-10-25 (America/Vancouver). Base: `origin/main` at `724e35d` (includes PR #46 fork bring-up, PR #50 M4 visual finish, and two PRs that merged during the audit: #51 Settings + Library and #54 release locales).
+Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #53 `a03d2a5`, plus the titles and file lists of PRs #55–#57.
 
 This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.md v1 scope, and the platform basics a browser needs. For each item it names the plan, the library code, the App wiring, and the evidence. It is an inventory. It changes no code.
 
@@ -12,7 +12,7 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 | Status | Meaning |
 |---|---|
 | **done** | A user can use it in the app built from `main` today. On `main` the App is still the plain M1 shell (`App/BrowserWindowController.swift`: table-view tab list, address field). So "done" often means "works in the M1 shell, without Arc's look". |
-| **in PR** | It works in the real app of an open PR (#45, #52, #53), or its code is in an open PR (#54–#57). |
+| **in PR** | It works in the real app of an open PR (#45, #52, #53), or its code is in an open PR (#55–#57). |
 | **planned** | A plan names the missing part. Library code can already exist on `main` (for example all of `OpenSettings` from #51, which no App code shows yet). "Plan in progress" means a plan that another agent is writing now (§0.3). |
 | **unplanned** | No plan covers the missing part. Library code can exist (the note says so). |
 | **out of scope** | Excluded by AGENTS.md (accounts, sync, Easels, Notes, Arc Max) or by a lead decision. Listed only so nobody builds it by accident. |
@@ -37,7 +37,8 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 | App shell Step C (menus, keys, command bar) | uncommitted edits in worktree `t3-d8b5b30a`, branch `t3/app-shell-commands` (no commits beyond PR #52) | planned (in progress); not counted as wired |
 | Settings + Library | PR #51, merged to `main` as `dc62e65` during this audit; changes no `App/` file | planned (library on `main`; App wiring in app-shell §4.11 and settings Step 8) |
 | Settings polish | PR #56, branch `m5/settings-polish` | in PR (`OpenSettings` only) |
-| Release Steps 1/3, 9, 11 | PR #54 (`tools/release-locales.txt`), PR #55 (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`), PR #57 (`tools/release.sh`) | in PR |
+| Release Steps 1/3 | PR #54, merged to `main` as `724e35d` during this audit (`tools/release-locales.txt`) | planned (partial) |
+| Release Steps 9, 11 | PR #55 (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`), PR #57 (`tools/release.sh`) | in PR |
 | Extensions P1 tab-strip bridge | PR #53, branch `m7/ext-p1-tabstrip` | in PR |
 | Space creation + theme editor plan | branch `plan/space-theme-editor` | plan in progress |
 | Site Control Center + Boost editor plan | branch `plans/site-control-boost-editor` | plan in progress |
@@ -75,8 +76,8 @@ Row count by status (281 rows in §1; a "(partial)" row counts under its base st
 | 1.17 Engine and platform basics | 9 | 2 | 19 | 15 | 1 |
 | 1.18 Settings and Library | 0 | 0 | 10 | 0 | 2 |
 | 1.19 First run | 0 | 0 | 4 | 0 | 0 |
-| 1.20 Release | 0 | 3 | 6 | 0 | 0 |
-| **Total** | **23** | **63** | **136** | **51** | **8** |
+| 1.20 Release | 0 | 2 | 7 | 0 | 0 |
+| **Total** | **23** | **62** | **137** | **51** | **8** |
 
 ## 1. Feature tables
 
@@ -458,7 +459,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Developer ID signing, hardened runtime, entitlements | — | release §4 | `project.yml` is ad-hoc | — | — | planned | Needs U-1, U-2 (§5.1). |
 | Notarization and DMG | — | release §3 | — | — | — | planned | Needs U-3. |
 | Sparkle updates with an appcast on GitHub Pages | — | release §6 | — | — | — | planned | Needs U-4, U-5. |
-| English-only locales | engine-patches P5 | release §2.7 | `tools/embed-cef.sh` (`OPEN_KEEP_LOCALES`); PR #54 adds `tools/release-locales.txt` | — | — | in PR | |
+| English-only locales | engine-patches P5 | release §2.7 | `tools/embed-cef.sh` (`OPEN_KEEP_LOCALES`); `tools/release-locales.txt` (#54, merged) | — | — | planned (partial) | The list is on `main`; the release pipeline that applies it is PR #57. |
 | License inventory and acknowledgements | `docs/followups.md` | release §7, Step 9 | PR #55 (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`) | — | — | in PR | The review itself needs U-6. |
 | Crash symbol archive (dSYMs kept on this Mac) | — | release §2.5 | — | — | — | planned | |
 | `tools/release.sh --dry-run` | — | release §11, Step 11 | PR #57 (`tools/release.sh`) | — | — | in PR | |
@@ -671,7 +672,7 @@ Design reviews of Settings, the first-run screens, and the Links pane belong to 
 
 ## 6. Evidence for this audit
 
-The audit started on `42bba0b`. PR #51 merged during the audit, so the branch was fast-forwarded to `dc62e65` and the checks marked "both" ran again. No unit tests, no Arc launch, no desktop input, and no Arc user data were used.
+The audit started on `42bba0b`. PR #51 merged during the audit, so the branch was fast-forwarded to `dc62e65` and the checks marked "both" ran again. PR #54 (a text file and a plan line) merged next; `tools/verify-all.sh` ran a third time on the final merge. No unit tests, no Arc launch, no desktop input, and no Arc user data were used.
 
 | Command | Tree | Result |
 |---|---|---|
@@ -682,7 +683,7 @@ The audit started on `42bba0b`. PR #51 merged during the audit, so the branch wa
 | `.build/release/commandbar-render check` | both | 78/78 passed |
 | `.build/release/settings-preview check` (inside verify-all) | `dc62e65` | 28 checks passed, 0 failed |
 | `.build/release/sidebar-render bench --rows 1000` | `42bba0b` | scroll p95 3.67 ms; moveNode p95 4.84 ms; Space switch 7.6–14.8 ms (load 8.5) |
-| `tools/verify-all.sh` | both | `42bba0b`: 14 PASS; `dc62e65`: 15 PASS (adds `settings-preview`); no SKIP |
+| `tools/verify-all.sh` | all | `42bba0b`: 14 PASS; `dc62e65`: 15 PASS (adds `settings-preview`); final merge with `724e35d`: 15 PASS; no SKIP |
 | Coverage join (§2) with a fresh `commands-dump --markdown` | both | Same counts on both trees |
 | `git grep` for library types in `App/` on `origin/main` and `origin/t3/app-shell-real-window` | both | No App use of `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `BoostStore`, `AdBlockStore`, `SleepController`, `ScriptHost`, `RoutingEvaluator`, `GlobalHotkeyService`, `archiveExpiredTabs` |
 | Diff of the MH menu tables against `expected-menu.json` | both | 1 Arc item missing (Reveal Tab in Sidebar); 2 extra standard macOS items |
