@@ -57,9 +57,12 @@ enum FeatureChecks {
         let divider = c.container.divider(at: 0)!
         let initialFractions = split.fractions
         model.undoManager = undo
+        let beforeLiveFrames = c.container.slots.map(\.frame)
         let pageLayouts = c.container.slots.compactMap { ($0.contentHostView as? FakePageView)?.layoutCount }
         divider.drag(by: 60, commit: false)
-        check(c.container.slots.compactMap { ($0.contentHostView as? FakePageView)?.layoutCount } == pageLayouts,
+        check(c.container.slots.map(\.frame) != beforeLiveFrames
+            && c.container.slots.allSatisfy { $0.paneChrome?.frame.width == $0.frame.width }
+            && c.container.slots.compactMap { ($0.contentHostView as? FakePageView)?.layoutCount } == pageLayouts,
               "R8 divider updates frames without laying out the web subtree per event")
         divider.drag(by: 120); settle()
         check(split.fractions.count == 2 && abs(split.fractions.reduce(0, +) - 1) < 0.000001 && split.fractions[0] > 0.5, "S3 divider persists normalized widths")
@@ -85,11 +88,16 @@ enum FeatureChecks {
         c.container.host(for: first.id)?.focus()
         check(c.handleKeyDown(focusSecond) && split.focusedPaneID == newID, "R9 web responder permits split-focus shortcut")
         c.performCommand("focus-split-pane-1")
-        let sidebarField = NSTextField(); c.sidebar.addSubview(sidebarField); c.window?.makeFirstResponder(sidebarField)
-        check(!c.handleKeyDown(focusSecond) && split.focusedPaneID == first.id, "R9 sidebar responder keeps split-focus shortcut")
-        sidebarField.removeFromSuperview()
+        func outline(in view: NSView) -> NSOutlineView? {
+            if let list = view as? NSOutlineView { return list }
+            return view.subviews.lazy.compactMap { outline(in: $0) }.first
+        }
+        let sidebarList = outline(in: c.sidebar)!
+        check(c.window!.makeFirstResponder(sidebarList) && c.window!.firstResponder === sidebarList
+            && !c.handleKeyDown(focusSecond) && split.focusedPaneID == first.id, "R9 sidebar responder keeps split-focus shortcut")
         let textField = NSTextField(); c.contentView.addSubview(textField); c.window?.makeFirstResponder(textField)
-        check(!c.handleKeyDown(focusSecond) && split.focusedPaneID == first.id, "R9 text field retains split-focus shortcut")
+        check((c.window!.firstResponder is NSTextView || c.window!.firstResponder === textField)
+            && !c.handleKeyDown(focusSecond) && split.focusedPaneID == first.id, "R9 text field retains split-focus shortcut")
         textField.removeFromSuperview(); c.container.host(for: first.id)?.focus()
         c.performCommand("expand-current-split"); settle(); check(c.container.slots[0].frame == c.container.bounds && c.container.slots[1].isHidden, "S5 maximize hides other slots")
         c.splitController.performCommand("escape"); settle(); check(c.container.slots.allSatisfy { !$0.isHidden }, "S5 Escape restores layout")

@@ -14,7 +14,8 @@ public enum FeatureSite {
         let host = HostNormalizer.canonicalHostName(raw)
         var ipv4 = in_addr(), ipv6 = in6_addr()
         let isIP = host.withCString { inet_pton(AF_INET, $0, &ipv4) == 1 || inet_pton(AF_INET6, $0, &ipv6) == 1 }
-        if isIP || host == "localhost" { return host }
+        // Scoped IPv6 literals include a zone suffix that inet_pton does not accept.
+        if isIP || host.contains(":") || host == "localhost" { return host }
         let suffixCount = PublicSuffixList.shared.suffixLabelCount(host: host) ?? 1
         return host.split(separator: ".").suffix(suffixCount + 1).joined(separator: ".")
     }
