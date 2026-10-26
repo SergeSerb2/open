@@ -34,13 +34,13 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | Toolbar glyph, enabled (and the sidebar toggle always) | black 0.56 `GrayA11` | `GrayA11` | F0001 toggle core ≈ 0.56; Arc's AX says the toggle is disabled, but it draws enabled |
 | Toolbar glyph, disabled; every chrome glyph in an inactive window | black 0.22 `GrayA8` | `GrayA8` | F0001 back/forward; inactive capture `arc-window-5245.png` |
 | Bottom plus | `GrayA11`; inactive 0.30 | white 0.62 (fitted) | F0001, F0079, inactive capture |
-| Home (our glyph) | black 0.52; inactive 0.26 (fitted for our shape) | guess | F0001, inactive capture |
+| Home (our glyph) | black 0.52; inactive 0.26 (fitted for our shape) | white 0.59; inactive 0.30 (session 2 peaks, so lower bounds; was a guess) | F0001, inactive capture; session 2 03/0001, 0016 (`re/interaction-states.md` §20.1) |
 | URL field and tile fill | `SidebarItemBackground` (`#0E0F10` 0.05 P3) | `#FAFBFF` 0.10 | ΔE ≤ 0.61 on 7 elements |
 | URL field under the pointer | `SidebarItemHoveredBackground` (`#0E0F10` 0.10 P3) | `#FAFBFF` 0.15 | F0033 vs F0032 (§16) |
 | Hover-reveal card stroke | `SidebarBorderColor` white 0.30 | same | F0129 `#696875` over `#272739` (§16) |
 | Row hover, header hover, New Tab hover | `SidebarItemBackground` | same | F0013 ΔE 0.45, F0031 0.49, F0079 0.81 |
 | Button hover plate | black 0.07 `GrayA4` | `GrayA4` | F0024 ΔE 0.38, F0027 0.72 |
-| Selected row, selected tile, "New Tab" during Cmd+T | theme `light.background`, opaque | white 0.20 `TabCellBackgroundCurrent` | F0015 ΔE 1.05, F0016 1.15, F0063 2.00, F0066 2.03 |
+| Selected row, selected tile, "New Tab" during Cmd+T | theme `light.background`, opaque | white 0.20 `TabCellBackgroundCurrent` | F0015 ΔE 1.05, F0016 1.15, F0063 2.00, F0066 2.03. Session 2 (default dark theme): row 0.19 (03/0001); **change pending:** a selected Favorite tile is white ≈ 0.44 (07/0140), not 0.20; in an inactive window the row drops to 0.10 and the tile to 0.24 with a 2 px white ≈ 0.36 ring (03/0016, 07/0163). Default theme in macOS Light: row `#F4F3F5` (20/0015). `re/interaction-states.md` §20.3, §20.11 |
 | Selected shadow | black 0.20 `TabCellShadowSelected`, radius 1.5, 1 pt down | none (the dark token is clear) | F0014 edge profile |
 | Pinned/Today divider | black 0.15 `SidebarSeparator` | white 0.15 | F0066 ΔE 0.33 |
 | "Clear" | `SidebarForeground`; `SidebarForegroundDarker` on hover | same tokens | F0041 |
@@ -61,7 +61,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 | Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]`; the system draws 12 pt circles centered in them, at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden | measured (AX F0001, F0129, F0131; F0001 pixels) |
 | Toolbar buttons | 32×32 at y 7; toggle x 77; back / forward / reload at x `W − 106 / W − 72 / W − 38` (pitch 34, reload 6 pt from the edge); hover plate = button frame, radius 6 | measured |
 | URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]`; hover darkens the fill, same frame | measured, text origin fitted |
-| Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (6 → 3 columns at width 228 and 500); no favorites: an 8 pt section | measured; rule for other counts guess; empty section fitted (§16) |
+| Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (1, 2, 3, 4 → one row; 5 and 6 → 3 columns, the short row left-aligned); no favorites: an 8 pt section | measured for 1–6 (session 2 07/0043–0139, F0016); 7 and more guess. **Change pending:** with no Favorites Arc shows the dashed "Drag to add Favorites" card (105 pt section at width 228) until it is dismissed; our 8 pt section is fitted to the window-only sidebar (§16) and stays only for the dismissed state (guess) (`re/interaction-states.md` §20.3) |
 | Space header | 36 pt band; icon frame `[13, 5, 26, 26]`; title origin x 44, baseline 23; hover fill `[8, 0, W − 16, 36]`, chevron in place of the icon, "…" at the right. Without favorites the band starts at y 90, 8 pt below the URL field | measured, text origin fitted |
 | Tab list | 3 pt spacer row, then 41 pt rows; favicon `[17, y + 11, 18, 18]` (16 ink); title origin x 44, baseline y + 25; fill `[8 + indent, y + 2, W − 16 − indent, 36]`, radius 10 continuous | measured, baseline fitted (ink bottom at y + 24) |
 | Close / unload | `[W − 39, y + 7, 26, 26]`; the title then ends at its left edge | measured |
@@ -76,7 +76,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 | Web panel | `[W, 10, winW − W − 10, winH − 20]`, radius 6, shadow black 0.25 radius 3 offset 1; hidden sidebar `[10, 10, winW − 20, winH − 20]` | measured |
 | Hover-reveal card | `[5, 5, W, H − 10]`, radius 12 circular; 1 pt stroke `SidebarBorderColor` (white 0.30) on the outermost pixels inside the card; shadow black 0.17, σ 4 pt, no offset | measured (F0129, F0130); corner and shadow fitted (§16) |
 | Hover-reveal zones | dwell 0.15 s (outer edge 0.16 s) in: the left edge (x 0…6, held −20…15), the strip left of the window (50 pt, held 250), the top-left corner (40 pt wide, −15…20), the traffic-light region (to y 50); the card stays while the pointer is on it or in a zone and hides 0.15 s after it leaves | decoded (§16); zone unit 10 and exit delay guess |
-| Sidebar width | default 228; 500 is the widest seen; minimum 180 | 500 guess as max; minimum guess |
+| Sidebar width | default 228 (a double-click on the resize edge resets to it); minimum 164; maximum 500; dragging past the minimum slides the sidebar out while the button is still down, and Cmd+S then restores the width from before the drag; at 207 and below the toolbar keeps only Back, Forward, and "More options" (28 × 28 at y 9) | measured (session 2 06/0009–0088, `re/interaction-states.md` §20.1). **Value change:** minimum was a 180 guess; the drag-to-hide point is past 164 (≈ pointer x 65–85, notes only) |
 
 ### 2.3 Typography
 
@@ -100,6 +100,8 @@ Labels draw with Core Text at an exact baseline (`TextLabel`). The text origin s
 ### 2.4 Motion (provisional)
 
 Arc keeps its springs in compiled code. The capture has about 0.47 s between frames, so only progress points exist. All animations use these tokens, so a better capture changes one place.
+
+Capture session 2 measured Arc's motion in a screen video (`re/interaction-states.md` §20.12; PR #104 records the same video in §13.1 there and edits the rows below, so they are not changed here). **Values that change:** Space switch slide: a critically damped spring with response **0.20 s** (not 0.30), settled ≈ 0.27 s; folder expand ≈ 0.20 s (ease-out) and collapse ≈ 0.25 s (close to our 0.22 s); command bar open and close: **no animation**; Cmd+S hide and show ≈ 0.10 s (spring response ≈ 0.1 s, damping 0.9–1.0), the show starting ≈ 0.29 s after the key; hover-reveal card in: spring response ≈ 0.16–0.18 s, damping ≈ 0.8–0.86 (3 pt overshoot), out ≈ 0.10 s ease-in-out; copy toast in ≈ 0.20 s, shown ≈ 4.95 s, out ≈ 0.16 s; theme popover in ≈ 0.20 s, out ≈ 0.19 s. Not measured: the tooltip delay, the hover and selection fades, the swipe snap, the theme cross-fade (both test Spaces had the same theme), Peek.
 
 | Token | Value | Evidence |
 |---|---|---|
@@ -142,7 +144,7 @@ The stored stops are saturated (`#FF8558`, `#F0E941`, `#FF5598` in Space 1). On 
 
 ### 3.5 Default theme
 
-Spaces without a stored theme draw measured corner colors: dark TL `#252538`, TR `#322438`, BL `#2C2437`, BR `#342237` (macOS Dark). Background ΔE 0.59 on F0079. The light variant is a guess (no light-mode capture). Its text colors are in §2.1.
+Spaces without a stored theme draw measured corner colors: dark TL `#252538`, TR `#322438`, BL `#2C2437`, BR `#342237` (macOS Dark). Background ΔE 0.59 on F0079. Its text colors are in §2.1. The light variant was a guess; capture session 2 measured it in macOS Light (20/0015, `re/interaction-states.md` §20.11): sidebar top `#DBDBF3`, top-right margin `#ECE0E4`, sidebar bottom `#E8E0ED`, bottom-right margin `#F1E2E2` (lavender to pink). **Change pending:** our light corners (`#EDEDF1` …, `SpaceThemeStyle.defaultTheme`) differ by ΔE00 4.7–9.1. Light text: tab title `#0F1152`, "New Tab" `#9E9CAB`, URL host `#53545D`; URL field and tiles `#D1D1E8`.
 
 ### 3.6 Grain
 
@@ -170,7 +172,7 @@ SF Symbols where one fits. Sizes are tuned so the 1x ink box matches Arc's (meas
 | Header chevron | `chevron.down` / `chevron.right` | 12 Bold | not measured |
 | Header "…" | `ellipsis` | 13 Bold | not measured |
 | "Clear" arrow | `arrow.down` | 9 Semibold | AX 12×9 |
-| Audio / muted | `speaker.wave.2.fill` / `speaker.slash.fill` | 11 | not captured |
+| Audio / muted | `speaker.wave.2.fill` / `speaker.slash.fill` | 11 | session 2: outline glyphs (speaker with waves / slashed speaker), ink 19×13 / 16×16, in a 26×26 button `[41, y + 7]` right after the favicon; the title moves to x 69 (12/0022, 0027; `re/interaction-states.md` §20.7). **Change pending:** our glyphs are filled and sit after the title |
 | Bottom plus | `plus` | 17 Medium | 14×14 (=) |
 | Home (Library) | our vector `CustomIcon.library`: a filled box, a lid, two items above | 14×16 ink | 14×16 (=) |
 | Folder closed / open | our vector `CustomIcon.folder` in the Space accent | 18 pt frame | shape not matched (§9) |
@@ -242,7 +244,7 @@ A same-parent move downward subtracts one, because the model counts the position
 
 ### 5.6 Menus and tooltips
 
-Context menus are native `NSMenu`s built per target, in the captured order: Today tab (F0115), pinned tab (F0116), folder (F0119), and Space on the title or empty space (F0117). Favorite and bottom plus menus are guesses. The split row menu follows Arc's menu builder (`re/menus-and-hotkeys.md`, "Split row menu"): Separate All Tabs · Add Tab… · Convert to Vertical/Horizontal Split View · — · Tab Options · one submenu per pane (Separate from Split View · — · Mute · Copy Link · Copy Link as Markdown · — · Archive Item) · — · Duplicate · Move to · — · Archive Item. Each item sends an intent. "Rename…" starts the inline editor.
+Context menus are native `NSMenu`s built per target, in the captured order: Today tab (F0115), pinned tab (F0116), folder (F0119), and Space on the title or empty space (F0117). Favorite and bottom plus menus were guesses; capture session 2 shows both (`re/interaction-states.md` §20.3, §20.8). **Change pending:** Favorite tile: Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Customize Page… · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ (Profiles, not Spaces) · — · Remove Favorite. Plus button: an Arc popover with a bottom arrow, not an `NSMenu`: New Space · New Folder · — · New Easel ⌃⇧E · New Boost · — · New Split ⌃⇧= · New Tab ⌘T (Easels are out of scope for Open). Session 2's Today tab menu is longer than F0115's (Share, Change Icon…, Rename…, Mute, Customize Page…, Duplicate, and Archive Tab · Archive Tabs Below with the ⌥ alternates Archive Other Tabs · Archive Tabs Above); why F0115 was shorter is not known. The split row menu follows Arc's menu builder (`re/menus-and-hotkeys.md`, "Split row menu"): Separate All Tabs · Add Tab… · Convert to Vertical/Horizontal Split View · — · Tab Options · one submenu per pane (Separate from Split View · — · Mute · Copy Link · Copy Link as Markdown · — · Archive Item) · — · Duplicate · Move to · — · Archive Item. Each item sends an intent. "Rename…" starts the inline editor.
 
 Tooltips are our own capsule (`TooltipView`) in a borderless child panel: 27 pt tall, radius = height / 2; two lines 42 pt. Fill is the theme's `light.title`. Keycaps follow the label. Placement: below toolbar buttons, above the bottom bar, beside the pointer on rows. Delay 0.6 s and fades are guesses.
 
@@ -437,7 +439,27 @@ Split-row menu: see §5.6.
 
 ### 15.1 No regression on the matched states
 
-The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktree. It is re-derived from the frames in `.re/vf/run-states.sh` (same snapshots, sizes, forced states). The table runs it with release builds of `origin/main` (`33aade1`) and of this branch, one state per process. All 13 PNGs and tables are byte-identical between the two builds.
+The historical M4 cohort used release builds of `origin/main` (`33aade1`) and
+its branch, one state per process. Its 13 PNGs and tables were byte-identical.
+The table below records the Arc worst-value limits and element counts for the
+current gate. The lost ignored runner is now committed as
+`tools/verification/sidebar-compare-states.sh` (details in §17.1).
+
+**Lead gate, 2026-10-26 (supersedes table-byte and SHA identity):**
+
+1. Every compared element's position error and both Arc/Open ink boxes must be
+   identical between main and branch. There is no geometry tolerance.
+2. Each element's color metric may differ from main by at most **0.15 ΔE00**.
+   This includes the background mean and sampled maximum. RGB strings and table
+   bytes can differ because text anti-aliasing differs between builds.
+3. Both main and branch must stay within each state's recorded worst position
+   and ΔE00 limits below, with the same compared elements and sampling counts.
+4. Combined table SHA-256 values are reported for information only. They do not
+   gate acceptance.
+
+The runner retains at most three paired attempts per state, as before; every
+failed attempt and its reason stays in the receipt and private output folder.
+It never changes masks, inputs, or limits to make a state pass.
 
 | State | Frame | Elements | Worst position (pt) | Worst ΔE00 | Main vs branch |
 |---|---|---|---|---|---|
@@ -602,3 +624,339 @@ The real app (`OPEN_AUTOMATION=1 tools/build.sh Release`), driven only through t
 | `hide_reveal`, `fullscreen_hover_reveal` | rewritten: condition waits on the card (settled, or gone) instead of fixed sleeps, each sub-condition and its time recorded |
 
 The two rewritten checks failed in about one run of two before (docs/followups.md, PR #53), always on the first reveal after a hide. The reveal itself was not slow. guess (not traced): a pointer event at the real pointer cancelled the pending reveal. Both possible causes are gone: synthetic pointer events carry a tag and the reveal follows only tagged events once a check moves the pointer, and the waits are conditions.
+
+## 17. Sidebar completion S1 (2026-10-26)
+
+`SidebarContext.selection` owns transient multi-selection for one window.
+Cmd-click first includes the visible current row (lead decision Q9). Shift-click
+and Shift+Arrow use visible tabs, folders, and splits in display order, skipping
+all sentinel rows. Esc, plain clicks, and Space switches clear it. Removing or
+hiding rows prunes it; moves keep the IDs in display order. Favorites do not join.
+
+Each row observes one `SidebarRowSelectionState.isSelected` flag. A toggle marks
+only those row fills dirty, with no cell layout or full outline reload. Current
+rows keep their fill and shadow; other selected rows use
+`SidebarRole.rowMultiselected` (the existing `TabCellBackgroundMutiselected`
+color, documented in [sidebar-completion.md §3](re/sidebar-completion.md#3-multi-select)).
+Split pane cells appear only when the split is current. The multi-fill uses the
+existing hover geometry and `Motion.hoverFade`.
+
+Verification uses real window events and real offscreen AppKit views in
+`sidebar-render check`, plus `sidebar-render bench --rows 1000 --selection`.
+MS1–MS6 and MS13 cover current-row inclusion, range extension and shrinking,
+keyboard input, empty current state, pruning, folder/split fills, and row order.
+MS6 samples the rendered fill in light and dark appearances against the composited
+token (ΔE00 0.304 / 0.302, limit 0.5), and checks its exact geometry and shadow.
+The selection bench measured p95 0.46 ms with zero row layouts (limit 1 ms and at
+most two layouts). Scroll p95 was 2.83 ms; the saved pre-change run was 3.80 ms.
+These are local measurements, not a claim that S1 improves scroll performance.
+No unit tests, desktop input, or engine build ran. App automation E1–E4 remains
+with the later App lane.
+
+### 17.1 Durable 13-state comparison
+
+Lead waiver (review finding S1-1; originally §16.1 before the chrome merge):
+S1 retains byte-identical tables as a stricter interim rule. S4 (#99) replaces
+it with the lead gate in §15.1; SHA identity then becomes informational.
+S1 ships only as the base of S2 (#91), whose press/drag handling completes S1-5.
+
+The old git-ignored runners were lost. The committed replacement is
+`tools/verification/sidebar-compare-states.sh`, with a Python helper next to it.
+It reconstructs §15.1 with one state per render process, using absolute private
+input paths. The snapshot, frame, forced state, size, width, and compare switches
+for every state are in the helper. It retains the existing `Compare.swift` masks.
+F0079 uses the pre-theme static snapshot and reads the omitted first folder
+child's title from that frame's private AX input inside the compare harness.
+Blue-theme row text and New Tab differ from its snapshot, as in the earlier
+comparison; their ink is excluded. No private value is part of the script.
+
+```sh
+tools/verification/sidebar-compare-states.sh \
+  /absolute/path/to/.re/design-compare \
+  --renderer /absolute/path/to/Packages/OpenKit/.build/release/sidebar-render
+```
+
+The runner resolves `origin/main` to an immutable commit, exports its package
+source into `/tmp`, and makes a release build. `--baseline-renderer` can reuse an
+existing release binary built from `--baseline-ref`. It renders and compares both
+binaries sequentially and applies the exact-geometry / 0.15 ΔE00 color-metric /
+recorded-Arc-limits gate in §15.1. Table and SHA identity are informational.
+Known offscreen nondeterminism (§15.1) permits at most three paired attempts per
+state; every attempt is retained and the receipt lists the count. It never
+changes or removes table rows to hide a main-versus-branch difference. Outputs
+stay in a private `/tmp/open-sidebar-compare-*` directory, including images,
+commands' logs, the binary/input SHA-256 receipts, per-state tables, and the
+combined tables in sorted state-name order. Captures and snapshots stay in the
+main checkout's `.re`.
+
+All 13 per-state worst values and element counts reproduce §15.1, and all 13
+main-versus-S1 tables are byte-identical. **Baseline SHA re-derived:**
+`f820361b0b4baa3ad4e24b723ca807462f1b195d2f2391997815445ec77455e1`.
+The historical `2e7974…a278448` is still printed for comparison. Its original
+runner is unavailable. This was the S1 byte-identity gate; the lead replaced it
+with the numeric gate in §15.1 on 2026-10-26.
+`tools/verify-all.sh` includes `sidebar-compare`: it runs where the private inputs
+exist and SKIPs only when those inputs are absent. `SIDEBAR_CAPTURE_ROOT` selects
+a different private input root; `SIDEBAR_BASELINE_RENDERER` supplies a prebuilt
+main binary. The full local verification run passed every available row.
+
+## 18. Sidebar completion S2 (2026-10-26)
+
+Selection menus use the order in sidebar-completion §3.1. Tabs and splits offer
+bulk pin/unpin; mixed selections offer Delete for folders. No menu shows Archive
+Folder (lead Q1). Single folder Delete now reaches M2's one-record folder archive.
+The folder and Space menu titles use curly quotes. Right-clicking an unselected
+row clears the transient selection; right-clicking a selected row in a group
+keeps the group and shows its selection menu. Favorites do not join it (Q9's
+current-row inclusion remains as implemented in S1).
+
+`ModelSidebarActions` maps move, archive, folder creation at the first selected
+slot, pin/unpin, duplicate, Clear keeping IDs, folder archive, and Space export to
+M1/M2's atomic commands. Consumed selection clears before the command; a refused
+delegate restores it. Pin and Duplicate retain selection. New Folder starts
+inline rename after the native outline has applied its changes. Cmd+D,
+Cmd+Shift+N, and Delete use this path when the outline has a selection.
+`SidebarContext.performSelectionCommand` accepts the existing registry IDs;
+`SidebarView.perform(_:)` exposes the same transaction path to later App handlers.
+
+Two App handoff details make the plan concrete:
+
+- `moveNodesToNewSpace(ids:)` carries every selected ID to the New Space form.
+  §3.1 requires this action, but §2.2 omitted its enum case. It stays App-owned.
+- The selection menu's `deleteFolders(ids:)` contains only folders. Delete on a
+  mixed keyboard selection carries all selected IDs in that same intent. The
+  App must confirm once, then call `sidebar.perform(.archiveNodes(ids: ids))` for
+  one undo step. Cancel preserves the selection. Copy Links, confirmation sheets,
+  and the New Space form still belong to the later App lane.
+
+The outline mirrors selection into `selectedRowIndexes` with native highlights
+suppressed. Production pasteboard writers emit one item per selected row in
+visible order. A plain press on a selected row preserves this native drag hint
+until release; a click activates the row, and a drag keeps the group. Successful
+outline, folder, Favorites, and Space-icon drops use the bulk model commands.
+Refused sources are skipped; an entirely refused drop preserves selection.
+Actual drag-session callbacks dim source rows to 0.4 and restore them on end.
+
+Bulk actions buffer only the sidebar's synchronous view events. The model still
+emits per-node `TreeChange`s. Each affected parent is reconciled once: departures
+first, then final inserts/moves, then expansion and selection sync. Native edits
+share an outline update group. This removes per-node layout work without a full
+reload. Single-node model events keep the existing incremental path. The initial
+50-row move cohort exceeded 16 ms; this batching reduced its p95 to 4.99 ms.
+A real Delete-event cohort measured archive p95 4.18 ms with the SQLite sink
+attached. The benchmark uses drop/Delete entry points; NSMenu action helper
+animation is outside that command-work measurement. Menu actions have separate
+functional checks. Selection toggle p95 was 0.22 ms with zero row layouts; scroll
+p95 was 2.74 ms in that local cohort. These are load-dependent measurements.
+
+Lead Q14 clarification: Option changes only the tooltip to **Clear unselected
+Today tabs**. The label remains **↓ Clear** and its width never changes. The
+tooltip updates without pointer movement and resets when the window resigns key. Its action keeps the
+current row and selected rows through `clearToday(space:keeping:)`. The Today
+menu's Archive Other Tabs is a native Option alternate immediately after Archive
+Item. A per-window local flags monitor keeps this correct when web content has
+focus. The default Clear geometry is unchanged.
+
+`sidebar-render check` drives real menus, key events, native selected row indexes,
+pasteboard writers, drop callbacks, undo, and SQLite archive writes. It covers
+MS7–MS12, CU1–CU4, and TF1–TF3, including refused drops, folder records, and an
+unhandled App confirmation. It uses no unit tests or substitute views/models.
+The drag fixture supplies event metadata; it does not create a global desktop
+drag session. `sidebar-render bench --rows 1000 --selection --bulk 50` enforces
+the selection and bulk budgets and verifies row consistency with no full reload.
+The 13-state runner from §17.1 remains the visual regression gate. CU5 additionally
+runs the committed `sidebar-render divider-check` command against the baseline
+release renderer: synthetic divider pixels at rest and with Clear must match.
+All bounded paired attempts remain in the comparison output directory. Native
+App flow E1–E4 and alert/clipboard/form integration remain with the App lane.
+
+## 19. Sidebar completion S3 (2026-10-26)
+
+Unread tabs show a lazy 6 pt accent dot centered at `(W − 26, y + 20)`.
+The title reserves 6 pt before it; hover and Peek take priority. A collapsed
+folder summarizes unread tabs at any depth, including split panes. Expansion
+returns the badge to the visible child. Geometry and accent choice are guesses
+from sidebar-completion §2.7 and [SC §9](re/sidebar-completion.md#9-unread-badge).
+Design R1 keeps the geometry but uses shadedDark in light Spaces and a lighter
+accent in dark Spaces (at least 3:1 in the real light/dark row checks; guess
+pending C5). Folder glyph colors remain unchanged.
+The spring uses response 0.2 / damping 0.8; clear fades for 0.12 s. Reduce Motion
+suppresses both. Theme changes update the accent of an existing dot.
+
+A navigated pinned row swaps its favicon for a 20 pt reset plate on favicon
+hover. Its 11 pt Semibold SF Symbol is `arrow.uturn.backward`; Option changes it
+to `arrow.up.forward` and "Separate From Pinned Tab" (lead Q10). Normal
+activation sends reset through the model. Separate stays App-owned for live host
+handoff. The glyph swap fades over 0.08 s. Ordinary pinned rows have no plate.
+
+Expansion synchronizes in one native update/animation group and preserves the
+first visible item when it survives the change. Nested folders are included,
+even when they have never been opened. The focused harness checks expansion,
+collapse, one-step undo, same-value no-op, and no full reload. The release
+`sidebar-render bench --expand-all 50` cohort measured p95 5.43 ms for 50 folders
+with 10 children each, over 40 command/observation/layout/display rounds (limit
+16 ms). No timer, target, dependency, or unit test was added.
+
+`sidebar-render check` covers UB1–UB5, SP1–SP4, EA1–EA3, and TT1–TT2 through
+actual rows, events, rendered glyph pixels, tooltips, model commands, and undo.
+The Gmail fixture uses the generic cleanup rule and draws "Inbox (3)"; changing
+its title updates the displayed row with zero tab-row layouts. New render flags
+are `--unread ROW,…` and `--hover-favicon ROW`, combined with `--option-held`.
+The new App unread triggers and live Separate host transfer remain A-lane work.
+
+This branch is based on unreviewed M3 PR #78, branch `t3/sidebar-tidy-titles`, at
+`7e16e6195c0aef187a50edf7f95f4f5c61149890`. The M3 merge kept its tidy-title
+CLI check, stronger B4 removal-order check, and model documentation alongside the
+merged M2 archive flow; lane S adds no model implementation changes.
+
+## 20. Sidebar completion S4 (2026-10-26)
+
+`SpaceManagerView` is an injectable Library page from OpenSidebar. It takes a
+dedicated `SidebarContext` and an optional `onIntent` closure. The App supplies
+its normal intent routing for navigation and confirmations; the default uses
+`ModelSidebarActions` for the offscreen harness. Library registration and host
+wiring remain M5/A-lane work. No Settings dependency or new target was added.
+
+Columns are 244 pt wide, with 16 pt insets and 12 pt gaps. Their 44 pt
+`SpaceControlsView` headers draw the existing Space icon, 13 pt Semibold title,
+a Profile chip only with two or more Profiles, and a More menu. The menu has
+Turn into Folder destinations and Delete (disabled for the last Space). The
+body uses the same `SpacePageView` rows, selection, menus, inline rename, and
+production pasteboard/drop paths, without Favorites or a duplicate Space header.
+These geometry and lift values remain guesses from completion §3.2.
+
+A native grabber tracking loop moves the column horizontally. Crossing another
+column's midpoint changes its slot with the Space-switch spring and one
+alignment haptic per crossed slot. Release commits one `moveSpace` intent; Esc
+cancels. The card lifts with scale 1.02 and a black 0.25 / radius 8 / y +4 shadow.
+The pager now repositions cached pages when Space order changes with no focus
+change. Per lead Q5, the bottom switcher has **no reorder gesture**. SW1–SW4 are
+intentionally skipped; existing Space-icon tab drops remain checked by MS12.
+HG4 checks the two-slot reorder in the Manager instead.
+
+Column shells and headers exist in model order. Row pages and theme backgrounds
+build when a column first enters the horizontal viewport and stay cached. The
+real 10-Space × 100-row harness verifies the ≤120 ms initial build budget, lazy
+scroll-in, and no full reloads of existing pages. Initial page setup fills the
+root cache and installs its delegate before the native data source, whose setter
+performs the initial reload; the old redundant empty/explicit pair is gone.
+Model edits still send per-node events and the Manager batches view updates
+through the same transaction path as the sidebar.
+
+`SidebarHaptics` reads `open.advanced.hapticOnTabReorder` at use (default true)
+and calls the system performer. Outline, folder, Favorites, and Space-icon node
+drops use generic feedback on success; distinct insertion destinations use
+alignment. Space swipes emit levelChange once when crossing the half-width
+commit threshold. Diagnostic counts record the actual performer calls. No timer
+was added. The release harness drives native grabber events, Escape, undo,
+cross-column production drop callbacks, preference changes, and real swipe
+events for SM1–SM6 and HG1–HG4. Haptic feel needs human review.
+
+`sidebar-render space-manager --out FILE.png [--profiles 2]` renders the real
+Library view with neutral synthetic data. `--snapshot` uses an existing snapshot
+read-only; `--columns N --rows N --scroll-x X` exercises lazy columns. All
+evidence stays outside the repository. No unit tests or App source changes.
+
+S4's renderer dependency is Media Step 3 #92 (`OffscreenRenderer.swift` at
+`35c0c41`): CARenderer and read-back share one Metal queue, and CATextLayer is
+cloned as text. A scratch main with only that file ported is
+`687843162552c6e4f6801930f968b48722c72221`. Two independent release builds were
+warning/error-free. Their first comparison had 11/13 byte-identical tables;
+static-active and selected-pinned differed only in row-title color metrics, with
+identical positions and ink boxes. Full evidence is under
+`/tmp/open-sidebar-s4/fixed-main`. That result prompted the lead gate above.
+`verify-all` accepts `SIDEBAR_BASELINE_REF` and `SIDEBAR_BASELINE_RENDERER` to
+name this renderer-only main dependency explicitly until #92 merges.
+
+S4 review R1: the grabber uses the shared capsule tooltip. Header icon/title align
+with the sidebar (13/41 pt), with the grabber at W−58. Lift transforms the content
+about the column center; `--lift-column` captures an actual tracking frame.
+Manager renders use LibraryContent’s `SettingsTokens.content` background in both
+appearances. Dark columns have a 1 pt white 0.30 rim (guess pending C2).
+Hidden Managers keep one dirty flag; visibility reconciles cached final parent
+lists in one bulk native update, without reloadData or a queued event history.
+The earlier SM6 number means **36 ms to first layout**, excluding GPU snapshot
+and real favicon loading. C2/C5/C7 values remain guesses until capture session 2.
+
+## 21. Sidebar completion S5 (2026-10-26)
+
+`HoverPreviewTracker` belongs to each `SidebarContext`. It is lazy, uses only
+cancellable one-shot tasks, and installs no timer, notification observer, or
+event monitor when previews are disabled. It reads the live master, Folders,
+Pinned tabs and Favorites, and delay preferences (defaults true/true/true/0.5 s).
+Movement inside the same target keeps the original deadline. Folder rows, pinned
+rows, and Favorites emit `SidebarHoverPreviewRequest(kind:anchorInWindow:)`;
+Today, split rows, and the current tab/tile do not. Reset-plate hover keeps its
+action tooltip and takes priority over the row preview. Other row tooltips stay
+off while a preview is armed or shown.
+
+The tracker blocks during drag, rename, menu tracking, and Space swipes. Row
+actions, Esc, scroll, Space changes, source removal, and window resignation
+dismiss it. Outside both row and card, dismissal waits 0.25 s. The App reports
+card entry/exit through `setPointerInsidePreview`; a target swap is immediate
+while a preview shows or within one second after it hid. Settings disable removes
+installed work. Each window has its own state. No preview host or panel is made
+by OpenSidebar: A2 handles the live page host, panel placement, frame/scale/fade
+animation, and adoption back into the container cache through `.hoverPreview`.
+The public `HoverPreviewMetrics` / `Motion.previewIn`, `previewOut`, and
+`previewSwap` tokens give that controller the plan's guessed geometry/motion.
+
+`FolderPreviewView` is a native 300 pt card. Its header is 36 pt; its rows are
+32 pt, with 16 pt favicons and 13 pt titles. It lists tabs depth-first (including
+split panes), shows search above eight tabs, and scrolls after ten rows. Hover
+and keyboard selection share the row fill. The real search editor routes
+Up/Down into the results and Return to selection. Empty folders say “No tabs”;
+a query with no match says “No matching tabs” and Return does nothing. Tab/title
+and subtree changes update the card through Observation. It has 4 pt bottom
+padding and a 1 pt inner white 0.10 rim in dark (guess pending C4). Content appearance
+follows its Space. `PreviewColors.background` is white / #212222, the measured
+SC §7 palette fact; all card geometry remains a guess pending capture C4.
+
+Plan/code mismatch: the model does not yet have the theme plan's `iconOverride`
+field. A shared `FolderIconView` serves the row and header. It resolves the
+Context’s optional `folderIconOverrideProvider`, then `Folder.customIcon`
+(SF Symbol name or emoji), then our own folder vector. The header uses the same
+Space accent and open/closed state, at `[11,9,18,18]`. Lane S adds no model field. The model also does not expand
+the folder chain in `selectNode`; the card sends existing `setExpanded` intents
+for its ancestors before selection. `ModelSidebarActions` resolves a selected
+split pane to the split and its focused pane. App host selection remains A2.
+
+`SidebarBannerView` shows only after the App sets
+`context.autoArchiveBannerRequested` for a real sweep. Eligibility/dismissal
+preferences remain live. Got it sends `.dismissAutoArchiveBanner`; the Settings
+text link sends `.openProfileSettings` with the focused Space's actual Profile.
+The App persists the dismissal for either action; the default model delegate
+leaves these intents unhandled. All windows observe preference changes, and the
+host can also call `refreshAutoArchiveBanner()` after its write.
+
+The copy uses the Profile's real interval: 1/6/12/24 hours or 7/30 days (lead
+Q12). Never means no banner. Card geometry is `[8, H−50−8−h, W−16, h]`, radius
+10, padding 12, title 13 Semibold, body 12 Regular / line height 15, button 24.
+Height follows wrapping: at width 228 the current six-hour fixture is 123 pt,
+and the longer default twelve-hour copy is 138 pt; at 500 it is 108 pt. This
+replaces the plan's approximate 106 pt guess without clipping the required copy.
+The real tab-list bottom inset is zero. Its frame ends at `H−50−8−h−8`,
+8 pt above the card; no row lies beneath the banner. The card fill is opaque,
+compositing selected fill over the Space base (default dark: #515160).
+Geometry changes once; only the card’s layer
+animates (12 pt slide/fade, 0.22 s in / 0.18 s out), so the transition adds no
+layout pass per frame. Reduce Motion uses the fade. All banner visual values
+remain guesses pending C6.
+
+The CLI renders these real views with `--preview folder:N` and
+`--banner auto-archive`; private snapshots stay read-only and neutral fixtures
+can supply non-default thresholds. The native flow checks cover HP1–HP6 and
+BN1–BN4 using actual pointer/key events, timer deadlines, production drag/menu
+callbacks, text editing, the Settings link, Profile changes, and disabled/empty
+cases. No unit tests, new dependency/target, App edit, or desktop control.
+App E11–E12/E16, live-host reuse, and the sweep trigger remain A-lane acceptance.
+The §15.1 numeric 13-state gate and the #92 shared Renderer dependency apply.
+
+S5 review R1: “Open archives tabs that you haven’t used…” keeps the lead’s copy
+and curly apostrophe. Message colors are black 0.55 / white 0.70 (guess); the
+accent link is darkened/lightened to at least 4.5:1 against the opaque card and
+stays underlined in dark. Got it uses GrayA4/5/6 at rest/hover/press (guess).
+The preview keeps neutral white/#212222 fill pending C4. The source NSWindow is
+captured weakly at show time, so resignation still dismisses after the owner
+view is gone. A real-time timer check advances the main run loop in 5 ms slices
+for at most 0.6 s and requires the 0.5 s deadline within ±50 ms.
