@@ -2,6 +2,7 @@ import AppKit
 
 /// Capture comparison only: reject the pad's dot lattice before sampling ink.
 /// All coordinates are 1x panel points. No private pixels are exported.
+@MainActor
 enum GlyphInk {
     struct Sample {
         let background: [Double]

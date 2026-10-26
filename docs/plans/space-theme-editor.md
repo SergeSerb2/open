@@ -1246,12 +1246,11 @@ Evidence: `theme-design-r2.md`, capture session 2 item 17
   hover stacks to about 0.20. Minus glyph is pixel-aligned and shifted 1 pt
   down, preserving the button frame (0081–0085).
 
-Session-2 render comparison samples opaque glyph cores at ≥99% peak
-contrast, so different antialiased SF/Arc silhouettes do not bias a token
-measurement. Half-peak boxes still report center/height. Disabled glyphs
-sit among brighter grid dots; their table samples fixed core coordinates
-instead of treating grid dots as symbol bounds. The light moon uses 17 pt
-(16 pt in dark) to retain the captured height in item 20 frame 0027.
+Session-2 glyph comparisons mask the pad-dot lattice and use median stroke
+interiors. They report normalized and raw core color separately. Half-peak
+boxes still report center/height; empty-label measurements remain separate.
+The light moon uses 17 pt (16 pt in dark) to retain the captured height in
+item 20 frame 0027.
 
 ### Review R3 — corrected glyph sampling (2026-10-26)
 
