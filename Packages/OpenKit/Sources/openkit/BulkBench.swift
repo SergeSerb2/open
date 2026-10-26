@@ -141,7 +141,9 @@ func runBulkBench() async {
     let bareIndexOK = indexMatchesRebuild(bare)
 
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-archive-\(UUID().uuidString)")
-    let store = ArchiveStore(root: tmp)
+    let directories = ProfileDirectories(root: tmp)
+    try! directories.ensureProfileDirectories(dataDirectoryName: "Default")
+    let store = ArchiveStore(fileURL: directories.archiveFileURL(dataDirectoryName: "Default"))
     let stored = makeExpiryBenchModel()
     stored.archiveSink = store
     var storedArchived = 0

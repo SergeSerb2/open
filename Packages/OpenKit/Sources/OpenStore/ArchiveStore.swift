@@ -23,9 +23,7 @@ public final class ArchiveStore: ArchiveSink {
     private let queue = DispatchQueue(label: "open.archive", qos: .utility)
     nonisolated(unsafe) private var db: SQLiteDB?
 
-    public init(root: URL) {
-        self.fileURL = root.appendingPathComponent("State/archive.sqlite3")
-    }
+    public init(fileURL: URL) { self.fileURL = fileURL }
 
     nonisolated private func openOnQueue() {
         guard db == nil else { return }

@@ -8,7 +8,7 @@ if sweptImportCopies > 0 {
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons> ...")
+    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons|profiles> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
@@ -29,6 +29,8 @@ do {
         try await MainActor.run { try runDump(args: rest) }
     case "roundtrip":
         try await MainActor.run { try runRoundtrip(args: rest) }
+    case "profiles":
+        try await MainActor.run { try runProfiles(args: rest) }
     case "route":
         try await MainActor.run { try runRoute(args: rest) }
     case "bench":

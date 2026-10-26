@@ -101,7 +101,9 @@ private struct Fixture {
 
 /// 100k synthetic URLs plus the pages the scenarios need.
 private func makeHistory(at root: URL) async -> HistoryStore {
-    let history = HistoryStore(root: root)
+    let directories = ProfileDirectories(root: root)
+    try! directories.ensureProfileDirectories(dataDirectoryName: "Default")
+    let history = HistoryStore(fileURL: directories.historyFileURL(dataDirectoryName: "Default"))
     let now = Date()
     var items: [(url: URL, title: String, time: Date)] = []
     items.reserveCapacity(100_000)
