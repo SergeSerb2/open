@@ -113,6 +113,7 @@ public struct TabDTO: Codable, Sendable {
     public var customTitle: String?
     public var pinnedURL: String?
     public var customIcon: String?
+    public var iconOverride: SpaceIconDTO?
     public var createdAt: Double
     public var lastActiveAt: Double
     public var isMuted: Bool
@@ -125,6 +126,7 @@ public struct FolderDTO: Codable, Sendable {
     public var title: String
     public var isExpanded: Bool
     public var customIcon: String?
+    public var iconOverride: SpaceIconDTO?
     public var children: [NodeDTO]
 }
 
@@ -341,7 +343,7 @@ public enum SnapshotMapper {
     static func nodeDTO(_ node: SidebarNode) -> NodeDTO {
         switch node {
         case .tab(let t): return .tab(tabDTO(t))
-        case .folder(let f): return .folder(FolderDTO(id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, children: f.children.map { nodeDTO($0) }))
+        case .folder(let f): return .folder(FolderDTO(id: f.id.rawValue.uuidString, title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: iconDTO(f.iconOverride), children: f.children.map { nodeDTO($0) }))
         case .split(let s): return .split(SplitDTO(id: s.id.rawValue.uuidString, orientation: s.orientation.rawValue, fractions: s.fractions, panes: s.panes.map { tabDTO($0) }, focusedPaneID: s.focusedPaneID?.rawValue.uuidString))
         }
     }
@@ -349,21 +351,21 @@ public enum SnapshotMapper {
     static func node(from dto: NodeDTO) -> SidebarNode {
         switch dto {
         case .tab(let t): return .tab(tab(from: t))
-        case .folder(let f): return .folder(Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, children: f.children.map { node(from: $0) }))
+        case .folder(let f): return .folder(Folder(id: ItemID(uuidString: f.id), title: f.title, isExpanded: f.isExpanded, customIcon: f.customIcon, iconOverride: icon(from: f.iconOverride), children: f.children.map { node(from: $0) }))
         case .split(let s): return .split(Split(id: ItemID(uuidString: s.id), orientation: SplitOrientation(rawValue: s.orientation) ?? .horizontal, fractions: s.fractions, panes: s.panes.map { tab(from: $0) }, focusedPaneID: s.focusedPaneID.map { ItemID(uuidString: $0) }))
         }
     }
 
     static func tabDTO(_ t: Tab) -> TabDTO {
         TabDTO(id: t.id.rawValue.uuidString, url: t.url.absoluteString, title: t.title, customTitle: t.customTitle,
-               pinnedURL: t.pinnedURL?.absoluteString, customIcon: t.customIcon,
+               pinnedURL: t.pinnedURL?.absoluteString, customIcon: t.customIcon, iconOverride: iconDTO(t.iconOverride),
                createdAt: t.createdAt.timeIntervalSince1970, lastActiveAt: t.lastActiveAt.timeIntervalSince1970,
                isMuted: t.isMuted, openerID: t.openerID?.rawValue.uuidString, isUnread: t.isUnread)
     }
 
     static func tab(from dto: TabDTO) -> Tab {
         Tab(id: ItemID(uuidString: dto.id), url: URL(string: dto.url) ?? URL(string: "about:blank")!, title: dto.title,
-            customTitle: dto.customTitle, pinnedURL: dto.pinnedURL.flatMap { URL(string: $0) }, customIcon: dto.customIcon,
+            customTitle: dto.customTitle, pinnedURL: dto.pinnedURL.flatMap { URL(string: $0) }, customIcon: dto.customIcon, iconOverride: icon(from: dto.iconOverride),
             createdAt: Date(timeIntervalSince1970: dto.createdAt), lastActiveAt: Date(timeIntervalSince1970: dto.lastActiveAt),
             isMuted: dto.isMuted, openerID: dto.openerID.map { ItemID(uuidString: $0) }, isUnread: dto.isUnread)
     }
