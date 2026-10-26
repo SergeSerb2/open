@@ -35,8 +35,11 @@ public enum Motion {
     public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)
     /// Snap after a two-finger swipe ends.
     public static let spaceSwipeSnap = SpringToken(response: 0.26, dampingFraction: 0.92)
-    /// Background cross-fade on a Space switch: same length as the slide, ease-in-out.
-    public static let themeCrossfade: CFTimeInterval = 0.3
+    /// Background cross-fade on a Space switch: linear, 0.21 s. With the 0.3 s
+    /// critically damped slide this reproduces both measured progress pairs
+    /// (slide 0.65 / fade 0.53 and slide 0.88 / fade 0.77, A0222 and A0227).
+    public static let themeCrossfade: CFTimeInterval = 0.21
+    public static var themeCrossfadeTiming: CAMediaTimingFunction { CAMediaTimingFunction(name: .linear) }
     /// Row hover fill fade in and out.
     public static let hoverFade: CFTimeInterval = 0.08
     /// Selected fill moving to a new row.

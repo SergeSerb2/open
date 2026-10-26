@@ -26,7 +26,6 @@ final class ObservationLoop {
     private let read: @MainActor () -> Void
     private let changed: @MainActor () -> Void
     private var cancelled = false
-    private var scheduled = false
 
     init(read: @escaping @MainActor () -> Void, changed: @escaping @MainActor () -> Void) {
         self.read = read

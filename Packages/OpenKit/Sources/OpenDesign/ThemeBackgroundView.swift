@@ -17,6 +17,9 @@ public final class ThemeBackgroundView: NSView {
         get { current.theme }
         set { crossfade(to: newValue, animated: false) }
     }
+    /// The style shown once any running cross-fade ends.
+    public var targetStyle: SpaceThemeStyle { incoming?.theme ?? current.theme }
+
     public var isWindowActive: Bool = true {
         didSet { if isWindowActive != oldValue { refresh() } }
     }
@@ -93,6 +96,8 @@ public final class ThemeBackgroundView: NSView {
     /// Cross-fades to `style`. Without animation it swaps at once.
     public func crossfade(to style: SpaceThemeStyle, animated: Bool, duration: CFTimeInterval = Motion.themeCrossfade) {
         if incoming == nil, current.theme == style { return }
+        // Already fading to this style: let the running fade finish.
+        if animated, let incoming, incoming.theme == style, incoming.animation(forKey: "opacity") != nil { return }
         if !animated {
             incoming?.removeFromSuperlayer(); incoming = nil
             current.theme = style
@@ -115,7 +120,7 @@ public final class ThemeBackgroundView: NSView {
     private func animateOpacity(_ layer: CALayer, to value: Float, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
         CATransaction.begin()
         CATransaction.setAnimationDuration(duration)
-        CATransaction.setAnimationTimingFunction(Motion.easeInOut)
+        CATransaction.setAnimationTimingFunction(Motion.themeCrossfadeTiming)
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
         let a = CABasicAnimation(keyPath: "opacity")
         a.fromValue = layer.presentation()?.opacity ?? layer.opacity

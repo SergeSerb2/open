@@ -20,6 +20,8 @@ public final class SidebarContext {
     public var isNewTabCommandBarOpen: Bool = false
     /// Forced hover for offscreen rendering and checks. Nil follows the pointer.
     public var forcedHover: SidebarHoverTarget?
+    /// The pointer is over the sidebar (or a hover is forced).
+    var pointerInSidebar = false
 
     /// Whether a tab has live web content. A loaded pinned tab shows "−" (close
     /// and keep pinned) instead of "×". Supplied by the App (engine state).

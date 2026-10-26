@@ -147,6 +147,11 @@ public enum SidebarRole {
     public static let rowAccessory = GrayScale.a(11)
     /// Bottom-bar plus: core pixels black ≈ 0.55 (F0001) → `GrayA11`. Dark: white 0.62 (F0079).
     public static let bottomGlyph = DesignColor(light: GrayScale.a(11).light, dark: .white(0.62))
+    /// Bottom-bar glyphs while the window is inactive: peak black ≈ 0.28 on the
+    /// inactive capture → `SidebarForeground` (0.30). Dark: guess.
+    public static let bottomGlyphInactive = DesignColor(light: SidebarColors.foreground.light, dark: .white(0.30))
+    /// Home glyph while the window is inactive: fitted for our filled glyph (inactive capture). Dark: guess.
+    public static let homeGlyphInactive = DesignColor(light: .black(0.26), dark: .white(0.26))
     /// Bottom-bar Home (Library): core pixels black ≈ 0.52 (F0001), fitted for our
     /// own glyph shape. Dark: guess, white at the same alpha.
     public static let homeGlyph = DesignColor(light: .black(0.52), dark: .white(0.52))

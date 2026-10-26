@@ -135,7 +135,7 @@ enum Checks {
         check(delegate.log.contains(.setExpanded(folderID: folder.id, expanded: false)), "click on a folder row toggles it")
         OffscreenRenderer.settle(scene, runLoop: 0.15); rowsMatch("folder collapsed by click")
         delegate.log.removeAll()
-        if let r = sidebar.displayedRows.firstIndex(of: "newTab"), let outline = sidebar.outlineView() {
+        if let r = sidebar.displayedRows.firstIndex(of: "newTab"), let outline = sidebar.focusedOutline {
             let f = outline.rect(ofRow: r)
             click(scene.convert(NSPoint(x: f.midX, y: f.midY), from: outline))
         }

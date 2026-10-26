@@ -225,6 +225,10 @@ class PlateButton: NSView {
     var plateRect: @MainActor (NSRect) -> NSRect = { $0 }
     var plateRadius: CGFloat = ChromeMetrics.buttonPlateRadius
     var showsHoverPlate = true
+    /// Chrome glyphs (toolbar, bottom bar) take the disabled tone while the window
+    /// is inactive: measured black ≈ 0.21–0.26 on the inactive capture vs 0.52–0.56 active.
+    var dimsWhenInactive = false
+    var inactiveTint: DesignColor = SidebarRole.toolbarGlyphDisabled
     /// Forced hover key for renders; compared against `SidebarContext.forcedHover`.
     var hoverKey: SidebarHoverTarget?
     weak var context: SidebarContext?
@@ -264,8 +268,9 @@ class PlateButton: NSView {
     }
 
     override func updateLayer() {
-        let (enabled, hovered) = tracked({ (isEnabled(), isHovered) }) { [weak self] in self?.needsDisplay = true }
-        glyphView.tint = { [glyphTint] in glyphTint(enabled) }
+        let (enabled, hovered, active) = tracked({ (isEnabled(), isHovered, context?.isWindowActive ?? true) }) { [weak self] in self?.needsDisplay = true }
+        let dim = dimsWhenInactive && !active
+        glyphView.tint = { [glyphTint, inactiveTint] in dim ? inactiveTint.nsColor : glyphTint(enabled) }
         let appearance = contentAppearance
         CATransaction.begin()
         CATransaction.setAnimationDuration(Motion.hoverFade)

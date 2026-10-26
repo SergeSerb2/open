@@ -26,11 +26,14 @@ final class BottomBarView: NSView {
         }
         for (b, key) in [(home, SidebarHoverTarget.home), (plus, .plus)] {
             b.context = context
+            b.dimsWhenInactive = true
+            b.inactiveTint = SidebarRole.bottomGlyphInactive
             b.hoverKey = key
             b.glyphTint = { _ in SidebarRole.bottomGlyph.nsColor }
             addSubview(b)
         }
         home.glyphTint = { _ in SidebarRole.homeGlyph.nsColor }
+        home.inactiveTint = SidebarRole.homeGlyphInactive
         home.action = { [unowned context] in context.send(.showLibrary) }
         home.tooltip = { Tooltip(title: "Library", placement: .above, style: style()) }
         plus.menuProvider = { [weak self] in self?.menus.plus() }

@@ -29,6 +29,7 @@ public final class SidebarView: NSView {
     let pager: SpacePagerView
     let bottomBar: BottomBarView
     private var cardBackground: ThemeBackgroundView?
+    private var pointerTracking: NSTrackingArea?
     private var observerID: UUID?
     private var loops: [ObservationLoop] = []
 
@@ -92,6 +93,17 @@ public final class SidebarView: NSView {
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
     }
 
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerTracking { removeTrackingArea(pointerTracking) }
+        let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(t)
+        pointerTracking = t
+    }
+
+    public override func mouseEntered(with event: NSEvent) { context.pointerInSidebar = true }
+    public override func mouseExited(with event: NSEvent) { context.pointerInSidebar = false }
+
     /// Theme, appearance, and the window background.
     private func syncTheme() {
         guard let space = context.focusedSpace else { return }
@@ -99,8 +111,8 @@ public final class SidebarView: NSView {
         let bg = presentation == .floatingCard ? cardBackground : themeBackground
         bg?.isWindowActive = context.isWindowActive
         // A theme edit on the focused Space shows at once; Space switches cross-fade in the pager.
-        if bg?.style != context.style(for: space), pager.currentPage?.space === space {
-            bg?.crossfade(to: context.style(for: space), animated: window != nil)
+        if let bg, bg.targetStyle != context.style(for: space), pager.currentPage?.space === space {
+            bg.crossfade(to: context.style(for: space), animated: animatesSidebarChanges)
         }
         for v in [toolbar, urlField, favorites, bottomBar] as [NSView] { v.needsDisplay = true; v.needsLayout = true }
     }
@@ -234,6 +246,6 @@ extension SidebarView {
         for e in events { _ = pager.handleScroll(e) }
     }
 
-    /// Clicks the row of a node: the outline's own action runs.
-    public func outlineView(for space: SpaceID? = nil) -> NSOutlineView? { pager.currentPage?.outline }
+    /// The focused page's tab list (checks and benches).
+    public var focusedOutline: NSOutlineView? { pager.currentPage?.outline }
 }

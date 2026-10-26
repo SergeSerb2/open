@@ -21,6 +21,7 @@ final class ToolbarView: NSView {
         }
         func setup(_ b: PlateButton, _ key: ToolbarButtonKind, _ tip: @escaping @MainActor () -> Tooltip?) {
             b.context = context
+            b.dimsWhenInactive = true
             b.hoverKey = .toolbar(key)
             b.tooltip = tip
             addSubview(b)
@@ -112,10 +113,10 @@ final class URLFieldView: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
-    private var isHovered: Bool {
-        if let forced = context.forcedHover { return forced == .urlField }
-        return pointerInside
-    }
+    /// The copy and Site Control buttons show while a page is loaded and the
+    /// pointer is anywhere over the sidebar. guess: they came and went between
+    /// frames (F0015, F0016, F0019, F0035, F0123).
+    private var showsButtons: Bool { context.forcedHover != nil || context.pointerInSidebar || pointerInside }
 
     override func updateLayer() {
         let appearance = contentAppearance
@@ -131,7 +132,7 @@ final class URLFieldView: NSView {
         CATransaction.commit()
         let hasPage = tracked({ context.currentTab != nil }) { [weak self] in self?.needsLayout = true }
         label.font = (hasPage ? Typography.urlHost : Typography.urlField).font
-        let showAccessories = hasPage && tracked({ isHovered }) { [weak self] in self?.needsLayout = true }
+        let showAccessories = hasPage && tracked({ showsButtons }) { [weak self] in self?.needsLayout = true }
         let ox = URLFieldMetrics.insetX, oy = URLFieldMetrics.y
         magnifier.isHidden = hasPage
         magnifier.frame = URLFieldMetrics.magnifierFrame.offsetBy(dx: -ox, dy: -oy)

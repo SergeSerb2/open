@@ -14,6 +14,7 @@ enum RenderCLI {
         switch cmd {
         case "render": try render(rest)
         case "synth": try synth(rest)
+        case "tooltip": try tooltip(rest)
         case "compare": try Compare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
@@ -29,6 +30,8 @@ enum RenderCLI {
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
+          --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
+      sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
       sidebar-render bench [--rows N]
@@ -150,10 +153,44 @@ enum RenderCLI {
         let delegate = RecordingDelegate()
         let scene = RenderScene(context: context, options: options, delegate: delegate)
         scene.background.renderScale = scale
-        var image = OffscreenRenderer().render(scene, scale: scale)
+        var image: CGImage
+        if let n = value(args, "--switch-to").flatMap(Int.init), model.spaces.indices.contains(n), let window = model.windows.first {
+            // A transition frame: animate the switch and capture the presentation tree at `--at` seconds.
+            SidebarDiagnostics.forceAnimations = true
+            let host = OffscreenRenderer.host(scene, scale: scale)
+            model.focusSpace(windowID: window.id, spaceID: model.spaces[n].id)
+            let at = Double(value(args, "--at") ?? "0.1") ?? 0.1
+            RunLoop.main.run(until: Date().addingTimeInterval(at))
+            image = OffscreenRenderer().snapshot(scene, scale: scale, presentation: true)
+            host.contentView = nil
+            host.close()
+        } else {
+            image = OffscreenRenderer().render(scene, scale: scale)
+        }
         if let c = value(args, "--crop")?.split(separator: ",").compactMap({ Double($0) }), c.count == 4 {
             image = image.cropping(to: CGRect(x: c[0] * scale, y: c[1] * scale, width: c[2] * scale, height: c[3] * scale)) ?? image
         }
+        OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
+        print("wrote \(out) \(image.width)x\(image.height)")
+    }
+
+    /// Renders one Arc-style tooltip capsule in a Space's colors.
+    static func tooltip(_ args: [String]) throws {
+        guard let dir = value(args, "--snapshot"), let out = value(args, "--out"), let title = value(args, "--title") else { throw CLIError(description: usage) }
+        let model = try loadModel(dir)
+        let context = try makeContext(args, model: model)
+        guard let space = context.focusedSpace else { return }
+        let keys = value(args, "--keys")?.split(separator: ",").map(String.init) ?? []
+        let tip = Tooltip(title: title, subtitle: value(args, "--subtitle"), keys: keys, style: context.style(for: space))
+        let view = TooltipView(tooltip: tip)
+        let pad: CGFloat = 12
+        let frame = NSView(frame: CGRect(x: 0, y: 0, width: view.fittingSize.width + 2 * pad, height: view.fittingSize.height + 2 * pad))
+        frame.wantsLayer = true
+        frame.layer?.backgroundColor = CGColor(gray: 0.5, alpha: 0.15)
+        view.frame = CGRect(x: pad, y: pad, width: view.fittingSize.width, height: view.fittingSize.height)
+        frame.addSubview(view)
+        let scale = CGFloat(Double(value(args, "--scale") ?? "2") ?? 2)
+        let image = OffscreenRenderer().render(frame, scale: scale)
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
         print("wrote \(out) \(image.width)x\(image.height)")
     }

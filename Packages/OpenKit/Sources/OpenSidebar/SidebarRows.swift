@@ -266,7 +266,9 @@ final class TabCellView: SidebarCellView {
         return context.isTabLoaded(tab)
     }
 
-    private var showsAccessory: Bool { (rowView?.isHovered ?? false) || (rowView?.isCurrent ?? false) }
+    /// The close or unload button follows the pointer, not the selection: a
+    /// selected Today row made by Cmd+T shows none (F0066); hovered rows do (F0013).
+    private var showsAccessory: Bool { rowView?.isHovered ?? false }
 
     override func rowStateChanged() {
         let visible = showsAccessory

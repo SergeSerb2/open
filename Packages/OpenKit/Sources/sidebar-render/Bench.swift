@@ -44,7 +44,7 @@ enum Bench {
         print("offscreen GPU render of the window (\(image?.width ?? 0)×\(image?.height ?? 0)): \(ms(render))")
 
         // Scrolling: move the clip view by 120 pt per step (about one wheel tick at 120 Hz).
-        guard let outline = sidebar.outlineView(), let clip = outline.enclosingScrollView?.contentView else { return }
+        guard let outline = sidebar.focusedOutline, let clip = outline.enclosingScrollView?.contentView else { return }
         var steps: [Double] = []
         let maxY = max(0, outline.frame.height - clip.bounds.height)
         var y: CGFloat = 0
