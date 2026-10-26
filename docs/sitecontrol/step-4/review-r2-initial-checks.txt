@@ -1,0 +1,1166 @@
+SiteControl: snapshot or geometry unavailable for tab B7E9A10D-E623-41D9-921E-CE8EA5C05D41
+SiteControl: snapshot or geometry unavailable for tab A16EC9D1-BA7D-4726-A29C-66E95C3804A2
+SiteControl: snapshot or geometry unavailable for tab FB6A2A1B-C60B-491A-A22B-51FAFB970E79
+SiteControl: snapshot or geometry unavailable for tab 0406649A-10C3-4EBC-9B60-A5EEE1E0055F
+SiteControl: snapshot or geometry unavailable for tab 0406649A-10C3-4EBC-9B60-A5EEE1E0055F
+SiteControl: snapshot or geometry unavailable for tab 30FDE307-69A4-4EE0-B537-45BE6A99E34B
+Panel first draw: main-thread CPU p95 11.206 ms; wall p95 11.689 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
+CPU samples ms: 11.084, 11.206, 9.718, 9.477, 10.266, 9.149, 9.382, 8.979, 9.131, 9.310, 9.044, 8.625, 9.291, 8.733, 8.887, 10.302, 10.283, 11.634, 9.248, 9.875, 9.966, 10.381, 9.347, 9.183, 9.250, 10.265, 10.321, 9.889, 10.538, 9.850
+Wall samples ms: 11.431, 11.689, 9.927, 9.675, 10.552, 9.325, 9.597, 8.999, 9.258, 9.470, 9.118, 8.662, 9.372, 8.787, 8.916, 10.496, 10.510, 12.232, 9.393, 10.014, 10.189, 10.776, 9.472, 9.386, 9.463, 10.386, 10.653, 9.991, 10.765, 10.053
+CPU parts mean (init/attach/present/display): 0.756, 0.131, 4.040, 4.826
+Editor full drag frame (native event + display): p95 1.488 ms, max 1.689 ms (100 frames; diagnostic, no separate plan budget)
+Editor idle: 1.661 ms main-thread CPU in 2 s, no host work=true; ten-page refresh max 0.095 ms
+Editor: wheel event p95 0.030 ms (500 native events); previews 59 in 1 s / 120 Hz; simple open p95 16.159 ms; hue sample 6.498 ms off-main=true
+| Result | Check |
+|---|---|
+| PASS | F1 anchor presents |
+| PASS | F1 second anchor click closes and is consumed |
+| PASS | F2 Escape closes and restores focus |
+| PASS | F2 outside click closes and reaches page |
+| PASS | outside NSEventType(rawValue: 3) dismisses and forwards to the page |
+| PASS | outside NSEventType(rawValue: 25) dismisses and forwards to the page |
+| PASS | outside click reaches a real native target/action exactly once |
+| PASS | F21 native AX role and label pairs, host description, favicon hidden |
+| PASS | Step 2 More is enabled |
+| PASS | missing capture capability disables all three actions |
+| PASS | two windows observe a shared source independently |
+| PASS | third window registers its own observer |
+| PASS | window teardown removes only its own observer |
+| PASS | F22 missing geometry stays closed and logs once |
+| PASS | F22 geometry lost while open closes and logs once |
+| PASS | F22 missing snapshot stays closed and logs once |
+| PASS | successful presentation resets once-per-failure-episode reporting |
+| PASS | close fades both layers and disables hit testing immediately |
+| PASS | old close completion cannot hide a new presentation |
+| PASS | host is exposed once in native AX |
+| PASS | security label policy for https |
+| PASS | security label policy for http |
+| PASS | security label policy for chrome |
+| PASS | security label policy for open |
+| PASS | security label policy for chrome-extension |
+| PASS | security label policy for about |
+| PASS | security label policy for data |
+| PASS | security label policy for file |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | F3 Tab visits the complete control order |
+| PASS | F3 Tab wraps |
+| PASS | F3 Shift+Tab reverses |
+| PASS | F3 tile grid arrows and Space activate the target |
+| PASS | F4 ad-block On/Off/On, one reload row |
+| PASS | F6 Camera Allowed becomes Blocked |
+| PASS | reload closes before host action |
+| PASS | F5 unavailable blocker opens Settings without mutation |
+| PASS | F7 Boost switch changes value |
+| PASS | F7 edit button and Return edit the Boost |
+| PASS | F8 both New Boost entries use the host |
+| PASS | F9 interim menu hides Clear Cache and section Boost items |
+| PASS | F9 no-Boost menu has Manage and New |
+| PASS | F9 E2 capability exposes Clear Cache |
+| PASS | F9 clear items call distinct kinds and show Reload |
+| PASS | F9 Manage Boosts… routes and closes |
+| PASS | F9 Manage Extensions… routes and closes |
+| PASS | F9 Add Extension… routes and closes |
+| PASS | F9 All Site Settings encodes the origin |
+| PASS | internal page has only Share, Copy URL and footer |
+| PASS | F20 private window cannot create or edit Boosts |
+| PASS | global-off note and disabled switches |
+| PASS | keyboard focus scrolls the long body |
+| PASS | extension picker falls back to Add Extension in More |
+| PASS | picker fallback focuses More without opening a menu |
+| PASS | picker Return opens the native menu with Add Extension highlighted |
+| PASS | picker Escape closes the panel from the native menu |
+| PASS | F21 all section, tile, row and action labels and roles |
+| PASS | live source updates the open panel |
+| PASS | closed anchor tab dismisses on source notification |
+| PASS | live Boost removal keeps keyboard input in the panel |
+| PASS | Tab works after the focused Boost disappears |
+| PASS | Command shortcut dismisses and returns to normal routing |
+| PASS | picker item focus guard fails when Extensions UI lands |
+| PASS | Command+36 never activates a focused control |
+| PASS | Command+49 never activates a focused control |
+| PASS | Space with no focused control is passed to the page |
+| PASS | long tile titles use two full lines |
+| PASS | private switches have half opacity |
+| PASS | native AX puts actions before sections and host appears once |
+| PASS | native tracked Return chooses Clear Cookies and keeps reload row |
+| PASS | native tracked Esc dismisses with menuCancelled |
+| PASS | Command+Return on a Boost row cannot edit after dismissal |
+| PASS | mouse activation does not show a keyboard focus ring |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | F10 drag leaves the real store unchanged before mouse-up |
+| PASS | F10 live preview uses real planner and strips JavaScript |
+| PASS | F10 mouse-up commits once and derives the wheel adjustment |
+| PASS | F14 one Cmd+Z restores the complete pre-drag value |
+| PASS | F14 Cmd+Shift+Z restores the drag |
+| PASS | F11 wheel input 1 through store and injection planner |
+| PASS | F11 wheel input 2 through store and injection planner |
+| PASS | F11 wheel input 3 through store and injection planner |
+| PASS | F11 wheel input 4 through store and injection planner |
+| PASS | F11 wheel input 5 through store and injection planner |
+| PASS | F11 wheel input 6 through store and injection planner |
+| PASS | F11 wheel input 7 through store and injection planner |
+| PASS | F11 wheel input 8 through store and injection planner |
+| PASS | F11 wheel input 9 through store and injection planner |
+| PASS | F11 wheel input 10 through store and injection planner |
+| PASS | F11 wheel input 11 through store and injection planner |
+| PASS | F11 wheel input 12 through store and injection planner |
+| PASS | F12 System font chip persists the safe CSS family |
+| PASS | F14 font undo restores Original |
+| PASS | F14 font redo restores System |
+| PASS | F12 text size cycle 2 |
+| PASS | F12 text size cycle 3 |
+| PASS | F12 text size cycle 4 |
+| PASS | F12 text size cycle 0 |
+| PASS | F12 text size cycle 1 |
+| PASS | F12 Shift-click cycles size backwards |
+| PASS | F12 text case cycle 1 |
+| PASS | F12 text case cycle 2 |
+| PASS | F12 text case cycle 3 |
+| PASS | F12 text case cycle 0 |
+| PASS | F14 case undo restores lowercase |
+| PASS | F14 case redo restores default |
+| PASS | F15 All Boosts delegates and keeps editor open |
+| PASS | F15 Shuffle sets wheel and font, preserving text options |
+| PASS | F14 Shuffle is one complete undo step |
+| PASS | F15 native rename Done permits 'Evening colors' |
+| PASS | F15 native rename Done permits '' |
+| PASS | F15 rename Cancel preserves name |
+| PASS | F15 reset Cancel preserves edits |
+| PASS | F15 Reset clears all edit fields and preserves scope/name |
+| PASS | F14 Reset is one undo step |
+| PASS | F15 delete Cancel keeps editor and stored Boost |
+| PASS | F15 Delete closes editor and deletes from the real store |
+| PASS | F16 close new Boost changed=false |
+| PASS | F16 close new Boost changed=true |
+| PASS | F19 Make your own persists only the dismissed flag |
+| PASS | F19 close leaves interstitial flag false |
+| PASS | legacy filter is exact and the wheel is editable with a note |
+| PASS | non-color edit retains exact legacy filter |
+| PASS | first color edit replaces legacy values with normalized wheel values |
+| PASS | legacy first-edit undo restores byte-identical colorAdjustment and nil wheel |
+| PASS | F15 Reset also clears stored CSS, JS and Zaps |
+| PASS | F14 Reset restores CSS, JS and Zaps together |
+| PASS | F15 header double-click and Return commit inline rename |
+| PASS | F15 first Esc cancels inline rename and keeps panel |
+| PASS | F15 second Esc closes the editor |
+| PASS | scope menu labels host and subdomains without changing stored meaning |
+| PASS | news.example.com scope applies to child.news.example.com |
+| PASS | news.example.com scope does not apply to example.com |
+| PASS | saved IP path scope has one host choice and a checked path item |
+| PASS | 103-4 saved IP /news is checked while page is /other/page |
+| PASS | 103-4 saved IP /news is checked while page is / |
+| PASS | root IP scope hides path and registrable-domain items |
+| PASS | 103-1 commit then close flushes to a fresh store without caller saveNow |
+| PASS | 103-1 native Delete is durable immediately |
+| PASS | 103-2 slider repeats keep live state out of store before the group ends |
+| PASS | 103-2 one second slider repeats commit once |
+| PASS | 103-2 one undo restores every repeated slider step |
+| PASS | 103-2 AX slider repeats commit once on AX focus loss |
+| PASS | 103-2 one undo restores all AX increments |
+| PASS | 103-2 keyboard focus loss commits the slider group |
+| PASS | 103-3 slider drag has its own undo entry after wheel repeat |
+| PASS | 103-3 second undo restores the wheel repeat separately |
+| PASS | 103-5 an invalid request preserves the live editor |
+| PASS | 103-7 load removes only stale atomic-write files |
+| PASS | 103-8 pending page sampling disables Shuffle and wheel edits |
+| PASS | 103-8 sampling enables Shuffle and wheel edits |
+| PASS | design 10 keyboard focus fully reveals a 56 pt font chip |
+| PASS | design 12 disabled tile copy is user-facing |
+| PASS | F21 real editor AX hierarchy labels all controls |
+| PASS | navigation keeps the editor and shows Not active |
+| PASS | tab switch finalizes and closes the bound editor |
+| PASS | global-off permits stored edits and skips every preview |
+| PASS | render scc-basic light 1x header/action/footer fill |
+| PASS | render scc-basic light 1x every separator on device pixel |
+| PASS | render scc-basic light 1x shadow offset down |
+| PASS | render scc-basic light 1x anchor geometry |
+| PASS | complete opaque capture scc-basic light 1x |
+| PASS | render scc-basic light 1x (fill and glyph ink) |
+| PASS | render scc-basic light 2x header/action/footer fill |
+| PASS | render scc-basic light 2x every separator on device pixel |
+| PASS | render scc-basic light 2x shadow offset down |
+| PASS | render scc-basic light 2x anchor geometry |
+| PASS | complete opaque capture scc-basic light 2x |
+| PASS | render scc-basic light 2x (fill and glyph ink) |
+| PASS | render scc-basic dark 1x header/action/footer fill |
+| PASS | render scc-basic dark 1x every separator on device pixel |
+| PASS | render scc-basic dark 1x shadow offset down |
+| PASS | render scc-basic dark 1x anchor geometry |
+| PASS | complete opaque capture scc-basic dark 1x |
+| PASS | render scc-basic dark 1x (fill and glyph ink) |
+| PASS | render scc-basic dark 2x header/action/footer fill |
+| PASS | render scc-basic dark 2x every separator on device pixel |
+| PASS | render scc-basic dark 2x shadow offset down |
+| PASS | render scc-basic dark 2x anchor geometry |
+| PASS | complete opaque capture scc-basic dark 2x |
+| PASS | render scc-basic dark 2x (fill and glyph ink) |
+| PASS | render scc-insecure light 1x header/action/footer fill |
+| PASS | render scc-insecure light 1x every separator on device pixel |
+| PASS | render scc-insecure light 1x shadow offset down |
+| PASS | render scc-insecure light 1x anchor geometry |
+| PASS | complete opaque capture scc-insecure light 1x |
+| PASS | render scc-insecure light 1x (fill and glyph ink) |
+| PASS | render scc-insecure light 2x header/action/footer fill |
+| PASS | render scc-insecure light 2x every separator on device pixel |
+| PASS | render scc-insecure light 2x shadow offset down |
+| PASS | render scc-insecure light 2x anchor geometry |
+| PASS | complete opaque capture scc-insecure light 2x |
+| PASS | render scc-insecure light 2x (fill and glyph ink) |
+| PASS | render scc-insecure dark 1x header/action/footer fill |
+| PASS | render scc-insecure dark 1x every separator on device pixel |
+| PASS | render scc-insecure dark 1x shadow offset down |
+| PASS | render scc-insecure dark 1x anchor geometry |
+| PASS | complete opaque capture scc-insecure dark 1x |
+| PASS | render scc-insecure dark 1x (fill and glyph ink) |
+| PASS | render scc-insecure dark 2x header/action/footer fill |
+| PASS | render scc-insecure dark 2x every separator on device pixel |
+| PASS | render scc-insecure dark 2x shadow offset down |
+| PASS | render scc-insecure dark 2x anchor geometry |
+| PASS | complete opaque capture scc-insecure dark 2x |
+| PASS | render scc-insecure dark 2x (fill and glyph ink) |
+| PASS | render scc-adblock-excluded light 1x header/action/footer fill |
+| PASS | render scc-adblock-excluded light 1x every separator on device pixel |
+| PASS | render scc-adblock-excluded light 1x shadow offset down |
+| PASS | render scc-adblock-excluded light 1x anchor geometry |
+| PASS | complete opaque capture scc-adblock-excluded light 1x |
+| PASS | render scc-adblock-excluded light 1x (fill and glyph ink) |
+| PASS | render scc-adblock-excluded light 2x header/action/footer fill |
+| PASS | render scc-adblock-excluded light 2x every separator on device pixel |
+| PASS | render scc-adblock-excluded light 2x shadow offset down |
+| PASS | render scc-adblock-excluded light 2x anchor geometry |
+| PASS | complete opaque capture scc-adblock-excluded light 2x |
+| PASS | render scc-adblock-excluded light 2x (fill and glyph ink) |
+| PASS | render scc-adblock-excluded dark 1x header/action/footer fill |
+| PASS | render scc-adblock-excluded dark 1x every separator on device pixel |
+| PASS | render scc-adblock-excluded dark 1x shadow offset down |
+| PASS | render scc-adblock-excluded dark 1x anchor geometry |
+| PASS | complete opaque capture scc-adblock-excluded dark 1x |
+| PASS | render scc-adblock-excluded dark 1x (fill and glyph ink) |
+| PASS | render scc-adblock-excluded dark 2x header/action/footer fill |
+| PASS | render scc-adblock-excluded dark 2x every separator on device pixel |
+| PASS | render scc-adblock-excluded dark 2x shadow offset down |
+| PASS | render scc-adblock-excluded dark 2x anchor geometry |
+| PASS | complete opaque capture scc-adblock-excluded dark 2x |
+| PASS | render scc-adblock-excluded dark 2x (fill and glyph ink) |
+| PASS | render scc-adblock-unavailable light 1x header/action/footer fill |
+| PASS | render scc-adblock-unavailable light 1x every separator on device pixel |
+| PASS | render scc-adblock-unavailable light 1x shadow offset down |
+| PASS | render scc-adblock-unavailable light 1x anchor geometry |
+| PASS | complete opaque capture scc-adblock-unavailable light 1x |
+| PASS | render scc-adblock-unavailable light 1x (fill and glyph ink) |
+| PASS | render scc-adblock-unavailable light 2x header/action/footer fill |
+| PASS | render scc-adblock-unavailable light 2x every separator on device pixel |
+| PASS | render scc-adblock-unavailable light 2x shadow offset down |
+| PASS | render scc-adblock-unavailable light 2x anchor geometry |
+| PASS | complete opaque capture scc-adblock-unavailable light 2x |
+| PASS | render scc-adblock-unavailable light 2x (fill and glyph ink) |
+| PASS | render scc-adblock-unavailable dark 1x header/action/footer fill |
+| PASS | render scc-adblock-unavailable dark 1x every separator on device pixel |
+| PASS | render scc-adblock-unavailable dark 1x shadow offset down |
+| PASS | render scc-adblock-unavailable dark 1x anchor geometry |
+| PASS | complete opaque capture scc-adblock-unavailable dark 1x |
+| PASS | render scc-adblock-unavailable dark 1x (fill and glyph ink) |
+| PASS | render scc-adblock-unavailable dark 2x header/action/footer fill |
+| PASS | render scc-adblock-unavailable dark 2x every separator on device pixel |
+| PASS | render scc-adblock-unavailable dark 2x shadow offset down |
+| PASS | render scc-adblock-unavailable dark 2x anchor geometry |
+| PASS | complete opaque capture scc-adblock-unavailable dark 2x |
+| PASS | render scc-adblock-unavailable dark 2x (fill and glyph ink) |
+| PASS | render scc-no-boosts light 1x header/action/footer fill |
+| PASS | render scc-no-boosts light 1x every separator on device pixel |
+| PASS | render scc-no-boosts light 1x shadow offset down |
+| PASS | render scc-no-boosts light 1x anchor geometry |
+| PASS | complete opaque capture scc-no-boosts light 1x |
+| PASS | render scc-no-boosts light 1x (fill and glyph ink) |
+| PASS | render scc-no-boosts light 2x header/action/footer fill |
+| PASS | render scc-no-boosts light 2x every separator on device pixel |
+| PASS | render scc-no-boosts light 2x shadow offset down |
+| PASS | render scc-no-boosts light 2x anchor geometry |
+| PASS | complete opaque capture scc-no-boosts light 2x |
+| PASS | render scc-no-boosts light 2x (fill and glyph ink) |
+| PASS | render scc-no-boosts dark 1x header/action/footer fill |
+| PASS | render scc-no-boosts dark 1x every separator on device pixel |
+| PASS | render scc-no-boosts dark 1x shadow offset down |
+| PASS | render scc-no-boosts dark 1x anchor geometry |
+| PASS | complete opaque capture scc-no-boosts dark 1x |
+| PASS | render scc-no-boosts dark 1x (fill and glyph ink) |
+| PASS | render scc-no-boosts dark 2x header/action/footer fill |
+| PASS | render scc-no-boosts dark 2x every separator on device pixel |
+| PASS | render scc-no-boosts dark 2x shadow offset down |
+| PASS | render scc-no-boosts dark 2x anchor geometry |
+| PASS | complete opaque capture scc-no-boosts dark 2x |
+| PASS | render scc-no-boosts dark 2x (fill and glyph ink) |
+| PASS | render scc-boosts-off light 1x header/action/footer fill |
+| PASS | render scc-boosts-off light 1x every separator on device pixel |
+| PASS | render scc-boosts-off light 1x shadow offset down |
+| PASS | render scc-boosts-off light 1x anchor geometry |
+| PASS | complete opaque capture scc-boosts-off light 1x |
+| PASS | render scc-boosts-off light 1x (fill and glyph ink) |
+| PASS | render scc-boosts-off light 2x header/action/footer fill |
+| PASS | render scc-boosts-off light 2x every separator on device pixel |
+| PASS | render scc-boosts-off light 2x shadow offset down |
+| PASS | render scc-boosts-off light 2x anchor geometry |
+| PASS | complete opaque capture scc-boosts-off light 2x |
+| PASS | render scc-boosts-off light 2x (fill and glyph ink) |
+| PASS | render scc-boosts-off dark 1x header/action/footer fill |
+| PASS | render scc-boosts-off dark 1x every separator on device pixel |
+| PASS | render scc-boosts-off dark 1x shadow offset down |
+| PASS | render scc-boosts-off dark 1x anchor geometry |
+| PASS | complete opaque capture scc-boosts-off dark 1x |
+| PASS | render scc-boosts-off dark 1x (fill and glyph ink) |
+| PASS | render scc-boosts-off dark 2x header/action/footer fill |
+| PASS | render scc-boosts-off dark 2x every separator on device pixel |
+| PASS | render scc-boosts-off dark 2x shadow offset down |
+| PASS | render scc-boosts-off dark 2x anchor geometry |
+| PASS | complete opaque capture scc-boosts-off dark 2x |
+| PASS | render scc-boosts-off dark 2x (fill and glyph ink) |
+| PASS | render scc-incognito light 1x header/action/footer fill |
+| PASS | render scc-incognito light 1x every separator on device pixel |
+| PASS | render scc-incognito light 1x shadow offset down |
+| PASS | render scc-incognito light 1x anchor geometry |
+| PASS | complete opaque capture scc-incognito light 1x |
+| PASS | render scc-incognito light 1x (fill and glyph ink) |
+| PASS | render scc-incognito light 2x header/action/footer fill |
+| PASS | render scc-incognito light 2x every separator on device pixel |
+| PASS | render scc-incognito light 2x shadow offset down |
+| PASS | render scc-incognito light 2x anchor geometry |
+| PASS | complete opaque capture scc-incognito light 2x |
+| PASS | render scc-incognito light 2x (fill and glyph ink) |
+| PASS | render scc-incognito dark 1x header/action/footer fill |
+| PASS | render scc-incognito dark 1x every separator on device pixel |
+| PASS | render scc-incognito dark 1x shadow offset down |
+| PASS | render scc-incognito dark 1x anchor geometry |
+| PASS | complete opaque capture scc-incognito dark 1x |
+| PASS | render scc-incognito dark 1x (fill and glyph ink) |
+| PASS | render scc-incognito dark 2x header/action/footer fill |
+| PASS | render scc-incognito dark 2x every separator on device pixel |
+| PASS | render scc-incognito dark 2x shadow offset down |
+| PASS | render scc-incognito dark 2x anchor geometry |
+| PASS | complete opaque capture scc-incognito dark 2x |
+| PASS | render scc-incognito dark 2x (fill and glyph ink) |
+| PASS | render scc-internal-page light 1x header/action/footer fill |
+| PASS | render scc-internal-page light 1x every separator on device pixel |
+| PASS | render scc-internal-page light 1x shadow offset down |
+| PASS | render scc-internal-page light 1x anchor geometry |
+| PASS | complete opaque capture scc-internal-page light 1x |
+| PASS | render scc-internal-page light 1x (fill and glyph ink) |
+| PASS | render scc-internal-page light 2x header/action/footer fill |
+| PASS | render scc-internal-page light 2x every separator on device pixel |
+| PASS | render scc-internal-page light 2x shadow offset down |
+| PASS | render scc-internal-page light 2x anchor geometry |
+| PASS | complete opaque capture scc-internal-page light 2x |
+| PASS | render scc-internal-page light 2x (fill and glyph ink) |
+| PASS | render scc-internal-page dark 1x header/action/footer fill |
+| PASS | render scc-internal-page dark 1x every separator on device pixel |
+| PASS | render scc-internal-page dark 1x shadow offset down |
+| PASS | render scc-internal-page dark 1x anchor geometry |
+| PASS | complete opaque capture scc-internal-page dark 1x |
+| PASS | render scc-internal-page dark 1x (fill and glyph ink) |
+| PASS | render scc-internal-page dark 2x header/action/footer fill |
+| PASS | render scc-internal-page dark 2x every separator on device pixel |
+| PASS | render scc-internal-page dark 2x shadow offset down |
+| PASS | render scc-internal-page dark 2x anchor geometry |
+| PASS | complete opaque capture scc-internal-page dark 2x |
+| PASS | render scc-internal-page dark 2x (fill and glyph ink) |
+| PASS | render scc-many light 1x header/action/footer fill |
+| PASS | render scc-many light 1x every separator on device pixel |
+| PASS | render scc-many light 1x shadow offset down |
+| PASS | render scc-many light 1x anchor geometry |
+| PASS | complete opaque capture scc-many light 1x |
+| PASS | render scc-many light 1x (fill and glyph ink) |
+| PASS | render scc-many light 2x header/action/footer fill |
+| PASS | render scc-many light 2x every separator on device pixel |
+| PASS | render scc-many light 2x shadow offset down |
+| PASS | render scc-many light 2x anchor geometry |
+| PASS | complete opaque capture scc-many light 2x |
+| PASS | render scc-many light 2x (fill and glyph ink) |
+| PASS | render scc-many dark 1x header/action/footer fill |
+| PASS | render scc-many dark 1x every separator on device pixel |
+| PASS | render scc-many dark 1x shadow offset down |
+| PASS | render scc-many dark 1x anchor geometry |
+| PASS | complete opaque capture scc-many dark 1x |
+| PASS | render scc-many dark 1x (fill and glyph ink) |
+| PASS | render scc-many dark 2x header/action/footer fill |
+| PASS | render scc-many dark 2x every separator on device pixel |
+| PASS | render scc-many dark 2x shadow offset down |
+| PASS | render scc-many dark 2x anchor geometry |
+| PASS | complete opaque capture scc-many dark 2x |
+| PASS | render scc-many dark 2x (fill and glyph ink) |
+| PASS | render scc-pane-anchor light 1x header/action/footer fill |
+| PASS | render scc-pane-anchor light 1x every separator on device pixel |
+| PASS | render scc-pane-anchor light 1x shadow offset down |
+| PASS | render scc-pane-anchor light 1x anchor geometry |
+| PASS | complete opaque capture scc-pane-anchor light 1x |
+| PASS | render scc-pane-anchor light 1x (fill and glyph ink) |
+| PASS | render scc-pane-anchor light 2x header/action/footer fill |
+| PASS | render scc-pane-anchor light 2x every separator on device pixel |
+| PASS | render scc-pane-anchor light 2x shadow offset down |
+| PASS | render scc-pane-anchor light 2x anchor geometry |
+| PASS | complete opaque capture scc-pane-anchor light 2x |
+| PASS | render scc-pane-anchor light 2x (fill and glyph ink) |
+| PASS | render scc-pane-anchor dark 1x header/action/footer fill |
+| PASS | render scc-pane-anchor dark 1x every separator on device pixel |
+| PASS | render scc-pane-anchor dark 1x shadow offset down |
+| PASS | render scc-pane-anchor dark 1x anchor geometry |
+| PASS | complete opaque capture scc-pane-anchor dark 1x |
+| PASS | render scc-pane-anchor dark 1x (fill and glyph ink) |
+| PASS | render scc-pane-anchor dark 2x header/action/footer fill |
+| PASS | render scc-pane-anchor dark 2x every separator on device pixel |
+| PASS | render scc-pane-anchor dark 2x shadow offset down |
+| PASS | render scc-pane-anchor dark 2x anchor geometry |
+| PASS | complete opaque capture scc-pane-anchor dark 2x |
+| PASS | render scc-pane-anchor dark 2x (fill and glyph ink) |
+| PASS | render scc-dark light 1x header/action/footer fill |
+| PASS | render scc-dark light 1x every separator on device pixel |
+| PASS | render scc-dark light 1x shadow offset down |
+| PASS | render scc-dark light 1x anchor geometry |
+| PASS | complete opaque capture scc-dark light 1x |
+| PASS | render scc-dark light 1x (fill and glyph ink) |
+| PASS | render scc-dark light 2x header/action/footer fill |
+| PASS | render scc-dark light 2x every separator on device pixel |
+| PASS | render scc-dark light 2x shadow offset down |
+| PASS | render scc-dark light 2x anchor geometry |
+| PASS | complete opaque capture scc-dark light 2x |
+| PASS | render scc-dark light 2x (fill and glyph ink) |
+| PASS | render scc-dark dark 1x header/action/footer fill |
+| PASS | render scc-dark dark 1x every separator on device pixel |
+| PASS | render scc-dark dark 1x shadow offset down |
+| PASS | render scc-dark dark 1x anchor geometry |
+| PASS | complete opaque capture scc-dark dark 1x |
+| PASS | render scc-dark dark 1x (fill and glyph ink) |
+| PASS | render scc-dark dark 2x header/action/footer fill |
+| PASS | render scc-dark dark 2x every separator on device pixel |
+| PASS | render scc-dark dark 2x shadow offset down |
+| PASS | render scc-dark dark 2x anchor geometry |
+| PASS | complete opaque capture scc-dark dark 2x |
+| PASS | render scc-dark dark 2x (fill and glyph ink) |
+| PASS | render scc-reload light 1x header/action/footer fill |
+| PASS | render scc-reload light 1x every separator on device pixel |
+| PASS | render scc-reload light 1x shadow offset down |
+| PASS | render scc-reload light 1x anchor geometry |
+| PASS | complete opaque capture scc-reload light 1x |
+| PASS | render scc-reload light 1x (fill and glyph ink) |
+| PASS | render scc-reload light 2x header/action/footer fill |
+| PASS | render scc-reload light 2x every separator on device pixel |
+| PASS | render scc-reload light 2x shadow offset down |
+| PASS | render scc-reload light 2x anchor geometry |
+| PASS | complete opaque capture scc-reload light 2x |
+| PASS | render scc-reload light 2x (fill and glyph ink) |
+| PASS | render scc-reload dark 1x header/action/footer fill |
+| PASS | render scc-reload dark 1x every separator on device pixel |
+| PASS | render scc-reload dark 1x shadow offset down |
+| PASS | render scc-reload dark 1x anchor geometry |
+| PASS | complete opaque capture scc-reload dark 1x |
+| PASS | render scc-reload dark 1x (fill and glyph ink) |
+| PASS | render scc-reload dark 2x header/action/footer fill |
+| PASS | render scc-reload dark 2x every separator on device pixel |
+| PASS | render scc-reload dark 2x shadow offset down |
+| PASS | render scc-reload dark 2x anchor geometry |
+| PASS | complete opaque capture scc-reload dark 2x |
+| PASS | render scc-reload dark 2x (fill and glyph ink) |
+| PASS | render scc-hover light 1x header/action/footer fill |
+| PASS | render scc-hover light 1x every separator on device pixel |
+| PASS | render scc-hover light 1x shadow offset down |
+| PASS | render scc-hover light 1x anchor geometry |
+| PASS | complete opaque capture scc-hover light 1x |
+| PASS | render scc-hover light 1x (fill and glyph ink) |
+| PASS | render scc-hover light 2x header/action/footer fill |
+| PASS | render scc-hover light 2x every separator on device pixel |
+| PASS | render scc-hover light 2x shadow offset down |
+| PASS | render scc-hover light 2x anchor geometry |
+| PASS | complete opaque capture scc-hover light 2x |
+| PASS | render scc-hover light 2x (fill and glyph ink) |
+| PASS | render scc-hover dark 1x header/action/footer fill |
+| PASS | render scc-hover dark 1x every separator on device pixel |
+| PASS | render scc-hover dark 1x shadow offset down |
+| PASS | render scc-hover dark 1x anchor geometry |
+| PASS | complete opaque capture scc-hover dark 1x |
+| PASS | render scc-hover dark 1x (fill and glyph ink) |
+| PASS | render scc-hover dark 2x header/action/footer fill |
+| PASS | render scc-hover dark 2x every separator on device pixel |
+| PASS | render scc-hover dark 2x shadow offset down |
+| PASS | render scc-hover dark 2x anchor geometry |
+| PASS | complete opaque capture scc-hover dark 2x |
+| PASS | render scc-hover dark 2x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus light 1x header/action/footer fill |
+| PASS | render scc-keyboard-focus light 1x every separator on device pixel |
+| PASS | render scc-keyboard-focus light 1x shadow offset down |
+| PASS | render scc-keyboard-focus light 1x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus light 1x |
+| PASS | render scc-keyboard-focus light 1x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus light 2x header/action/footer fill |
+| PASS | render scc-keyboard-focus light 2x every separator on device pixel |
+| PASS | render scc-keyboard-focus light 2x shadow offset down |
+| PASS | render scc-keyboard-focus light 2x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus light 2x |
+| PASS | render scc-keyboard-focus light 2x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus dark 1x header/action/footer fill |
+| PASS | render scc-keyboard-focus dark 1x every separator on device pixel |
+| PASS | render scc-keyboard-focus dark 1x shadow offset down |
+| PASS | render scc-keyboard-focus dark 1x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus dark 1x |
+| PASS | render scc-keyboard-focus dark 1x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus dark 2x header/action/footer fill |
+| PASS | render scc-keyboard-focus dark 2x every separator on device pixel |
+| PASS | render scc-keyboard-focus dark 2x shadow offset down |
+| PASS | render scc-keyboard-focus dark 2x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus dark 2x |
+| PASS | render scc-keyboard-focus dark 2x (fill and glyph ink) |
+| FAIL | scc-menu captures the native overlay |
+| PASS | render scc-menu light 1x header/action/footer fill |
+| PASS | render scc-menu light 1x every separator on device pixel |
+| PASS | render scc-menu light 1x shadow offset down |
+| PASS | render scc-menu light 1x anchor geometry |
+| PASS | complete opaque capture scc-menu light 1x |
+| PASS | render scc-menu light 1x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu light 2x header/action/footer fill |
+| PASS | render scc-menu light 2x every separator on device pixel |
+| PASS | render scc-menu light 2x shadow offset down |
+| PASS | render scc-menu light 2x anchor geometry |
+| PASS | complete opaque capture scc-menu light 2x |
+| PASS | render scc-menu light 2x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu dark 1x header/action/footer fill |
+| PASS | render scc-menu dark 1x every separator on device pixel |
+| PASS | render scc-menu dark 1x shadow offset down |
+| PASS | render scc-menu dark 1x anchor geometry |
+| PASS | complete opaque capture scc-menu dark 1x |
+| PASS | render scc-menu dark 1x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu dark 2x header/action/footer fill |
+| PASS | render scc-menu dark 2x every separator on device pixel |
+| PASS | render scc-menu dark 2x shadow offset down |
+| PASS | render scc-menu dark 2x anchor geometry |
+| PASS | complete opaque capture scc-menu dark 2x |
+| PASS | render scc-menu dark 2x (fill and glyph ink) |
+| PASS | render scc-picker light 1x header/action/footer fill |
+| PASS | render scc-picker light 1x every separator on device pixel |
+| PASS | render scc-picker light 1x shadow offset down |
+| PASS | render scc-picker light 1x anchor geometry |
+| PASS | complete opaque capture scc-picker light 1x |
+| PASS | render scc-picker light 1x (fill and glyph ink) |
+| PASS | render scc-picker light 2x header/action/footer fill |
+| PASS | render scc-picker light 2x every separator on device pixel |
+| PASS | render scc-picker light 2x shadow offset down |
+| PASS | render scc-picker light 2x anchor geometry |
+| PASS | complete opaque capture scc-picker light 2x |
+| PASS | render scc-picker light 2x (fill and glyph ink) |
+| PASS | render scc-picker dark 1x header/action/footer fill |
+| PASS | render scc-picker dark 1x every separator on device pixel |
+| PASS | render scc-picker dark 1x shadow offset down |
+| PASS | render scc-picker dark 1x anchor geometry |
+| PASS | complete opaque capture scc-picker dark 1x |
+| PASS | render scc-picker dark 1x (fill and glyph ink) |
+| PASS | render scc-picker dark 2x header/action/footer fill |
+| PASS | render scc-picker dark 2x every separator on device pixel |
+| PASS | render scc-picker dark 2x shadow offset down |
+| PASS | render scc-picker dark 2x anchor geometry |
+| PASS | complete opaque capture scc-picker dark 2x |
+| PASS | render scc-picker dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on light 1x header/action/footer fill |
+| PASS | render scc-tooltip-on light 1x every separator on device pixel |
+| PASS | render scc-tooltip-on light 1x shadow offset down |
+| PASS | render scc-tooltip-on light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on light 1x |
+| PASS | render scc-tooltip-on light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on light 2x header/action/footer fill |
+| PASS | render scc-tooltip-on light 2x every separator on device pixel |
+| PASS | render scc-tooltip-on light 2x shadow offset down |
+| PASS | render scc-tooltip-on light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on light 2x |
+| PASS | render scc-tooltip-on light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-on dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-on dark 1x shadow offset down |
+| PASS | render scc-tooltip-on dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on dark 1x |
+| PASS | render scc-tooltip-on dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-on dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-on dark 2x shadow offset down |
+| PASS | render scc-tooltip-on dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on dark 2x |
+| PASS | render scc-tooltip-on dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off light 1x header/action/footer fill |
+| PASS | render scc-tooltip-off light 1x every separator on device pixel |
+| PASS | render scc-tooltip-off light 1x shadow offset down |
+| PASS | render scc-tooltip-off light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off light 1x |
+| PASS | render scc-tooltip-off light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off light 2x header/action/footer fill |
+| PASS | render scc-tooltip-off light 2x every separator on device pixel |
+| PASS | render scc-tooltip-off light 2x shadow offset down |
+| PASS | render scc-tooltip-off light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off light 2x |
+| PASS | render scc-tooltip-off light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-off dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-off dark 1x shadow offset down |
+| PASS | render scc-tooltip-off dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off dark 1x |
+| PASS | render scc-tooltip-off dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-off dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-off dark 2x shadow offset down |
+| PASS | render scc-tooltip-off dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off dark 2x |
+| PASS | render scc-tooltip-off dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable light 1x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable light 1x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable light 1x shadow offset down |
+| PASS | render scc-tooltip-unavailable light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable light 1x |
+| PASS | render scc-tooltip-unavailable light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable light 2x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable light 2x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable light 2x shadow offset down |
+| PASS | render scc-tooltip-unavailable light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable light 2x |
+| PASS | render scc-tooltip-unavailable light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable dark 1x shadow offset down |
+| PASS | render scc-tooltip-unavailable dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable dark 1x |
+| PASS | render scc-tooltip-unavailable dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable dark 2x shadow offset down |
+| PASS | render scc-tooltip-unavailable dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable dark 2x |
+| PASS | render scc-tooltip-unavailable dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private light 1x header/action/footer fill |
+| PASS | render scc-tooltip-private light 1x every separator on device pixel |
+| PASS | render scc-tooltip-private light 1x shadow offset down |
+| PASS | render scc-tooltip-private light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private light 1x |
+| PASS | render scc-tooltip-private light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private light 2x header/action/footer fill |
+| PASS | render scc-tooltip-private light 2x every separator on device pixel |
+| PASS | render scc-tooltip-private light 2x shadow offset down |
+| PASS | render scc-tooltip-private light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private light 2x |
+| PASS | render scc-tooltip-private light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-private dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-private dark 1x shadow offset down |
+| PASS | render scc-tooltip-private dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private dark 1x |
+| PASS | render scc-tooltip-private dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-private dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-private dark 2x shadow offset down |
+| PASS | render scc-tooltip-private dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private dark 2x |
+| PASS | render scc-tooltip-private dark 2x (fill and glyph ink) |
+| PASS | render editor-interstitial light 1x body and opaque backdrop |
+| PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial light 1x rendered contrast title 13.72 body 13.72 button 10.24 |
+| PASS | render editor-interstitial real controls present |
+| PASS | render editor-interstitial light 2x body and opaque backdrop |
+| PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial light 2x rendered contrast title 13.72 body 13.72 button 10.24 |
+| PASS | render editor-interstitial real controls present |
+| PASS | render editor-interstitial dark 1x body and opaque backdrop |
+| PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial dark 1x rendered contrast title 11.19 body 5.16 button 10.24 |
+| PASS | render editor-interstitial real controls present |
+| PASS | render editor-interstitial dark 2x body and opaque backdrop |
+| PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial dark 2x rendered contrast title 11.19 body 5.16 button 10.24 |
+| PASS | render editor-interstitial real controls present |
+| PASS | render editor-simple light 1x body and opaque backdrop |
+| PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | render editor-simple real controls present |
+| PASS | render editor-simple light 2x body and opaque backdrop |
+| PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | render editor-simple real controls present |
+| PASS | render editor-simple dark 1x body and opaque backdrop |
+| PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | render editor-simple real controls present |
+| PASS | render editor-simple dark 2x body and opaque backdrop |
+| PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | render editor-simple real controls present |
+| PASS | render editor-advanced-color light 1x body and opaque backdrop |
+| PASS | render editor-advanced-color exact opaque editor surface after resize |
+| PASS | render editor-advanced-color real controls present |
+| PASS | render editor-advanced-color light 2x body and opaque backdrop |
+| PASS | render editor-advanced-color exact opaque editor surface after resize |
+| PASS | render editor-advanced-color real controls present |
+| PASS | render editor-advanced-color dark 1x body and opaque backdrop |
+| PASS | render editor-advanced-color exact opaque editor surface after resize |
+| PASS | render editor-advanced-color real controls present |
+| PASS | render editor-advanced-color dark 2x body and opaque backdrop |
+| PASS | render editor-advanced-color exact opaque editor surface after resize |
+| PASS | render editor-advanced-color real controls present |
+| PASS | render editor-neutral-page light 1x body and opaque backdrop |
+| PASS | render editor-neutral-page exact opaque editor surface after resize |
+| PASS | render editor-neutral-page real controls present |
+| PASS | render editor-neutral-page light 2x body and opaque backdrop |
+| PASS | render editor-neutral-page exact opaque editor surface after resize |
+| PASS | render editor-neutral-page real controls present |
+| PASS | render editor-neutral-page dark 1x body and opaque backdrop |
+| PASS | render editor-neutral-page exact opaque editor surface after resize |
+| PASS | render editor-neutral-page real controls present |
+| PASS | render editor-neutral-page dark 2x body and opaque backdrop |
+| PASS | render editor-neutral-page exact opaque editor surface after resize |
+| PASS | render editor-neutral-page real controls present |
+| PASS | render editor-not-active light 1x body and opaque backdrop |
+| PASS | render editor-not-active exact opaque editor surface after resize |
+| PASS | render editor-not-active real controls present |
+| PASS | render editor-not-active light 2x body and opaque backdrop |
+| PASS | render editor-not-active exact opaque editor surface after resize |
+| PASS | render editor-not-active real controls present |
+| PASS | render editor-not-active dark 1x body and opaque backdrop |
+| PASS | render editor-not-active exact opaque editor surface after resize |
+| PASS | render editor-not-active real controls present |
+| PASS | render editor-not-active dark 2x body and opaque backdrop |
+| PASS | render editor-not-active exact opaque editor surface after resize |
+| PASS | render editor-not-active real controls present |
+| PASS | render editor-global-off light 1x body and opaque backdrop |
+| PASS | render editor-global-off exact opaque editor surface after resize |
+| PASS | render editor-global-off real controls present |
+| PASS | render editor-global-off light 2x body and opaque backdrop |
+| PASS | render editor-global-off exact opaque editor surface after resize |
+| PASS | render editor-global-off real controls present |
+| PASS | render editor-global-off dark 1x body and opaque backdrop |
+| PASS | render editor-global-off exact opaque editor surface after resize |
+| PASS | render editor-global-off real controls present |
+| PASS | render editor-global-off dark 2x body and opaque backdrop |
+| PASS | render editor-global-off exact opaque editor surface after resize |
+| PASS | render editor-global-off real controls present |
+| PASS | render editor-legacy light 1x body and opaque backdrop |
+| PASS | render editor-legacy exact opaque editor surface after resize |
+| PASS | render editor-legacy real controls present |
+| PASS | render editor-legacy light 2x body and opaque backdrop |
+| PASS | render editor-legacy exact opaque editor surface after resize |
+| PASS | render editor-legacy real controls present |
+| PASS | render editor-legacy dark 1x body and opaque backdrop |
+| PASS | render editor-legacy exact opaque editor surface after resize |
+| PASS | render editor-legacy real controls present |
+| PASS | render editor-legacy dark 2x body and opaque backdrop |
+| PASS | render editor-legacy exact opaque editor surface after resize |
+| PASS | render editor-legacy real controls present |
+| PASS | render editor-menu light 1x body and opaque backdrop |
+| PASS | render editor-menu exact opaque editor surface after resize |
+| PASS | render editor-menu real controls present |
+| PASS | render editor-menu light 2x body and opaque backdrop |
+| PASS | render editor-menu exact opaque editor surface after resize |
+| PASS | render editor-menu real controls present |
+| PASS | render editor-menu dark 1x body and opaque backdrop |
+| PASS | render editor-menu exact opaque editor surface after resize |
+| PASS | render editor-menu real controls present |
+| PASS | render editor-menu dark 2x body and opaque backdrop |
+| PASS | render editor-menu exact opaque editor surface after resize |
+| PASS | render editor-menu real controls present |
+| PASS | render editor-scope-host light 1x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-host light 2x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-host dark 1x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-host dark 2x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-ip light 1x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-scope-ip light 2x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-scope-ip dark 1x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-scope-ip dark 2x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-rename light 1x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-rename light 2x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-rename dark 1x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-rename dark 2x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-reset light 1x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-reset light 2x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-reset dark 1x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-reset dark 2x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-delete light 1x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-delete light 2x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-delete dark 1x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-delete dark 2x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-double-banner light 1x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-double-banner light 2x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-double-banner dark 1x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-double-banner dark 2x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-hover-side light 1x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-hover-side light 2x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-hover-side dark 1x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-hover-side dark 2x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-pressed-side light 1x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-pressed-side light 2x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-pressed-side dark 1x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-pressed-side dark 2x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-focus-side light 1x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-focus-side light 2x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-focus-side dark 1x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-focus-side dark 2x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-hover-chip light 1x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-hover-chip light 2x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-hover-chip dark 1x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-hover-chip dark 2x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-pressed-chip light 1x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-pressed-chip light 2x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-pressed-chip dark 1x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-pressed-chip dark 2x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-focus-chip light 1x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-focus-chip light 2x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-focus-chip dark 1x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-focus-chip dark 2x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-hover-tile light 1x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-hover-tile light 2x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-hover-tile dark 1x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-hover-tile dark 2x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-pressed-tile light 1x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-pressed-tile light 2x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-pressed-tile dark 1x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-pressed-tile dark 2x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-focus-tile light 1x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | render editor-focus-tile light 2x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | render editor-focus-tile dark 1x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | render editor-focus-tile dark 2x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | step-4 committed SHA256 editor-advanced-color-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-advanced-color-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-advanced-color-light@1x.png |
+| PASS | step-4 committed SHA256 editor-advanced-color-light@2x.png |
+| PASS | step-4 committed SHA256 editor-delete-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-delete-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-delete-light@1x.png |
+| PASS | step-4 committed SHA256 editor-delete-light@2x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-light@1x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-light@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-light@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-light@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-light@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-light@2x.png |
+| PASS | step-4 committed SHA256 editor-global-off-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-global-off-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-global-off-light@1x.png |
+| PASS | step-4 committed SHA256 editor-global-off-light@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-light@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-light@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-light@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-light@2x.png |
+| PASS | step-4 committed SHA256 editor-interstitial-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-interstitial-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-interstitial-light@1x.png |
+| PASS | step-4 committed SHA256 editor-interstitial-light@2x.png |
+| PASS | step-4 committed SHA256 editor-legacy-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-legacy-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-legacy-light@1x.png |
+| PASS | step-4 committed SHA256 editor-legacy-light@2x.png |
+| PASS | step-4 committed SHA256 editor-menu-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-menu-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-menu-light@1x.png |
+| PASS | step-4 committed SHA256 editor-menu-light@2x.png |
+| PASS | step-4 committed SHA256 editor-neutral-page-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-neutral-page-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-neutral-page-light@1x.png |
+| PASS | step-4 committed SHA256 editor-neutral-page-light@2x.png |
+| PASS | step-4 committed SHA256 editor-not-active-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-not-active-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-not-active-light@1x.png |
+| PASS | step-4 committed SHA256 editor-not-active-light@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-light@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-light@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-light@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-light@2x.png |
+| PASS | step-4 committed SHA256 editor-rename-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-rename-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-rename-light@1x.png |
+| PASS | step-4 committed SHA256 editor-rename-light@2x.png |
+| PASS | step-4 committed SHA256 editor-reset-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-reset-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-reset-light@1x.png |
+| PASS | step-4 committed SHA256 editor-reset-light@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-light@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-light@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-simple-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-simple-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-simple-light@1x.png |
+| PASS | step-4 committed SHA256 editor-simple-light@2x.png |
+| PASS | complete step-4 render receipts |
+| PASS | step-1 committed SHA256 scc-basic-dark@1x.png |
+| PASS | step-1 committed SHA256 scc-basic-dark@2x.png |
+| PASS | step-1 committed SHA256 scc-basic-light@1x.png |
+| PASS | step-1 committed SHA256 scc-basic-light@2x.png |
+| PASS | complete step-1 render receipts |
+| PASS | step-2 committed SHA256 scc-adblock-excluded-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-adblock-excluded-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-adblock-excluded-light@1x.png |
+| PASS | step-2 committed SHA256 scc-adblock-excluded-light@2x.png |
+| PASS | step-2 committed SHA256 scc-adblock-unavailable-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-adblock-unavailable-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-adblock-unavailable-light@1x.png |
+| PASS | step-2 committed SHA256 scc-adblock-unavailable-light@2x.png |
+| PASS | step-2 committed SHA256 scc-basic-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-basic-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-basic-light@1x.png |
+| PASS | step-2 committed SHA256 scc-basic-light@2x.png |
+| PASS | step-2 committed SHA256 scc-boosts-off-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-boosts-off-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-boosts-off-light@1x.png |
+| PASS | step-2 committed SHA256 scc-boosts-off-light@2x.png |
+| PASS | step-2 committed SHA256 scc-dark-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-dark-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-dark-light@1x.png |
+| PASS | step-2 committed SHA256 scc-dark-light@2x.png |
+| PASS | step-2 committed SHA256 scc-hover-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-hover-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-hover-light@1x.png |
+| PASS | step-2 committed SHA256 scc-hover-light@2x.png |
+| PASS | step-2 committed SHA256 scc-incognito-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-incognito-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-incognito-light@1x.png |
+| PASS | step-2 committed SHA256 scc-incognito-light@2x.png |
+| PASS | step-2 committed SHA256 scc-insecure-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-insecure-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-insecure-light@1x.png |
+| PASS | step-2 committed SHA256 scc-insecure-light@2x.png |
+| PASS | step-2 committed SHA256 scc-internal-page-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-internal-page-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-internal-page-light@1x.png |
+| PASS | step-2 committed SHA256 scc-internal-page-light@2x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-light@1x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-light@2x.png |
+| PASS | step-2 committed SHA256 scc-many-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-many-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-many-light@1x.png |
+| PASS | step-2 committed SHA256 scc-many-light@2x.png |
+| PASS | step-2 committed SHA256 scc-menu-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-menu-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-menu-light@1x.png |
+| PASS | step-2 committed SHA256 scc-menu-light@2x.png |
+| PASS | step-2 committed SHA256 scc-no-boosts-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-no-boosts-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-no-boosts-light@1x.png |
+| PASS | step-2 committed SHA256 scc-no-boosts-light@2x.png |
+| PASS | step-2 committed SHA256 scc-pane-anchor-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-pane-anchor-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-pane-anchor-light@1x.png |
+| PASS | step-2 committed SHA256 scc-pane-anchor-light@2x.png |
+| PASS | step-2 committed SHA256 scc-picker-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-picker-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-picker-light@1x.png |
+| PASS | step-2 committed SHA256 scc-picker-light@2x.png |
+| PASS | step-2 committed SHA256 scc-reload-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-reload-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-reload-light@1x.png |
+| PASS | step-2 committed SHA256 scc-reload-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-light@2x.png |
+| PASS | complete step-2 render receipts |
+| PASS | motion committed SHA256 close-000ms.png |
+| PASS | motion committed SHA256 close-040ms.png |
+| PASS | motion committed SHA256 close-080ms.png |
+| PASS | motion committed SHA256 close-260ms.png |
+| PASS | motion committed SHA256 grow-000ms.png |
+| PASS | motion committed SHA256 grow-040ms.png |
+| PASS | motion committed SHA256 grow-080ms.png |
+| PASS | motion committed SHA256 grow-260ms.png |
+| PASS | motion committed SHA256 open-000ms.png |
+| PASS | motion committed SHA256 open-040ms.png |
+| PASS | motion committed SHA256 open-080ms.png |
+| PASS | motion committed SHA256 open-260ms.png |
+| PASS | motion committed SHA256 shrink-000ms.png |
+| PASS | motion committed SHA256 shrink-040ms.png |
+| PASS | motion committed SHA256 shrink-080ms.png |
+| PASS | motion committed SHA256 shrink-260ms.png |
+| PASS | complete motion render receipts |
+| FAIL | panel build/layout/first draw main-thread CPU p95 < 8 ms |
+| FAIL | native click to first draw wall p95 < 8 ms |
+| PASS | idle editor has no host work and less than 0.5 percent main-thread CPU |
+| PASS | commit refreshes ten real page plans within 100 ms |
+| PASS | wheel event to preview queue p95 < 2 ms |
+| PASS | 1 s 120 Hz drag coalesces to at most 61 real planner previews |
+| FAIL | simple editor build/layout/first draw p95 < 12 ms |
+| PASS | 2216x1394 PNG dominant hue under 15 ms off the main thread |
+
+1144/1148 passed
+FAIL: command sitecontrol-render exited 1; expected 0
