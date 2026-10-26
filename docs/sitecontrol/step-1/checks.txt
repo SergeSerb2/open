@@ -1,4 +1,4 @@
-Step 1 skeleton open: build + native click + layout + first display; 30 samples, 5 warmups; p95 main thread 6.731 ms, wall 8.277 ms
+Step 1 skeleton open: build + native click + layout + first display; 30 samples, 5 warmups; p95 main thread 6.734 ms, wall 10.245 ms
 | Result | Check |
 |---|---|
 | PASS | F1 anchor presents |
@@ -20,26 +20,31 @@ Step 1 skeleton open: build + native click + layout + first display; 30 samples,
 | PASS | render scc-basic light 1x separator on device pixel |
 | PASS | render scc-basic light 1x shadow visible and offset down |
 | PASS | render scc-basic light 1x anchor x241 y40 without arrow |
+| PASS | render scc-basic light 1x complete opaque capture |
 | PASS | render scc-basic light 2x header/action/footer fill and size |
 | PASS | render scc-basic light 2x action and footer ink |
 | PASS | render scc-basic light 2x separator on device pixel |
 | PASS | render scc-basic light 2x shadow visible and offset down |
 | PASS | render scc-basic light 2x anchor x241 y40 without arrow |
+| PASS | render scc-basic light 2x complete opaque capture |
+| PASS | render scc-basic light 2x repeated capture is stable and complete |
 | PASS | render scc-basic dark 1x header/action/footer fill and size |
 | PASS | render scc-basic dark 1x action and footer ink |
 | PASS | render scc-basic dark 1x separator on device pixel |
 | PASS | render scc-basic dark 1x shadow visible and offset down |
 | PASS | render scc-basic dark 1x anchor x241 y40 without arrow |
+| PASS | render scc-basic dark 1x complete opaque capture |
 | PASS | render scc-basic dark 2x header/action/footer fill and size |
 | PASS | render scc-basic dark 2x action and footer ink |
 | PASS | render scc-basic dark 2x separator on device pixel |
 | PASS | render scc-basic dark 2x shadow visible and offset down |
 | PASS | render scc-basic dark 2x anchor x241 y40 without arrow |
+| PASS | render scc-basic dark 2x complete opaque capture |
 | PASS | committed SHA256 scc-basic-dark@1x.png |
 | PASS | committed SHA256 scc-basic-dark@2x.png |
 | PASS | committed SHA256 scc-basic-light@1x.png |
 | PASS | committed SHA256 scc-basic-light@2x.png |
 | PASS | four committed render receipts |
-| PASS | bench skeleton open p95 6.731 ms <= 8 ms main thread |
+| PASS | bench skeleton open p95 6.734 ms <= 8 ms main thread |
 
-40/40 passed
+45/45 passed

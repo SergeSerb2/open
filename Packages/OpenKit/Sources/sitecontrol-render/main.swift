@@ -59,6 +59,16 @@ enum CLI {
                 checks.append(Flows.Check(name: label + " separator on device pixel", pass: separator != header && pixel(image, x: Int((panel.minX+160)*scale), y: Int((panel.minY+92)*scale)+1) == header))
                 checks.append(Flows.Check(name: label + " shadow visible and offset down", pass: bottom != page && luminance(bottom) < luminance(top)))
                 checks.append(Flows.Check(name: label + " anchor x241 y40 without arrow", pass: panel.minX == 241 && panel.minY == 40 && pixel(image, x: Int(235*scale), y: Int(64*scale)) != header))
+                checks.append(Flows.Check(name: label + " complete opaque capture", pass: fullyOpaque(image)))
+                if appearance == .light && scale == 2 {
+                    let repeated = stage.render(scale: scale)
+                    let stable: Bool
+                    if let firstData = image.dataProvider?.data, let nextData = repeated.dataProvider?.data {
+                        stable = stablePixels(firstData as Data, nextData as Data)
+                    } else { stable = false }
+                    checks.append(Flows.Check(name: label + " repeated capture is stable and complete", pass:
+                        stable && fullyOpaque(repeated)))
+                }
             } }
             checks.append(contentsOf: try receipts())
             checks.append(contentsOf: Bench.run())
@@ -67,6 +77,24 @@ enum CLI {
         }
     }
     static func luminance(_ pixel: [UInt8]) -> Int { pixel.prefix(3).map(Int.init).reduce(0, +) }
+    static func stablePixels(_ first: Data, _ next: Data) -> Bool {
+        guard first.count == next.count else { return false }
+        // Native symbol redraws can round antialiased edge channels by 2/255.
+        // Permit that quantization; opacity remains exact in fullyOpaque.
+        return first.withUnsafeBytes { (a: UnsafeRawBufferPointer) in
+            next.withUnsafeBytes { (b: UnsafeRawBufferPointer) in
+                for i in 0..<a.count { if abs(Int(a[i]) - Int(b[i])) > 2 { return false } }
+                return true
+            }
+        }
+    }
+    static func fullyOpaque(_ image: CGImage) -> Bool {
+        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return false }
+        for y in 0..<image.height { for x in 0..<image.width {
+            if bytes[y * image.bytesPerRow + x * 4 + 3] != 255 { return false }
+        } }
+        return true
+    }
     static func hasInk(_ image: CGImage, rect: CGRect, scale: CGFloat, fill: [UInt8]) -> Bool {
         var ink = 0
         for y in Int(rect.minY*scale)..<Int(rect.maxY*scale) {

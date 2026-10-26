@@ -41,6 +41,9 @@ final class Stage {
         root.addSubview(anchorButton)
         window = OffscreenRenderer.host(root, scale: scale)
         window.orderFront(nil); window.makeFirstResponder(root)
+        // The browser page is already painted when its Site Controls are clicked.
+        // Prepare that fixture before measuring creation of the panel itself.
+        OffscreenRenderer.settle(root)
         let wall = DispatchTime.now().uptimeNanoseconds
         let cpu = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
         controller = SiteControlController(source: self.source, actions: self.source)
