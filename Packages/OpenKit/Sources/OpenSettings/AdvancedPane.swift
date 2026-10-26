@@ -60,7 +60,7 @@ public struct AdvancedPane: View {
         }
         SettingsGroup {
             SettingsRow(height:64,divider:false) { VStack(alignment:.leading,spacing:5) {
-                HStack { Text("Sleep inactive tabs");Spacer();Picker("Sleep inactive tabs",selection:$model.sleepMode) { ForEach(TabSleepMode.allCases,id:\.self) { Text($0.rawValue.capitalized).tag($0) } }.labelsHidden().frame(width:150) }
+                HStack { Text("Sleep inactive tabs");Spacer();SettingsPopUp("Sleep inactive tabs",selection:$model.sleepMode,width:150,entries:TabSleepMode.allCases.map{.option($0.rawValue.capitalized,$0)}) }
                 Text(sleepDescription).font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             } }
         }.id("advanced-sleep")
