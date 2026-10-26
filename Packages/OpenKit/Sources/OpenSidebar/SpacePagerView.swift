@@ -20,6 +20,10 @@ final class SpacePagerView: NSView {
     private var animating = false
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
+    var bottomContentInset: CGFloat = 0 { didSet {
+        guard bottomContentInset != oldValue else { return }
+        for page in pages.values { page.scroll.contentInsets.bottom = bottomContentInset }
+    } }
 
     private struct SwipeState {
         var baseIndex: Int
@@ -54,6 +58,7 @@ final class SpacePagerView: NSView {
         if let p = pages[space.id] { return p }
         let p = SpacePageView(context: context, space: space, menus: menus)
         p.scroll.pager = self
+        p.scroll.contentInsets.bottom = bottomContentInset
         pages[space.id] = p
         strip.addSubview(p)
         return p
@@ -98,7 +103,7 @@ final class SpacePagerView: NSView {
             placeStrip(); finishSlide()
             return
         }
-        if previous != nil { context.selection.clear() }
+        if previous != nil { context.selection.clear(); context.existingHoverPreviews?.dismiss() }
         let target = focusedIndex
         let w = bounds.width
         let from = previous.flatMap { id in spaces.firstIndex { $0.id == id } } ?? target
@@ -145,6 +150,7 @@ final class SpacePagerView: NSView {
         switch event.phase {
         case .began:
             guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return false }
+            context.suppressPreviews(.swipe, true)
             strip.layer?.removeAnimation(forKey: "slide")
             animating = false
             let base = focusedIndex
@@ -186,6 +192,7 @@ final class SpacePagerView: NSView {
                 target = min(max(s.baseIndex + (moved > 0 ? 1 : -1), 0), spaces.count - 1)
             }
             swipe = nil
+            context.suppressPreviews(.swipe, false)
             if target != s.baseIndex { context.selection.clear() }
             // The delegate changes focus synchronously; snap to whatever is focused now.
             if target != s.baseIndex { context.send(.switchSpace(spaces[target].id)) }
@@ -240,6 +247,7 @@ final class PageScrollView: NSScrollView {
     private var routing = false
 
     override func scrollWheel(with event: NSEvent) {
+        (documentView as? SidebarOutlineView)?.page?.context.existingHoverPreviews?.dismiss()
         if event.phase == .began { routing = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) }
         if routing, let pager, pager.handleScroll(event) {
             if event.phase == .ended || event.phase == .cancelled { routing = false }

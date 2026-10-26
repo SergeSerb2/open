@@ -792,3 +792,71 @@ identical positions and ink boxes. Full evidence is under
 `/tmp/open-sidebar-s4/fixed-main`. That result prompted the lead gate above.
 `verify-all` accepts `SIDEBAR_BASELINE_REF` and `SIDEBAR_BASELINE_RENDERER` to
 name this renderer-only main dependency explicitly until #92 merges.
+
+## 21. Sidebar completion S5 (2026-10-26)
+
+`HoverPreviewTracker` belongs to each `SidebarContext`. It is lazy, uses only
+cancellable one-shot tasks, and installs no timer, notification observer, or
+event monitor when previews are disabled. It reads the live master, Folders,
+Pinned tabs and Favorites, and delay preferences (defaults true/true/true/0.5 s).
+Movement inside the same target keeps the original deadline. Folder rows, pinned
+rows, and Favorites emit `SidebarHoverPreviewRequest(kind:anchorInWindow:)`;
+Today, split rows, and the current tab/tile do not. Reset-plate hover keeps its
+action tooltip and takes priority over the row preview. Other row tooltips stay
+off while a preview is armed or shown.
+
+The tracker blocks during drag, rename, menu tracking, and Space swipes. Row
+actions, Esc, scroll, Space changes, source removal, and window resignation
+dismiss it. Outside both row and card, dismissal waits 0.25 s. The App reports
+card entry/exit through `setPointerInsidePreview`; a target swap is immediate
+while a preview shows or within one second after it hid. Settings disable removes
+installed work. Each window has its own state. No preview host or panel is made
+by OpenSidebar: A2 handles the live page host, panel placement, frame/scale/fade
+animation, and adoption back into the container cache through `.hoverPreview`.
+The public `HoverPreviewMetrics` / `Motion.previewIn`, `previewOut`, and
+`previewSwap` tokens give that controller the plan's guessed geometry/motion.
+
+`FolderPreviewView` is a native 300 pt card. Its header is 36 pt; its rows are
+32 pt, with 16 pt favicons and 13 pt titles. It lists tabs depth-first (including
+split panes), shows search above eight tabs, and scrolls after ten rows. Hover
+and keyboard selection share the row fill. The real search editor routes
+Up/Down into the results and Return to selection. Empty folders say “No tabs”;
+a query with no match says “No matching tabs” and Return does nothing. Tab/title
+and subtree changes update the card through Observation. Content appearance
+follows its Space. `PreviewColors.background` is white / #212222, the measured
+SC §7 palette fact; all card geometry remains a guess pending capture C4.
+
+Plan/code mismatch: the model does not yet have the theme plan's `iconOverride`
+field. The header uses its existing `Folder.customIcon` (symbol or emoji), else
+our own folder vector. Lane S adds no model field. The model also does not expand
+the folder chain in `selectNode`; the card sends existing `setExpanded` intents
+for its ancestors before selection. `ModelSidebarActions` resolves a selected
+split pane to the split and its focused pane. App host selection remains A2.
+
+`SidebarBannerView` shows only after the App sets
+`context.autoArchiveBannerRequested` for a real sweep. Eligibility/dismissal
+preferences remain live. Got it sends `.dismissAutoArchiveBanner`; the Settings
+text link sends `.openProfileSettings` with the focused Space's actual Profile.
+The App persists the dismissal for either action; the default model delegate
+leaves these intents unhandled. All windows observe preference changes, and the
+host can also call `refreshAutoArchiveBanner()` after its write.
+
+The copy uses the Profile's real interval: 1/6/12/24 hours or 7/30 days (lead
+Q12). Never means no banner. Card geometry is `[8, H−50−8−h, W−16, h]`, radius
+10, padding 12, title 13 Semibold, body 12 Regular / line height 15, button 24.
+Height follows wrapping: at width 228 the current six-hour fixture is 123 pt,
+and the longer default twelve-hour copy is 138 pt; at 500 it is 108 pt. This
+replaces the plan's approximate 106 pt guess without clipping the required copy.
+The real tab-list bottom inset is `h+8`. It changes once; only the card's layer
+animates (12 pt slide/fade, 0.22 s in / 0.18 s out), so the transition adds no
+layout pass per frame. Reduce Motion uses the fade. All banner visual values
+remain guesses pending C6.
+
+The CLI renders these real views with `--preview folder:N` and
+`--banner auto-archive`; private snapshots stay read-only and neutral fixtures
+can supply non-default thresholds. The native flow checks cover HP1–HP6 and
+BN1–BN4 using actual pointer/key events, timer deadlines, production drag/menu
+callbacks, text editing, the Settings link, Profile changes, and disabled/empty
+cases. No unit tests, new dependency/target, App edit, or desktop control.
+App E11–E12/E16, live-host reuse, and the sweep trigger remain A-lane acceptance.
+The §15.1 numeric 13-state gate and the #92 shared Renderer dependency apply.

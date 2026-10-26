@@ -29,6 +29,7 @@ enum RenderCLI {
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
                             [--multi-select ROW,ROW…] [--option-held] [--unread ROW,…] [--hover-favicon ROW]
+                            [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
@@ -111,6 +112,10 @@ enum RenderCLI {
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
         context.isOptionHeld = args.contains("--option-held")
+        if let banner = value(args, "--banner") {
+            guard banner == "auto-archive" else { throw CLIError(description: "unknown banner") }
+            context.autoArchiveBannerRequested = true
+        }
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
@@ -173,6 +178,12 @@ enum RenderCLI {
         options.revealCard = args.contains("--reveal")
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
+        if let preview = value(args, "--preview"), let space = context.focusedSpace {
+            let parts = preview.split(separator: ":")
+            let folders = (space.pinned + space.today).compactMap(\.folder)
+            guard parts.count == 2, parts[0] == "folder", let index = Int(parts[1]), folders.indices.contains(index) else { throw CLIError(description: "no preview folder \(preview)") }
+            options.previewFolderID = folders[index].id
+        }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
         let delegate = RecordingDelegate()
         let scene = RenderScene(context: context, options: options, delegate: delegate)

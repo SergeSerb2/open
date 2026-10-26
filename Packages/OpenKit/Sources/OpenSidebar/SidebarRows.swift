@@ -270,6 +270,7 @@ class SidebarCellView: NSView {
     /// Inline title editor (double-click or "Rename…").
     private var editor: NSTextField?
     func beginEditing(text: String, frame: NSRect, font: NSFont, commit: @escaping @MainActor (String) -> Void) {
+        page?.context.suppressPreviews(.rename, true)
         let field = RenameField(frame: frame)
         field.stringValue = text
         field.font = font
@@ -281,6 +282,7 @@ class SidebarCellView: NSView {
         field.onEnd = { [weak self, weak field] value in
             field?.removeFromSuperview()
             self?.editor = nil
+            self?.page?.context.suppressPreviews(.rename, false)
             self?.subviews.forEach { if $0 is TextLabel { $0.isHidden = false } }
             if let value { commit(value) }
         }

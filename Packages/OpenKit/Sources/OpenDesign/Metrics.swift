@@ -315,3 +315,28 @@ public enum SpaceManagerMetrics {
     public static let headerHeight: CGFloat = 44
     public static let pitch = columnWidth + gap
 }
+
+/// Hover preview geometry (completion §3.6; guesses pending capture C4).
+public enum HoverPreviewMetrics {
+    public static let pageWidth: CGFloat = 420
+    public static let pageMaxHeight: CGFloat = 560
+    public static let windowInset: CGFloat = 10
+    public static let folderWidth: CGFloat = 300
+    public static let rowHeight: CGFloat = 32
+    public static let headerHeight: CGFloat = 36
+    public static let sidebarGap: CGFloat = 8
+    public static let radius: CGFloat = 10
+    public static let shadowOpacity: Float = 0.25
+    public static let shadowRadius: CGFloat = 12
+    public static let shadowOffsetY: CGFloat = 4
+}
+/// Auto-archive education geometry (completion §3.11; guesses).
+public enum BannerMetrics {
+    public static let inset: CGFloat = 8
+    public static let padding: CGFloat = 12
+    public static let radius: CGFloat = 10
+    public static let titleSize: CGFloat = 13
+    public static let messageSize: CGFloat = 12
+    public static let lineHeight: CGFloat = 15
+    public static let buttonHeight: CGFloat = 24
+}

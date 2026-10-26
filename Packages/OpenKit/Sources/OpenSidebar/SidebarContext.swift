@@ -12,6 +12,23 @@ public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
     public let selection = SidebarSelection()
+    /// Preview/banner preferences; the App uses .standard, harnesses use a suite.
+    @ObservationIgnored public let previewPreferences: UserDefaults
+    @ObservationIgnored private var hoverPreviewStorage: HoverPreviewTracker?
+    var existingHoverPreviews: HoverPreviewTracker? { hoverPreviewStorage }
+    @ObservationIgnored var previewSuppressions: Set<HoverPreviewTracker.Suppression> = []
+    var previewsEnabled: Bool { previewPreferences.object(forKey: "open.general.previewsEnabled") == nil || previewPreferences.bool(forKey: "open.general.previewsEnabled") }
+    var canStartHoverPreview: Bool { previewsEnabled && previewSuppressions.isEmpty }
+    func suppressPreviews(_ reason: HoverPreviewTracker.Suppression, _ value: Bool) {
+        if value { previewSuppressions.insert(reason) } else { previewSuppressions.remove(reason) }
+        existingHoverPreviews?.setSuppressed(reason, value)
+    }
+    public var hoverPreviews: HoverPreviewTracker {
+        if let hoverPreviewStorage { return hoverPreviewStorage }
+        let tracker = HoverPreviewTracker(context: self); hoverPreviewStorage = tracker; return tracker
+    }
+    /// Set only after a real auto-archive sweep. Never persisted in the snapshot.
+    public var autoArchiveBannerRequested = false
     public let haptics = SidebarHaptics()
     @ObservationIgnored weak var manager: SpaceManagerView?
     var managerSpaceID: SpaceID?
@@ -66,9 +83,10 @@ public final class SidebarContext {
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?
 
-    public init(model: BrowserModel, windowID: WindowID) {
+    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard) {
         self.model = model
         self.windowID = windowID
+        self.previewPreferences = previewPreferences
     }
 
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
@@ -129,6 +147,10 @@ public final class SidebarContext {
 
     @discardableResult
     func send(_ intent: SidebarIntent) -> Bool {
+        switch intent {
+        case .hoverPreview: break
+        default: existingHoverPreviews?.dismiss()
+        }
         switch intent {
         case .select, .selectFavorite: selection.clear()
         default: break

@@ -486,7 +486,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     @objc private func scrolled() {
         guard let window else { return }
-        updateHover(at: convert(window.mouseLocationOutsideOfEventStream, from: nil))
+        context.existingHoverPreviews?.dismiss()
+        updateHover(at: convert(window.mouseLocationOutsideOfEventStream, from: nil), allowPreview: false)
     }
 
     // MARK: Hover
@@ -500,25 +501,31 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     override func mouseMoved(with event: NSEvent) { updateHover(at: convert(event.locationInWindow, from: nil)) }
-    override func mouseExited(with event: NSEvent) { hoveredItem = nil; header.pointerInside = false }
+    override func mouseExited(with event: NSEvent) { hoveredItem = nil; header.pointerInside = false; context.existingHoverPreviews?.leaveTarget() }
 
-    private func updateHover(at point: NSPoint) {
+    private func updateHover(at point: NSPoint, allowPreview: Bool = true) {
         header.pointerInside = header.frame.contains(point)
         let p = outline.convert(point, from: self)
-        guard scroll.frame.contains(point) else { hoveredItem = nil; return }
+        guard scroll.frame.contains(point) else { hoveredItem = nil; context.existingHoverPreviews?.leaveTarget(); return }
         let row = outline.row(at: p)
         let item = row >= 0 ? outline.item(atRow: row) as AnyObject? : nil
         hoveredItem = item
-        if let tab = item as? Tab, let rowView = outline.rowView(atRow: row, makeIfNecessary: false) {
+        if let rowView = row >= 0 ? outline.rowView(atRow: row, makeIfNecessary: false) : nil, let id = itemID(of: item) {
             let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? TabCellView
             let reset = cell.map { $0.trackFavicon(at: $0.convert(point, from: self)) } ?? false
-            if !reset {
+            if reset { context.existingHoverPreviews?.dismiss(); return }
+            if allowPreview, context.canStartHoverPreview,
+               context.hoverPreviews.hover(nodeID: id, anchorInWindow: rowView.convert(rowView.bounds, to: nil), owner: rowView) { return }
+            if !context.canStartHoverPreview { context.existingHoverPreviews?.dismiss() }
+            if let tab = item as? Tab {
                 TooltipController.shared.schedule(Tooltip(title: tab.displayTitle, subtitle: "Double-click to rename", placement: .beside, style: style),
                                                   for: rowView, at: rowView.convert(point, from: self))
-            }
+            } else { TooltipController.shared.cancel(for: nil) }
         } else if item is DividerItem, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? DividerCellView {
+            context.existingHoverPreviews?.leaveTarget()
             cell.trackPointer(at: cell.convert(point, from: self))
         } else {
+            context.existingHoverPreviews?.leaveTarget()
             TooltipController.shared.cancel(for: nil)
         }
     }
@@ -569,6 +576,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func menu(at point: NSPoint) -> NSMenu {
+        context.existingHoverPreviews?.dismiss()
         context.manager?.activate(space)
         let row = outline.row(at: point)
         let item = row >= 0 ? outline.item(atRow: row) : nil
@@ -657,6 +665,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      willBeginAt screenPoint: NSPoint, forItems draggedItems: [Any]) {
         outline.dragWasStarted = true
+        context.suppressPreviews(.drag, true)
         TooltipController.shared.cancel(for: nil)
         draggingIDs = Set(draggedItems.compactMap { itemID(of: $0) })
         updateRowStates(animated: false)
@@ -665,6 +674,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         draggingIDs = []
+        context.suppressPreviews(.drag, false)
         context.haptics.endDrag()
         updateRowStates(animated: false)
     }
@@ -697,6 +707,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func outlineView(_ outlineView: NSOutlineView, parentOf item: AnyObject) -> Any? { outlineView.parent(forItem: item) }
 
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
+        context.suppressPreviews(.drag, true)
         guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
@@ -708,6 +719,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
+        defer { context.suppressPreviews(.drag, false) }
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
             guard !ids.isEmpty else { return false }
@@ -772,12 +784,19 @@ final class SidebarOutlineView: NSOutlineView {
         }
     }
 
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        page?.context.suppressPreviews(.drag, false)
+        super.draggingEnded(sender)
+    }
+
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         page?.context.haptics.endDrag()
+        page?.context.suppressPreviews(.drag, false)
         super.draggingExited(sender)
     }
 
     override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 { page?.context.existingHoverPreviews?.dismiss() }
         if let page { page.context.manager?.activate(page.space) }
         if let page, !page.context.selection.isEmpty, event.modifierFlags.intersection([.control, .option]).isEmpty {
             if event.modifierFlags.contains(.command) {
@@ -948,6 +967,7 @@ final class SpaceHeaderView: NSView {
     }
 
     func beginRename() {
+        context.suppressPreviews(.rename, true)
         let field = RenameField(frame: title.frame.insetBy(dx: -2, dy: -1))
         field.stringValue = context.title(of: space)
         field.font = title.font
@@ -959,6 +979,7 @@ final class SpaceHeaderView: NSView {
         field.onEnd = { [weak self, weak field] value in
             field?.removeFromSuperview()
             self?.title.isHidden = false
+            self?.context.suppressPreviews(.rename, false)
             if let value { self?.context.send(.renameSpace(id, title: value)) }
         }
         title.isHidden = true

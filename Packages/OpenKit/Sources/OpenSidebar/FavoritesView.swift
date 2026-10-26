@@ -105,6 +105,13 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         return []
     }
 
+    func collectionView(_ collectionView: NSCollectionView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint, forItemsAt indexPaths: Set<IndexPath>) {
+        context.suppressPreviews(.drag, true)
+    }
+    func collectionView(_ collectionView: NSCollectionView, draggingSession session: NSDraggingSession, endedAt screenPoint: NSPoint, dragOperation operation: NSDragOperation) {
+        context.suppressPreviews(.drag, false); context.haptics.endDrag()
+    }
+
     // MARK: Drag and drop
 
     func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> (any NSPasteboardWriting)? {
@@ -114,6 +121,7 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     func collectionView(_ collectionView: NSCollectionView, validateDrop draggingInfo: any NSDraggingInfo,
                         proposedIndexPath: AutoreleasingUnsafeMutablePointer<NSIndexPath>,
                         dropOperation: UnsafeMutablePointer<NSCollectionView.DropOperation>) -> NSDragOperation {
+        context.suppressPreviews(.drag, true)
         dropOperation.pointee = .before
         if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
             // Favorites hold tabs only.
@@ -127,6 +135,7 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
 
     func collectionView(_ collectionView: NSCollectionView, acceptDrop draggingInfo: any NSDraggingInfo,
                         indexPath: IndexPath, dropOperation: NSCollectionView.DropOperation) -> Bool {
+        defer { context.suppressPreviews(.drag, false) }
         let index = indexPath.item
         if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
             guard !ids.isEmpty, let profileID else { return false }
@@ -147,6 +156,7 @@ final class FavoritesCollectionView: NSCollectionView {
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
         owner?.context.haptics.endDrag()
+        owner?.context.suppressPreviews(.drag, false)
         super.draggingExited(sender)
     }
 
@@ -154,6 +164,7 @@ final class FavoritesCollectionView: NSCollectionView {
         let p = convert(event.locationInWindow, from: nil)
         guard let owner, let menus = owner.menus, let i = indexPathForItem(at: p)?.item, owner.tabs.indices.contains(i) else { return nil }
         owner.context.selection.clear()
+        owner.context.existingHoverPreviews?.dismiss()
         return menus.favorite(owner.tabs[i])
     }
 }
@@ -337,8 +348,12 @@ final class FavoriteTileView: NSView {
     private func hoverChanged() {
         guard let tab, let context, let space = context.focusedSpace else { return }
         if pointerInside {
+            if context.canStartHoverPreview,
+               context.hoverPreviews.hover(nodeID: tab.id, anchorInWindow: convert(bounds, to: nil), owner: self) { return }
+            if !context.canStartHoverPreview { context.existingHoverPreviews?.dismiss() }
             TooltipController.shared.schedule(Tooltip(title: tab.displayTitle, placement: .below, style: context.style(for: space)), for: self)
         } else {
+            context.existingHoverPreviews?.leaveTarget()
             TooltipController.shared.cancel(for: self)
         }
     }
