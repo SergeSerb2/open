@@ -235,7 +235,9 @@ extension CompletionChecks {
             let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
             let down = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!
             let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: 0.01, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 0)!
-            delegate.log = []; NSApp.postEvent(up, atStart: true); outline.mouseDown(with: down); pump()
+            delegate.log = []; NSApp.postEvent(up, atStart: true); outline.mouseDown(with: down)
+            _ = NSApp.nextEvent(matching: .leftMouseUp, until: Date(), inMode: .default, dequeue: true)
+            pump()
             check(!delegate.log.contains(where: { if case .select = $0 { true } else { false } }) && !(host.firstResponder is NSTextView), "MS7 selected accessory press neither activates nor renames")
         } else { check(false, "MS7 selected row exposes its accessory control") }
         context.forcedHover = nil; select(ids)
