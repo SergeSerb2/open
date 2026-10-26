@@ -763,7 +763,6 @@ final class SidebarOutlineView: NSOutlineView {
         case 125, 126: // Down, Up: focus only, leaving selection in the model.
             let extending = event.modifierFlags.contains(.shift)
             let selection = page.context.selection
-            let oldCount = selection.ids.count
             var from = current
             let candidates = extending ? rows.filter { itemID(of: item(atRow: $0)) != nil } : rows
             if extending {
@@ -775,7 +774,6 @@ final class SidebarOutlineView: NSOutlineView {
             let next = event.keyCode == 125 ? candidates.first(where: { $0 > from }) : candidates.last(where: { $0 < (from < 0 ? numberOfRows : from) })
             if let next { keyboardItem = item(atRow: next) as AnyObject?; scrollRowToVisible(next) }
             if extending, let id = itemID(of: keyboardItem) { selection.extend(to: id, order: page.selectableOrder) }
-            if extending, selection.ids.count != oldCount { NSAccessibility.post(element: self, notification: .selectedRowsChanged) }
         case 53: // Escape
             page.context.selection.clear()
         case 36, 49, 76: // Return, Space, keypad Enter

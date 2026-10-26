@@ -70,7 +70,11 @@ enum CompletionChecks {
         check(context.selection.ids == Array(space.pinned.prefix(4).map(\.id)), "MS5 Shift+Down three times selects four rows")
         let selectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.pinned[1].id.description)!, makeIfNecessary: true)!
         let unselectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.today[0].id.description)!, makeIfNecessary: true)!
-        check(selectedRow.isAccessibilitySelected() && !unselectedRow.isAccessibilitySelected(), "MS5 accessibility exposes selected and unselected real rows")
+        // Ask AppKit's AX attribute dispatcher, rather than calling the row override.
+        func axSelected(_ row: NSView) -> Bool? {
+            row.perform(NSSelectorFromString("accessibilityAttributeValue:"), with: NSAccessibility.Attribute.selected.rawValue)?.takeUnretainedValue() as? Bool
+        }
+        check(axSelected(selectedRow) == true && axSelected(unselectedRow) == false, "MS5 AXSelected attribute API exposes selected and unselected real rows")
         key(53)
         check(context.selection.isEmpty, "MS5 Escape clears selection")
         key(125, .shift); key(126)
