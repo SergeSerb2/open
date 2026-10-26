@@ -237,23 +237,25 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(receipt.cancelled && receipt.copyStarted && receipt.copyWasPartial && receipt.privateModes && receipt.temporaryCopyRemoved && receipt.sourceUnchanged,"cancelled partial copy leaked files, changed its source, or bypassed cancellation")
                 print("COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchanged=true")
             case "previews-legacy-migration":
-                for legacy in [false, true] {
+                let cases: [(legacy: Bool, folders: Bool?)] = [(false, nil), (true, false), (false, true)]
+                for (legacy, storedFolders) in cases {
+                    let expectedFolders = storedFolders ?? legacy
                     let suite = "open.previews.migration.\(UUID().uuidString)"
                     let defaults = UserDefaults(suiteName: suite)!
                     defer { defaults.removePersistentDomain(forName: suite) }
                     defaults.set(legacy, forKey: "open.general.previewsOnHover")
-                    if legacy { defaults.set(false, forKey: "open.general.previewsFolders") }
+                    if let storedFolders { defaults.set(storedFolders, forKey: "open.general.previewsFolders") }
                     let migrated = SettingsViewModel(model: vm.model, actions: env.actions, defaults: defaults, root: env.root, snapshot: vm.snapshot)
-                    try require(!migrated.bool("open.general.previewsFolders") && migrated.bool("open.general.previewsPages") == legacy,
+                    try require(migrated.bool("open.general.previewsFolders") == expectedFolders && migrated.bool("open.general.previewsPages") == legacy,
                                 "legacy preview source choices were reset or an explicit new choice was overwritten")
                     try require(defaults.synchronize(), "migration did not flush to the existing defaults store")
                     let disk = defaults.persistentDomain(forName: suite)!
-                    try require(disk["open.general.previewsFolders"] as? Bool == false && disk["open.general.previewsPages"] as? Bool == legacy,
+                    try require(disk["open.general.previewsFolders"] as? Bool == expectedFolders && disk["open.general.previewsPages"] as? Bool == legacy,
                                 "preview migration did not persist the source keys")
                     defaults.set(true, forKey: "open.general.previewsPages")
                     defaults.set(false, forKey: "open.general.previewsOnHover")
                     let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: suite)!, root: env.root, snapshot: vm.snapshot)
-                    try require(!reloaded.bool("open.general.previewsFolders") && reloaded.bool("open.general.previewsPages"),
+                    try require(reloaded.bool("open.general.previewsFolders") == expectedFolders && reloaded.bool("open.general.previewsPages"),
                                 "repeat registration overwrote a later per-source choice")
                 }
                 print("Legacy preview false/true, missing keys, explicit choices, disk writes, and repeat startup passed")
