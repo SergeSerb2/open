@@ -1,14 +1,26 @@
 import Foundation
+import OpenImport
+
+let sweptImportCopies = sweepStaleImportCopies()
+if sweptImportCopies > 0 {
+    FileHandle.standardError.write(Data("import cleanup: removed \(sweptImportCopies) stale copies\n".utf8))
+}
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route> ...")
+    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
 
 do {
     switch command {
+    case "verify-secrets-fixture":
+        try runSyntheticSecretsFixture()
+    case "import-arc-secrets":
+        await Task.detached(priority: .utility) { runImportArcSecrets(args: rest) }.value
+    case "import-arc-history":
+        await runImportArcHistory(args: rest)
     case "import-arc":
         try await runImportArc(args: rest)
     case "archive-list":
