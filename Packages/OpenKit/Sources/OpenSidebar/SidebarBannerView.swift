@@ -9,7 +9,7 @@ public final class SidebarBannerView: NSView, NSTextViewDelegate {
     public let context: SidebarContext
     private let title = TextLabel()
     public let messageView = BannerMessageView()
-    public let dismissButton = NSButton(title: "Got it", target: nil, action: nil)
+    public let dismissButton = BannerDismissButton()
     public var onHeightChange: (@MainActor () -> Void)?
     private var loop: ObservationLoop?
     private var cachedWidth: CGFloat = -1
@@ -52,21 +52,38 @@ public final class SidebarBannerView: NSView, NSTextViewDelegate {
         case .thirtyDays: return "30 days"
         }
     }
-    public var message: String { "Open archives tabs that you haven't used in the past \(thresholdText ?? ""). You can adjust this in Settings." }
+    public var message: String { "Open archives tabs that you haven’t used in the past \(thresholdText ?? ""). You can adjust this in Settings." }
     private func refresh() {
         guard let space = context.focusedSpace else { return }
         let style = context.style(for: space), appearance = context.appearance(for: space)
         self.appearance = appearance.nsAppearance
-        layer?.backgroundColor = style.selectedFill(appearance).cgColor
+        let base: RGBA
+        switch style.fill { case .corners(let colors): base = colors.first ?? RGBA(hex: 0x252538)
+        case .blended(let colors, _): base = colors.first ?? RGBA(hex: 0xEDEDF1) }
+        let fill = style.selectedFill(appearance)
+        let background = RGBA(fill.red * fill.alpha + base.red * (1-fill.alpha), fill.green * fill.alpha + base.green * (1-fill.alpha), fill.blue * fill.alpha + base.blue * (1-fill.alpha))
+        layer?.backgroundColor = background.cgColor
         SelectionShadow.apply(to: layer!, appearance: appearance)
         title.color = { style.titleColor(appearance).nsColor }
         let paragraph = NSMutableParagraphStyle(); paragraph.minimumLineHeight = BannerMetrics.lineHeight; paragraph.maximumLineHeight = BannerMetrics.lineHeight
-        let string = NSMutableAttributedString(string: message, attributes: [.font: NSFont.systemFont(ofSize: BannerMetrics.messageSize), .foregroundColor: SidebarRole.secondaryText.resolved(appearance).nsColor, .paragraphStyle: paragraph])
+        let string = NSMutableAttributedString(string: message, attributes: [.font: NSFont.systemFont(ofSize: BannerMetrics.messageSize), .foregroundColor: (appearance == .light ? RGBA.black(0.55) : RGBA.white(0.70)).nsColor, .paragraphStyle: paragraph])
         let range = (string.string as NSString).range(of: "Settings")
         string.addAttribute(.link, value: "open-profile-settings", range: range)
         messageView.textStorage?.setAttributedString(string)
-        messageView.linkTextAttributes = [.foregroundColor: style.accentColor(appearance).nsColor, .underlineStyle: 0]
-        dismissButton.layer?.backgroundColor = GrayScale.a(4).cgColor(appearance)
+        var link = style.contrastAccent(appearance)
+        func luminance(_ c: RGBA) -> Double {
+            func linear(_ x: Double) -> Double { x <= 0.04045 ? x / 12.92 : pow((x+0.055)/1.055,2.4) }
+            return linear(c.red)*0.2126 + linear(c.green)*0.7152 + linear(c.blue)*0.0722
+        }
+        let baseL = luminance(background), target: Double = appearance == .light ? 0 : 1
+        for _ in 0..<100 {
+            let ink = luminance(link), contrast = (max(ink,baseL)+0.05)/(min(ink,baseL)+0.05)
+            if contrast >= 4.5 { break }
+            link = RGBA(link.red*0.95+target*0.05,link.green*0.95+target*0.05,link.blue*0.95+target*0.05)
+        }
+        messageView.alwaysUnderline = appearance == .dark
+        messageView.linkTextAttributes = [.foregroundColor: link.nsColor, .underlineStyle: appearance == .dark ? NSUnderlineStyle.single.rawValue : 0]
+        dismissButton.refreshState()
         dismissButton.attributedTitle = NSAttributedString(string: "Got it", attributes: [.font: NSFont.systemFont(ofSize: BannerMetrics.messageSize, weight: .medium), .foregroundColor: style.titleColor(appearance).nsColor])
         cachedWidth = -1; cachedMessage = ""; needsLayout = true
         onHeightChange?()
@@ -97,6 +114,7 @@ public final class SidebarBannerView: NSView, NSTextViewDelegate {
 @MainActor
 public final class BannerMessageView: NSTextView {
     private var tracking: NSTrackingArea?
+    public var alwaysUnderline = false
     public override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
@@ -106,12 +124,37 @@ public final class BannerMessageView: NSTextView {
     public override func mouseMoved(with event: NSEvent) {
         let index = characterIndexForInsertion(at: convert(event.locationInWindow, from: nil))
         let onLink = index < (textStorage?.length ?? 0) && textStorage?.attribute(.link, at: index, effectiveRange: nil) != nil
-        var attributes = linkTextAttributes ?? [:]; attributes[.underlineStyle] = onLink ? NSUnderlineStyle.single.rawValue : 0
+        var attributes = linkTextAttributes ?? [:]; attributes[.underlineStyle] = (alwaysUnderline || onLink) ? NSUnderlineStyle.single.rawValue : 0
         linkTextAttributes = attributes
         super.mouseMoved(with: event)
     }
     public override func mouseExited(with event: NSEvent) {
-        var attributes = linkTextAttributes ?? [:]; attributes[.underlineStyle] = 0; linkTextAttributes = attributes
+        var attributes = linkTextAttributes ?? [:]; attributes[.underlineStyle] = alwaysUnderline ? NSUnderlineStyle.single.rawValue : 0; linkTextAttributes = attributes
         super.mouseExited(with: event)
+    }
+}
+
+
+/// Native action button with the guessed GrayA4/5/6 rest/hover/press states.
+@MainActor public final class BannerDismissButton: NSButton {
+    private var tracking: NSTrackingArea?
+    private var hovered = false
+    private var pressed = false
+    public init() { super.init(frame: .zero); title = "Got it"; wantsLayer = true }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    func refreshState() { layer?.backgroundColor = GrayScale.a(pressed ? 6 : hovered ? 5 : 4).cgColor(contentAppearance) }
+    public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshState() }
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area); tracking = area
+    }
+    public override func mouseEntered(with event: NSEvent) { hovered = true; refreshState() }
+    public override func mouseExited(with event: NSEvent) { hovered = false; refreshState() }
+    public override func mouseDown(with event: NSEvent) {
+        pressed = true; refreshState()
+        super.mouseDown(with: event)
+        pressed = false; refreshState()
     }
 }

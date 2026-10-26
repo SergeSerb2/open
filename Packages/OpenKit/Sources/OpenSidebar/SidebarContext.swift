@@ -79,6 +79,10 @@ public final class SidebarContext {
     /// so the Peek's URL or loading changes do not reach every row.
     public private(set) var peekSourceNodeID: ItemID?
 
+    /// Theme integration supplies iconOverride here until the model exposes that field.
+    /// Shared folder rendering resolves this before Folder.customIcon.
+    public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
+
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?

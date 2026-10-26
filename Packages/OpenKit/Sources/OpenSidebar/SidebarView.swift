@@ -125,13 +125,15 @@ public final class SidebarView: NSView {
         let favH = favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
-        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, bottom - favTop - favH))
+        let bannerHeight = bannerShown ? banner?.height(for: max(0, w - 2 * BannerMetrics.inset)) ?? 0 : 0
+        let listBottom = bottom - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
+        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, listBottom - favTop - favH))
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
         if bannerShown, let banner {
             let height = banner.height(for: max(0, w - 2 * BannerMetrics.inset))
             banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - BannerMetrics.inset - height,
                                   width: max(0, w - 2 * BannerMetrics.inset), height: height)
-            pager.bottomContentInset = height + BannerMetrics.inset
+
         }
     }
 
@@ -395,6 +397,10 @@ extension SidebarView {
         return convert(dot.frame, from: cell)
     }
 
+    public func drawnFolderGlyph(nodeID: ItemID) -> String? { (cell(nodeID: nodeID) as? FolderCellView)?.icon.lastDrawnGlyph }
+
+    public func folderIconView(nodeID: ItemID) -> NSView? { (cell(nodeID: nodeID) as? FolderCellView)?.icon }
+
     public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 
     public func resetAction(tabID: ItemID) -> NSView? {
@@ -492,7 +498,7 @@ extension SidebarView {
         if wanted {
             banner.isHidden = false
             needsLayout = true; layoutSubtreeIfNeeded()
-        } else { pager.bottomContentInset = 0 }
+        } else { needsLayout = true }
         guard animatesSidebarChanges else { banner.isHidden = !wanted; return }
         let duration = wanted ? Motion.bannerIn : Motion.bannerOut
         let opacity = CABasicAnimation(keyPath: "opacity")
@@ -512,6 +518,6 @@ extension SidebarView {
         CATransaction.commit()
     }
     public var autoArchiveBanner: SidebarBannerView? { bannerShown ? banner : nil }
-    public var bannerContentInset: CGFloat { pager.bottomContentInset }
+    public var bannerContentInset: CGFloat { 0 }
     public func refreshAutoArchiveBanner() { syncBanner() }
 }

@@ -20,10 +20,7 @@ final class SpacePagerView: NSView {
     private var animating = false
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
-    var bottomContentInset: CGFloat = 0 { didSet {
-        guard bottomContentInset != oldValue else { return }
-        for page in pages.values { page.scroll.contentInsets.bottom = bottomContentInset }
-    } }
+
 
     private struct SwipeState {
         var baseIndex: Int
@@ -58,7 +55,6 @@ final class SpacePagerView: NSView {
         if let p = pages[space.id] { return p }
         let p = SpacePageView(context: context, space: space, menus: menus)
         p.scroll.pager = self
-        p.scroll.contentInsets.bottom = bottomContentInset
         pages[space.id] = p
         strip.addSubview(p)
         return p

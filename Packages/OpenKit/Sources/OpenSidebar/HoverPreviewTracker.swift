@@ -18,6 +18,7 @@ public final class HoverPreviewTracker {
     private let model: BrowserModel
     private var candidate: SidebarHoverPreviewRequest?
     private weak var owner: NSView?
+    private weak var shownWindow: NSWindow?
     private var showTask: DispatchWorkItem?
     private var hideTask: DispatchWorkItem?
     private var lastHidden: TimeInterval?
@@ -95,8 +96,9 @@ public final class HoverPreviewTracker {
         }
     }
     private func show(_ next: SidebarHoverPreviewRequest) {
-        guard valid(next), owner?.window != nil else { dismiss(); return }
+        guard valid(next), let window = owner?.window else { dismiss(); return }
         showTask?.cancel(); showTask = nil
+        shownWindow = window
         request = next
         context.send(.hoverPreview(next))
     }
@@ -122,7 +124,7 @@ public final class HoverPreviewTracker {
         showTask?.cancel(); showTask = nil; hideTask?.cancel(); hideTask = nil
         candidate = nil; insideCard = false
         guard request != nil else { return }
-        request = nil; lastHidden = ProcessInfo.processInfo.systemUptime
+        request = nil; shownWindow = nil; lastHidden = ProcessInfo.processInfo.systemUptime
         context.send(.hoverPreview(nil))
     }
     private func installObservers() {
@@ -143,7 +145,7 @@ public final class HoverPreviewTracker {
         })
         observers.append(center.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] note in
             let resignedWindow = note.object as? NSWindow
-            MainActor.assumeIsolated { if let self, resignedWindow === self.owner?.window { self.dismiss() } }
+            MainActor.assumeIsolated { if let self, resignedWindow === (self.shownWindow ?? self.owner?.window) { self.dismiss() } }
         })
         observers.append(center.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {

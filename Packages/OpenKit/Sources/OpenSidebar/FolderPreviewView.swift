@@ -9,7 +9,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     public let folder: Folder
     public let searchField = NSSearchField()
     public let tableView = FolderPreviewTable()
-    private let headerIcon = FolderPreviewIcon()
+    private let headerIcon = FolderIconView()
     private let title = TextLabel()
     private let emptyLabel = TextLabel()
     private let scroll = NSScrollView()
@@ -22,7 +22,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         self.context = context; self.folder = folder
         super.init(frame: .zero)
         wantsLayer = true; layer?.cornerRadius = 10; layer?.cornerCurve = .continuous; layer?.masksToBounds = true
-        headerIcon.folder = folder
+        headerIcon.folder = folder; headerIcon.context = context
         title.text = { [weak folder] in folder?.title ?? "" }; title.font = .systemFont(ofSize: 13, weight: .semibold); title.baseline = 23
         searchField.delegate = self; searchField.placeholderString = "Search tabs"; searchField.sendsSearchStringImmediately = true
         searchField.setAccessibilityLabel("Search folder tabs")
@@ -58,9 +58,11 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
     public override func keyDown(with event: NSEvent) { tableView.keyDown(with: event) }
-    public override var fittingSize: NSSize { CGSize(width: HoverPreviewMetrics.folderWidth, height: HoverPreviewMetrics.headerHeight + (tabs.count > 8 ? 32 : 0) + CGFloat(max(1, min(filtered.count, 10))) * HoverPreviewMetrics.rowHeight) }
+    public override var fittingSize: NSSize { CGSize(width: HoverPreviewMetrics.folderWidth, height: HoverPreviewMetrics.headerHeight + (tabs.count > 8 ? 32 : 0) + CGFloat(max(1, min(filtered.count, 10))) * HoverPreviewMetrics.rowHeight + 4) }
     public var displayedTabIDs: [ItemID] { filtered.map(\.id) }
-    public var displayedHeaderIcon: String? { folder.customIcon }
+    public var displayedHeaderIcon: String? { context.folderIconOverrideProvider?(folder) ?? folder.customIcon }
+    public var drawnHeaderGlyph: String? { headerIcon.lastDrawnGlyph }
+    public var headerIconView: NSView { headerIcon }
 
     private func collectTabs() -> [Tab] {
         func walk(_ nodes: [SidebarNode]) -> [Tab] {
@@ -82,16 +84,18 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
         self.appearance = appearance.nsAppearance
         searchField.appearance = self.appearance
         layer?.backgroundColor = PreviewColors.background.cgColor(appearance)
+        layer?.borderWidth = appearance == .dark ? 1 : 0
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.10).cgColor
         title.color = { Core.foregroundPrimary.nsColor }
         headerIcon.needsDisplay = true; tableView.needsDisplay = true
     }
     public override func layout() {
         super.layout()
-        headerIcon.frame = CGRect(x: 12, y: 10, width: 16, height: 16)
+        headerIcon.frame = CGRect(x: 11, y: 9, width: 18, height: 18)
         title.frame = CGRect(x: 36, y: 0, width: max(0, bounds.width - 48), height: 36)
         searchField.frame = CGRect(x: 12, y: 36, width: max(0, bounds.width - 24), height: 24)
         let y: CGFloat = searchField.isHidden ? 36 : 68
-        scroll.frame = CGRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y))
+        scroll.frame = CGRect(x: 0, y: y, width: bounds.width, height: max(0, bounds.height - y - 4))
         tableView.tableColumns.first?.width = bounds.width
         emptyLabel.frame = CGRect(x: 12, y: y, width: max(0, bounds.width - 24), height: 32)
     }
@@ -183,19 +187,4 @@ private final class FolderPreviewCell: NSTableCellView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override func layout() { super.layout(); favicon.frame = CGRect(x: 12, y: 8, width: 16, height: 16); title.frame = CGRect(x: 36, y: 0, width: max(0, bounds.width - 48), height: 32) }
-}
-@MainActor
-private final class FolderPreviewIcon: NSView {
-    weak var folder: Folder?
-    override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        let icon = tracked({ folder?.customIcon }) { [weak self] in self?.needsDisplay = true }
-        if let icon {
-            if let image = NSImage(systemSymbolName: icon, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 14, weight: .medium)) {
-                image.drawTinted(in: bounds, color: Core.foregroundPrimary.nsColor)
-            } else { EmojiRenderer.draw(icon, in: bounds) }
-            return
-        }
-        CustomIcon.folder(open: false, in: bounds, color: Core.brandBlue.nsColor)
-    }
 }

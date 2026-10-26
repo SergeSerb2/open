@@ -71,6 +71,19 @@ enum PreviewChecks {
               "HP1 pinned row emits the App request at 0.5 s ±50 ms")
         let sourceFrame = sidebar.rowFrame(nodeID: pinned.id)!
         check(context.hoverPreviews.request?.anchorInWindow == sidebar.convert(sourceFrame, to: nil), "HP1 request carries the real row's window anchor")
+        escape(); pump(1.01); recorder.events = []
+        let liveStart = ProcessInfo.processInfo.systemUptime
+        hover(pinned.id)
+        var earlyRequest = false
+        while ProcessInfo.processInfo.systemUptime - liveStart < 0.6, context.hoverPreviews.request == nil {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+            if ProcessInfo.processInfo.systemUptime - liveStart < 0.45, context.hoverPreviews.request != nil { earlyRequest = true }
+        }
+        let realRequest = recorder.events.first { if case .hoverPreview(.some) = $0.0 { true } else { false } }
+        check(!earlyRequest && realRequest.map { (0.45...0.55).contains($0.1-liveStart) } == true, "HP1 real-time 5 ms run-loop slices deliver preview at 0.5 s ±50 ms, deadline 0.6 s")
+        context.hoverPreviews.setPointerInsidePreview(true)
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: host)
+        check(context.hoverPreviews.request == nil, "HP5 captured source window resignation dismisses a preview held by the card")
         escape(); pump(1.01)
         recorder.events = []
         let folderStart = ProcessInfo.processInfo.systemUptime
@@ -161,12 +174,23 @@ enum PreviewChecks {
         let host = OffscreenRenderer.host(card, scale: 1)
         defer { host.contentView = nil; host.close() }
         func pump() { RunLoop.main.run(until: Date().addingTimeInterval(0.01)); OffscreenRenderer.settle(card); OffscreenRenderer.settle(scene) }
-        Checks.check(card.bounds.width == 300 && card.fittingSize.height == 388 && card.tableView.rowHeight == 32 && !card.searchField.isHidden && card.searchField.frame.height == 24,
+        Checks.check(card.bounds.width == 300 && card.fittingSize.height == 392 && card.tableView.rowHeight == 32 && !card.searchField.isHidden && card.searchField.frame.height == 24,
                      "HP3 real native folder card is 300 wide, has 32 pt rows, search above eight tabs, and ten visible rows")
+        for icon in [String?.none, "⭐️", "star.fill"] {
+            folder.customIcon = icon; pump()
+            _ = OffscreenRenderer().snapshot(scene, scale: 1); _ = OffscreenRenderer().snapshot(card, scale: 1)
+            Checks.check(card.drawnHeaderGlyph != nil && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == card.drawnHeaderGlyph, "HP3 actual row/header glyphs match for \(icon ?? "folder glyph")")
+        }
+        context.folderIconOverrideProvider = { _ in "heart.fill" }; folder.customIcon = "⭐️"; pump()
+        Checks.check(card.drawnHeaderGlyph == "heart.fill" && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "heart.fill", "HP3 shared iconOverride provider precedes customIcon in row and header")
+        context.folderIconOverrideProvider = nil; folder.customIcon = nil; pump()
+        model.setExpanded(folderID: folder.id, expanded: true); pump()
+        Checks.check(card.drawnHeaderGlyph == "folder.open" && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "folder.open", "HP3 row and header both draw the open folder glyph without customIcon")
+        model.setExpanded(folderID: folder.id, expanded: false); pump()
         let before = OffscreenRenderer().snapshot(card, scale: 1)
         folder.customIcon = "⭐️"; pump()
         let after = OffscreenRenderer().snapshot(card, scale: 1)
-        Checks.check(card.displayedHeaderIcon == "⭐️" && (before.dataProvider!.data! as Data) != (after.dataProvider!.data! as Data), "HP3 custom folder icon changes the actual header pixels (iconOverride is not yet in the model)")
+        Checks.check(card.displayedHeaderIcon == "⭐️" && (before.dataProvider!.data! as Data) != (after.dataProvider!.data! as Data), "HP3 custom folder icon changes the actual header pixels")
         host.makeFirstResponder(card.searchField)
         let editor = card.searchField.currentEditor() as! NSTextView
         editor.selectAll(nil); editor.insertText("Needle", replacementRange: NSRange(location: 0, length: editor.string.utf16.count)); pump()
@@ -209,16 +233,61 @@ enum PreviewChecks {
             context.window?.sidebarWidth = width; pump()
             let banner = sidebar.autoArchiveBanner!, height = banner.height(for: width - 16)
             Checks.check(banner.frame == CGRect(x: 8, y: scene.bounds.height - 50 - 8 - height, width: width - 16, height: height) &&
-                         sidebar.bannerContentInset == height + 8 && sidebar.focusedOutline?.enclosingScrollView?.contentInsets.bottom == height + 8 &&
+                         sidebar.bannerContentInset == 0 && sidebar.focusedOutline?.enclosingScrollView?.contentInsets.bottom == 0 &&
+                         sidebar.convert(sidebar.focusedOutline!.enclosingScrollView!.bounds, from: sidebar.focusedOutline!.enclosingScrollView!).maxY == banner.frame.minY - 8 &&
+                         NSColor(cgColor: banner.layer!.backgroundColor!)!.alphaComponent == 1 &&
                          banner.dismissButton.frame.minY >= banner.messageView.frame.maxY + 8,
-                         "BN1 banner frame, unclipped text, and real list inset at width \(Int(width)) (height \(Int(height)))")
+                         "BN1 opaque banner, unclipped text, and list ending 8 pt above card at width \(Int(width)) (height \(Int(height)))")
         }
+        let originalSpace = context.focusedSpace!, originalAppearance = context.systemAppearance
+        for space in [context.model.spaces[0], context.model.spaces[2]] {
+            context.model.focusSpace(windowID: context.windowID, spaceID: space.id)
+            for appearance in [ContentAppearance.light, .dark] {
+                context.systemAppearance = appearance
+                for width in [228.0, 500.0] {
+                    context.window?.sidebarWidth = width; pump()
+                    let banner = sidebar.autoArchiveBanner!
+                    func luminance(_ color: NSColor) -> Double {
+                        let c = color.usingColorSpace(.sRGB)!
+                        func linear(_ x: CGFloat) -> Double { let x = Double(x); return x <= 0.04045 ? x/12.92 : pow((x+0.055)/1.055,2.4) }
+                        return linear(c.redComponent)*0.2126 + linear(c.greenComponent)*0.7152 + linear(c.blueComponent)*0.0722
+                    }
+                    let link = banner.messageView.linkTextAttributes![.foregroundColor] as! NSColor
+                    let bg = NSColor(cgColor: banner.layer!.backgroundColor!)!
+                    let a = luminance(link), b = luminance(bg), ratio = (max(a,b)+0.05)/(min(a,b)+0.05)
+                    let bottom = sidebar.convert(sidebar.focusedOutline!.enclosingScrollView!.bounds, from: sidebar.focusedOutline!.enclosingScrollView!).maxY
+                    Checks.check(ratio >= 4.5 && bg.alphaComponent == 1 && bottom == banner.frame.minY-8, "BN1/BN4 \(context.title(of: space)) \(appearance) width \(Int(width)): opaque card, no row overlap, link contrast \(String(format: "%.2f",ratio)):1 ≥ 4.5:1")
+                }
+            }
+        }
+        context.model.focusSpace(windowID: context.windowID, spaceID: originalSpace.id)
+        context.systemAppearance = originalAppearance; pump()
         for (interval, label) in [(AutoArchiveInterval.oneHour, "1 hour"), (.sixHours, "6 hours"), (.twelveHours, "12 hours"), (.twentyFourHours, "24 hours"), (.sevenDays, "7 days"), (.thirtyDays, "30 days")] {
             var settings = profile.settings; settings.autoArchiveAfter = interval; profile.settings = settings; pump()
             Checks.check(sidebar.autoArchiveBanner?.thresholdText == label && sidebar.autoArchiveBanner?.message.contains("past \(label).") == true,
                          "BN3 banner uses the Profile's real \(label) threshold")
         }
         let banner = sidebar.autoArchiveBanner!
+        Checks.check(banner.message.contains("haven’t") && !banner.message.contains("haven't"), "BN1 banner uses the curly apostrophe")
+        let button = banner.dismissButton
+        let pointOnButton = button.convert(CGPoint(x: 12, y: 12), to: nil)
+        let enter = NSEvent.enterExitEvent(with: .mouseEntered, location: pointOnButton, modifierFlags: [], timestamp: 0, windowNumber: scene.window!.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)!
+        button.mouseEntered(with: enter)
+        Checks.check(button.layer?.backgroundColor == GrayScale.a(5).cgColor(button.contentAppearance), "BN2 Got it hover uses GrayA5")
+        let exit = NSEvent.enterExitEvent(with: .mouseExited, location: pointOnButton, modifierFlags: [], timestamp: 0, windowNumber: scene.window!.windowNumber, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)!
+        button.mouseExited(with: exit)
+        Checks.check(button.layer?.backgroundColor == GrayScale.a(4).cgColor(button.contentAppearance), "BN2 Got it exit restores GrayA4")
+        var capturedPressed = false
+        let probe = Timer(timeInterval: 0.01, repeats: false) { _ in MainActor.assumeIsolated {
+            capturedPressed = button.layer?.backgroundColor == GrayScale.a(6).cgColor(button.contentAppearance)
+            let release = NSEvent.mouseEvent(with: .leftMouseUp, location: pointOnButton, modifierFlags: [], timestamp: 0.02, windowNumber: scene.window!.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!
+            NSApp.postEvent(release, atStart: true)
+        } }
+        RunLoop.main.add(probe, forMode: .eventTracking)
+        button.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: pointOnButton, modifierFlags: [], timestamp: 0, windowNumber: scene.window!.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!)
+        probe.invalidate()
+        _ = NSApp.nextEvent(matching: .leftMouseUp, until: Date(), inMode: .default, dequeue: true)
+        Checks.check(capturedPressed && button.layer?.backgroundColor == GrayScale.a(4).cgColor(button.contentAppearance), "BN2 native mouse tracking uses GrayA6 while pressed and restores GrayA4")
         banner.dismissButton.performClick(nil)
         Checks.check(recorder.events.last?.0 == .dismissAutoArchiveBanner, "BN2 native Got it button sends the App dismissal intent")
         let text = banner.messageView

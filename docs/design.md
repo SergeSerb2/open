@@ -843,13 +843,16 @@ split panes), shows search above eight tabs, and scrolls after ten rows. Hover
 and keyboard selection share the row fill. The real search editor routes
 Up/Down into the results and Return to selection. Empty folders say “No tabs”;
 a query with no match says “No matching tabs” and Return does nothing. Tab/title
-and subtree changes update the card through Observation. Content appearance
+and subtree changes update the card through Observation. It has 4 pt bottom
+padding and a 1 pt inner white 0.10 rim in dark (guess pending C4). Content appearance
 follows its Space. `PreviewColors.background` is white / #212222, the measured
 SC §7 palette fact; all card geometry remains a guess pending capture C4.
 
 Plan/code mismatch: the model does not yet have the theme plan's `iconOverride`
-field. The header uses its existing `Folder.customIcon` (symbol or emoji), else
-our own folder vector. Lane S adds no model field. The model also does not expand
+field. A shared `FolderIconView` serves the row and header. It resolves the
+Context’s optional `folderIconOverrideProvider`, then `Folder.customIcon`
+(SF Symbol name or emoji), then our own folder vector. The header uses the same
+Space accent and open/closed state, at `[11,9,18,18]`. Lane S adds no model field. The model also does not expand
 the folder chain in `selectNode`; the card sends existing `setExpanded` intents
 for its ancestors before selection. `ModelSidebarActions` resolves a selected
 split pane to the split and its focused pane. App host selection remains A2.
@@ -868,7 +871,10 @@ Q12). Never means no banner. Card geometry is `[8, H−50−8−h, W−16, h]`, 
 Height follows wrapping: at width 228 the current six-hour fixture is 123 pt,
 and the longer default twelve-hour copy is 138 pt; at 500 it is 108 pt. This
 replaces the plan's approximate 106 pt guess without clipping the required copy.
-The real tab-list bottom inset is `h+8`. It changes once; only the card's layer
+The real tab-list bottom inset is zero. Its frame ends at `H−50−8−h−8`,
+8 pt above the card; no row lies beneath the banner. The card fill is opaque,
+compositing selected fill over the Space base (default dark: #515160).
+Geometry changes once; only the card’s layer
 animates (12 pt slide/fade, 0.22 s in / 0.18 s out), so the transition adds no
 layout pass per frame. Reduce Motion uses the fade. All banner visual values
 remain guesses pending C6.
@@ -881,3 +887,12 @@ callbacks, text editing, the Settings link, Profile changes, and disabled/empty
 cases. No unit tests, new dependency/target, App edit, or desktop control.
 App E11–E12/E16, live-host reuse, and the sweep trigger remain A-lane acceptance.
 The §15.1 numeric 13-state gate and the #92 shared Renderer dependency apply.
+
+S5 review R1: “Open archives tabs that you haven’t used…” keeps the lead’s copy
+and curly apostrophe. Message colors are black 0.55 / white 0.70 (guess); the
+accent link is darkened/lightened to at least 4.5:1 against the opaque card and
+stays underlined in dark. Got it uses GrayA4/5/6 at rest/hover/press (guess).
+The preview keeps neutral white/#212222 fill pending C4. The source NSWindow is
+captured weakly at show time, so resignation still dismisses after the owner
+view is gone. A real-time timer check advances the main run loop in 5 ms slices
+for at most 0.6 s and requires the 0.5 s deadline within ±50 ms.
