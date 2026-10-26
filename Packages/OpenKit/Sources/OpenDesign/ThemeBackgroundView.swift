@@ -226,7 +226,7 @@ final class ThemeLayer: CALayer {
 
     @MainActor func resize(to size: CGSize) {
         field.frame = CGRect(origin: .zero, size: size)
-        let t = ThemeTexture.period(theme.texture)
+        let t = theme.usesLegacyIntensity ? Grain.tilePoints : ThemeTexture.period(theme.texture)
         grainTile.frame = CGRect(x: 0, y: 0, width: t, height: t)
         grainRows.frame = CGRect(x: 0, y: 0, width: t, height: size.height)
         grainRows.instanceCount = Int((size.height / t).rounded(.up))
@@ -251,7 +251,10 @@ final class ThemeLayer: CALayer {
         let gkey = GrainKey(noise: noise, scale: scale, texture: theme.texture)
         if gkey != grainKey {
             grainKey = gkey
-            grainTile.contents = ThemeTexture.tile(theme.texture, noiseFactor: noise, scale: scale)
+            // Legacy snapshots used exact noise, not the editor's 0.05 bucket.
+            grainTile.contents = theme.usesLegacyIntensity
+                ? Grain.tile(noiseFactor: noise, scale: scale)
+                : ThemeTexture.tile(theme.texture, noiseFactor: noise, scale: scale)
             grainTile.contentsScale = scale
         }
         grainColumns.isHidden = false
