@@ -28,6 +28,29 @@ public struct ProfileDirectories: Sendable {
         for path in paths { try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true) }
     }
 
+    public var retiredDirectoriesFileURL: URL { root.appendingPathComponent("State/retired-profile-dirs.json") }
+
+    public func unavailableDirectoryNames() throws -> Set<String> {
+        var names: Set<String> = []
+        let profiles = root.appendingPathComponent("Profiles")
+        if FileManager.default.fileExists(atPath: profiles.path) {
+            names.formUnion(try FileManager.default.contentsOfDirectory(atPath: profiles.path))
+        }
+        if FileManager.default.fileExists(atPath: retiredDirectoriesFileURL.path) {
+            names.formUnion(try JSONDecoder().decode([String].self, from: Data(contentsOf: retiredDirectoriesFileURL)))
+        }
+        return Set(names.map { $0.lowercased() })
+    }
+
+    public func retireDirectoryName(_ name: String) throws {
+        var names: Set<String> = []
+        if FileManager.default.fileExists(atPath: retiredDirectoriesFileURL.path) {
+            names.formUnion(try JSONDecoder().decode([String].self, from: Data(contentsOf: retiredDirectoriesFileURL)))
+        }
+        names.insert(name.lowercased())
+        try DurableFiles.write(JSONEncoder().encode(names.sorted()), to: retiredDirectoriesFileURL)
+    }
+
     /// Caller must tear down the engine first. Model deletion alone never calls this.
     public func deleteProfileData(dataDirectoryName: String) throws {
         try FileManager.default.removeItem(at: profileDirectory(dataDirectoryName: dataDirectoryName))

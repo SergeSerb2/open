@@ -49,8 +49,8 @@ public final class ProfilesSettingsModel {
         model.updateProfileSettings(id: id, settings: settings); refresh(from: model)
     }
     @discardableResult
-    public func deleteProfile(in model: BrowserModel, id: ProfileID) -> Bool {
-        let deleted = model.deleteProfile(id: id); refresh(from: model); return deleted
+    public func deleteProfile(in model: BrowserModel, id: ProfileID) throws -> Bool {
+        let deleted = try model.deleteProfile(id: id); refresh(from: model); return deleted
     }
     public func indicator(for spaceID: SpaceID, in model: BrowserModel) -> (name: String, icon: SpaceIcon?)? {
         guard model.profiles.count > 1, let space = model.space(id: spaceID), let profile = model.profile(id: space.profileID) else { return nil }

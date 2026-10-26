@@ -47,7 +47,7 @@ func prepareProfiles(_ model: BrowserModel, root: URL, json: Bool = false) throw
     func notice(_ line: String) {
         if json { FileHandle.standardError.write(Data((line + "\n").utf8)) } else { print(line) }
     }
-    let report = ProfileMigration.migrateSingleProfileLayout(root: root, profiles: model.profiles)
+    let report = try OpenDataRoot.prepare(root: root, model: model)
     for line in report.moved { notice("migration moved \(line)") }
     for line in report.skipped { notice("migration skipped \(line)") }
     let repaired = model.repairMissingProfileReferences()
@@ -114,7 +114,7 @@ func runProfiles(args: [String]) throws {
     let json = enabled.contains("--json")
     let mutating = command != "list" && command != "show"
     let repaired = try prepareProfiles(model, root: root, json: json)
-    if mutating && !repaired.isEmpty { snapshot.saveNow(model: model) }
+    if mutating && command != "delete" && !repaired.isEmpty { try snapshot.saveNow(model: model) }
     let undo = UndoManager(); undo.groupsByEvent = false; model.undoManager = undo
     let directories = ProfileDirectories(root: root)
     let sink = profileArchiveSink(model: model, directories: directories)
@@ -148,26 +148,26 @@ func runProfiles(args: [String]) throws {
         guard let p = model.createProfile(name: name, icon: icon) else {
             profileCLIError("profile name \(BrowserModel.profileNameIssue(name, in: model.profiles)!.rawValue)")
         }
-        snapshot.saveNow(model: model)
         try directories.ensureProfileDirectories(for: p)
+        try snapshot.saveNow(model: model)
         if json { try printJSON(jsonRow(p)) } else { print("created profile \(p.id.description.prefix(8)) dir=\(p.dataDirectoryName)") }
     case "rename":
         let p = profile(positional[0]), name = options["--name"]!
         guard model.renameProfile(id: p.id, to: name) else {
             profileCLIError("profile name \(BrowserModel.profileNameIssue(name, in: model.profiles, excluding: p.id)!.rawValue)")
         }
-        snapshot.saveNow(model: model); print("updated profile \(p.id.description.prefix(8))")
+        try snapshot.saveNow(model: model); print("updated profile \(p.id.description.prefix(8))")
     case "set-icon":
         let p = profile(positional[0]); model.setProfileIcon(id: p.id, icon: icon)
-        snapshot.saveNow(model: model); print("updated profile \(p.id.description.prefix(8))")
+        try snapshot.saveNow(model: model); print("updated profile \(p.id.description.prefix(8))")
     case "assign-space":
         let s = space(positional[0]), p = profile(options["--to"]!)
         guard model.moveSpace(id: s.id, toProfile: p.id) else { profileCLIError("cannot assign space") }
-        snapshot.saveNow(model: model); print("assigned space \(s.id.description.prefix(8)) -> profile \(p.id.description.prefix(8))")
+        try snapshot.saveNow(model: model); print("assigned space \(s.id.description.prefix(8)) -> profile \(p.id.description.prefix(8))")
     case "create-space":
         let p = profile(options["--profile"]!)
         let s = model.createSpace(title: options["--title"]!, profileID: p.id)
-        snapshot.saveNow(model: model); print("created space \(s.id.description.prefix(8)) profile=\(p.id.description.prefix(8))")
+        try snapshot.saveNow(model: model); print("created space \(s.id.description.prefix(8)) profile=\(p.id.description.prefix(8))")
     case "delete":
         let p = profile(positional[0]), favoriteCount = p.favorites.count
         if let reason = model.deleteBlockReason(for: p.id) {
@@ -176,8 +176,8 @@ func runProfiles(args: [String]) throws {
             case .spacesAssigned(let count): profileCLIError("profile has \(count) space(s)")
             }
         }
-        guard model.deleteProfile(id: p.id) else { profileCLIError("cannot delete profile") }
-        sink.flushAll(); snapshot.saveNow(model: model)
+        guard try model.deleteProfile(id: p.id) else { profileCLIError("cannot delete profile") }
+        sink.flushAll(); try snapshot.saveNow(model: model)
         print("deleted profile \(p.id.description.prefix(8)) archivedFavorites=\(favoriteCount)")
     default: usage()
     }

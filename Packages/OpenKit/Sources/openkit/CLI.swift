@@ -59,15 +59,21 @@ func runImportArc(args: [String]) async throws {
         FileHandle.standardError.write(Data("usage: openkit import-arc [--arc-dir PATH] --out DIR [--show-titles]\n".utf8))
         exit(2)
     }
+    let store = SnapshotStore(root: outDir)
+    let previous = try store.load()
+    let directories = ProfileDirectories(root: outDir)
+    let reserved = try directories.unavailableDirectoryNames()
+    let existing = Dictionary(uniqueKeysWithValues: (previous?.profiles ?? []).map { ($0.id, $0.dataDirectoryName) })
     let importer = ArcImporter(arcDirectory: arcDir)
-    let result = try importer.importAll()
+    let result = try importer.importAll(directoryNamesToAvoid: reserved, existingDirectories: existing)
+    if let importedDefault = result.model.defaultProfile, reserved.contains("default"), existing[importedDefault.id] != "Default" {
+        throw NSError(domain: "OpenStore", code: 1, userInfo: [NSLocalizedDescriptionKey: "import refused: Default directory is reserved by existing data"])
+    }
     let model = result.model
     var report = result.report
-    let store = SnapshotStore(root: outDir)
-    store.saveNow(model: model)
-    let directories = ProfileDirectories(root: outDir)
     // Preserve old output stores before opening any new per-Profile archive.
     _ = try prepareProfiles(model, root: outDir)
+    try store.saveNow(model: model)
     let archiveSink = profileArchiveSink(model: model, directories: directories)
     for (id, records) in Dictionary(grouping: result.archiveRecords, by: \.profileID) {
         let stored = await archiveSink.store(for: id).importRecords(records)
@@ -145,7 +151,7 @@ func runArchiveList(args: [String]) async {
     do {
         model = try SnapshotStore(root: root).load() ?? BrowserModel()
         _ = try prepareProfiles(model, root: root)
-    } catch { profileCLIError("cannot load snapshot") }
+    } catch { profileCLIError("cannot prepare data root: \(error)") }
     let selected: Profile?
     if let profileRef {
         guard let profile = resolveProfile(profileRef, in: model) else { profileCLIError("unknown profile \(profileRef)", code: 2) }
@@ -176,7 +182,7 @@ func runRoundtrip(args: [String]) throws {
     let root = URL(fileURLWithPath: dirArg)
     let store = SnapshotStore(root: root)
     guard let first = try store.load() else { print("no snapshot at \(dirArg)"); exit(1) }
-    store.saveNow(model: first)
+    try store.saveNow(model: first)
     guard let second = try store.load() else { print("reload failed"); exit(1) }
     if SnapshotMapper.structurallyEqual(first, second) {
         print("roundtrip OK")
@@ -186,9 +192,9 @@ func runRoundtrip(args: [String]) throws {
     }
 }
 
-func runBench() async {
+func runBench() async throws {
     print("bench: synthetic model (5000 items over 10 spaces)")
-    let result = await MainActor.run { () -> (encodeMs: Double, decodeMs: Double, saveMs: Double, loadMs: Double) in
+    let result = try await MainActor.run { () throws -> (encodeMs: Double, decodeMs: Double, saveMs: Double, loadMs: Double) in
         let profile = Profile(name: "Bench")
         var spaces: [Space] = []
         var counter = 0
@@ -212,11 +218,12 @@ func runBench() async {
         let model = BrowserModel(profiles: [profile], spaces: spaces, windows: [window])
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-\(UUID().uuidString)")
         let store = SnapshotStore(root: tmp)
+        try OpenDataRoot.prepare(root: tmp, model: model)
         let dto = SnapshotMapper.dto(from: model)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         var t0 = Date(); let data = try! encoder.encode(dto); let encodeMs = Date().timeIntervalSince(t0) * 1000
         t0 = Date(); _ = try! JSONDecoder().decode(SnapshotFileDTO.self, from: data); let decodeMs = Date().timeIntervalSince(t0) * 1000
-        t0 = Date(); store.saveNow(model: model); let saveMs = Date().timeIntervalSince(t0) * 1000
+        t0 = Date(); try store.saveNow(model: model); let saveMs = Date().timeIntervalSince(t0) * 1000
         t0 = Date(); _ = try! store.load(); let loadMs = Date().timeIntervalSince(t0) * 1000
         try? FileManager.default.removeItem(at: tmp)
         return (encodeMs, decodeMs, saveMs, loadMs)
@@ -229,7 +236,8 @@ func runBench() async {
     print("bench: history (100k URLs, 1000 searches)")
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-hist-\(UUID().uuidString)")
     let directories = ProfileDirectories(root: tmp)
-    try! directories.ensureProfileDirectories(dataDirectoryName: "Default")
+    try await OpenDataRoot.prepare(root: tmp)
+    try directories.ensureProfileDirectories(dataDirectoryName: "Default")
     let history = HistoryStore(fileURL: directories.historyFileURL(dataDirectoryName: "Default"))
     var items: [(url: URL, title: String, time: Date)] = []
     items.reserveCapacity(100_000)

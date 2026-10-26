@@ -24,6 +24,11 @@ public final class ProfileArchiveSink: ArchiveSink {
     public func archive(_ entries: [ArchiveEntry]) {
         for (id, batch) in Dictionary(grouping: entries, by: \.profileID) { store(for: id).archive(batch) }
     }
+    public func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        // A Profile delete contains only one Profile, so the archive is one transaction.
+        try store(for: entries.first?.profileID).archiveForProfileDeletion(entries, directoryName: directoryName)
+        try directories.retireDirectoryName(directoryName)
+    }
     public func discardArchived(ids: [ItemID]) { for store in stores.values { store.discardArchived(ids: ids) } }
     public func flushAll() { for store in stores.values { store.flushQueue() } }
 }

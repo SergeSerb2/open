@@ -142,6 +142,8 @@ func runBulkBench() async {
 
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-archive-\(UUID().uuidString)")
     let directories = ProfileDirectories(root: tmp)
+    do { try OpenDataRoot.prepare(root: tmp) }
+    catch { profileCLIError("cannot prepare data root: \(error)") }
     try! directories.ensureProfileDirectories(dataDirectoryName: "Default")
     let stored = makeExpiryBenchModel()
     let sink = profileArchiveSink(model: stored, directories: directories)

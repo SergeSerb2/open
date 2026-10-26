@@ -15,16 +15,20 @@ usage: openkit suggest --snapshot DIR [--history DB|DIR] [--offline] [--mode new
 """
 
 /// `--history` takes an Open root's default Profile or an explicit per-Profile history file.
-func historyStore(at path: String) -> HistoryStore? {
+@MainActor
+func historyStore(at path: String) throws -> HistoryStore? {
     let url = URL(fileURLWithPath: path)
     if url.pathExtension == "sqlite3" {
         let state = url.deletingLastPathComponent()
         let profile = state.deletingLastPathComponent()
         guard url.lastPathComponent == "history.sqlite3", state.lastPathComponent == "State",
               profile.deletingLastPathComponent().lastPathComponent == "Profiles" else { return nil }
+        let root = profile.deletingLastPathComponent().deletingLastPathComponent()
+        _ = try SnapshotStore(root: root).load()
         return HistoryStore(fileURL: url)
     }
-    return HistoryStore(fileURL: ProfileDirectories(root: url).historyFileURL(dataDirectoryName: "Default"))
+    let model = try SnapshotStore(root: url).load()
+    return HistoryStore(fileURL: ProfileDirectories(root: url).historyFileURL(dataDirectoryName: model?.defaultProfile?.dataDirectoryName ?? "Default"))
 }
 
 @MainActor
@@ -76,11 +80,13 @@ func runSuggest(args: [String]) async {
     }
     var history: HistoryStore?
     if let historyPath {
-        guard let store = historyStore(at: historyPath) else {
-            FileHandle.standardError.write(Data("error: --history needs a root DIR or <root>/Profiles/<dir>/State/history.sqlite3\n".utf8))
-            exit(2)
-        }
-        history = store
+        do {
+            guard let store = try historyStore(at: historyPath) else {
+                FileHandle.standardError.write(Data("error: --history needs a root DIR or <root>/Profiles/<dir>/State/history.sqlite3\n".utf8))
+                exit(2)
+            }
+            history = store
+        } catch { profileCLIError("cannot prepare history: \(error)") }
     }
 
     let window = model.windows.first

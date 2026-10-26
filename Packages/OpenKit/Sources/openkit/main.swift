@@ -36,7 +36,7 @@ do {
     case "route":
         try await MainActor.run { try runRoute(args: rest) }
     case "bench":
-        await runBench()
+        try await runBench()
     case "commands-demo":
         try await runCommandsDemo(args: rest)
     case "suggest", "suggest-check": await runSuggestCommand(command, args: rest)

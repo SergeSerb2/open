@@ -17,6 +17,12 @@ final class CountingSink: ArchiveSink {
         store.archive(entries)
     }
 
+    func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        archiveCalls += 1
+        lastBatch = entries
+        try store.archiveForProfileDeletion(entries, directoryName: directoryName)
+    }
+
     func discardArchived(ids: [ItemID]) { store.discardArchived(ids: ids) }
 }
 
@@ -406,13 +412,18 @@ func runCommandsDemo(args: [String]) async throws {
     events.removeAll(); undo.redo()
     check(space.profileID == pid && space.title == "Profile Demo Space" && events.count == 1, "combined edit redo restores the whole edit")
 
+    events.removeAll()
+    model.updateSpace(id: sid, title: "Invalid edit", profileID: ProfileID())
+    check(space.profileID == pid && space.title == "Profile Demo Space" && events.isEmpty,
+          "stale Profile in updateSpace refuses the whole edit without events")
+
     step("profiles: deletion refusals register no undo")
     _ = model.moveSpace(id: sid, toProfile: addedID)
     events.removeAll()
-    check(!model.deleteProfile(id: addedID) && model.deleteBlockReason(for: addedID) == .spacesAssigned(count: 1) && events.isEmpty, "delete Profile with Spaces refuses without events")
+    check(!(try model.deleteProfile(id: addedID)) && model.deleteBlockReason(for: addedID) == .spacesAssigned(count: 1) && events.isEmpty, "delete Profile with Spaces refuses without events")
     undo.undo(); check(space.profileID == pid, "assigned-Profile deletion registered no undo")
     events.removeAll()
-    check(!model.deleteProfile(id: model.defaultProfile!.id) && events.isEmpty, "delete default Profile refuses without events")
+    check(!(try model.deleteProfile(id: model.defaultProfile!.id)) && events.isEmpty, "delete default Profile refuses without events")
     undo.undo(); check(space.profileID == addedID && space.title == oldTitle, "default deletion registered no undo")
     _ = model.moveSpace(id: sid, toProfile: pid)
 
@@ -422,7 +433,7 @@ func runCommandsDemo(args: [String]) async throws {
     let profileArchive = composite.store(for: addedID)
     let callsBeforeProfileDelete = sink.archiveCalls
     events.removeAll()
-    check(model.deleteProfile(id: addedID) && sink.archiveCalls == callsBeforeProfileDelete + 1
+    check((try model.deleteProfile(id: addedID)) && sink.archiveCalls == callsBeforeProfileDelete + 1
           && sink.lastBatch.count == 1 && sink.lastBatch[0].profileID == addedID
           && sink.lastBatch[0].originalLocation == NodeParent.favorites(addedID).archiveLocation
           && events.map(describe) == ["reload(favorites)"], "Profile delete archives Favorites in one sink call and emits one reload")
@@ -450,7 +461,7 @@ func runCommandsDemo(args: [String]) async throws {
     undo.redo()
     check(indexMatchesRebuild(model), "Profile section index equals a full rebuild")
 
-    snapshots.saveNow(model: model)
+    try snapshots.saveNow(model: model)
     composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")
     if failed > 0 { exit(1) }

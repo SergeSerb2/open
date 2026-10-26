@@ -25,33 +25,52 @@ public final class ArchiveStore: ArchiveSink {
 
     public init(fileURL: URL) { self.fileURL = fileURL }
 
-    nonisolated private func openOnQueue() {
+    nonisolated private func openOnQueue() throws {
         guard db == nil else { return }
-        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        db = try? SQLiteDB(path: fileURL.path)
-        db?.exec("""
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let opened = try SQLiteDB(path: fileURL.path)
+        guard opened.exec("""
         CREATE TABLE IF NOT EXISTS archived_tabs(
           id TEXT PRIMARY KEY, url TEXT NOT NULL, title TEXT NOT NULL,
           space_id TEXT, profile_id TEXT, archived_at REAL NOT NULL,
           reason TEXT NOT NULL, original_location TEXT NOT NULL, payload TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_archived_at ON archived_tabs(archived_at DESC);
-        """)
+        """) else { throw archiveFailure() }
+        db = opened
     }
 
     /// Snapshots the tabs on the main actor. JSON encoding and one SQLite transaction run on the queue.
     public func archive(_ entries: [ArchiveEntry]) {
         guard !entries.isEmpty else { return }
-        let rows = entries.map { entry in
+        let rows = rows(entries)
+        queue.async { [weak self] in
+            guard let self else { return }
+            try? self.openOnQueue()
+            try? self.insertOnQueue(rows)
+        }
+    }
+
+    private func rows(_ entries: [ArchiveEntry]) -> [ArchiveRow] {
+        entries.map { entry in
             ArchiveRow(id: entry.tab.id.rawValue.uuidString, url: entry.tab.url.absoluteString, title: entry.tab.displayTitle,
                        spaceID: entry.spaceID?.rawValue.uuidString, profileID: entry.profileID?.rawValue.uuidString,
                        archivedAt: entry.archivedAt.timeIntervalSince1970, reason: entry.reason.rawValue,
                        originalLocation: entry.originalLocation, payload: SnapshotMapper.tabDTO(entry.tab))
         }
-        queue.async { [weak self] in
-            guard let self else { return }
-            self.openOnQueue()
-            self.insertOnQueue(rows)
+    }
+
+    /// Profile deletion waits for FULL-synchronous commit and surfaces all failures.
+    public func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        let rows = rows(entries)
+        guard !rows.isEmpty else { return }
+        try queue.sync {
+            try openOnQueue()
+            try insertOnQueue(rows)
         }
+    }
+
+    nonisolated private func archiveFailure() -> NSError {
+        NSError(domain: "OpenStore.Archive", code: 1, userInfo: [NSLocalizedDescriptionKey: "archive write did not commit"])
     }
 
     public func discardArchived(ids: [ItemID]) {
@@ -59,7 +78,7 @@ public final class ArchiveStore: ArchiveSink {
         let keys = ids.map { $0.rawValue.uuidString }
         queue.async { [weak self] in
             guard let self else { return }
-            self.openOnQueue()
+            try? self.openOnQueue()
             guard let db = self.db else { return }
             db.exec("BEGIN IMMEDIATE")
             let stmt = db.prepare("DELETE FROM archived_tabs WHERE id = ?")
@@ -86,7 +105,7 @@ public final class ArchiveStore: ArchiveSink {
         return await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: (0, records.count)); return }
-                self.openOnQueue()
+                try? self.openOnQueue()
                 guard let db = self.db else { continuation.resume(returning: (0, records.count)); return }
                 var inserted = 0
                 var duplicates = 0
@@ -119,14 +138,17 @@ public final class ArchiveStore: ArchiveSink {
         }
     }
 
-    nonisolated private func insertOnQueue(_ rows: [ArchiveRow]) {
-        guard let db else { return }
+    nonisolated private func insertOnQueue(_ rows: [ArchiveRow]) throws {
+        guard let db else { throw archiveFailure() }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        db.exec("BEGIN IMMEDIATE")
-        let stmt = db.prepare("INSERT OR REPLACE INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload) VALUES(?,?,?,?,?,?,?,?,?)")
+        guard db.exec("PRAGMA synchronous=FULL"), db.exec("BEGIN IMMEDIATE") else { throw archiveFailure() }
+        var committed = false
+        defer { if !committed { db.exec("ROLLBACK") } }
+        guard let stmt = db.prepare("INSERT OR REPLACE INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload) VALUES(?,?,?,?,?,?,?,?,?)") else { throw archiveFailure() }
+        defer { sqlite3_finalize(stmt) }
         for row in rows {
-            let payload = (try? encoder.encode(row.payload)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            let payload = String(decoding: try encoder.encode(row.payload), as: UTF8.self)
             db.bindText(stmt, 1, row.id)
             db.bindText(stmt, 2, row.url)
             db.bindText(stmt, 3, row.title)
@@ -136,15 +158,15 @@ public final class ArchiveStore: ArchiveSink {
             db.bindText(stmt, 7, row.reason)
             db.bindText(stmt, 8, row.originalLocation)
             db.bindText(stmt, 9, payload)
-            sqlite3_step(stmt)
+            guard sqlite3_step(stmt) == SQLITE_DONE else { throw archiveFailure() }
             sqlite3_reset(stmt)
         }
-        sqlite3_finalize(stmt)
-        db.exec("COMMIT")
+        guard db.exec("COMMIT") else { throw archiveFailure() }
+        committed = true
     }
 
     nonisolated private func queryOnQueue(sql: String, limit: Int, likeText: String?, exactID: String?) -> [ArchivedTabRecord] {
-        openOnQueue()
+        try? openOnQueue()
         guard let db else { return [] }
         let stmt = db.prepare(sql)
         defer { sqlite3_finalize(stmt) }
@@ -217,7 +239,7 @@ public final class ArchiveStore: ArchiveSink {
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: 0); return }
-                self.openOnQueue()
+                try? self.openOnQueue()
                 guard let db = self.db else { continuation.resume(returning: 0); return }
                 let cutoff = Date().addingTimeInterval(-Double(days) * 86400).timeIntervalSince1970
                 let stmt = db.prepare("DELETE FROM archived_tabs WHERE archived_at < ?")
@@ -234,7 +256,7 @@ public final class ArchiveStore: ArchiveSink {
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
                 guard let self else { continuation.resume(returning: 0); return }
-                self.openOnQueue()
+                try? self.openOnQueue()
                 guard let db = self.db else { continuation.resume(returning: 0); return }
                 let stmt = db.prepare("SELECT COUNT(*) FROM archived_tabs")
                 var value = 0

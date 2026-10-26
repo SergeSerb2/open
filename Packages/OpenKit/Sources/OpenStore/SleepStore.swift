@@ -34,9 +34,7 @@ public final class SleepStore {
     private let queue = DispatchQueue(label: "open.sleep", qos: .utility)
     nonisolated(unsafe) private var db: SQLiteDB?
 
-    public init(root: URL? = nil) {
-        fileURL = SnapshotStore(root: root).root.appendingPathComponent("State/sleep.sqlite3")
-    }
+    public init(fileURL: URL) { self.fileURL = fileURL }
 
     deinit {
         let connection = db

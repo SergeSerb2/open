@@ -44,14 +44,25 @@ public struct ArchivedTabRecord: Sendable, Identifiable {
 }
 
 /// Sink for tabs that leave the sidebar. Implemented by OpenStore's ArchiveStore.
-/// Called on the main actor; implementations must not block (dispatch async internally).
+/// Called on the main actor. Normal archive/discard calls dispatch asynchronously;
+/// confirmed Profile deletion may wait for the durable commit.
 @MainActor
 public protocol ArchiveSink: AnyObject {
     /// Stores tabs that left the sidebar. A bulk command passes all of its tabs in one call.
     func archive(_ entries: [ArchiveEntry])
+    /// Waits for durable archive commit; a failure must leave the model unchanged.
+    func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws
     /// Drops the rows of tabs that are back in the sidebar (restore, or undo of a close),
     /// so a tab is never in the sidebar and the archive at once.
     func discardArchived(ids: [ItemID])
+}
+
+public enum ProfileArchiveError: Error { case confirmationUnavailable }
+
+public extension ArchiveSink {
+    func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        throw ProfileArchiveError.confirmationUnavailable
+    }
 }
 
 extension NodeParent {
@@ -763,6 +774,10 @@ public final class BrowserModel {
         return nil
     }
 
+    /// Filled by OpenDataRoot from disk and tombstones; model commands do no I/O.
+    @ObservationIgnored public var unavailableProfileDirectoryNames: Set<String> = []
+    @ObservationIgnored public var onArchiveError: ((Error) -> Void)?
+
     public var defaultProfile: Profile? { profiles.first { $0.dataDirectoryName == "Default" } ?? profiles.first }
 
     public func spaces(using profileID: ProfileID) -> [Space] { spaces.filter { $0.profileID == profileID } }
@@ -778,11 +793,12 @@ public final class BrowserModel {
     public func createProfile(name: String, icon: SpaceIcon? = nil, settings: ProfileSettings = ProfileSettings()) -> Profile? {
         guard Self.profileNameIssue(name, in: profiles) == nil else { return nil }
         var directory = "Default"
-        if !profiles.isEmpty {
+        if !profiles.isEmpty || unavailableProfileDirectoryNames.contains("default") {
             repeat { directory = "Profile-" + UUID().uuidString.prefix(8).uppercased() }
-            while profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }
+            while unavailableProfileDirectoryNames.contains(directory.lowercased()) || profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }
         }
         let profile = Profile(name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
+        unavailableProfileDirectoryNames.insert(directory.lowercased())
         let slot = profiles.count
         insertProfile(profile, at: slot)
         registerUndo({ model in model.removeProfile(profile.id); return true }, reapply: { model in
@@ -834,13 +850,16 @@ public final class BrowserModel {
     }
 
     @discardableResult
-    public func deleteProfile(id: ProfileID) -> Bool {
-        guard let revert = removeProfileArchiving(id) else { return false }
-        registerUndo(revert, reapply: { $0.removeProfileArchiving(id) ?? Self.noRevert })
+    public func deleteProfile(id: ProfileID) throws -> Bool {
+        guard let revert = try removeProfileArchiving(id) else { return false }
+        registerUndo(revert, reapply: { model in
+            do { return try model.removeProfileArchiving(id) ?? Self.noRevert }
+            catch { model.onArchiveError?(error); return Self.noRevert }
+        })
         return true
     }
 
-    private func removeProfileArchiving(_ id: ProfileID) -> Revert? {
+    private func removeProfileArchiving(_ id: ProfileID) throws -> Revert? {
         guard let profile = profile(id: id), deleteBlockReason(for: id) == nil,
               let slot = profiles.firstIndex(where: { $0.id == id }) else { return nil }
         let now = Date()
@@ -848,8 +867,10 @@ public final class BrowserModel {
             ArchiveEntry(tab: $0, reason: .closed, originalLocation: NodeParent.favorites(id).archiveLocation,
                          spaceID: nil, profileID: id, archivedAt: now)
         }
-        // Resolve the directory while the Profile is still available to the sink.
-        archive(entries)
+        // Commit the archive and its directory tombstone before any model mutation.
+        if let archiveSink { try archiveSink.archiveForProfileDeletion(entries, directoryName: profile.dataDirectoryName) }
+        else if !entries.isEmpty { throw ProfileArchiveError.confirmationUnavailable }
+        unavailableProfileDirectoryNames.insert(profile.dataDirectoryName.lowercased())
         removeProfile(id)
         emit(.reload(parent: .favorites(id)))
         let ids = entries.map { $0.tab.id }
@@ -907,6 +928,7 @@ public final class BrowserModel {
 
     public func updateSpace(id: SpaceID, title: String? = nil, icon: SpaceIcon?? = nil, theme: SpaceTheme? = nil, profileID: ProfileID? = nil) {
         guard let space = space(id: id) else { return }
+        if let profileID, profile(id: profileID) == nil { return }
         let oldTitle = space.title; let oldIcon = space.icon; let oldTheme = space.theme; let oldProfile = space.profileID
         let apply: @MainActor () -> Void = {
             if let title { space.title = title }

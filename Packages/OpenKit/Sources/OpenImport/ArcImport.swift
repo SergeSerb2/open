@@ -131,7 +131,7 @@ public struct ArcImporter {
     }
 
     @MainActor
-    public func importAll() throws -> ArcImportResult {
+    public func importAll(directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
         let sidebarURL = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: sidebarURL), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ImportError.missingSidebar
@@ -242,7 +242,7 @@ public struct ArcImporter {
             let found = safe && FileManager.default.fileExists(atPath: arcDirectory.appendingPathComponent("User Data").appendingPathComponent(directory).path, isDirectory: &isDirectory) && isDirectory.boolValue
             if found { report.chromiumDirsFound += 1 } else { report.chromiumDirsMissing += 1 }
         }
-        let defaultMetadataKey = metadata["default"] != nil ? "default" : metadataOrder.first { metadata[$0]?.directory == "Default" }
+        let defaultMetadataKey: String? = metadata["default"] != nil ? "default" : nil
         func canonicalKey(_ ref: String) -> String {
             if ref == "default" || ref == defaultMetadataKey { return "default" }
             if metadata[ref] != nil { return ref }
@@ -264,14 +264,17 @@ public struct ArcImporter {
             profileIDByKey[key] = pid
             let found = metadataFor(key)
             let fallback = "Profile-" + pid.description.prefix(8).uppercased()
-            var directory = key == "default" ? "Default" : (found?.directory ?? fallback)
+            var directory = key == "default" ? "Default" : (existingDirectories[pid] ?? found?.directory ?? fallback)
             directory = String(directory.unicodeScalars.map { scalar -> Character in
                 CharacterSet.controlCharacters.contains(scalar) || "/:\\".unicodeScalars.contains(scalar) ? "-" : Character(String(scalar))
             })
             if directory.isEmpty || directory == "." || directory == ".." { directory = fallback }
+            if key != "default", directory.caseInsensitiveCompare("Default") == .orderedSame { directory = "Default-named" }
             let stem = directory
             var suffix = 2
-            while profiles.contains(where: { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }) {
+            while profiles.contains(where: { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame })
+                || (key != "default" && directoryNamesToAvoid.contains(directory.lowercased())
+                    && existingDirectories[pid]?.caseInsensitiveCompare(directory) != .orderedSame) {
                 directory = "\(stem)-\(suffix)"; suffix += 1
             }
             profiles.append(Profile(id: pid, name: found?.name ?? (key == "default" ? "Default" : "Profile"), dataDirectoryName: directory))
@@ -281,7 +284,7 @@ public struct ArcImporter {
         // Space order controls display order and collision suffixes. Sidebar links win.
         for (id, object) in spacesRaw { _ = profileID(for: object["profile"] ?? profileRefBySpace[id]) }
         for key in metadataOrder { _ = profileID(for: key) }
-        if profiles.isEmpty { _ = profileID(for: ["default": true]) }
+        _ = profileID(for: ["default": true])
         let defaultProfileID = profiles.first(where: { $0.dataDirectoryName == "Default" })?.id ?? profiles[0].id
 
         // Icon / theme helpers.
