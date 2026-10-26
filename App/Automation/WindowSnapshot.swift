@@ -15,6 +15,12 @@
     private typealias CreateFromArray = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
 
     static func capture(_ window: NSWindow, to url: URL) async throws -> String {
+      // Draw pending AppKit changes (a command that just changed the sidebar)
+      // and give the window server a frame to pick them up.
+      window.contentView?.layoutSubtreeIfNeeded()
+      window.displayIfNeeded()
+      CATransaction.flush()
+      try? await Task.sleep(for: .milliseconds(50))
       var base: NSImage
       var method: String
       if let image = windowServerImage(window), !isBlank(image) {

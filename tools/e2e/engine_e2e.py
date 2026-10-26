@@ -287,9 +287,9 @@ def extension_checks(app, style, results):
     # chrome://extensions in our web view (style decides: the shell's
     # Extensions menu always uses a Chrome-style page).
     t = new_tab(app, "chrome://extensions")
-    count_js = ('(() => { const m = document.querySelector("extensions-manager"); if (!m) return -1;'
+    count_js = ('(() => { const m = document.querySelector("extensions-manager"); if (!m || !m.shadowRoot) return -1;'
                 ' const list = m.shadowRoot.querySelector("extensions-item-list");'
-                ' return list ? list.shadowRoot.querySelectorAll("extensions-item").length : -2; })()')
+                ' return list && list.shadowRoot ? list.shadowRoot.querySelectorAll("extensions-item").length : -2; })()')
     wait_until(lambda: app.eval(t, count_js) >= 4, timeout=15)
     count = app.eval(t, count_js)
     results["chrome_extensions_page_url"] = app.page(t).get("url")
