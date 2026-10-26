@@ -1297,3 +1297,25 @@ stays in `.re/` and is never committed.
   `ghidra-media.txt`, `assets-*.json`, `arccore-strings.txt`).
 - Chromium 156 sources: paths with line numbers in §2 and §6
   (`~/Developer/open-engine/chromium_git/chromium/src`).
+
+## Appendix — Lead decisions (2026-10-25)
+
+- Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).
+- Q1 Mini players sit above the bottom bar. This is provisional until screenshot S3, then follow Arc.
+- Q2 Up to 3 mini players, newest first.
+- Q3 Paused mini players hide after 60 min. A tab stays awake while its mini player shows.
+- Q4 Auto-PiP on window minimize, occlusion, or app hide: follow Arc. Screenshot S10 decides. Until then, it is off.
+- Q5 Close on a mini player or an auto-PiP pauses the media and skips auto-PiP for that tab until the tab is shown again.
+- Q6 A manual PiP stays open when its tab is shown again. Back to Tab closes it.
+- Q7 Ship with Chromium's PiP window until EM-4 lands.
+- Q8 The volume control is a mute toggle only, until EM-2.
+- Q9 No new PiP command or shortcut (Arc has none).
+- Q10 "Mute All Tabs" is app-wide.
+- Q11 Always respect `disablePictureInPicture`.
+- Q12 The Meet chat toggle in Document PiP is deferred.
+- Q13 Mic and camera mini players ship with Step 8.
+- Q14 No audio badge on Favorites tiles, unless screenshot S9 shows one.
+- Q15 The scrolling title is on, with no setting.
+- Q16 Engine queue: Step 5 (EM-1a, EM-5 interim, EM-8) is OpenEngine-only and goes to the Steps 1–5 implementer, not the engine lead. The fork requests EM-1b, EM-2, EM-3 (P6), and EM-5 (fork path) queue after P2. EM-6 and EM-7 follow them. EM-4 (own PiP window) queues after the ad-block and tab-sleep patch series.
+- Q17 The PiP menu check mark shows the current state.
+- Screenshots S1–S12: the lead asks the user in one batch with the other plans' screenshot needs. Step 12 waits for them.
