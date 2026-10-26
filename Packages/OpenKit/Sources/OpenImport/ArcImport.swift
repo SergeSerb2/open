@@ -345,11 +345,15 @@ public struct ArcImporter {
         func tabCustomIcon(from tabData: [String: Any]) -> SpaceIcon? {
             guard let customInfo = tabData["customInfo"] as? [String: Any],
                   let iconType = customInfo["iconType"] as? [String: Any] else { return nil }
-            if let emojiV2 = iconType["emoji_v2"] as? String { return .emoji(emojiV2) }
+            if let emojiV2 = iconType["emoji_v2"] as? String, !emojiV2.isEmpty { return .emoji(emojiV2) }
             if let scalar = iconType["emoji"] as? NSNumber, let s = UnicodeScalar(scalar.intValue) {
                 return .emoji(String(Character(s)))
             }
-            if let named = iconType["icon"] as? String { return .named(named) }
+            if let named = iconType["icon"] as? String {
+                if NamedSpaceIcons.symbols[named] != nil { report.namedSpaceIcons[named, default: 0] += 1 }
+                else { report.unknownNamedSpaceIcons += 1 }
+                return .named(named)
+            }
             return nil
         }
 

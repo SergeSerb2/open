@@ -122,6 +122,9 @@ public final class BrowserModel {
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
     @ObservationIgnored public var undoManager: UndoManager?
+    /// Offscreen CLI fault injection. Nil in the app; never persisted or observed.
+    @ObservationIgnored public var diagnosticSpaceCreationFailureAtMove: Int?
+    @ObservationIgnored private var spaceCreationEvents: [TreeChange]?
 
     /// Invalidates derived tab ownership after structural edits or a full import/load.
     @ObservationIgnored public private(set) var treeRevision: UInt64 = 0
@@ -159,6 +162,7 @@ public final class BrowserModel {
     public func removeObserver(_ id: UUID) { observers[id] = nil }
 
     private func emit(_ change: TreeChange) {
+        if spaceCreationEvents != nil { spaceCreationEvents?.append(change); return }
         treeRevision &+= 1
         for handler in observers.values { handler(change) }
     }
@@ -973,23 +977,42 @@ public final class BrowserModel {
         guard insertion.map({ (0...spaces.count).contains($0) }) ?? true,
               Set(ids).count == ids.count else { return false }
         // The destination is a fresh Space, so it cannot be a source node's descendant.
+        let moving = Set(ids)
         for id in ids {
             guard index[id] != nil, let parent = parentByID[id], position(of: id, in: parent) != nil else { return false }
             if case .splitPane = parent { return false }
+            var ancestor = parent
+            while case .folder(let parentID) = ancestor {
+                guard !moving.contains(parentID), let next = parentByID[parentID] else { return false }
+                ancestor = next
+            }
         }
         return true
     }
 
     private func insertSpaceMoving(_ space: Space, at i: Int, moving ids: [ItemID]) -> Revert? {
         guard self.space(id: space.id) == nil, validSpaceCreation(index: i, moving: ids) else { return nil }
+        // Buffer structural events until all relocations succeed. Rollback uses the
+        // same primitives, and discards both their forward and inverse events.
+        spaceCreationEvents = []
         insertSpace(space, at: i)
         var moves: [Revert] = []
-        for id in ids {
+        for (moveIndex, id) in ids.enumerated() {
             // Every source was validated before the first mutation. The fresh pinned
             // section accepts tabs, folders (with children), and whole splits.
-            if let revert = relocate(id, to: .spacePinned(space.id), at: nil) { moves.append(revert) }
+            guard diagnosticSpaceCreationFailureAtMove != moveIndex,
+                  let revert = relocate(id, to: .spacePinned(space.id), at: nil) else {
+                for revert in moves.reversed() { _ = revert(self) }
+                removeSpace(space.id)
+                spaceCreationEvents = nil
+                return nil
+            }
+            moves.append(revert)
         }
         emit(.reload(parent: .spaceToday(space.id)))
+        let committedEvents = spaceCreationEvents ?? []
+        spaceCreationEvents = nil
+        for event in committedEvents { emit(event) }
         let reverts = moves
         return { model in
             guard model.space(id: space.id) != nil else { return false }

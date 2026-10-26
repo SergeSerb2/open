@@ -221,6 +221,12 @@ default case (write a custom `init(from:)` for the three enums; synthesized
 has no released users; `docs/model.md` precedent). Add `style: SpaceStyle? = nil`
 to `SpaceTheme.init`.
 
+Lead review amendment (2026-10-26, Step 1 round 1): fields inside `style`
+decode with `decodeIfPresent` and their documented defaults. Wrongly typed
+optional inputs also use those defaults. An unusable optional style (no
+valid key color or invalid object shape) is nil, so it cannot fail the
+whole snapshot. The legacy theme fields keep their original decode rules.
+
 ### 3.2 Rendering precedence and write rules
 
 `SpaceThemeStyle(theme:system:)` resolves, in order:
@@ -760,6 +766,14 @@ undo, TreeChange, or snapshot dirty state. After validation, create and move
 the nodes as one undo step. An empty moving list with a valid index never
 fails.
 
+Lead review amendment (2026-10-26, Step 1 round 1): refuse a moving list
+that includes both an ancestor and its descendant. If any relocation fails
+after insertion, reverse the earlier moves and remove the inserted Space,
+then return nil. Buffer structural events until success, so a rollback emits
+none. The real CLI exercises a forced late failure and checks snapshot
+bytes, undo depth, and the index. Success emits one `.move` per node, no
+source-parent reload, and has byte-identical undo and redo snapshots.
+
 The existing nonoptional `createSpace(title:profileID:icon:theme:)` forwards
 with `at: nil, moving: []`; it may force-unwrap with a comment explaining
 that this path cannot fail. Its callers do not change. Step 7's
@@ -897,6 +911,12 @@ lead-approved addition), `SpacePageView.swift`, `OpenCommands/CommandRegistry.sw
 `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`,
 `tools/verify-all.sh` (add `space-editor`), `docs/release/licenses.md` (emoji data row, Step 6), `docs/model.md`,
 `docs/design.md` (new §: editor), `docs/commands.md`.
+
+Step 1 review additions: `sidebar-render/OffscreenRenderer.swift` synchronizes
+render and readback on one Metal queue for P1. `Fixtures/space-schema1/`
+holds the frozen synthetic schema-1 snapshot and its three pre-change PNGs;
+the `space-legacy` entry in `tools/verify-all.sh` and
+`tools/verification/check.py` gate their round trip and byte equality.
 
 ## 12. Verification (no unit tests)
 

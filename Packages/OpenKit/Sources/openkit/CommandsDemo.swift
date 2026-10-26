@@ -525,8 +525,19 @@ func runCommandsDemo(args: [String]) async throws {
     guard let movingFolder = model.createFolder(in: .spaceToday(sid), title: "Moving folder", withNodes: [folderTab.id]) else { exit(1) }
     let beforeCreate = try snapshotBytes()
     let depthBeforeCreate = undoDepth()
+    events.removeAll()
+    let sourceParents = Set([model.parent(of: movingTab.id)!, model.parent(of: movingFolder.id)!])
     guard let created = model.createSpace(title: "Created with moves", profileID: pid, icon: .named("planet"),
                                          theme: SpaceTheme(), at: 0, moving: [movingTab.id, movingFolder.id]) else { exit(1) }
+    let afterCreate = try snapshotBytes()
+    let moved = events.compactMap { event -> ItemID? in
+        if case .move(_, _, _, _, let id) = event { return id }; return nil
+    }
+    let sourceReloads = events.filter { event in
+        if case .reload(let parent) = event { return sourceParents.contains(parent) }; return false
+    }
+    check(moved.count == 2 && Set(moved) == Set([movingTab.id, movingFolder.id]) && sourceReloads.isEmpty,
+          "successful create emits one move per node and no source-parent reload")
     check(model.spaces.first === created && created.pinned.map(\.id) == [movingTab.id, movingFolder.id]
           && movingFolder.children.map(\.id) == [folderTab.id] && [movingTab, folderTab].allSatisfy { $0.pinnedURL == $0.url },
           "create inserts at index 0 and moves the same tab and folder with pinned ancestry")
@@ -535,6 +546,7 @@ func runCommandsDemo(args: [String]) async throws {
     check(try snapshotBytes() == beforeCreate, "one undo restores the entire pre-create snapshot byte for byte")
     undo.redo()
     check(model.space(id: created.id) === created && indexMatchesRebuild(model), "redo restores the same Space, nodes and index")
+    check(try snapshotBytes() == afterCreate, "redo restores the entire created snapshot byte for byte")
 
     step("Space editor: refused creation has no writes, event or undo")
     let refusalA = model.newTab(in: sid, url: url("refusal-a"))
@@ -544,6 +556,8 @@ func runCommandsDemo(args: [String]) async throws {
         ("split pane", [movingTab.id, refusalA.id], Optional<Int>.none),
         ("missing ID", [movingTab.id, ItemID()], nil),
         ("duplicate ID", [movingTab.id, movingTab.id], nil),
+        ("ancestor and child", [movingFolder.id, folderTab.id], nil),
+        ("child and ancestor", [folderTab.id, movingFolder.id], nil),
         ("negative index", [movingTab.id], -1),
         ("index past end", [movingTab.id], model.spaces.count + 1),
     ] {
@@ -561,6 +575,21 @@ func runCommandsDemo(args: [String]) async throws {
               "refused create (\(label)) leaves the actual undo stack depth unchanged")
     }
     check(model.node(id: refusalSplit.id)?.split === refusalSplit, "refusals preserve the original split")
+
+    step("Space editor: late relocation failure rolls back the transaction")
+    let rollbackDepth = undoDepth()
+    let beforeRollback = try snapshotBytes()
+    let revisionBeforeRollback = model.treeRevision
+    events.removeAll()
+    model.diagnosticSpaceCreationFailureAtMove = 1
+    let rolledBack = model.createSpace(title: "Rolled back", profileID: pid, icon: nil, theme: SpaceTheme(),
+                                      at: nil, moving: [movingTab.id, movingFolder.id])
+    model.diagnosticSpaceCreationFailureAtMove = nil
+    let afterRollback = try snapshotBytes()
+    check(rolledBack == nil && afterRollback == beforeRollback && events.isEmpty && model.treeRevision == revisionBeforeRollback,
+          "forced failure after the first move restores all snapshot bytes, discards events and preserves tree revision")
+    check(undoDepth() == rollbackDepth, "late relocation failure registers no undo")
+    check(indexMatchesRebuild(model), "rollback restores the full index")
 
     step("Space editor: previews, commit and icons")
     let originalTheme = space.theme
@@ -633,6 +662,22 @@ func runCommandsDemo(args: [String]) async throws {
     try snapshots.saveNow(model: lenient)
     guard let normalizedReload = try snapshots.load() else { exit(1) }
     check(SnapshotMapper.structurallyEqual(lenient, normalizedReload), "normalized snapshot writes defaults and round trips unchanged")
+    for (label, partial) in [
+        ("missing fields", ["keyColor": ["red": 0.3, "green": 0.5, "blue": 0.7, "alpha": 1]] as [String: Any]),
+        ("odd optional fields", ["keyColor": ["red": 0.3, "green": 0.5, "blue": 0.7, "alpha": 1], "colorCount": "odd", "noiseFactor": [1], "texture": 7] as [String: Any]),
+    ] {
+        theme["style"] = partial; spaces[current]["theme"] = theme; decoded["spaces"] = spaces
+        try JSONSerialization.data(withJSONObject: decoded, options: [.sortedKeys]).write(to: file)
+        guard let partialModel = try snapshots.load() else { exit(1) }
+        let defaults = SpaceStyle(keyColor: RGBAColor(red: 0.3, green: 0.5, blue: 0.7))
+        check(partialModel.space(id: sid)?.theme.style == defaults, "\(label) loads with the documented style defaults")
+        try snapshots.saveNow(model: partialModel)
+        guard let partialReload = try snapshots.load() else { exit(1) }
+        check(SnapshotMapper.structurallyEqual(partialModel, partialReload), "\(label) roundtrips through the real snapshot store")
+    }
+    theme["style"] = ["noiseFactor": 0.4]; spaces[current]["theme"] = theme; decoded["spaces"] = spaces
+    try JSONSerialization.data(withJSONObject: decoded, options: [.sortedKeys]).write(to: file)
+    check(try snapshots.load()?.space(id: sid)?.theme.style == nil, "style without a usable key color falls back to nil without failing the snapshot")
     try snapshots.saveNow(model: model)
     composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")

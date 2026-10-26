@@ -66,14 +66,18 @@ public struct SpaceStyle: Codable, Hashable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(keyColor: try c.decode(RGBAColor.self, forKey: .keyColor),
-                  colorCount: try c.decode(Int.self, forKey: .colorCount),
-                  wheel: try c.decode(SpaceStyleWheel.self, forKey: .wheel),
-                  appearance: try c.decode(SpaceStyleAppearance.self, forKey: .appearance),
-                  noiseFactor: try c.decode(Double.self, forKey: .noiseFactor),
-                  texture: try c.decode(SpaceStyleTexture.self, forKey: .texture),
-                  intensityFactor: try c.decode(Double.self, forKey: .intensityFactor),
-                  mathVersion: try c.decode(Int.self, forKey: .mathVersion))
+        guard let key = try c.decodeIfPresent(RGBAColor.self, forKey: .keyColor) else {
+            throw DecodingError.keyNotFound(CodingKeys.keyColor, .init(codingPath: c.codingPath,
+                debugDescription: "A Space style needs a key color"))
+        }
+        self.init(keyColor: key,
+                  colorCount: (try? c.decodeIfPresent(Int.self, forKey: .colorCount)) ?? 1,
+                  wheel: (try? c.decodeIfPresent(SpaceStyleWheel.self, forKey: .wheel)) ?? .analogous,
+                  appearance: (try? c.decodeIfPresent(SpaceStyleAppearance.self, forKey: .appearance)) ?? .automatic,
+                  noiseFactor: (try? c.decodeIfPresent(Double.self, forKey: .noiseFactor)) ?? 0,
+                  texture: (try? c.decodeIfPresent(SpaceStyleTexture.self, forKey: .texture)) ?? .grain,
+                  intensityFactor: (try? c.decodeIfPresent(Double.self, forKey: .intensityFactor)) ?? 0.8,
+                  mathVersion: (try? c.decodeIfPresent(Int.self, forKey: .mathVersion)) ?? SpaceStyle.currentMathVersion)
     }
 }
 
@@ -88,6 +92,26 @@ public struct SpaceTheme: Codable, Hashable, Sendable {
     public var gradientStopsDark: [GradientStop]
     public var importedArcThemeJSON: Data?
     public var style: SpaceStyle?
+
+    private enum CodingKeys: String, CodingKey {
+        case lightBackground, darkBackground, lightForeground, darkForeground, accent
+        case gradientStopsLight, gradientStopsDark, importedArcThemeJSON, style
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // Legacy fields retain their original decode contract. An unusable optional
+        // editor style falls back to nil, rather than losing the whole snapshot.
+        self.init(lightBackground: try c.decodeIfPresent(RGBAColor.self, forKey: .lightBackground),
+                  darkBackground: try c.decodeIfPresent(RGBAColor.self, forKey: .darkBackground),
+                  lightForeground: try c.decodeIfPresent(RGBAColor.self, forKey: .lightForeground),
+                  darkForeground: try c.decodeIfPresent(RGBAColor.self, forKey: .darkForeground),
+                  accent: try c.decodeIfPresent(RGBAColor.self, forKey: .accent),
+                  gradientStopsLight: try c.decode([GradientStop].self, forKey: .gradientStopsLight),
+                  gradientStopsDark: try c.decode([GradientStop].self, forKey: .gradientStopsDark),
+                  importedArcThemeJSON: try c.decodeIfPresent(Data.self, forKey: .importedArcThemeJSON),
+                  style: try? c.decodeIfPresent(SpaceStyle.self, forKey: .style))
+    }
 
     public init(
         lightBackground: RGBAColor? = nil, darkBackground: RGBAColor? = nil,
