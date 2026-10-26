@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""Read-only engine checks. Uses only Python's standard library."""
+import argparse
+import ast
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+
+FORK = Path(__file__).resolve().parents[1]
+SERIES = ("chromium", "cef", "rust")
+KEYS = "CHROMIUM_TAG CHROMIUM_COMMIT CEF_BRANCH CEF_COMMIT DEPOT_TOOLS_COMMIT RUST_TOOLCHAIN_REV RUST_TOOLCHAIN_VERSION ADBLOCK_CRATE_VERSION RMP_CRATE_VERSION ENGINE_ROOT_DEFAULT CHROMIUM_SRC_SUBDIR OUT_DIR_DEV OUT_DIR_RELEASE BUILD_JOBS_DEFAULT TARGET_CPU".split()
+os.environ["GIT_OPTIONAL_LOCKS"] = "0"
+os.environ["LC_ALL"] = "C"
+
+
+def run(*args, cwd=None):
+    return subprocess.run(args, cwd=cwd, text=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, check=False)
+
+
+def versions():
+    pin_file = os.environ.get("OPEN_ENGINE_VERSIONS", str(FORK / "VERSIONS"))
+    result = subprocess.run(["/bin/bash", "-c", 'set -a; . "$1"; env -0', "pins", pin_file],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True,
+                            env={k: v for k, v in os.environ.items() if k not in KEYS})
+    env = dict(item.decode().split("=", 1) for item in result.stdout.split(b"\0") if item)
+    for key in KEYS:
+        if not env.get(key):
+            raise ValueError(f"VERSIONS: missing key {key}")
+    return {key: env[key] for key in KEYS}
+
+
+def patch_plan():
+    records = []
+    for series in SERIES:
+        seen = set()
+        for number, line in enumerate((FORK / "patches" / series / "series").read_text().splitlines(), 1):
+            text = line.strip()
+            if text.startswith("# DISABLED:"):
+                names = re.findall(r"[\w.-]+\.patch", text)
+                if names:
+                    if names[0] in seen:
+                        raise ValueError(f"series {series} lists {names[0]} twice")
+                    seen.add(names[0])
+                    if not (FORK / "patches" / series / names[0]).is_file():
+                        raise ValueError(f"series {series}:{number}: missing disabled patch {names[0]}")
+                records.append(("disabled", series, names[0] if names else f"line-{number}", text))
+                continue
+            if not text or text.startswith("#"):
+                continue
+            name = text.split("#", 1)[0].strip()
+            if not re.fullmatch(r"[\w.-]+\.patch", name):
+                raise ValueError(f"series {series}:{number}: invalid patch name {name}")
+            if name in seen:
+                raise ValueError(f"series {series} lists {name} twice")
+            seen.add(name)
+            if not (FORK / "patches" / series / name).is_file():
+                raise ValueError(f"series {series}:{number}: missing {name}")
+            records.append(("active", series, name, text))
+    return records
+
+
+def manifest(series):
+    result = {}
+    name = None
+    for line in (FORK / "patches" / series / "manifest").read_text().splitlines():
+        text = line.strip()
+        match = re.fullmatch(r"#\s*([\w.-]+\.patch)", text)
+        if match:
+            name = match[1]
+            if name in result:
+                raise ValueError(f"manifest {series} lists {name} twice")
+        elif text.startswith("paths:"):
+            if not name or name in result:
+                raise ValueError(f"manifest {series}: paths without a unique patch block")
+            paths = sorted(set(shlex.split(text[6:])))
+            if not paths or any(p.startswith(("/", ":")) or ".." in Path(p).parts or re.search(r"\s", p) for p in paths):
+                raise ValueError(f"manifest {series}: invalid paths for {name}")
+            if series == "cef" and any(not p.startswith("cef/") for p in paths):
+                raise ValueError(f"manifest cef: paths must start with cef/: {name}")
+            result[name] = paths
+    return result
+
+
+def patch_git(src, series):
+    # CEF is a separate Git repository. Patch headers still use src-relative paths.
+    return ["git", "-C", str(src / "cef" if series == "cef" else src), "apply",
+            "-p2" if series == "cef" else "-p1"]
+
+
+def overlay_files():
+    return sorted(p for p in (FORK / "src").rglob("*")
+                  if p.is_file() and p.name != ".gitkeep" and p.suffix != ".open")
+
+
+def gn_args(path):
+    result = {}
+    for line in path.read_text().splitlines():
+        match = re.match(r"\s*(\w+)\s*=\s*(.*?)\s*(?:#.*)?$", line)
+        if match:
+            result[match[1]] = match[2]
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(usage="engine-status [--json <path>] [--strict]",
+                                     epilog="Engine/fork/scripts/engine-status")
+    parser.add_argument("--json", type=Path, metavar="PATH")
+    parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--patch-plan", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--refresh-plan", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.patch_plan or args.refresh_plan:
+        records = patch_plan()
+        manifests = {s: manifest(s) for s in SERIES} if args.refresh_plan else {}
+        for kind, series, name, line in records:
+            if args.refresh_plan and kind == "active":
+                if name not in manifests[series]:
+                    raise ValueError(f"manifest {series}: missing paths for {name}")
+                line = " ".join(manifests[series][name])
+            print("\t".join((kind, series, name, line)))
+        return 0
+    pins = versions()
+    root = Path((os.environ.get("OPEN_ENGINE_ROOT") or str(Path.home() / pins["ENGINE_ROOT_DEFAULT"]))).resolve()
+    src = root / pins["CHROMIUM_SRC_SUBDIR"]
+    state = root / ".open-engine-state"
+    checks = []
+
+    def add(level, name, detail):
+        checks.append(dict(result=level, name=name, detail=detail))
+        print(f"{level:4}  {name}  {detail}")
+
+    differences = []
+    for directory, command, key in ((src, ("rev-parse", "HEAD"), "CHROMIUM_COMMIT"),
+                                    (src / "cef", ("rev-parse", "HEAD"), "CEF_COMMIT"),
+                                    (root / "depot_tools", ("rev-parse", "HEAD"), "DEPOT_TOOLS_COMMIT"),
+                                    (src, ("describe", "--tags"), "CHROMIUM_TAG")):
+        actual = run("git", "-C", str(directory), *command).stdout.strip() or "unavailable"
+        if actual != pins[key]:
+            differences.append(f"{key}: expected {pins[key]}, actual {actual}")
+    add("FAIL" if differences else "PASS", "S-1 Pins", "; ".join(differences) or "Chromium, CEF, depot_tools and tag match VERSIONS")
+
+    # CEF patcher has no dry-run option. Inspect its declarative config without executing it.
+    try:
+        cfg = src / "cef/patch/patch.cfg"
+        tree = ast.parse(cfg.read_text())
+        patches = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                       and any(isinstance(t, ast.Name) and t.id == "patches" for t in n.targets))
+        missing = [p["name"] for p in patches if not (cfg.parent / "patches" / (p["name"] + ".patch")).is_file()]
+        dirty = run("git", "-C", str(src), "diff", "--stat").stdout.strip()
+        if missing or not dirty:
+            add("FAIL", "S-2 CEF patches", f"missing patch files: {missing}; src diff --stat nonempty: {bool(dirty)}")
+        else:
+            add("WARN", "S-2 CEF patches", f"fallback: src diff --stat is nonempty; all {len(patches)} patch.cfg files exist; not full patch proof")
+    except (OSError, ValueError, SyntaxError, StopIteration) as error:
+        add("FAIL", "S-2 CEF patches", str(error))
+
+    try:
+        records = patch_plan()
+        errors, disabled = [], []
+        for kind, series, name, line in records:
+            if kind == "disabled":
+                disabled.append(f"{series}/{name}: {line}")
+            elif run(*patch_git(src, series), "--reverse", "--check", str(FORK / "patches" / series / name)).returncode:
+                errors.append(f"{series}/{name} is not applied")
+        add("FAIL" if errors else "WARN" if disabled else "PASS", "S-3 Open patches", "; ".join(errors + disabled) or "all active patches applied (empty series is valid)")
+    except ValueError as error:
+        records = []
+        add("FAIL", "S-3 Open patches", str(error))
+
+    overlay = overlay_files()
+    bad, stale = [], []
+    for file in overlay:
+        relative = file.relative_to(FORK / "src")
+        dest = src / relative
+        if not dest.is_file() or hashlib.sha256(file.read_bytes()).digest() != hashlib.sha256(dest.read_bytes()).digest():
+            bad.append(f"missing or different: {relative}")
+    for folder in (src / "open", src / "cef/libcef/browser/open"):
+        if folder.exists():
+            stale += [str(p.relative_to(src)) for p in sorted(folder.rglob("*")) if p.is_file() and not (FORK / "src" / p.relative_to(src)).is_file()]
+    add("FAIL" if bad else "WARN" if stale else "PASS", "S-4 Overlay", "; ".join(bad + [f"stale: {p}" for p in stale]) or f"{len(overlay)} files match")
+
+    out = src / pins["OUT_DIR_DEV"]
+    live = out / "args.gn"
+    if live.is_file():
+        expected, actual = gn_args(FORK / "gn/dev.args.gn"), gn_args(live)
+        changed = sorted(k for k, v in expected.items() if actual.get(k) != v)
+        extra = sorted(actual.keys() - expected.keys())
+        add("FAIL" if changed and args.strict else "WARN" if changed or extra else "PASS", "S-5 GN args", f"changed keys: {changed}; extra keys: {extra}" if changed or extra else "dev keys match")
+    else:
+        add("WARN", "S-5 GN args", f"not generated yet: {live}")
+    distrib = state / "distrib.txt"
+    binary = None
+    framework = out / "Chromium Embedded Framework.framework/Chromium Embedded Framework"
+    if framework.is_file():
+        binary = framework
+    found_distrib = False
+    if distrib.is_file():
+        distpath = Path(distrib.read_text().strip())
+        if distpath.is_dir():
+            candidates = sorted(distpath.rglob("Chromium Embedded Framework.framework/Chromium Embedded Framework"))
+            if candidates:
+                found_distrib, binary = True, candidates[0]
+    missing = []
+    if not (out / "cefsimple").exists():
+        missing.append(f"not built yet: {out / 'cefsimple'}")
+    if not found_distrib:
+        missing.append(f"no framework directory in distrib recorded by {distrib}")
+    add("WARN" if missing else "PASS", "S-6 Build outputs", "; ".join(missing) or "cefsimple and distrib framework exist")
+    if binary is None:
+        add("WARN", "S-7 Symbols", f"not built yet: {framework}; stock symbol proof waits for Step 7")
+    else:
+        symbols = run("nm", "-gU", str(binary))
+        exported = {line.split()[-1] for line in symbols.stdout.splitlines() if line.split()}
+        expected = [line.strip() for line in (FORK / "verification/expected-symbols.txt").read_text().splitlines() if line.strip() and not line.strip().startswith("#")]
+        missing = sorted(set(expected) - exported)
+        add("FAIL" if symbols.returncode or missing else "PASS", "S-7 Symbols", f"{binary}: missing {missing}; {symbols.stderr.strip()}" if symbols.returncode or missing else f"{len(expected)} symbols present in {binary}")
+    try:
+        records = patch_plan()
+        order = []
+        for series in SERIES:
+            names = [name for kind, s, name, _ in records if kind == "active" and s == series]
+            if names != sorted(names):
+                order.append(f"{series}: series order differs from numeric filename order: {names}")
+        add("WARN" if order else "PASS", "S-8 Series sanity", "; ".join(order) or "no duplicates or missing patches; numeric order matches")
+    except ValueError as error:
+        add("FAIL", "S-8 Series sanity", str(error))
+    counts = {level: sum(c["result"] == level for c in checks) for level in ("PASS", "FAIL", "WARN")}
+    print(f"engine-status: {counts['PASS']} pass, {counts['FAIL']} fail, {counts['WARN']} warn")
+    if args.json:
+        target = args.json.resolve()
+        repo = Path(run("git", "-C", str(FORK), "rev-parse", "--show-toplevel").stdout.strip()).resolve()
+        # Never allow a JSON output under the Chromium tree, even inside STATE_DIR via symlinks.
+        if target.is_relative_to(src.resolve()) or not (target.is_relative_to(repo) or target.is_relative_to(state.resolve())):
+            raise ValueError("--json output must be in the repo or STATE_DIR, outside Chromium src")
+        target.write_text(json.dumps(dict(checks=checks, summary=counts), indent=2) + "\n")
+    return int(bool(counts["FAIL"] or (args.strict and counts["WARN"])))
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"engine-status: {error}", file=sys.stderr)
+        sys.exit(1)
