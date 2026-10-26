@@ -139,6 +139,14 @@ black at fixed alphas). Aliases: `runtime-observations.md` §3.3.
 Harmony colors for count `n` and wheel `w`: `analogous` → `[k, +40°, −40°]`
 (first `n`); `complementary` → `n = 2: [k, +180°]`, `n = 3: [k, +150°, +210°]`.
 
+Add transition (lead, 2026-10-26 11:57 America/Vancouver): when count is
+exactly 1, Add sets `wheel = .complementary` and count 2. A second Add keeps
+that mode and gives +150°/+210°. At count ≥2, Add preserves the stored
+wheel (including a page-2 analogous style reduced to two colors). Count and
+mode change in one undoable command; undo restores both. Do not change the
+harmony function or rewrite stored styles. Evidence: session 2 item 17,
+frames 0065/0067/0069, page-1 Brand 8, +180° then +150°/+210°.
+
 Background layout: `n = 1` → single color; `n = 2` → base `[c0, c1]`, no
 overlay; `n = 3` → base `[c0, c1]`, overlay `[clear, c2]`. Translucency is
 always `light` (all 4 stored themes, including the dark-content one).
@@ -150,6 +158,11 @@ the dark text that light content uses (both from the semantic palettes). Bias: A
 `ThemeTuning.automaticBias` (= 0.0, guess, §15 Q3), Light −21, Dark +21.
 
 ### 2.2 Pad mapping
+
+**Provisional, not a parity gate:** capture session 2 contradicts this
+linear radius law. See the dated lead amendment and mandatory Step 9 gate
+below. Keep current stored styles and mathVersion semantics until that work
+is implemented with an explicit compatibility decision.
 
 Unit disc, y down, angle clockwise from 3 o'clock. Lightness range by mode:
 Automatic `0.01…0.97`, Light `0.575…0.97`, Dark `0.01…0.425`.
@@ -1123,3 +1136,36 @@ on both pages; the same editor in macOS Light.
 - Q10 The 2nd and 3rd color knobs are 30 pt, not draggable, and move with the main knob.
 - Q11 Spaces ▸ Rename Space edits the name in the sidebar header. A dialog appears only when the sidebar is hidden.
 - The capture request goes into the user's single combined Arc capture session.
+
+
+### Lead round-3 overrides — 2026-10-26
+
+Evidence: `theme-design-r2.md`, capture session 2 item 17
+(`20261026-104045-17-theme-editor`) and item 20
+(`20261026-103516-20-light-mode`); private frames remain local under `.re/`.
+
+- **Harmony / N5:** the 11:57 lead clarification supersedes the earlier
+  suggestion to alter the harmony function. Add switches a one-color style
+  to complementary, in one undo step; Add at two colors preserves its mode.
+  No preset or persisted style is rewritten. Frames 0065/0067/0069 prove the
+  page-1 complementary offsets. The editor wiring lands in Step 3, where
+  `ThemeEditorState` exists; Step 2 keeps and gates both harmony modes.
+- **Step 9 is a hard written acceptance gate, not optional polish.** Decode
+  Arc's knob-radius ↔ color function before claiming pad parity. Frames
+  0027–0049 show shared radii for mid greys; 0091–0097 show a deep color at
+  the center (lightness about 0.45), not black. Do not decode it in this
+  review pass. Current M3 proves an internal round trip only.
+- **Q4 / intensity:** Step 9 must reproduce the tint at intensity zero.
+  Frames 0098/0100/0111: Arc keeps a tint at 0 (current Open ΔE00 7.30),
+  and the measured intensity-1 alpha is about 0.75. The provisional law is
+  not a verified Arc law. Preserve these capture values as the calibration
+  acceptance inputs; no stored-value meaning changes in this review pass.
+- **D-8 / equal mean darkness:** the earlier equal-darkness requirement is
+  superseded as an Arc parity target. Step 9 must calibrate per-texture
+  darkness and contrast from 0112/0114/0116/0118 at noise 0.8. Arc tweed is
+  darkest and smoothest, with mean (209.6,184.8,185.8) and L standard
+  deviation 2.53, versus no-texture (228.9,201.9,202.7). Grain, sand, denim,
+  and tweed do not share one mean. Keep existing procedural Space tiles and
+  current compatibility checks until Step 9 replaces this provisional fit;
+  they are regression checks, not a claim that Arc uses equal darkness.
+  Grain strength and per-channel calibration belong to this same gate.
