@@ -1556,3 +1556,17 @@ Add these to the user's single combined Arc capture session
 - Open code: §1 table.
 - PR #53 (`m7/ext-p1-tabstrip` at `a03d2a5`): `Engine/fork/src/open/browser/tab_strip/open_tab_strip.cc`,
   `open_browser_window.mm`, `docs/engine-api.md` diff.
+
+## Appendix — Lead decisions (2026-10-26)
+
+- Approved as the page and platform features plan.
+- Q1 Translation uses Apple's on-device Translation framework. No account, no API key, no fork patch.
+- Q2 No Cast in v1. Hide the menu item and turn the media router off.
+- Q3 AppleScript `execute` is gated behind "Allow JavaScript from Apple Events", off by default (Chromium default). This overrides applescript plan Q5; update that plan's appendix in the implementing PR.
+- Q4 A notification click selects its tab after 500 ms if the page does not call `focus()`.
+- Q5 Tabs with notification permission never sleep: no freeze and no timer discard (Chrome parity). This works alongside the keep-alive site list (#65).
+- Q6 Developer Mode in v1 is minimal: a per-site toggle, the menu title, a Site Control tile, and the full URL in the URL field. The Site Control Center plan shows its Developer Mode row once this lands.
+- Q7 Task Manager uses Chromium's window. Build Open's own only if Chromium's fails.
+- Q8 Cmd+Shift drag and Cmd+Shift click: a drag of at least 4 pt captures; a click replays to the page.
+- Q9–Q12 Appearance is app-wide. The split-view toast anchors at the whole panel's top-right. Quote without a selection acts as Copy URL. Auto-translate covers the same host.
+- The captures go into the user's single combined Arc capture session.
