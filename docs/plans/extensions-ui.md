@@ -1607,3 +1607,18 @@ measuring.
 | Q7 | Manage page URL: show `chrome://extensions`, or add an `open://extensions` alias like Arc's `arc://extensions`? | `chrome://extensions`; an alias adds WebUI work for no user value |
 | Q8 | Engine order: E11 (popup windows) with P1+ or after P3? | With P1+ (small; Bitwarden's pop-out needs it) |
 | Q9 | An extension omnibox keyword equal to a Site Search name or keyword: which wins? | Site Search (built in, predictable); the extension stays reachable by name (§3.14.1) |
+
+## Appendix — Lead decisions (2026-10-26)
+
+- Approved as the extensions UI plan. The engine API needs go into the engine lead's P2/P3 queue, after #53 (P1) merges.
+- Q1 Cmd+E opens Arc's extension picker. Remove Cmd+E from "Use Selection to Find".
+- Q2 The URL field shows the extension slots only on hover, as Arc does. Re-check this after screenshot S-1.
+- Q3 Context menu labels: "Pin" / "Unpin" and "Remove from Open…".
+- Q4 A new install is pinned by default.
+- Q5 The Site Control Center has no Chrome-style site-access toggles. The context menu covers site access.
+- Q6 No `chrome.sidePanel` in v1.
+- Q7 **Changed:** Chromium pages show in the URL field and command bar as `open://…`. This is a display alias only, matching Arc's `arc://…`; the engine still loads `chrome://`. It applies to `open://extensions` too. This aligns with the passwords plan Q-4.
+- Q8 E11 (extension popup windows) ships with the P1 follow-ups.
+- Q9 When a keyword is the same, Site Search wins over an extension omnibox keyword. The extension stays reachable by its name.
+- Extension keyboard shortcuts (`chrome.commands`) need a keybinding registry without a focus manager; see PR #53 follow-up E15.
+- The screenshots go into the user's single combined Arc capture session.
