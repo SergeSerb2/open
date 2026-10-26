@@ -22,6 +22,7 @@
 #include <malloc/malloc.h>
 #include <mach/mach.h>
 
+#include <cstdio>
 #include <cstring>
 
 namespace {
@@ -70,18 +71,33 @@ malloc_zone_t* DefaultZone() {
   return reinterpret_cast<malloc_zone_t*>(zones[0]);
 }
 
+// Chrome aborts where this logs: Open must still start, but a failed
+// install must show in the logs (the launch race is back then).
+void LogSkipped(const char* why) {
+  fprintf(stderr, "OpenEngine: early malloc zone registration skipped: %s\n",
+          why);
+}
+
 // Before main() and before AppKit, in the app and in every helper (all link
 // OpenEngine). Chrome makes the same call at the start of main().
 __attribute__((constructor)) void OERegisterDelegatingMallocZone() {
-  // Another library got there first: leave the zones alone, as Chrome does
-  // (it would abort instead; Open must still start).
-  if (IsZoneRegistered(kDelegatingZoneName) ||
-      IsZoneRegistered(kPartitionAllocZoneName)) {
+  // Another library got there first: leave the zones alone.
+  if (IsZoneRegistered(kDelegatingZoneName)) {
+    LogSkipped(
+        "a delegating zone is already registered (another copy installed it)");
+    return;
+  }
+  if (IsZoneRegistered(kPartitionAllocZoneName)) {
+    LogSkipped(
+        "PartitionAlloc is already a malloc zone (the engine loaded first)");
     return;
   }
   malloc_zone_t* purgeable_zone = malloc_default_purgeable_zone();
   g_default_zone = DefaultZone();
   if (!g_default_zone) {
+    LogSkipped(
+        "the malloc zones could not be read; PartitionAlloc will install "
+        "itself on its racy path");
     return;
   }
 
@@ -177,6 +193,16 @@ __attribute__((constructor)) void OERegisterDelegatingMallocZone() {
   // Keep the purgeable zone after the default one.
   malloc_zone_unregister(purgeable_zone);
   malloc_zone_register(purgeable_zone);
+
+  // Upstream's final check, logged instead of fatal.
+  if (DefaultZone() != &g_delegating_zone) {
+    const malloc_zone_t* first = DefaultZone();
+    fprintf(stderr,
+            "OpenEngine: early malloc zone registration failed: zone 0 is "
+            "\"%s\", not the delegating zone; PartitionAlloc will install "
+            "itself on its racy path\n",
+            first && first->zone_name ? first->zone_name : "?");
+  }
 }
 
 }  // namespace
