@@ -1,5 +1,5 @@
 diff --git a/cef/BUILD.gn b/cef/BUILD.gn
-index dd0a558c0..156cccf7f 100644
+index dd0a558c0..556088094 100644
 --- a/cef/BUILD.gn
 +++ b/cef/BUILD.gn
 @@ -115,6 +115,9 @@ import("//tools/grit/grit_rule.gni")
@@ -12,12 +12,13 @@ index dd0a558c0..156cccf7f 100644
  if (is_clang) {
    import("//build/config/clang/clang.gni")
  }
-@@ -1096,6 +1099,8 @@ source_set("libcef_static") {
+@@ -1096,6 +1099,9 @@ source_set("libcef_static") {
    }
  
    if (is_mac) {
 +    # Open: hidden tab-strip Browsers and hosted tabs.
 +    sources += open_libcef_mac_sources
++    deps += open_libcef_deps
      sources += includes_mac + [
        "libcef/browser/chrome/chrome_content_browser_client_cef_mac.mm",
        "libcef/browser/chrome/chrome_web_contents_view_delegate_cef_mac.mm",

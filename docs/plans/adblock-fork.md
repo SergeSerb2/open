@@ -2478,3 +2478,27 @@ contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.
   - Script redirect gives a `data:application/javascript;base64,…` URL; image redirect is blocked.
   - nytimes.com gets 443 hide selectors; `.ad--300x250` gets a generic selector.
   - Bad URLs, a garbage or truncated DAT, and broken resources JSON all degrade without a panic.
+
+### Step 3 as built (2026-10-26)
+
+- **Namespace.** `open_engine`, not `open`. A namespace named `open` clashes with POSIX `open()` from `<fcntl.h>`, which Chromium includes widely. The P1/P2 overlay already uses `open_engine`.
+- **Files.**
+  - Overlay: `open/adblock/{open_adblock_types.h, open_adblock_service.{h,cc}, open_adblock_selftest.{h,cc}, BUILD.gn}`. The shim is a `public_deps` because the service header includes `lib.rs.h`.
+  - CEF patch `0310-open-adblock-service-owner.patch`: `CefBrowserContext::open_adblock_service()` (lazy) and the member; `Shutdown()` stops the service first.
+  - Test-only CEF patch `0314-open-adblock-cefsimple-smoke.patch`: no window in `--open-adblock-selftest` mode.
+- **Wiring (deviation).** The plan put `deps += [ "//open/adblock" ]` in P-3. But `browser_context.cc` needs it now, and patch 0302 already owns `cef/BUILD.gn`. So 0302's Open block gains one generic line, `deps += open_libcef_deps`, and the overlay `open/open_libcef_sources.gni` lists `//open/adblock`. Future overlay targets need no CEF patch change.
+- **Self-test location (deviation from §13.1).** cefsimple links only the public C API, so it cannot reach `CefBrowserContext`. The switches are read in `CefBrowserContext::Initialize()` for the first (global) context:
+  - `--open-adblock-dir` (with or without `--open-adblock-selftest`) enables blocking and loads that root.
+  - The self-test ends with `CefQuitMessageLoop()`; cefsimple's exit code is always 0, and the verdict is the `OpenAdBlockSelftest: PASS|FAIL` line.
+  - Step 6 moves the switches to P-6 on the new CEF API and deletes the direct includes.
+- **Verification as built (§9.2).**
+  - Reads only `current.json`, then the live generation's `manifest.json` (SHA-256 against the pointer), then each listed `<listID>.txt` (size and SHA-256). Never enumerates.
+  - Read caps: 64 KiB pointer, 4 MiB manifest and receipt, 64 MiB list, 256 MiB DAT. Links are rejected.
+  - The receipt `engine-inputs.json` = generation, manifest SHA-256, every file's SHA-256, plus the DAT's size and SHA-256. The DAT is used only if the receipt equals the one rebuilt from the verified inputs.
+  - Writes go DAT first, then receipt, each with `ImportantFileWriter::WriteFileAtomically`. A failed write keeps the in-memory engine and sets `last_error`.
+- **Threading as built.** The build runs on a `MayBlock`, `USER_VISIBLE`, `CONTINUE_ON_SHUTDOWN` sequence and holds no service pointer. The reply is posted back to the UI thread with a weak pointer and a load id, so a stale or post-shutdown result is dropped. Checks copy a `shared_ptr` under a shared lock. List text and page tokens cross into Rust with `rust::String::lossy`, because invalid UTF-8 would otherwise abort.
+- **Results** (cefsimple, dev build, root written by `openkit adblock update`, live generation 2 with EasyList + EasyPrivacy):
+  - Run 1, no DAT: `engine_loaded=1 engine_from_dat=0 list_count=2 dat_size_bytes=6786699 last_build_ms=226`, all checks PASS.
+  - Run 2: `engine_from_dat=1 last_build_ms=48`, PASS; the whole process took 0.31 s.
+  - Cosmetic query: mean 66 µs per page (budget ≤ 100 µs).
+- **Shutdown.** Five quits (SIGTERM at 0.3, 0.5, 0.6, 0.8 and 1.0 s) during a 480 ms text build of a 12 MB `/tmp` fixture root. All exited with code 0 within 0.1 s, no `FATAL`, no new crash report, and zero cefsimple processes 1 s later.

@@ -2,3 +2,5 @@
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
 0302-open-hosted-tabs.patch  # P1: hosted Chrome style tabs (delegate, per-tab client, popups, focus, BUILD.gn)
 0303-open-context-menu-submenu-commands.patch  # P1: context-menu commands of submenus with their own delegate (macOS text services) do not crash
+0310-open-adblock-service-owner.patch  # Ad-block: CefBrowserContext owns open_engine::OpenAdBlockService; selftest switches (adblock-fork §6.1, §13.1)
+0314-open-adblock-cefsimple-smoke.patch  # Ad-block, test only: cefsimple opens no window in --open-adblock-selftest mode (adblock-fork §13.1); keep last
