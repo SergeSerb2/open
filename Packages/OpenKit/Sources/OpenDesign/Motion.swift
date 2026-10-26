@@ -30,6 +30,11 @@ public struct SpringToken: Sendable, Hashable {
 /// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
 /// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
 public enum Motion {
+    /// Theme editor container motion; PROVISIONAL, plan §5.10.
+    public static let editorOpen = SpringToken(response: 0.25, dampingFraction: 0.85)
+    public static let editorFade: CFTimeInterval = 0.12
+    public static let editorCloseScale: Double = 0.96
+    public static let editorKnobReturn = SpringToken(response: 0.2, dampingFraction: 0.85)
     /// Space page slide after a click or shortcut. Visible part ≈ 0.2–0.35 s; the
     /// slide leads the background fade (A0222: slide 0.65, fade 0.53).
     public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)

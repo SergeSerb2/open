@@ -1005,6 +1005,39 @@ The creation form, the icon picker, 2–3 knobs, forced modes, page 2, and the
 light appearance have no capture yet. Their checks are geometry-only until
 the capture session in §15 lands; the PR lists them as "no capture".
 
+Lead amendment, user message **2026-10-26 01:20:22 America/Vancouver**:
+replacement glyph shape is exempt from the shape and edge comparison.
+Mask glyph ink in those comparisons, as `docs/design.md` masks favicons and
+tile icons. Rule 1 forbids copying Arc's art; SF Symbols have different
+outlines. Glyph tokens still require calibration: tune point size and weight
+until each ink bounding-box center and height are within 1 pt of F0137.
+Compare core ink color at ΔE00 ≤ 2, changing the token when needed and citing
+the capture. Report old and new tokens and measured errors in the Step 3
+PR. Button frames, plates, and fills retain their normal limits.
+
+F0137 calibration (Step 3; sizes are SF point sizes, all Medium):
+
+| Glyph | Old token | Calibrated token | Center error x/y (pt) | Height error (pt) | Core ΔE00 old → new |
+|---|---|---|---|---|---|
+| Automatic | 15 pt; y offset 0; white 0.90 | 15 pt; y offset −1; white 0.50 | −0.5 / +0.5 | +1 | 9.49 → 0.61 |
+| Light | 15 pt; white 0.50 | unchanged | −0.5 / +0.5 | −1 | 0.62 → 0.62 |
+| Dark | 15 pt; white 0.50 | 16 pt; white 0.50 | 0 / +0.5 | −1 | 0.98 → 1.20 |
+| Remove | 13 pt; white 0.50 | unchanged | +0.5 / −0.5 | −1 | 0.30 → 0.30 |
+| Add | 13 pt; white 0.50 | 17 pt; sRGB (0.98, 0.98, 1), alpha 0.54 | +0.5 / −0.5 | +1 | 3.06 → 0.58 |
+
+The Add token's small cool tint fits F0137's core `#C1C1C4` over the fixed
+offscreen material. Light appearance remains uncalibrated. These calibrated
+values supersede the corresponding values in §5.4, §5.5, and §5.9.
+
+The `#926400` swatch above is a clipped display shorthand. The session's
+extended-sRGB key is `(0.570741951, 0.392751396, −0.130948484)`, not
+`(146/255, 100/255, 0)`. Retaining its negative blue component gives the
+documented P3 hue 44.1186° and lightness 0.272203. The harness's default
+editor scene uses those stored components. Evidence: `space-editor-render
+math --arc-json <local-session1-StorableSidebar.json>` palette round trip
+has zero error, and the F0137 ring box is identical at `(202,201,44,44)` in
+the panel crop. No capture pixels are committed.
+
 ### 12.4 App e2e (`tools/e2e/engine_e2e.py --only space-editor`)
 
 Runs after app-shell Step B (the real window). Fresh data dir, automation
