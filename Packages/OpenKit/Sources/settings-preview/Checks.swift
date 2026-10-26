@@ -85,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -422,6 +422,47 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let storedCount = await countArchive(env.archives); try require(storedCount == 4, "delete not in SQLite")
                 library.requestClearArchive(); let beforeClear = await countArchive(env.archives); try require(library.confirmsClear && beforeClear == 4, "clear did not ask first")
                 await library.clearArchiveConfirmed(); let after = await countArchive(env.archives); try require(after == 0 && env.libraryActions.log.contains("clearArchive"), "clear not on disk")
+            case "library-folder-archive":
+                try await env.prepareLibrary()
+                let space = vm.model.spaces[0], library = env.library
+                let first = vm.model.newTab(in: space.id, url: URL(string: "https://example.invalid/folder-a")!, title: "Folder A")
+                let second = vm.model.newTab(in: space.id, url: URL(string: "https://example.invalid/folder-b")!, title: "Folder B")
+                let third = vm.model.newTab(in: space.id, url: URL(string: "https://example.invalid/folder-c")!, title: "Folder C")
+                let split = vm.model.makeSplit(tabIDs: [second.id, third.id])!
+                let nested = vm.model.createFolder(in: .spaceToday(space.id), title: "Nested", withNodes: [split.id])!
+                let folder = vm.model.createFolder(in: .spaceToday(space.id), title: "Restorable folder", withNodes: [first.id, nested.id])!
+                vm.model.closeTab(id: folder.id)
+                (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                await library.reloadArchive()
+                let row = library.archiveRows.first { $0.id == folder.id }!
+                try require(row.kind == .folder && library.archivedChildCount(row) == 3, "L2 nested tab count must include split panes")
+                let oldActionCount = env.libraryActions.log.count
+                let before = try Data(contentsOf: vm.snapshot.fileURL)
+                vm.model.undoManager?.removeAllActions()
+                setenv("OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL", "1", 1)
+                await library.restore(id: folder.id)
+                unsetenv("OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL")
+                let retained = await env.archives[space.profileID]!.record(id: folder.id)
+                try require(vm.model.node(id: folder.id) == nil && retained?.kind == .folder && vm.model.undoManager?.canUndo == false
+                            && env.libraryActions.log.count == oldActionCount && (try Data(contentsOf: vm.snapshot.fileURL)) == before,
+                            "L3 failed save lost folder archive or published undo/action")
+                await library.restore(id: folder.id)
+                let disk = try env.diskModel()
+                try require(disk.node(id: folder.id)?.folder?.children.count == 2 && disk.node(id: nested.id)?.folder?.children.first?.id == split.id,
+                            "L3 folder restore did not persist the subtree")
+                try require(library.statusText == "Folder restored to \(vm.model.displayTitle(for: space)). Click to view." && library.restoredSpaceID == space.id,
+                            "L3 folder restore text/View destination mismatch")
+                library.actions.viewSpace(id: library.restoredSpaceID!)
+                try require(env.libraryActions.log.suffix(2) == ["restoreArchived \(folder.id)", "viewSpace \(space.id)"], "L3 View action missing")
+                vm.model.closeTab(id: folder.id)
+                (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                await library.reloadArchive()
+                try archiveDeleteTrigger(env.archives[space.profileID]!.fileURL, enabled: true)
+                await library.restore(id: folder.id)
+                try archiveDeleteTrigger(env.archives[space.profileID]!.fileURL, enabled: false)
+                try require(library.statusText.hasPrefix("Folder restored, but its Archive entry"), "folder archive-delete failure was called a Tab restore")
+                let oldTab = ArchivedTabRecord(id: ItemID(), url: URL(string: "https://example.invalid/old")!, title: "Old tab", archivedAt: Date(), reason: .folderDeleted, originalLocation: "today:\(space.id)", payloadJSON: "{}")
+                try require(oldTab.kind == .tab && library.archivedChildCount(oldTab) == 0, "L2 legacy folderDeleted tabs were relabeled as folders")
             case "library-downloads":
                 try await env.prepareLibrary(); let library = env.library
                 let active = env.downloadFeed.downloads.first { $0.state == .inProgress }!, failed = env.downloadFeed.downloads.first { $0.state == .failed }!, done = env.downloadFeed.downloads.first { $0.state == .completed }!

@@ -69,7 +69,9 @@ configuration.logFile = directories.root.appendingPathComponent("State/engine.lo
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort
 configuration.verboseLogging = options.verboseLogging
-configuration.userAgentProduct = "Open/0.1"
+// No userAgentProduct: Chrome's own User-Agent, as Arc does. A non-Chrome
+// product token replaces "Chrome/156", and sites and extensions then take
+// their Safari path (Bitwarden never finished loading).
 // Ad-hoc signed builds (no Team ID) get a new signature on every build, so
 // macOS would ask for keychain access each time; they use Chromium's mock key.
 // Developer ID builds use the "Open Safe Storage" keychain item.
