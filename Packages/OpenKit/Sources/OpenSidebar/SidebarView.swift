@@ -320,6 +320,9 @@ extension SidebarView {
         return (cell.visibleCellFrames.map { convert($0, from: cell) }, cell.dividersVisible)
     }
 
+    /// Back, forward, and reload show in the sidebar toolbar.
+    public var toolbarNavigationVisible: Bool { !toolbar.back.isHidden && !toolbar.forward.isHidden && !toolbar.reload.isHidden }
+
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }
 

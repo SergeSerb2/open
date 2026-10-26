@@ -65,6 +65,10 @@ final class ToolbarView: NSView {
         reload.frame = CGRect(origin: CGPoint(x: ChromeMetrics.reloadX(sidebarWidth: w), y: y), size: s)
         let loading = tracked({ context.pageIsLoading }) { [weak self] in self?.needsLayout = true }
         reload.glyphView.glyph = loading ? .stopLoading : .reload
+        // A selected split moves back, forward, and reload into each pane's bar: the
+        // sidebar toolbar keeps only the toggle (F0081, F0082: AX and pixels).
+        let split = tracked({ context.isSplitSelected }) { [weak self] in self?.needsLayout = true }
+        for b in [back, forward, reload] { b.isHidden = split }
     }
 }
 

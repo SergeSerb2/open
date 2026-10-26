@@ -41,6 +41,7 @@ enum VisualFinishChecks {
         check(selected.map { $0.cells == expected && !$0.dividersVisible } ?? false,
               "selected split row: one 28 pt cell per pane, 4 pt inside the card, no divider (\(selected?.cells.map { "\($0)" }.joined(separator: " ") ?? "none"))")
 
+        check(!sidebar.toolbarNavigationVisible, "selected split: the sidebar toolbar keeps only the toggle (F0081)")
         print("split row menu (Arc builder order)")
         let titles = sidebar.menuTitles(nodeID: split.id)
         let longTitle = String(b.displayTitle.prefix(30)) + "…"
@@ -83,6 +84,7 @@ enum VisualFinishChecks {
         print("Peek badge and dim (F0090, F0101)")
         let source = space.pinned.compactMap(\.tab).first!
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: source.id); pump()
+        check(sidebar.toolbarNavigationVisible, "a selected tab brings back, forward, and reload back")
         let sourceRow = sidebar.rowFrame(nodeID: source.id)!
         check(sidebar.peekBadgeFrame(tabID: source.id) == nil, "no badge without a Peek")
         context.peekBadges = [source.id: SidebarPeekBadge(url: URL(string: "https://example.org/preview")!)]

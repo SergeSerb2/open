@@ -45,6 +45,10 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | Row close and unload glyphs | black 0.56 `GrayA11` | `GrayA11` | F0013 ΔE 1.39, F0015 1.23 |
 | Switcher, other Spaces | emoji in grayscale (Rec. 709 luma) at opacity 0.55 | same | F0001 two-channel fit gives 0.48 at full coverage; 0.55 matches the darkest pixels at 12 pt |
 | Tooltip | fill theme `light.title`; text theme `light.background` (guess); keycaps text at 18 % (guess) | same | F0021–F0033 fill exact |
+| Split cells in a selected split row | black 0.07 `TabCellChildBackground` (guess: no light capture) | white 0.07 | F0081 ΔE 1.34 / 1.39 |
+| Peek badge plate | `TabCellChildBackground` | same | F0090 ΔE 0.76 (F0101 white ≈ 0.075) |
+| Source row while its Peek shows | `SidebarItemBackground` (black 0.05; guess) | white 0.10 | F0090 ΔE 0.09 |
+| Toolbar row / bottom bar under a Peek | opacity 0.43 / 0.52 (fitted) | same | F0090 glyphs ΔE ≤ 1.98 |
 
 ### 2.2 Metrics (`Metrics.swift`)
 
@@ -61,6 +65,10 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 | Close / unload | `[W − 39, y + 7, 26, 26]`; the title then ends at its left edge | measured |
 | Folders | 16 pt indent per level; folder title 14 Semibold | measured |
 | Split row | cells of `(W − 16 − indent − 4) / n`; icon at cell + 0, title at cell + 28, divider 10 pt left of the next cell | measured at depth 1 (icons x 33 / 129) |
+| Selected split row | card = the selected fill; pane cells `[12 + indent + i·pitch, y + 6, pitch − 4, 28]`, radius 8; no divider | measured F0081 (`[12, y+6, 100, 28]`, `[116, y+6, 100, 28]`) |
+| Peek badge | plate `[W − 38, y + 8, 24, 24]`, radius 6; favicon 16 pt ink centered; title ends at `W − 39` | measured F0090, F0101 |
+| "/" mark | 2 × 14.5 pt stroke, 0.14 rad, centered 3 pt left of the title origin at y + 19.5; title + 2 pt | measured F0090, F0101 |
+| Row title truncation | 1 pt kept free at the right (2 pt with the inset) | fitted: F0001, F0081, F0090 truncation points |
 | Divider row | 17 pt; 1 pt line at y + 7 from x 18 to W − 18; with "Clear" the line ends at W − 66, arrow `[W − 58, y + 3, 12, 9]`, label x W − 46 | measured |
 | Bottom bar | 50 pt; Home `[8, 9, 32, 32]`; plus `[W − 40, 9, 32, 32]`; switcher items 36×34 at pitch 34, centered in `[42, 0, W − 84, 50]`; plate = item inset 1 | measured |
 | Web panel | `[W, 10, winW − W − 10, winH − 20]`, radius 6, shadow black 0.25 radius 3 offset 1; hidden sidebar `[10, 10, winW − 20, winH − 20]` | measured |
@@ -197,7 +205,10 @@ The host window owns a `ThemeBackgroundView` behind the sidebar and the web pane
 | "New Tab" during Cmd+T | `context.isNewTabCommandBarOpen = true`: selected fill, label and plus in the title color; the selected tab loses its fill | F0063 |
 | Divider and "Clear" | divider only with Today tabs; "↓ Clear" while the pointer is on the divider row | F0041, F0066 |
 | Folder | glyph open or closed in the Space accent, 14 Semibold, click toggles, children indented 16; animated expand and collapse | F0072, F0079 |
-| "/" mark | a pinned tab whose host or path left its pinned URL; title shifts 4 pt (guess) | A0414 |
+| "/" mark | a pinned tab whose host or path left its pinned URL; title shifts 2 pt | A0414; geometry F0090, F0101 |
+| Selected split row | card with one cell per pane, no divider; no mark on the focused pane | F0081 |
+| Split selected | the toolbar keeps only the sidebar toggle | F0081, F0082 |
+| Peek open | source row: badge with the Peek favicon (also while another row is selected); lighter fill while the Peek shows; URL field and toolbar follow the Peek page; toolbar row and bottom bar dimmed, URL field, Favorites, and list not dimmed | F0090, F0101 |
 | Space header hover | fill, chevron (collapses Pinned), "…" menu | A0413 |
 | URL field | placeholder with magnifier; with a page, the host; copy and Site Control buttons while the pointer is over the sidebar (guess) | F0015, F0016 |
 | Inactive window | toolbar and bottom glyphs take the disabled tones; the theme underlay lightens | inactive capture |
@@ -226,7 +237,7 @@ A same-parent move downward subtracts one, because the model counts the position
 
 ### 5.6 Menus and tooltips
 
-Context menus are native `NSMenu`s built per target, in the captured order: Today tab (F0115), pinned tab (F0116), folder (F0119), and Space on the title or empty space (F0117). Favorite, split row, and bottom plus menus are guesses. Each item sends an intent. "Rename…" starts the inline editor.
+Context menus are native `NSMenu`s built per target, in the captured order: Today tab (F0115), pinned tab (F0116), folder (F0119), and Space on the title or empty space (F0117). Favorite and bottom plus menus are guesses. The split row menu follows Arc's menu builder (`re/menus-and-hotkeys.md`, "Split row menu"): Separate All Tabs · Add Tab… · Convert to Vertical/Horizontal Split View · — · Tab Options · one submenu per pane (Separate from Split View · — · Mute · Copy Link · Copy Link as Markdown · — · Archive Item) · — · Duplicate · Move to · — · Archive Item. Each item sends an intent. "Rename…" starts the inline editor.
 
 Tooltips are our own capsule (`TooltipView`) in a borderless child panel: 27 pt tall, radius = height / 2; two lines 42 pt. Fill is the theme's `light.title`. Keycaps follow the label. Placement: below toolbar buttons, above the bottom bar, beside the pointer on rows. Delay 0.6 s and fades are guesses.
 
@@ -351,7 +362,7 @@ Two fixes came from profiling: building the close and audio buttons on demand (s
 
 ## 12. End-to-end checks
 
-`sidebar-render check` drives the real view stack in an offscreen window: 103 checks, all passing (the prior 81 plus 22 model-followup checks). Covered: rows match the model after `newTab`, `pinTab`, `moveNode`, `createFolder`, folder collapse and expand, `makeSplit` and `unsplit`, `closeTab` and its undo, `clearToday` and its undo (divider goes and comes back); no `reloadData` during edits; favorites add and remove; clicks (a mouse-down delivered to the hit-tested view, the mouse-up through the event queue) on a pinned row, a folder, "New Tab", and the URL field reach the delegate and the model; context menu item order for 4 targets; drop-target mapping for 4 positions; a Space switch moves the pager and the theme; a swipe switches Spaces and a short swipe snaps back.
+`sidebar-render check` drives the real view stack in an offscreen window: 123 checks, all passing (§15 adds 20) (the prior 81 plus 22 model-followup checks). Covered: rows match the model after `newTab`, `pinTab`, `moveNode`, `createFolder`, folder collapse and expand, `makeSplit` and `unsplit`, `closeTab` and its undo, `clearToday` and its undo (divider goes and comes back); no `reloadData` during edits; favorites add and remove; clicks (a mouse-down delivered to the hit-tested view, the mouse-up through the event queue) on a pinned row, a folder, "New Tab", and the URL field reach the delegate and the model; context menu item order for 4 targets; drop-target mapping for 4 positions; a Space switch moves the pager and the theme; a swipe switches Spaces and a short swipe snaps back.
 
 ## 13. Model and import changes needed
 
@@ -396,3 +407,48 @@ Merged `origin/main` before the corrections. The merge kept both the sidebar and
 The Arc comparison repeats §7 with the same capture-time snapshots, 1x renders, sizes, sidebar width, forced states, masks, and compare arguments from `.re/design-compare/run-states.sh`, using the release executable in place of the old debug executable path. All 13 state tables are byte-for-byte unchanged, including every position/color error and the aggregate error rows in §8. Concatenating the 13 `table.md` files in sorted state-name order gives SHA-256 `2e79746492cc775d8b207bc5759084b74f3e96ab88e521c6ab9909790a278448` before and after. Tokens, metrics, colors, and the §8 error tables are unchanged. Raw captures, snapshots, renders, and run receipts remain in git-ignored `.re/`.
 
 One F0031 render from the concurrent harness/comparison run had transient pixel differences, including pixels outside the sidebar. Its cause is not established. Rerunning that exact render/compare command alone produced the baseline PNG and table byte for byte; no source or visual values changed between those runs. The final set contains 13 baseline-identical PNGs as well as the 13 baseline-identical tables.
+
+
+## 15. M4 visual finish (2026-10-25)
+
+Split View and Peek reach the sidebar. All values come from F0081, F0082, F0090, F0101, and the fast frames A0264–A0271 (`re/interaction-states.md` §§3, 7, 11, 12).
+
+| Change | Arc evidence | Result (§7 method) |
+|---|---|---|
+| Selected split row: card plus one cell per pane, no divider | F0081 pixels | card 0.0 pt / ΔE 1.53, cells 0.0 / 1.34, 1.39 |
+| No focused-pane mark in the row (the plan's `ContentVisible` guess is dropped) | F0081: both cells pixel-identical; focus on pane 2 | both cells measured the same |
+| Split selected: sidebar toolbar keeps only the toggle | F0081, F0082 AX and pixels | no ink in both, `sidebar-render check` |
+| Peek badge on the source row, also while another row is selected | F0090, F0101 | plate 0.0 pt / ΔE 0.76 |
+| Source row fill white 0.10 while its Peek shows | F0090, F0102 | 0.0 pt / ΔE 0.09 |
+| Peek dim under the URL field, Favorites, and list; over the toolbar row and bottom bar | F0090 vs F0101 | row titles ΔE ≤ 0.45; toolbar ≤ 0.57; bottom bar ≤ 1.98 |
+| URL field and toolbar follow the Peek page; back/forward/reload in the enabled tone under the dim | F0090 AX and pixels | host 0.0 / 0.14 |
+| "/" mark: measured stroke; title + 2 pt (was a 4 pt guess) | F0090, F0101 | row title 0.0 / 0.39 |
+| Row titles keep 1 pt free at the right when they truncate | AX widths 128, 152, 168 | F0090 source title 0.0 |
+| A title box narrower than "…" draws nothing (four-pane split rows overflowed) | — | `sidebar-render check` |
+| First hover of a row lays out its new close button | — (bug: zero frame until the next layout) | `sidebar-render check` |
+
+Split-row menu: see §5.6.
+
+### 15.1 No regression on the matched states
+
+The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktree. It is re-derived from the frames in `.re/vf/run-states.sh` (same snapshots, sizes, forced states). The table runs it with release builds of `origin/main` (`33aade1`) and of this branch, one state per process. All 13 PNGs and tables are byte-identical between the two builds.
+
+| State | Frame | Elements | Worst position (pt) | Worst ΔE00 | Main vs branch |
+|---|---|---|---|---|---|
+| Static, active window | F0001 | 31 | 1.0 | 1.59 | identical |
+| Static, inactive window | `arc-window-5245.png` | 31 | 1.0 | 1.17 | identical |
+| Row hover | F0013 | 33 | 1.0 | 1.59 | identical |
+| Selected pinned row, page loaded | F0015 | 33 | 1.0 | 1.73 | identical |
+| Selected favorite tile | F0016 | 28 | 1.0 | 1.59 | identical |
+| Sidebar toggle hover | F0024 | 29 | 1.0 | 1.59 | identical |
+| Home hover | F0027 | 29 | 2.0 | 1.59 | identical |
+| "New Tab" hover | F0031 | 29 | 1.0 | 1.59 | identical |
+| Cmd+T open | F0063 | 35 | 1.0 | 2.00 | identical |
+| Today tab selected | F0066 | 36 | 1.0 | 2.03 | identical |
+| Default dark Space, folder, split, child hover | F0079 | 31 | 1.0 | 1.77 | identical |
+| Yellow theme | F0070 | 23 | 1.0 | 1.95 | identical |
+| Blue theme with grain | F0069 | 19 | 1.0 | 2.38 | identical |
+
+Worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because the re-derived script skips the URL copy and Site Control buttons there. Element counts differ in six states (F0016, F0024, F0027, F0031, F0063, F0066): the re-derived script skips URL-host, button, and row-title elements whose text or state differs between the snapshot and the capture. The known differences in §9 remain (Home hover 2 pt, F0063/F0066 selected fill ≈ 2.0, blue grain 2.38).
+
+Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone; then the outputs matched.

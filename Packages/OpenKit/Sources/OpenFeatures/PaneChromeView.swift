@@ -42,7 +42,7 @@ public final class PaneChromeView: NSView {
     var onURL: (() -> Void)?
     var onCopy: (() -> Void)?
     /// Bar color when the page reports none: the Space's light background, else white.
-    var fallbackColor: NSColor = .white { didSet { update() } }
+    var fallbackColor: NSColor = .white
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
     public var isFocused = false { didSet { update() } }

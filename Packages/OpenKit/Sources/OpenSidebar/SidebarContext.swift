@@ -60,6 +60,12 @@ public final class SidebarContext {
         }
     }
 
+    /// The focused Space's selection is a split.
+    var isSplitSelected: Bool {
+        guard let space = focusedSpace, let id = selectedID(in: space.id) else { return false }
+        return model.node(id: id)?.split != nil
+    }
+
     /// The page the toolbar and URL field describe: the Peek on screen, else the current tab.
     var hasPage: Bool { shownPeek != nil || currentTab != nil }
     var pageHost: String? { shownPeek?.displayHost ?? currentTab?.displayHost }
