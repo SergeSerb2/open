@@ -20,6 +20,14 @@ enum Bench {
         let scale = CGFloat(Double(RenderCLI.value(args, "--scale") ?? "2") ?? 2)
         let model = Synthetic.model(bulkRows: rows)
         model.rebuildIndex()
+        if RenderCLI.value(args, "--row-media") == "mixed" {
+            for (i, tab) in model.index.values.compactMap(\.tab).sorted(by: { $0.url.absoluteString < $1.url.absoluteString }).enumerated() {
+                tab.live.isAudible = i % 3 == 0
+                tab.isMuted = i % 3 == 1
+                tab.live.isCapturing = i % 3 == 2
+            }
+            print("row media fixture: audible, muted and capturing in thirds")
+        }
         guard let window = model.windows.first else { return }
         let context = SidebarContext(model: model, windowID: window.id)
         context.systemAppearance = .dark

@@ -1,0 +1,210 @@
+{
+  "baseline": "origin/main 4ef33e9b07ab739afe315b9f08313e9eaf1b471b\nOnly Bench.swift receives the same deterministic row-media fixture instrumentation as head.\n",
+  "bench_source_sha256": "cc7cfaf5fc53fa6c5948a3acc671e6da83d5f097919a0934d08837a8e23b6498",
+  "binary_sha256": {
+    "baseline": "54b9767959871cb705b0ad5035fa8da33928b4cf72a8b9dbc541974fd3fddb6e",
+    "head": "85bf03552dd45b489bb1c40ddfc6b9ea48dd0be6c11c6780a12e5e577da7ca02"
+  },
+  "records": [
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 3.99
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 3.81
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 2.8
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 2.17
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 2.81
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 1.84
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 2.91
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 2.89
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 3.26
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 4.04
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 6,
+      "p95_ms": 3.34
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 6,
+      "p95_ms": 4.09
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 2.92
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 3.94
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 3.14
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 3.54
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 1.81
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 2.35
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 3.13
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 3.03
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 2.38
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 3.46
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 6,
+      "p95_ms": 3.33
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 6,
+      "p95_ms": 3.2
+    }
+  ],
+  "summary": {
+    "plain": {
+      "baseline": {
+        "runs": [
+          3.99,
+          2.17,
+          2.81,
+          2.89,
+          3.26,
+          4.09
+        ],
+        "median_p95_ms": 3.075,
+        "mean_p95_ms": 3.2016666666666667
+      },
+      "head": {
+        "runs": [
+          3.81,
+          2.8,
+          1.84,
+          2.91,
+          4.04,
+          3.34
+        ],
+        "median_p95_ms": 3.125,
+        "mean_p95_ms": 3.1233333333333335
+      },
+      "mean_delta_ms": -0.07833333333333314
+    },
+    "mixed": {
+      "baseline": {
+        "runs": [
+          2.92,
+          3.54,
+          1.81,
+          3.03,
+          2.38,
+          3.2
+        ],
+        "median_p95_ms": 2.9749999999999996,
+        "mean_p95_ms": 2.8133333333333335
+      },
+      "head": {
+        "runs": [
+          3.94,
+          3.14,
+          2.35,
+          3.13,
+          3.46,
+          3.33
+        ],
+        "median_p95_ms": 3.2350000000000003,
+        "mean_p95_ms": 3.225
+      },
+      "mean_delta_ms": 0.4116666666666666
+    }
+  }
+}

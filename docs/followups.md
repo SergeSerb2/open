@@ -33,5 +33,7 @@ Small items found during review and verification. Each line: area — issue — 
 - Shell (P1) — pages that are not sidebar tabs: sized `window.open` popups join the strip at the engine level but are not model tabs; Peek is Alloy (done in the port); Little Open, when it lands, must create its pages as Alloy or as tabs of its own window. — PR #53 shell review 8, 2026-10-26
 - Shell (P1) — add a tabstrip check that `navigator.userAgent` has the `Chrome/156` token and no `Open/0.1`. — PR #53 shell review 10, 2026-10-26
 - Shell — `--style=<typo>` silently selects Chrome; accept only `chrome` and `alloy`, Chrome when the flag is missing. — PR #53 shell review 11, 2026-10-26
-- App shell e2e — the window suite's edge-hover checks (`hide_reveal`, `fullscreen_hover_reveal`) fail intermittently: about one of the two per run, in both Chrome and Alloy style (2026-10-26 runs on the PR #53 head: chrome FAIL fullscreen_hover_reveal, chrome FAIL hide_reveal, chrome 40/40, alloy FAIL hide_reveal). The failing case is the first reveal after the sidebar hides (`revealed` stays false for 3 s). The reveal itself works: 10 of 10 edge hovers in a loop revealed in 0.38 s in both styles. `hide_reveal` now records each sub-condition. Owner: app shell. — engine lead, 2026-10-26
 
+- Media D8 (2026-10-26): decode the inline speaker-tooltip string and the
+  `SpeakerIcon` timing values from the shared read-only RE snapshots. Cite
+  the symbol/string evidence and confirm the tooltip text/case with S9.
