@@ -193,7 +193,7 @@ private final class SidebarUnreadDot {
         CATransaction.commit()
         guard shown != self.shown else { return }
         self.shown = shown
-        let reduced = SidebarDiagnostics.forceReducedMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if reduced { layer.removeAnimation(forKey: "unread-in") }
         if shown && !reduced {
             let spring = Motion.unreadAppear.animation(keyPath: "transform.scale")
