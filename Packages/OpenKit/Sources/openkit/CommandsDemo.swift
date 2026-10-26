@@ -708,6 +708,8 @@ func runCommandsDemo(args: [String]) async throws {
     try JSONSerialization.data(withJSONObject: decoded, options: [.sortedKeys]).write(to: file)
     check(try snapshots.load()?.space(id: sid)?.theme.style == nil, "style without a usable key color falls back to nil without failing the snapshot")
     try snapshots.saveNow(model: model)
+    runTidyTitlesDemo(check: check)
+    runTidyRenameDemo(check: check)
     try await runFolderArchiveDemo(root: root.appendingPathComponent("FolderArchive"), check: check)
     try await runSidebarCommandsDemo(root: root.appendingPathComponent("SidebarCommands"), check: check)
     composite.flushAll()
