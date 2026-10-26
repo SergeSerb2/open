@@ -71,6 +71,7 @@ extension Motion {
     /// Guesses centralized per media plan §4.2.7 and §4.4.7; reduce motion uses fades.
     /// Finite fallback approved after the native offscreen transition produced no effect keys.
     public static let rowMediaFallback: CFTimeInterval = 0.25
+    // Media plan §13.6: all mini-player timings are guesses pending a motion capture.
     public static let miniPlayerStack = SpringToken(response: 0.3, dampingFraction: 1)
     public static let miniPlayerResize: CFTimeInterval = 0.2
     public static let miniPlayerTitle: CFTimeInterval = 0.12
