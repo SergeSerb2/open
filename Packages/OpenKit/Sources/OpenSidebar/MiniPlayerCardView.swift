@@ -8,7 +8,7 @@ import Symbols
     public let source: MediaSource
     public let marquee = MarqueeLabel(frame: .zero)
     private let context: SidebarContext
-    private let stackEdge = CALayer()
+    private var stackEdge: CALayer?
     public var isRetiring = false
     public var showsStackEdge = false { didSet { if showsStackEdge != oldValue { needsLayout = true } } }
     private let favicon = FaviconView()
@@ -39,7 +39,6 @@ import Symbols
         self.source = source; self.context = context
         super.init(frame: .zero); wantsLayer = true; layer?.cornerCurve = .continuous
         layer?.cornerRadius = MiniPlayerMetrics.cornerRadius
-        layer?.addSublayer(stackEdge)
         favicon.context = context; favicon.tab = source.tabID.flatMap { context.model.tab(id: $0) }
         addSubview(titleHit); titleHit.addSubview(favicon); titleHit.addSubview(marquee)
         titleHit.action = { [weak self] in self?.send(MediaIntent.backToTab) }
@@ -138,15 +137,19 @@ import Symbols
         layer?.borderWidth = SidebarDiagnostics.mediaIncreasesContrast ? 1 : 0
         layer?.borderColor = SidebarColors.separator.cgColor(contentAppearance)
         CATransaction.commit()
-        stackEdge.backgroundColor = SidebarColors.separator.cgColor(contentAppearance)
+        stackEdge?.backgroundColor = SidebarColors.separator.cgColor(contentAppearance)
         needsLayout = true
     }
     public override func layout() {
         super.layout()
         let m = MiniPlayerMetrics.self, w = bounds.width, hovered = isCardHovered
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        stackEdge.isHidden = !showsStackEdge
-        stackEdge.frame = CGRect(x: m.cornerRadius, y: 0, width: max(0, w - 2 * m.cornerRadius), height: m.stackEdge)
+        if showsStackEdge {
+            let edge = stackEdge ?? CALayer()
+            if stackEdge == nil { layer?.addSublayer(edge); stackEdge = edge }
+            edge.backgroundColor = SidebarColors.separator.cgColor(contentAppearance)
+            edge.frame = CGRect(x: m.cornerRadius, y: 0, width: max(0, w - 2 * m.cornerRadius), height: m.stackEdge)
+        } else { stackEdge?.removeFromSuperlayer(); stackEdge = nil }
         titleHit.frame = CGRect(x: 0, y: 0, width: w, height: m.titleRowHeight)
         favicon.frame = m.favicon
         let closeWidth = hovered ? m.button : 0
