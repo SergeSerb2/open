@@ -126,6 +126,7 @@ static NSView* OEParkingView() {
 - (void)oe_viewWillMoveToWindow:(nullable NSWindow*)window;
 - (void)oe_viewDidMoveToWindow;
 - (void)oe_viewGeometryChanged;
+- (void)oe_showHostedPageIfVisible;
 @end
 
 // The page's view. CEF's host NSView becomes its only subview (Alloy), or a
@@ -169,6 +170,7 @@ static NSView* OEParkingView() {
 - (void)viewDidUnhide {
   [super viewDidUnhide];
   [_content oe_viewGeometryChanged];
+  [_content oe_showHostedPageIfVisible];
 }
 
 @end
@@ -232,11 +234,29 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   return self;
 }
 
+- (void)oe_setHostBrowser:(nullable OEBrowser*)browser {
+  _oe_hostBrowser = browser;
+  _oe_hostBrowserIdentifier = browser ? browser.identifier : 0;
+}
+
+- (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser {
+  OEWebContentConfiguration* config =
+      [[OEWebContentConfiguration alloc] initWithContext:browser.context];
+  config.runtimeStyle = OERuntimeStyleChrome;
+  if ((self = [self initWithConfiguration:config URL:nil])) {
+    // Chromium creates the page (OnAfterCreated arrives on our client).
+    _awaitingPopup = YES;
+    [self oe_setHostBrowser:browser];
+  }
+  return self;
+}
+
 - (void)dealloc {
   _client->Detach();
   if (_browser) {
     _client->SetClosing();
-    if (_configuration.runtimeStyle == OERuntimeStyleAlloy) {
+    if (_configuration.runtimeStyle == OERuntimeStyleAlloy ||
+        _oe_hostBrowser) {
       NSView* host = (__bridge NSView*)_browser->GetHost()->GetWindowHandle();
       [OEParkingView() addSubview:host];
     }
@@ -286,6 +306,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   return _browser ? _browser->GetIdentifier() : 0;
 }
 
+- (NSInteger)chromeTabIdentifier {
+  CefRefPtr<CefTabStrip> strip =
+      [_oe_hostBrowser oe_tabStripCreatingIfNeeded:NO];
+  return _browser && strip ? strip->GetTabId(_browser) : -1;
+}
+
 - (CefRefPtr<CefBrowser>)oe_browser {
   return _browser;
 }
@@ -333,6 +359,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     }
   });
   [self oe_syncChromeWindow];
+  [self oe_showHostedPageIfVisible];
 }
 
 - (void)oe_createBrowser {
@@ -350,6 +377,17 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   CefString url = OECef(_pendingURL.absoluteString ?: @"about:blank");
   CefRefPtr<CefRequestContext> context = self.context.oe_requestContext;
+  if (_configuration.runtimeStyle == OERuntimeStyleChrome &&
+      [self oe_createHostedTab:url]) {
+    return;
+  }
+  if (_configuration.runtimeStyle == OERuntimeStyleChrome && _oe_tabStrip &&
+      _oe_tabStrip.context == self.context && !_oe_tabStrip.oe_canHostTabs) {
+    // A tab whose context gets no hidden Chrome window (CefTabStrip::Create:
+    // a non-default profile without a disk profile) stays Alloy rather than
+    // opening its own Chrome window.
+    _configuration.runtimeStyle = OERuntimeStyleAlloy;
+  }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {
     _chromeHost = OECreateChromeHostWindow(
         self, _client.get(), url, [self oe_browserSettings],
@@ -368,6 +406,31 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                                 [self oe_extraInfo], context);
 }
 
+// Fork patch P1: a Chrome style page that is in an OEBrowser becomes a tab of
+// that window's hidden Chrome window, hosted in our view.
+- (BOOL)oe_createHostedTab:(const CefString&)url {
+  OEBrowser* owner = _oe_tabStrip;
+  if (!owner || owner.context != self.context) {
+    return NO;
+  }
+  CefRefPtr<CefTabStrip> strip = [owner oe_tabStripCreatingIfNeeded:YES];
+  if (!strip) {
+    return NO;
+  }
+  [self oe_setHostBrowser:owner];
+  // Synchronous: OnAfterCreated (-oe_browserCreated:) runs inside.
+  CefRefPtr<CefBrowser> browser =
+      strip->CreateTab(_client.get(), url, [self oe_browserSettings],
+                       [self oe_extraInfo], -1,
+                       [owner isPinnedWebContent:self]);
+  if (!browser) {
+    [self oe_setHostBrowser:nil];
+    return NO;
+  }
+  [owner oe_setNeedsTabStripSync];
+  return YES;
+}
+
 - (BOOL)oe_adoptPopupWithWindowInfo:(CefWindowInfo&)windowInfo
                              client:(CefRefPtr<CefClient>&)client
                            settings:(CefBrowserSettings&)settings
@@ -381,6 +444,13 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   client = _client.get();
   extraInfo = [self oe_extraInfo];
   settings.background_color = [self oe_browserSettings].background_color;
+  if (opener.oe_hostBrowser) {
+    // Hosted opener (P1): keep CEF's Chrome style window info; the engine
+    // makes the popup a tab of the opener's hidden Chrome window.
+    [self oe_setHostBrowser:opener.oe_hostBrowser];
+    _configuration.runtimeStyle = OERuntimeStyleChrome;
+    return YES;
+  }
   if (opener.runtimeStyle == OERuntimeStyleChrome) {
     // Views-hosted opener: CEF ignores windowInfo and hands us a
     // CefBrowserView in OnPopupBrowserViewCreated instead.
@@ -433,11 +503,22 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     [self enableAutoResizeWithMinimumSize:_autoResizeMin
                               maximumSize:_autoResizeMax];
   }
-  if (_configuration.runtimeStyle == OERuntimeStyleAlloy) {
+  if (_configuration.runtimeStyle == OERuntimeStyleAlloy ||
+      _oe_hostBrowser) {
     NSView* host = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
+    if (_oe_hostBrowser && host && host.superview != _view) {
+      // A hosted tab's window handle is its WebContents view (P1). Chromium
+      // hides that view itself when the tab starts in the background, and
+      // only Views unhides it (ViewsHostableSetVisible); here our view's
+      // hidden state and the window's occlusion decide, as for Alloy.
+      [_view addSubview:host];
+      host.hidden = NO;
+    }
     host.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [self oe_layoutBrowserView];
   }
+  [_oe_hostBrowser oe_setNeedsTabStripSync];
+  [self oe_showHostedPageIfVisible];
   [self oe_notify:OEWebContentChangeLive | OEWebContentChangeURL |
                   OEWebContentChangeLoading];
 }
@@ -478,9 +559,22 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   [self oe_syncChromeWindow];
 }
 
+// Hosted tabs (P1) that Chromium created in the background start hidden; a
+// view that becomes visible in a window shows its page, as a Chrome
+// BrowserView does for the active tab. Hiding (and window occlusion) is
+// Chromium's own WebContents view logic.
+- (void)oe_showHostedPageIfVisible {
+  if (_browser && _oe_hostBrowser && _view.window &&
+      !_view.isHiddenOrHasHiddenAncestor) {
+    _browser->GetHost()->WasHidden(false);
+  }
+}
+
 // Alloy: CEF's host NSView is our view's only subview; keep it filling it.
+// Hosted tabs (P1): the same for the WebContents view.
 - (void)oe_layoutBrowserView {
-  if (!_browser || _configuration.runtimeStyle != OERuntimeStyleAlloy) {
+  if (!_browser || (_configuration.runtimeStyle != OERuntimeStyleAlloy &&
+                    !_oe_hostBrowser)) {
     return;
   }
   NSView* host = (__bridge NSView*)_browser->GetHost()->GetWindowHandle();
@@ -929,9 +1023,10 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   _browser->GetHost()->SetFocus(true);
-  if (_configuration.runtimeStyle == OERuntimeStyleAlloy) {
+  if (_configuration.runtimeStyle == OERuntimeStyleAlloy || _oe_hostBrowser) {
     // The page's key view is Chromium's RenderWidgetHostViewCocoa inside
-    // CEF's host view; the host view itself does not handle key events.
+    // CEF's host view (Alloy) or the WebContents view (hosted tab); the
+    // container itself does not handle key events.
     NSView* content = (__bridge NSView*)_browser->GetHost()->GetWindowHandle();
     NSView* target = OEFindRenderWidgetView(content) ?: content;
     if (target.window && target.window.firstResponder != target) {
