@@ -697,3 +697,24 @@ Release harness verification: `commands-demo` 166/166 including FA1–FA7 and th
 M1 checks; `settings-preview check --only library-folder-archive` PASS for L2/L3,
 View, durable save failure, and legacy row meaning. No unit tests or desktop input.
 App restore-last-closed dispatch by record kind remains App-lane wiring.
+
+## Sidebar completion M3 (2026-10-26)
+
+`Tab.displayTitle` now uses `customTitle ?? TidyTitles.tidy(title:url:)`. The
+Open-written rule table follows sidebar-completion §3.7 for Gmail, Google Docs,
+Drive, Calendar, YouTube, GitHub, X/Twitter, LinkedIn, Wikipedia, Stack Overflow,
+Figma, Slack, Outlook, and Amazon. Host matching is exact after removing one
+leading www. The first matching rule wins. Empty results keep the raw title.
+No Arc JSON values were read or copied. Raw `Tab.title`, snapshot values, and
+suggestion-search inputs are unchanged.
+
+Regexes compile once. A main-actor cache holds at most 512 title/host/path/fragment
+keys. The real commands-demo flow passes 40 fixture pairs, custom-title precedence,
+no-match and empty-result cases, and snapshot roundtrip. T3 p95 was 0.334 µs for
+10,000 cache hits and 4.875 µs for 1,000 misses (limits 5/50 µs). All 170 demo
+checks pass. No suggestion code or suite checks changed.
+
+The 13 capture-state comparisons could not run: `.re/vf/run-states.sh` and its
+capture-time inputs are absent from this checkout and the current project/worktrees.
+The full `sidebar-render check` remains part of verify-all; lane S owns TT1/TT2.
+No claim of capture parity is made for this step.
