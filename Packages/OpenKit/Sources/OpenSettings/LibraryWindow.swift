@@ -14,15 +14,16 @@ public struct LibraryContent:View {
                 ZStack {Text(viewModel.section.title).font(.system(size:13,weight:.semibold))
                     if viewModel.section == .archive {HStack {Spacer();Button("Delete Selected…",role:.destructive){viewModel.requestDeleteArchive(viewModel.archiveRows.filter{viewModel.selectedIDs.contains($0.id.description)}.map(\.id))}.disabled(viewModel.selectedIDs.isEmpty);Button("Clear Archive…"){viewModel.requestClearArchive()}.disabled(viewModel.archiveTotalCount == 0)}.buttonStyle(SettingsButtonStyle())}
                 }.frame(height:24)
-                LibraryToolbar(model:viewModel)
+                if viewModel.section != .spaces { LibraryToolbar(model:viewModel) }
             }.padding(.horizontal,18).padding(.top,4).padding(.bottom,12).background(.bar)
             Divider()
             Group {switch viewModel.section {
+            case .spaces:LibrarySpacesSection(model:viewModel)
             case .archive:ArchiveSection(model:viewModel)
             case .downloads:DownloadsSection(model:viewModel)
             case .captures,.media:CapturesSection(model:viewModel)
             case .history:HistorySection(model:viewModel)
-            }}.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity)
+            }}.padding(viewModel.section == .spaces ? 0 : 16).frame(maxWidth:.infinity,maxHeight:.infinity)
             if !viewModel.statusText.isEmpty {HStack {Text(viewModel.statusText).font(.caption).foregroundStyle(.secondary);if let space=viewModel.restoredSpaceID {Button("View"){viewModel.actions.viewSpace(id:space)}};Spacer()}.padding(.horizontal,16).padding(.bottom,10)}
         }
     }.font(Font(SettingsTokens.label.font)).controlSize(.regular).background(Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
@@ -39,6 +40,7 @@ private struct LibraryToolbar:View {
     @Bindable var model:LibraryViewModel
     var body:some View {HStack(spacing:8) {
         switch model.section {
+        case .spaces: EmptyView()
         case .archive:
             Picker("Space",selection:$model.archiveSpaceFilter){Text("All Spaces").tag(Optional<SpaceID>.none);ForEach(model.model.spaces,id:\.id){Text(model.model.displayTitle(for:$0)).tag(Optional($0.id))}}.labelsHidden()
             Picker("Reason",selection:$model.archiveReasonFilter){Text("All Reasons").tag(Optional<ArchiveReason>.none);ForEach([ArchiveReason.closed,.autoArchived,.clearedToday,.folderDeleted],id:\.self){Text($0.libraryTitle).tag(Optional($0))}}.labelsHidden()

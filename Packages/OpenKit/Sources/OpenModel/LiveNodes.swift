@@ -38,6 +38,7 @@ public final class Tab {
     public var pinnedURL: URL?
     /// Emoji or SF Symbol name.
     public var customIcon: String?
+    public var iconOverride: SpaceIcon?
     public var createdAt: Date
     public var lastActiveAt: Date
     public var isMuted: Bool
@@ -46,17 +47,18 @@ public final class Tab {
 
     public let live = TabLiveState()
 
-    public var displayTitle: String { customTitle ?? title }
+    public var displayTitle: String { customTitle ?? TidyTitles.tidy(title: title, url: url) }
 
     public init(
         id: ItemID = ItemID(), url: URL, title: String = "",
-        customTitle: String? = nil, pinnedURL: URL? = nil, customIcon: String? = nil,
+        customTitle: String? = nil, pinnedURL: URL? = nil, customIcon: String? = nil, iconOverride: SpaceIcon? = nil,
         createdAt: Date = Date(), lastActiveAt: Date = Date(),
         isMuted: Bool = false, openerID: ItemID? = nil, isUnread: Bool = false
     ) {
         self.id = id; self.url = url; self.title = title
         self.customTitle = customTitle; self.pinnedURL = pinnedURL
         self.customIcon = customIcon; self.createdAt = createdAt
+        self.iconOverride = iconOverride
         self.lastActiveAt = lastActiveAt; self.isMuted = isMuted
         self.openerID = openerID; self.isUnread = isUnread
     }
@@ -71,11 +73,13 @@ public final class Folder {
     public var title: String
     public var isExpanded: Bool
     public var customIcon: String?
+    public var iconOverride: SpaceIcon?
     public var children: [SidebarNode]
 
-    public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, children: [SidebarNode] = []) {
+    public init(id: ItemID = ItemID(), title: String = "Folder", isExpanded: Bool = true, customIcon: String? = nil, iconOverride: SpaceIcon? = nil, children: [SidebarNode] = []) {
         self.id = id; self.title = title; self.isExpanded = isExpanded
         self.customIcon = customIcon; self.children = children
+        self.iconOverride = iconOverride
     }
 }
 
