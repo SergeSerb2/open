@@ -19,6 +19,7 @@
 
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
+    private var pointerRequestID = 0
 
     init(app: AppDelegate) {
       self.app = app
@@ -291,10 +292,12 @@
       case "mouse":
         let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
         guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
+        pointerRequestID += 1
+        let motionTag = Self.syntheticPointerTag + pointerRequestID
         func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
           NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
             modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
-            context: nil, eventNumber: type == .mouseMoved ? Self.syntheticPointerTag : 0, clickCount: 1,
+            context: nil, eventNumber: type == .mouseMoved ? motionTag : 0, clickCount: 1,
             pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
         }
         let action = a["action"] as? String
@@ -304,9 +307,25 @@
           // From the first synthetic move on, pointer-driven window logic (the
           // sidebar hover reveal) follows only these tagged events, so the
           // hardware pointer of whoever uses the Mac cannot disturb a check.
-          BrowserWindowController.pointerEventFilter = { $0.eventNumber == AutomationController.syntheticPointerTag }
+          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
           let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+          let owner = app.windowControllers.first { $0.window === target }
+          let count = owner?.revealState.pointerEvents
+          let delivered = Mutex(false)
+          let monitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { e in
+            if e.windowNumber == number && e.eventNumber == motionTag { delivered.withLock { $0 = true } }
+            return e
+          }
+          defer { if let monitor { NSEvent.removeMonitor(monitor) } }
           if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
+          // The local monitor consumes motion on native dequeue. A second
+          // queued move must not overtake/coalesce the leave-edge event that
+          // clears reveal suppression. Acknowledge actual delivery, not a delay.
+          let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+          while !delivered.withLock({ $0 }) || (owner != nil && owner!.revealState.pointerEvents <= count!) {
+              guard ContinuousClock.now < deadline else { throw Failure(message: "pointer motion was not dequeued") }
+              try await Task.sleep(for: .milliseconds(5))
+          }
           // Tracking areas follow the hardware pointer, so `hover` also delivers
           // enter, move, and exit to the owners of the areas under the point.
           if action == "hover" { return hover(target, at: NSPoint(x: point[0], y: target.frame.height - point[1])) }
@@ -485,6 +504,7 @@
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
         app.focusWindow(controller.windowID, activate: a["activate"] as? Bool == true)
+        if a["activate"] as? Bool == true, let target = controller.window { try await activateForInput(target) }
         return true
       case "window-close":
         w.window?.performClose(nil); return true
@@ -868,8 +888,7 @@
       return nil
     }
 
-    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
-      guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window else { throw Failure(message: "no window") }
+    private func activateForInput(_ target: NSWindow) async throws {
       // Activation is asynchronous. Never inject into an inactive app after a
       // fixed grace period: its production router correctly declines the key.
       // Make the requested window key again once activation has completed.
@@ -882,6 +901,11 @@
         if NSApp.isActive { target.makeKeyAndOrderFront(nil) }
         try await Task.sleep(for: .milliseconds(10))
       }
+    }
+
+    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+      guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window else { throw Failure(message: "no window") }
+      try await activateForInput(target)
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).

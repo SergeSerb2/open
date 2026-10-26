@@ -61,7 +61,7 @@ class Open:
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
-        # activation entitlement. Launch the actual bundle through LaunchServices,
+        # activation grant. Launch the actual bundle through LaunchServices,
         # just as a user does. -W tracks this new instance through app exit.
         self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
         launch = ["/usr/bin/open", "-n", "-W", self.bundle,
@@ -87,7 +87,8 @@ class Open:
         raise RuntimeError("Open did not start; see %s" % log_path)
 
     def call(self, cmd, timeout=120, **args):
-        if cmd in ("key", "focus") and self.pid and not self.call("window-state").get("appActive", False):
+        foreground_input = cmd in ("key", "focus", "mouse") or (cmd == "window-focus" and args.get("activate"))
+        if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # LaunchServices foreground request if another app took focus.
             # This targets only this suite's absolute Open.app bundle path.
@@ -2713,7 +2714,7 @@ def main():
 
     os.makedirs(OUT, exist_ok=True)
     tmp = os.path.join(ROOT, ".re", "e2e-%s-%s" % (opts.only, opts.style))
-    user_data = os.path.expanduser("~/Library/Application Support/Open-E2E-%s-%s" % (opts.only, opts.style))
+    user_data = os.path.join(tmp, "user-data")
     shutil.rmtree(user_data, ignore_errors=True)
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
