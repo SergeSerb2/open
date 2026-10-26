@@ -1411,3 +1411,23 @@ Operator details that reconcile earlier instructions:
 - The requested `docs/engine-fork.md` operator guide is added alongside the
   Phase A file inventory. These deviation notes are also an authorized
   exception to §3.3's original file boundary.
+
+## Implementation deviation notes — Phase B (2026-10-25)
+
+Results are in [docs/engine-fork.md](../engine-fork.md), "Phase B bring-up".
+
+- Step 7 bootstrap ran with `--skip-sync --skip-hooks`. The stock scripts
+  had synced the pinned tree and run its hooks. A sync on the CEF-dirty tree
+  stops at the local-change guard, and a `gclient runhooks` rerun could touch
+  `LASTCHANGE` and force a wide rebuild for no gain.
+- §6.6 step 2: `engine-distrib` calls `cef/tools/make_distrib.py --minimal
+  --no-symbols --no-docs --no-archive` directly instead of `automate-git.py
+  --minimal-distrib-only`. On branch 8078, automate never adds
+  `--no-symbols` for the minimal type, and dev builds have no dSYMs to copy.
+  It also builds `cefclient`, which `make_distrib.py` needs for `Release/`.
+- §10.1 S-2 runs CEF's own applied test per `patch.cfg` entry (read-only)
+  and reports PASS, instead of the file-presence WARN fallback.
+- Step 8 is deferred to the ad-block work (it queues behind P1). Step 10
+  stops at the PGO gate (known gap, docs/followups.md).
+- `gn/dev.args.gn` is no longer byte-identical to the stock args: it adds
+  `disable_fieldtrial_testing_config=true` (docs/followups.md, lead).

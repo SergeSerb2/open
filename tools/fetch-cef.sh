@@ -3,25 +3,27 @@
 # project builds against) and builds libcef_dll_wrapper (Release, arm64) in
 # Vendor/cef/build/. Idempotent: a second run checks a stamp and exits.
 #
-#   tools/fetch-cef.sh              # $CEF_SOURCE, default cdn
-#   CEF_SOURCE=fork tools/fetch-cef.sh
+#   tools/fetch-cef.sh              # $CEF_SOURCE, default fork
+#   CEF_SOURCE=cdn tools/fetch-cef.sh
 #   tools/fetch-cef.sh --force      # copy again and rebuild the wrapper
 #
 # CEF_SOURCE is the one switch between engines:
+#   fork  (default) Our fork's distribution, recorded by
+#         Engine/fork/scripts/engine-distrib and copied by
+#         tools/fetch-engine.sh --run (docs/engine-fork.md).
 #   cdn   Stock CEF from cef-builds.spotifycdn.com, built from the same CEF
 #         commit and Chromium tag as our fork (checked against
 #         Engine/fork/VERSIONS). The archive and its extraction are cached in
 #         $OPEN_CEF_CACHE (default ~/Library/Caches/Open/cef), so a clean
-#         clone does not download 300 MB again.
-#   fork  Our fork's distribution, recorded by Engine/fork/scripts/engine-distrib
-#         and copied by tools/fetch-engine.sh --run (docs/engine-fork.md).
+#         clone does not download 300 MB again. Use it only to compare
+#         against the fork (docs/engine-spike.md, Measurements).
 #
 # To move the CDN pin: pick a "standard" macosarm64 entry from
 # https://cef-builds.spotifycdn.com/index.json, update CEF_VERSION and CEF_SHA1,
 # run once with CEF_SHA256= (empty), then pin the printed sha256.
 set -euo pipefail
 
-CEF_SOURCE="${CEF_SOURCE:-cdn}"
+CEF_SOURCE="${CEF_SOURCE:-fork}"
 CEF_VERSION="156.0.14+g4fa4ab5+chromium-156.0.8078.48"
 CEF_PLATFORM="macosarm64"
 CEF_SHA1="dd97a0bf9f25686b135858ea809780dfb9b57006"

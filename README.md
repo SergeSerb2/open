@@ -14,4 +14,4 @@ tools/run.sh              # runs it (profile: ~/Library/Application Support/Open
 tools/build.sh Release    # OPEN_KEEP_LOCALES="en" ships only English Chromium locales
 ```
 
-`CEF_SOURCE=fork tools/build.sh` builds against our Chromium fork's distribution instead of the pinned CDN build. Docs: [architecture](docs/architecture.md), [engine API](docs/engine-api.md), [engine spike and verdict](docs/engine-spike.md), [fork patch plan](docs/engine-patches.md), [automation](docs/automation.md).
+`tools/build.sh` builds against our Chromium fork's distribution ([engine fork guide](docs/engine-fork.md)); `CEF_SOURCE=cdn tools/build.sh` uses the pinned stock CDN build for comparisons. Docs: [architecture](docs/architecture.md), [engine API](docs/engine-api.md), [engine spike and verdict](docs/engine-spike.md), [fork patch plan](docs/engine-patches.md), [automation](docs/automation.md).
