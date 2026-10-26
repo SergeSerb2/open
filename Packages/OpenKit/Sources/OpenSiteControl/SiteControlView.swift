@@ -13,7 +13,7 @@ public final class SiteControlView: NSView {
     public var isActive = false
     private let panelShadow = CALayer()
     public var panelFrame: CGRect { panel.frame }
-    var presentationLayers: [CALayer] { [panel.layer, panelShadow].compactMap { $0 } }
+    public var presentationLayers: [CALayer] { [panel.layer, panelShadow].compactMap { $0 } }
     func clearStructureAnimations() {
         for state in captureStructure() {
             for key in state.layer.animationKeys() ?? [] where key.hasPrefix("rows.") { state.layer.removeAnimation(forKey: key) }
@@ -47,6 +47,8 @@ public final class SiteControlView: NSView {
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        if let surface = panel.layer { surface.anchorPoint = .zero; surface.position = panel.frame.origin }
+        panelShadow.anchorPoint = .zero
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = SiteControlShape.path(in: panel.bounds, radius: SiteControlMetrics.cornerRadius)
         // AppKit flips the backing layer. Positive local y is down in this overlay.
@@ -60,7 +62,10 @@ public final class SiteControlView: NSView {
         if event.modifierFlags.contains(.command) { _ = onKey?(event); return false }
         return super.performKeyEquivalent(with: event)
     }
-    public override func mouseDown(with event: NSEvent) {
+    public override func mouseDown(with event: NSEvent) { forwardOutside(event) }
+    public override func rightMouseDown(with event: NSEvent) { forwardOutside(event) }
+    public override func otherMouseDown(with event: NSEvent) { forwardOutside(event) }
+    private func forwardOutside(_ event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if anchorFrame.contains(point) { onAnchor?(); return }
         guard !panel.frame.contains(point), let window else { return }
@@ -124,7 +129,7 @@ public final class SiteControlPanelView: NSView {
         hostLabel.font = Typography.siteControlTitle.font
         hostLabel.textColor = Core.foregroundPrimary.nsColor
         hostLabel.lineBreakMode = .byTruncatingTail; hostLabel.maximumNumberOfLines = 1
-        hostLabel.setAccessibilityRole(.staticText); favicon.setAccessibilityElement(false); favicon.setAccessibilityHidden(true)
+        hostLabel.setAccessibilityElement(false); hostLabel.setAccessibilityHidden(true); favicon.setAccessibilityElement(false); favicon.setAccessibilityHidden(true)
         addSubview(hostLabel); addSubview(favicon)
         let specs = [("share", "Share", "square.and.arrow.up"), ("copyURL", "Copy URL", "link"),
                      ("newBoost", "New Boost", "paintbrush.pointed"), ("capture", "Capture a portion of this page", "viewfinder"),
@@ -175,7 +180,9 @@ public final class SiteControlPanelView: NSView {
             button.isHidden = !snapshot.context.isWebsite && !["action.share", "action.copyURL"].contains(button.controlID)
             button.isEnabled = button.controlID == "action.newBoost" ? snapshot.canCreateBoost : snapshot.commandsEnabled[commands[button.controlID] ?? ""] ?? !button.controlID.hasPrefix("action.capture")
         }
-        let secure = snapshot.context.security == .secure || (snapshot.context.security == .unknown && snapshot.context.url.scheme == "https")
+        let scheme = snapshot.context.url.scheme?.lowercased()
+        security.isHidden = scheme != "https" && scheme != "http"
+        let secure = scheme == "https"
         security.title = secure ? "Secure" : "Insecure"; security.symbol = secure ? "lock.fill" : "lock.open.fill"
         security.tint = secure ? CommandBarColors.lockSecure : CommandBarColors.lockInsecure
         security.setAccessibilityLabel("Connection: " + security.title)
@@ -242,8 +249,8 @@ public final class SiteControlPanelView: NSView {
             }
         }
         tileButtons = nextTiles; bodyHeight = y; body.frame = CGRect(x: 0, y: 0, width: SiteControlMetrics.width, height: y)
-        controls += [security, more]
-        setAccessibilityChildren([hostLabel, scroll, security, more] + actions.filter { !$0.isHidden })
+        controls += [security, more].filter { !$0.isHidden }
+        setAccessibilityChildren(actions.filter { !$0.isHidden } + [scroll] + [security, more].filter { !$0.isHidden })
         scroll.contentView.scroll(to: scrollPosition); scroll.reflectScrolledClipView(scroll.contentView)
         needsLayout = true; needsDisplay = true
     }
@@ -314,7 +321,7 @@ public final class SiteControlPanelView: NSView {
         surfaceClip.frame = bounds; surfaceClip.path = shape
         fillLayer.path = shape; fillLayer.fillColor = Core.popoverBackground.cgColor(contentAppearance)
         edgeClip.path = shape; edgeLayer.path = shape; edgeLayer.lineWidth = 2 * px; edgeLayer.strokeColor = CommandBarColors.hairlineDivider.cgColor(contentAppearance)
-        layer?.cornerRadius = SiteControlMetrics.cornerRadius
+        layer?.cornerRadius = 0
         let lines = CGMutablePath()
         for y in [SiteControlMetrics.headerHeight + SiteControlMetrics.actionRowHeight, bounds.height - SiteControlMetrics.footerHeight] {
             lines.move(to: CGPoint(x: SiteControlMetrics.separatorInset, y: y + px/2))

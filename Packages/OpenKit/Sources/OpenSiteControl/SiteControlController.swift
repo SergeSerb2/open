@@ -87,6 +87,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.panel.showsReload = false
         view.panel.apply(snapshot); configureKeys(); layout()
         guard isPresented else { return }
+        unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
         if preferredMenuItemTitle != nil { view.panel.focus(view.panel.more) }
         animateOpen(animated)
@@ -270,11 +271,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         }
     }
     private func transform(scale: CGFloat, layer: CALayer) -> CATransform3D {
-        // Compensate for the layer's anchor so the top-leading corner stays fixed.
-        let anchor = CGPoint(x: layer.anchorPoint.x * layer.bounds.width, y: layer.anchorPoint.y * layer.bounds.height)
-        var transform = CATransform3DMakeTranslation(-anchor.x, -anchor.y, 0)
-        transform = CATransform3DScale(transform, scale, scale, 1)
-        return CATransform3DTranslate(transform, anchor.x, anchor.y, 0)
+        CATransform3DMakeScale(scale, scale, 1)
     }
     private func animateClose(_ animated: Bool, completion: @escaping @MainActor () -> Void) {
         guard animated else { completion(); return }
