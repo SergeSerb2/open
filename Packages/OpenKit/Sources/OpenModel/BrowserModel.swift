@@ -786,6 +786,7 @@ public final class BrowserModel {
         var title: String
         var isExpanded: Bool
         var customIcon: String?
+        var iconOverride: SpaceIcon?
         var children: [ArchivedNodePayload]
         var originalSection: String?
     }
@@ -813,6 +814,7 @@ public final class BrowserModel {
             return Tab(id: id, url: payload.url.flatMap(URL.init(string:)) ?? URL(string: "about:blank")!,
                        title: payload.title ?? "", customTitle: payload.customTitle,
                        pinnedURL: payload.pinnedURL.flatMap(URL.init(string:)), customIcon: payload.customIcon,
+                       iconOverride: payload.iconOverride,
                        createdAt: payload.createdAt.map(Date.init(timeIntervalSince1970:)) ?? record.archivedAt,
                        lastActiveAt: Date(), isMuted: payload.isMuted ?? false,
                        openerID: payload.openerID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) },
@@ -821,6 +823,7 @@ public final class BrowserModel {
         func folder(_ payload: ArchivedFolderPayload) -> Folder? {
             guard let id = identity(payload.id) else { return nil }
             return Folder(id: id, title: payload.title, isExpanded: payload.isExpanded, customIcon: payload.customIcon,
+                          iconOverride: payload.iconOverride,
                           children: payload.children.compactMap(node))
         }
         func node(_ payload: ArchivedNodePayload) -> SidebarNode? {
