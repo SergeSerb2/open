@@ -120,8 +120,8 @@ except where a section says Save.
 | `open.general.automaticallyUpdate` | Bool | `true` | General; Sparkle (M9) |
 | `open.general.warnBeforeQuitting` | Bool | `true` | General; quit confirm |
 | `open.general.previewsEnabled` | Bool | `true` | General; hover Previews |
-| `open.general.previewsFolders` | Bool | `true` | Previews sheet; folders (sidebar completion lead Q3) |
-| `open.general.previewsPages` | Bool | `true` | Previews sheet; pinned tabs and Favorites (lead Q3) |
+| `open.general.previewsFolders` | Bool | `true` | Previews sheet; folders (sidebar completion lead Q3); seeded once from stored previewsOnHover when absent |
+| `open.general.previewsPages` | Bool | `true` | Previews sheet; pinned tabs and Favorites (lead Q3); seeded once from stored previewsOnHover when absent |
 | `open.general.previewsDelaySeconds` | Double | `0.5` | Previews sheet; 0.3 / 0.5 / 1 s |
 | `open.sidebar.hideHintShown` | Bool | `false` | First-hide hint (sidebar completion §2.4) |
 | `open.sidebar.autoArchiveBannerDismissed` | Bool | `false` | Auto-archive education dismissal |

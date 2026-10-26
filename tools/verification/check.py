@@ -468,7 +468,7 @@ def main():
         run("python3", str(root / "tools/generate-sounds.py"), "--check")
         text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
         matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
-        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text, "missing sound flow receipts")
+        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
     elif name == "boosts":

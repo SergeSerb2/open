@@ -2,8 +2,8 @@
 """Generate Open's own sounds with the standard library, then macOS afconvert.
 
 No recorded or reference-app audio is used. The PCM samples use a fixed seed.
-CAF hashes include the container and are pinned below. --check also verifies the
-committed resources byte for byte without replacing them.
+PCM hashes are pinned below. --check verifies the generated samples and the
+decoded committed resources. CAF byte differences are informational only.
 """
 import argparse
 import hashlib
@@ -17,9 +17,9 @@ import wave
 
 RATE = 48000
 SEED = 0x4F50454E
-EXPECTED = {
-    "open-capture": "5ef6a250b964a5c043a60bb3275dbc4c0233f12122b1708a64e6209c393668ab",
-    "open-event": "9df3e7d91a7dd3b905bcfbb9e7a57ab7e1d991b5700d3be3d9fdd37b25b6d31f",
+EXPECTED_PCM = {
+    "open-capture": "4634a95aa59fe3bcb96f220935544790e2f388b82edf03050d0b223e9e89c52f",
+    "open-event": "72ef269b2a3ba81dab4ef79a99dcaf081014ac2aea17d8905c96bbd10d19ef55",
 }
 
 
@@ -61,6 +61,9 @@ def generate(destination, verify):
         destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="open-generated-sounds-") as temporary:
         for name, samples in (("open-capture", capture()), ("open-event", event())):
+            digest = hashlib.sha256(samples).hexdigest()
+            if digest != EXPECTED_PCM[name]:
+                raise RuntimeError(f"generated PCM hash differs for {name}: {digest}")
             wav = Path(temporary) / (name + ".wav")
             caf = Path(temporary) / (name + ".caf")
             with wave.open(str(wav), "wb") as output:
@@ -70,17 +73,18 @@ def generate(destination, verify):
                 output.writeframes(samples)
             subprocess.run(["afconvert", "-f", "caff", "-d", "LEI16@48000", str(wav), str(caf)], check=True)
             data = caf.read_bytes()
-            digest = hashlib.sha256(data).hexdigest()
-            expected = EXPECTED.get(name)
-            if digest != expected:
-                raise RuntimeError(f"generated hash differs for {name}: {digest}")
             target = destination / (name + ".caf")
             if verify:
-                if target.read_bytes() != data:
-                    raise RuntimeError(f"committed sound differs: {target.name}")
+                decoded = Path(temporary) / (name + "-committed.wav")
+                subprocess.run(["afconvert", "-f", "WAVE", "-d", "LEI16@48000", str(target), str(decoded)], check=True)
+                with wave.open(str(decoded), "rb") as source:
+                    committed = source.readframes(source.getnframes())
+                if hashlib.sha256(committed).hexdigest() != EXPECTED_PCM[name]:
+                    raise RuntimeError(f"committed PCM differs: {target.name}")
+                print(f"{name}.caf container byte-identical (informational): {target.read_bytes() == data}")
             else:
                 target.write_bytes(data)
-            print(f"{name}.caf SHA-256 {digest}")
+            print(f"{name} PCM SHA-256 {digest}")
 
 
 if __name__ == "__main__":
