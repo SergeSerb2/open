@@ -84,7 +84,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "sidebar-defaults"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -93,6 +93,21 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
+            case "sidebar-defaults":
+                try require(!vm.bool("open.sidebar.hideHintShown") && !vm.bool("open.sidebar.autoArchiveBannerDismissed")
+                            && vm.bool("open.sidebar.autoArchiveBannerEligible") && !vm.bool("open.advanced.playSoundEffects")
+                            && vm.bool("open.general.previewsFolders") && vm.bool("open.general.previewsPages"), "sidebar app defaults differ")
+                vm.set(true, for: "open.sidebar.hideHintShown")
+                vm.set(true, for: "open.sidebar.autoArchiveBannerDismissed")
+                vm.set(false, for: "open.sidebar.autoArchiveBannerEligible")
+                vm.set(false, for: "open.general.previewsFolders")
+                vm.set(false, for: "open.general.previewsPages")
+                let disk = try env.diskDefaults()
+                try require(disk["open.sidebar.hideHintShown"] as? Bool == true && disk["open.sidebar.autoArchiveBannerDismissed"] as? Bool == true
+                            && disk["open.sidebar.autoArchiveBannerEligible"] as? Bool == false && disk["open.general.previewsFolders"] as? Bool == false
+                            && disk["open.general.previewsPages"] as? Bool == false, "sidebar settings did not reach the existing UserDefaults store")
+                let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: env.suite)!, root: env.root, snapshot: vm.snapshot)
+                try require(reloaded.bool("open.sidebar.hideHintShown") && !reloaded.bool("open.general.previewsPages"), "sidebar settings did not survive reload")
             case "general-toggles":
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()

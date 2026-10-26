@@ -120,6 +120,12 @@ except where a section says Save.
 | `open.general.automaticallyUpdate` | Bool | `true` | General; Sparkle (M9) |
 | `open.general.warnBeforeQuitting` | Bool | `true` | General; quit confirm |
 | `open.general.previewsEnabled` | Bool | `true` | General; hover Previews |
+| `open.general.previewsFolders` | Bool | `true` | Previews sheet; folders (sidebar completion lead Q3) |
+| `open.general.previewsPages` | Bool | `true` | Previews sheet; pinned tabs and Favorites (lead Q3) |
+| `open.general.previewsDelaySeconds` | Double | `0.5` | Previews sheet; 0.3 / 0.5 / 1 s |
+| `open.sidebar.hideHintShown` | Bool | `false` | First-hide hint (sidebar completion §2.4) |
+| `open.sidebar.autoArchiveBannerDismissed` | Bool | `false` | Auto-archive education dismissal |
+| `open.sidebar.autoArchiveBannerEligible` | Bool | `true` | Auto-archive education eligibility |
 | `open.links.externalInLittleOpen` | Bool (fallback `true`) | `true` | Links; routing (exists; `docs/routing.md`) |
 | `open.links.littleOpenHotkeyEnabled` | Bool (fallback `true`) | `true` | Links; `GlobalHotkeyService` (exists) |
 | `open.links.optionCommandClickLittleOpen` | Bool (fallback `true`) | `true` | Links; link clicks (exists) |
@@ -134,7 +140,7 @@ except where a section says Save.
 | `open.advanced.enableBoosts` | Bool | `true` | Advanced; Boosts gate (feature plan owns detail) |
 | `open.advanced.allowSitesThemeData` | Bool | `false` | Advanced (unknown; Open choice OFF = private by default) |
 | `open.advanced.enableSharedQuotes` | Bool | `true` | Advanced |
-| `open.advanced.playSoundEffects` | Bool | `false` | Advanced (unknown; Open choice OFF until sounds ship) |
+| `open.advanced.playSoundEffects` | Bool | `false` | Advanced; Open-generated sounds (lead Q6: OFF, no general event caller) |
 | `open.advanced.hapticOnTabReorder` | Bool | `true` | Advanced (guess ON, section 7.2) |
 | `open.advanced.tabSleepMode` | String (`automatic`/`conservative`/`aggressive`/`never`) | `automatic` | Advanced; sleep policy (section 5.5) |
 | `open.appIcon.selectedID` | String (`openDefault`/`openDark`/`openLight`/`openMono`/`openColor`/`openRetro`) | `openDefault` | App Icon; `NSApp.applicationIconImage` / alternate icon |
@@ -414,15 +420,13 @@ Quit, Previews, Profile Settings hint, Default Browser, Import.
 
 #### 5.1.1 Previews sheet (from G-3)
 
-Sheet size 480x320. Title "Previews". Rows: master switch (same key
-as G-3), "Show previews when hovering links" switch
-(`open.general.previewsOnHover`, default ON; add this one key — it is
-the only key this plan adds beyond section 2.1), delay pop-up
-(0.3 s / 0.5 s / 1 s; `open.general.previewsDelaySeconds` Double,
-default 0.5). Close button "Done". The sheet writes the same
-`UserDefaults` keys. No engine call. Hover Preview reads the keys
-when it arms. Add both keys to the section 2.1 registry in code
-comments and in `register(defaults:)`.
+Sheet size 480x320. Title "Previews". Rows: "Show Open Previews:" master
+switch, "Folders" and "Pinned tabs and Favorites" source switches (sidebar
+completion lead Q3 overrides the former hovering-links switch), then delay
+0.3 s / 0.5 s / 1 s. Keys are registered in §2.1 through SettingsDefaults.
+The former previewsOnHover key is no longer read. Close button "Done".
+App values use UserDefaults; no ProfileSettings fields or second store are added.
+Hover Preview reads these keys when it arms.
 
 ### 5.2 Profiles
 

@@ -44,11 +44,12 @@ public struct PreviewsSheet: View {
     @Bindable var model: GeneralViewModel
     public init(model:GeneralViewModel) {self.model=model}
     public var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Previews").font(.title2)
-            PreferenceToggle(title: "Show link previews", key: "open.general.previewsEnabled", root: model.root)
-            PreferenceToggle(title: "Show previews when hovering links", key: "open.general.previewsOnHover", root: model.root)
-            HStack {Text("Delay");Spacer();SettingsPopUp("Delay",selection:$model.previewDelay,width:137,entries:[.option("0.3 s",0.3),.option("0.5 s",0.5),.option("1 s",1)])}.disabled(!model.root.bool("open.general.previewsOnHover"))
+            PreferenceToggle(title: "Show Open Previews:", key: "open.general.previewsEnabled", root: model.root)
+            PreferenceToggle(title: "Folders", key: "open.general.previewsFolders", root: model.root)
+            PreferenceToggle(title: "Pinned tabs and Favorites", key: "open.general.previewsPages", root: model.root)
+            HStack {Text("Delay");Spacer();SettingsPopUp("Delay",selection:$model.previewDelay,width:137,entries:[.option("0.3 s",0.3),.option("0.5 s",0.5),.option("1 s",1)])}.disabled(!model.root.bool("open.general.previewsEnabled"))
             Spacer(); HStack { Spacer(); Button("Done") { model.root.showsPreviews = false }.keyboardShortcut(.defaultAction) }
         }.padding(24).frame(width: 480, height: 320).buttonStyle(SettingsButtonStyle())
     }
