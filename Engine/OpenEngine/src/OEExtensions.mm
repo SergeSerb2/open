@@ -226,6 +226,18 @@ NSDictionary* ReadJSON(NSURL* url) {
   return self;
 }
 
+- (void)oe_applyBadgeText:(NSString*)badgeText
+               badgeColor:(NSColor*)badgeColor
+                    title:(NSString*)title
+                  enabled:(BOOL)enabled {
+  _badgeText = badgeText.length ? [badgeText copy] : nil;
+  _badgeBackgroundColor = badgeColor;
+  if (title.length) {
+    _title = [title copy];
+  }
+  _enabled = _enabled && enabled;
+}
+
 @end
 
 #pragma mark - OEExtensionManager

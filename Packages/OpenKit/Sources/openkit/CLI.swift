@@ -174,7 +174,7 @@ func runArchiveList(args: [String]) async {
     let formatter = ISO8601DateFormatter()
     for row in rows {
         let host = row.url.host() ?? "•••"
-        print("  archive \(row.id.rawValue.uuidString.prefix(8)) ••• <\(host)> reason=\(row.reason.rawValue) archivedAt=\(formatter.string(from: row.archivedAt))")
+        print("  archive \(row.id.rawValue.uuidString.prefix(8)) ••• <\(host)> kind=\(row.kind.rawValue) reason=\(row.reason.rawValue) archivedAt=\(formatter.string(from: row.archivedAt))")
     }
 }
 

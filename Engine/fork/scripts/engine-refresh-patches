@@ -75,6 +75,10 @@ while IFS=$'\t' read -r kind series name path_text; do
             rust_staged=1
             ${git_cmd[@]+"${git_cmd[@]}"} add -f -- ${paths[@]+"${paths[@]}"}
             ${git_cmd[@]+"${git_cmd[@]}"} diff --cached --no-color --binary ${prefixes[@]+"${prefixes[@]}"} -- ${paths[@]+"${paths[@]}"} > "$patch.tmp"
+        elif [[ "$series" == chromium ]]; then
+            # Diff against HEAD plus CEF's own hunks for each path: Open's
+            # Chromium patches apply on top of CEF's patches (engine-apply).
+            python3 "$SCRIPT_DIR/lib/cef_baseline_diff.py" "$SRC_DIR" ${paths[@]+"${paths[@]}"} > "$patch.tmp"
         else
             ${git_cmd[@]+"${git_cmd[@]}"} diff HEAD --no-color --binary ${prefixes[@]+"${prefixes[@]}"} -- ${paths[@]+"${paths[@]}"} > "$patch.tmp"
         fi
