@@ -545,6 +545,49 @@ public final class BrowserModel {
 
     // MARK: - Commands: tabs
 
+    /// Copies a whole sidebar subtree immediately after its source, with fresh
+    /// IDs and runtime state. One undo step removes the complete copy.
+    @discardableResult
+    public func duplicateNode(id: ItemID) -> ItemID? {
+        guard let source = node(id: id), let parent = parent(of: id), let position = position(of: id, in: parent) else { return nil }
+        if case .splitPane(let splitID) = parent, (node(id: splitID)?.split?.panes.count ?? 4) >= 4 { return nil }
+        func copyTab(_ tab: Tab) -> Tab {
+            Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
+                customIcon: tab.customIcon, isMuted: tab.isMuted)
+        }
+        func copyNode(_ node: SidebarNode) -> SidebarNode {
+            switch node {
+            case .tab(let tab): return .tab(copyTab(tab))
+            case .folder(let folder):
+                return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded,
+                    customIcon: folder.customIcon, children: folder.children.map(copyNode)))
+            case .split(let split):
+                let panes = split.panes.map(copyTab)
+                let focused = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
+                return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focused))
+            }
+        }
+        let copied = copyNode(source)
+        let oldFractions: [Double]?
+        if case .splitPane(let splitID) = parent { oldFractions = node(id: splitID)?.split?.fractions }
+        else { oldFractions = nil }
+        guard let index = attach(copied, to: parent, at: position + 1) else { return nil }
+        func updateFractions(_ model: BrowserModel, restoring: Bool) {
+            guard case .splitPane(let splitID) = parent, let split = model.node(id: splitID)?.split else { return }
+            split.fractions = restoring ? (oldFractions ?? []) : Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
+        }
+        updateFractions(self, restoring: false)
+        let revert: Revert = { model in
+            guard model.detach(copied.id) != nil else { return false }
+            updateFractions(model, restoring: true); return true
+        }
+        registerUndo(revert, reapply: { model in
+            guard model.attach(copied, to: parent, at: index) != nil else { return Self.noRevert }
+            updateFractions(model, restoring: false); return revert
+        })
+        return copied.id
+    }
+
     @discardableResult
     public func newTab(in spaceID: SpaceID, url: URL, title: String = "", at position: Int? = nil, unread: Bool = false) -> Tab {
         let tab = Tab(url: url, title: title, isUnread: unread)
@@ -803,6 +846,7 @@ public final class BrowserModel {
         var title: String
         var isExpanded: Bool
         var customIcon: String?
+        var iconOverride: SpaceIcon?
         var children: [ArchivedNodePayload]
         var originalSection: String?
     }
@@ -830,6 +874,7 @@ public final class BrowserModel {
             return Tab(id: id, url: payload.url.flatMap(URL.init(string:)) ?? URL(string: "about:blank")!,
                        title: payload.title ?? "", customTitle: payload.customTitle,
                        pinnedURL: payload.pinnedURL.flatMap(URL.init(string:)), customIcon: payload.customIcon,
+                       iconOverride: payload.iconOverride,
                        createdAt: payload.createdAt.map(Date.init(timeIntervalSince1970:)) ?? record.archivedAt,
                        lastActiveAt: Date(), isMuted: payload.isMuted ?? false,
                        openerID: payload.openerID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) },
@@ -838,6 +883,7 @@ public final class BrowserModel {
         func folder(_ payload: ArchivedFolderPayload) -> Folder? {
             guard let id = identity(payload.id) else { return nil }
             return Folder(id: id, title: payload.title, isExpanded: payload.isExpanded, customIcon: payload.customIcon,
+                          iconOverride: payload.iconOverride,
                           children: payload.children.compactMap(node))
         }
         func node(_ payload: ArchivedNodePayload) -> SidebarNode? {
@@ -1212,13 +1258,13 @@ public final class BrowserModel {
     private func copyNode(_ node: SidebarNode) -> SidebarNode {
         func copyTab(_ tab: Tab) -> Tab {
             Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
-                customIcon: tab.customIcon, isMuted: tab.isMuted)
+                customIcon: tab.customIcon, iconOverride: tab.iconOverride, isMuted: tab.isMuted)
         }
         switch node {
         case .tab(let tab): return .tab(copyTab(tab))
         case .folder(let folder):
             return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded, customIcon: folder.customIcon,
-                                  children: folder.children.map { copyNode($0) }))
+                                  iconOverride: folder.iconOverride, children: folder.children.map { copyNode($0) }))
         case .split(let split):
             let panes = split.panes.map(copyTab)
             let focus = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }

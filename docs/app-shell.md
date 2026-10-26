@@ -246,11 +246,13 @@ Main's M4 visual finish (`39fb0ed`) is merged with both sides' behavior kept.
 | M4 selection / binding | Model owns collapse selection; all visible split panes bind on refresh; one-pane duplicate refresh stays removed | features-render check 147/147 |
 | Lazy Peek | Passive key and navigation checks use existing Peek storage | Escape with no Peek keeps it unconstructed; native startup check passes |
 
-The all-Spaces strip order is intentional (locked engine decision, 2026-10-25):
-favorites first, then Spaces in model order, each in sidebar order (pinned then
-Today, folders and split panes flattened). Each window/profile strip contains
-its own loaded subset. Space focus does not change that order. Peek hosts stay
-outside the strip until promotion.
+Step B originally used favorites followed by each Space's pinned and Today rows.
+The merged P1 port (#53) supersedes that strip order with Chromium's pinned prefix:
+favorites, then every Space's pinned rows, then every Space's Today rows. Spaces
+retain model order within each part; folders and split panes are flattened in
+sidebar order. Each window/profile strip contains its own loaded subset. Space
+focus does not change that order. Peek hosts remain outside the strip; promoting
+an Alloy Peek into a Chrome tab recreates the host, as documented by P1.
 
 The initial Step B review evidence below used **CDN CEF**. The current fork
 refresh is recorded separately below.
@@ -460,3 +462,674 @@ Rule 10: merged origin/main, then full tools/verify-all.sh, 15 PASS, no SKIP.
 | sidebar-render | PASS | 17 |
 | commandbar-render | PASS | 15 |
 | boosts | PASS | 3 |
+
+
+## Step C initial integration — before audit P0
+
+The command bar uses the merged `OpenCommandBar` delegate API. Its one lazy
+controller per window shares the app's profile-scoped Suggest/History backend.
+Typed opens, current-page edits, cross-Space switches, calculator copy, and
+registry actions reach the model and real engine. Command-Return creates a
+background host without selecting it. Both key layers reuse the controller's
+one router; native menu validation and command-bar actions share enabled state.
+Key overrides are validated before menus and the Carbon registration change.
+Invalid files fall back to defaults with a plain diagnostic.
+
+Duplicate creates a tab immediately after its source, a whole split, or a folder
+subtree, with new IDs and no web hosts. One model undo removes the entire copy.
+The container remains the guarded writer of live tab state.
+
+`OpenSettings` from main (`dc62e65`) replaces the placeholder. Cmd+, uses the
+shared Settings presenter. Cmd+Shift+L, Downloads, Archive, and History use the
+shared Library presenter and select its section. Both receive the app's one
+`SnapshotStore`. Archive/History stores are shared, including when profiles are
+added. Library owns restore/delete transactions; the App callbacks do not
+repeat those writes. Downloads come from the real engine contexts and Captures
+use the shared file index. History opens into `library.historyProfileID`.
+Custom search engines resolve through `SearchEngines.resolve`. The pure remote
+query notice gate never opens a Settings window or changes its selected profile.
+
+### Engine and end-to-end evidence
+
+Engine: **fork**, Chromium 156.0.8078.48 / CEF 156.0.14. The fork distribution
+was fetched with `tools/fetch-engine.sh --run`; no engine build or source sync
+was run. Embedded and vendor Mach-O UUIDs match:
+`4C4C44FE-5555-3144-A175-7398C5A1D4B4`. Every phase-named JSON below records the
+source stamp and both UUIDs. The earlier A/B CDN receipts remain separate.
+
+| Suite | Debug / fork | Release / fork | Evidence |
+|---|---|---|---|
+| `commandbar` | 35/35 PASS | 35/35 PASS | [Debug](engine-spike/results-commandbar-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-pre-p0-fork-release.json) |
+| `window` | 38/38 PASS; 2 named timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-window-step-c-pre-p0-fork-release.json) |
+| `sidebar` | 18/18 PASS; durable engine profile storage BLOCKED | 18/18 PASS; durable engine profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-pre-p0-fork-release.json) |
+| `peek` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-peek-step-c-pre-p0-fork-release.json) |
+| `shell` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-shell-step-c-pre-p0-fork-release.json) |
+
+The command-bar suite uses a real loopback HTTP page that prevents default keys,
+the actual field editor and native menu targets. It checks Cmd+T/L/W/S through
+the app/window paths, profile isolation, Pin/Unpin actions, lazy duplicate trees,
+Archive restore, custom-engine navigation, and Settings persistence. Global
+Carbon registration and disable/re-register are checked; no OS-wide key is sent.
+All app windows close after each run. No unit tests or mocked engines were added.
+
+### Timing (milliseconds, fork)
+
+| Mark | Debug | Release | Budget |
+|---|---:|---:|---|
+| First command-bar open, including construction | 33.97 | 31.55 | ≤50; PASS |
+| Repeat command-bar open | 22.58 | 18.50 | ≤50; PASS |
+| Cold profile; median of 5: confirmed sidebar drawn | — | 245 | ≤250; PASS |
+| Cold profile; median of 5: first contentful paint | — | 482 | ≤700; PASS |
+| Warm profile; median of 5: confirmed sidebar drawn | — | 245 | ≤250; PASS |
+| Warm profile; median of 5: first contentful paint | — | 491 | ≤700; PASS |
+
+Host load average was [6.72705078125, 10.06103515625, 13.02001953125] on 18 CPUs. These are
+observed timings under shared-machine load, not controlled idle measurements.
+Kernel process-start marks are confirmed in all ten Release launches. Debug
+launch-budget rows are explicit SKIPs. The forced no-display-link path still
+starts the engine and loads the page after the real three-second timeout.
+
+### Live static comparison
+
+| Capture / scope | Elements | Worst position | Worst ΔE00 | Result |
+|---|---:|---:|---:|---|
+| F0001 real sidebar/window, Debug + Release / fork | 31 | 1 pt | 1.61 | PASS |
+| Empty panel, same live capture | 11 fill samples | native frame assertions pass | max 1.05 | PASS |
+| Command bar / Settings / Library | real app images below | reviewed visually | no new live Arc metric claimed | library render checks below |
+
+Method: docs/design.md §7, existing color-space conversion, element masks, and
+same frozen private capture. Raw personal inputs stay in `.re/`; no reference
+assets or private URLs/titles enter the repo. The command-bar library's existing
+comparison limits (Cmd+L selection and split-row presentation) remain documented
+in docs/commandbar.md; this PR does not relabel them as a new pixel match.
+
+Own-window screenshots: [command bar](engine-spike/commandbar-live-release.png),
+[Settings](engine-spike/settings-live-release.png),
+[Library](engine-spike/library-live-release.png),
+[standard window](engine-spike/step-c-window-startup.png).
+
+### Limits
+
+- Little Open remains the required Step C stub until Step E. Incognito and
+  Peek Email remain disabled. Unsupported later-step actions stay disabled.
+- Save Page uses OpenEngine's `Page.captureSnapshot` MHTML plus a native Save
+  panel: today's public API cannot initiate an OEDownload for saving a page.
+- Settings protocols are wired to the real UI. Durable import, ad-block engine
+  filtering, sleep lifecycle binding, and application icon switching remain
+  later integration work. Their adapters report that state; they do not claim
+  those operations completed. Update checks report the missing update feed.
+- Data clearing supports all-time cookies/cache together. Other ranges, History,
+  and Downloads clearing return a plain error before mutation. Profile deletion
+  refuses an open engine context. Translation prompt reset has no engine API.
+- Continuous page-theme events are still missing; the host color callback uses
+  the guarded post-load renderer query. Durable non-default engine storage stays
+  BLOCKED on the `root_cache_path` follow-up in docs/followups.md.
+- Drag reorder exercises the production SidebarDelegate intent; it does not
+  automate a native cross-window mouse drag. No desktop input was sent.
+
+### Step C repository verification
+
+Merged `origin/main` through `dc62e65`. Both app builds are clean under Swift 6.
+The fork Release socket build uses `OPEN_AUTOMATION=1`; normal Release keeps it off.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 10 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 1 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 2 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 42 |
+| sidebar-render | PASS | 19 |
+| commandbar-render | PASS | 14 |
+| boosts | PASS | 2 |
+
+`features-render check`: 147/147 PASS after preserving sibling selection only
+when a larger split remains. The first pass exposed this case (146/147); the
+failed log is retained under `.re/c-final-features-render-before-split-guard.log`.
+`sidebar-render check`: 125/125 PASS. No reference app was launched.
+
+
+### Step C audit P0 — native responder chain
+
+Standard system commands are now registry metadata (`SystemCommandActions`) in
+OpenCommands. Menu items carry AppKit selectors with `target=nil`, including
+native find tags and Bold/Italic font traits. Services, Window, and Font menus
+remain registered with AppKit. The App no longer maintains a selector map.
+
+Page Copy, Cut, Paste, Select All, and Undo are exercised through the actual
+window key route and native responders. Command-bar text undo uses the editor's
+own manager; it cannot undo a model tab action. Sidebar model undo is checked
+after Reveal Tab focuses the actual outline. Native Find gets first refusal in
+text fields; only the window's fallback opens browser Find.
+
+Tabs > Reveal Tab in Sidebar is registered and included in expected-menu.json.
+It has no default shortcut, as recorded in docs/re/menus-and-hotkeys.md §Tabs.
+View > Reveal Current Tab retains Ctrl+Space.
+
+A P0 development run passed the functional checks but missed the Debug first-open
+budget at 62.92 ms under load. Its [receipt](engine-spike/results-commandbar-step-c-before-focus-optimization-debug.json)
+is preserved. Opening the bar now avoids a redundant menu rebuild when its
+window is already active. Final measurements below supersede no earlier miss.
+
+The lead's independent fork verification of merged #52 reported a 253 ms cold
+sidebar median while seven agents built; its first run was 207 ms. Those are
+separate observations from the 218/232 ms measurements above. Step I must
+remeasure launch and command-bar budgets on an idle machine.
+
+P1 port boundary: this step changes no TabStripMirror, ExtensionTabRequests, or
+factory OEBrowserDelegate section. Factory changes are UI composition, command
+bar/navigation intents, native text/find responders, and the Library download
+notification. Engine code and engine project settings remain with the lead.
+
+
+## Step C audit P0 complete suite run — 2026-10-26
+
+The PR targets main directly, after #45 and #52 merged. The tested main base is
+`b62935e96fd8a5ff062b525a1eeda32dafd3ecd8`; it includes the bundle-ID and entitlement
+updates. Both app builds pass under Swift 6. The Release socket build uses
+`OPEN_AUTOMATION=1`. The default **fork** distribution was refreshed with
+`tools/fetch-engine.sh --run`; no Chromium build, sync, or CDN fallback was used.
+
+The last complete suite run below, before the final model-only main merge, used
+matching embedded/vendor UUID
+`4C4C44B8-5555-3144-A161-028377002F35`. The exact source stamp and both UUIDs are in every
+receipt. Earlier receipts retain their different fork UUIDs and measurements.
+
+| Suite / fork | Debug | Release | Evidence |
+|---|---|---|---|
+| commandbar | 45/45 PASS | 45/45 PASS | [Debug](engine-spike/results-commandbar-step-c-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-fork-release.json) |
+| window | 37/38 PASS; FAIL: fullscreen_hover_reveal; 2 named launch-timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-c-fork-debug.json), [Release](engine-spike/results-window-step-c-fork-release.json) |
+| sidebar | 18/18 PASS; durable profile storage BLOCKED | 18/18 PASS; durable profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-fork-release.json) |
+| peek | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-c-fork-debug.json), [Release](engine-spike/results-peek-step-c-fork-release.json) |
+| shell | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-c-fork-debug.json), [Release](engine-spike/results-shell-step-c-fork-release.json) |
+
+| Step C acceptance | Debug / fork | Release / fork |
+|---|---|---|
+| Registry-native menu selectors, target nil | PASS | PASS |
+| Real page Copy, Cut, Paste, Undo, Select All via window keys | PASS | PASS |
+| Native text-field undo leaves model intact | PASS | PASS |
+| Sidebar model undo after outline focus | PASS | PASS |
+| Native Services / Font / Window menus and font trait tags | PASS | PASS |
+| Tabs Reveal Tab in Sidebar, no shortcut; View Ctrl+Space retained | PASS | PASS |
+| Cmd+T/L/W/S with a page that prevents default keys | PASS | PASS |
+| New/current/background navigation; cross-Space row; calculator copy | PASS | PASS |
+| Pin/Unpin actions; duplicate tab/folder/split stays lazy; one undo | PASS | PASS |
+| Real Settings/Library, shared SnapshotStore; section commands | PASS | PASS |
+| Archive restore, profile-scoped History open, custom engine | PASS | PASS |
+| Override reload/conflict fallback; shared-router double press | PASS | PASS |
+| Carbon registration/toggle and Settings persistence | PASS | PASS |
+| commands-dump exact expected-menu comparison | exit 0 | exit 0 |
+
+
+| Measurement / fork | Debug ms | Release ms | Budget |
+|---|---:|---:|---|
+| First command-bar results, including construction | 42.05 | 28.75 | ≤50; PASS |
+| Repeat command-bar results | 25.97 | 19.31 | ≤50; PASS |
+| Cold, fresh profile, median of 5: confirmed sidebar | — | 219 | ≤250; PASS |
+| Cold, fresh profile, median of 5: first contentful paint | — | 445 | ≤700; PASS |
+| Warm, existing profile, median of 5: confirmed sidebar | — | 237 | ≤250; PASS |
+| Warm, existing profile, median of 5: first contentful paint | — | 471 | ≤700; PASS |
+
+Host load was [10.59375, 10.75146484375, 10.736328125] on 18 CPUs. These are shared-machine
+observations, not idle acceptance. Keep the earlier 62.92 ms Debug bar miss and
+252 ms warm-sidebar miss in their frozen receipts. An intermediate run also
+reported 255 ms warm sidebar; its value was captured in the work log before the
+final run. The lead separately reported #52 at 253 ms cold (and an earlier
+207 ms run) while seven agents built. Step I must remeasure on an idle machine.
+
+The final Debug `fullscreen_hover_reveal` failure remains a failure: the floating
+card did not appear in native fullscreen. Earlier Release key-response and sidebar-width failures
+are retained in the before-key-settle receipt. Intermediate hover failures were
+also observed before the final run. No hover, frame, traffic-light,
+sidebar layout, or metrics code changed in Step C; that work is owned separately.
+The static F0001 sidebar comparison remains a legacy narrow check, not proof that
+the reported live-chrome defects are closed.
+
+The automation key response now waits one short native event-loop turn before
+reading responder state. The first Release command-bar attempt queried a host
+before creation; the fixture now waits through the existing `wait` interface.
+Neither change invents a UI result. Native page editing, text undo and sidebar
+undo are still dispatched through the real AppKit/engine interfaces.
+
+The factory OEBrowserDelegate section, TabStripMirror, ExtensionTabRequests,
+window setup and sidebar chrome remain untouched relative to the merged base.
+Existing Step C limits above remain: Little Open stub, disabled Incognito/Peek
+Email, later-step import/filter/sleep/icon/update adapters, the all-time combined
+cookie/cache API restriction, post-load color fallback, and durable non-default
+profile storage BLOCKED on root_cache_path. Native OS-wide services and Hide
+Others are not invoked by automation; their nil-target wiring is checked.
+
+### Final rule 10 and rendering checks
+
+Merged origin/main, then full tools/verify-all.sh: **16 PASS, no SKIP**. The added
+media-demo row comes from main. `features-render check`: **147/147 PASS**, including
+Escape through the real window handler restoring a maximized split. Sidebar
+render passes 125/125. commands-dump exits 0 with the new Tabs entry. No unit tests,
+reference assets, Arc launch, or desktop input were used.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 31 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 11 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 43 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 15 |
+| boosts | PASS | 3 |
+
+
+### Post-merge repeat on main 005e065
+
+Main subsequently added Sidebar M1 model commands (`005e065afa77bf188ab6fd820e6d0b0db8b8ae03`).
+That merge is included in this PR. Debug and Release rebuilds passed on the refreshed
+fork UUID `4C4C4479-5555-3144-A13D-8D658E72FFF9`, stamp suffix `1793001051`.
+The last complete run above remains separate evidence; the repeat did not reproduce
+all of its passes:
+
+| Latest repeat / fork | Debug | Release | Evidence |
+|---|---|---|---|
+| commandbar | 1 PASS, suite FAIL before opening the bar | 1 PASS, suite FAIL before opening the bar | [Debug](engine-spike/results-commandbar-step-c-post-main-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-post-main-fork-release.json) |
+| sidebar | 17 PASS, suite FAIL at comparison setup; durable storage BLOCKED | 17 PASS, suite FAIL at comparison setup; durable storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-post-main-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-post-main-fork-release.json) |
+
+The command-bar check could not obtain a key window (`keyWindow=0`) after activating
+its own Open window. The sidebar comparison could not obtain the required
+2216×1394 pt frame: AppKit clamped it to 2216×1050. A read-only `NSScreen.screens`
+query reported a single 1920×1080 screen during this attempt. The cause of the key
+window failure is not confirmed. No window setup, activation policy, hover or
+layout code was changed to bypass these failures. All apps launched by the suites
+were closed. These latest rows are failures, not replaced with the earlier passes.
+
+Post-merge `tools/verify-all.sh`: **16 PASS, no SKIP**. Both app builds pass.
+`features-render check`: **147/147 PASS**; sidebar-render: **125/125 PASS**.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 58 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 53 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 16 |
+| boosts | PASS | 4 |
+
+
+### Final main merge: first-run Settings
+
+Merged main through `4ef33e9b07ab739afe315b9f08313e9eaf1b471b` (#66). It adds the
+shared ImportActions parent protocol and Settings presentation updates. Step C
+keeps the real presenters and the same single SnapshotStore. It adds no first-run
+flow, window setup, sidebar chrome, or P1 delegate changes. The full runtime
+receipts and the later failed attempts above retain their original revisions;
+this merge does not turn those failed attempts into passing evidence.
+
+The command-bar and Settings/Library screenshots were inspected. No new live Arc
+comparison is claimed for those windows; the earlier command-bar comparison
+limits in docs/commandbar.md remain.
+
+Final Debug and Release builds both embed fork UUID
+`4C4C4420-5555-3144-A124-50C9E706917C`, source-stamp suffix `1793001810`
+(`xcrun dwarfdump --uuid` on each app framework). These are build results, not
+new runtime acceptance; runtime UUIDs remain attached to the earlier receipts.
+
+Final rule 10 after the #66 merge: **16 PASS, no SKIP**. Debug and Release
+app builds pass. `features-render check`: **147/147 PASS**; sidebar-render
+**125/125 PASS**. Latest full repository summary:
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 48 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 68 |
+| sidebar-render | PASS | 18 |
+| commandbar-render | PASS | 15 |
+| boosts | PASS | 3 |
+
+
+## Step C main merge and display hold — 2026-10-26
+
+Merged `e44b40d` (P1 #53, first run #66, sidebar #77, chrome #90), then main
+through `15e261e` (Release metadata and Sparkle pin). No rebase or force-push.
+The P1 host structure, TabStripMirror, ExtensionTabRequests and factory
+OEBrowserDelegate remain as main implements them. Step C keyboard/undo behavior
+is reapplied above them. Chrome geometry, traffic-light placement, spacing and
+reveal behavior remain from #90. Package.swift and verify-all retain every target
+and row from main.
+
+### Failure causes and changes
+
+| Failure / defect | Evidence | Change / current limit |
+|---|---|---|
+| Launch focus | Same Debug app, raw executable in Alloy and Chrome: visible but appActive=false/key=0 after five seconds. Bundle launch: active/key and native page Copy succeeds. | Normal suites launch the exact bundle through LaunchServices. Input waits for native focus. A helper renews activation only for a verified PID/executable, without resolving another Open instance by bundle ID. The new PID helper compiles; its real-app path awaits resume. |
+| Focus after command-bar navigation | Native RenderWidget responder and key app, but the committed page reported document.hasFocus=false for five seconds. | Restore focus after loading, only while that same page remains selected, the window is key and the command bar is closed. The resulting five native editing rows and all 45 action checks passed in a diagnostic. |
+| Capture size | Old run: 1394 pt request clipped to 1050 on a 1080 pt screen. Morning negative control on a 1440 pt screen: 1800 pt clipped to 1410, exact-frame mode kept 1800. | Keep #90's unconstrained capture mode and wait for the exact dimensions. Position/color tolerances are unchanged. Morning sidebar/window comparisons passed. |
+| Hover readiness | First leave/enter moves were queued without native-dequeue acknowledgement; NSEvent.h documents that movement coalescing is enabled by default. | Each synthetic motion now has a request tag and waits for native monitor + tracker delivery. Production reveal code and dwell budgets stay unchanged. This alone did not clear the next attempt: hide/reveal failed again alongside inactive/key=0 failures. Final stability is unverified. |
+| Save fixture | After creating a custom-search tab, the fixture tried to focus the older background cross-Space tab. | Select/load it before focusing. Save sheet and relaunch rows passed in the 45/45 diagnostic. |
+| Worktree/process isolation | Suite roots used shared Application Support paths. Stopping subprocess.run's supervisor also left two own Open processes alive. | Use worktree-private .re data roots. Wait for the actual app PID on cleanup, not only open -W. The next supervisor records stop requests and finishes its current child. Both orphan processes were identified by socket PID and closed. |
+
+[Controlled native-state evidence](engine-spike/step-c-main-recheck/focus-capture-causes.json).
+The isolation issue is an additional defect, not proof that every prior focus
+failure had that cause. Foreground contention remained in the interrupted run.
+
+### Diagnostic results, not a completed acceptance matrix
+
+| Debug / default fork / Chrome | Result |
+|---|---|
+| Actions after navigation focus fix | 45/45 PASS |
+| First matrix window runs | 43 PASS + hide_reveal FAIL; then 44/44 PASS; both have two named timing SKIPs |
+| First matrix sidebar runs | 18/18 PASS twice; durable storage BLOCKED |
+| First matrix shell runs | 6/6 PASS twice |
+| First matrix features run | 19/19 PASS |
+| First matrix actions run | 45/45 PASS |
+| Later window attempt | 23 PASS; hide_reveal and suite FAIL; incomplete |
+| Later sidebar attempt | 18/18 PASS; durable storage BLOCKED |
+| Later shell attempt | 2 PASS; suite FAIL on native key-focus readiness; incomplete |
+| Active features attempt at hold | Interrupted; no complete receipt |
+| Required final three-pass matrix | NOT COMPLETE; Debug and Release all five suites remain to rerun |
+
+All files and the exact failed rows are retained in
+[step-c-main-recheck](engine-spike/step-c-main-recheck/README.md). The last helper,
+cleanup and hold changes are not credited with runtime acceptance. Default fork
+runtime receipts embed UUID `4C4C44F5-5555-3144-A143-53034578039A`, matching the vendor
+UUID, source-stamp suffix `1793006546`. No CDN comparison or engine build/sync.
+Debug launch numbers do not close Release budgets; the final Release medians are
+pending the resumed matrix. Earlier misses remain recorded above.
+
+### Offscreen/build checks complete before hold
+
+Debug build PASS (18.77 s), Release automation build PASS (58.29 s).
+`features-render`: 147/147 PASS; `sidebar-render`: 147/147 PASS. Full verify-all:
+16 PASS, no SKIP. The exact-PID Swift helper compiles with Swift 6 and Python
+compilation/CLI help passes; no unit checks replace the remaining real-app flows.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 1 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 3 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 68 |
+| sidebar-render | PASS | 22 |
+| commandbar-render | PASS | 16 |
+| boosts | PASS | 4 |
+
+The lead requested a display hold at 09:58 America/Vancouver. All own Open
+processes are closed and `.re/hold-on-screen` prevents new launches. The estimated
+11:15 end is not authorization to resume. The required three repetitions of
+window/sidebar/shell/features/actions in Debug and Release, the final PR body,
+and push remain pending the lead's explicit resume.
+
+
+## Step C review update: main merge, focus and capture checks
+
+Main is merged through `a962f39`. #53's factory/delegate structure and strip order,
+#90's window geometry and reveal behavior, both Package.swift sides and every
+verify-all row are retained. No rebase or force-push. TabStripMirror,
+ExtensionTabRequests and the factory's OEBrowserDelegate section match main.
+The sole additional reveal hook applies only after the existing tagged automation
+pointer filter is installed; its default nil preserves ordinary deactivation behavior.
+
+| Reported failure | Root cause and evidence | Change |
+|---|---|---|
+| Native key focus (`keyWindow=0`) | A raw executable can show a window without a foreground grant. Same-app raw-vs-LaunchServices controls are retained in `focus-capture-causes.json`. Activation is asynchronous and can be refused or lost to another app. | Launch the exact bundle through LaunchServices; activate only its verified PID; wait for the actual requested key window before native input. A lost grant is INTERRUPTED, not PASS. |
+| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if Open is active, that page is still selected, its window is key, the bar and sheets are closed, and the first responder is still the page or window. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
+| Comparison capture size | AppKit constrained a 1394 pt request to 1050 on a 1080 pt display. A controlled larger request likewise clipped under ordinary constraints and stayed exact with the existing capture hook. | Keep #90's unconstrained automation frame mode and poll the exact reference dimensions. No comparison tolerance changes. |
+| Hover and card-pixel checks | Synthetic moves previously advanced before native dequeue, and real activation traces then confirmed repeated didResignActive notifications during dwell/hold/capture. The production card intentionally dismisses on resignation. The lead confirmed concurrent user/agent foreground use. | Acknowledge each tagged native motion and reveal-tracker delivery. Tagged pointer sessions ignore unrelated activation changes; normal sessions still dismiss. A real-app check yields only Open and verifies reveal/dismiss while inactive. Pixel/native-focus steps retain interruption evidence and bounded retries. |
+| Direct deactivation control failed | NSApp.deactivate did not complete a foreground handoff or emit a resignation in the controlled run; native key-window readiness then timed out. This was a control-method failure, not evidence of a page/menu defect. | Replace it with a second owned Open process, exact-executable validation and AppKit cooperative activation. Native resignation itself is sufficient interruption evidence; app metadata can update later. Retain the failed control receipts. |
+| Save fixture focus | The fixture tried to focus an old background tab after selecting a newer custom-search tab. | Select and load the target before focusing it. |
+| Cross-worktree/process interference | Shared suite data roots and launcher-only cleanup could leave an old app running or collide with another worktree. | Private worktree data roots, actual socket PID/executable validation, and app-PID cleanup. Signal handling finishes the current child before stopping. |
+
+Native-focus steps record the readiness-grant uptime and the actual frontmost app
+name/PID. Foreground loss before an assertion marks the attempt INTERRUPTED even
+if its assertion succeeded. Up to three fresh workflow attempts avoid replaying a
+destructive key against partially changed state. Each original assertion is kept;
+only a complete uninterrupted retry can contribute accepted passes. Exhaustion
+exits 2. Ordinary assertion failures exit 1. The native fault-injection receipt
+checks this policy against two owned real app instances, not an isolated model or mock.
+
+The lead accepted the three Debug and three Release locked runs with zero
+foreground interruptions as the required focus acceptance on 2026-10-26.
+All timing misses, ordinary failures, interrupted attempts, named Debug timing
+SKIPs and durable profile-storage BLOCKED rows remain explicit in the linked
+summary and raw receipts. Step I must remeasure launch budgets on an idle machine.
+
+
+All final on-screen invocations hold `/tmp/open-onscreen-e2e.lock` through
+`/usr/bin/lockf`, one suite at a time. Builds and offscreen checks do not hold it.
+Pre-lock foreground interruptions remain in their own phase; they do not enter
+the final accepted matrix.
+
+Builds and the 19-row full verifier completed before the 13:06 local heavy-job
+slot rule. Future build/verifier commands use `heavy.sh`. No slot was held while
+the on-screen matrix ran. The recorded timings remain loaded-machine evidence.
+
+
+### Final locked matrix and remaining acceptance gap
+
+Tested source `342800c`, main `a962f39`, default fork UUID
+`4C4C4432-5555-3144-A144-B678285BC5F4`, Chrome hosting. All 30 requested
+Debug/Release invocations finished. Full verify-all: **19 PASS, no SKIP**;
+sidebar-render **368/368**, features-render **151/151**. All twelve live static
+comparisons passed within **1 pt / ΔE00 1.61**.
+
+The final matrix has **zero foreground interruptions**. All Debug rows pass.
+Release window runs each pass 45 functional checks and fail both 250 ms sidebar
+launch budgets under load; all six first-paint medians pass 700 ms. They remain
+recorded load exceptions for Step I, not passes. Release actions repetition 1
+stops after six passes with a native key-readiness FAIL before page Copy, despite
+its error reporting active=true and equal target/key window numbers. No external
+foreground loss was observed. Its exact cause is **unconfirmed**. Later 45/45
+runs and 80 additional locked real-app navigation/Copy cycles do not erase it.
+The exact two-tab diagnostic captured 400 native input steps with active/key state
+at every before/after boundary. The lead accepted the locked three-run matrix as focus acceptance on 2026-10-26. No timing budget or comparison tolerance changed.
+
+[Full three-run tables, six Release medians, command-bar timings and all verifier rows](engine-spike/step-c-main-recheck/post-a962f39/final-summary.md).
+[Unresolved focus failure and diagnostic provenance](engine-spike/step-c-main-recheck/post-a962f39/focus-readiness-unresolved.json).
+
+Earlier phases retain their code-4 fullscreen failure, Widevine download misses
+and command-bar timing misses with their original revisions. These did not recur
+in the final matrix; their historical underlying causes are not declared fixed.
+The final Open command-bar, Settings and Library screenshots were inspected.
+No new Arc comparison is claimed for those three windows.
+
+
+## Step C final merged verification — 2026-10-26
+
+## Step C review update: main merge, focus and capture checks
+
+Main is merged through `8f3379a`. #53's factory/delegate structure and strip order,
+#90's window geometry and reveal behavior, both Package.swift sides and every
+verify-all row are retained. No rebase or force-push. TabStripMirror,
+ExtensionTabRequests and the factory's OEBrowserDelegate section match main.
+The sole additional reveal hook applies only after the existing tagged automation
+pointer filter is installed; its default nil preserves ordinary deactivation behavior.
+
+| Reported failure | Root cause and evidence | Change |
+|---|---|---|
+| Native key focus (`keyWindow=0`) | A raw executable can show a window without a foreground grant. Same-app raw-vs-LaunchServices controls are retained in `focus-capture-causes.json`. Activation is asynchronous and can be refused or lost to another app. | Launch the exact bundle through LaunchServices; activate only its verified PID; wait for the actual requested key window before native input. A lost grant is INTERRUPTED, not PASS. |
+| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if Open is active, that page is still selected, its window is key, the bar and sheets are closed, and the first responder is still the page or window. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
+| Comparison capture size | AppKit constrained a 1394 pt request to 1050 on a 1080 pt display. A controlled larger request likewise clipped under ordinary constraints and stayed exact with the existing capture hook. | Keep #90's unconstrained automation frame mode and poll the exact reference dimensions. No comparison tolerance changes. |
+| Hover and card-pixel checks | Synthetic moves previously advanced before native dequeue, and real activation traces then confirmed repeated didResignActive notifications during dwell/hold/capture. The production card intentionally dismisses on resignation. The lead confirmed concurrent user/agent foreground use. | Acknowledge each tagged native motion and reveal-tracker delivery. Tagged pointer sessions ignore unrelated activation changes; normal sessions still dismiss. A real-app check yields only Open and verifies reveal/dismiss while inactive. Pixel/native-focus steps retain interruption evidence and bounded retries. |
+| Direct deactivation control failed | NSApp.deactivate did not complete a foreground handoff or emit a resignation in the controlled run; native key-window readiness then timed out. This was a control-method failure, not evidence of a page/menu defect. | Replace it with a second owned Open process, exact-executable validation and AppKit cooperative activation. Native resignation itself is sufficient interruption evidence; app metadata can update later. Retain the failed control receipts. |
+| Save fixture focus | The fixture tried to focus an old background tab after selecting a newer custom-search tab. | Select and load the target before focusing it. |
+| Persistence relaunch / launcher exit | macOS open -W reported Unable to block on application (GetProcessPID). The harness treated that waiter exit as app exit before obtaining a socket PID. App exit itself was not established. | Wait for the real socket/PID within the existing 60-second deadline. The real first-frame timeout fixture also runs open without -W and requires a live page after its launcher exits. Original failed receipts remain. |
+| Cross-worktree/process interference | Shared suite data roots and launcher-only cleanup could leave an old app running or collide with another worktree. | Private worktree data roots, actual socket PID/executable validation, and app-PID cleanup. Signal handling finishes the current child before stopping. |
+
+Native-focus steps record the readiness-grant uptime and the actual frontmost app
+name/PID. Foreground loss before an assertion marks the attempt INTERRUPTED even
+if its assertion succeeded. Up to three fresh workflow attempts avoid replaying a
+destructive key against partially changed state. Each original assertion is kept;
+only a complete uninterrupted retry can contribute accepted passes. Exhaustion
+exits 2. Ordinary assertion failures exit 1. The native fault-injection receipt
+checks this policy against two owned real app instances, not an isolated model or mock.
+
+The lead accepted the three Debug and three Release locked runs with zero
+foreground interruptions as the required focus acceptance on 2026-10-26.
+All timing misses, ordinary failures, interrupted attempts, named Debug timing
+SKIPs and durable profile-storage BLOCKED rows remain explicit in the linked
+summary and raw receipts. Step I must remeasure launch budgets on an idle machine.
+
+
+All final on-screen invocations hold `/tmp/open-onscreen-e2e.lock` through
+`/usr/bin/lockf`, one suite at a time. Builds and offscreen checks do not hold it.
+Pre-lock foreground interruptions remain in their own phase; they do not enter
+the final accepted matrix.
+
+Both app builds and the full verifier use the heavy-job slot wrapper.
+The on-screen suite lock is separate and covers one invocation at a time.
+The earlier 342800c/a962f39 matrix and its unresolved native readiness failure
+remain in post-a962f39. The new native error reports the same active/key predicate
+values that refused input, plus key-window identity and foreground metadata;
+readiness conditions, the five-second deadline and acceptance checks are unchanged.
+
+The final Release shell repetition 1 failed before automation on persistence
+relaunch with a CEF allocator fatal at allocator_shim_apple.cc:61. CoreFoundation
+and RunningBoardServices appear in the preserved stack. Why the pointer lacked
+a malloc zone remains unconfirmed; the engine lead owns the follow-up. This is
+a genuine FAIL, not an interruption or a timing load exception. No Engine source
+or distribution changes are part of Step C.
+
+### Final results
+
+Harness source `6e9d1a4`, main merged through `8f3379a`. Both app binaries were
+built at `4a6fe77` through heavy.sh; every tracked App, Engine, OpenKit and build
+input is identical at the harness revision. Full verify-all ran fresh at
+`6e9d1a4`: **19 PASS, no SKIP**; sidebar-render **429/429**, features-render
+**258/258**. All runtime tables use the default fork, UUID
+`4C4C4432-5555-3144-A144-B678285BC5F4`, distribution stamp suffix `1793036548`.
+
+| Suite | Debug runs 1 / 2 / 3 | Release runs 1 / 2 / 3 |
+|---|---|---|
+| window | 46/46 each | 46 PASS + 2 launch-budget FAIL each |
+| sidebar | 18/18 each | 18/18 each |
+| shell | 6/6 each | 5 PASS + startup FAIL / 6/6 / 6/6 |
+| features | 19/19 each | 19/19 each |
+| actions | 45/45 each | 45/45 each |
+
+All 30 invocations finished. **Zero final foreground interruptions**. The
+expected negative-control interruptions are separate. Debug window timing SKIPs
+and sidebar durable-profile-storage BLOCKED rows remain explicit. All twelve
+live static comparisons passed at **≤1 pt / worst ΔE00 1.61**. First/repeat
+command-bar internal results pass 50 ms in all six actions runs. These numbers
+start at showCommandBar entry and end when the first snapshot is applied; they
+exclude preceding key routing, socket transport and frame presentation.
+
+All six Release sidebar launch medians exceed 250 ms under load; first paint
+passes 700 ms in all six. Load averages at the three starts were 46.03, 10.75
+and 13.08. These remain recorded load exceptions and require Step I idle
+measurement. They are not passes.
+
+Release shell repetition 1 has a confirmed engine allocator startup crash before
+automation on persistence relaunch. Its original FAIL, stack and follow-up remain.
+The earlier native key-readiness failure has an unconfirmed cause after 80
+additional real-app diagnostic cycles; the current six actions runs pass, and the
+lead accepted the locked three-run matrix as focus acceptance on 2026-10-26. No check, time budget or
+comparison tolerance was relaxed.
+
+[Full three-run, timing, comparison and 19-row verifier tables](engine-spike/step-c-main-recheck/final-summary.md).
+[Engine startup stack](engine-spike/step-c-main-recheck/engine-startup-crash.txt).
+The final command-bar, Settings and Library screenshots were inspected and
+contain only Open's synthetic fixtures. No new Arc comparison is claimed for
+those three windows. No unit tests or desktop input.
+
+
+### Step C code review round 1
+
+The lead accepted the prior three Debug and three Release locked runs with zero
+foreground interruptions as focus acceptance. The recorded allocator startup
+FAIL remains in the historical receipts. It has no Open frames, is not attributed
+to this PR, and is nonblocking per the lead; the [separate allocator debug task](t3-thread://v1/thread:delegated-task:command%3Amcp%3A113d67cd-becd-4e78-a257-e72ea2a8568f%3Adelegate-task%3Adebug-1027-release-relaunch-zone-crash-v1) owns it.
+
+Post-load, command-bar-dismiss and Save-sheet callbacks now share a guarded focus
+restore. Open must be active, the window key, the same page selected, the bar
+and sheets closed, and the first responder still the page or the window. A
+sidebar editor, URL field, Find field, command bar or sheet keeps its focus.
+Actual slow HTTP response fixtures exercise sidebar, Find, inactive load, and
+inactive programmatic dismissal. The old build loses sidebar focus and changes
+the inactive dismissal responder; both red receipts are retained.
+
+Rename Tab uses the existing sidebar inline editor. A split pane with no outline
+row uses an asynchronous sheet. The actions suite checks commit, Escape cancel,
+and a running page timer while editing. Save capture, page-background and Find
+selection tasks have owners and cancellation. Quit cancels these tasks and
+closes all hosts before engine shutdown; the shell suite records and asserts
+that order with real queued Save/background work.
+
+The 50 ms rows measure internal command-bar work: showCommandBar entry to first
+snapshot applied. Preceding key routing, socket transport and frame presentation
+are excluded. Every timed polling/capture interval now has a native activation
+trace bound, even without a key call. Unexpected foreground loss remains
+INTERRUPTED with at most three fresh workflow attempts.
+
+
+Round 1 verification is complete on main merged through `931a777`. App builds
+use `8e345dc`; window/actions use harness `5d57c96`, and shell uses `8a71e1b`.
+All app/package/build inputs match across these harness revisions. Default fork,
+Chrome hosting, UUID `4C4C4432-5555-3144-A144-B678285BC5F4`.
+
+| Suite | Debug | Release | Unexpected foreground interruptions |
+|---|---|---|---:|
+| window | 53 PASS; 2 named timing SKIP | 53 functional PASS; 2 launch-budget FAIL | 0 |
+| shell | 7/7 | 7/7 | 0 |
+| actions | 47/47 | 47/47 | 0 |
+
+Full heavy.sh verifier: **20 PASS, no SKIP**. Sidebar-render 429/429,
+commandbar-render 78/78, features-render 258/258. Live comparison: **1 pt /
+worst delta E00 1.55** in both configurations. Three socket-only interruption
+controls each have zero native-input steps and store INTERRUPTED, never PASS.
+
+Release cold/warm medians: sidebar **307 / 264 ms**, first paint **526 / 474 ms**,
+load **11.14 / 12.07 / 16.28**. Sidebar misses remain FAIL load exceptions for
+Step I; budgets stay 250 / 700 ms. Internal command-bar first/repeat results:
+Debug **32.50 / 13.59 ms**, Release **32.47 / 10.62 ms** (scope above).
+
+Save presenter replies use the socket caller boundary and the same production
+capture completion. The real MHTML engine capture and file write pass. System
+Save/Cancel buttons and remote key delivery remain unverified; native open,
+page editing and inline rename key routes remain tested. The completed shutdown
+record is awaited through engineShutdownEnd; both configurations reject forced
+cleanup and require zero pending work/hosts before shutdown.
+
+[Full review table, verifier rows, timing and retained failures](engine-spike/step-c-review-r1/summary.md).

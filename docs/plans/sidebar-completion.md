@@ -348,7 +348,7 @@ menus and SC §3):
 
 **Visuals.** A selected row that is not the current row draws
 `SidebarRole.rowMultiselected` in the normal fill rect `[8 + indent, y + 2,
-W − 16 − indent, 36]`, radius 10 continuous, no shadow. The current row keeps
+W − 16 − indent, 36]`, radius 12 continuous, no shadow. The current row keeps
 its selected fill and shadow. Hover over a selected row keeps the multi fill
 (0.10 is darker than the 0.05 hover). Split rows use the same fill; their
 pane cells show only when current. A selected folder fills only its own row.

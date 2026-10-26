@@ -1,0 +1,20 @@
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3397, in main
+    execute()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3359, in execute
+    shell_checks(factory, results["shell"], tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 884, in shell_checks
+    shutdown_order_checks(app_factory, results, tmp)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 1596, in shutdown_order_checks
+    app.call('save-page-choose', path=destination)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 204, in call
+    raise RuntimeError("%s: %s" % (cmd, resp.get("error")))
+RuntimeError: save-page-choose: unknown command save-page-choose
+fresh_model              PASS
+tab_strip_mirror         PASS
+keyboard                 PASS
+split_view               PASS
+window_png               PASS
+persistence              PASS
+suite                    FAIL
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-shell-release.json

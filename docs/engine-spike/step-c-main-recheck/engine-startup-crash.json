@@ -1,0 +1,14 @@
+{
+  "receipt": "release-shell-1.json",
+  "sourceHead": "6e9d1a4",
+  "appBuildHead": "4a6fe77",
+  "engine": "fork",
+  "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+  "phase": "Persistence relaunch, before automation socket",
+  "fatal": "allocator_shim_apple.cc(61): No zone found",
+  "traceFile": "engine-startup-crash.txt",
+  "classification": "FAIL, not INTERRUPTED or a timing load exception",
+  "rootCause": "CEF allocator fatal during RunningBoardServices/CoreFoundation startup. Why the pointer had no zone is not established by this trace. Engine-lead investigation is required; the engine source/distribution was not changed by Step C.",
+  "rawPrivateFile": ".re/release-shell-1-launch-failure/open.log.launch-1793050162577814000.log",
+  "rawSHA256": "69d27c6d02fc1e583138ef7ca7fb24891333b5aafedf2f466a4ac62e38dd57c5"
+}

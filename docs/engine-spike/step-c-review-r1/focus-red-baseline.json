@@ -1,0 +1,97 @@
+{
+  "appSource": "4a6fe77 (app inputs identical at reviewed head 58ea518)",
+  "headReviewed": "58ea518437316c2301f23c881987f682cbdab1ad",
+  "method": "Actual old Open app, controlled local HTTP slow response, real sidebar/command bar, and exact-owned Open foreground peer. No mocked engine.",
+  "activeSidebarAndSimpleInactive": [
+    {
+      "case": "sidebar",
+      "before": {
+        "appActive": true,
+        "isKeyWindow": true,
+        "firstResponder": "SidebarOutlineView"
+      },
+      "after": {
+        "appActive": true,
+        "isKeyWindow": true,
+        "firstResponder": "RenderWidgetHostViewCocoa"
+      },
+      "nativeBefore": {
+        "active": true,
+        "frontmostApp": "Open",
+        "frontmostPID": 70721,
+        "keyWindow": 118734,
+        "uptime": 140814.89007145833
+      },
+      "nativeAfter": {
+        "active": true,
+        "frontmostApp": "Open",
+        "frontmostPID": 70721,
+        "keyWindow": 118734,
+        "uptime": 140815.55356508333
+      },
+      "peerPID": null,
+      "focusPreserved": false
+    },
+    {
+      "case": "inactive",
+      "before": {
+        "appActive": false,
+        "isKeyWindow": false,
+        "firstResponder": "SidebarOutlineView"
+      },
+      "after": {
+        "appActive": false,
+        "isKeyWindow": false,
+        "firstResponder": "SidebarOutlineView"
+      },
+      "nativeBefore": {
+        "active": false,
+        "frontmostApp": "Open",
+        "frontmostPID": 70902,
+        "keyWindow": 0,
+        "uptime": 140817.54863308335
+      },
+      "nativeAfter": {
+        "active": false,
+        "frontmostApp": "Open",
+        "frontmostPID": 70902,
+        "keyWindow": 0,
+        "uptime": 140818.2170202917
+      },
+      "peerPID": 70902,
+      "focusPreserved": true
+    }
+  ],
+  "inactiveCommandBarDismiss": [
+    {
+      "case": "inactive-dismiss",
+      "before": {
+        "appActive": false,
+        "isKeyWindow": false,
+        "firstResponder": "CommandBarFieldEditor"
+      },
+      "after": {
+        "appActive": false,
+        "isKeyWindow": false,
+        "firstResponder": "RenderWidgetHostViewCocoa"
+      },
+      "nativeBefore": {
+        "active": false,
+        "frontmostApp": "Open",
+        "frontmostPID": 85570,
+        "keyWindow": 0,
+        "uptime": 140935.491504625
+      },
+      "nativeAfter": {
+        "active": false,
+        "frontmostApp": "Open",
+        "frontmostPID": 85570,
+        "keyWindow": 0,
+        "uptime": 140936.16297016668
+      },
+      "peerPID": 85570,
+      "focusPreserved": false
+    }
+  ],
+  "note": "The active sidebar and inactive dismissal cases are red. The simple inactive load already preserves the sidebar on this Mac because deactivation clears its key window; this is not claimed as a red baseline."
+}

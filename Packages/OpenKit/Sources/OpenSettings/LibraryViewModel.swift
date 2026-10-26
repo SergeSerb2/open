@@ -73,6 +73,10 @@ import OpenStore
         section = LibrarySection(rawValue: defaults.string(forKey: "open.library.lastSection") ?? "") ?? .archive
         historyProfileID = model.windows.first.flatMap { model.space(id: $0.focusedSpaceID)?.profileID } ?? model.profiles.first?.id ?? ProfileID()
     }
+    /// The app supplies its shared stores when new profiles enter the model.
+    public func registerStores(archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore]) {
+        self.archives.merge(archives) { _, shared in shared }; self.histories.merge(histories) { _, shared in shared }
+    }
     public func refreshProfiles() {
         let ids = Set(model.profiles.map(\.id)); histories = histories.filter { ids.contains($0.key) } // Keep injected retired-profile archives searchable.
         let directories = ProfileDirectories(root: snapshot.root)

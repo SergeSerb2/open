@@ -23,7 +23,7 @@ import Foundation
 public enum ThemeField {
     /// Gradient opacity over the underlay. Fitted 0.62–0.645 on two Spaces with
     /// `intensityFactor` 0.8.
-    public static let layerAlpha: Double = 0.64
+    public static func layerAlpha(intensity: Double) -> Double { 0.8 * min(1, max(0, intensity)) }
     /// Underlay gray for `translucencyStyle: light`, active and inactive window.
     public static let lightUnderlayActive: Double = 0.694
     public static let lightUnderlayInactive: Double = 0.83
@@ -78,21 +78,28 @@ public enum ThemeField {
         let underlay: Double
 
         public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
+            // New editor styles clamp render inputs only. Imported/stops
+            // themes retain the original extended-color path byte for byte.
+            func fill(_ color: RGBA) -> RGBA {
+                if style.usesLegacyIntensity { return color }
+                func channel(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
+                return RGBA(channel(color.red), channel(color.green), channel(color.blue), color.alpha)
+            }
             switch style.fill {
             case .blended(let b, let o):
-                base = b.map { OKLab.fromSRGB($0.red, $0.green, $0.blue) }
-                var ov = o.map { (OKLab.fromSRGB($0.red, $0.green, $0.blue), $0.alpha) }
+                base = b.map(fill).map { OKLab.fromSRGB($0.red, $0.green, $0.blue) }
+                var ov = o.map(fill).map { (OKLab.fromSRGB($0.red, $0.green, $0.blue), $0.alpha) }
                 // A clear first stop fades in the second stop's own color
                 // (no darkening through black; measured).
                 if ov.count == 2, ov[0].1 == 0 { ov[0].0 = ov[1].0 }
                 overlay = ov
                 corners = []
             case .corners(let c):
-                base = []; overlay = []; corners = c
+                base = []; overlay = []; corners = c.map(fill)
             }
             baseParam = Param(ThemeField.endpoints(ThemeField.baseLine, size: windowSize))
             overlayParam = Param(ThemeField.endpoints(ThemeField.overlayLine, size: windowSize))
-            alpha = ThemeField.layerAlpha
+            alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
             switch style.translucency {
             case .light: underlay = isActive ? ThemeField.lightUnderlayActive : ThemeField.lightUnderlayInactive
             case .dark: underlay = isActive ? ThemeField.darkUnderlayActive : ThemeField.darkUnderlayInactive
@@ -125,9 +132,11 @@ public enum ThemeField {
                 let (orr, og, ob) = OKLab.toLinear(o)
                 let ba = alpha
                 outA = oa + (1 - oa) * ba
-                r = (orr * oa + r * ba * (1 - oa)) / outA
-                g = (og * oa + g * ba * (1 - oa)) / outA
-                bl = (ob * oa + bl * ba * (1 - oa)) / outA
+                if outA > 0 {
+                    r = (orr * oa + r * ba * (1 - oa)) / outA
+                    g = (og * oa + g * ba * (1 - oa)) / outA
+                    bl = (ob * oa + bl * ba * (1 - oa)) / outA
+                }
             }
             let er = OKLab.encode(r), eg = OKLab.encode(g), eb = OKLab.encode(bl)
             let u0 = underlay * (1 - outA)
