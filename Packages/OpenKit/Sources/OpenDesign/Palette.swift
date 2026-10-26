@@ -128,6 +128,8 @@ public enum SidebarRole {
     public static let buttonPressed = GrayScale.a(6)
     /// URL field and favorite tile resting fill: measured black 0.045 → `SidebarItemBackground`.
     public static let fieldFill = SidebarColors.itemBackground
+    /// URL field under the pointer: F0033 `#CF8B6F` over `#E49978` = black 0.10 → `SidebarItemHoveredBackground`.
+    public static let fieldHover = SidebarColors.itemHoveredBackground
     /// guess: tiles darken like rows on hover (not captured).
     public static let tileHover = SidebarColors.itemHoveredBackground
     /// Row and Space header hover: measured black 0.048 (light), white 0.10 (dark).
