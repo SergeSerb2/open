@@ -2,6 +2,18 @@
 
 Open's end-to-end tests drive the real app through a local Unix socket. There is no computer use: nothing here moves the system mouse, types on the system keyboard, or touches another app. Key and mouse events are built inside Open and go only to Open's own windows. Pixels come only from Open's own windows.
 
+Every agent command that opens Open on screen must hold the machine-wide lock
+for one suite or diagnostic invocation, including launch and cleanup:
+
+```sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
+```
+
+Release the lock between suite invocations. Do not hold it during builds,
+verify-all, or offscreen render checks. Nested peer instances within a suite use
+that suite's existing lock; they do not acquire it again. The lock serializes
+agents, while native-focus interruption tracking still covers user activity.
+
 ## Enable
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
