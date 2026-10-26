@@ -1,19 +1,24 @@
-SiteControl: snapshot or geometry unavailable for tab CA2737C1-4C6C-456F-845B-E4576B073F36
-SiteControl: snapshot or geometry unavailable for tab D7D5D24A-19A8-4A1F-899F-54DC376A5379
-SiteControl: snapshot or geometry unavailable for tab 057FBAF1-E526-4088-9CD0-CE9236344B6A
-SiteControl: snapshot or geometry unavailable for tab F0D79A16-BF68-483F-BA08-3A67C02B2CF3
-Panel first draw: main-thread CPU p95 4.589 ms; wall p95 4.597 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
-CPU samples ms: 4.552, 4.547, 4.596, 4.493, 4.431, 4.268, 4.188, 4.272, 4.132, 4.212, 4.285, 4.288, 4.230, 4.184, 4.167, 4.282, 4.153, 4.363, 4.310, 4.247, 4.176, 4.179, 4.261, 4.589, 4.173, 4.170, 4.283, 4.218, 4.360, 4.134
-Wall samples ms: 4.553, 4.548, 4.597, 4.500, 4.452, 4.269, 4.188, 4.279, 4.133, 4.213, 4.295, 4.297, 4.258, 4.184, 4.167, 4.299, 4.154, 4.363, 4.310, 4.261, 4.247, 4.179, 4.279, 4.606, 4.182, 4.178, 4.290, 4.219, 4.391, 4.134
-CPU parts mean (init/attach/present/display): 0.269, 0.063, 1.898, 2.062
-Editor idle: 4.576 ms main-thread CPU in 2 s, no host work=true; ten-page refresh max 0.072 ms
-Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 Hz; simple open p95 8.624 ms; hue sample 7.199 ms off-main=true
+SiteControl: snapshot or geometry unavailable for tab FEC9005C-9ED3-4BC2-BEFD-9C17D86CA90A
+SiteControl: snapshot or geometry unavailable for tab F02F417C-60EE-4223-B1B1-AAFD1082A6F6
+SiteControl: snapshot or geometry unavailable for tab 9411B2A7-1367-4143-A517-35C47EC2B56F
+SiteControl: snapshot or geometry unavailable for tab B9002E04-D530-4717-BB00-501A87164F74
+SiteControl: snapshot or geometry unavailable for tab B9002E04-D530-4717-BB00-501A87164F74
+SiteControl: snapshot or geometry unavailable for tab 46D98BB8-3C00-4CD2-8981-D9C09BBA5B0F
+Panel first draw: main-thread CPU p95 11.872 ms; wall p95 13.240 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
+CPU samples ms: 8.662, 8.965, 10.193, 9.833, 9.009, 10.457, 8.413, 8.781, 9.374, 9.328, 7.617, 10.631, 14.120, 10.905, 11.872, 9.756, 11.227, 9.018, 8.917, 7.771, 8.070, 8.288, 8.899, 7.945, 8.140, 8.603, 8.058, 10.481, 8.655, 8.329
+Wall samples ms: 9.080, 9.207, 10.794, 10.837, 9.543, 10.904, 8.601, 9.007, 9.727, 9.580, 7.670, 11.176, 16.690, 12.130, 13.240, 10.590, 12.345, 9.216, 9.094, 7.879, 8.197, 8.420, 9.168, 8.041, 8.271, 8.784, 8.176, 10.846, 8.773, 8.518
+CPU parts mean (init/attach/present/display): 0.646, 0.119, 3.980, 4.599
+Editor full drag frame (native event + display): p95 1.486 ms, max 3.258 ms (100 frames; diagnostic, no separate plan budget)
+Editor idle: 1.585 ms main-thread CPU in 2 s, no host work=true; ten-page refresh max 0.123 ms
+Editor: wheel event p95 0.078 ms (500 native events); previews 59 in 1 s / 120 Hz; simple open p95 16.799 ms; hue sample 6.897 ms off-main=true
 | Result | Check |
 |---|---|
 | PASS | F1 anchor presents |
 | PASS | F1 second anchor click closes and is consumed |
 | PASS | F2 Escape closes and restores focus |
 | PASS | F2 outside click closes and reaches page |
+| PASS | outside NSEventType(rawValue: 3) dismisses and forwards to the page |
+| PASS | outside NSEventType(rawValue: 25) dismisses and forwards to the page |
 | PASS | outside click reaches a real native target/action exactly once |
 | PASS | F21 native AX role and label pairs, host description, favicon hidden |
 | PASS | Step 2 More is enabled |
@@ -24,6 +29,24 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | F22 missing geometry stays closed and logs once |
 | PASS | F22 geometry lost while open closes and logs once |
 | PASS | F22 missing snapshot stays closed and logs once |
+| PASS | successful presentation resets once-per-failure-episode reporting |
+| PASS | close fades both layers and disables hit testing immediately |
+| PASS | old close completion cannot hide a new presentation |
+| PASS | host is exposed once in native AX |
+| PASS | security label policy for https |
+| PASS | security label policy for http |
+| PASS | security label policy for chrome |
+| PASS | security label policy for open |
+| PASS | security label policy for chrome-extension |
+| PASS | security label policy for about |
+| PASS | security label policy for data |
+| PASS | security label policy for file |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
 | PASS | F3 Tab visits the complete control order |
 | PASS | F3 Tab wraps |
 | PASS | F3 Shift+Tab reverses |
@@ -57,6 +80,20 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | live Boost removal keeps keyboard input in the panel |
 | PASS | Tab works after the focused Boost disappears |
 | PASS | Command shortcut dismisses and returns to normal routing |
+| PASS | picker item focus guard fails when Extensions UI lands |
+| PASS | Command+36 never activates a focused control |
+| PASS | Command+49 never activates a focused control |
+| PASS | Space with no focused control is passed to the page |
+| PASS | long tile titles use two full lines |
+| PASS | private switches have half opacity |
+| PASS | native AX puts actions before sections and host appears once |
+| PASS | native tracked Return chooses Clear Cookies and keeps reload row |
+| PASS | native tracked Esc dismisses with menuCancelled |
+| PASS | Command+Return on a Boost row cannot edit after dismissal |
+| PASS | mouse activation does not show a keyboard focus ring |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | reload growth moves content with its viewport without clipping the last row |
 | PASS | F10 drag leaves the real store unchanged before mouse-up |
 | PASS | F10 live preview uses real planner and strips JavaScript |
 | PASS | F10 mouse-up commits once and derives the wheel adjustment |
@@ -117,7 +154,25 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | news.example.com scope applies to child.news.example.com |
 | PASS | news.example.com scope does not apply to example.com |
 | PASS | saved IP path scope has one host choice and a checked path item |
+| PASS | 103-4 saved IP /news is checked while page is /other/page |
+| PASS | 103-4 saved IP /news is checked while page is / |
 | PASS | root IP scope hides path and registrable-domain items |
+| PASS | 103-1 commit then close flushes to a fresh store without caller saveNow |
+| PASS | 103-1 native Delete is durable immediately |
+| PASS | 103-2 slider repeats keep live state out of store before the group ends |
+| PASS | 103-2 one second slider repeats commit once |
+| PASS | 103-2 one undo restores every repeated slider step |
+| PASS | 103-2 AX slider repeats commit once on AX focus loss |
+| PASS | 103-2 one undo restores all AX increments |
+| PASS | 103-2 keyboard focus loss commits the slider group |
+| PASS | 103-3 slider drag has its own undo entry after wheel repeat |
+| PASS | 103-3 second undo restores the wheel repeat separately |
+| PASS | 103-5 an invalid request preserves the live editor |
+| PASS | 103-7 load removes only stale atomic-write files |
+| PASS | 103-8 pending page sampling disables Shuffle and wheel edits |
+| PASS | 103-8 sampling enables Shuffle and wheel edits |
+| PASS | design 10 keyboard focus fully reveals a 56 pt font chip |
+| PASS | design 12 disabled tile copy is user-facing |
 | PASS | F21 real editor AX hierarchy labels all controls |
 | PASS | navigation keeps the editor and shows Not active |
 | PASS | tab switch finalizes and closes the bound editor |
@@ -386,29 +441,273 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | render scc-dark dark 2x anchor geometry |
 | PASS | complete opaque capture scc-dark dark 2x |
 | PASS | render scc-dark dark 2x (fill and glyph ink) |
+| PASS | render scc-reload light 1x header/action/footer fill |
+| PASS | render scc-reload light 1x every separator on device pixel |
+| PASS | render scc-reload light 1x shadow offset down |
+| PASS | render scc-reload light 1x anchor geometry |
+| PASS | complete opaque capture scc-reload light 1x |
+| PASS | render scc-reload light 1x (fill and glyph ink) |
+| PASS | render scc-reload light 2x header/action/footer fill |
+| PASS | render scc-reload light 2x every separator on device pixel |
+| PASS | render scc-reload light 2x shadow offset down |
+| PASS | render scc-reload light 2x anchor geometry |
+| PASS | complete opaque capture scc-reload light 2x |
+| PASS | render scc-reload light 2x (fill and glyph ink) |
+| PASS | render scc-reload dark 1x header/action/footer fill |
+| PASS | render scc-reload dark 1x every separator on device pixel |
+| PASS | render scc-reload dark 1x shadow offset down |
+| PASS | render scc-reload dark 1x anchor geometry |
+| PASS | complete opaque capture scc-reload dark 1x |
+| PASS | render scc-reload dark 1x (fill and glyph ink) |
+| PASS | render scc-reload dark 2x header/action/footer fill |
+| PASS | render scc-reload dark 2x every separator on device pixel |
+| PASS | render scc-reload dark 2x shadow offset down |
+| PASS | render scc-reload dark 2x anchor geometry |
+| PASS | complete opaque capture scc-reload dark 2x |
+| PASS | render scc-reload dark 2x (fill and glyph ink) |
+| PASS | render scc-hover light 1x header/action/footer fill |
+| PASS | render scc-hover light 1x every separator on device pixel |
+| PASS | render scc-hover light 1x shadow offset down |
+| PASS | render scc-hover light 1x anchor geometry |
+| PASS | complete opaque capture scc-hover light 1x |
+| PASS | render scc-hover light 1x (fill and glyph ink) |
+| PASS | render scc-hover light 2x header/action/footer fill |
+| PASS | render scc-hover light 2x every separator on device pixel |
+| PASS | render scc-hover light 2x shadow offset down |
+| PASS | render scc-hover light 2x anchor geometry |
+| PASS | complete opaque capture scc-hover light 2x |
+| PASS | render scc-hover light 2x (fill and glyph ink) |
+| PASS | render scc-hover dark 1x header/action/footer fill |
+| PASS | render scc-hover dark 1x every separator on device pixel |
+| PASS | render scc-hover dark 1x shadow offset down |
+| PASS | render scc-hover dark 1x anchor geometry |
+| PASS | complete opaque capture scc-hover dark 1x |
+| PASS | render scc-hover dark 1x (fill and glyph ink) |
+| PASS | render scc-hover dark 2x header/action/footer fill |
+| PASS | render scc-hover dark 2x every separator on device pixel |
+| PASS | render scc-hover dark 2x shadow offset down |
+| PASS | render scc-hover dark 2x anchor geometry |
+| PASS | complete opaque capture scc-hover dark 2x |
+| PASS | render scc-hover dark 2x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus light 1x header/action/footer fill |
+| PASS | render scc-keyboard-focus light 1x every separator on device pixel |
+| PASS | render scc-keyboard-focus light 1x shadow offset down |
+| PASS | render scc-keyboard-focus light 1x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus light 1x |
+| PASS | render scc-keyboard-focus light 1x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus light 2x header/action/footer fill |
+| PASS | render scc-keyboard-focus light 2x every separator on device pixel |
+| PASS | render scc-keyboard-focus light 2x shadow offset down |
+| PASS | render scc-keyboard-focus light 2x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus light 2x |
+| PASS | render scc-keyboard-focus light 2x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus dark 1x header/action/footer fill |
+| PASS | render scc-keyboard-focus dark 1x every separator on device pixel |
+| PASS | render scc-keyboard-focus dark 1x shadow offset down |
+| PASS | render scc-keyboard-focus dark 1x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus dark 1x |
+| PASS | render scc-keyboard-focus dark 1x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus dark 2x header/action/footer fill |
+| PASS | render scc-keyboard-focus dark 2x every separator on device pixel |
+| PASS | render scc-keyboard-focus dark 2x shadow offset down |
+| PASS | render scc-keyboard-focus dark 2x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus dark 2x |
+| PASS | render scc-keyboard-focus dark 2x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu light 1x header/action/footer fill |
+| PASS | render scc-menu light 1x every separator on device pixel |
+| PASS | render scc-menu light 1x shadow offset down |
+| PASS | render scc-menu light 1x anchor geometry |
+| PASS | complete opaque capture scc-menu light 1x |
+| PASS | render scc-menu light 1x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu light 2x header/action/footer fill |
+| PASS | render scc-menu light 2x every separator on device pixel |
+| PASS | render scc-menu light 2x shadow offset down |
+| PASS | render scc-menu light 2x anchor geometry |
+| PASS | complete opaque capture scc-menu light 2x |
+| PASS | render scc-menu light 2x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu dark 1x header/action/footer fill |
+| PASS | render scc-menu dark 1x every separator on device pixel |
+| PASS | render scc-menu dark 1x shadow offset down |
+| PASS | render scc-menu dark 1x anchor geometry |
+| PASS | complete opaque capture scc-menu dark 1x |
+| PASS | render scc-menu dark 1x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu dark 2x header/action/footer fill |
+| PASS | render scc-menu dark 2x every separator on device pixel |
+| PASS | render scc-menu dark 2x shadow offset down |
+| PASS | render scc-menu dark 2x anchor geometry |
+| PASS | complete opaque capture scc-menu dark 2x |
+| PASS | render scc-menu dark 2x (fill and glyph ink) |
+| PASS | render scc-picker light 1x header/action/footer fill |
+| PASS | render scc-picker light 1x every separator on device pixel |
+| PASS | render scc-picker light 1x shadow offset down |
+| PASS | render scc-picker light 1x anchor geometry |
+| PASS | complete opaque capture scc-picker light 1x |
+| PASS | render scc-picker light 1x (fill and glyph ink) |
+| PASS | render scc-picker light 2x header/action/footer fill |
+| PASS | render scc-picker light 2x every separator on device pixel |
+| PASS | render scc-picker light 2x shadow offset down |
+| PASS | render scc-picker light 2x anchor geometry |
+| PASS | complete opaque capture scc-picker light 2x |
+| PASS | render scc-picker light 2x (fill and glyph ink) |
+| PASS | render scc-picker dark 1x header/action/footer fill |
+| PASS | render scc-picker dark 1x every separator on device pixel |
+| PASS | render scc-picker dark 1x shadow offset down |
+| PASS | render scc-picker dark 1x anchor geometry |
+| PASS | complete opaque capture scc-picker dark 1x |
+| PASS | render scc-picker dark 1x (fill and glyph ink) |
+| PASS | render scc-picker dark 2x header/action/footer fill |
+| PASS | render scc-picker dark 2x every separator on device pixel |
+| PASS | render scc-picker dark 2x shadow offset down |
+| PASS | render scc-picker dark 2x anchor geometry |
+| PASS | complete opaque capture scc-picker dark 2x |
+| PASS | render scc-picker dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on light 1x header/action/footer fill |
+| PASS | render scc-tooltip-on light 1x every separator on device pixel |
+| PASS | render scc-tooltip-on light 1x shadow offset down |
+| PASS | render scc-tooltip-on light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on light 1x |
+| PASS | render scc-tooltip-on light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on light 2x header/action/footer fill |
+| PASS | render scc-tooltip-on light 2x every separator on device pixel |
+| PASS | render scc-tooltip-on light 2x shadow offset down |
+| PASS | render scc-tooltip-on light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on light 2x |
+| PASS | render scc-tooltip-on light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-on dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-on dark 1x shadow offset down |
+| PASS | render scc-tooltip-on dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on dark 1x |
+| PASS | render scc-tooltip-on dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-on dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-on dark 2x shadow offset down |
+| PASS | render scc-tooltip-on dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on dark 2x |
+| PASS | render scc-tooltip-on dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off light 1x header/action/footer fill |
+| PASS | render scc-tooltip-off light 1x every separator on device pixel |
+| PASS | render scc-tooltip-off light 1x shadow offset down |
+| PASS | render scc-tooltip-off light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off light 1x |
+| PASS | render scc-tooltip-off light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off light 2x header/action/footer fill |
+| PASS | render scc-tooltip-off light 2x every separator on device pixel |
+| PASS | render scc-tooltip-off light 2x shadow offset down |
+| PASS | render scc-tooltip-off light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off light 2x |
+| PASS | render scc-tooltip-off light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-off dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-off dark 1x shadow offset down |
+| PASS | render scc-tooltip-off dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off dark 1x |
+| PASS | render scc-tooltip-off dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-off dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-off dark 2x shadow offset down |
+| PASS | render scc-tooltip-off dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off dark 2x |
+| PASS | render scc-tooltip-off dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable light 1x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable light 1x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable light 1x shadow offset down |
+| PASS | render scc-tooltip-unavailable light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable light 1x |
+| PASS | render scc-tooltip-unavailable light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable light 2x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable light 2x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable light 2x shadow offset down |
+| PASS | render scc-tooltip-unavailable light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable light 2x |
+| PASS | render scc-tooltip-unavailable light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable dark 1x shadow offset down |
+| PASS | render scc-tooltip-unavailable dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable dark 1x |
+| PASS | render scc-tooltip-unavailable dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable dark 2x shadow offset down |
+| PASS | render scc-tooltip-unavailable dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable dark 2x |
+| PASS | render scc-tooltip-unavailable dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private light 1x header/action/footer fill |
+| PASS | render scc-tooltip-private light 1x every separator on device pixel |
+| PASS | render scc-tooltip-private light 1x shadow offset down |
+| PASS | render scc-tooltip-private light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private light 1x |
+| PASS | render scc-tooltip-private light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private light 2x header/action/footer fill |
+| PASS | render scc-tooltip-private light 2x every separator on device pixel |
+| PASS | render scc-tooltip-private light 2x shadow offset down |
+| PASS | render scc-tooltip-private light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private light 2x |
+| PASS | render scc-tooltip-private light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-private dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-private dark 1x shadow offset down |
+| PASS | render scc-tooltip-private dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private dark 1x |
+| PASS | render scc-tooltip-private dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-private dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-private dark 2x shadow offset down |
+| PASS | render scc-tooltip-private dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private dark 2x |
+| PASS | render scc-tooltip-private dark 2x (fill and glyph ink) |
 | PASS | render editor-interstitial light 1x body and opaque backdrop |
 | PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial light 1x rendered contrast title 13.72 body 13.72 button 10.24 |
 | PASS | render editor-interstitial real controls present |
 | PASS | render editor-interstitial light 2x body and opaque backdrop |
 | PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial light 2x rendered contrast title 13.72 body 13.72 button 10.24 |
 | PASS | render editor-interstitial real controls present |
 | PASS | render editor-interstitial dark 1x body and opaque backdrop |
 | PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial dark 1x rendered contrast title 11.19 body 5.16 button 10.24 |
 | PASS | render editor-interstitial real controls present |
 | PASS | render editor-interstitial dark 2x body and opaque backdrop |
 | PASS | render editor-interstitial exact opaque editor surface after resize |
+| PASS | interstitial dark 2x rendered contrast title 11.19 body 5.16 button 10.24 |
 | PASS | render editor-interstitial real controls present |
 | PASS | render editor-simple light 1x body and opaque backdrop |
 | PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | empty marker center shows the pad within 3/255 |
 | PASS | render editor-simple real controls present |
 | PASS | render editor-simple light 2x body and opaque backdrop |
 | PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | empty marker center shows the pad within 3/255 |
 | PASS | render editor-simple real controls present |
 | PASS | render editor-simple dark 1x body and opaque backdrop |
 | PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | empty marker center shows the pad within 3/255 |
 | PASS | render editor-simple real controls present |
 | PASS | render editor-simple dark 2x body and opaque backdrop |
 | PASS | render editor-simple exact opaque editor surface after resize |
+| PASS | empty marker center shows the pad within 3/255 |
 | PASS | render editor-simple real controls present |
 | PASS | render editor-advanced-color light 1x body and opaque backdrop |
 | PASS | render editor-advanced-color exact opaque editor surface after resize |
@@ -482,14 +781,226 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | render editor-menu dark 2x body and opaque backdrop |
 | PASS | render editor-menu exact opaque editor surface after resize |
 | PASS | render editor-menu real controls present |
+| PASS | render editor-scope-host light 1x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-host light 2x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-host dark 1x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-host dark 2x body and opaque backdrop |
+| PASS | render editor-scope-host exact opaque editor surface after resize |
+| PASS | render editor-scope-host real controls present |
+| PASS | render editor-scope-ip light 1x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-scope-ip light 2x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-scope-ip dark 1x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-scope-ip dark 2x body and opaque backdrop |
+| PASS | render editor-scope-ip exact opaque editor surface after resize |
+| PASS | render editor-scope-ip real controls present |
+| PASS | render editor-rename light 1x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-rename light 2x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-rename dark 1x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-rename dark 2x body and opaque backdrop |
+| PASS | render editor-rename exact opaque editor surface after resize |
+| PASS | render editor-rename real controls present |
+| PASS | render editor-reset light 1x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-reset light 2x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-reset dark 1x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-reset dark 2x body and opaque backdrop |
+| PASS | render editor-reset exact opaque editor surface after resize |
+| PASS | render editor-reset real controls present |
+| PASS | render editor-delete light 1x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-delete light 2x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-delete dark 1x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-delete dark 2x body and opaque backdrop |
+| PASS | render editor-delete exact opaque editor surface after resize |
+| PASS | render editor-delete real controls present |
+| PASS | render editor-double-banner light 1x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-double-banner light 2x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-double-banner dark 1x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-double-banner dark 2x body and opaque backdrop |
+| PASS | render editor-double-banner exact opaque editor surface after resize |
+| PASS | render editor-double-banner real controls present |
+| PASS | render editor-hover-side light 1x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-hover-side light 2x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-hover-side dark 1x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-hover-side dark 2x body and opaque backdrop |
+| PASS | render editor-hover-side exact opaque editor surface after resize |
+| PASS | render editor-hover-side real controls present |
+| PASS | render editor-pressed-side light 1x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-pressed-side light 2x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-pressed-side dark 1x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-pressed-side dark 2x body and opaque backdrop |
+| PASS | render editor-pressed-side exact opaque editor surface after resize |
+| PASS | render editor-pressed-side real controls present |
+| PASS | render editor-focus-side light 1x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-focus-side light 2x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-focus-side dark 1x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-focus-side dark 2x body and opaque backdrop |
+| PASS | render editor-focus-side exact opaque editor surface after resize |
+| PASS | render editor-focus-side real controls present |
+| PASS | render editor-hover-chip light 1x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-hover-chip light 2x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-hover-chip dark 1x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-hover-chip dark 2x body and opaque backdrop |
+| PASS | render editor-hover-chip exact opaque editor surface after resize |
+| PASS | render editor-hover-chip real controls present |
+| PASS | render editor-pressed-chip light 1x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-pressed-chip light 2x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-pressed-chip dark 1x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-pressed-chip dark 2x body and opaque backdrop |
+| PASS | render editor-pressed-chip exact opaque editor surface after resize |
+| PASS | render editor-pressed-chip real controls present |
+| PASS | render editor-focus-chip light 1x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-focus-chip light 2x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-focus-chip dark 1x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-focus-chip dark 2x body and opaque backdrop |
+| PASS | render editor-focus-chip exact opaque editor surface after resize |
+| PASS | render editor-focus-chip real controls present |
+| PASS | render editor-hover-tile light 1x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-hover-tile light 2x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-hover-tile dark 1x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-hover-tile dark 2x body and opaque backdrop |
+| PASS | render editor-hover-tile exact opaque editor surface after resize |
+| PASS | render editor-hover-tile real controls present |
+| PASS | render editor-pressed-tile light 1x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-pressed-tile light 2x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-pressed-tile dark 1x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-pressed-tile dark 2x body and opaque backdrop |
+| PASS | render editor-pressed-tile exact opaque editor surface after resize |
+| PASS | render editor-pressed-tile real controls present |
+| PASS | render editor-focus-tile light 1x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | render editor-focus-tile light 2x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | render editor-focus-tile dark 1x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
+| PASS | render editor-focus-tile dark 2x body and opaque backdrop |
+| PASS | render editor-focus-tile exact opaque editor surface after resize |
+| PASS | render editor-focus-tile real controls present |
 | PASS | step-4 committed SHA256 editor-advanced-color-dark@1x.png |
 | PASS | step-4 committed SHA256 editor-advanced-color-dark@2x.png |
 | PASS | step-4 committed SHA256 editor-advanced-color-light@1x.png |
 | PASS | step-4 committed SHA256 editor-advanced-color-light@2x.png |
+| PASS | step-4 committed SHA256 editor-delete-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-delete-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-delete-light@1x.png |
+| PASS | step-4 committed SHA256 editor-delete-light@2x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-light@1x.png |
+| PASS | step-4 committed SHA256 editor-double-banner-light@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-chip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-light@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-side-light@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-light@1x.png |
+| PASS | step-4 committed SHA256 editor-focus-tile-light@2x.png |
 | PASS | step-4 committed SHA256 editor-global-off-dark@1x.png |
 | PASS | step-4 committed SHA256 editor-global-off-dark@2x.png |
 | PASS | step-4 committed SHA256 editor-global-off-light@1x.png |
 | PASS | step-4 committed SHA256 editor-global-off-light@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-chip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-light@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-side-light@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-light@1x.png |
+| PASS | step-4 committed SHA256 editor-hover-tile-light@2x.png |
 | PASS | step-4 committed SHA256 editor-interstitial-dark@1x.png |
 | PASS | step-4 committed SHA256 editor-interstitial-dark@2x.png |
 | PASS | step-4 committed SHA256 editor-interstitial-light@1x.png |
@@ -510,6 +1021,34 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | step-4 committed SHA256 editor-not-active-dark@2x.png |
 | PASS | step-4 committed SHA256 editor-not-active-light@1x.png |
 | PASS | step-4 committed SHA256 editor-not-active-light@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-chip-light@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-light@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-side-light@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-light@1x.png |
+| PASS | step-4 committed SHA256 editor-pressed-tile-light@2x.png |
+| PASS | step-4 committed SHA256 editor-rename-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-rename-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-rename-light@1x.png |
+| PASS | step-4 committed SHA256 editor-rename-light@2x.png |
+| PASS | step-4 committed SHA256 editor-reset-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-reset-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-reset-light@1x.png |
+| PASS | step-4 committed SHA256 editor-reset-light@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-light@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-host-light@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-dark@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-dark@2x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-light@1x.png |
+| PASS | step-4 committed SHA256 editor-scope-ip-light@2x.png |
 | PASS | step-4 committed SHA256 editor-simple-dark@1x.png |
 | PASS | step-4 committed SHA256 editor-simple-dark@2x.png |
 | PASS | step-4 committed SHA256 editor-simple-light@1x.png |
@@ -540,6 +1079,10 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | step-2 committed SHA256 scc-dark-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-dark-light@1x.png |
 | PASS | step-2 committed SHA256 scc-dark-light@2x.png |
+| PASS | step-2 committed SHA256 scc-hover-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-hover-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-hover-light@1x.png |
+| PASS | step-2 committed SHA256 scc-hover-light@2x.png |
 | PASS | step-2 committed SHA256 scc-incognito-dark@1x.png |
 | PASS | step-2 committed SHA256 scc-incognito-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-incognito-light@1x.png |
@@ -552,10 +1095,18 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | step-2 committed SHA256 scc-internal-page-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-internal-page-light@1x.png |
 | PASS | step-2 committed SHA256 scc-internal-page-light@2x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-light@1x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-light@2x.png |
 | PASS | step-2 committed SHA256 scc-many-dark@1x.png |
 | PASS | step-2 committed SHA256 scc-many-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-many-light@1x.png |
 | PASS | step-2 committed SHA256 scc-many-light@2x.png |
+| PASS | step-2 committed SHA256 scc-menu-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-menu-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-menu-light@1x.png |
+| PASS | step-2 committed SHA256 scc-menu-light@2x.png |
 | PASS | step-2 committed SHA256 scc-no-boosts-dark@1x.png |
 | PASS | step-2 committed SHA256 scc-no-boosts-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-no-boosts-light@1x.png |
@@ -564,6 +1115,30 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | step-2 committed SHA256 scc-pane-anchor-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-pane-anchor-light@1x.png |
 | PASS | step-2 committed SHA256 scc-pane-anchor-light@2x.png |
+| PASS | step-2 committed SHA256 scc-picker-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-picker-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-picker-light@1x.png |
+| PASS | step-2 committed SHA256 scc-picker-light@2x.png |
+| PASS | step-2 committed SHA256 scc-reload-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-reload-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-reload-light@1x.png |
+| PASS | step-2 committed SHA256 scc-reload-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-light@2x.png |
 | PASS | complete step-2 render receipts |
 | PASS | motion committed SHA256 close-000ms.png |
 | PASS | motion committed SHA256 close-040ms.png |
@@ -582,13 +1157,14 @@ Editor: wheel event p95 0.039 ms (500 native events); previews 59 in 1 s / 120 H
 | PASS | motion committed SHA256 shrink-080ms.png |
 | PASS | motion committed SHA256 shrink-260ms.png |
 | PASS | complete motion render receipts |
-| PASS | panel build/layout/first draw main-thread CPU p95 < 8 ms |
-| PASS | native click to first draw wall p95 < 8 ms |
+| FAIL | panel build/layout/first draw main-thread CPU p95 < 8 ms |
+| FAIL | native click to first draw wall p95 < 8 ms |
 | PASS | idle editor has no host work and less than 0.5 percent main-thread CPU |
 | PASS | commit refreshes ten real page plans within 100 ms |
 | PASS | wheel event to preview queue p95 < 2 ms |
 | PASS | 1 s 120 Hz drag coalesces to at most 61 real planner previews |
-| PASS | simple editor build/layout/first draw p95 < 12 ms |
+| FAIL | simple editor build/layout/first draw p95 < 12 ms |
 | PASS | 2216x1394 PNG dominant hue under 15 ms off the main thread |
 
-580/580 passed
+1149/1152 passed
+FAIL: command sitecontrol-render exited 1; expected 0

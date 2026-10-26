@@ -35,3 +35,26 @@ Menu and sheet contact sheets use AppKit's native view capture, composited besid
 | editor-focus-tile | [light 1x](editor-focus-tile-light@1x.png) | [light 2x](editor-focus-tile-light@2x.png) | [dark 1x](editor-focus-tile-dark@1x.png) | [dark 2x](editor-focus-tile-dark@2x.png) |
 
 Verification receipts: [focused checks](checks.txt), [full gate](verify-all.txt), [AX hierarchy](accessibility.txt). The PR body maps each review item to its change. All geometry remains a plan guess pending capture session 2.
+
+## Final verification, 2026-10-26
+
+Tested code: e5ba994bbe7cf9aa6790e74b8ebed63283e889fd. The stack contains origin/main
+15e261e4fe06fb77149ddda446b9e4f0522490b8, #69 and #96 through merge commits.
+The full gate passes 16/17 rows. Site Control passes 1149/1152 checks; only timing checks fail.
+All native flows, real rendered contrast/hollow-marker checks, AX, render receipts and the
+Boosts browser harness pass. The first full gate is retained in review-r2-initial-*;
+its first-popup capture race was fixed in #96 and is clear in the final run.
+
+| Failed timing | Measured | Budget |
+|---|---|---|
+| SCC first draw CPU p95 | 11.872 ms | <8 ms |
+| SCC first draw wall p95 | 13.240 ms | <8 ms |
+| Simple editor open p95 | 16.799 ms | <12 ms |
+
+Timing budgets failed under heavy machine load (lead exception, 2026-10-26). Rerun before merge.
+
+Full drag frame (native event + display) p95 1.486 ms, max 3.258 ms (100 frames;
+diagnostic, no separate plan budget). Wheel event p95 0.078 ms against <2 ms;
+59 previews during a one-second 120 Hz drag; idle main-thread CPU 1.585 ms in two seconds;
+ten-page refresh max 0.123 ms; off-main hue sampling 6.897 ms. Dark first-run rendered contrast:
+title 11.19:1, body 5.16:1, footer label 10.24:1.
