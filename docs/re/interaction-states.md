@@ -30,7 +30,7 @@ Spaces in this session (order = switcher order):
 Three caveats:
 
 1. **Window moves are not Arc's.** The window x position jumps between 94, 336, 8, −356, and −1888 (`windows.tsv`). Other windows slide in beside it. guess: a third-party tiling or scrolling window manager. Ignore all window x/y changes.
-2. **Traffic lights are grey in every frame** (`#CD866C` on `#E69679` in Space 1, `#696873` on `#252539` in Space 4), even while the user typed into Arc. Active-window colors were not captured. guess: the capture shows the inactive style, or Arc keeps them muted. Their geometry does not depend on the style: AX gives 16 pt buttons at window `[12, 16]`, `[35, 16]`, `[58, 16]` (F0001 close `[106, 54, 16, 16]` screen; F0131 `[348, 54]` with the window at `[336, 38]`), and the drawn 12 pt circles are centered in them at x 20 / 43 / 66, y 24 (F0001 pixels). On the hover-reveal card they move with the card to `[17, 21]` (F0128, F0129); see §13.
+2. **Traffic lights are grey in every frame** (`#CD866C` on `#E69679` in Space 1, `#696873` on `#252539` in Space 4), even while the user typed into Arc. Active-window colors were not captured. guess: the capture shows the inactive style, or Arc keeps them muted. Measured 2026-10-26: the grey is not macOS's own inactive drawing. The fill is Arc's catalog color `DimmedWindowControls` (`ARCUI_ARCUI.bundle` `Assets.car`: black; dark `(0.953, 0.953, 0.918)`) over the background at 0.10 (light, F0001: 0.099–0.103 per channel) and 0.33 (dark, F0079/F0129/F0131: 0.326–0.332; plain white would need 0.295 on blue against 0.31 on red and green). A faint 1 pt ring in each button's color sits just outside the 12 pt circle (fitted: 0.06 light, 0.34 dark). macOS 27's own inactive buttons, measured in Open's window when not key, are lighter on light content (`#E6A78E` over `#E49678`) and white ≈ 0.18 on dark. The buttons themselves are system buttons: AX shows `AXButton` with `AXCloseButton` / `AXMinimizeButton` / `AXFullScreenButton` while Arc imports no AX subrole constants (`nm -u`) and sets none; Arc calls `standardWindowButton:` and `standardWindowButton:forStyleMask:`, and `performClose:`, `performMiniaturize:`, `performZoom:`, `zoom:`, `toggleFullScreen:` (strings). Its own `Arc.WindowControlButton` (`Arc/WindowControlsButton.swift`) is an `NSControl` with an icon image view, hover and press state, and click, right-click, and drag-begin closures (`otool -ov`: `mouseEntered:`, `mouseDown:`, `rightMouseDown:`, `mouseDragged:`, `updateLayer`; no accessibility overrides); guess: it serves other window controls (`LeftAccessoryType.windowControls`, `TopBarConfiguration.shouldShowWindowControls`). Capture session 2 (2026-10-26, item 3, `sessions/20261026-100848-03-active-window/`, 1x, macOS Dark, default dark theme; timeline `s2-notes.txt` "03 step") settles the active state. Active and key with the pointer on the page (frames 0003–0005): grey, `#686973` on `#252538`, `DimmedWindowControls` at 0.326–0.331, colored rings `#5F3F4A` / `#5E533C` / `#39543E` at r 6.5. Pointer over the group (0007–0008): the standard red, yellow, and green with glyphs (rings `#D06A67` / `#D0AD27` / `#4CB035`). Pointer on Back, Forward, Reload (0010–0015): grey, unchanged. Arc inactive, Finder frontmost (0016–0018): the same fill alpha (0.328–0.331) over a darker underlay, `#565761` on `#0A0B1D`, and no colored ring (`#202132` at r 6.5). Session 1's values equal the active ones to the level, so its frames were taken while Arc was active, and the colored ring marks the active window. The AX frames are the same `[12/35/58, 16, 16, 16]` (close `[457, 238]` with the window at `[445, 222]`). On the hover-reveal card (item 5, `sessions/20261026-101324-05-reveal-card/`, frames 0009–0034) the buttons keep this look at (25, 29), (48, 29), (71, 29), with the fill at 0.327–0.331 and the rings; with the pointer on them (0018) they show the system colors and glyphs (§13.1). Open follows this (`docs/design.md` §23). Their geometry does not depend on the style: AX gives 16 pt buttons at window `[12, 16]`, `[35, 16]`, `[58, 16]` (F0001 close `[106, 54, 16, 16]` screen; F0131 `[348, 54]` with the window at `[336, 38]`), and the drawn 12 pt circles are centered in them at x 20 / 43 / 66, y 24 (F0001 pixels). On the hover-reveal card they move with the card to `[17, 21]` (F0128, F0129); see §13.
 3. **AX and pixels can disagree by one state.** `ax.json` is written before the screenshot, so a frame's AX can lag its image by up to about 1 s.
 
 ## 1. Timeline
@@ -166,6 +166,7 @@ guess: dark Spaces use white at a similar alpha (rows use 0.10).
 | Child title | 14 pt Regular (ink 97 vs 98) | F0079 |
 | Expand animation | Children slide down from under the folder row while the rows below move down. Labels are visible during the slide. Done in < 0.5 s. | A0237, A0256 |
 | Collapse animation | Labels fade first. Icons slide up into the folder row. Done in < 0.5 s. | A0239 |
+| Expand and collapse duration | The sidebar changes for 0.20–0.24 s per expand or collapse (4 of 4, 9–10 video frames each). Open's `Motion.rowStructure` is 0.22 s. | §13.1, `21-motion.mov` |
 | State on disk | `StorableWindows.windows[].expandedItems` gains `[folderId, {expanded:{}}]` (see `data-model.md`, "Archive and session files") | |
 | Split row (in a folder) | One 41 pt row with two cells: icon at x 33 and x 129, titles at x 61 and x 157, each 56 pt wide and truncated. A thin vertical divider between the cells. | F0079 AX and crop |
 | Split row (Today, selected) | The selected fill is a card `[8, y+2, 212, 36]` (white 0.20, `#50505F` on `#272438`). Inside it each pane has its own cell, 4 pt inside the card and 4 pt apart: `[12, y+6, 100, 28]` and `[116, y+6, 100, 28]`, corner ≈ 8 (row-by-row edge profile), white 0.07 over the card (`#5D5C6A`, `TabCellChildBackground`). No divider. Icons x 17 / 121, titles x 45 / 149, 64 wide, tail-truncated with "…". | F0081 AX and pixels |
@@ -217,6 +218,7 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 | Return (Cmd+T) | A new Today tab appears right under "New Tab" and is selected. | F0041–F0042 |
 | New window (Cmd+N) | Opens with the command bar already open | F0098, F0157 AX |
 | Open/close animation | AX shows a shrunken field (width 2) and table (98x52) mid-animation. guess: scale from the center with a fade. | F0060, F0064 |
+| Open/close timing | No animation on screen: in 4 of 4 Cmd+T and Esc events the bar appears or disappears between two video frames 17–39 ms apart, with no frame in between. The same recording has 3–9 frames inside each 0.1–0.24 s motion (§13.1). The shrunken AX frames above are a layout state, not a visible scale. | §13.1, `21-motion.mov` |
 
 ## 10. Space switching
 
@@ -229,6 +231,7 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 | Web content | Swaps at once to the target Space's last tab (or empty state). It does not slide. | A0222 |
 | Progress pairs | A0222: slide 0.65, fade 0.53. A0227: slide 0.88, fade 0.77. The slide leads the fade. guess: ease-out or spring slide plus a linear or ease-in-out fade over the same time. | `fade()` / shift-match in the analysis scripts |
 | Duration | Not measurable at 0.47 s spacing. 2 of 5 switches were caught mid-flight, so the visible part is about 0.2–0.35 s (guess). | A0221–A0233 |
+| Duration (video) | The sidebar changes for 0.28–0.29 s (2 switches, 11 frames each); the web content swaps in one frame. Only 2 of the 4 clicks switched. | §13.1, `21-motion.mov` |
 | Window title | Becomes the Space name, or the selected tab title | `windows.tsv` |
 
 ## 11. Split View
@@ -264,7 +267,8 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 | Property | Measured | Evidence |
 |---|---|---|
 | Hidden layout | Web content `[10, 10, W−20, H−20]` (10 pt on every side). No traffic lights or toolbar are visible. | F0128 AX, A0439 |
-| Hint toast | First hide shows a toast at the window's top-right: "You can use [⌘S] to easily show and hide your Sidebar!". Dark, Space-tinted rounded rectangle with a keycap. Own window 600x600 (layer 0), anchored at the window's top-right. Gone after about 6 s. | F0128–F0131, A0438–A0447 |
+| Inactive window, default dark theme | The window background darkens when Arc is inactive: sidebar `#272538` → `#0B0B1C`, top margin `#252538` → `#0B0B1D`, right and bottom margins `#352337` → `#19091D`; about 26–28 levels down on every channel, like losing a white layer of ≈ 0.11 (fit 0.115 / 0.107 / 0.123 on R / G / B). The reveal card's translucency explains it: the window background is the same blend as the card, over a near-white backdrop while active and over black while inactive (§13.1). Open's default theme does not change yet (`docs/followups.md`). | session 2, 03 frames 0003 vs 0016 (sRGB) |
+| Hint toast | First hide shows a toast at the window's top-right: "You can use [⌘S] to easily show and hide your Sidebar!". Dark, Space-tinted rounded rectangle with a keycap. Own window 600x600 (layer 0), anchored at the window's top-right. Gone after about 6 s. Session 2 showed no hint on any path (toolbar button, Cmd+S, View > Hide Sidebar); guess: it shows once per install and had already shown. | F0128–F0131, A0438–A0447; session 2 item 4 (`s2-notes.txt` 10:11:20) |
 | Hover-reveal | A floating card `[5, 5, W_sidebar, H−10]` (here 500 x 1384): 5 pt from the window edges. Corner ≈ 10 pt. 1 px light stroke (white a ≈ 0.25). Small shadow (7.5% at the edge, 0 by 8 pt). The card shows the Space background and all sidebar content, with the traffic lights at its top. | F0130 pixels and AX |
 | Card corner | The card's edge per pixel row at all four corners (the stroke's outer edge, F0129 against F0128) fits a circular corner of radius 11.75 (RMS 0.08 px over 8 rows); a continuous corner fits worse (radius 11.5, RMS 0.22 px). derived: circular, radius 12. The "≈ 10" above was a visual estimate. | F0129 vs F0128, edge measure in `tools/e2e/engine_e2e.py` `card_edges` |
 | Card stroke | The outermost pixel row and column inside the card frame (x 5 and 504, y 5 and 1388), `#696875` over the card fill `#272739`: white 0.30 over the fill (0.30–0.32 per channel), the `SidebarBorderColor` token. Nothing outside the frame is lighter. | F0129 sRGB rows y 700, x 250 |
@@ -276,12 +280,38 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 | Outer left edge zone | Left of the window: 250 pt wide while the pointer is in the window or the zone, 50 pt when it comes from elsewhere. | `0x1000301f8` (250.0 = `0x406f400000000000`, 50.0 = `0x4049000000000000`) |
 | Top-left zone | 40 pt wide at the window's top-left corner (40.0 = `0x4044000000000000`), from 1.5 u above the top edge to 2 u below it while the pointer is in the window (same u, first double). | `0x10002fed0`, `0x10002ff7c` |
 | Traffic-light zone | From the window buttons' frames to about 50 pt below the top (adds 50.0, keeps at least 10.0). | `0x100030390`, `0x100030564` |
-| Card slide | Not measurable: A0439 (hidden) and A0440 (card) are 1 s apart. `WindowLayoutController` holds a lazy `sidebarTransformAnimation` (`CABasicAnimation`), so the card likely moves by a layer transform (guess). | field names; A0439–A0440 |
+| Card slide | Session 1 could not time it: A0439 (hidden) and A0440 (card) are 1 s apart. The session 2 video does: in ≈ 0.14 s with a 3 pt overshoot, out in ≈ 0.10 s (§13.1). `WindowLayoutController` holds a lazy `sidebarTransformAnimation` (`CABasicAnimation`), so the card likely moves by a layer transform (guess). | field names; A0439–A0440; `21-motion.mov` |
 | Toolbar button | Its AX desc changes from "Hide sidebar" to "Lock sidebar" while the card shows | F0128, F0131 |
-| Hide animation | The sidebar slides out to the left as a card while the web content grows | A0436–A0438 |
+| Hide animation | The sidebar slides out to the left as a card while the web content grows. Cmd+S hide and show each take ≈ 0.1 s; the show starts ≈ 0.29 s after the key (§13.1). | A0436–A0438; `21-motion.mov` |
 | Width | 228 → 500 in one drag. `sidebarWidth` = 500 on disk. guess: 500 is the maximum (the user aimed for the widest stop). | F0126–F0127, A0424 → A0431 |
 | Minimum | Not captured. A0422 shows the sidebar sliding out during the narrow drag. guess: dragging below the minimum hides the sidebar. | A0422 |
 | Other windows | A new window (Cmd+N) also uses 500 | F0157 AX |
+
+### 13.1 Capture session 2: reveal card, hide, and motion (2026-10-26)
+
+Sources (raw frames stay local; never committed):
+
+- `sessions/20261026-101324-05-reveal-card/`: frames 1.4 s apart, 1x, window 1728 × 1084, macOS Dark. Both Spaces ("Capture A" and "Capture B") use the default dark theme. Their anchored sidebars are equal to the level (frames 0001 and 0043). Capture A shows a white page, Capture B a dark page (`#101418`).
+- `sessions/20261026-101007-04-hide-hint/`: 0.2 s was requested, but frames came 0.45–0.6 s apart.
+- `video/21-motion.mov`: the window region, 3054 frames over 95 s at a variable rate (`ffprobe` `pts_time`; 17–47 ms apart during motion). Positions come from the first white pixel on row y 600. The video clock is aligned to `s2-notes.txt` on the four Cmd+T and Esc responses (t0 = 10:38:40.52 ± 0.02 s). Clicks show a constant ≈ 0.72 s lag after their note, so the dwell and exit delays cannot be timed.
+
+Still frames were converted from the display profile to sRGB (§7 method). The video gives positions and times only, not colors.
+
+| Property | Measured | Evidence |
+|---|---|---|
+| Buttons on the card | Centers (25, 29), (48, 29), (71, 29), ±0.05 px: the anchored centers + (5, 5). At rest: `DimmedWindowControls` at 0.327–0.331 over the card fill, with the colored rings (`#5F3F4B` / `#5F543C` / `#3B5540`) because the window is active. With the pointer on them: the system colors and glyphs. | 05 frames 0009, 0021, 0029, 0034; 0018 (hover) |
+| Card fill is translucent | Over the white page, the card is 1.5–2 levels lighter than the anchored sidebar. Over the dark page it is `#0E0B20`, 26 levels darker. Where the page under it has a lighter band (y 680–940), the card is lighter there too. Fit over both Spaces (x 120–220, y 420–1040): card = k + a × blur(page), a = 0.115 / 0.115 / 0.113 (R / G / B), k = (14.4, 9.2, 29.2), Gaussian σ ≈ 25 px, RMS 1.06 levels (2.29 at σ 5; 3.35 with no blur). derived: ≈ 0.885 × a tint `#100A21` + 0.115 × the page under the card, blurred. | 05 frames 0009 vs 0006 (A), 0029 vs 0037 (B) |
+| Window background, same blend | Inactive window, sidebar rows y 440–1000: (12.4…17.0, 9.9, 29.0), equal to k within about 1 level, so the blend over black. Active: k + 0.115 × ≈ `#E6EEF1`. Strings in the Arc binary (`strings -a`): `WindowBackgroundTranslucencyViewAppKit` (`WindowBackground/WindowBackgroundTranslucencyViewAppKit.swift`), lazy `behindWindowBlurView`, `translucencyWashView`, `translucencyView`, `blurView`, and `Arc.FloatingSidebarBackgroundView` (`Arc/FloatingSidebarBackgroundView.swift`). Which class owns which view is not known. guess: the active backdrop is the desktop behind the window, seen through a behind-window blur, and macOS drops it while the window is inactive. No capture with a different desktop exists. | 03 frames 0003, 0016; 05 frames 0001, 0043 |
+| "Darkens toward its bottom" | Not a gradient. The card shows the page under it. Over the white page the card's bottom is lighter than its top (it follows the theme). Over the dark page the lighter band follows the page's footer. The F0129 bottom (`#180E3A`) sat over dark page content. | as above; `docs/design.md` §16.4 |
+| Card hide | Present in 0036 (pointer far right), gone in 0037. No timing at this frame spacing. | 05 frames 0036–0037 |
+| First-hide hint | None on any path (above). Each hide and show is complete in the next frame (< 0.46 s). No frame shows a transition. | 04 frames 0001–0094 |
+| Cmd+S hide | 3 of 3: the page edge goes 228 → 10 in 0.095–0.122 s, from the last frame at rest to the first frame at the end (228, 122, 38, 14, 10 at 16.260, 16.307, 16.332, 16.357, 16.382 s). It starts with the key (0.02–0.03 s before the note, on the Cmd+T alignment). Spring fit: response 0.09–0.16 s, damping 0.76–0.92, RMS ≤ 1.1 px. | `21-motion.mov` 16.26, 20.61, 24.93 s |
+| Cmd+S show | 3 of 3: 10 → 228 in 0.091–0.096 s (fit 0.10–0.12 s, damping 0.84–0.94). Motion starts 0.28–0.29 s after the key note in all three; nothing in the window changes before that. Cause not known. guess: while the sidebar is hidden, the key goes to the page first. | `21-motion.mov` 18.76, 23.08, 32.41 s |
+| Card in | The card's right edge goes 10 → 236 in 0.137 s, 3 px past its rest position (233), then back to 233 by 0.242 s (10, 26, 84, 162, 189, 225, 236, 235, 234, 233). Spring fit: response 0.164 s, damping 0.86, RMS 2.2 px. | `21-motion.mov` 26.63 s |
+| Card out | 233 → 10 in 0.100 s (233, 203, 117, 38, 10). | `21-motion.mov` 29.50 s |
+| Space switch, folders, Cmd+T, toast | §10, §7, §9.3, §16 rows marked `21-motion.mov`. | |
+
+Each duration is ± one frame (17–47 ms). The spring fits rest on 4–10 points, so they are ranges, not tokens.
 
 ## 14. Theme editor
 
@@ -346,6 +376,7 @@ Not captured: Favorite tile, split row, bottom-bar Space icon. The split-row men
 | Variants | Page zoom ("110%", "125%", "100%"). "Copied Current URL" with a Share button (`square.and.arrow.up`, 32.5x27.5, lighter rounded square). | F0142–F0147, F0155 |
 | Stacking | Each zoom step opens a new toast window. Up to 4 overlap while older ones fade. | `windows.tsv` A0487 |
 | Appear | Scale-up from small (AX text 12x6 mid-animation) | F0144 |
+| Timing (Cmd+Shift+C) | Appears over ≈ 0.15 s (7 frames), shows ≈ 4.9 s, fades out over ≈ 0.09 s (5 frames). | §13.1, `21-motion.mov` |
 
 ## 17. Windows
 
@@ -422,7 +453,7 @@ Window buttons and glyphs (S2 03, default dark theme, sidebar 364):
 | Pointer over the buttons | 0007–0008 | System colors with glyphs: `#F35146` / `#FCB800` / `#00BB00` bodies (center rows). |
 | Pointer on Back, Forward, Reload | 0010–0015 | Buttons unchanged (grey). Tooltips "Go back ⌘[" and "Reload this page ⌘R" in 27 pt capsules (windows 180 x 93 and 229 x 93). No Forward tooltip was seen (Forward was disabled). |
 | Inactive (Finder frontmost) | 0016–0018 | Buttons `#565761` over `#0A0B1D`, no ring. The sidebar and toolbar background darken from `#282538` to `#0D0A1D` (about 27 levels on every channel). PR #104's agent fits the reveal card as ≈ 0.885 × a theme tint + 0.115 × the blurred page, and finds the same blend over black matches the inactive window. Checked here: the fit's constant `#0E091D` is within ΔE00 0.4–1.1 of the inactive sidebar at y 450, 700, and 950. guess (#104): the window background is the same translucent material, over a light backdrop while active. |
-| Fill model | — | `docs/design.md` §17 in PR #104 fits the grey as `DimmedWindowControls` at 0.33 over the background, with the ring only while the window is active. These frames agree with that fit. |
+| Fill model | — | `docs/design.md` §23 in PR #104 fits the grey as `DimmedWindowControls` at 0.33 over the background, with the ring only while the window is active. These frames agree with that fit. |
 
 Toolbar and bottom-bar glyph peaks (brightest 12 pixels; white alpha over the local background; 1x, so lower bounds):
 
