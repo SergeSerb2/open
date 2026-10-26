@@ -115,6 +115,7 @@ class Open:
             subprocess.run(["nice", "-n", "10", "xcrun", "swiftc", "-O", "-swift-version", "6", "-parse-as-library",
                             activator_source, "-o", self.activator], check=True)
         self.pid = None
+        self.launch_waiter_ended_before_automation = False
         self.closed = False
         self.native_steps = []
         self.activation_trace = []
@@ -128,7 +129,10 @@ class Open:
         # activation grant. Launch the actual bundle through LaunchServices,
         # just as a user does. -W tracks this new instance through app exit.
         self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
-        launch = ["/usr/bin/open", "-n", "-W", self.bundle,
+        # The first-frame timeout fixture also uses open without -W. Its
+        # successful early launcher exit must not be mistaken for app exit.
+        wait_args = [] if (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1" else ["-W"]
+        launch = ["/usr/bin/open", "-n"] + wait_args + [self.bundle,
                   "--stdout", self.launch_log_path, "--stderr", self.launch_log_path]
         for key, value in env.items():
             if key.startswith("OPEN_") or key in (extra_env or {}):
@@ -143,12 +147,13 @@ class Open:
             except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
             if self.proc.poll() is not None:
-                self.log.close()
-                raise RuntimeError("Open exited before automation; see %s" % log_path)
+                # LaunchServices may fail its -W GetProcessPID wait independently
+                # of launching the app. Only the real socket establishes readiness.
+                self.launch_waiter_ended_before_automation = True
         self.proc.kill()
         self.proc.wait()
         self.log.close()
-        raise RuntimeError("Open did not start; see %s" % log_path)
+        raise RuntimeError("Open automation was not ready within 60 s (launcher exit %s); see %s" % (self.proc.returncode, log_path))
 
     def call(self, cmd, timeout=120, **args):
         foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
@@ -2480,7 +2485,7 @@ def startup_failure_checks(factory, results, tmp):
     app_path = app.executable
     app.quit()
     unconfirmed = factory(urls=("data:text/html,<title>Unconfirmed frame</title><h1>Unconfirmed frame</h1>",), fresh=True,
-                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1"})
+                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1", "OPEN_E2E_NO_LAUNCH_WAIT": "1"})
     try:
         tab = unconfirmed.call("tabs")[0]
         unconfirmed.call("wait", tab=tab["id"])
@@ -2490,6 +2495,11 @@ def startup_failure_checks(factory, results, tmp):
             and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
             and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
             "timing": timing, "hosts": unconfirmed.call("host-counts")}
+        results["launch_waiter_early_exit"] = {"ok": unconfirmed.launch_waiter_ended_before_automation
+            and unconfirmed.proc.poll() == 0 and check_page(unconfirmed, tab["id"], "Unconfirmed frame"),
+            "launcherExit": unconfirmed.proc.returncode,
+            "waiterEndedBeforeAutomation": unconfirmed.launch_waiter_ended_before_automation,
+            "actualAppPID": unconfirmed.pid}
     finally:
         unconfirmed.quit()
     early_data = os.path.join(tmp, "early-quit")
