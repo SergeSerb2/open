@@ -430,6 +430,149 @@ arm64 slice; full math in `design-tokens.md` §6.5, measured editor layout in
     captured. guess: the context menu edits inline in the header, and the
     dialog serves the menu bar item when the sidebar is hidden.
 
+Added 2026-10-26 (Step 9 decode; evidence: `llvm-objdump` on the arm64 slice,
+one read-only Ghidra run on the shared project with `-noanalysis -readOnly`,
+Swift reflection records, and capture session 2 item 17 frames; raw output and
+the fit script are local in `.re/theme-pad/`):
+
+17. **Theme pad, intensity, and texture law.** This replaces the pad-range part
+    of `design-tokens.md` §6.5 and closes the round-3 Step 9 gaps. Each sub-item
+    gives the evidence. Values are facts unless marked **guess**.
+
+    **17a. The lightness range is editor state, not a mode constant.** The
+    editor state holds `lightnessRange` and `saturation`. The pad maps radius
+    linearly into that range. The range is re-centered on the key color in
+    these cases:
+
+    | Event | Range | Saturation | Evidence |
+    |---|---|---|---|
+    | Editor opens on a Space with no color | 0.01…0.97 | 1.0 | `State.init` `0x1017a8050` (constants 0.01, 0.97, 1.0); reset case `didDeleteAllColors` `0x1017aa994` stores the pair (1.0, 0.01) from `0x103760070` and 0.97. Session 1 F0137: the first color has P3 saturation 0.9995 and sits at t = 0.273 of 0.01…0.97 (45.98 pt predicted, 45.26 pt measured). |
+    | Editor opens on a color, Automatic | `max(0.01, l − 0.25)` … `min(0.97, l + 0.25)` | `max(0.01, s)` | Helper `0x1017a9414` (constants −0.25, 0.01, 0.25, 0.97; 0.75 and 0.97 when the color has no P3 form), called from `State.init`. |
+    | Editor opens on a color, forced Light / Dark | Light 0.575…0.97, Dark 0.01…0.425, widened to include `l` if `l` is outside | `max(0.01, s)` | `State.init` `0x1017a8050` (branch on the `forceAppearance` bias). |
+    | Preset tap (`didSelectColorSet`), Automatic | `l ± 0.25` as above | `max(0.01, s)`, or 1.0 when the color has no P3 form | Reducer case 1 `0x1017aa388`; the call to `0x1017a9414` at `0x1017aafa4` is skipped when the bias tag is `forceAppearance` (`0x1017aaf98`). |
+    | Preset tap, forced Light / Dark | unchanged | as above | same branch |
+    | Force Light / Dark (`didForceAppearance`) | Light 0.575…0.97, Dark 0.01…0.425 | unchanged | Reducer case 4 `0x1017aa854`: `t = clamp((l − lo)/(hi − lo))` with the **current** range, then `l' = lo' + span'·t` (spans 0.395 / 0.415 at `0x1017aa904`, `0x1017aa918`). Hue and saturation stay. |
+    | Drag, add, remove, intensity, noise | unchanged | unchanged | Reducer cases 0, 2, 3, 9, 10 do not write the range fields (`+0x48`, `+0x50`). |
+
+    `l` and `s` are P3 HSL lightness and saturation of the key color. The range
+    is not stored in the theme JSON (no such field in the reflection records or
+    in `StorableSidebar.json`), so it is rebuilt each time the editor opens.
+
+    The reducer is one jump table at `0x1017a9dcc` (table `0x1017ab320`, 16
+    cases in the `SpaceStyleEditor.Action` declaration order: drag knob,
+    color set, noise, intensity, force appearance, preset page, delegate,
+    finish drag, delete all, add, remove, end gesture, Escape, tap noise
+    knob, on appear, appearance updated). Returning to **Automatic** is a
+    delegate message (`didSetAutomaticAppearance`), not a reducer case. **guess:**
+    the host keeps the current range; no code path that re-centers it was found.
+
+    **17b. Pad mapping with that range.** Knob → color (`0x1017a724c`): hue =
+    `atan2(y, x)` in degrees, plus 360, modulo 360 (stub `atan2` `0x1035dcbf0`);
+    `t = min(max(distance/0.99, 0), 1)` (0.99 at `0x1017a72cc`);
+    `l = lo + t·(hi − lo)`; saturation from the state; result = P3 HSL color,
+    alpha 1 (`0x1009a59a0`). Color → knob (`0x1017a6f28`):
+    `r = 0.99·clamp((l − lo)/(hi − lo), 0, 1)`, angle = hue. The unit disc
+    has a 170 pt radius on screen.
+
+    Capture check (session 2 item 17; knob centers from the white ring, colors
+    converted from the capture's display profile to Display P3):
+
+    | Frames | What | Decoded | Arc | Error |
+    |---|---|---|---|---|
+    | 0027–0045 | Greyscale 1–9 knob centers | range `l ± 0.25` | all on the 0° axis | ≤ 0.9 pt each; the old fixed 0.01…0.97 range is off by up to 39.4 pt |
+    | 0033 / 0035 / 0037 | Greyscale 4 / 5 / 6 | all at t = 0.5 → 84.2 pt | 83.5 pt for all three | 0.8 pt; this is why mid greys share a radius |
+    | 0065 | Brand 8 knob | (−78.8, −29.4) pt | (−79.5, −29.5) pt | 0.7 pt (old law 30.3 pt) |
+    | 0092 | knob at the center after Brand 8 | P3 (162.1, 51.5, 93.7) | (163.0, 53.0, 95.0) | ΔE00 0.39 |
+    | 0093 | knob at r 0.485 | P3 (213.4, 124.1, 124.6) | (213.0, 125.0, 126.0) | ΔE00 0.37 |
+    | 0098 | knob near the edge, at rest | P3 (241.2, 211.5, 211.6) | (242.0, 213.0, 213.0) | ΔE00 0.40 |
+
+    After Brand 8 (P3 HSL h 200.5°, s 0.5176, l 0.6667) the range is
+    0.4167…0.9167. So the pad center is a deep color at l 0.417, not black.
+    In 0092 the knob is within 1 pt of the center, so its angle cannot be
+    measured; the check takes the hue from Arc's knob and tests only
+    lightness and saturation. The knob is drawn clipped at the content edge
+    (window x 597), so edge positions use the ring's left edge plus 22 pt.
+
+    **17c. Sidebar color and intensity.** The SwiftUI theme style view
+    (`0x1015322b8`, module `WindowThemeUI`) reads the style's `noiseFactor`,
+    `intensityFactor`, and `overlay` and builds three layers:
+
+    - Theme color at opacity `a = 0.2 + 0.55 × intensity` (constants 0.55 at
+      `0x101532444`, 0.2 at `0x101532458`).
+    - Under it, a wash: `Color.black.opacity(0.35)` when the color scheme
+      test is true, else `Color.white`; then `.opacity(min(a, 0.5))`
+      (`0x10153240c`–`0x101532470`; stubs `Color.black`, `Color.white`,
+      `Color.opacity(_:)`, `ColorScheme.==`). **guess (strong):** the black
+      branch is Dark. The macOS Dark capture fits it.
+    - The texture image, at opacity `noise × k` (17d).
+
+    The Metal path has the same inputs: `GradientRenderConfiguration` holds
+    `underlayColor` and a per-layer `alpha` (strings in
+    `ARC_WindowThemeUI.bundle/…/default.metallib`). Its CPU fill function was
+    not decoded. The capture fits the SwiftUI law:
+
+    `sidebar = a·key + (1 − a)·M·(1 − 0.35·min(a, 0.5))`
+
+    This is composited in gamma-encoded P3. `M` is the material under the
+    theme. It is 0.8246 in this capture (fitted on 9 greys, spread
+    0.820–0.829).
+
+    | Frame | Intensity | `a` | Arc sidebar P3 | Decoded | ΔE00 |
+    |---|---|---|---|---|---|
+    | 0098 | 0 | 0.20 | (204.5, 199.1, 198.8) | (204.7, 198.7, 198.8) | 0.39 |
+    | 0100 | ≈ 0.5 | 0.475 | (206.3, 192.5, 192.9) | (206.6, 192.5, 192.5) | 0.21 |
+    | 0095 | 0.8 | 0.64 | (217.1, 198.3, 198.4) | (216.8, 197.8, 197.9) | 0.14 |
+    | 0102 | 1 | 0.75 | (224.4, 202.9, 202.9) | (224.2, 202.0, 202.1) | 0.36 |
+    | 0092 | 0.8, pad center | 0.64 | (168.7, 98.0, 122.5) | (166.2, 95.4, 122.4) | 1.23 |
+    | 0093 | 0.8, mid radius | 0.64 | (200.2, 143.4, 142.9) | (199.0, 141.9, 142.2) | 0.54 |
+    | 0065 | 0.8, Brand 8 | 0.64 | (144.6, 180.0, 198.8) | (143.1, 180.2, 199.4) | 0.45 |
+
+    The tint at intensity 0 is the 0.2 floor. The wash also gets lighter at
+    low intensity: the underlay is M × 0.93 at intensity 0 and M × 0.825 from
+    intensity 0.55 up. Compositing in gamma-encoded sRGB instead of P3 raises
+    the 0092 error to 2.55, and linear light raises it to 5.97 (fit only;
+    **guess:** the window composites in the display's space, which is close
+    to P3 on this display). A frame captured while the knob moved (0091,
+    second window image) is not used: the sidebar lags the knob there.
+
+    **17d. Texture opacity per texture.** Helper `0x10153258c` switches on
+    `overlay` and multiplies the noise factor before it draws the tile image
+    (small-string names `grain`, `sand`, `denim`, `tweed`):
+
+    | Texture | Multiplier `k` | Evidence |
+    |---|---|---|
+    | grain | 0.80 | `0x101532600` |
+    | sand | 0.15 | `0x101532648` |
+    | denim | 0.60 | `0x101532628` |
+    | tweed | 0.40 | `0x10153266c` |
+
+    Each texture click sets noise to exactly 0.80 (session 2). So the textures
+    draw at opacity 0.64 / 0.12 / 0.48 / 0.32. Arc's tiles differ in darkness,
+    so the visible darkening is not ordered by `k`. Measured at intensity 1
+    (0111 → 0112/0114/0116/0118, region x 30–200, y 820–1020, Display P3, CIE
+    L* of every pixel):
+
+    | Texture | Mean color ÷ plain (encoded) | ΔL* | L* standard deviation | Tile mean darkness = (1 − ratio)/(0.8·k) |
+    |---|---|---|---|---|
+    | none | 1 | 0 | 0.17 | — |
+    | grain | 0.9614 | −2.89 | 2.02 | 0.060 |
+    | sand | 0.9621 | −2.84 | 1.53 | 0.316 |
+    | denim | 0.9414 | −4.40 | 1.28 | 0.122 |
+    | tweed | 0.9160 | −6.32 | 0.92 | 0.262 |
+
+    The darkening is the same in R, G, and B within 0.001 (grain ratios
+    0.9617 / 0.9606 / 0.9616), so the texture is a neutral darkening. Tweed is
+    the darkest and the smoothest; grain is the lightest per unit of opacity
+    and the roughest. The tile darkness column is our fit, not a decoded
+    constant. One noise value per texture was captured, so linearity in
+    noise is a **guess**.
+
+    **Not decoded:** the Metal renderer's own fill function, the light-mode
+    wash (white at `min(a, 0.5)` by the decoded branch, but not captured over
+    a light theme), the inactive-window material, and whether the
+    `isActive ? 1.0 : 0.25` value at `0x1015324b0` scales the texture or
+    another layer.
+
 ### 2.4 Switching
 
 12. Switch by: clicking a Space in the switcher, Spaces ▸ "Next Space" /
