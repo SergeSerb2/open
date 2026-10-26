@@ -70,19 +70,9 @@ public final class SidebarBannerView: NSView, NSTextViewDelegate {
         let range = (string.string as NSString).range(of: "Settings")
         string.addAttribute(.link, value: "open-profile-settings", range: range)
         messageView.textStorage?.setAttributedString(string)
-        var link = style.contrastAccent(appearance)
-        func luminance(_ c: RGBA) -> Double {
-            func linear(_ x: Double) -> Double { x <= 0.04045 ? x / 12.92 : pow((x+0.055)/1.055,2.4) }
-            return linear(c.red)*0.2126 + linear(c.green)*0.7152 + linear(c.blue)*0.0722
-        }
-        let baseL = luminance(background), target: Double = appearance == .light ? 0 : 1
-        for _ in 0..<100 {
-            let ink = luminance(link), contrast = (max(ink,baseL)+0.05)/(min(ink,baseL)+0.05)
-            if contrast >= 4.5 { break }
-            link = RGBA(link.red*0.95+target*0.05,link.green*0.95+target*0.05,link.blue*0.95+target*0.05)
-        }
-        messageView.alwaysUnderline = appearance == .dark
-        messageView.linkTextAttributes = [.foregroundColor: link.nsColor, .underlineStyle: appearance == .dark ? NSUnderlineStyle.single.rawValue : 0]
+        let link = style.contrastAccent(appearance, against: background, minimumContrast: 4.5)
+        messageView.alwaysUnderline = true
+        messageView.linkTextAttributes = [.foregroundColor: link.nsColor, .underlineStyle: NSUnderlineStyle.single.rawValue]
         dismissButton.refreshState()
         dismissButton.attributedTitle = NSAttributedString(string: "Got it", attributes: [.font: NSFont.systemFont(ofSize: BannerMetrics.messageSize, weight: .medium), .foregroundColor: style.titleColor(appearance).nsColor])
         cachedWidth = -1; cachedMessage = ""; needsLayout = true

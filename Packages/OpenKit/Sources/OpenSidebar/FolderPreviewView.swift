@@ -91,7 +91,7 @@ public final class FolderPreviewView: NSView, NSTableViewDataSource, NSTableView
     }
     public override func layout() {
         super.layout()
-        headerIcon.frame = CGRect(x: 11, y: 9, width: 18, height: 18)
+        headerIcon.frame = CGRect(x: 10, y: 8, width: 20, height: 20)
         title.frame = CGRect(x: 36, y: 0, width: max(0, bounds.width - 48), height: 36)
         searchField.frame = CGRect(x: 12, y: 36, width: max(0, bounds.width - 24), height: 24)
         let y: CGFloat = searchField.isHidden ? 36 : 68

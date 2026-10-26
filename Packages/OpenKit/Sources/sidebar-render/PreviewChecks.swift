@@ -185,6 +185,7 @@ enum PreviewChecks {
         Checks.check(card.drawnHeaderGlyph == "heart.fill" && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "heart.fill", "HP3 shared iconOverride provider precedes customIcon in row and header")
         context.folderIconOverrideProvider = nil; folder.customIcon = nil; pump()
         model.setExpanded(folderID: folder.id, expanded: true); pump()
+        Checks.check(card.headerIconView.frame == CGRect(x: 10, y: 8, width: 20, height: 20), "HP3 header uses the row's 20 pt icon canvas, centered on the 36 pt header")
         Checks.check(card.drawnHeaderGlyph == "folder.open" && scene.sidebar.drawnFolderGlyph(nodeID: folder.id) == "folder.open", "HP3 row and header both draw the open folder glyph without customIcon")
         model.setExpanded(folderID: folder.id, expanded: false); pump()
         let before = OffscreenRenderer().snapshot(card, scale: 1)
@@ -253,6 +254,13 @@ enum PreviewChecks {
                         return linear(c.redComponent)*0.2126 + linear(c.greenComponent)*0.7152 + linear(c.blueComponent)*0.0722
                     }
                     let link = banner.messageView.linkTextAttributes![.foregroundColor] as! NSColor
+                    Checks.check(banner.messageView.alwaysUnderline && banner.messageView.linkTextAttributes?[.underlineStyle] as? Int == NSUnderlineStyle.single.rawValue,
+                                 "BN1 Settings remains underlined in \(appearance)")
+                    if space === context.model.spaces[2] && appearance == .light {
+                        let ink = link.usingColorSpace(.sRGB)!
+                        Checks.check(ink.blueComponent > ink.redComponent + 0.15 && ink.blueComponent > ink.greenComponent + 0.15,
+                                     "BN1 unthemed light Settings keeps the passing blue Space accent")
+                    }
                     let bg = NSColor(cgColor: banner.layer!.backgroundColor!)!
                     let a = luminance(link), b = luminance(bg), ratio = (max(a,b)+0.05)/(min(a,b)+0.05)
                     let bottom = sidebar.convert(sidebar.focusedOutline!.enclosingScrollView!.bounds, from: sidebar.focusedOutline!.enclosingScrollView!).maxY
