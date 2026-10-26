@@ -46,6 +46,7 @@ packages:
   # Engine-agnostic Swift packages (model, stores, web protocols).
   OpenKit:
     path: Packages/OpenKit
+  Sparkle: { url: https://github.com/sparkle-project/Sparkle, exactVersion: 2.10.1 }
 
 targetTemplates:
   CEFHelper:
@@ -129,6 +130,10 @@ targets:
     dependencies:
       - target: OpenEngine
         embed: true
+      # SwiftPM embeds and signs this binaryTarget automatically. Explicit
+      # embed adds a nonexistent Sparkle-product copy with XcodeGen 2.46.
+      - package: Sparkle
+        product: Sparkle
       - package: OpenKit
         product: OpenModel
       - package: OpenKit
