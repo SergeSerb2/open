@@ -1,0 +1,4 @@
+# CEF locales shipped in release builds. One per line.
+# Always keep en: Chromium falls back to it. Add a locale only when the
+# shell UI or a shipped feature actually uses it.
+en
