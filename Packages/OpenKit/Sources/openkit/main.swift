@@ -8,7 +8,7 @@ if sweptImportCopies > 0 {
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons|profiles> ...")
+    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons|profiles|sleep-demo|sleep-sim> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
@@ -23,6 +23,8 @@ do {
         await runImportArcHistory(args: rest)
     case "import-arc":
         try await runImportArc(args: rest)
+    case "sleep-demo": try await runSleepDemo(args: rest)
+    case "sleep-sim": try await runSleepSimulation(args: rest)
     case "archive-list":
         await runArchiveList(args: rest)
     case "dump":

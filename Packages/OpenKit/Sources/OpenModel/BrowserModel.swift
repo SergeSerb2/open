@@ -112,6 +112,9 @@ public final class BrowserModel {
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
     @ObservationIgnored public var undoManager: UndoManager?
 
+    /// Invalidates derived tab ownership after structural edits or a full import/load.
+    @ObservationIgnored public private(set) var treeRevision: UInt64 = 0
+
     // O(1) lookup. Every command updates both maps in place, in O(size of the changed subtree).
     // rebuildIndex() walks the whole tree and runs only on load and import.
     @ObservationIgnored public private(set) var index: [ItemID: SidebarNode] = [:]
@@ -145,6 +148,7 @@ public final class BrowserModel {
     public func removeObserver(_ id: UUID) { observers[id] = nil }
 
     private func emit(_ change: TreeChange) {
+        treeRevision &+= 1
         for handler in observers.values { handler(change) }
     }
 
@@ -165,6 +169,7 @@ public final class BrowserModel {
 
     /// Full rebuild from `profiles` and `spaces`. For load and import only.
     public func rebuildIndex() {
+        treeRevision &+= 1
         index.removeAll(); parentByID.removeAll()
         spaceByIDCache = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0) })
         profileByIDCache = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
@@ -1272,13 +1277,25 @@ public final class BrowserModel {
         registerChange(undo: { window.focusedSpaceID = old }, redo: { window.focusedSpaceID = spaceID })
     }
 
+    /// Every pane is visible when a split is selected or its keyboard focus changes.
+    private func stampVisibleTabs(in node: SidebarNode) {
+        let date = Date()
+        let tabs = node.split?.panes ?? node.tab.map { [$0] } ?? []
+        for tab in tabs { tab.lastActiveAt = date; tab.isUnread = false }
+    }
+
+    public func focusSplitPane(splitID: ItemID, tabID: ItemID) {
+        guard let split = index[splitID]?.split, split.panes.contains(where: { $0.id == tabID }) else { return }
+        split.focusedPaneID = tabID
+        stampVisibleTabs(in: .split(split))
+    }
+
     public func selectNode(windowID: WindowID, spaceID: SpaceID, nodeID: ItemID?) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.selectedNodeBySpace[spaceID]
         window.selectedNodeBySpace[spaceID] = nodeID
-        if let nodeID, let tab = tab(id: nodeID) {
-            tab.lastActiveAt = Date()
-            tab.isUnread = false
+        if let nodeID, let node = index[nodeID] {
+            stampVisibleTabs(in: node)
         }
         registerChange(undo: { window.selectedNodeBySpace[spaceID] = old },
                        redo: { window.selectedNodeBySpace[spaceID] = nodeID })
