@@ -122,7 +122,13 @@ public enum PiPMetrics {
     public static let cornerPitch: CGFloat = 32
     public static let playButton: CGFloat = 48
     public static let skipButton: CGFloat = 40
-    public static let skipGlyph: CGFloat = 24
+    public static let skipGlyph: CGFloat = 22
+    public static let compactSkipGlyph: CGFloat = 18
+    public static let minimumSkipWidth: CGFloat = 168
+    public static let packedTrackGap: CGFloat = 16
+    public static let scrubDragThreshold: CGFloat = 3
+    public static let disabledControlOpacity: CGFloat = 0.4
+    public static let documentButtonRadius: CGFloat = 5
     public static let skipDistance: CGFloat = 72
     public static let compactSkipDistance: CGFloat = 56
     public static let trackButton: CGFloat = 32

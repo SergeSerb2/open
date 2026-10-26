@@ -73,7 +73,7 @@ import OpenWeb
 
 @MainActor private final class DocumentPiPTopBar: NSView {
     private let favicon = DocumentPiPFavicon(), title = DocumentPiPLabel(labelWithString: "")
-    private let settings = PiPControlButton(glyph: .pipSettings, title: "Settings")
+    private let settings = PiPControlButton(glyph: .pipSettings, title: "Options")
     private let closeButton = PiPControlButton(glyph: .pipClose, title: "Close")
     private let menuBuilder: PiPMenuBuilder
     private let hairline = CALayer()
@@ -86,6 +86,7 @@ import OpenWeb
         title.stringValue = text; title.font = Typography.documentPiPHost.font; title.textColor = PiPRole.secondaryText.nsColor
         title.lineBreakMode = .byTruncatingTail
         for view in [favicon, title, settings, closeButton] as [NSView] { addSubview(view) }
+        settings.documentStyle = true; closeButton.documentStyle = true
         settings.showsPlate = false; settings.growsOnHover = false; closeButton.showsPlate = false; closeButton.growsOnHover = false
         settings.setAccessibilityIdentifier("pip.document.settings"); closeButton.setAccessibilityIdentifier("pip.document.close")
         settings.action = { [weak self] in guard let self else { return }; self.menuBuilder.build(document: true).popUp(positioning: nil, at: CGPoint(x: 0, y: self.settings.bounds.maxY), in: self.settings) }

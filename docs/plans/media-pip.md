@@ -461,7 +461,7 @@ in the Step 6 PR.
 | Level | `.floating` when "Keep Window on Top" is on (default, key `open.pip.keepOnTop`), else `.normal`. `toggleAlwaysOnTop` exists in Arc (PP-8); the default is a guess. |
 | Content | The engine's `videoView` fills the window. The overlay (§4.4.3) sits above it. |
 | Initial size | Chromium's rule (Arc's is unknown): fit the video's natural aspect inside a box of `visibleFrame.width / 5` × `visibleFrame.height / 5` of the screen that holds the source window, then clamp to the minimum and maximum below (`chrome/browser/ui/views/overlay/video_overlay_window_views.cc:463-505`). Our e2e run got 384×216 from it. |
-| Initial position | Bottom-right of that screen's `visibleFrame`, inset 16 pt (guess). Later opens in the same app run reuse the last frame's origin and width. Not persisted. |
+| Initial position | Bottom-right of that screen's `visibleFrame`, inset 16 pt (guess). Later opens in the same app run reuse the last frame's origin and LONG side, clamped to the current video's limits. Not persisted. |
 | Resize | `contentAspectRatio` = natural size; minimum 284×160 (Chromium `kMinWindowSize`, same file `:109`), maximum 50 % of `visibleFrame` in each dimension (guess). A natural-size change (`didChangePiPVideoResolution`) keeps the width and updates the height. |
 | Size class | Compact below 300 pt wide, regular otherwise (guess; Arc has `PIPSizeClassKey`). |
 
@@ -472,6 +472,12 @@ the shorter side is at least 160 pt and the longer side follows the aspect
 ratio. A 9:16 video on a screen with 900 pt visible height can use about
 253×450 pt (height capped at 50%). Widths below PiPMetrics.compactWidth use
 compact controls. PP6 covers 9:16 and 1:1 video on a 900 pt screen.
+
+Lead review decision (2026-10-26 09:23 America/Vancouver): the first open
+clamps the /5 fit with the geometry limits, `min(maximum.width,
+max(minimum.width, fit))`, giving about 160×284 for 9:16. Later opens reuse
+the last LONG side, preserving aspect and applying those same limits.
+PP6 reads the first portrait frame before any explicit resize.
 
 #### 4.4.3 Overlay controls (`PiPOverlayView`)
 
@@ -484,15 +490,26 @@ All glyphs white; plates black. Values are guesses except where marked
 | Bottom scrim | Gradient black 0 → 0.6 over the bottom 64 pt | Controls visible |
 | Close | 28×28 circle (code) at `[p, p]`, `p` = 8 compact / 10 regular (code); SF `xmark` 12 pt Semibold; plate black 0.4, hover 0.55 with scale 1.08 (`GrowOnHover`) | Unless the site rule hides Close (Meet, PP-11). Tooltip "Close" (code). |
 | Minimize | 28×28 at `[p + 32, p]`; SF `minus` 13 pt Bold | Always (Arc `minimizeEnabled`, default on). Tooltip "Minimize" (code). |
-| Settings | 28×28 at `[w − p − 28, p]`; SF `ellipsis` 13 pt Bold; click opens the menu (§4.4.5) under the button | Always |
+| Settings | 28×28 at `[w − p − 28, p]`; SF `ellipsis` 13 pt Bold; tooltip/AX label "Options"; click opens the menu (§4.4.5) under the button | Always |
 | Play/Pause | 48×48 centered; SF `play.fill`/`pause.fill` 26 pt (regular) or 22 pt (compact) | Unless `disablePlayButton` |
-| Skip back / ahead 15 s | 40×40 at center ∓ 72 (regular) or ∓ 56 (compact); our own vector glyph (circular arrow with "15", 24 pt) | Unless `disableSkipButton`, or the duration is not finite (live). Tooltips "Skip back 15 seconds" / "Skip ahead 15 seconds" (Arc). |
+| Skip back / ahead 15 s | 40×40 at center ∓ 72 (regular) or ∓ 56 (compact); SF `gobackward.15` / `goforward.15`, 22 pt Regular / 18 pt compact | Unless `disableSkipButton`, the duration is not finite (live), or the width is below 168 pt. Skip ahead is disabled at end-of-media, opacity 0.4 (Open guess from design r1). Tooltips "Skip back 15 seconds" / "Skip ahead 15 seconds" (Arc). |
 | Previous / Next track | 32×32 at center ∓ 120, SF `backward.end.fill`/`forward.end.fill` 16 pt | Regular size only, when the session offers them |
-| Back to Tab | Pill, height 24, horizontal padding 10, text "Back to Tab" 12 Semibold white, plate black 0.4 / hover 0.55 / pressed 0.7, at bottom-left `[p, h − p − 24 − 16]` | Always (Arc `BackToTabButton`, `PIPPillActionButtonStyle`) |
-| Mute | 28×28 at `[w − p − 28, h − p − 28 − 16]`, SF `speaker.wave.2.fill` / `speaker.slash.fill` 13 pt | Always (Arc `toggleMute`) |
+| Back to Tab | Pill, height 24, horizontal padding 10, text "Back to Tab" 12 Semibold white, plate black 0.4 / hover 0.55 / pressed 0.7, at bottom-left on the shared bottom-row center line below | Always (Arc `BackToTabButton`, `PIPPillActionButtonStyle`) |
+| Mute | 28×28 at the trailing edge on the shared bottom-row center line below, SF `speaker.wave.2.fill` / `speaker.slash.fill` 13 pt | Always (Arc `toggleMute`) |
 | Scrubber | §4.4.4, along the bottom inside `p` | Unless `disableScrubButton` or the duration is not finite |
 | Skip Ad | Pill "Skip Ad", style as Back to Tab, bottom-right above Mute | When the session offers `skipAd` (Arc `skipAdButtonVisible`) |
 | Meeting row | 32×32 circles centered at the bottom, 12 pt apart: microphone, camera, hang up (plate `#F53714`, SF `phone.down.fill`) | When the PiP reports meeting controls; then the play group hides (Arc `showMeetingControls`) |
+
+Review r1 Open design (2026-10-26 09:23; guesses pending capture session 2):
+play, skip and track controls have no plate at rest; hover/pressed plates remain.
+A full-window black 0.25 dim appears with controls, in addition to the edge scrims.
+When Close is hidden, Minimize takes `[p, p]`. If Play is hidden, pack the
+visible track buttons with a 16 pt gap (two track centers at ±24 pt).
+
+Bottom controls share `yc = h − p − offset − 14`, with offset 16 when the
+scrubber shows and 0 when it is hidden. Pill/Mute/meeting frames center on
+yc. This gives `yc = h − p − 30` with a scrubber. A packed meeting row
+centers at `yc − 14 − 6 − 16`.
 
 Open layout detail (provisional until S1/S11): keep the meeting row centered
 near the bottom. If it would overlap the always-visible Back to Tab or Mute
@@ -507,17 +524,22 @@ VoiceOver focus inside the window keeps them visible.
 #### 4.4.4 Scrubber (`PiPScrubberView`)
 
 Open design (lead decision, 2026-10-26 02:38 America/Vancouver): mouse-down
-jumps to the clicked time. Dragging then starts from that time and applies
+jumps to the clicked time. Refinement from the 09:23 review decision: a
+plain click only seeks; it does not pause/resume. After at least 3 pt movement,
+precision dragging pauses if playback was active, starts from that clicked
+time and applies
 the precision math below. Confirm this behavior against S1/S2. PP4 also
 checks click-to-jump followed by a precision drag.
 
 - Bar: `[p, h − p − 4, w − 2p, 4]`, radius 2, track white 0.3, fill
-  white 0.9; 6 pt tall while hovered. Hit area 20 pt tall (Arc
+  white 0.9; 6 pt tall while hovered or dragging. Hit area 20 pt tall (Arc
   `draggableHeight`).
 - Drag: horizontal movement seeks. Factor `m = min(8, 1 + floor(max(0,
   −dy) / 40))` where `dy` is the vertical distance from the drag start
   (up is negative). Time change = `dx / barWidth · duration / m`.
-- Label 11 pt Medium white 0.85, centered 8 pt above the bar while
+- While dragging, fade Back to Tab, Mute and Skip Ad out in 0.15 s, restore
+  them in 0.15 s on release, and disable their hit testing during the drag.
+- Label 11 pt Medium white 0.85, truncated to `w − 2p`, centered 8 pt above the bar while
   dragging: "Drag upwards to seek precisely" when `m < 2`, else
   "Seeking at m× precision" (Arc strings, PP-7).
 - The video pauses during the drag and resumes if it was playing
@@ -678,7 +700,7 @@ Chromium's).
 |---|---|
 | Trigger | The page calls `documentPictureInPicture.requestWindow()`; the engine reports disposition `newPictureInPicture` with the requested size (EM-7). |
 | Window | `NSPanel` like §4.4.2, not aspect-locked, min 284×160, level from "Keep Window on Top". Content size = requested size + top bar. Position: bottom-right, 16 pt inset. |
-| Top bar | Height 28 (guess), fill `PiPRole.documentTopBar` (`#212123`, both appearances, design-tokens §1.8), 1 px hairline `PiPRole.documentHairline` (white 0.20) at the bottom. Left: the opener's favicon 16 pt at x 10. Then the opener's host, 12 Medium white 0.85. Right: settings `ellipsis` (menu: "Keep Window on Top", separator, "Picture-in-picture on <host>:" header) and close `xmark`, 20×20 each, 6 pt apart, 8 pt from the edge. |
+| Top bar | Height 28 (guess), fill `PiPRole.documentTopBar` (`#212123`, both appearances, design-tokens §1.8), 1 px hairline `PiPRole.documentHairline` (white 0.20) at the bottom. Left: the opener's favicon 16 pt at x 10. Then the opener's host, 12 Medium white 0.85. Right: settings `ellipsis` (menu: "Keep Window on Top", separator, "Picture-in-picture on <host>:" header) and close `xmark`, 20×20 each, 6 pt apart, 8 pt from the edge. Glyphs white 0.85 at rest / 1 on hover; hover plate white 0.12, radius 5 (Open review-r1 design). Ellipsis tooltip/AX label "Options". |
 | Drag | The top bar drags the window (Arc `DocumentPIPGestureMode.acceptOverTopBar`). |
 | Close | Closes the child page; Chromium returns elements to the opener. |
 
@@ -1205,7 +1227,7 @@ tokens.
 ```text
 features-render pip --out FILE.png [--size 384x216] [--scale 1|2] [--state playing|paused|ended]
                     [--controls visible|hidden] [--meeting] [--site twitch|meet|youtube|none]
-                    [--drag-precision N] [--menu] [--document --top-bar-title TEXT]
+                    [--drag-precision N] [--menu] [--document --top-bar-title TEXT] [--document-hover-options]
 ```
 
 The fake video view paints a gradient with the size written in it.
@@ -1322,6 +1344,19 @@ spot before Step 3; otherwise proceed after the plain-row gate passes.
 | 10 | [APP] Phase 2: Open's PiP window replaces Chromium's (`shellHostsPictureInPicture = YES`). | `App/Media/MediaCoordinator.swift`, `App/EngineBridge.swift` | E-M5…E-M10, E-M14 PASS on Open's window; PP checks unchanged. |
 | 11 | [ENGINE + APP] EM-6, EM-7; Document PiP and the Meet path. | fork + OpenEngine; App coordinator | E-M13 PASS; `meet-like.html` gets a Chromium auto PiP after a leave. |
 | 12 | Polish against screenshots: compare renders, fix tokens, motion. | `OpenDesign/*` | Compare targets met or each miss named with numbers. |
+
+### Step 10/11 lifecycle gate (code review r1)
+
+App wiring remains required before phase-2 video and Document PiP acceptance:
+
+- Tab close, archive, discard and crash must call `dismiss(reason: .sourceGone)`
+  on the video PiP controller. The call returns the video without pausing it.
+- Closing a Document PiP opener must call `DocumentPiPWindowController.close()`.
+- The earlier Step 6 store gate remains: close/archive/discard/crash remove the
+  tab source; window teardown stops sidebar observations and calls removeWindow.
+
+The controllers cannot observe a source tab by themselves. Fake-host Step 4
+checks prove the effects after these calls, not that future App callers are wired.
 
 ## 10. Risks and open questions (lead decisions)
 

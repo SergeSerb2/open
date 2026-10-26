@@ -72,8 +72,8 @@ public enum Glyph: String, CaseIterable, Sendable {
         case .pipMute: Spec(symbol: "speaker.slash.fill", pointSize: 13, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
         case .pipUnmute: Spec(symbol: "speaker.wave.2.fill", pointSize: 13, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
         case .pipHangUp: Spec(symbol: "phone.down.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
-        case .pipSkipBack: Spec(symbol: "gobackward.15", pointSize: 24, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
-        case .pipSkipForward: Spec(symbol: "goforward.15", pointSize: 24, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipSkipBack: Spec(symbol: "gobackward.15", pointSize: 22, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipSkipForward: Spec(symbol: "goforward.15", pointSize: 22, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
         case .globe: Spec(symbol: "globe", pointSize: 14, weight: .regular, arcInk: nil, note: "favicon fallback")
         }
     }
@@ -81,10 +81,6 @@ public enum Glyph: String, CaseIterable, Sendable {
     /// Template image. Tint it with `NSImage.drawTinted` or a layer mask.
     @MainActor public var image: NSImage? {
         if self == .library { return CustomIcon.template(size: 16, cacheKey: "library") { CustomIcon.library(in: $0, color: .black) } }
-        if self == .pipSkipBack || self == .pipSkipForward {
-            let forward = self == .pipSkipForward
-            return CustomIcon.template(size: PiPMetrics.skipGlyph, cacheKey: rawValue) { CustomIcon.skip15(forward: forward, in: $0) }
-        }
         return GlyphCache.image(self)
     }
 }
@@ -208,19 +204,4 @@ public enum CustomIcon {
 
 
 extension CustomIcon {
-    /// Own vector skip glyph: circular arrow and system-font numeral. No reference assets (PP-6).
-    @MainActor public static func skip15(forward: Bool, in r: CGRect) {
-        let center = CGPoint(x: r.midX, y: r.midY + 1), radius = r.width * 0.4
-        let path = NSBezierPath()
-        path.appendArc(withCenter: center, radius: radius, startAngle: forward ? 225 : -45, endAngle: forward ? -45 : 225, clockwise: !forward)
-        path.lineWidth = 1.7; path.lineCapStyle = .round; NSColor.black.setStroke(); path.stroke()
-        let arrow = NSBezierPath()
-        let x = r.midX + (forward ? 1 : -1) * radius * 0.7, y = r.midY - radius * 0.7 + 1
-        arrow.move(to: CGPoint(x: x - (forward ? 4 : -4), y: y - 1))
-        arrow.line(to: CGPoint(x: x, y: y))
-        arrow.line(to: CGPoint(x: x, y: y + 4))
-        arrow.lineWidth = 1.7; arrow.stroke()
-        let text = NSAttributedString(string: "15", attributes: [.font: NSFont.systemFont(ofSize: 9, weight: .semibold), .foregroundColor: NSColor.black])
-        let size = text.size(); text.draw(at: CGPoint(x: r.midX - size.width / 2, y: r.midY - size.height / 2 + 1))
-    }
 }

@@ -7,7 +7,7 @@ import QuartzCore
 @MainActor public final class PiPScrubberView: NSView {
     private let host: any WebPictureInPictureHost
     private var startPoint = CGPoint.zero, startTime: Double = 0, dragTime: Double = 0
-    private var wasPlaying = false, hovered = false
+    private var wasPlaying = false, hovered = false, trackingClick = false
     private var tracking: NSTrackingArea?
     private var visibility: PiPVisibilityObserver?
     private var displayLink: CADisplayLink?
@@ -39,8 +39,9 @@ import QuartzCore
         let advance = host.mediaState.playback == .playing && !host.endOfMedia ? max(0, Date().timeIntervalSince(host.positionUpdatedAt)) * host.playbackRate : 0
         return min(duration ?? .greatestFiniteMagnitude, max(0, host.currentTime.isFinite ? host.currentTime + advance : 0))
     }
+    public var barHeight: CGFloat { hovered || isDragging ? PiPMetrics.scrubberHoverHeight : PiPMetrics.scrubberHeight }
     public override func draw(_ dirtyRect: NSRect) {
-        let height = hovered ? PiPMetrics.scrubberHoverHeight : PiPMetrics.scrubberHeight
+        let height = barHeight
         let track = CGRect(x: 0, y: bounds.midY - height / 2, width: bounds.width, height: height)
         PiPRole.scrubberTrack.nsColor.setFill(); NSBezierPath(roundedRect: track, xRadius: height / 2, yRadius: height / 2).fill()
         var fill = track; fill.size.width *= CGFloat(duration.map { displayedTime / $0 } ?? 0)
@@ -58,18 +59,24 @@ import QuartzCore
         startPoint = convert(event.locationInWindow, from: nil)
         startTime = min(duration, max(0, Double(startPoint.x / bounds.width) * duration)); dragTime = startTime; precision = 1
         wasPlaying = host.mediaState.playback == .playing
-        isDragging = true; onDragChanged?(true)
-        if wasPlaying { host.togglePlayPause() }
-        host.scrubTo(startTime); onPrecisionChanged?(); needsDisplay = true; updateDisplayLink()
+        trackingClick = true
+        host.seekTo(startTime); onPrecisionChanged?(); needsDisplay = true
     }
     public override func mouseDragged(with event: NSEvent) {
-        guard isDragging, let duration else { return }
+        guard trackingClick, let duration else { return }
         let point = convert(event.locationInWindow, from: nil), dy = point.y - startPoint.y
+        if !isDragging {
+            guard hypot(point.x - startPoint.x, dy) >= PiPMetrics.scrubDragThreshold else { return }
+            isDragging = true
+            if wasPlaying { host.togglePlayPause() }
+            onDragChanged?(true); updateDisplayLink()
+        }
         precision = min(PiPMetrics.maximumPrecision, 1 + floor(Double(max(0, -dy) / PiPMetrics.precisionStep)))
         dragTime = min(duration, max(0, startTime + Double((point.x - startPoint.x) / max(1, bounds.width)) * duration / precision))
         host.scrubTo(dragTime); onPrecisionChanged?(); needsDisplay = true
     }
     public override func mouseUp(with event: NSEvent) {
+        guard trackingClick else { return }; trackingClick = false
         guard isDragging else { return }
         host.seekTo(dragTime)
         if wasPlaying && host.mediaState.playback != .playing { host.togglePlayPause() }

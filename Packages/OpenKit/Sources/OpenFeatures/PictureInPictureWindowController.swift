@@ -180,8 +180,8 @@ private struct PiPWindowGeometry {
     }
     func initialFrame(reusing old: CGRect?) -> CGRect {
         let fit = min(screen.width * PiPMetrics.initialScreenFraction, screen.height * PiPMetrics.initialScreenFraction * ratio)
-        let standard = max(PiPMetrics.minimum.width, PiPMetrics.minimum.height * ratio)
-        let size = constrained(CGSize(width: old?.width ?? min(maximum.width, max(standard, fit)), height: 0))
+        let reusedWidth = old.map { max($0.width, $0.height) * min(1, ratio) }
+        let size = constrained(CGSize(width: reusedWidth ?? min(maximum.width, max(minimum.width, fit)), height: 0))
         let inset = PiPMetrics.screenInset
         let origin = old.map { CGPoint(x: min(screen.maxX - size.width - inset, max(screen.minX + inset, $0.minX)), y: min(screen.maxY - size.height - inset, max(screen.minY + inset, $0.minY))) }
             ?? CGPoint(x: screen.maxX - size.width - inset, y: screen.minY + inset)

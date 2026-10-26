@@ -1,9 +1,10 @@
-# Step 4 PiP evidence
+# Step 4 PiP evidence — review r1
 
-The real AppKit PiP and Document PiP windows render over the plan's fake video
-host. All artwork is Open's own drawing or SF Symbols. The video surface paints
-only a synthetic gradient and its size. PiP uses the same colors in both appearances.
-No App or engine wiring belongs to this step.
+The real AppKit PiP and Document PiP windows use the plan's fake video host.
+All artwork is Open's own drawing or SF Symbols. The synthetic video is a
+bitmap-backed gradient and size label; it cannot lose its tiled backing store
+when the offscreen renderer clones a large 2× view. No Arc capture yet shows
+these surfaces. Guesses stay guesses until capture session 2.
 
 ```sh
 swift build --package-path Packages/OpenKit -c release -j 6
@@ -11,48 +12,54 @@ Packages/OpenKit/.build/release/features-render check
 python3 Packages/OpenKit/MediaRenders/step4/render-scenes.py
 ```
 
-The check command passes 191/191, including PP1–PP8. It creates complete native
-panels offscreen, sends mouse events through NSWindow.sendEvent after hit testing,
-and invokes actual NSMenu items. PP3 observes a real finite CA fade, lets the
-actual 2 s DispatchWorkItem fire, and checks that animation keys disappear.
-PP4 verifies click-to-jump, 80 pt upward precision dragging, final seek and resume.
-The full verification gate now runs features-render check.
+The native-window checks pass **209/209**, including PP1–PP8 and the review
+additions. They send native mouse events after hit testing, run real menu items,
+and use actual finite animation and delayed-work completion. A plain click seeks
+once without pause/resume; dragging pauses, fades the utility controls, keeps the
+bar at 6 pt and resumes on release. Narrow labels truncate within the padding.
 
-The idle offscreen window measured 0.025% process CPU over 2 s (0.5% budget).
-Hidden controls, paused playback and an ordered-out panel have no display link;
-ordered-out panels also cancel the pending control-hide item. The display link
-requires visible controls, a visible unoccluded window, finite duration and playing
-state. On-screen motion, key focus and engine-backed video remain later checks.
+The first portrait frame is checked before any resize (160×285 native points;
+AppKit rounds the ideal 160×284.444). Later opens reuse the last long side.
+The maximum-size 9:16 case still respects the 50% cap with native one-point
+rounding. A real presentWindows=true offscreen panel runs its source-rect spring,
+reaches the target and alpha 1, completes Back to Tab exactly once, and closes
+cleanly when interrupted during presentation. The focus check resigns the actual
+key panel and verifies that both focus holds clear.
 
-PP6 checks exact native contentAspectRatio and the 50% screen cap. AppKit rounds
-the requested 253.125×450 portrait frame to 254×450 native points; the check allows
-one point of native frame rounding. The portrait PNG uses exact 9:16 at 252×448.
-The square check reaches 450×450 and returns to a 284×284 minimum.
+Idle offscreen process CPU: 0.020% over 2 s (budget 0.5%). Hidden, paused and
+ordered-out states have no display link. No polling timer is used.
 
-The menu files below dump the real NSMenu. Each row includes its title, separator,
-checkmark, enabled state, key equivalent, modifier mask and indentation for nesting.
-The check captures the host-less, disabled and private states after real actions.
-There is no drawn menu preview. Invalid size and state CLI cases both exit 1 and
-produce no PNG.
+The square 2× snapshot check samples opacity across the video, including the
+region that was transparent before. The rendered gallery covers the 160×284
+minimum and scrubbing at 284 and 160 pt, plus the Document PiP Options hover.
+Invalid size and state exit 1 without a PNG.
 
-Lead decisions recorded in plan §4.4.2, §4.4.4 and §8.3:
+Native menus below dump the real NSMenu: order, separators, checkmarks, enabled
+state, keys, modifiers and nesting. No menu preview is drawn. App source-tab and
+Document PiP opener teardown remain required Step 10/11 lifecycle gates in the
+plan. These fake-host checks prove effects after calls, not future App wiring.
 
-- 2026-10-26 02:38: click jumps before precision dragging; Open design pending S1/S2.
-- 2026-10-26 02:47: preserve aspect and the 50% maximum; relax the minimum for portrait.
-- 2026-10-26 03:11: native menu text only; PNG renders only the PiP window.
-
-Meeting-row packing is provisional Open geometry pending S1/S11: center it near
-the bottom and move it one row above Back to Tab and Mute if their frames overlap.
-The compact native-window check verifies that these controls remain separate.
+Lead decisions: 02:38 click jump, refined at 09:23 to seek-only on a plain click;
+02:47 preserve aspect and cap; 09:23 first-open fit and later long-side reuse;
+03:11 native menu text only. All times are 2026-10-26 America/Vancouver.
+The .25 full-window dim, unplated center cluster, and provisional meeting-row
+packing remain Open design guesses pending S1/S11.
 
 | Scene | 1× | 2× |
 |---|---|---|
 | compact-meeting | [PNG](compact-meeting@1x.png) | [PNG](compact-meeting@2x.png) |
 | compact-paused | [PNG](compact-paused@1x.png) | [PNG](compact-paused@2x.png) |
 | compact-playing | [PNG](compact-playing@1x.png) | [PNG](compact-playing@2x.png) |
+| compact-precision-1 | [PNG](compact-precision-1@1x.png) | [PNG](compact-precision-1@2x.png) |
+| compact-precision-3 | [PNG](compact-precision-3@1x.png) | [PNG](compact-precision-3@2x.png) |
 | controls-hidden | [PNG](controls-hidden@1x.png) | [PNG](controls-hidden@2x.png) |
+| document-hover | [PNG](document-hover@1x.png) | [PNG](document-hover@2x.png) |
 | document | [PNG](document@1x.png) | [PNG](document@2x.png) |
 | meet | [PNG](meet@1x.png) | [PNG](meet@2x.png) |
+| portrait-meeting | [PNG](portrait-meeting@1x.png) | [PNG](portrait-meeting@2x.png) |
+| portrait-minimum | [PNG](portrait-minimum@1x.png) | [PNG](portrait-minimum@2x.png) |
+| portrait-precision-1 | [PNG](portrait-precision-1@1x.png) | [PNG](portrait-precision-1@2x.png) |
+| portrait-precision | [PNG](portrait-precision@1x.png) | [PNG](portrait-precision@2x.png) |
 | portrait | [PNG](portrait@1x.png) | [PNG](portrait@2x.png) |
 | precision-1 | [PNG](precision-1@1x.png) | [PNG](precision-1@2x.png) |
 | precision-3 | [PNG](precision-3@1x.png) | [PNG](precision-3@2x.png) |
@@ -64,6 +71,6 @@ The compact native-window check verifies that these controls remain separate.
 | twitch | [PNG](twitch@1x.png) | [PNG](twitch@2x.png) |
 | youtube | [PNG](youtube@1x.png) | [PNG](youtube@2x.png) |
 
-Native menus: [regular](menu-regular.txt), [disabled](menu-disabled.txt), [host-less](menu-hostless.txt), [private disabled](menu-private-disabled.txt), [Document PiP](menu-document.txt).
+46 PNGs total. Native menus: [regular](menu-regular.txt), [disabled](menu-disabled.txt), [host-less](menu-hostless.txt), [private disabled](menu-private-disabled.txt), [Document](menu-document.txt).
 
-[Complete check receipt](features-check.txt) · [Build receipt](build.txt).
+[Runtime receipt](features-check.txt) · [Build receipt](build.txt) · [PNG hashes and sizes](renders.json).

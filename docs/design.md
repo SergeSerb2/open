@@ -564,3 +564,11 @@ and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
 | Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
 
 Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.
+
+Media review-r1 PiP refinements (Open design; no Arc capture yet): SF skip glyphs
+22/18 pt, hidden below 168 pt; no center plate at rest; whole-window black .25
+dim while controls show (guess). Bottom controls share one center line, with a
+zero offset when the scrubber is hidden. Scrubbing fades utility controls in .15 s
+and keeps a 6 pt bar. Document header glyphs white .85, hover plate white .12,
+radius 5. First-open portrait clamps the /5 fit; reuse keeps the long side.
+See plan §4.4 for the lead's exact limits and click-only seek refinement.

@@ -31,6 +31,12 @@ import OpenWeb
             guard let index = menu.items.firstIndex(where: { $0.title == title }) else { check(false, "PP menu item exists: \(title)"); return }
             menu.performActionForItem(at: index)
         }
+        let firstPortraitHost = FakePiPHost(); firstPortraitHost.naturalSize = CGSize(width: 900, height: 1600)
+        guard let firstPortrait = PictureInPictureWindowController(host: firstPortraitHost, sourceURL: nil, settings: MediaSettings(defaults: FeatureCLI.defaults()), rules: rules, screenVisibleFrame: PiPScene.screen) else { throw CLIError(description: "first portrait failed") }
+        firstPortrait.presentWindows = false; fixtures.append(firstPortrait)
+        let initialPortrait = firstPortrait.window!.frame
+        check(abs(initialPortrait.width - 160) <= 1 && abs(initialPortrait.height - 160 * 16 / 9) <= 1,
+              "PP6 first-open portrait before any resize uses relaxed fit: \(initialPortrait)")
         let (regular, host, settings) = try make()
         let (compact, _, _) = try make(CGSize(width: 284, height: 160))
         for (controller, p) in [(regular, CGFloat(10)), (compact, CGFloat(8))] {
@@ -45,7 +51,13 @@ import OpenWeb
         check(twitch.overlay.control(named: "play")?.view.isHidden == true && twitch.overlay.control(named: "back")?.view.isHidden == true &&
               twitch.overlay.control(named: "forward")?.view.isHidden == true && twitch.overlay.scrubber.isHidden, "PP2 Twitch hides play, skip and scrubber")
         let (meet, _, _) = try make(url: URL(string: "https://meet.google.com/example"))
-        check(meet.overlay.control(named: "close")?.view.isHidden == true, "PP2 Meet hides Close")
+        check(meet.overlay.control(named: "close")?.view.isHidden == true && meet.overlay.control(named: "minimize")?.view.frame.origin == CGPoint(x: 10, y: 10), "PP2 Meet hides Close and moves Minimize into its slot")
+        check(regular.overlay.control(named: "back")?.pointSize == 22 && compact.overlay.control(named: "back")?.pointSize == 18 && Glyph.pipSkipBack.spec.symbol == "gobackward.15" && Glyph.pipSkipForward.spec.symbol == "goforward.15", "PP SF skip glyphs use 22 pt regular and 18 pt compact")
+        check(regular.overlay.control(named: "tab")?.view.frame.midY == 176 && regular.overlay.control(named: "mute")?.view.frame.midY == 176, "PP bottom controls share one center line")
+        check(twitch.overlay.control(named: "previous")?.view.frame.midX == 192 - 24 && twitch.overlay.control(named: "next")?.view.frame.midX == 192 + 24 && twitch.overlay.control(named: "mute")?.view.frame.midY == 192, "PP Twitch packs tracks and removes the hidden scrubber offset")
+        let (narrow, _, _) = try make(CGSize(width: 160, height: 284))
+        check(narrow.overlay.control(named: "back")?.view.isHidden == true && narrow.overlay.control(named: "forward")?.view.isHidden == true, "PP skip buttons hide below 168 pt")
+        check(regular.overlay.control(named: "settings")?.title == "Options", "PP ellipsis tooltip and AX copy say Options")
         let (meeting, meetingHost, _) = try make(CGSize(width: 284, height: 160))
         meetingHost.mediaState.actions = [.toggleMicrophone, .toggleCamera, .hangUp]; meetingHost.mediaState.microphoneMuted = false; meetingHost.mediaState.cameraOn = true
         meeting.refresh(); pump(meeting.contentView)
@@ -85,10 +97,15 @@ import OpenWeb
         regular.overlay.setControlsVisible(true, animated: false); host.mediaState.duration = 120; host.currentTime = 12; host.positionUpdatedAt = Date(); regular.refresh(); pump(regular.contentView)
         let scrubber = regular.overlay.scrubber, start = CGPoint(x: scrubber.bounds.width / 4, y: scrubber.bounds.midY)
         panel.sendEvent(PiPScene.event(.leftMouseDown, in: scrubber, at: start))
-        check(host.calls.contains(where: { if case .scrub(let value) = $0 { return abs(value - 30) < 0.001 }; return false }) && host.mediaState.playback == .paused,
-              "PP4 mouse-down jumps to clicked time and pauses")
+        check(host.calls.contains(where: { if case .seek(let value) = $0 { return abs(value - 30) < 0.001 }; return false }) && host.mediaState.playback == .playing,
+              "PP4 mouse-down jumps without pausing before any drag")
         let drag = CGPoint(x: start.x + scrubber.bounds.width * 0.3, y: start.y - 80)
-        panel.sendEvent(PiPScene.event(.leftMouseDragged, in: scrubber, at: drag)); pump(regular.contentView)
+        host.mediaState.actions.insert(.skipAd); regular.refresh()
+        panel.sendEvent(PiPScene.event(.leftMouseDragged, in: scrubber, at: drag)); pump(regular.contentView, 0.02)
+        scrubber.mouseExited(with: PiPScene.event(.mouseMoved, in: scrubber, at: drag))
+        check(scrubber.barHeight == 6 && host.mediaState.playback == .paused && ["tab", "mute", "ad"].allSatisfy { id in regular.overlay.control(named: id)?.view.layer?.opacity == 0 && regular.overlay.control(named: id)?.view.layer?.animation(forKey: "pip.scrubUtility")?.duration == 0.15 }, "PP4 drag keeps the 6 pt bar and fades all utility controls in 0.15 s")
+        let precisionLabel = descendants(regular.overlay).compactMap { $0 as? NSTextField }.first { $0.stringValue == scrubber.precisionText }
+        check(precisionLabel?.lineBreakMode == .byTruncatingTail && precisionLabel?.frame.width == regular.overlay.bounds.width - 20, "PP4 precision label truncates within the horizontal padding")
         check(scrubber.precisionText == "Seeking at 3× precision" && host.calls.contains(where: { if case .scrub(let value) = $0 { return abs(value - 42) < 0.001 }; return false }),
               "PP4 click-to-jump then 80 pt up drag scrubs at 3× precision")
         panel.sendEvent(PiPScene.event(.leftMouseUp, in: scrubber, at: drag)); pump(regular.contentView)
@@ -99,6 +116,20 @@ import OpenWeb
         panel.sendEvent(PiPScene.event(.leftMouseDragged, in: scrubber, at: CGPoint(x: flatStart.x + 20, y: flatStart.y)))
         check(scrubber.precisionText == "Drag upwards to seek precisely", "PP4 flat drag shows the neutral hint")
         panel.sendEvent(PiPScene.event(.leftMouseUp, in: scrubber, at: flatStart))
+        let beforeClick = host.calls.count
+        panel.sendEvent(PiPScene.event(.leftMouseDown, in: scrubber, at: flatStart))
+        panel.sendEvent(PiPScene.event(.leftMouseUp, in: scrubber, at: flatStart))
+        check(Array(host.calls.dropFirst(beforeClick)) == [.seek(60)] && host.mediaState.playback == .playing && !scrubber.isDragging, "PP4 a plain click seeks once without pause/resume")
+        check(["tab", "mute", "ad"].allSatisfy { regular.overlay.control(named: $0)?.view.layer?.opacity == 1 }, "PP4 mouse-up restores the utility controls")
+        if let play = regular.overlay.control(named: "play")?.view {
+            play.setAccessibilityFocused(true)
+            check(!regular.overlay.hasScheduledHide, "PP accessibility focus holds controls")
+            panel.resignKey(); pump(regular.contentView, 0.02)
+            check(!panel.isKeyWindow && regular.overlay.hasScheduledHide, "PP resign-key clears keyboard and accessibility focus holds")
+        }
+        host.endOfMedia = true; regular.refresh()
+        check(regular.overlay.control(named: "forward")?.view.isAccessibilityEnabled() == false && regular.overlay.control(named: "forward")?.view.alphaValue == 0.4 && regular.overlay.control(named: "next")?.view.isAccessibilityEnabled() == true, "PP ended disables Skip ahead at 0.4 opacity while offered Next stays enabled")
+        host.endOfMedia = false
         host.mediaState.playback = .paused; regular.refresh()
         check(!scrubber.hasDisplayLink, "PP paused playback stops the display link")
         panel.orderOut(nil); pump(regular.contentView)
@@ -130,6 +161,11 @@ import OpenWeb
         nativeAction("Turn off", in: privateController.overlay.makeMenu())
         print("NATIVE MENU private-disabled\n" + PiPScene.menuDump(privateController.overlay.makeMenu()) + "END NATIVE MENU")
         check(privateSession.disabled == ["private.example.test"] && before.isEqual(to: privateDefaults.dictionaryRepresentation()), "PP5 private Turn off writes only its in-memory session")
+        regular.resize(to: CGSize(width: 384, height: 216))
+        let reusedHost = FakePiPHost(); reusedHost.naturalSize = CGSize(width: 900, height: 1600)
+        guard let reused = PictureInPictureWindowController(host: reusedHost, sourceURL: nil, settings: MediaSettings(defaults: FeatureCLI.defaults()), rules: rules, screenVisibleFrame: PiPScene.screen) else { throw CLIError(description: "reused portrait failed") }
+        reused.presentWindows = false; fixtures.append(reused)
+        check(abs(reused.window!.frame.width - 216) <= 1 && abs(reused.window!.frame.height - 384) <= 1, "PP6 later portrait reuses the landscape long side")
         regular.resize(to: CGSize(width: 10, height: 10)); pump(regular.contentView)
         check(panel.frame.width >= 284 && panel.frame.height >= 160 && abs(panel.frame.width / panel.frame.height - 16 / 9) < 0.01, "PP6 minimum landscape size preserves aspect")
         let (portrait, _, _) = try make(CGSize(width: 900, height: 900), natural: CGSize(width: 900, height: 1600))
@@ -145,6 +181,31 @@ import OpenWeb
         check(square.window!.frame.size == CGSize(width: 450, height: 450), "PP6 1:1 on 900 pt screen caps at 450x450")
         square.resize(to: CGSize(width: 1, height: 1)); pump(square.contentView)
         check(square.window!.frame.size == CGSize(width: 284, height: 284) && square.overlay.isCompact, "PP6 square preserves aspect at its minimum")
+        square.resize(to: CGSize(width: 450, height: 450))
+        let squareImage = OffscreenRenderer().render(square.contentView, scale: 2), squarePixels: NSBitmapImageRep
+        squarePixels = NSBitmapImageRep(cgImage: squareImage)
+        check(stride(from: 40, to: 860, by: 80).allSatisfy { y in stride(from: 40, to: 860, by: 80).allSatisfy { x in (squarePixels.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.99 } }, "PP fake square video stays opaque above the 2x tiling threshold")
+        let sourcePanel = NSPanel(contentRect: CGRect(x: -22000, y: -22000, width: 800, height: 500), styleMask: [.borderless], backing: .buffered, defer: false)
+        sourcePanel.isReleasedWhenClosed = false; defer { sourcePanel.close() }
+        func animatedFixture() throws -> (PictureInPictureWindowController, FakePiPHost) {
+            let h = FakePiPHost()
+            guard let c = PictureInPictureWindowController(host: h, sourceURL: nil, settings: MediaSettings(defaults: FeatureCLI.defaults()), rules: rules, sourceWindow: sourcePanel, screenVisibleFrame: PiPScene.screen) else { throw CLIError(description: "animated fixture failed") }
+            c.reduceMotionOverride = false; c.resize(to: CGSize(width: 384, height: 216)); fixtures.append(c)
+            return (c, h)
+        }
+        let (animated, animatedHost) = try animatedFixture()
+        let targetFrame = animated.window!.frame
+        var closedCount = 0, returnedCount = 0
+        animated.onClosed = { _ in closedCount += 1 }; animated.onBackToTab = { returnedCount += 1 }
+        animated.present(); try await Task.sleep(for: .seconds(1)); pump(animated.contentView)
+        check(animated.window!.frame == targetFrame && animated.window!.alphaValue == 1 && animatedHost.windowVisible && targetFrame.maxX < 0, "PP presentWindows=true finishes its real offscreen spring at target frame and alpha 1")
+        animated.dismiss(reason: .backToTab); try await Task.sleep(for: .seconds(0.6)); pump(animated.contentView)
+        check(returnedCount == 1 && closedCount == 1 && animatedHost.calls == [.close(false)] && animated.window?.isVisible == false && !animatedHost.windowVisible, "PP Back to Tab animated completion closes exactly once")
+        let (interrupted, interruptedHost) = try animatedFixture()
+        var interruptedCount = 0; interrupted.onClosed = { _ in interruptedCount += 1 }
+        interrupted.present(); try await Task.sleep(for: .milliseconds(20)); interrupted.dismiss(reason: .userClosed)
+        try await Task.sleep(for: .seconds(1)); pump(interrupted.contentView)
+        check(interruptedCount == 1 && interruptedHost.calls == [.close(true)] && interrupted.window?.isVisible == false && !interruptedHost.windowVisible, "PP close during presentation reaches a clean completed end state")
         for (id, reason, pause) in [("tab", PiPSession.Reason.backToTab, false), ("minimize", .minimized, false), ("close", .userClosed, true)] {
             let (controller, actionHost, _) = try make(); controller.window?.orderBack(nil); pump(controller.contentView)
             var returned = false, closed: PiPSession.Reason?

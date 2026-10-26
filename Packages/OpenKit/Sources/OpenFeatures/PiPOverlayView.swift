@@ -12,7 +12,7 @@ import OpenWeb
     private let builder: PiPMenuBuilder
     private let hiddenBySite: Set<String>
     private let controls = PiPControlsContainer(), precisionLabel = NSTextField(labelWithString: "")
-    private let topScrim = CAGradientLayer(), bottomScrim = CAGradientLayer()
+    private let dim = CALayer(), topScrim = CAGradientLayer(), bottomScrim = CAGradientLayer()
     private var buttons: [String: PiPControlButton] = [:]
     private var tracking: NSTrackingArea?, hideWork: DispatchWorkItem?
     private var visibility: PiPVisibilityObserver?
@@ -26,13 +26,14 @@ import OpenWeb
         self.host = host; builder = menuBuilder; hiddenBySite = configuration?.hide ?? []
         scrubber = PiPScrubberView(host: host)
         super.init(frame: .zero); wantsLayer = true
+        dim.backgroundColor = PiPRole.controlsDim.cgColor(.dark); layer?.addSublayer(dim)
         controls.wantsLayer = true; addSubview(controls)
         topScrim.colors = [PiPRole.topScrim.cgColor(.dark), PiPRole.topScrim.resolved(.dark).withAlpha(0).cgColor]
         bottomScrim.colors = [PiPRole.bottomScrim.resolved(.dark).withAlpha(0).cgColor, PiPRole.bottomScrim.cgColor(.dark)]
         for scrim in [topScrim, bottomScrim] { scrim.startPoint = CGPoint(x: 0.5, y: 0); scrim.endPoint = CGPoint(x: 0.5, y: 1); layer?.insertSublayer(scrim, at: 0) }
         add("close", .pipClose, "Close") { [weak self] in self?.onClose?() }
         add("minimize", .pipMinimize, "Minimize") { [weak self] in self?.onMinimize?() }
-        add("settings", .pipSettings, "Settings") { [weak self] in self?.showMenu() }
+        add("settings", .pipSettings, "Options") { [weak self] in self?.showMenu() }
         add("play", .pipPause, "Pause") { [weak self] in self?.host.togglePlayPause(); self?.refresh() }
         add("back", .pipSkipBack, "Skip back 15 seconds") { [weak self] in self?.skip(-PiPMetrics.skipSeconds) }
         add("forward", .pipSkipForward, "Skip ahead 15 seconds") { [weak self] in self?.skip(PiPMetrics.skipSeconds) }
@@ -44,10 +45,13 @@ import OpenWeb
         add("microphone", .mediaMicrophone, "Toggle Microphone") { [weak self] in self?.host.toggleMicrophone(); self?.refresh() }
         add("camera", .mediaCamera, "Toggle Camera") { [weak self] in self?.host.toggleCamera(); self?.refresh() }
         add("hangup", .pipHangUp, "Hang Up") { [weak self] in self?.host.hangUp() }
+        for id in ["play", "back", "forward", "previous", "next"] { buttons[id]?.showsPlate = false }
         controls.addSubview(scrubber); controls.addSubview(precisionLabel)
         precisionLabel.font = Typography.pipPrecision.font; precisionLabel.textColor = PiPRole.secondaryText.nsColor
         precisionLabel.alignment = .center; precisionLabel.isHidden = true
-        scrubber.onDragChanged = { [weak self] _ in self?.showControls(); self?.updatePrecision(); self?.updatePlayGlyph() }
+        precisionLabel.lineBreakMode = .byTruncatingTail; precisionLabel.maximumNumberOfLines = 1
+        precisionLabel.cell?.wraps = false
+        scrubber.onDragChanged = { [weak self] _ in self?.showControls(); self?.updateUtilityVisibility(); self?.updatePrecision(); self?.updatePlayGlyph() }
         scrubber.onPrecisionChanged = { [weak self] in self?.updatePrecision(); self?.updatePlayGlyph() }
         scrubber.onKeyboardFocus = { [weak self] value in self?.keyboardFocus = value; self?.showControls() }
         scrubber.onAccessibilityFocus = { [weak self] value in self?.accessibilityFocus = value; self?.showControls() }
@@ -91,42 +95,68 @@ import OpenWeb
         buttons["microphone"]?.glyph = state.microphoneMuted == true ? .mediaMicrophoneMuted : .mediaMicrophone
         buttons["camera"]?.glyph = state.cameraOn == false ? .mediaCameraOff : .mediaCamera
         buttons["mute"]?.glyph = host.mediaMuted ? .pipMute : .pipUnmute; buttons["mute"]?.label = host.mediaMuted ? "Unmute" : "Mute"
+        buttons["forward"]?.isEnabled = !host.endOfMedia
         scrubber.refresh(); needsLayout = true
     }
     public override func layout() {
         super.layout()
         let m = PiPMetrics.self, w = bounds.width, h = bounds.height, p = isCompact ? m.compactPadding : m.regularPadding
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        dim.frame = bounds
         controls.frame = bounds; topScrim.frame = CGRect(x: 0, y: 0, width: w, height: m.topScrim)
         bottomScrim.frame = CGRect(x: 0, y: h - m.bottomScrim, width: w, height: m.bottomScrim)
         buttons["close"]?.frame = CGRect(x: p, y: p, width: m.cornerButton, height: m.cornerButton)
-        buttons["minimize"]?.frame = CGRect(x: p + m.cornerPitch, y: p, width: m.cornerButton, height: m.cornerButton)
+        buttons["minimize"]?.frame = CGRect(x: p + (buttons["close"]?.isHidden == true ? 0 : m.cornerPitch), y: p, width: m.cornerButton, height: m.cornerButton)
         buttons["settings"]?.frame = CGRect(x: w - p - m.cornerButton, y: p, width: m.cornerButton, height: m.cornerButton)
         buttons["play"]?.glyphSize = isCompact ? m.compactPlayGlyph : Glyph.pipPlay.spec.pointSize
         buttons["play"]?.frame = CGRect(x: w / 2 - m.playButton / 2, y: h / 2 - m.playButton / 2, width: m.playButton, height: m.playButton)
         let skip = isCompact ? m.compactSkipDistance : m.skipDistance
         for (id, sign) in [("back", CGFloat(-1)), ("forward", CGFloat(1))] {
+            buttons[id]?.glyphSize = isCompact ? m.compactSkipGlyph : m.skipGlyph
+            buttons[id]?.isHidden = !host.mediaState.actions.intersection([.toggleMicrophone, .toggleCamera, .hangUp]).isEmpty || hiddenBySite.contains("skip") || host.mediaState.duration.map { !$0.isFinite || $0 <= 0 } != false || w < m.minimumSkipWidth
             buttons[id]?.frame = CGRect(x: w / 2 + sign * skip - m.skipButton / 2, y: h / 2 - m.skipButton / 2, width: m.skipButton, height: m.skipButton)
         }
         for (id, sign) in [("previous", CGFloat(-1)), ("next", CGFloat(1))] {
             buttons[id]?.isHidden = isCompact || !host.mediaState.actions.contains(id == "previous" ? .previousTrack : .nextTrack) || !host.mediaState.actions.intersection([.toggleCamera, .toggleMicrophone, .hangUp]).isEmpty
             buttons[id]?.frame = CGRect(x: w / 2 + sign * m.trackDistance - m.trackButton / 2, y: h / 2 - m.trackButton / 2, width: m.trackButton, height: m.trackButton)
         }
+        if buttons["play"]?.isHidden == true {
+            let tracks = ["previous", "next"].filter { buttons[$0]?.isHidden == false }
+            for (i, id) in tracks.enumerated() {
+                buttons[id]?.frame.origin.x = w / 2 + (CGFloat(i) - CGFloat(tracks.count - 1) / 2) * (m.trackButton + m.packedTrackGap) - m.trackButton / 2
+            }
+        }
+        let offset = scrubber.isHidden ? 0 : m.bottomControlsOffset
+        let centerY = h - p - offset - m.cornerButton / 2
         let tabWidth = buttons["tab"]?.pillWidth ?? 0
-        buttons["tab"]?.frame = CGRect(x: p, y: h - p - m.pillHeight - m.bottomControlsOffset, width: tabWidth, height: m.pillHeight)
-        buttons["mute"]?.frame = CGRect(x: w - p - m.cornerButton, y: h - p - m.cornerButton - m.bottomControlsOffset, width: m.cornerButton, height: m.cornerButton)
+        buttons["tab"]?.frame = CGRect(x: p, y: centerY - m.pillHeight / 2, width: tabWidth, height: m.pillHeight)
+        buttons["mute"]?.frame = CGRect(x: w - p - m.cornerButton, y: centerY - m.cornerButton / 2, width: m.cornerButton, height: m.cornerButton)
         let adWidth = buttons["ad"]?.pillWidth ?? 0
-        buttons["ad"]?.frame = CGRect(x: w - p - adWidth, y: h - p - m.cornerButton - m.bottomControlsOffset - m.pillHeight - m.expandedControlGap, width: adWidth, height: m.pillHeight)
+        buttons["ad"]?.frame = CGRect(x: w - p - adWidth, y: centerY - m.cornerButton / 2 - m.pillHeight - m.expandedControlGap, width: adWidth, height: m.pillHeight)
         let meeting = ["microphone", "camera", "hangup"].filter { buttons[$0]?.isHidden == false }
         let total = CGFloat(meeting.count) * m.meetingButton + CGFloat(max(0, meeting.count - 1)) * m.meetingGap
-        var meetingY = h - p - m.meetingButton - m.bottomControlsOffset
+        var meetingY = centerY - m.meetingButton / 2
         let meetingRect = CGRect(x: (w - total) / 2, y: meetingY, width: total, height: m.meetingButton)
         if let tab = buttons["tab"], let mute = buttons["mute"], meetingRect.intersects(tab.frame) || meetingRect.intersects(mute.frame) {
-            meetingY = min(tab.frame.minY, mute.frame.minY) - m.expandedControlGap - m.meetingButton
+            meetingY = centerY - m.cornerButton / 2 - m.expandedControlGap - m.meetingButton
         }
         for (i, id) in meeting.enumerated() { buttons[id]?.frame = CGRect(x: (w - total) / 2 + CGFloat(i) * (m.meetingButton + m.meetingGap), y: meetingY, width: m.meetingButton, height: m.meetingButton) }
         scrubber.frame = CGRect(x: p, y: h - p - m.scrubberHeight / 2 - m.scrubberHitHeight / 2, width: max(0, w - 2 * p), height: m.scrubberHitHeight)
         precisionLabel.frame = CGRect(x: p, y: h - p - m.scrubberHeight - m.precisionLabelGap - m.precisionLabelHeight, width: max(0, w - 2 * p), height: m.precisionLabelHeight)
+        CATransaction.commit()
+    }
+    private func updateUtilityVisibility() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        for id in ["tab", "mute", "ad"] {
+            guard let button = buttons[id], let layer = button.layer else { continue }
+            button.isSuppressed = scrubber.isDragging
+            let old = layer.presentation()?.opacity ?? layer.opacity
+            layer.opacity = scrubber.isDragging ? 0 : 1
+            if window?.isVisible == true {
+                let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = old; fade.toValue = layer.opacity
+                fade.duration = Motion.pipFade; layer.add(fade, forKey: "pip.scrubUtility")
+            }
+        }
         CATransaction.commit()
     }
     private func updatePlayGlyph() {
@@ -137,7 +167,7 @@ import OpenWeb
     public func setControlsVisible(_ visible: Bool, animated: Bool = true) {
         controlsVisible = visible; scrubber.controlsAreVisible = visible
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        for layer in [controls.layer, topScrim, bottomScrim].compactMap({ $0 }) {
+        for layer in [controls.layer, dim, topScrim, bottomScrim].compactMap({ $0 }) {
             let old = layer.presentation()?.opacity ?? layer.opacity
             layer.opacity = visible ? 1 : 0
             if animated && window?.isVisible == true {
@@ -182,7 +212,7 @@ import OpenWeb
             guard let self else { return }
             if closing || !window.isVisible || NSApp.isHidden {
                 self.hideWork?.cancel(); self.hideWork = nil; self.setControlsVisible(false, animated: false)
-            } else { if !window.isKeyWindow { self.keyboardFocus = false }; self.showControls() }
+            } else { if !window.isKeyWindow { self.keyboardFocus = false; self.accessibilityFocus = false }; self.showControls() }
         } }
     }
 }
@@ -193,7 +223,9 @@ import OpenWeb
     var glyphSize: CGFloat? { didSet { if glyphSize != oldValue { needsDisplay = true } } }
     var label: String { didSet { if label != oldValue { needsDisplay = true } } }
     var action: (() -> Void)?, onActivity: (() -> Void)?, onKeyboardFocus: ((Bool) -> Void)?, onAccessibilityFocus: ((Bool) -> Void)?
-    var showsPlate = true, growsOnHover = true
+    var showsPlate = true, growsOnHover = true, documentStyle = false
+    var isSuppressed = false
+    var isEnabled = true { didSet { alphaValue = isEnabled ? 1 : PiPMetrics.disabledControlOpacity; needsDisplay = true } }
     private var hovered = false, pressed = false
     private var tracking: NSTrackingArea?
     var pillWidth: CGFloat { ceil((label as NSString).size(withAttributes: [.font: Typography.pipPill.font]).width) + 2 * PiPMetrics.pillPadding }
@@ -201,6 +233,7 @@ import OpenWeb
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { isSuppressed ? nil : super.hitTest(point) }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func becomeFirstResponder() -> Bool { onKeyboardFocus?(true); return true }
@@ -208,8 +241,8 @@ import OpenWeb
     override func setAccessibilityFocused(_ focused: Bool) { super.setAccessibilityFocused(focused); onAccessibilityFocus?(focused) }
     override func draw(_ dirtyRect: NSRect) {
         let fill = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? PiPRole.plateHighContrast : (pressed ? PiPRole.platePressed : (hovered ? PiPRole.plateHover : PiPRole.plate))
-        (glyph == .pipHangUp ? PiPRole.hangUp : fill).nsColor.setFill()
-        let radius = glyph == nil ? bounds.height / 2 : min(bounds.width, bounds.height) / 2
+        (documentStyle ? PiPRole.documentButtonHover : (glyph == .pipHangUp ? PiPRole.hangUp : fill)).nsColor.setFill()
+        let radius = documentStyle ? PiPMetrics.documentButtonRadius : (glyph == nil ? bounds.height / 2 : min(bounds.width, bounds.height) / 2)
         if showsPlate || hovered || pressed { NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill() }
         if let glyph, var image = glyph.image {
             if let size = glyphSize, let replacement = NSImage(systemSymbolName: glyph.spec.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: glyph.spec.weight)) { image = replacement }
@@ -217,7 +250,7 @@ import OpenWeb
             guard let cg = NSGraphicsContext.current?.cgContext else { return }
             cg.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
             image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            cg.setBlendMode(.sourceIn); cg.setFillColor(PiPRole.glyph.cgColor(.dark)); cg.fill(rect); cg.endTransparencyLayer()
+            cg.setBlendMode(.sourceIn); cg.setFillColor((documentStyle && !hovered ? PiPRole.secondaryText : PiPRole.glyph).cgColor(.dark)); cg.fill(rect); cg.endTransparencyLayer()
         } else {
             let attrs: [NSAttributedString.Key: Any] = [.font: Typography.pipPill.font, .foregroundColor: PiPRole.glyph.nsColor]
             let size = (label as NSString).size(withAttributes: attrs)
@@ -241,13 +274,14 @@ import OpenWeb
         }
     }
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true; TooltipController.shared.cancel(for: self); layer?.setAffineTransform(.identity) }
-    override func mouseDown(with event: NSEvent) { pressed = true; needsDisplay = true; onActivity?(); TooltipController.shared.cancel(for: self) }
-    override func mouseUp(with event: NSEvent) { if pressed && bounds.contains(convert(event.locationInWindow, from: nil)) { action?() }; pressed = false; needsDisplay = true; onActivity?() }
+    override func mouseDown(with event: NSEvent) { guard isEnabled && !isSuppressed else { return }; pressed = true; needsDisplay = true; onActivity?(); TooltipController.shared.cancel(for: self) }
+    override func mouseUp(with event: NSEvent) { if isEnabled && !isSuppressed && pressed && bounds.contains(convert(event.locationInWindow, from: nil)) { action?() }; pressed = false; needsDisplay = true; onActivity?() }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityLabel() -> String? { label }
     override func accessibilityHelp() -> String? { label }
-    override func accessibilityPerformPress() -> Bool { onActivity?(); action?(); return action != nil }
+    override func isAccessibilityEnabled() -> Bool { isEnabled && !isSuppressed }
+    override func accessibilityPerformPress() -> Bool { guard isEnabled && !isSuppressed else { return false }; onActivity?(); action?(); return action != nil }
 }
 
 @MainActor private final class PiPControlsContainer: NSView { override var isFlipped: Bool { true } }

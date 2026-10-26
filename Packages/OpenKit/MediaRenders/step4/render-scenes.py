@@ -21,6 +21,13 @@ scenes = [
     ('precision-3', '384x216', ['--drag-precision', '3']),
     ('precision-8', '384x216', ['--drag-precision', '8']),
     ('portrait', '252x448', []),
+    ('portrait-minimum', '160x284', []),
+    ('compact-precision-1', '284x160', ['--drag-precision', '1']),
+    ('compact-precision-3', '284x160', ['--drag-precision', '3']),
+    ('portrait-precision', '160x284', ['--drag-precision', '3']),
+    ('portrait-precision-1', '160x284', ['--drag-precision', '1']),
+    ('portrait-meeting', '160x284', ['--meeting', '--site', 'meet']),
+    ('document-hover', '384x300', ['--document', '--document-hover-options']),
     ('square', '450x450', []),
     ('document', '384x300', ['--document', '--top-bar-title', 'example.test', '--menu']),
 ]

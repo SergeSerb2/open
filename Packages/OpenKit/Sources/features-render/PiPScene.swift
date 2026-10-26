@@ -45,12 +45,27 @@ import OpenWeb
     override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
+    override var wantsUpdateLayer: Bool { true }
+    override func layout() { super.layout(); needsDisplay = true }
+    override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsDisplay = true }
+    override func updateLayer() {
+        // Supply a plain bitmap layer: AppKit's large-view tiling cannot be cloned
+        // reliably by the offscreen renderer. This is only the synthetic video.
+        let scale = window?.backingScaleFactor ?? 2
+        let width = Int(ceil(bounds.width * scale)), height = Int(ceil(bounds.height * scale))
+        guard width > 0, height > 0, let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        context.scaleBy(x: scale, y: scale); context.translateBy(x: 0, y: bounds.height); context.scaleBy(x: 1, y: -1)
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         NSGradient(starting: NSColor(srgbRed: 0.09, green: 0.18, blue: 0.31, alpha: 1), ending: NSColor(srgbRed: 0.19, green: 0.44, blue: 0.39, alpha: 1))?.draw(in: bounds, angle: 35)
         let text = "\(Int(bounds.width))×\(Int(bounds.height))"
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 18, weight: .medium), .foregroundColor: NSColor.white.withAlphaComponent(0.8)]
         let size = (text as NSString).size(withAttributes: attrs)
         (text as NSString).draw(at: CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2), withAttributes: attrs)
+        NSGraphicsContext.restoreGraphicsState()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer?.contents = context.makeImage(); layer?.contentsScale = scale
+        CATransaction.commit()
     }
 }
 
@@ -99,6 +114,9 @@ import OpenWeb
         if args.contains("--document") {
             guard let controller = DocumentPiPWindowController(host: host, sourceURL: url, requestedSize: CGSize(width: size.width, height: max(0, size.height - PiPMetrics.documentTopBar)), settings: settings, topBarTitle: RenderCLI.value(args, "--top-bar-title"), screenVisibleFrame: screen) else { throw CLIError(description: "cannot create Document PiP") }
             controller.presentWindows = false; root = controller.contentView; menu = controller.makeMenu()
+            if args.contains("--document-hover-options"), let button = controller.topBar.subviews.first(where: { $0.accessibilityIdentifier() == "pip.document.settings" }) {
+                button.mouseEntered(with: event(.mouseMoved, in: button, at: CGPoint(x: button.bounds.midX, y: button.bounds.midY)))
+            }
             cleanup = { controller.close() }
         } else {
             guard let controller = PictureInPictureWindowController(host: host, sourceURL: url, settings: settings, rules: rules, screenVisibleFrame: screen) else { throw CLIError(description: "cannot create video PiP") }
