@@ -427,6 +427,7 @@ func runSleepDemo(args: [String]) async throws {
     let reloaded = try oldStore.load()!
     let schema = try oldStore.loadData()?.schemaVersion
     check("pre-change schema-1 fixture defaults balanced; roundtrip OK", defaultMode && SnapshotMapper.structurallyEqual(oldModel, reloaded) && schema == 1)
+    check("pre-change snapshot without keepAliveSites defaults to an empty list", oldModel.profiles.allSatisfy { $0.settings.keepAliveSites.isEmpty })
     for mode in SleepMode.allCases {
         oldModel.profiles[0].settings.sleepMode = mode; try oldStore.saveNow(model: oldModel)
         check("snapshot persists \(mode.rawValue) mode", try oldStore.load()?.profiles.first?.settings.sleepMode == mode)
@@ -463,14 +464,14 @@ func runSleepDemo(args: [String]) async throws {
     check("SQLite/open failures surface onError and keep CLI running", !invalidStore.errors.isEmpty)
 
     try await runSleepReviewScenarios(root: root, check: check)
-    await runKeepAliveScenarios(root: root.appendingPathComponent("keep-alive"), check: check)
+    try await runKeepAliveScenarios(root: root.appendingPathComponent("keep-alive"), check: check)
     try await runSleepControllerBench(root: root.appendingPathComponent("bench"), check: check)
     print("sleep-demo \(failed == 0 ? "OK" : "FAIL"): \(passed) checks passed, \(failed) failed")
     if failed != 0 { throw SleepCLIError.checksFailed(failed) }
 }
 
 @MainActor
-private func runKeepAliveScenarios(root: URL, check: (String, Bool) -> Void) async {
+private func runKeepAliveScenarios(root: URL, check: (String, Bool) -> Void) async throws {
     let s = SleepScenario(root: root)
     // Independent service URLs exercise the shipped resource through the controller.
     let liveURLs = [
@@ -497,14 +498,13 @@ private func runKeepAliveScenarios(root: URL, check: (String, Bool) -> Void) asy
         "https://example.invalid/mail.google.com/mail", "file://mail.google.com/mail",
     ]
     let normal = normalURLs.map { s.tab(url: $0) }
-    let defaults = KeepAliveRules.defaults(for: s.profile.id)
-    defer { defaults.removeObject(forKey: KeepAliveRules.settingsKey) }
-    defaults.set(["notify.example.invalid/inbox", "", "https://bad.invalid", "*.invalid", "bad..invalid"],
-                 forKey: KeepAliveRules.settingsKey)
+    var settings = s.profile.settings
+    settings.keepAliveSites = ["notify.example.invalid/inbox", "", "https://bad.invalid", "*.invalid", "bad..invalid"]
+    s.model.updateProfileSettings(id: s.profile.id, settings: settings)
     let userTab = s.tab(url: "https://team.notify.example.invalid/inbox/messages")
     let userOutside = s.tab(url: "https://notify.example.invalid/other")
     // Same host and path in another profile must use that profile's empty list.
-    let other = Profile(name: "Keep-alive isolation")
+    let other = Profile(name: "Keep-alive isolation", dataDirectoryName: "Keep-alive-isolation")
     let otherTab = Tab(url: userTab.url, lastActiveAt: s.clock.date)
     other.favorites = [otherTab]
     s.model.profiles.append(other); s.model.rebuildIndex(); s.controller.contentCreated(tabID: otherTab.id)
@@ -520,7 +520,12 @@ private func runKeepAliveScenarios(root: URL, check: (String, Bool) -> Void) asy
               && !s.trace.ids("freeze").contains(tab.id) && !s.trace.ids("discard").contains(tab.id))
     }
     check("outside-scope URLs sleep and destroy normally", normal.allSatisfy { $0.live.sleepPhase == .sleeping && !s.controller.liveContent.contains($0.id) })
-    check("persisted per-profile user rule stays live for 48 h", userTab.live.sleepPhase == .live && KeepAliveRules.defaults(for: s.profile.id).stringArray(forKey: KeepAliveRules.settingsKey)?.first == "notify.example.invalid/inbox")
+    let snapshot = SnapshotStore(root: root.appendingPathComponent("profile-snapshot"))
+    try snapshot.saveNow(model: s.model)
+    let reloaded = try snapshot.load()
+    check("snapshot-persisted per-profile user rule stays live for 48 h", userTab.live.sleepPhase == .live
+          && reloaded?.profile(id: s.profile.id)?.settings.keepAliveSites == settings.keepAliveSites
+          && reloaded?.profile(id: other.id)?.settings.keepAliveSites == [])
     check("user rules preserve path scope and profile isolation", userOutside.live.sleepPhase == .sleeping && otherTab.live.sleepPhase == .sleeping)
     for tab in live + [userTab] { await s.controller.debugSleepNow(tabID: tab.id) }
     await s.controller.handleMemoryPressure(.warning); await s.controller.handleMemoryPressure(.critical)
@@ -540,14 +545,29 @@ private func runKeepAliveScenarios(root: URL, check: (String, Bool) -> Void) asy
     s.clock.advance(1); await s.controller.tick()
     check("leaving Gmail discards at the normal 300 s delay", navigated.live.sleepPhase == .sleeping)
 
-    defaults.set([], forKey: KeepAliveRules.settingsKey)
+    settings.keepAliveSites = []
+    s.model.updateProfileSettings(id: s.profile.id, settings: settings)
     await s.controller.tick(); await s.controller.tick()
     check("removing a user rule invalidates the cached match", userTab.live.sleepPhase == .sleeping)
     let added = s.tab(age: 400, url: "https://new.example.invalid/chat")
     await s.controller.tick()
-    defaults.set(["new.example.invalid/chat"], forKey: KeepAliveRules.settingsKey)
+    settings.keepAliveSites = ["new.example.invalid/chat"]
+    s.model.updateProfileSettings(id: s.profile.id, settings: settings)
     await s.controller.tick(); await s.controller.handleMemoryPressure(.warning)
     check("adding a user rule protects an already frozen tab from discard", added.live.sleepPhase == .frozen && !s.trace.ids("discard").contains(added.id))
+
+    let liveAdded = s.tab(url: "https://live.example.invalid/chat")
+    await s.controller.tick()
+    let revision = s.model.treeRevision
+    settings.keepAliveSites.append("live.example.invalid/chat")
+    let updated = s.model.updateProfileSettings(id: s.profile.id, settings: settings)
+    s.clock.advance(30); await s.controller.tick()
+    s.clock.advance(48 * 3600 - 30); await s.controller.tick()
+    await s.controller.debugSleepNow(tabID: liveAdded.id)
+    await s.controller.handleMemoryPressure(.warning)
+    check("model settings edit keeps a live tab awake without a restart or tree change", updated
+          && s.model.treeRevision == revision && liveAdded.live.sleepPhase == .live
+          && !s.trace.ids("freeze").contains(liveAdded.id) && !s.trace.ids("discard").contains(liveAdded.id))
 
     let race = SleepScenario(root: root.appendingPathComponent("navigation-race"))
     let racing = race.tab(age: 400)

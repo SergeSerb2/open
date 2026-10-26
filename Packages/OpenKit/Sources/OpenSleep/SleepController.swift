@@ -21,14 +21,10 @@ public final class SleepController {
     private let visibility: any SleepVisibilityProviding
     private let chromiumTag: String
     private let now: () -> Date
-    private let keepAliveDefaults: (ProfileID) -> UserDefaults
     private final class ProfileRules {
-        let defaults: UserDefaults
         var sites: [String] = []
         var rules = KeepAliveRules.builtIn
-        init(defaults: UserDefaults) { self.defaults = defaults }
-        func current() -> KeepAliveRules {
-            let current = defaults.stringArray(forKey: KeepAliveRules.settingsKey) ?? []
+        func current(_ current: [String]) -> KeepAliveRules {
             if current != sites {
                 sites = current
                 rules = current.isEmpty ? .builtIn : KeepAliveRules(userSites: current)
@@ -81,12 +77,9 @@ public final class SleepController {
 
     public init(model: BrowserModel, engine: any SleepEngine, store: any SleepHistoryStoring,
                 visibility: any SleepVisibilityProviding, chromiumTag: String,
-                maximumUnloadQueriesPerPass: Int = 32,
-                keepAliveDefaults: @escaping (ProfileID) -> UserDefaults = KeepAliveRules.defaults(for:),
-                now: @escaping () -> Date = Date.init) {
+                maximumUnloadQueriesPerPass: Int = 32, now: @escaping () -> Date = Date.init) {
         self.model = model; self.engine = engine; self.store = store; self.visibility = visibility
         self.chromiumTag = chromiumTag; self.now = now
-        self.keepAliveDefaults = keepAliveDefaults
         self.maximumUnloadQueriesPerPass = max(0, maximumUnloadQueriesPerPass)
         liveContent = Set(model.index.values.compactMap { node in
             guard let tab = node.tab, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen else { return nil }
@@ -257,13 +250,16 @@ public final class SleepController {
     }
 
     private func policies() -> [NodeParent: SleepPolicy] {
+        // Read settings every pass, independently of treeRevision, just as for
+        // sleepMode. Model edits take effect on the next tick without a restart.
         let profiles = Dictionary(uniqueKeysWithValues: model.profiles.map { profile in
             let cache: ProfileRules
             if let existing = profileRules[profile.id] { cache = existing }
             else {
-                cache = ProfileRules(defaults: keepAliveDefaults(profile.id)); profileRules[profile.id] = cache
+                cache = ProfileRules(); profileRules[profile.id] = cache
             }
-            return (profile.id, SleepPolicy(mode: profile.settings.sleepMode, keepAliveRules: cache.current()))
+            return (profile.id, SleepPolicy(mode: profile.settings.sleepMode,
+                                           keepAliveRules: cache.current(profile.settings.keepAliveSites)))
         })
         var result: [NodeParent: SleepPolicy] = [:]
         for (id, policy) in profiles { result[.favorites(id)] = policy }

@@ -1,15 +1,7 @@
 import Foundation
-import OpenModel
 
 /// Immutable, compiled host suffixes and case-sensitive path prefixes. No regex.
 public final class KeepAliveRules: Sendable {
-    public static let settingsKey = "open.sleep.keepAliveSites"
-
-    /// This key has a separate array in each profile's suite, never an app-wide list.
-    public static func defaults(for profileID: ProfileID) -> UserDefaults {
-        UserDefaults(suiteName: "open.profile.\(profileID.rawValue.uuidString)")!
-    }
-
     private struct SourceRule: Decodable {
         let host: String
         let path: String?

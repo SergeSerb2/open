@@ -81,8 +81,6 @@ public extension AutoArchiveInterval {
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,
         "open.advanced.playSoundEffects": false, "open.advanced.hapticOnTabReorder": true,
         "open.advanced.tabSleepMode": "automatic", "open.appIcon.selectedID": "openDefault",
-        // Per-profile suite open.profile.<ProfileID UUID>; no Settings UI yet.
-        "open.sleep.keepAliveSites": [String](),
         "open.library.lastSection": "archive", "open.shortcuts.defaultPriority": "browser",
         "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": true,
     ]
