@@ -11,7 +11,9 @@ Packages/OpenKit/.build/release/features-render check
 python3 Packages/OpenKit/MediaRenders/step4/render-scenes.py
 ```
 
-The native-window check passes **254/254**, including PP1–PP8, real animated
+After merging main at `b5f3034`, all 17 full-gate checks pass. The merge preserves
+both PiP checks and main's bundled sound resources/checks, with one definition per target.
+The native-window check passes **258/258**, including PP1–PP8, real animated
 present/dismiss and interrupted-close paths, menu actions, seek-only click,
 precision drag, focus resignation, the 168 pt boundary, and faded-utility
 hit/handler suppression. The latter keeps the active scrub gesture: a second
@@ -57,7 +59,7 @@ or grow and keeps its tooltip. The precision hint fades in/out in .15 s with
 the utilities and never intercepts hits. Document buttons press with white .18.
 The updated gallery includes disabled hover and Document pressed states.
 
-Idle offscreen process CPU: 0.042% over 2 s (budget 0.5%). Hidden, paused and
+Idle offscreen process CPU: 0.049% over 2 s (budget 0.5%). Hidden, paused and
 ordered-out states have no display link. No polling timer is used.
 
 The large 2× square stays opaque. Invalid size and state exit 1 without a PNG.
@@ -98,4 +100,4 @@ opener teardown remain future App gates in plan Steps 10/11.
 
 56 PNGs total. Native menus: [regular](menu-regular.txt), [disabled](menu-disabled.txt), [host-less](menu-hostless.txt), [private disabled](menu-private-disabled.txt), [Document](menu-document.txt).
 
-[Runtime receipt](features-check.txt) · [Build receipt](build.txt) · [PNG hashes and sizes](renders.json).
+[Full verification table](verify-all.txt) · [Runtime receipt](features-check.txt) · [Build receipt](build.txt) · [PNG hashes and sizes](renders.json).

@@ -1,3 +1,7 @@
+open-capture.caf container byte-identical (informational): True
+open-capture PCM SHA-256 4634a95aa59fe3bcb96f220935544790e2f388b82edf03050d0b223e9e89c52f
+open-event.caf container byte-identical (informational): True
+open-event PCM SHA-256 72ef269b2a3ba81dab4ef79a99dcaf081014ac2aea17d8905c96bbd10d19ef55
 PASS C1 single pane has no bar
 PASS C1 measured panel insets
 PASS S1 horizontal 2 panes wide equal tiles
@@ -200,7 +204,7 @@ PASS PP3 pointer movement starts the real control fade
 PASS PP3 actual 2 s work hides controls
 PASS PP3 fade leaves no animation keys
 PASS PP idle hidden controls have no display link or pending hide work
-PASS PP idle offscreen window CPU 0.042% (budget 0.5%)
+PASS PP idle offscreen window CPU 0.049% (budget 0.5%)
 PASS PP3 real menu delegate tracking keeps controls visible
 PASS PP3 menu close after pointer exit fades controls
 PASS PP4 mouse-down jumps without pausing before any drag
@@ -292,4 +296,8 @@ PASS PP8 native Document PiP menu has Keep on Top and host header
 PASS PP Document Options pressed plate is white 0.18
 PASS PP native hit test: Document close
 PASS PP8 Document close returns the child without pausing
-features-render check: 254 passed, 0 failed
+PASS SE1 capture loads from bundle: 0.450 s, peak -6.000 dBFS
+PASS SE1 event loads from bundle: 1.100 s, peak -8.000 dBFS
+PASS SE2 disabled/absent preference neither loads nor plays a sound
+PASS SE3 enabled preference plays once through SoundEffects and loads one prepared player
+features-render check: 258 passed, 0 failed
