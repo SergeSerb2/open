@@ -1,0 +1,98 @@
+{
+  "baseline_ref": "eceb6834ab7972f14b305ddb0c19e53b8294ec52",
+  "binary_sha256": {
+    "baseline": "f8b0ea95282534c510c77d7a8a1c747492ca0a8b8a7402cd49cd340dffd42c15",
+    "head": "2b9c51f6a869e6e4d9247245182ca8e94a76964d9fc241339aa9570a8dec04ab"
+  },
+  "records": [
+    {
+      "build": "baseline",
+      "pair": 1,
+      "p95_ms": 1.42
+    },
+    {
+      "build": "head",
+      "pair": 1,
+      "p95_ms": 1.6
+    },
+    {
+      "build": "head",
+      "pair": 2,
+      "p95_ms": 3.0
+    },
+    {
+      "build": "baseline",
+      "pair": 2,
+      "p95_ms": 2.64
+    },
+    {
+      "build": "baseline",
+      "pair": 3,
+      "p95_ms": 1.58
+    },
+    {
+      "build": "head",
+      "pair": 3,
+      "p95_ms": 1.56
+    },
+    {
+      "build": "head",
+      "pair": 4,
+      "p95_ms": 1.4
+    },
+    {
+      "build": "baseline",
+      "pair": 4,
+      "p95_ms": 1.48
+    },
+    {
+      "build": "baseline",
+      "pair": 5,
+      "p95_ms": 1.38
+    },
+    {
+      "build": "head",
+      "pair": 5,
+      "p95_ms": 1.43
+    },
+    {
+      "build": "head",
+      "pair": 6,
+      "p95_ms": 1.38
+    },
+    {
+      "build": "baseline",
+      "pair": 6,
+      "p95_ms": 1.45
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "runs": [
+        1.42,
+        2.64,
+        1.58,
+        1.48,
+        1.38,
+        1.45
+      ],
+      "median_p95_ms": 1.4649999999999999,
+      "mean_p95_ms": 1.6583333333333332
+    },
+    "head": {
+      "runs": [
+        1.6,
+        3.0,
+        1.56,
+        1.4,
+        1.43,
+        1.38
+      ],
+      "median_p95_ms": 1.495,
+      "mean_p95_ms": 1.7283333333333333
+    },
+    "median_p95_ms_delta": 0.03000000000000025,
+    "mean_p95_ms_delta": 0.07000000000000006
+  },
+  "MC9": "PASS"
+}

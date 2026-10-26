@@ -38,7 +38,7 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | URL field and tile fill | `SidebarItemBackground` (`#0E0F10` 0.05 P3) | `#FAFBFF` 0.10 | ΔE ≤ 0.61 on 7 elements |
 | URL field under the pointer | `SidebarItemHoveredBackground` (`#0E0F10` 0.10 P3) | `#FAFBFF` 0.15 | F0033 vs F0032 (§16) |
 | Hover-reveal card stroke | `SidebarBorderColor` white 0.30 | same | F0129 `#696875` over `#272739` (§16) |
-| Window buttons at rest | `DimmedWindowControls` black 0.10; ring (active window only) `#DB3B3C` / `#D4A201` / `#2FB513` at 0.06 | `DimmedWindowControls` `(0.953, 0.953, 0.918)` 0.33; ring (active only) `#FE8179` / `#FECE3F` / `#70D249` at 0.34 | F0001, F0129, F0131, session 2 03 (§22) |
+| Window buttons at rest | `DimmedWindowControls` black 0.10; ring (active window only) `#DB3B3C` / `#D4A201` / `#2FB513` at 0.06 | `DimmedWindowControls` `(0.953, 0.953, 0.918)` 0.33; ring (active only) `#FE8179` / `#FECE3F` / `#70D249` at 0.34 | F0001, F0129, F0131, session 2 03 (§23) |
 | Row hover, header hover, New Tab hover | `SidebarItemBackground` | same | F0013 ΔE 0.45, F0031 0.49, F0079 0.81 |
 | Button hover plate | black 0.07 `GrayA4` | `GrayA4` | F0024 ΔE 0.38, F0027 0.72 |
 | Selected row, selected tile, "New Tab" during Cmd+T | theme `light.background`, opaque | white 0.20 `TabCellBackgroundCurrent` | F0015 ΔE 1.05, F0016 1.15, F0063 2.00, F0066 2.03. Session 2 (default dark theme): row 0.19 (03/0001); **change pending:** a selected Favorite tile is white ≈ 0.44 (07/0140), not 0.20; in an inactive window the row drops to 0.10 and the tile to 0.24 with a 2 px white ≈ 0.36 ring (03/0016, 07/0163). Default theme in macOS Light: row `#F4F3F5` (20/0015). `re/interaction-states.md` §20.3, §20.11 |
@@ -59,7 +59,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 
 | Area | Value | Mark |
 |---|---|---|
-| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]` (AX), 12 pt circles centered at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden. At rest, active or not, Arc's dimmed look: `DimmedWindowControls` over the background (0.10 light, 0.33 dark), with a faint 1 pt ring in each button's color only while the window is active; the pointer over the group shows the system buttons (colors, glyphs, the tiling menu); Back, Forward, and Reload hovers leave them grey. The system buttons stay for every behavior (§22) | measured (AX F0001, F0129, F0131, session 2 03; pixels F0001, F0129, F0131, session 2 03 frames 0003–0016); ring fitted |
+| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]` (AX), 12 pt circles centered at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden. At rest, active or not, Arc's dimmed look: `DimmedWindowControls` over the background (0.10 light, 0.33 dark), with a faint 1 pt ring in each button's color only while the window is active; the pointer over the group shows the system buttons (colors, glyphs, the tiling menu); Back, Forward, and Reload hovers leave them grey. The system buttons stay for every behavior (§23) | measured (AX F0001, F0129, F0131, session 2 03; pixels F0001, F0129, F0131, session 2 03 frames 0003–0016); ring fitted |
 | Toolbar buttons | 32×32 at y 7; toggle x 77; back / forward / reload at x `W − 106 / W − 72 / W − 38` (pitch 34, reload 6 pt from the edge); hover plate = button frame, radius 6 | measured |
 | URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]`; hover darkens the fill, same frame | measured, text origin fitted |
 | Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (1, 2, 3, 4 → one row; 5 and 6 → 3 columns, the short row left-aligned); no favorites: an 8 pt section | measured for 1–6 (session 2 07/0043–0139, F0016); 7 and more guess. **Change pending:** with no Favorites Arc shows the dashed "Drag to add Favorites" card (105 pt section at width 228) until it is dismissed; our 8 pt section is fitted to the window-only sidebar (§16) and stays only for the dismissed state (guess) (`re/interaction-states.md` §20.3) |
@@ -337,7 +337,7 @@ State elements (other frames): row hover fill 0.0 pt / 0.45; close × 0.0 / 1.39
 | Toggle, forward, copy ink boxes | 1 pt | SF Symbol shapes differ slightly from Arc's art. |
 | Folder glyph | shape | Arc's open folder has an outlined back and a lighter rim. Ours is a simpler two-tone shape in the same accent. |
 | Inactive switcher emoji | darkest pixels within 10 levels | Arc's desaturation method is not known; ours is luma at 0.55. |
-| Traffic lights | not compared by `sidebar-render compare` | The comparison masks them; the renders draw the dimmed rest look (`DimmedTrafficLightsView`). The real window's buttons are checked separately (§16, §22). |
+| Traffic lights | not compared by `sidebar-render compare` | The comparison masks them; the renders draw the dimmed rest look (`DimmedTrafficLightsView`). The real window's buttons are checked separately (§16, §23). |
 | Favicons | not compared | Masked; renders have no engine favicons. |
 | Light-mode default theme, dark tokens without a dark capture, motion numbers, favorites column rule for counts other than 6 | guesses | No capture yet (interaction-states §19). |
 
@@ -902,11 +902,35 @@ captured weakly at show time, so resignation still dismisses after the owner
 view is gone. A real-time timer check advances the main run loop in 5 ms slices
 for at most 0.6 s and requires the 0.5 s deadline within ±50 ms.
 
-## 22. Window buttons: Arc's dimmed look (2026-10-26)
+## 22. Media tokens (review r1, 2026-10-26)
 
-The user decided that the window buttons use Arc's grey look in every window state, with the standard colors and glyphs only while the pointer is over the group. Capture session 2 then showed it as Arc's own behavior in the active window (22.1).
+No Arc capture yet shows these surfaces. **Code** means a value decoded from
+Arc's types; **fact** means a measured existing sidebar token; **guess** means
+Open's provisional design pending capture session 2. The full specification
+and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
+[features-advanced.md](re/features-advanced.md) §8 (PP-1…PP-22).
 
-### 22.1 How Arc does it (metadata only)
+| Surface / token | Value | Status |
+|---|---|---|
+| Mini-player card | Insets 8/4, height 68, corner 10; title 13 Medium | Insets/corner reuse sidebar facts; height/font/fill guess |
+| Mini-player controls | 24×24, radius 6; foreground black .50 / white .66 | Code PP-16 / design-tokens §1.8; placement guess |
+| Media tooltip | Above, delay .45 s | Code PP-6; title wording PP-16 |
+| Volume drawer | +28 pt; track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | Guess; inset correction from design r1 |
+| Collapsed stack | Offset 5, width inset 6, opacity 1−.3i; back-card top edge .5 pt separator | Guess; top edge added by design r1, confirm S6 |
+| Expanded stack | Gap 6; collapse delay .3 s; spring response .3/damping 1 | Guess, PP-14 names states |
+| Marquee | Fade 4 left/8 right; delay 3 s; speed 30 pt/s; gap 32 | Left fade code PP-17; remainder guess |
+| PiP window | Corner 12, min 284×160, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
+| PiP corners | Buttons 28×28, padding 8 compact / 10 regular | Code PP-6 |
+| PiP scrubber | Bar 4/6 pt, hit 20; precision step 40 pt, cap 8× | Hit height code PP-7; other geometry/math Open design |
+| Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
+
+Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.
+
+## 23. Window buttons: Arc's dimmed look (2026-10-26)
+
+The user decided that the window buttons use Arc's grey look in every window state, with the standard colors and glyphs only while the pointer is over the group. Capture session 2 then showed it as Arc's own behavior in the active window (23.1).
+
+### 23.1 How Arc does it (metadata only)
 
 | Evidence | Command | Finding |
 |---|---|---|
@@ -922,12 +946,12 @@ The user decided that the window buttons use Arc's grey look in every window sta
 
 `rea inspect-native-dispatch-metadata` refused the 80 MB binary (its 64 MiB input budget), so the method lists come from `otool -ov`. No Ghidra analysis was run. guess: Arc dims system buttons with `DimmedWindowControls`; how it hides their color is not visible in metadata. Capture session 2 shows the look while Arc is key, in the window and on the card.
 
-### 22.2 Choice
+### 23.2 Choice
 
 | Approach | Keeps | Loses | Arc |
 |---|---|---|---|
 | (a) System buttons drawn inactive while the window is key | everything | — | — |
-| **(a′) System buttons transparent at rest, dimmed circles drawn under them; the pointer over the group shows the system buttons** | the actions, Option-click zoom, the tiling menu on the green button, full screen, AX roles and subroles, the system glyphs and colors on hover | nothing functional | keeps system buttons (22.1) |
+| **(a′) System buttons transparent at rest, dimmed circles drawn under them; the pointer over the group shows the system buttons** | the actions, Option-click zoom, the tiling menu on the green button, full screen, AX roles and subroles, the system glyphs and colors on hover | nothing functional | keeps system buttons (23.1) |
 | (b) Our own buttons, wired to the window | the actions (rewired), AX subroles (set by hand) | the tiling menu (system UI), the system's glyph art and hover behavior, the exact full-screen and zoom rules | — |
 
 (a) has no public API: macOS picks the buttons' look from the app's and the window's active state. (a′) is the lightest approach that keeps every behavior, so Open uses it:
@@ -939,7 +963,7 @@ The user decided that the window buttons use Arc's grey look in every window sta
 - The colored rings show only while the window is key (`showsRing`), as in session 2: inactive Arc keeps the fill and drops the rings. The change is immediate, as for macOS's own buttons (no implicit layer fade).
 - `DimmedTrafficLightsView` owns the hover state. AppKit sends no exit to a hidden view, and a tracking area it re-creates (unhide, frame change, full-screen exit) sends no exit for a pointer that left meanwhile. So the view clears the state when it hides (full-screen entry, ⌘S, the card's hide) and reads it again from where the pointer is when it shows, when its tracking area is rebuilt, after a full-screen exit, and after a restore from the Dock. While automation drives the pointer, it reads the automation pointer instead of the hardware one. Before this (PR #104 review), the buttons stayed colored at rest after a full-screen exit or a restore, and stayed grey under the pointer after ⌘S twice.
 
-### 22.3 Comparison with Arc (§7 method)
+### 23.3 Comparison with Arc (§7 method)
 
 Open's live window at 2216 × 1394 with the capture-time snapshot, sidebar 228 (F0001) or 500 (F0131, F0129 card), Space 4 without its later theme; Open's window was key and the look dimmed in every row. Fill = the 4 × 4 px core; ring = the mean at r 6.5; RMS over the 18 × 18 px around each button.
 
@@ -968,7 +992,7 @@ Inactive, the fill alpha matches and both have no ring; the colors differ becaus
 
 ![Window buttons](design/window-buttons-dimmed.png)
 
-### 22.4 Verification
+### 23.4 Verification
 
 New `window` suite rows:
 
