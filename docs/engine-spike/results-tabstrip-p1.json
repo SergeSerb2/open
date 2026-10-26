@@ -1,13 +1,19 @@
 {
   "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "embeddedUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792999269"
+  },
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 68637,
+    "pid": 14357,
     "root": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome/Profiles"
   },
-  "started": "2026-10-25 23:36:31",
+  "started": "2026-10-26 00:21:45",
   "style": "chrome",
   "tabstrip": {
     "badge_text": {
@@ -40,117 +46,401 @@
         "https://bitwarden.com/browser-start/"
       ]
     },
+    "context_menu_commands": {
+      "crashed": null,
+      "dismissed": [
+        {
+          "closed": [
+            "sheet:NSSavePanel"
+          ],
+          "command": "page: Save As\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "page: Print\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "page: Cast\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "page: Inspect"
+        },
+        {
+          "closed": [
+            "open-window"
+          ],
+          "command": "link: Open Link in New Window"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "link: Print\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "link: Inspect"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "image: Inspect"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "selection: Print\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "selection: Inspect"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "editable: Print\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "editable: Inspect"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacFramelessNSWindow"
+          ],
+          "command": "video: Picture in Picture"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "video: Cast\u2026"
+        },
+        {
+          "closed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "command": "video: Inspect"
+        }
+      ],
+      "failures": [],
+      "ok": true,
+      "ran": 58,
+      "skipped": [
+        "page: Back (disabled)",
+        "page: Forward (disabled)",
+        "link: Copy Link to Highlight (disabled)",
+        "link: Speech > Start Speaking",
+        "link: Speech > Stop Speaking (disabled)",
+        "selection: Copy Link to Highlight (disabled)",
+        "selection: Speech > Start Speaking",
+        "selection: Speech > Stop Speaking (disabled)",
+        "editable: Undo (disabled)",
+        "editable: Redo (disabled)",
+        "editable: Writing Direction > Default (disabled)",
+        "editable: Speech > Start Speaking",
+        "editable: Speech > Stop Speaking (disabled)"
+      ],
+      "targets": {
+        "editable": [
+          "Look Up \u201cMispeled wordd\u201d",
+          "Emoji  Symbols",
+          "Import Passwords",
+          "Cut",
+          "Copy",
+          "Paste",
+          "Paste and Match Style",
+          "Select All",
+          "Open in Reading Mode",
+          "Search Google for \u201cMispeled wordd\u201d",
+          "Print\u2026",
+          "Open in Reading Mode",
+          "Language Settings",
+          "Writing Direction > Left to Right",
+          "Writing Direction > Right to Left",
+          "Inspect"
+        ],
+        "image": [
+          "Open Image in New Tab",
+          "Save Image As\u2026",
+          "Copy Image",
+          "Copy Image Address",
+          "Create QR Code for this Image",
+          "Search Image with Google",
+          "Inspect"
+        ],
+        "link": [
+          "Open Link in New Tab",
+          "Open Link in New Window",
+          "Open Link in Split View",
+          "Open Link in Incognito Window",
+          "Save Link As\u2026",
+          "Copy Link Address",
+          "Copy",
+          "Search Google for \u201cA link to another page\u201d",
+          "Print\u2026",
+          "Inspect"
+        ],
+        "page": [
+          "Reload",
+          "Save As\u2026",
+          "Print\u2026",
+          "Cast\u2026",
+          "Open in Reading Mode",
+          "Create QR Code for this Page",
+          "View Page Source",
+          "Inspect"
+        ],
+        "selection": [
+          "Look Up \u201cSelectable sentence for the context menu check.\u201d",
+          "Copy",
+          "Search Google for \u201cSelectable sentence for the context menu check.\u201d",
+          "Print\u2026",
+          "Open in Reading Mode",
+          "Inspect"
+        ],
+        "video": [
+          "Loop",
+          "Show All Controls",
+          "Open Video in New Tab",
+          "Save Video Frame As\u2026",
+          "Save Video As\u2026",
+          "Copy Video Frame",
+          "Copy Video Address",
+          "Picture in Picture",
+          "Cast\u2026",
+          "Search Video Frame with Google",
+          "Inspect"
+        ]
+      },
+      "video": "video.webm"
+    },
     "events_seen": [
       "activated",
       "created",
+      "focus",
       "moved",
       "pinned",
       "removed",
       "updated"
     ],
+    "favorite_pin_noop": {
+      "chromium_after": {
+        "pinned": true
+      },
+      "ok": true,
+      "pin": {
+        "ok": true
+      },
+      "section_after": "favorites",
+      "unpin": {
+        "ok": false
+      }
+    },
     "hosted_tabs": {
       "ok": true,
       "tabs": [
         [
           "today",
           "https://www.iana.org/help/example-domains",
-          1576986672,
-          1576986668
+          248149054,
+          248149050
         ],
         [
           "today",
           "https://example.org/",
-          1576986671,
-          1576986668
+          248149053,
+          248149050
         ],
         [
           "today",
           "https://bitwarden.com/browser-start/",
-          1576986670,
-          1576986668
+          248149052,
+          248149050
         ],
         [
           "today",
           "https://example.com/",
-          1576986669,
-          1576986668
+          248149051,
+          248149050
         ]
       ]
     },
-    "no_tab_groups": {
-      "folder": "6F2ACD12-D41E-4A17-848B-27F2DA885BD6",
-      "folder_tab": [
-        {
-          "groupId": -1,
-          "id": 1576986672,
-          "pinned": true
+    "no_cross_window_moves": {
+      "chrome_window": {
+        "ok": {
+          "id": 248149067,
+          "tab": 248149068
         }
-      ],
-      "group_call": "Grouping is not supported by tabs in this window.",
+      },
+      "move_in": {
+        "error": "Tabs cannot be moved between windows in this browser."
+      },
+      "move_out": {
+        "error": "Tabs cannot be moved between windows in this browser."
+      },
       "ok": true,
-      "tab_groups": 0
+      "windows_create_with_tab": {
+        "error": "Tabs cannot be moved between windows in this browser."
+      }
     },
     "on_activated": {
-      "events": [
+      "events_before": 15,
+      "expected_tab": 248149053,
+      "new_events": [
         {
-          "tabId": 1576986671,
-          "time": 1792996604444,
+          "tabId": 248149053,
+          "time": 1792999320345,
           "type": "activated",
-          "windowId": 1576986668
-        },
-        {
-          "tabId": 1576986671,
-          "time": 1792996605925,
-          "type": "activated",
-          "windowId": 1576986668
+          "windowId": 248149050
         }
       ],
-      "expected_tab": 1576986671,
+      "ok": true
+    },
+    "peek_not_a_tab": {
+      "note": "Little Open is not in this shell yet; its pages will follow the same rule (non-model hosts are Alloy).",
+      "ok": true,
+      "peek_page": {
+        "kind": "tab",
+        "style": "alloy",
+        "url": "https://example.com/?peek"
+      },
+      "strip_unchanged": true
+    },
+    "per_tab_badge": {
+      "badges": [
+        "B",
+        "A",
+        "P1",
+        "B"
+      ],
+      "expected": [
+        "B",
+        "A",
+        "P1",
+        "B"
+      ],
       "ok": true
     },
     "query_active_current_window": {
-      "expected_tab": 1576986670,
+      "expected_tab": 248149052,
       "ok": true,
       "result": [
         {
-          "id": 1576986670,
+          "id": 248149052,
           "url": "https://bitwarden.com/browser-start/",
-          "windowId": 1576986668
+          "windowId": 248149050
         }
       ]
     },
+    "second_space": {
+      "activation_switched_space": true,
+      "mirror": [
+        248149060,
+        248149059,
+        248149057,
+        248149054,
+        248149052,
+        248149071
+      ],
+      "mirror_matches_chrome_tabs": true,
+      "ok": true,
+      "second_space_tab_in_strip": true
+    },
     "tabs_create": {
       "extension_result": {
-        "id": 1576986674,
-        "windowId": 1576986668
+        "id": 248149056,
+        "windowId": 248149050
       },
+      "note": "tabs.create ignores pinned, index and openerTabId (documented P1 gap).",
       "ok": true,
       "sidebar_tab": {
-        "id": "F8DAD993-FB2E-4955-9018-64DE3170C57C",
+        "id": "B2A750E7-7EA0-4B60-B22F-EAE58B9DE1AF",
         "section": "today",
         "url": "https://example.net/?from=extension",
         "visible": true
       }
     },
+    "tabs_discard": {
+      "background": {
+        "ok": {
+          "discarded": false,
+          "id": 248149058
+        }
+      },
+      "background_unloaded_in_place": true,
+      "ok": true,
+      "visible": {
+        "error": "Cannot discard tab with id: 248149052."
+      }
+    },
     "tabs_move": {
       "ok": true,
       "today_after": [
-        "DF7BB0B4-FD40-4302-9708-2025427043FD",
-        "F8DAD993-FB2E-4955-9018-64DE3170C57C",
-        "97BFD669-125B-4C00-A680-BDBEEE37995C",
-        "C83F095E-2C1B-463B-BEA1-135009DF5F85",
-        "828C9902-F596-4111-9D13-546B4602F278"
+        "D9AC9154-BBDE-4518-8A69-F9EB380ED13F",
+        "B2A750E7-7EA0-4B60-B22F-EAE58B9DE1AF",
+        "68FA7EE6-97EB-42D4-B222-BD4F38874B75",
+        "870DC36C-A701-4E2E-8788-87DFF91BD617",
+        "B4521B82-4DA8-4FC7-945B-ADC403F028B4"
       ],
       "today_before": [
-        "F8DAD993-FB2E-4955-9018-64DE3170C57C",
-        "97BFD669-125B-4C00-A680-BDBEEE37995C",
-        "C83F095E-2C1B-463B-BEA1-135009DF5F85",
-        "828C9902-F596-4111-9D13-546B4602F278",
-        "DF7BB0B4-FD40-4302-9708-2025427043FD"
+        "B2A750E7-7EA0-4B60-B22F-EAE58B9DE1AF",
+        "68FA7EE6-97EB-42D4-B222-BD4F38874B75",
+        "870DC36C-A701-4E2E-8788-87DFF91BD617",
+        "B4521B82-4DA8-4FC7-945B-ADC403F028B4",
+        "D9AC9154-BBDE-4518-8A69-F9EB380ED13F"
+      ]
+    },
+    "tabs_move_exact": {
+      "before_folder_result": {
+        "ok": 1
+      },
+      "into_folder_refused": true,
+      "into_folder_result": {
+        "ok": 2
+      },
+      "ok": true,
+      "today_after": [
+        "8D8FBF2A-3177-4C9A-B218-6A1E8F8DE852",
+        "48D62965-C427-45A5-99B9-FD379BF9658A",
+        "8564054E-86C5-48AD-A5D1-D5244FB94131",
+        "7CB73A54-EF31-476E-A876-00C5F4904188",
+        "D9AC9154-BBDE-4518-8A69-F9EB380ED13F",
+        "B2A750E7-7EA0-4B60-B22F-EAE58B9DE1AF",
+        "68FA7EE6-97EB-42D4-B222-BD4F38874B75",
+        "870DC36C-A701-4E2E-8788-87DFF91BD617",
+        "B4521B82-4DA8-4FC7-945B-ADC403F028B4"
       ]
     },
     "tabs_remove": {
-      "ok": true
+      "ok": true,
+      "pinned_and_favorite_unloaded_in_place": true,
+      "results": [
+        {
+          "ok": null
+        },
+        {
+          "ok": null
+        }
+      ],
+      "today_tab_gone_from_sidebar": true
     },
     "tabs_update_active": {
       "ok": true
@@ -160,54 +450,55 @@
     },
     "window_screenshot": "p1-window.png",
     "windows_and_tabs": {
+      "note": "chrome.windows focus state is out of scope for P1 (focused is not asserted).",
       "ok": true,
-      "sidebar": [
+      "sidebar_rows": [
         [
-          "97BFD669-125B-4C00-A680-BDBEEE37995C",
-          1576986672
+          "68FA7EE6-97EB-42D4-B222-BD4F38874B75",
+          248149054
         ],
         [
-          "C83F095E-2C1B-463B-BEA1-135009DF5F85",
-          1576986671
+          "870DC36C-A701-4E2E-8788-87DFF91BD617",
+          248149053
         ],
         [
-          "828C9902-F596-4111-9D13-546B4602F278",
-          1576986670
+          "B4521B82-4DA8-4FC7-945B-ADC403F028B4",
+          248149052
         ],
         [
-          "DF7BB0B4-FD40-4302-9708-2025427043FD",
-          1576986669
+          "D9AC9154-BBDE-4518-8A69-F9EB380ED13F",
+          248149051
         ]
       ],
       "windows": [
         {
           "focused": false,
-          "id": 1576986668,
+          "id": 248149050,
           "tabs": [
             {
               "active": false,
-              "id": 1576986672,
+              "id": 248149054,
               "index": 0,
               "pinned": false,
               "url": "https://www.iana.org/help/example-domains"
             },
             {
               "active": false,
-              "id": 1576986671,
+              "id": 248149053,
               "index": 1,
               "pinned": false,
               "url": "https://example.org/"
             },
             {
               "active": true,
-              "id": 1576986670,
+              "id": 248149052,
               "index": 2,
               "pinned": false,
               "url": "https://bitwarden.com/browser-start/"
             },
             {
               "active": false,
-              "id": 1576986669,
+              "id": 248149051,
               "index": 3,
               "pinned": false,
               "url": "https://example.com/"
@@ -216,6 +507,24 @@
           "type": "normal"
         }
       ]
+    },
+    "windows_remove_refused": {
+      "events": [
+        {
+          "content": 0,
+          "refused": true,
+          "request": "close",
+          "tab": "",
+          "time": 1792999331.136096,
+          "type": "window-request",
+          "window": 248149050
+        }
+      ],
+      "live_tabs": 5,
+      "ok": true,
+      "result": {
+        "ok": null
+      }
     }
   }
 }

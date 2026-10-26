@@ -369,6 +369,8 @@ Before you start:
 | 18 | Library / Home | The Home button target | Click the bottom-left Home button. (`library`) |
 | 19 | Toasts and Site Control Center | Toast style, Site Control popover | Press Cmd+Shift+C (copy URL) on a page. Then open the site controls from the URL field (hover it to find the control). (`toasts`) |
 | 20 | Second window | Multi-window titles, `StorableWindows` with 2 windows | Press Cmd+N, then switch Space in the new window. (`two-windows`) |
+| 21 | Boost editor | Editor window frame, wheel, font picker, tool buttons, Zap shelf, code mode | On a neutral public site, open the site controls from the URL field and click New Boost. Drag the color wheel, open the advanced color controls, pick two fonts, click the text size and case buttons, Zap one element, then open the code view and type one CSS rule. Hold each state 2 s. (`boost-editor`) |
+| 22 | Site Control Center, full | Popover frame, section headers on hover, tiles, footer menu | On a site with one Boost and a granted camera permission, open the site controls. Hover each section header, hover a tile, then click the ⋯ button. Repeat with Option held. (`site-controls`) |
 
 After each session, copy `StorableWindows.json` and `StorableSidebar.json` again (read-only) into `.re/runtime/appsupport/<label>/` to see what changed.
 

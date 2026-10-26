@@ -45,3 +45,26 @@ index cdd4c62080fb19b145e427c1533ba082fc1cda8c..17fe5070bf3067304846a2aac14c4f5a
      sad_tab_helper_ = GetUserDataFactory().CreateInstance<SadTabHelper>(
          tab, tab, tab.GetContents());
    }
+diff --git a/chrome/browser/ui/toasts/toast_controller.cc b/chrome/browser/ui/toasts/toast_controller.cc
+index 4b17a935547ff06c8d897087a890909da4f4a80a..e23920c00f52cca32ebba499c27d8800237faebc 100644
+--- a/chrome/browser/ui/toasts/toast_controller.cc
++++ b/chrome/browser/ui/toasts/toast_controller.cc
+@@ -43,6 +43,7 @@
+ #include "components/prefs/pref_service.h"
+ #include "components/tabs/public/tab_interface.h"
+ #include "content/public/browser/web_contents.h"
++#include "open/browser/tab_strip/hidden_browser.h"
+ #include "ui/base/l10n/l10n_util.h"
+ #include "ui/base/unowned_user_data/unowned_user_data_host.h"
+ #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+@@ -323,7 +324,9 @@ void ToastController::CreateToast(ToastParams params,
+   if (!anchor_view) {
+     // Don't actually create the toast in unit tests
+     // TODO(webium): show toast in webui browser.
+-    if (!webui_browser::IsWebUIBrowserEnabled()) {
++    // Open: hidden tab-strip Browsers have no Views to anchor a toast to.
++    if (!webui_browser::IsWebUIBrowserEnabled() &&
++        !open_engine::IsHiddenTabStripBrowser(browser_window_interface_)) {
+       CHECK_IS_TEST();
+     }
+     return;

@@ -5,6 +5,8 @@
 # 0301-open-headless-browser-window.patch
 paths: chrome/browser/ui/browser_window/internal/browser_window_features.cc
 # 0302-open-hidden-browser-ui.patch
-paths: chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc chrome/browser/ui/tabs/tab_features.cc
-# 0303-open-hidden-browser-no-tab-groups.patch
+paths: chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc chrome/browser/ui/tabs/tab_features.cc chrome/browser/ui/toasts/toast_controller.cc
+# 0303-open-hosted-tab-lifecycle.patch
+paths: chrome/browser/extensions/api/tabs/tabs_api.cc chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+# 0304-open-hidden-browser-no-tab-groups.patch
 paths: chrome/browser/ui/browser.cc

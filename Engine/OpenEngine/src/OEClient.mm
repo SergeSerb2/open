@@ -93,12 +93,47 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
   return false;
 }
 
+namespace {
+
+// The client of a page's DevTools window. Chrome opens that window itself
+// (the context menu's Inspect), and CEF gives it the inspected page's client
+// unless OnBeforeDevToolsPopup picks another one.
+class OEDevToolsClient : public CefClient {
+  IMPLEMENT_REFCOUNTING(OEDevToolsClient);
+};
+
+// True unless |browser| is a browser other than the page's own (a stray
+// callback must not create, retitle, or close the page).
+bool OEIsPageBrowser(OEWebContent* view, CefRefPtr<CefBrowser> browser) {
+  CefRefPtr<CefBrowser> own = view.oe_browser;
+  return !own || own->IsSame(browser);
+}
+
+}  // namespace
+
+void OEClient::OnBeforeDevToolsPopup(CefRefPtr<CefBrowser> browser,
+                                     CefWindowInfo& windowInfo,
+                                     CefRefPtr<CefClient>& client,
+                                     CefBrowserSettings& settings,
+                                     CefRefPtr<CefDictionaryValue>& extra_info,
+                                     bool* use_default_window) {
+  // With this client the DevTools page's creation, title, and close would
+  // reach the inspected page: closing DevTools closed the tab.
+  client = new OEDevToolsClient();
+}
+
 void OEClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
+  if (!OEIsPageBrowser(view_, browser)) {
+    return;
+  }
   [view_ oe_browserCreated:browser];
 }
 
 bool OEClient::DoClose(CefRefPtr<CefBrowser> browser) {
   OEWebContent* view = view_;
+  if (!OEIsPageBrowser(view, browser)) {
+    return false;
+  }
   if (!closing_ && view) {
     // window.close() from the page. Tell the shell; the close continues.
     close_requested_ = true;
@@ -118,6 +153,10 @@ void OEClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   // Chrome style pages never get DoClose: Chromium closes a hosted tab
   // itself (window.close(), chrome.tabs.remove). Tell the shell first.
   OEWebContent* view = view_;
+  if (!OEIsPageBrowser(view, browser)) {
+    [[OEEngine shared] oe_browserDidClose];
+    return;
+  }
   if (!closing_ && !close_requested_ && view.oe_hostBrowser) {
     close_requested_ = true;
     [view oe_requestClose];

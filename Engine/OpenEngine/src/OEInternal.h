@@ -91,6 +91,10 @@ class OEClient;
 /// The OEBrowser whose hidden Chrome window hosts this page as a tab (fork
 /// patch P1); nil for Alloy and Views-window Chrome style pages.
 @property(nonatomic, weak, nullable) OEBrowser* oe_hostBrowser;
+// -[OEBrowser identifier] of oe_hostBrowser, kept after that browser is gone
+// (its -dealloc marks its pages closing).
+@property(nonatomic, readonly) NSInteger oe_hostBrowserIdentifier;
+- (void)oe_setHostBrowser:(nullable OEBrowser*)browser;
 /// A content for a tab that Chromium creates in `browser` on its own
 /// (CefTabStripHandler::OnBeforeTabCreated). It never creates its own page.
 - (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser;
@@ -130,6 +134,10 @@ class OEClient;
 /// The hidden Chrome window (fork patch P1). Created on first use when
 /// `create` is YES; nullptr before the context is ready or after -close.
 - (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create;
+/// NO once the engine refused a hidden Chrome window for this browser's
+/// context (a non-default profile without a disk profile): its Chrome style
+/// pages use Alloy instead.
+@property(nonatomic, readonly) BOOL oe_canHostTabs;
 /// Puts Chromium's tab strip in -webContents order on the next turn.
 - (void)oe_setNeedsTabStripSync;
 - (void)oe_popupDidResize:(OEWebContent*)popup size:(NSSize)size;

@@ -32,6 +32,7 @@ public final class FakeWebContentHost: WebContentHost {
     public static var reportsTitles = true
     public var pageBackgroundColor: NSColor? { surface.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
     public var onPageBackgroundChange: ((NSColor?) -> Void)?
+    public var onLiveStateChange: ((WebContentLiveState) -> Void)?
 
     public init(tabID: ItemID, color: NSColor) {
         self.tabID = tabID; surface = FakePageView(color: color)
@@ -135,7 +136,7 @@ public final class FakePageView: NSView {
 public final class FakeWebContentHostFactory: WebContentHostFactory {
     public private(set) var made: [FakeWebContentHost] = []
     public func releaseClosedHosts() { made.removeAll { $0.isClosed } }
-    public func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost {
+    public func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
         let colors: [NSColor] = [.init(srgbRed: 0.87, green: 0.87, blue: 0.98, alpha: 1), .white,
                                   .init(srgbRed: 0.84, green: 0.94, blue: 0.88, alpha: 1), .init(srgbRed: 0.97, green: 0.90, blue: 0.80, alpha: 1)]
         let host = FakeWebContentHost(tabID: tabID, color: colors[made.count % colors.count]); made.append(host)

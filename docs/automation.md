@@ -49,6 +49,11 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
 | `tabs` | — | Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
+| `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
+| `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
+| `frame-save-counters` | — | Actual snapshot captures, dirty schedules, factory tree changes and mirror syncs |
+| `space-profile` | `space`, `profile` name | Production sidebar profile assignment intent; closes old Space hosts |
+| `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
@@ -66,7 +71,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
 | `type` | `tab`, `text` | Insert text in the focused page field |
 | `key` | `key`, `modifiers`, `route` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `text` sends plain characters to the first responder. |
-| `mouse` | `window`, `x`, `y` | Left click in one of Open's own windows (for Chromium's own dialogs) |
+| `mouse` | `window`, `x`, `y`; `action=move`; or `from` / `to` point pairs | Own-window click, queued hover motion, or native resize drag; system cursor stays unchanged |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
@@ -75,17 +80,33 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
+| `shell-windows` | — | Standard controller IDs and native window numbers |
+| `window-state` | — | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count |
+| `window-focus` | `id`, `activate` | Make that own window key; optional own-app activation |
+| `window-close` | — | Native close for the current standard window; model tabs stay |
+| `window-reopen` | — | Real application reopen handler, including after the last window closes |
+| `window-fullscreen` | — | Native full-screen toggle; wait for completed transition count before testing the result |
+| `sidebar-move` | `tab`, `section` or `folder`, `index` | Production SidebarDelegate move intent; model and engine strip share the resulting order |
+| `folder-create` / `folder-toggle` | `title` / `folder` | Create fixture folder through the model; production sidebar expand/collapse intent |
+| `folder` | `tabs`, `section` (`today`/`pinned`), `title`, `at` | Folder in the focused Space holding `tabs` in order, moved to index `at` |
+| `favorite` | `tab` | Move a tab to its profile's Favorites |
+| `dismiss` | — | End what a Chromium command opened: a modal panel (Print), sheets (Save As), Chromium's own Views windows (DevTools, Chrome windows). Returns what it closed |
+| `sidebar-clear` | — | Production sidebar Clear Today intent |
+| `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]` | Move/resize the main window |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus, keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus) or run one command (`run:<id>`, after the right click returns), keep the window size on page fullscreen |
 | `dialog` | `accept`, `text` | Complete a held dialog |
-| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup` |
+| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
 | `metrics` | `interval` | Chromium task manager rows and the physical footprint of every Open process |
-| `timing` | — | Launch marks in ms since process start, plus the first contentful paint of the selected tab |
+| `timing` | — | Monotonic launch marks from kernel process start, presented-sidebar mark, renderer first contentful paint, and clock-mapping uncertainty |
+| `startup` | — | Actual sidebar class, visible window count, page count and context count recorded before engine start |
+| `host-counts` | — | Cumulative tab host creations, retained tab hosts, and engine web-content count |
+| `sidebar-unload` | `tab` | Production sidebar unload intent without selecting the row |
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
@@ -103,6 +124,9 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 ```sh
 tools/build.sh Debug
 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
@@ -112,3 +136,26 @@ tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idl
 ```
 
 Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+
+Startup regression flags exist only in automation builds:
+`OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
+timer running without a display link. Engine startup must continue with
+`firstFrameConfirmed=false`, `firstFrameWaitTimedOut`, and no `sidebarDrawn` mark.
+`OPEN_AUTOMATION_QUIT_BEFORE_ENGINE=1` requests Open's native terminate action
+during the first-frame wait; `OPEN_AUTOMATION_EARLY_NAVIGATION=<URL>` submits
+Open's address action before readiness; `OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE=1`
+clicks Open's own Quit alert button after a real engine-load failure. They send
+no input to the system or other applications.
+
+The window and sidebar suites compare the live app against F0001 when the
+capture-time snapshot and capture exist in the main checkout's `.re/`.
+`OPEN_ARC_CAPTURE_ROOT` can name that `.re` directory explicitly. With no
+captures, only the comparison is reported SKIP; functional flows still run.
+Private screenshots and snapshot data stay in `.re/app-shell-comparison-*`.
+Only the per-element measurement tables are written to `docs/engine-spike/`.
+
+The window suite reports `kernel_process_start` separately and requires the
+kernel timestamp in all ten benchmark launches. Debug timing rows print named
+SKIP results with a Release-only reason. Sidebar `space_switch_wrapper` proves
+the live page and wrapper context; `durable_profile_storage` remains BLOCKED on
+the CEF `root_cache_path` follow-up in docs/followups.md.

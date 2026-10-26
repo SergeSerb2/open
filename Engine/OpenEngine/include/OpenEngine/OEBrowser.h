@@ -64,6 +64,17 @@ NS_SWIFT_UI_ACTOR
     requestsPinned:(BOOL)pinned
      forWebContent:(OEWebContent*)webContent
     NS_SWIFT_NAME(browser(_:requestsPinned:for:));
+/// chrome.tabs.discard: return YES if the shell will unload `webContent`
+/// with its own tab sleep. Do not close it inside this call. Chromium
+/// never discards these tabs itself (memory pressure, Memory Saver). Without
+/// this method the request is refused.
+- (BOOL)browser:(OEBrowser*)browser
+    requestsDiscardOfWebContent:(OEWebContent*)webContent
+    NS_SWIFT_NAME(browser(_:requestsDiscardOf:));
+/// chrome.windows.remove on this window while it has tabs. The window stays
+/// open; the shell decides. Without this method the request is refused.
+- (void)browserRequestsClose:(OEBrowser*)browser
+    NS_SWIFT_NAME(browserRequestsClose(_:));
 @end
 
 /// One shell window's tab strip (ADK "Browser") for one profile: the ordered

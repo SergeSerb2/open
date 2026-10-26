@@ -1,5 +1,11 @@
 {
   "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "embeddedUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792999269"
+  },
   "features": {
     "adblock_control": {
       "ok": true,
@@ -31,18 +37,11 @@
     },
     "context_menu": {
       "items": [
-        "Back",
-        "Forward",
-        "Reload",
-        "",
-        "Save As\u2026",
+        "Copy",
+        "Copy Link to Highlight",
         "Print\u2026",
-        "Cast\u2026",
         "Open in Reading Mode",
         "",
-        "Create QR Code for this Page",
-        "",
-        "View Page Source",
         "Inspect"
       ],
       "ok": true
@@ -92,7 +91,7 @@
     "find_in_page": {
       "active": 0,
       "final": true,
-      "matches": 132,
+      "matches": 134,
       "ok": true
     },
     "fullscreen": {
@@ -122,7 +121,7 @@
         "type": "application/pdf"
       },
       "ok": true,
-      "screenshot": "p1-pdf-viewer.png",
+      "screenshot": "chrome-pdf-viewer.png",
       "viewer_targets": [
         "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html"
       ]
@@ -165,7 +164,7 @@
       ]
     },
     "print_to_pdf": {
-      "bytes": 441090,
+      "bytes": 435321,
       "ok": true
     },
     "profiles": {
@@ -175,8 +174,8 @@
         "cookie": "",
         "storage": null
       },
-      "work_space": "C443DC66-AEA3-49FB-80A5-B3B4A69AF86C",
-      "work_tab_context": "Profile-92848D72"
+      "work_space": "0589260B-A733-4C9D-B5EF-EAAFD703A6FD",
+      "work_tab_context": "Profile-10CD9125"
     },
     "request_filter": {
       "ok": true,
@@ -199,14 +198,21 @@
       "unmatched_site": "undefined"
     },
     "widevine": {
-      "cdm_versions": null,
-      "eme": "unavailable: NotSupportedError Unsupported keySystem or supportedConfigurations.",
-      "ok": false,
-      "playback": null
+      "cdm_versions": [
+        "4.10.3112.0"
+      ],
+      "eme": "available: com.widevine.alpha",
+      "ok": true,
+      "playback": {
+        "currentTime": 4.953084,
+        "frames": 123,
+        "keySystem": "com.widevine.alpha",
+        "track": "vp09.00.41.08"
+      }
     },
     "zoom": {
-      "innerWidth_100": 1084,
-      "innerWidth_zoomed": 903,
+      "innerWidth_100": 1122,
+      "innerWidth_zoomed": 935,
       "level": 1,
       "ok": true
     }
@@ -214,10 +220,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 87190,
+    "pid": 61946,
     "root": "/Users/serge/Library/Application Support/Open-E2E-features-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-features-chrome/Profiles"
   },
-  "started": "2026-10-25 21:37:48",
+  "started": "2026-10-26 00:24:26",
   "style": "chrome"
 }

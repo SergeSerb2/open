@@ -1,0 +1,103 @@
+diff --git a/chrome/browser/extensions/api/tabs/tabs_api.cc b/chrome/browser/extensions/api/tabs/tabs_api.cc
+index bd5ca463750334a5359289cb3206df31e0976941..6baa6888ffc1817af07cd391cf83ff9090165e2c 100644
+--- a/chrome/browser/extensions/api/tabs/tabs_api.cc
++++ b/chrome/browser/extensions/api/tabs/tabs_api.cc
+@@ -113,6 +113,10 @@
+ #include "chrome/browser/safe_browsing/extension_telemetry/extension_telemetry_service.h"
+ #endif
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/hidden_browser.h"
++#endif
++
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+ namespace extensions {
+@@ -135,6 +139,11 @@ constexpr char kInvalidWindowTypeError[] = "Invalid value for type";
+ constexpr char kNoHighlightedTabError[] = "No highlighted tab";
+ constexpr char kTabIndexNotFoundError[] = "No tab at index: *.";
+ constexpr char kCannotFindTabToDiscard[] = "Cannot find a tab to discard.";
++#if BUILDFLAG(IS_MAC)
++// Open: each Open window owns its tabs (hidden tab-strip Browsers).
++constexpr char kOpenCannotMoveTabBetweenWindowsError[] =
++    "Tabs cannot be moved between windows in this browser.";
++#endif
+ constexpr char kCannotUnhighlightAllTabsError[] =
+     "Cannot unhighlight all tabs.";
+ 
+@@ -465,6 +474,12 @@ int MoveTabToWindow(ExtensionFunction* function,
+     *error = std::move(validation_result.error());
+     return -1;
+   }
++#if BUILDFLAG(IS_MAC)
++  if (open_engine::IsHiddenTabStripBrowser(target_browser)) {
++    *error = kOpenCannotMoveTabBetweenWindowsError;
++    return -1;
++  }
++#endif
+ 
+   // TODO(crbug.com/40638654): Rather than calling checking against
+   // TYPE_NORMAL, should this call
+@@ -1464,6 +1479,12 @@ base::expected<void, std::string> WindowsCreateFunction::ValidateTab(
+     return base::unexpected(
+         ExtensionTabUtil::kCanOnlyMoveTabsWithinNormalWindowsError);
+   }
++#if BUILDFLAG(IS_MAC)
++  if (open_engine::IsHiddenTabStripBrowser(
++          source_window->GetBrowserWindowInterface())) {
++    return base::unexpected(kOpenCannotMoveTabBetweenWindowsError);
++  }
++#endif
+ #if !BUILDFLAG(IS_ANDROID)
+   BrowserWindowInterface* source_browser = source_window->GetBrowser();
+   CHECK(source_browser);
+@@ -4338,6 +4359,19 @@ ExtensionFunction::ResponseAction TabsDiscardFunction::Run() {
+       return RespondNow(Error(ExtensionTabUtil::kNoCurrentWindowError));
+     }
+ 
++#if BUILDFLAG(IS_MAC)
++    // Open: its tab sleep unloads hosted tabs; Chrome does not discard them.
++    if (open_engine::IsHiddenTabStripBrowser(browser_window)) {
++      if (!open_engine::RequestHostedTabDiscard(contents)) {
++        return RespondNow(Error(ErrorUtils::FormatErrorMessage(
++            tabs_constants::kCannotDiscardTab, base::NumberToString(tab_id))));
++      }
++      return RespondNow(ArgumentList(
++          tabs::Discard::Results::Create(tabs_internal::CreateTabObjectHelper(
++              contents, extension(), source_context_type(), nullptr, -1))));
++    }
++#endif
++
+     TabListInterface* tab_list = TabListInterface::From(browser_window);
+     CHECK(tab_list);
+ 
+diff --git a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+index 6f872ee5a8debb2a536510f80eb6c8456027ce5f..03532ada35072325c38b0199651422790af3bfbe 100644
+--- a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
++++ b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+@@ -46,6 +46,10 @@
+ #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+ #include "url/gurl.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/hidden_browser.h"
++#endif
++
+ namespace resource_coordinator {
+ 
+ namespace {
+@@ -362,6 +366,14 @@ bool TabLifecycleUnitSource::TabLifecycleUnit::Discard(
+   if (IsDiscardBlockedByFeature(reason)) {
+     return false;
+   }
++#if BUILDFLAG(IS_MAC)
++  // Open: a discard replaces the tab's WebContents, which the embedder hosts.
++  // Its own tab sleep unloads hosted tabs (memory pressure, Memory Saver and
++  // chrome.tabs.discard all end here).
++  if (open_engine::IsHostedTab(web_contents())) {
++    return false;
++  }
++#endif
+ 
+   const base::TimeTicks discard_start_time = NowTicks();
+ 
