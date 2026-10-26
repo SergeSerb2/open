@@ -40,7 +40,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Plan item | Old guess | New fact (evidence) | Open PR | Change? |
 |---|---|---|---|---|
 | Active traffic lights (`interaction-states.md` §0 caveat 2; status §5.2) | Session 1's grey was the inactive style, or Arc keeps them muted | Grey `#686973` with a colored 1 px ring while active; system colors and glyphs on hover; grey without a ring while inactive (S2 03/0001, 0007, 0016) | window buttons #104 | agrees (#104 already uses session 2) |
-| Inactive window (design.md §3.3: 0.694 active / 0.83 inactive) | Fitted on light themes: lighter when inactive | The default dark theme **darkens** by ≈ 27 levels when inactive (`#282538` → `#0D0A1D`) (S2 03/0016) | #104 (follow-up filed there) | new work |
+| Inactive window (design.md §3.3: 0.694 active / 0.83 inactive) | Fitted on light themes: lighter when inactive | The default dark theme **darkens** by ≈ 27 levels when inactive (`#282538` → `#0D0A1D`) (S2 03/0016). PR #104's card blend over black (`#0E091D`) matches it within ΔE00 0.4–1.1 (checked here) | #104 (follow-up filed there) | new work |
 | Toolbar glyphs, dark (design.md §2.1) | Dark Home value a guess | Enabled white ≈ 0.59, disabled and inactive ≈ 0.25; Home and plus 0.59 active, 0.30 inactive (S2 03/0001, 0016) | — | check (design.md §2.1 updated) |
 | Card bottom (design.md §16.4, ΔE00 10.8) | The card darkens toward its bottom | The card is **translucent**: it shows the blurred page under it (over white = the anchored sidebar within ΔE00 0.6; over a dark page 26 levels darker). F0129's bottom sat over blue page content (S2 05/0014, 0028; F0128) | #104 (follow-up filed) | new work |
 | Card stroke | Seen on one side | On all four sides (S2 05/0014) | — | agrees |
@@ -60,8 +60,8 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Selected Favorite tile, dark (design.md §2.1) | White 0.20 like a row | White ≈ **0.44**; inactive 0.24 + 2 px ring (S2 07/0140, 0163) | sidebar lane (none) | new work |
 | Favorite tile menu (design.md §5.6; interaction-states §15) | Guessed | Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Customize Page… · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ (Profiles) · — · Remove Favorite (S2 07/0185) | sidebar lane (none) | must change (Open's guess) |
 | Space "More" button (interaction-states §2) | Expands on hover (guess) | 26 x 26 at `[W − 39, 205]`, plate white ≈ 0.08 (S2 07/0202) | — | agrees |
-| "Archive Tabs Below / Above", "Archive Other Tabs" (sidebar Q14, Q16, C8) | ⌥ until C8; defer Below/Above | They are the **⌥ alternates** of "Archive Tabs Below" and "Archive Tab" in the Today tab menu (S2 07/0242, 0255) | Sidebar S2 #91 | check (#91 builds ⌥ Clear and Archive Other Tabs) |
-| Folder expansion (sidebar S3) | `expandedItems` `{expanded: {}}` | Also `{peeked: {_0: [childID]}}`: a collapsed folder shows its last active child, its glyph shows "•••" (`FolderEllipses*` images); a click collapses fully, the next expands (S2 08/0090, 0100; V 46.49–55.04 s) | Sidebar S3 #95 | must change (state and glyph); import too |
+| "Archive Tabs Below / Above", "Archive Other Tabs" (sidebar Q14, Q16, C8) | ⌥ until C8; defer Below/Above | The visible Today tab menu ends with the normal items "Archive Tab" and "Archive Tabs Below" (lane S design reviewer agrees). AX lists "Archive Other Tabs" and "Archive Tabs Above" on the same frames, so they are their hidden **⌥ alternates** (derived; ⌥ was not held) (S2 07/0242, 0255) | Sidebar S2 #91 | check (#91 builds ⌥ Clear and Archive Other Tabs) |
+| Folder expansion (sidebar S3) | `expandedItems` `{expanded: {}}` | Also `{peeked: {_0: [childID]}}`: a collapsed folder shows its last active child, its glyph shows "•••" (`FolderEllipses*` images; the lane S design reviewer saw the same); a click collapses fully, the next expands (S2 08/0090, 0100; V 46.49–55.04 s) | Sidebar S3 #95 | must change (state and glyph); import too |
 | Folder row hover | — | White 0.10 fill and a "—" at the right (S2 08/0090) | #95 | check |
 | New Folder placement | — | Above the Today divider (S2 08/0100) | — | check |
 | Folder hover preview (sidebar §3.6, C4) | Look, size, delay guessed | Not captured (did not appear for synthetic events) | Sidebar S5 #102 | open |
@@ -110,7 +110,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Volume (S5, Q8) | Drawer | Click expanded the card; no drawer seen; tooltip "Adjust Tab Volume" (S2 14b/0024) | #92 | check |
 | Stack (S6, Q2, PP-14) | Back cards 5 pt up, 6 pt inset, opacity 1 − 0.3·i; expanded gap 6 | Back cards **7** pt up, insets ≈ **5 / 11**, dimmer; expanded 66 pt cards, gap **5**, newest at the bottom (S2 16/0005, 0012) | #92 | must change (numbers) |
 | How many (Q2) | 3 | At least 3 shown (S2 16) | #92 | agrees |
-| Auto-PiP window (S1) | Chromium window in phase 1 | 320 x 180, 10 pt from the screen's bottom-right, corner ≈ 6, video only at rest (S2 13/0002) | #101 | check |
+| Auto-PiP window (S1) | Chromium window in phase 1 | 320 x 180, 10 pt from the screen's bottom-right, corner ≈ 6, video only at rest (S2 13/0002; the media lane measured the same). The lead's first-open rule `visibleFrame` / 8 gives 2560 / 8 = 320 here; one display and one 16 : 9 video, so consistent but not proven | #101 | agrees (size and inset); check (other screens) |
 | PiP and the sidebar (MS1) | Source with open PiP has no card | Confirmed: no mini player while PiP shows (S2 13) | #92 | agrees |
 | Return to the tab (Q6) | Manual PiP stays | Auto-PiP closes when its tab is shown (notes 10:32:08); manual PiP not tested | #101 | check |
 | PiP hover controls, menu, back-to-PiP, close behavior (S2, S4, S7, Q5, Q17) | — | Not captured | #101 | open |
@@ -163,6 +163,8 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Mini player in Light (MP S3) | — | Not captured | #92 | open |
 
 ### 2.10 Motion (item 21, video)
+
+PR #104's agent timed the same video independently (Cmd+S ≈ 0.1 s each way, show ≈ 0.29 s after the key, card in ≈ 0.14 s with a 3 pt overshoot, no Cmd+T animation, folders ≈ 0.22 s). The rows below agree with it within one video frame.
 
 | Token (design.md §2.4) | Open value | Arc (evidence) | Open PR | Change? |
 |---|---|---|---|---|
