@@ -147,9 +147,11 @@ func runArchiveList(args: [String]) async {
         exit(2)
     }
     let root = URL(fileURLWithPath: dirArg)
+    let snapshot = SnapshotStore(root: root)
+    defer { withExtendedLifetime(snapshot) {} }
     let model: BrowserModel
     do {
-        model = try SnapshotStore(root: root).load() ?? BrowserModel()
+        model = try snapshot.load() ?? BrowserModel()
         _ = try prepareProfiles(model, root: root)
     } catch { profileCLIError("cannot prepare data root: \(error)") }
     let selected: Profile?
@@ -218,7 +220,8 @@ func runBench() async throws {
         let model = BrowserModel(profiles: [profile], spaces: spaces, windows: [window])
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-\(UUID().uuidString)")
         let store = SnapshotStore(root: tmp)
-        try OpenDataRoot.prepare(root: tmp, model: model)
+        let dataRoot = try OpenDataRoot.prepare(root: tmp, model: model)
+        defer { withExtendedLifetime(dataRoot) {} }
         let dto = SnapshotMapper.dto(from: model)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         var t0 = Date(); let data = try! encoder.encode(dto); let encodeMs = Date().timeIntervalSince(t0) * 1000
@@ -236,7 +239,8 @@ func runBench() async throws {
     print("bench: history (100k URLs, 1000 searches)")
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-hist-\(UUID().uuidString)")
     let directories = ProfileDirectories(root: tmp)
-    try await OpenDataRoot.prepare(root: tmp)
+    let dataRoot = try await OpenDataRoot.prepare(root: tmp)
+    defer { withExtendedLifetime(dataRoot) {} }
     try directories.ensureProfileDirectories(dataDirectoryName: "Default")
     let history = HistoryStore(fileURL: directories.historyFileURL(dataDirectoryName: "Default"))
     var items: [(url: URL, title: String, time: Date)] = []

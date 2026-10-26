@@ -43,12 +43,12 @@ also makes the optional Boosts check SKIP. Checks excluded by flags have no row.
 | `commands-dump` | The real headless NSMenu and keyboard registry match the reference table (`missing=0 extra=0 different=0`). Default and override bindings have no unexpected conflicts. See [commands.md](commands.md). | <1 s |
 | `route` | Runs an existing `tools/route-check.sh`, `tools/verify-routing.sh`, `tools/verify-route.sh`, release `route-check`, or `openkit route-check` runner when present. Otherwise exercises [routing.md](routing.md) A1–A10 through `openkit route`: host boundaries, containment, first-match order, source normalization, toggle, rejected scheme, stale target, and JSON/text agreement. Every accepted result has an explicit expected destination. | <2 s |
 | `favicons` | A tiny generated site served by Python http.server on loopback fetches through the release debug flags. Concurrent fetches succeed, a second process uses the cache, 32/64-pixel PNGs read back, and a page without an icon reports missing and absent readback. All requested page/icon URLs are local. See [favicons.md](favicons.md). | <2 s |
-| `sleep-demo` | The existing real model/controller/store CLI reports N checks passed and zero failed. Its engine boundary and clock remain the CLI's simulation. Expected deliberate storage errors are allowed. See [sleep.md](sleep.md). | 1–5 s |
+| `sleep-demo` | The existing real model/controller/store CLI reports N checks passed and zero failed. The 5,000-tab/200-pass gate uses thread CPU p95 <2 ms; wall time is informational. Its engine boundary and policy clock remain the CLI's simulation. Expected deliberate storage errors are allowed. See [sleep.md](sleep.md). | 1–5 s |
 | `adblock-perf` | Both current budgets pass: 1,000 lookups p95 <1 ms and profile open with integrity scan p95 <10 ms. Ten groups yield exactly 5,000 matches in 10,000 lookups. Official default-list downloads may be needed. See [adblock-lists.md](adblock-lists.md). | 5–30 s; network dependent |
 | `adblock-catalog` | Real CLI output contains all 46 catalog IDs, category counts 3/2/5/35/1, and only EasyList/EasyPrivacy enabled by default. | <1 s |
 | `profiles` | When `openkit profiles` exists, exercises the planned P-1–P-8 and P-10 flow: create, duplicate refusal, assign Space, both delete refusals with unchanged snapshot bytes, reassignment, temporary-profile deletion with retained directory, and roundtrip. Contract: [profiles plan §9.1](plans/profiles.md#91-openkit-profiles--cli-new-file-openkitprofilescliswift). | <2 s |
-| `sidebar-render` | When present, `sidebar-render check` reports N/N passed. | 1–5 s |
-| `commandbar-render` | When present, `commandbar-render check` reports N/N passed. | 1–5 s |
+| `sidebar-render` | When present, `sidebar-render check` reports N/N passed, N checks passed with zero failed, or `checks: N passed, 0 failed`. | 1–5 s |
+| `commandbar-render` | When present, `commandbar-render check` accepts the same summary formats as sidebar-render. | 1–5 s |
 | `boosts` | Headless system Chrome loads the actual Boosts harness and production scripts. A7 asserts banner highlight geometry/color, selector commit, hidden banner, and active picker. A11 asserts the precise pick, two aligned related previews, three-match replacement, and hidden posts. Saves both PNGs and rejects runtime errors. See [boosts.md](boosts.md). | 5–20 s; npm install dependent |
 | `import-arc` | Opt-in only. Read-only copies of Arc's top-level JSON files pass sidebar/archive accounting, `archive-list --limit 0`, and roundtrip. Also inspects default-profile output when profiles exists (P-9). | <2 s |
 
@@ -93,3 +93,71 @@ Use a disposable copy of the checkout and edit its copy of
 pass, then suggest-check must report FAIL with exit 1. Keep that edit outside the
 working branch. A missing advertised command is SKIP; a missing executable at
 execution time or a command with a wrong result is FAIL.
+
+## Data-root and gate corrections, 2026-10-25
+
+Verified `fix/dataroot-lock` against base `5de74ee` on macOS
+(America/Vancouver). The initial release build used only
+`nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`, in its own
+process session: exit 0, zero warnings, zero errors, 75.93 s. No unit tests
+were added. Host load was approximately 23–26 during the initial build.
+
+The full run used `VERIFY_JOBS=6 tools/verify-all.sh --keep-logs`, with
+`VERIFY_LOG_DIR` set to the receipt directory below. It exited 0 with
+**13 PASS, 0 FAIL, 1 SKIP**. The runner's incremental release build also
+reported zero warnings and zero errors.
+
+| Name | Result | Seconds |
+|---|---|---:|
+| build | PASS | 3 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 15 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| sidebar-render | PASS | 13 |
+| commandbar-render | SKIP: target absent | 0 |
+| boosts | PASS | 4 |
+
+Sidebar's real output was `checks: 81 passed, 0 failed`. The shared parser
+now accepts this format, the existing N/N formats, and `N checks passed,
+0 failed`. It still refuses zero/incomplete pass counts, nonzero failed
+counts, and explicit failure lines. No `docs/commandbar.md` or commandbar
+target exists in this checkout, so its future check uses that same parser;
+no commandbar runtime result is claimed. `import-arc` was not selected
+because this run did not opt in to personal Arc data.
+
+Additional real CLI checks used fresh synthetic roots:
+
+| Check | Result |
+|---|---|
+| `commands-demo` loop | 50/50 PASS, 103 checks each; zero lock failures |
+| `sleep-demo` loop | 50/50 PASS, 105 checks each; zero lock failures; second-connection reload passed every time |
+| Sleep loop thread CPU p95 | 0.612–1.872 ms across 50 runs; all below 2 ms |
+| Sleep loop wall p95, informational | 0.979–6.776 ms across 50 runs |
+| Same-root processes | Second process exits 1 in 0.131 s with a clear lock error while the first holds the kernel lock; first exits 0 after resuming |
+| Same root through a symlink | Second process exits 1 in 0.122 s with the same lock error |
+| Different-root processes | Both hold their locks concurrently and finish with exit 0 |
+| Release before owner process exits | A completed Sleep scenario releases its root; a second CLI opens that root while the first process remains alive; both finish with exit 0 |
+
+The full runner's Sleep result was 105/105. Its 200-pass CPU p50/p95/max was
+0.257/0.413/0.669 ms; wall p50/p95/max was 0.260/0.562/2.797 ms. The workload
+and 2 ms p95 budget remain unchanged; only thread CPU time gates acceptance.
+The adblock lookup/profile-open p95 values were 0.1461/2.8964 ms, within
+their unchanged 1/10 ms budgets. No check was retried.
+
+Receipts, external CLI drivers, and synthetic artifacts:
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-dataroot-fix-dkc382ib`.
+The full table and per-check logs are in its `verify-all/` directory;
+`cli-results.json` and `release-result.json` record the extra lock checks.
+See [model.md](model.md#data-root-lock) for token ownership and process-check
+details. No Chromium build/sync, Arc launch, desktop automation, personal-data
+read, or subagent ran. These CLI results do not close native app/engine gates.
+
+Release `openkit` SHA-256:
+`b10ff50c87fee7ba6f8d59f2c6fa8c839a1cbe5f4803d6f469ebd8cb2b9a1db8`.

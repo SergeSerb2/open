@@ -44,7 +44,8 @@ def matches(pattern, text):
 def all_passed(text):
     fractions = re.findall(r"\b(\d+)/(\d+)\s+(?:checks\s+)?passed\b", text)
     counts = re.findall(r"\b(\d+) checks passed, (\d+) failed\b", text)
-    require(fractions or counts, "missing N/N passed or checks passed, 0 failed summary")
+    counts += re.findall(r"\bchecks:\s*(\d+) passed, (\d+) failed\b", text)
+    require(fractions or counts, "missing N/N passed, N checks passed, or checks: N passed, 0 failed summary")
     require(all(int(n) == int(d) and int(n) > 0 for n, d in fractions), "incomplete pass count")
     require(all(int(n) > 0 and int(f) == 0 for n, f in counts), "failed check count")
     require(not re.search(r"^\s*(?:FAIL\b|.*\bFAIL(?:ED)?:)", text, re.MULTILINE),

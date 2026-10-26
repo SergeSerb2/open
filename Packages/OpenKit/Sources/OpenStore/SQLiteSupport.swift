@@ -4,10 +4,14 @@ import SQLite3
 /// Minimal SQLite wrapper. One connection, used only inside its actor/queue.
 final class SQLiteDB: @unchecked Sendable {
     private var db: OpaquePointer?
+    private let dataRootLock: DataRootLock
 
     init(path: String) throws {
+        dataRootLock = try DataRootLock.acquire(root: OpenDataRoot.root(forStoreFileURL: URL(fileURLWithPath: path)))
         if sqlite3_open(path, &db) != SQLITE_OK {
             let msg = db.map { String(cString: sqlite3_errmsg($0)) } ?? "open failed"
+            if let db { sqlite3_close(db) }
+            db = nil
             throw NSError(domain: "OpenStore.SQLite", code: 1, userInfo: [NSLocalizedDescriptionKey: msg])
         }
         exec("PRAGMA journal_mode=WAL;")
