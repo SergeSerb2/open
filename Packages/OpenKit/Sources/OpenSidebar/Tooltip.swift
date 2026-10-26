@@ -105,7 +105,7 @@ public final class TooltipController {
     public var visibleTooltipView: TooltipView? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first : nil }
     public var visibleTooltip: Tooltip? { visibleTooltipView?.tooltip }
 
-    func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
+    public func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
         if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }
         cancel(for: owner)
         owner = view
@@ -122,7 +122,7 @@ public final class TooltipController {
         DispatchQueue.main.asyncAfter(deadline: .now() + tooltip.showDelay, execute: work)
     }
 
-    func cancel(for view: NSView?) {
+    public func cancel(for view: NSView?) {
         guard view == nil || owner === view else { return }
         pending?.cancel(); pending = nil
         owner = nil
@@ -164,7 +164,9 @@ public final class TooltipController {
         host.addSubview(content)
         panel.contentView = host
         panel.setFrame(NSRect(x: origin.x - margin, y: origin.y - margin, width: host.frame.width, height: host.frame.height), display: true)
-        if panel.parent == nil { window.addChildWindow(panel, ordered: .above) }
+        if panel.parent !== window {
+            panel.parent?.removeChildWindow(panel); window.addChildWindow(panel, ordered: .above)
+        }
         panel.alphaValue = 0
         panel.orderFront(nil)
         NSAnimationContext.runAnimationGroup { ctx in

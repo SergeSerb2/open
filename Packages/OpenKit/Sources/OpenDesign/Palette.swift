@@ -216,6 +216,10 @@ extension SidebarRole {
 }
 
 public enum PiPRole {
+    public static let controlsDim = DesignColor(light: .black(0.25), dark: .black(0.25)) // guess, design r1
+    public static let documentButtonHover = DesignColor(light: .white(0.12), dark: .white(0.12))
+    public static let documentButtonPressed = DesignColor(light: .white(0.18), dark: .white(0.18))
+    public static let centerGlyphShadow = DesignColor(light: .black(0.35), dark: .black(0.35)) // guess, N3
     public static let glyph = DesignColor(light: .white(1), dark: .white(1))
     public static let plate = DesignColor(light: .black(0.4), dark: .black(0.4))
     public static let plateHover = DesignColor(light: .black(0.55), dark: .black(0.55))
