@@ -1,0 +1,13 @@
+AXPopover Site Control Center news.example.com
+  AXStaticText news.example.com
+    AXUnknown
+  AXImage Globe
+    AXUnknown
+  AXButton Share Share
+  AXButton Copy URL Copy URL
+  AXButton New Boost New Boost
+  AXButton Capture a portion of this page Capture a portion of this page
+  AXButton Capture the full page Capture the full page
+  AXButton Capture in Portrait Mode Capture in Portrait Mode
+  AXStaticText Connection: Secure Connection
+  AXMenuButton More More

@@ -1,0 +1,15 @@
+SiteControl: no snapshot for tab 151533E6-2C4A-4606-9B55-A2E337BC726E
+| Result | Check |
+|---|---|
+| PASS | F1 anchor presents |
+| PASS | F1 second anchor click closes and is consumed |
+| PASS | F2 Escape closes and restores focus |
+| PASS | F2 outside click closes and reaches page |
+| PASS | F21 panel, host, six actions and footer are labelled |
+| PASS | F22 missing snapshot stays closed and logs once |
+| PASS | render scc-basic light 1x |
+| PASS | render scc-basic light 2x |
+| PASS | render scc-basic dark 1x |
+| PASS | render scc-basic dark 2x |
+
+10/10 passed

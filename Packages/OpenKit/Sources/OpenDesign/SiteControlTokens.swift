@@ -1,0 +1,57 @@
+import AppKit
+import QuartzCore
+
+// Layout guesses and measured colors from site-control-boost-editor.md §§3–4.
+public enum SiteControlMetrics {          // §3; all guess unless a section cites evidence
+    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 12
+    public static let arrowBase: CGFloat = 18, arrowHeight: CGFloat = 9, anchorGap: CGFloat = 2
+    public static let inset: CGFloat = 14, headerHeight: CGFloat = 48, actionRowHeight: CGFloat = 44
+    public static let actionButton = CGSize(width: 44, height: 36), actionGap: CGFloat = 4, actionRadius: CGFloat = 8
+    public static let sectionHeaderHeight: CGFloat = 28, sectionBottomPadding: CGFloat = 10
+    public static let tile = CGSize(width: 142, height: 48), tileGap: CGFloat = 8, tileRadius: CGFloat = 10, tileIcon: CGFloat = 28
+    public static let boostRowHeight: CGFloat = 40   // extension item metrics belong to OpenExtensionsUI (§3.6)
+    public static let footerHeight: CGFloat = 44, reloadRowHeight: CGFloat = 32
+    public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 16, shadowOffsetY: CGFloat = 6
+}
+public enum BoostEditorMetrics {          // §4
+    public static let width: CGFloat = 268, inset: CGFloat = 14, headerHeight: CGFloat = 52
+    public static let wheelArea: CGFloat = 176, ringDiameter: CGFloat = 128, ringWidth: CGFloat = 18, padRadius: CGFloat = 46, puck: CGFloat = 24
+    public static let sideButton: CGFloat = 28, sliderRow: CGFloat = 28
+    public static let fontChip = CGSize(width: 56, height: 36), toolTile: CGFloat = 54, toolGap: CGFloat = 8
+    public static let zapRow: CGFloat = 30, zapVisibleRows = 5
+    public static let codeDefault = CGSize(width: 560, height: 640), codeMinimum = CGSize(width: 420, height: 360)
+    public static let gutterWidth: CGFloat = 36, codeFontSize: CGFloat = 12, codeLineHeight: CGFloat = 16
+    public static let contentInset: CGFloat = 12   // from the web panel's top-right corner
+}
+public enum BoostEditorColors {           // BO-22 values (facts); usage per §4 (guess)
+    public static let segmentBackground = DesignColor(light: .black(0.07), dark: .white(0.10))
+    public static let segmentSelection = DesignColor(light: .white(1), dark: .white(0.30))
+    public static let sliderTrack = DesignColor(RGBA(hex: 0x3B3746, alpha: 0.05))
+    public static let sliderTint = DesignColor(RGBA(hex: 0x017AFF))
+    public static let warning = DesignColor(RGBA(hex: 0xFF5A5F))
+    public static let puck = DesignColor(RGBA(hex: 0xFAFBFF))
+    public static let puckPad = DesignColor(light: .black(0.04), dark: .white(0.06))
+    public static let label = DesignColor(light: .white(1), dark: .black(0.80))
+    public static let zapPreview = DesignColor(RGBA(hex: 0xD9D9D9))
+    public static let interstitialForeground = DesignColor(RGBA(hex: 0x2E2740))
+    public static let interstitialFooter = DesignColor(RGBA(hex: 0xCEDBFC))
+    public static let accents: [DesignColor] = [0x300EFF, 0x55B948, 0xDD0EFF, 0xFF560E, 0xFF0E82, 0x860EFF, 0xFF0E0E, 0xF1A23C]
+        .enumerated().map { DesignColor(RGBA(hex: UInt32($0.element), [1, 7].contains($0.offset) ? .displayP3 : .sRGB)) }
+}
+extension Motion { public static let popoverOpen: CFTimeInterval = 0.18, popoverClose: CFTimeInterval = 0.12 }
+extension Typography {
+    public static let siteControlTitle = FontToken(14, .semibold), sectionTitle = FontToken(12, .semibold)
+    public static let tileTitle = FontToken(12, .semibold), tileSubtitle = FontToken(11, .regular)
+    public static let boostRowTitle = FontToken(13, .medium), editorTitle = FontToken(14, .semibold)
+}
+
+public extension SiteControlMetrics {
+    static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12, anchorAlignmentY: CGFloat = 30
+    static let faviconFrame = CGRect(x: 14, y: 16, width: 16, height: 16)
+    static let titleX: CGFloat = 38, titleBaseline: CGFloat = 29
+    static let actionGlyph: CGFloat = 18, disabledAlpha: CGFloat = 0.3
+    static let separatorInset: CGFloat = 12
+    static let footerInset: CGFloat = 10, footerButton: CGFloat = 28, footerY: CGFloat = 8
+    static let securityPadding: CGFloat = 6, securityGlyph: CGFloat = 12, securityRadius: CGFloat = 6
+    static let moreGlyph: CGFloat = 13, focusWidth: CGFloat = 2
+}
