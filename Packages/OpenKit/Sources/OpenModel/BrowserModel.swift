@@ -1337,6 +1337,7 @@ public final class BrowserModel {
         if let tab = tab(id: id) {
             let old = tab.customTitle
             let new = title.isEmpty ? nil : title
+            guard title != (old ?? tab.title), new != old else { return }
             tab.customTitle = new
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
         } else if let folder = index[id]?.folder {

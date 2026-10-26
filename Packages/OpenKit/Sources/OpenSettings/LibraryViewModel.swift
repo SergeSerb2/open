@@ -50,6 +50,7 @@ import OpenStore
     public let faviconStore: FaviconStore?
     private let snapshot: SnapshotStore
     private var archiveOwners: [ItemID: ProfileID] = [:]
+    @ObservationIgnored private var archivedDisplayTitles: [ItemID: String] = [:]
     @ObservationIgnored private var archivedChildCounts: [ItemID: Int] = [:]
     private var activeArchiveLoad = UUID()
     private var cursors: [ProfileID: Int] = [:]
@@ -77,7 +78,7 @@ import OpenStore
         await reload()
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
-    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
+    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archivedDisplayTitles = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
         defer { if request == generation && load == activeArchiveLoad { archiveLoading = false } }
@@ -90,6 +91,8 @@ import OpenStore
         let page = Array(candidates.sorted { a, b in a.1.archivedAt == b.1.archivedAt ? a.1.id.description < b.1.id.description : a.1.archivedAt > b.1.archivedAt }.prefix(100))
         for (profile, row) in page {
             cursors[profile, default: 0] += 1; archiveOwners[row.id] = profile
+            let custom = (try? JSONDecoder().decode(ArchivedTitle.self, from: Data(row.payloadJSON.utf8)))?.customTitle
+            archivedDisplayTitles[row.id] = row.kind == .folder ? row.title : (custom ?? TidyTitles.tidy(title: row.title, url: row.url))
             if row.kind == .folder { archivedChildCounts[row.id] = Self.countArchivedChildren(row) }
         }
         archiveRows += page.map(\.1); archiveHasMore = page.count == 100; archiveLoading=false
@@ -97,6 +100,9 @@ import OpenStore
             if favicons[row.id] != icon { faviconImages[row.id]=icon.flatMap{NSImage(data:$0)} }
             favicons[row.id] = icon } }
     }
+    private struct ArchivedTitle: Decodable { let customTitle: String? }
+    public func archivedDisplayTitle(_ row: ArchivedTabRecord) -> String { archivedDisplayTitles[row.id] ?? row.title }
+
     public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
         guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }
