@@ -8,17 +8,22 @@ import OpenImport
 @MainActor @Observable public final class ImportWizardViewModel {
     public enum Step: String, CaseIterable { case choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
     unowned let root: SettingsViewModel
+    private let importActions: any ImportActions
     public var plan: ImportPlan
     public var step: Step = .choose
     public private(set) var counts: [String: Int] = [:]
+    public private(set) var probe: ArcProbeResult?
+    private var countRequest=UUID()
     public private(set) var spaceMapping: [String] = []
     public private(set) var readable = false
-    public private(set) var busy = false
+    private var counting=false
+    public private(set) var isImporting=false
+    public var busy:Bool {counting || isImporting}
     public private(set) var errorText = ""
     public private(set) var outcome: ImportOutcome?
     public private(set) var consentWasDecided = false
-    public init(root: SettingsViewModel, directory: URL? = nil) {
-        self.root = root
+    public init(root: SettingsViewModel, directory: URL? = nil, actions: (any ImportActions)? = nil) {
+        self.root = root; self.importActions = actions ?? root.actions
         let path = root.defaults.string(forKey: "open.import.lastArcDir")
         plan = ImportPlan(directory: directory ?? path.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc"))
     }
@@ -27,75 +32,67 @@ import OpenImport
         if path.hasPrefix(root.root.path + "/") { return "Open Data/" + String(path.dropFirst(root.root.path.count + 1)) }
         return (path as NSString).abbreviatingWithTildeInPath
     }
-    public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || plan.secretsRequested) }
+    public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public func choose(directory: URL) async { plan.directory = directory; await refreshCounts() }
     public func refreshCounts() async {
-        readable = false; busy = true; errorText = ""; defer { busy = false }
-        do {
-            let directory = plan.directory
-            let summary = try await Task.detached(priority: .utility) {
-                let parsed = try ArcImporter(arcDirectory: directory).readSidebar()
-                return parsed
-            }.value
-            let result = try ArcImporter(arcDirectory: directory).importAll(sidebar: summary)
-            let report = result.report
-            counts = ["Spaces": report.spaces, "Pinned and Today tabs": report.pinnedTabs + report.todayTabs,
-                      "Favorites": report.favorites, "Folders": report.folders, "Archive": report.archiveImported,
-                      "Profiles": report.profiles, "Routing rules": report.routingRules, "Skipped easels": report.skippedEasels,
-                      "Skipped notes": report.skippedNotes, "Skipped unknown": report.skippedUnknown, "Welcome items": report.importedWelcome,
-                      "Archive accounted": report.archiveAccounted, "Archive total": report.archiveTotal]
-            spaceMapping = result.model.spaces.map { result.model.displayTitle(for: $0) + " → " + result.model.displayTitle(for: $0) }
-            // Counts only: these readers do not probe or read any Keychain item.
-            var secrets = 0, history = 0
-            let source = plan.directory
-            let names = result.model.profiles.map(\.dataDirectoryName)
-            let totals = try await Task.detached(priority: .utility) { () -> (Int, Int) in
-                var secretCount = 0, historyCount = 0
-                for name in names {
-                    let directory = source.appendingPathComponent("User Data").appendingPathComponent(name)
-                    if ["Login Data", "Cookies", "Web Data"].contains(where: { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }) {
-                        let report = try ArcSecretsReader(profileDirectory: directory).countOnly()
-                        secretCount += report.loginRows + report.cookieRows + report.addressRows + report.cardRows
-                    }
-                    let history = directory.appendingPathComponent("History")
-                    if FileManager.default.fileExists(atPath: history.path) { let report = try await ArcHistoryReader(historyFileURL: history).readBatches(consume: { _ in }); historyCount += report.keptVisits }
-                }
-                return (secretCount, historyCount)
-            }.value
-            secrets = totals.0; history = totals.1
-            counts["Passwords and cookies"] = secrets; counts["History"] = history; counts["Search settings"] = report.profiles
-            readable = true
-        } catch { counts = [:]; spaceMapping = []; errorText = "No readable import data found at \(plan.directory.path)." }
+        let request=UUID();countRequest=request
+        readable=false;counting=true;errorText="";probe=nil
+        let directory=plan.directory
+        let result=await ArcProbe(arcDirectory:directory).run()
+        guard !Task.isCancelled,request == countRequest,directory == plan.directory else {if request == countRequest {counting=false};return}
+        let labels=await Task.detached(priority:.utility) {(try? ArcImporter(arcDirectory:directory).spaceMappingLabels()) ?? []}.value
+        guard !Task.isCancelled,request == countRequest,directory == plan.directory else {if request == countRequest {counting=false};return}
+        probe=result;counts=result.settingsCounts;spaceMapping=labels
+        readable=result.sidebarFound && result.spaces != nil
+        counting=false
+        if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
+    }
+    public func countLabel(_ category:String)->String {
+        if let count=counts[category] {let partial=category == "History" ? probe?.historyPartial == true:category == "Passwords and cookies" && probe?.savedItemsPartial == true;return "Found: \(count.formatted())"+(partial ? " (partial)":"")}
+        guard let probe else {return "Counting…"}
+        let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
+        return found ? "Could not be read":"Not found"
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
     public var reportSummary:String {
-        let result=outcome?.counts ?? [:],spaces=result["Spaces"] ?? result["Imported Spaces",default:0]
-        let tabs=result["Imported tabs"] ?? result["Pinned and Today tabs",default:0]+result["Favorites",default:0]
-        return "Imported \(spaces) \(spaces == 1 ? "Space":"Spaces") and \(tabs) \(tabs == 1 ? "tab":"tabs")."
+        var parts:[String]=[]
+        if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
+        if ["Imported tabs","Pinned and Today tabs","Favorites"].allSatisfy({outcome?.failures[$0] == nil}) {parts.append(ImportCountCopy.phrase(reportCount("Imported tabs"),singular:"tab",plural:"tabs"))}
+        return parts.isEmpty ? "Import finished.":"Imported "+parts.joined(separator:" and ")+"."
     }
-    public func reportCount(_ category:String)->Int {outcome?.counts[category] ?? 0}
+    public func reportCount(_ category:String)->Int {outcome?.importedCount(category) ?? 0}
     public var reportSkipped:String {
         let result=outcome?.counts ?? [:]
         var parts:[String]=[]
-        for (key,singular,plural) in [("Skipped easels","easel","easels"),("Skipped notes","note","notes"),("Skipped unknown","unsupported item","unsupported items")] {
-            let count=result[key,default:0];if count > 0 {parts.append("\(count) \(count == 1 ? singular:plural)")}
+        for (key,singular,plural) in [("Skipped easels","Easel","Easels"),("Skipped notes","Note","Notes"),("Skipped unknown","unsupported item","unsupported items")] {
+            let count=result[key,default:0];if count > 0 {parts.append(ImportCountCopy.phrase(count,singular:singular,plural:plural))}
         }
         return parts.isEmpty ? "":"Skipped: " + parts.joined(separator:", ")
     }
+    public var hasImportedData:Bool {outcome?.didImportAnything ?? false}
     public var passwordsWereNotImported:Bool {!plan.secretsConsented}
-    public var canImportPasswordsAndCookies: Bool { root.actions.canImportPasswordsAndCookies }
+    public var canImportPasswordsAndCookies: Bool { importActions.canImportPasswordsAndCookies }
     public func review() { guard canContinue else { return }; step = .review }
     public func beginImport() async {
         guard step == .review, canContinue else { return }
-        if plan.secretsRequested && !consentWasDecided { step = .consent; return }
+        await requestImport()
+    }
+    /// First run can start while its estimate is still pending; the shared action reports read errors.
+    public func beginImport(plan: ImportPlan) async {
+        guard !isImporting, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
+        self.plan=plan; if !canImportPasswordsAndCookies {self.plan.skipSecrets()}; consentWasDecided=false; outcome=nil; errorText=""; step = .review
+        await requestImport()
+    }
+    private func requestImport() async {
+        if plan.secretsRequested && canImportPasswordsAndCookies && !consentWasDecided { step = .consent; return }
         await execute()
     }
-    public func allowAndImportSecrets() async { guard root.actions.canImportPasswordsAndCookies, step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.consentToSecrets(); await execute() }
+    public func allowAndImportSecrets() async { guard importActions.canImportPasswordsAndCookies, step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.consentToSecrets(); await execute() }
     public func skipSecrets() async { guard step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.skipSecrets(); await execute() }
     private func execute() async {
-        busy = true; step = .progress
-        let result = await root.actions.runImport(plan: plan)
-        outcome = result; errorText = result.errorText ?? ""; busy = false; step = .report
+        isImporting = true; step = .progress
+        let result = await importActions.runImport(plan: plan)
+        outcome = result; errorText = result.errorText ?? ""; isImporting = false; step = .report
         root.profiles.refresh(); root.refreshLinks()
     }
     public func retry() { guard !busy else { return }; outcome = nil; step = .choose }
@@ -114,26 +111,22 @@ public struct ImportWizard: View {
                 switch model.step {
                 case .choose:
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
-                    option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested)
-                    Text("Search settings imports your engine choice only.").font(.caption).foregroundStyle(.secondary)
+                    option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
+                    Text("Imports your search engine choice only.").font(.caption).foregroundStyle(.secondary)
                 case .review:
                     ForEach(model.spaceMapping, id: \.self) { Text($0) }
-                    Text("Profiles found: \(model.counts["Profiles", default: 0]) · Routing rules found: \(model.counts["Routing rules", default: 0])")
-                    Text("Skipped: \(model.counts["Skipped easels", default: 0]) \(model.counts["Skipped easels"] == 1 ? "easel" : "easels"), \(model.counts["Skipped notes", default: 0]) \(model.counts["Skipped notes"] == 1 ? "note" : "notes"), \(model.counts["Skipped unknown", default: 0]) unknown items.")
+                    Text("Found: \(ImportCountCopy.phrase(model.counts["Profiles",default:0],singular:"Profile",plural:"Profiles")) · \(ImportCountCopy.phrase(model.counts["Routing rules",default:0],singular:"routing rule",plural:"routing rules"))")
+                    Text("Skipped: \(ImportCountCopy.phrase(model.counts["Skipped easels",default:0],singular:"Easel",plural:"Easels")), \(ImportCountCopy.phrase(model.counts["Skipped notes",default:0],singular:"Note",plural:"Notes")), \(ImportCountCopy.phrase(model.counts["Skipped unknown",default:0],singular:"unknown item",plural:"unknown items")).")
                     Text("Easels and Notes do not import. Open has no Easels or Notes.").foregroundStyle(.secondary)
                 case .consent:
-                    if model.canImportPasswordsAndCookies {
-                        Text("Import passwords and cookies from Arc?").font(.headline)
-                        Text("Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else.")
-                    } else {
-                        Text("Passwords and cookies can't be imported yet.").font(.headline)
-                        Text("Open found \(model.counts["Passwords and cookies", default:0]) saved items in Arc. Open didn't read or copy them.")
-                    }
+                    let copy=PasswordsImportCopy(canImport:model.canImportPasswordsAndCookies,savedItems:model.probe == nil ? nil:(model.probe?.secretsFound == false ? 0:model.counts["Passwords and cookies"]))
+                    Text(copy.title).font(.headline)
+                    Text(copy.body)
                 case .progress: ProgressView(); Text("Importing selected data…")
                 case .report:
-                    if model.outcome?.errorText == nil {
+                    if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(name);Spacer();Text("\(model.reportCount(name))").monospacedDigit()}}
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.reportCount(name).formatted()).monospacedDigit()}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
@@ -145,21 +138,21 @@ public struct ImportWizard: View {
                 if model.step != .report { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
-                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
-                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
+                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!model.canContinue)
+                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!model.canContinue)
                 case .consent:
                     if model.canImportPasswordsAndCookies {
-                        Button("Continue Without Passwords") { Task { await model.skipSecrets() } }
-                        Button("Import Passwords and Cookies") { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction)
-                    } else { Button("Continue Without Passwords") { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction) }
+                        Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }
+                        Button(PasswordsImportCopy.allowButton) { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
+                    } else { Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
                 case .progress: EmptyView()
-                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction)
+                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
                 }
             }
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)
         .task { if !model.readable { await model.refreshCounts() } }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
-        HStack { Toggle(name, isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text("Found: \(model.counts[name, default: 0])").foregroundStyle(.secondary).monospacedDigit() }
+        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
     }
 }
