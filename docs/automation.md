@@ -214,3 +214,17 @@ Settings/Library. `--only commandbar` remains available with the same checks.
 Use `--style chrome` to exercise production P1 tab hosting. Screenshot comparisons
 request the existing `window-frame unconstrained=true` mode and wait for the exact
 reference size; their dimensions and ≤1 pt/ΔE00≤2 assertions stay unchanged.
+
+
+The harness's data root is `.re/e2e-<suite>-<style>/user-data` in its own worktree,
+not a shared Application Support path. A native activation helper addresses the
+PID returned by that socket and first checks its exact executable path; it never
+activates an Open instance by bundle identifier. App cleanup waits for that PID
+to exit even if the LaunchServices waiter has ended. Native mouse moves carry a
+request tag and return only after the local monitor and reveal tracker have
+consumed that request. Coalescing stays enabled and production chrome is unchanged.
+
+A lead-requested display hold is enforced by `.re/hold-on-screen`. While it exists,
+the harness refuses new Open launches. The file must be removed only after an
+explicit resume instruction; an elapsed estimate is not permission. Offscreen
+renderers and compilation do not require removing the file.

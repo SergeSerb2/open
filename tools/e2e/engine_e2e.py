@@ -49,11 +49,19 @@ CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 class Open:
     def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
+        if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
+            raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
         self.executable = app
         self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")
+        self.activator = os.path.join(ROOT, ".re", "e2e-tools", "activate-own-app")
+        if not os.path.exists(self.activator) or os.path.getmtime(self.activator) < os.path.getmtime(activator_source):
+            os.makedirs(os.path.dirname(self.activator), exist_ok=True)
+            subprocess.run(["nice", "-n", "10", "xcrun", "swiftc", "-O", "-swift-version", "6", "-parse-as-library",
+                            activator_source, "-o", self.activator], check=True)
         self.pid = None
         env = dict(os.environ, OPEN_USER_DATA=user_data)
         env.update(extra_env or {})
@@ -90,9 +98,9 @@ class Open:
         foreground_input = cmd in ("key", "focus", "mouse") or (cmd == "window-focus" and args.get("activate"))
         if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
-            # LaunchServices foreground request if another app took focus.
-            # This targets only this suite's absolute Open.app bundle path.
-            subprocess.run(["/usr/bin/open", "-a", self.bundle], check=True, timeout=10)
+            # foreground request if another app took focus. Address the exact
+            # verified PID; a bundle identifier can name another Open worktree.
+            subprocess.run([self.activator, str(self.pid), self.executable], check=True, timeout=10)
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(self.sock)
@@ -125,16 +133,23 @@ class Open:
             self.call("quit")
         except Exception:
             pass
+        # The launch waiter may have been interrupted independently of its app.
+        # Wait for the actual app PID too, and never kill another executable.
+        def still_ours():
+            if not self.pid:
+                return False
+            path = ctypes.create_string_buffer(4096)
+            libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+            return (libproc.proc_pidpath(self.pid, path, len(path)) > 0
+                    and os.path.realpath(os.fsdecode(path.value)) == os.path.realpath(self.executable))
+        deadline = time.monotonic() + 15
+        while still_ours() and time.monotonic() < deadline:
+            time.sleep(.05)
+        if still_ours():
+            os.kill(self.pid, signal.SIGKILL)
         try:
-            self.proc.wait(15)
+            self.proc.wait(2)
         except subprocess.TimeoutExpired:
-            # Killing the `open -W` waiter does not kill its app. Confirm the
-            # recorded PID still belongs to this exact binary before cleanup.
-            if self.pid:
-                path = ctypes.create_string_buffer(4096)
-                libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
-                if libproc.proc_pidpath(self.pid, path, len(path)) > 0 and os.path.realpath(os.fsdecode(path.value)) == os.path.realpath(self.executable):
-                    os.kill(self.pid, signal.SIGKILL)
             self.proc.kill()
             self.proc.wait()
         if os.path.exists(self.launch_log_path):
