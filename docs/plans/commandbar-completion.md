@@ -639,3 +639,21 @@ Agents must not launch or drive Arc (AGENTS.md rules 4–5). These need the user
 5. Command bar: type 4 letters of a host you have open, then press Backspace once, Right arrow once, and Left arrow once (one frame after each key).
 6. A command bar list that shows a three-pane split and a vertical split.
 7. Command bar: type a full host (for example a site you have not opened today) and stop; then type the same host again after visiting it (the "or Space" difference, Q13).
+
+## Appendix — Lead decisions (2026-10-26)
+
+- Approved as the command bar completion plan.
+- Q1 Hold-Cmd hints are on by default, for every Cmd+1…9 target. No hints while the sidebar is hidden.
+- Q2 The Actions scope opens with `actions` + Tab, plus an unbound `search-actions` command. No bare Control trigger.
+- Q3 The sidebar URL field hides while the toolbar shows ("Show as Toolbar").
+- Q4 The toolbar has no animation: one page resize.
+- Q5 The toolbar setting is per window. A new window copies the key window's setting.
+- Q6 The field shows the candidate's letter case (F0062).
+- Q7 Left arrow with a completion uses native behavior: keep the text and put the caret at the selection start.
+- Q8 Stripping trackers from copied URLs is a separate follow-up.
+- Q9 The (i) button and Cmd+I open the Essential Keyboard Shortcuts window.
+- Q10 The split icon uses 15 pt cells for 3–4 panes and vertical splits. Refit it when it is captured.
+- Q11 Remove the Shortcuts pane's `basics` filter.
+- Q12 Cmd+T offers the current tab.
+- Q13 Keep the current "or Space" rule for a whole host.
+- The screenshots go into the user's single combined Arc capture session.
