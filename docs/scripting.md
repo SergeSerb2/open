@@ -197,7 +197,7 @@ remain in `/tmp/script-check/`; they are not installed as a product or test targ
 
 ## Plan adaptations and limits
 
-- The lead's naming decision replaces the stale “Little Arc” phrase in §3's application-tab description with “Little Open”. Terms and codes are unchanged.
+- The lead's naming decision replaces the stale product name in §3's application-tab description with “Little Open”. Terms and codes are unchanged.
 - Foundation's SDK declares `NSObject.objectSpecifier` nonisolated and explicitly marks `NSScriptObjectSpecifier` non-Sendable. Swift rejects a main-actor override. Space/tab overrides therefore use a synchronous `MainActor.assumeIsolated` boundary and a local `nonisolated(unsafe)` result variable. This asserts the main-thread Cocoa call contract without making wrappers or specifiers Sendable. It is a narrow exception to §10's boundary guidance, required to build without warnings.
 - Indexed KVC getters return optional wrappers so invalid indices can return nil and error 1000 without a crash. Explicit Objective-C insertion/removal names follow `NSScriptKeyValueCoding.h` (`insertIn<Key>:atIndex:` and `removeFrom<Key>AtIndex:`); the Swift names stay as specified. The final probe calls Cocoa `insertValue`/`removeValue`, not only the Swift methods.
 - `removeFavorite` inserts at the start of Today. A second `moveNode(..., at: nil)` enforces the plan's end-of-destination rule for `topApp → unpinned` without editing OpenModel.
