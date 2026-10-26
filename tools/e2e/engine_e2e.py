@@ -851,9 +851,9 @@ def window_flow_checks(factory, results, tmp):
         left = wait_until(lambda: not app.call("window-state")["revealed"], timeout=3, step=0.05)
         results["hide_reveal"] = {"ok": hidden["sidebarMode"] == "hidden" and hidden["panel"][0] == 10
                                       and bool(reveal) and dismissed and selected and bool(left)}
-        app.call("key", key="s", modifiers=["cmd"], route="app")
+        toggle_route = app.call("key", key="s", modifiers=["cmd"], route="app")
         time.sleep(0.3)
-        results["toggle_sidebar"] = {"ok": app.call("window-state")["sidebarMode"] == "anchored"}
+        results["toggle_sidebar"] = {"ok": app.call("window-state")["sidebarMode"] == "anchored", "route":toggle_route, "state":app.call("window-state")}
         app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
         app.call("key", key="s", modifiers=["cmd"], route="app")
         time.sleep(0.3)
@@ -1358,7 +1358,9 @@ def commandbar_checks(factory, results, tmp, config):
         return wait_until(lambda: state() if state().get('text') == text and state().get('final') else None, timeout=5, step=.05)
     def press(key, **kw): return app.call('key', key=key, **kw)
     try:
-        tab = app.call('tabs')[0]['id']; wait_until(lambda: app.eval(tab, 'document.title') == 'Shell C /start', step=.1)
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, 'document.title') == 'Shell C /start', step=.1)
         app.call('suggest-remote', enabled=False)
         assert wait_until(lambda: app.call('hotkey-state')['prepared'], timeout=5, step=.02), 'post-paint command preparation did not run'
         results['lazy_commandbar'] = {'ok': state().get('created') is False}

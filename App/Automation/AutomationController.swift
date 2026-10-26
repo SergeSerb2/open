@@ -698,7 +698,7 @@
     private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window else { throw Failure(message: "no window") }
       target.makeKeyAndOrderFront(nil); NSApp.activate()
-      for _ in 0..<20 { if NSApp.isActive { break }; try? await Task.sleep(for: .milliseconds(10)) }
+      for _ in 0..<20 { if NSApp.isActive && target.isKeyWindow { break }; try? await Task.sleep(for: .milliseconds(10)) }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).
@@ -713,6 +713,7 @@
             }
           }
         }
+        try? await Task.sleep(for: .milliseconds(20))
         return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
       }
       let keys: [String: (String, UInt16)] = [
@@ -744,7 +745,12 @@
         else { continue }
         if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
       }
-      return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
+      // CEF's window key callback is asynchronous. Report after its next pump
+      // turn, as a user-facing automation caller expects.
+      try? await Task.sleep(for: .milliseconds(20))
+      return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+        "sidebarMode": w.windowState.sidebarMode.rawValue, "barPresented": w.commandBarSession?.isPresented == true,
+        "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }
 
     private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
