@@ -16,7 +16,7 @@ let package = Package(
     targets: [
         .target(name: "OpenModel"),
         .target(name: "OpenStore", dependencies: ["OpenModel"], linkerSettings: [.linkedLibrary("sqlite3")]),
-        .target(name: "OpenImport", dependencies: ["OpenModel"]),
+        .target(name: "OpenImport", dependencies: ["OpenModel"], linkerSettings: [.linkedLibrary("sqlite3"), .linkedFramework("Security")]),
         .target(name: "OpenSuggest", dependencies: ["OpenModel", "OpenStore"], resources: [.copy("Resources/public_suffix_list.dat")]),
         .target(name: "OpenCommands", dependencies: ["OpenModel", "OpenSuggest"], resources: [.copy("Resources/expected-menu.json")], linkerSettings: [.linkedFramework("Carbon")]),
         .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest"]),

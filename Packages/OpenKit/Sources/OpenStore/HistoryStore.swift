@@ -13,12 +13,14 @@ public struct HistoryMatch: Sendable {
 /// SQLite + FTS5 history. All access runs inside this actor (off the main thread).
 /// Budget: < 5 ms search on a 100k-URL database (FTS5 prefix index + frecency sort).
 public actor HistoryStore {
-    private var db: SQLiteDB?
+    var db: SQLiteDB?
     public let fileURL: URL
 
     public init(root: URL) {
         self.fileURL = root.appendingPathComponent("State/history.sqlite3")
     }
+
+    public init(fileURL: URL) { self.fileURL = fileURL }
 
     public func open() {
         guard db == nil else { return }
@@ -33,6 +35,10 @@ public actor HistoryStore {
           id INTEGER PRIMARY KEY, url_id INTEGER NOT NULL REFERENCES urls(id),
           time REAL NOT NULL, transition TEXT NOT NULL DEFAULT 'link');
         CREATE INDEX IF NOT EXISTS idx_visits_time ON visits(time DESC);
+        CREATE TABLE IF NOT EXISTS history_import_keys(
+          visit_key TEXT PRIMARY KEY NOT NULL,
+          url_id INTEGER NOT NULL REFERENCES urls(id));
+        CREATE INDEX IF NOT EXISTS idx_visits_url_time ON visits(url_id, time);
         CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(title, url, content='urls', content_rowid='id');
         CREATE TRIGGER IF NOT EXISTS urls_ai AFTER INSERT ON urls BEGIN
           INSERT INTO history_fts(rowid, title, url) VALUES (new.id, new.title, new.url);

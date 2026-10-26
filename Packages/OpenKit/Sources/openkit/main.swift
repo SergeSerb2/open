@@ -2,13 +2,17 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check> ...")
+    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
 
 do {
     switch command {
+    case "import-arc-secrets":
+        await Task.detached(priority: .utility) { runImportArcSecrets(args: rest) }.value
+    case "import-arc-history":
+        await runImportArcHistory(args: rest)
     case "import-arc":
         try await runImportArc(args: rest)
     case "archive-list":
