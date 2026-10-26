@@ -61,10 +61,12 @@ if firstFrame.presented {
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
 let configuration = OEEngineConfiguration()
-// root_cache_path = <root>/Profiles. The default profile's engine data is
-// then Profiles/Default/ (CEF's fixed name for the global context); other
-// profiles use Profiles/<dir>/Engine/ (BrowserWindowController.context(for:)).
-configuration.userDataDirectory = directories.root.appendingPathComponent("Profiles", isDirectory: true)
+// root_cache_path = <root>/Engine. The default profile's engine data is
+// Engine/Default (CEF's fixed name for the global context); other profiles
+// use Engine/<dir> (EngineWebContentHostFactory.context(for:)). CEF loads a
+// disk profile only for a direct child of root_cache_path
+// (docs/plans/profiles.md §6.2). OpenDataRoot moved older data there.
+configuration.userDataDirectory = directories.engineRoot
 configuration.logFile = directories.root.appendingPathComponent("State/engine.log")
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort

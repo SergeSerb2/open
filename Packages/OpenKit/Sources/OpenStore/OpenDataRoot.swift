@@ -115,8 +115,14 @@ public enum OpenDataRoot {
         var report = ProfileMigrationReport()
         if !DataRootLocks.isPrepared(root: root) {
             report = try ProfileMigration.migrateSingleProfileLayout(root: root, profiles: model?.profiles ?? [])
+            // Before any engine start: Chromium's data moves to <root>/Engine.
+            let engine = try EngineLayoutMigration.migrate(
+                root: root, profileDirectoryNames: Set((model?.profiles ?? []).map(\.dataDirectoryName)))
+            report.moved += engine.moved
+            report.skipped += engine.skipped
             DataRootLocks.markPrepared(root: root)
             for line in report.moved { FileHandle.standardError.write(Data("migration moved \(line)\n".utf8)) }
+            for line in report.skipped { FileHandle.standardError.write(Data("migration skipped \(line)\n".utf8)) }
         }
         if let model {
             model.unavailableProfileDirectoryNames.formUnion(try directories.unavailableDirectoryNames())

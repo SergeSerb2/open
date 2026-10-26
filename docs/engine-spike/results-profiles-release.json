@@ -1,0 +1,129 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "embeddedUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001051"
+  },
+  "profiles": {
+    "durable_second_profile": {
+      "default_cookie": "oe_default=1",
+      "ok": true,
+      "work_cookie": "oe_work=1",
+      "work_storage": "work"
+    },
+    "engine_layout": {
+      "layout": {
+        "engine_default_cookies": true,
+        "engine_work_cookies": true,
+        "local_state": true,
+        "profiles_default": [
+          "AdBlock",
+          "Boosts",
+          "State"
+        ]
+      },
+      "ok": true,
+      "work_dir": "Profile-12978A31"
+    },
+    "extension_isolation": {
+      "default_profile_probe_sees": {
+        "urls": [
+          "https://example.com/?profile=default"
+        ],
+        "windows": [
+          52582695
+        ]
+      },
+      "ok": true,
+      "work_profile_probe_sees": {
+        "urls": [
+          "https://example.com/?profile=work"
+        ],
+        "windows": [
+          52582691
+        ]
+      }
+    },
+    "migration_crash_cleanup": {
+      "after_relaunch": {
+        "default_cookie": "oe_default=1",
+        "ok": true,
+        "profiles_default": [
+          "AdBlock",
+          "Boosts",
+          "State"
+        ]
+      },
+      "at_crash": {
+        "exit": 86,
+        "original_cookies_kept": true,
+        "published": true
+      },
+      "ok": true
+    },
+    "migration_crash_copied": {
+      "after_relaunch": {
+        "default_cookie": "oe_default=1",
+        "ok": true,
+        "profiles_default": [
+          "AdBlock",
+          "Boosts",
+          "State"
+        ]
+      },
+      "at_crash": {
+        "exit": 86,
+        "original_cookies_kept": true,
+        "published": false
+      },
+      "ok": true
+    },
+    "migration_crash_published": {
+      "after_relaunch": {
+        "default_cookie": "oe_default=1",
+        "ok": true,
+        "profiles_default": [
+          "AdBlock",
+          "Boosts",
+          "State"
+        ]
+      },
+      "at_crash": {
+        "exit": 86,
+        "original_cookies_kept": true,
+        "published": true
+      },
+      "ok": true
+    },
+    "migration_crash_staged": {
+      "after_relaunch": {
+        "default_cookie": "oe_default=1",
+        "ok": true,
+        "profiles_default": [
+          "AdBlock",
+          "Boosts",
+          "State"
+        ]
+      },
+      "at_crash": {
+        "exit": 86,
+        "original_cookies_kept": true,
+        "published": false
+      },
+      "ok": true
+    },
+    "migration_from_legacy": {
+      "default_cookie": "oe_default=1",
+      "ok": true,
+      "profiles_default": [
+        "AdBlock",
+        "Boosts",
+        "State"
+      ]
+    }
+  },
+  "started": "2026-10-26 00:52:59",
+  "style": "chrome"
+}

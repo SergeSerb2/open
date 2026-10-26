@@ -513,6 +513,23 @@ class OEDefaultClient : public CefClient,
 
 - (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
                                  directory:(NSURL*)directory {
+  // CEF loads a disk profile only when cache_path's parent is
+  // root_cache_path, compared as strings (ChromeBrowserContext::
+  // InitializeAsync); anything else silently becomes an in-memory profile.
+  // userDataDirectory is already resolved (/tmp -> /private/tmp), so name the
+  // child through it.
+  char resolved[PATH_MAX];
+  if (realpath(directory.URLByDeletingLastPathComponent.fileSystemRepresentation,
+               resolved) &&
+      [@(resolved) isEqualToString:_configuration.userDataDirectory.path]) {
+    directory = [_configuration.userDataDirectory
+        URLByAppendingPathComponent:directory.lastPathComponent
+                        isDirectory:YES];
+  } else {
+    NSLog(@"OEEngine: %@ is not a direct child of %@; Chromium keeps that "
+          @"profile in memory",
+          directory.path, _configuration.userDataDirectory.path);
+  }
   NSString* path = directory.URLByStandardizingPath.path;
   if ([identifier isEqualToString:@"Default"] ||
       [path isEqualToString:_defaultContextDirectory.path]) {

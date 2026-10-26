@@ -486,9 +486,12 @@ the default. Never hardcode the default outside `SnapshotStore` /
   State/
     browser.json                 app-wide snapshot (unchanged, §4)
     favicons.sqlite3             GLOBAL favicon cache (path fixed here; CLI already takes --db)
+  Engine/                        CefSettings.root_cache_path (§6.2; lead decision 2026-10-25)
+    Default/                     the default Profile's Chromium profile dir (CEF's global context)
+    <dataDirectoryName>/         every other Profile's Chromium profile dir (its context's cache_path)
+    Local State, WidevineCdm/…   Chromium's installation-wide files
   Profiles/
     <dataDirectoryName>/         one directory per Profile; name from Profile.dataDirectoryName
-      Engine/                    CefRequestContext cache_path — Chromium profile dir (§6.2)
       State/
         history.sqlite3          this Profile's HistoryStore (Open's own history, FTS5)
         archive.sqlite3          this Profile's ArchiveStore
@@ -539,7 +542,11 @@ public struct ProfileDirectories: Sendable {
 Path rules (implement exactly; these are the §5.1 tree, nothing else):
 
 - `profileDirectory` = `root/Profiles/<dataDirectoryName>`.
-- `engineDirectory` = `profileDirectory/Engine`.
+- `engineRoot` = `root/Engine` (`root_cache_path`).
+- `engineDirectory` = `engineRoot/<dataDirectoryName>`. CEF loads a disk
+  profile only for a direct child of `root_cache_path` (§6.2). The default
+  Profile's engine data is always `engineRoot/Default`, whatever its
+  `dataDirectoryName` (CEF's global context).
 - `historyFileURL` / `archiveFileURL` / `sleepFileURL` =
   `profileDirectory/State/<name>.sqlite3`.
 - `boostsFileURL` = `profileDirectory/Boosts/boosts.json`.
@@ -550,7 +557,7 @@ Path rules (implement exactly; these are the §5.1 tree, nothing else):
   §3.2/§8 and validated there; a bad value here is a programmer error, not
   user input. (Do not silently sanitize: two Profiles must never collide
   onto one directory.)
-- `ensureProfileDirectories` creates `Engine/`, `State/`, `Boosts/`,
+- `ensureProfileDirectories` creates `State/`, `Boosts/`,
   `AdBlock/lists/` with intermediate directories. It is idempotent and
   creates no files. Call sites: App after `createProfile` succeeds;
   `openkit profiles create`; App bootstrap for every loaded Profile
@@ -569,7 +576,7 @@ site re-derives the name.
 | Store | Path | Scope | Status today | This plan |
 |---|---|---|---|---|
 | Snapshot | `<root>/State/browser.json` | Global | Implemented | Unchanged |
-| Engine (cookies, cache, logins, extensions, site settings, Chromium prefs) | `Profiles/<dir>/Engine/` | Per Profile | No engine yet | CEF owns the contents; Open only passes the path (§6). One request context each |
+| Engine (cookies, cache, logins, extensions, site settings, Chromium prefs) | `Engine/<dir>/` (default Profile: `Engine/Default/`) | Per Profile | No engine yet | CEF owns the contents; Open only passes the path (§6). One request context each |
 | History (Open) | `Profiles/<dir>/State/history.sqlite3` | Per Profile | Global `State/history.sqlite3` | Move + re-init (§5.4) |
 | Archive | `Profiles/<dir>/State/archive.sqlite3` | Per Profile | Global `State/archive.sqlite3` | Move + composite sink (§5.4) |
 | Sleep (`SleepStore`) | `Profiles/<dir>/State/sleep.sqlite3` | Per Profile | Planned only (memory-fork §7.5 said `State/sleep.sqlite3`) | Adopt the per-Profile path now; tell the memory implementer this plan supersedes that line |
@@ -707,6 +714,7 @@ delete, "Delete Profile data from disk" which the App runs in this order:
    Chromium Profile corrupts it.
 2. `ProfileDirectories.deleteProfileData(dataDirectoryName:)` with the name
    captured **before** the model delete (the Profile object is gone after).
+   It removes `Profiles/<dir>/` and `Engine/<dir>/`.
 3. `SnapshotStore.saveNow` so a crash cannot resurrect a Profile whose
    directory is gone. (If it did resurrect, `repairMissing…` does not apply
    — the Profile exists; its stores simply recreate empty. The save-first
@@ -767,13 +775,18 @@ Source: `~/Developer/open-engine/chromium_git/chromium/src/cef/include/`
 
 One-time CEF init (OpenEngine, before any browser):
 
-- `CefSettings.root_cache_path` = `<root>/Profiles` (absolute;
-  `ProfileDirectories(root:).profileDirectory` parent — compute it as
-  `root/Profiles`, never per-Profile).
-- `CefSettings.cache_path` = `<root>/Profiles/Default/Engine` — the global
+- `CefSettings.root_cache_path` = `<root>/Engine` (absolute;
+  `ProfileDirectories.engineRoot`). Lead decision 2026-10-25, replacing
+  `<root>/Profiles`: CEF loads a disk profile only when `cache_path`'s parent
+  equals `root_cache_path` as a string
+  (`ChromeBrowserContext::InitializeAsync`); `Profiles/<dir>/Engine` is a
+  grandchild, so CEF fell back to an in-memory off-the-record profile.
+- `CefSettings.cache_path` = `<root>/Engine/Default` — the global
   context **is** the default Profile. If the default Profile's
   `dataDirectoryName` is not `"Default"` (degenerate repair case), use that
-  Profile's `Engine/` path instead; the rule is "global = default Profile".
+  Profile's directory name instead; CEF keeps the global context at
+  `<root_cache_path>/Default` whatever is passed, so the rule is
+  "global = default Profile = `Engine/Default`".
 - `CefSettings.persist_session_cookies` = true, so session logins survive
   restart the way a Chromium Profile's do. Per-context override below.
 
@@ -1345,7 +1358,7 @@ channel on the real app:
    shows `B`.
 3. Switch back to Profile A: `/read` still shows `A`, not `B`. Assert the
    two Engine directories each gained Chromium cookie data under
-   `Profiles/<dirA>/Engine/` and `Profiles/<dirB>/Engine/` (`ls`; do not
+   `Engine/<dirA>/` and `Engine/<dirB>/` (`ls`; do not
    dump cookie values into the PR).
 4. Incognito window: `/read` shows no probe cookie; set one, close the
    window, reopen incognito: still none. Assert no new directory appeared
@@ -1447,7 +1460,7 @@ its gate; do not start the next step on a red gate.
   contexts, incognito contexts, teardown. No OpenKit edits.
 - Acceptance: §9.3 fallback (cefsimple two-context cookie check) passes;
   launch with 3 Profiles creates only the default context (registry log /
-  `Engine/` directory mtimes: only `Profiles/Default/Engine/` touched);
+  `Engine/` directory mtimes: only `Engine/Default/` touched);
   showing a second Profile's Space creates exactly its context.
 
 ### Step 7 — App wiring + full isolation (§6.3, §6.5, §9.3). **[NEEDS ENGINE]** Files: App target (Space-focus content swap, `.spaceProfileChanged` handling, delete teardown, §7.4 bootstrap)
@@ -1513,6 +1526,8 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 
 
 ## Appendix — Lead decisions (2026-10-25)
+
+- Engine root (supersedes engine-patches lead decision 4, "default profile engine data at `Profiles/Default/`"): Chromium's profile data lives under one engine root, `<root>/Engine/` = `root_cache_path`. `Engine/Default` is the default Profile, `Engine/<dir>` every other Profile. Open's own per-Profile files stay in `Profiles/<dir>/`. A one-time, crash-safe move (`OpenStore/EngineLayoutMigration.swift`, run by `OpenDataRoot.prepare` before the engine starts) brings older data over: the default Profile's Chromium files are cloned from `Profiles/Default/` into a staging folder, compared, published as `Engine/Default`, and only then removed; installation-wide files in `Profiles/` move with single renames; empty `Profiles/<dir>/Engine/` folders go away. Verified by `tools/e2e/engine_e2e.py --only profiles` (relaunch, both-direction extension isolation, legacy migration, a crash at each step).
 
 - Approved as written: deleting a Profile is refused while Spaces use it and always for the default Profile; Space→Profile moves allowed after a confirmation; `dataDirectoryName` is permanent; schema stays 1.
 - Q1 (named Arc profiles, StorableProfiles.json): keep the lenient parser; verify when a multi-profile Arc install is available.

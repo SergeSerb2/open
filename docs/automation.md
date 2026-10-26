@@ -157,5 +157,14 @@ Only the per-element measurement tables are written to `docs/engine-spike/`.
 The window suite reports `kernel_process_start` separately and requires the
 kernel timestamp in all ten benchmark launches. Debug timing rows print named
 SKIP results with a Release-only reason. Sidebar `space_switch_wrapper` proves
-the live page and wrapper context; `durable_profile_storage` remains BLOCKED on
-the CEF `root_cache_path` follow-up in docs/followups.md.
+the live page and wrapper context; `durable_profile_storage` points to the
+`profiles` suite.
+
+`tools/e2e/engine_e2e.py --only profiles` checks the engine data layout
+(`<root>/Engine`, docs/plans/profiles.md §6.2): each profile's copy of the
+tabs probe sees only its own tabs and windows (both directions); a second
+profile's cookie and localStorage survive a relaunch; a legacy layout (the
+default profile's Chromium files in `Profiles/Default`, installation files in
+`Profiles/`) migrates with its cookies; and a crash at each migration step
+(`OPENKIT_DEBUG_MIGRATION_CRASH=engine-copied|engine-staged|engine-published|engine-cleanup`)
+resumes on the next launch.

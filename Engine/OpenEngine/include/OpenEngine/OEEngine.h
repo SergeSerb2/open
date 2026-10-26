@@ -15,7 +15,8 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// Chromium's root_cache_path. Every persistent browser context lives
 /// under it. The global context (the default profile) is always
 /// <userDataDirectory>/Default: CEF ignores any other child path for it
-/// (cef_types.h, CefSettings.cache_path). Default:
+/// (cef_types.h, CefSettings.cache_path). Other contexts must be direct
+/// children: CEF keeps a deeper folder's profile in memory. Default:
 /// ~/Library/Application Support/Open.
 @property(nonatomic, copy) NSURL* userDataDirectory;
 

@@ -11,10 +11,22 @@ public struct ProfileDirectories: Sendable {
     }
 
     public func profileDirectory(dataDirectoryName: String) -> URL {
-        precondition(!dataDirectoryName.isEmpty && dataDirectoryName != "." && dataDirectoryName != ".." && !dataDirectoryName.contains("/"), "Invalid Profile directory name")
+        Self.validate(dataDirectoryName)
         return root.appendingPathComponent("Profiles", isDirectory: true).appendingPathComponent(dataDirectoryName, isDirectory: true)
     }
-    public func engineDirectory(dataDirectoryName: String) -> URL { profileDirectory(dataDirectoryName: dataDirectoryName).appendingPathComponent("Engine", isDirectory: true) }
+    /// Chromium's `root_cache_path`. CEF loads a disk profile only for a
+    /// direct child of it, so every profile's engine data is `Engine/<dir>`;
+    /// the default profile (CEF's global context) is always `Engine/Default`.
+    /// Installation-wide Chromium files (Local State, component downloads)
+    /// live here too. Open's own per-profile files stay in `Profiles/<dir>/`.
+    public var engineRoot: URL { root.appendingPathComponent("Engine", isDirectory: true) }
+    public func engineDirectory(dataDirectoryName: String) -> URL {
+        Self.validate(dataDirectoryName)
+        return engineRoot.appendingPathComponent(dataDirectoryName, isDirectory: true)
+    }
+    private static func validate(_ name: String) {
+        precondition(!name.isEmpty && name != "." && name != ".." && !name.contains("/"), "Invalid Profile directory name")
+    }
     private func stateFile(_ file: String, _ name: String) -> URL { profileDirectory(dataDirectoryName: name).appendingPathComponent("State", isDirectory: true).appendingPathComponent(file) }
     public func historyFileURL(dataDirectoryName: String) -> URL { stateFile("history.sqlite3", dataDirectoryName) }
     public func archiveFileURL(dataDirectoryName: String) -> URL { stateFile("archive.sqlite3", dataDirectoryName) }
@@ -23,8 +35,10 @@ public struct ProfileDirectories: Sendable {
     public func adBlockDirectory(dataDirectoryName: String) -> URL { profileDirectory(dataDirectoryName: dataDirectoryName).appendingPathComponent("AdBlock", isDirectory: true) }
     public func adBlockListsDirectory(dataDirectoryName: String) -> URL { adBlockDirectory(dataDirectoryName: dataDirectoryName).appendingPathComponent("lists", isDirectory: true) }
 
+    /// Open's own directories. The engine creates `Engine/<dir>` when the
+    /// profile's context first loads.
     public func ensureProfileDirectories(dataDirectoryName: String) throws {
-        let paths = [engineDirectory(dataDirectoryName: dataDirectoryName), historyFileURL(dataDirectoryName: dataDirectoryName).deletingLastPathComponent(), boostsFileURL(dataDirectoryName: dataDirectoryName).deletingLastPathComponent(), adBlockListsDirectory(dataDirectoryName: dataDirectoryName)]
+        let paths = [historyFileURL(dataDirectoryName: dataDirectoryName).deletingLastPathComponent(), boostsFileURL(dataDirectoryName: dataDirectoryName).deletingLastPathComponent(), adBlockListsDirectory(dataDirectoryName: dataDirectoryName)]
         for path in paths { try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true) }
     }
 
@@ -32,9 +46,8 @@ public struct ProfileDirectories: Sendable {
 
     public func unavailableDirectoryNames() throws -> Set<String> {
         var names: Set<String> = []
-        let profiles = root.appendingPathComponent("Profiles")
-        if FileManager.default.fileExists(atPath: profiles.path) {
-            names.formUnion(try FileManager.default.contentsOfDirectory(atPath: profiles.path))
+        for parent in [root.appendingPathComponent("Profiles"), engineRoot] where FileManager.default.fileExists(atPath: parent.path) {
+            names.formUnion(try FileManager.default.contentsOfDirectory(atPath: parent.path))
         }
         if FileManager.default.fileExists(atPath: retiredDirectoriesFileURL.path) {
             names.formUnion(try JSONDecoder().decode([String].self, from: Data(contentsOf: retiredDirectoriesFileURL)))
@@ -52,7 +65,10 @@ public struct ProfileDirectories: Sendable {
     }
 
     /// Caller must tear down the engine first. Model deletion alone never calls this.
+    /// Removes Open's files and the profile's engine data.
     public func deleteProfileData(dataDirectoryName: String) throws {
+        let engine = engineDirectory(dataDirectoryName: dataDirectoryName)
+        if DurableFiles.exists(engine) { try FileManager.default.removeItem(at: engine) }
         try FileManager.default.removeItem(at: profileDirectory(dataDirectoryName: dataDirectoryName))
     }
 }

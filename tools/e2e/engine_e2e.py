@@ -527,9 +527,9 @@ def feature_checks(app, style, results, tmp):
         app.call("space", space=home)
         app.call("close", tab=a)
         app.call("select", tab=t)
-        # The Work profile's engine data lives in Profiles/<dir>/Engine
-        # (docs/plans/profiles.md §5-6), separate from the default profile.
-        engine_dir = os.path.join(app.user_data, "Profiles", ctx or "?", "Engine")
+        # The Work profile's engine data lives in Engine/<dir>, a direct child
+        # of root_cache_path (docs/plans/profiles.md §6.2).
+        engine_dir = os.path.join(app.user_data, "Engine", ctx or "?")
         return {"ok": "oe_profile" not in r["cookie"] and r["storage"] is None and ctx not in (None, "Default")
                       and os.path.isdir(engine_dir),
                 "work_profile_sees": r, "work_tab_context": ctx, "work_engine_dir_exists": os.path.isdir(engine_dir),
@@ -555,7 +555,7 @@ def feature_checks(app, style, results, tmp):
 
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
-        cdm = os.path.join(app.user_data, "Profiles", "WidevineCdm")
+        cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
         got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=120, step=2)
         w = new_tab(app, "https://example.com/")
         r = app.eval(w, '(async () => { try { const a = await navigator.requestMediaKeySystemAccess("com.widevine.alpha",'
@@ -1600,7 +1600,7 @@ def sidebar_checks(factory, results, tmp):
         second_page = check_page(app, e, "Sidebar E")
         results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
                                                 and app.page(e)["context"] == context}
-        results["durable_profile_storage"] = {"status": "BLOCKED", "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof."}
+        results["durable_profile_storage"] = {"status": "SKIP", "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)"}
         background = new_tab(app, fixture("Profile background"))
         app.call("select", tab=e)
         previous = app.page(e)["identifier"]
@@ -1777,6 +1777,145 @@ def startup_failure_checks(factory, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Profiles: engine data under <root>/Engine (docs/plans/profiles.md §6.2)
+
+
+def profiles_checks(factory, results, tmp, config):
+    """Two launches on one data root, then the legacy layout and its
+    migration, including crashes at each migration step."""
+    root = None
+    default_url, work_url = "https://example.com/?profile=default", "https://example.com/?profile=work"
+
+    def cookie(app, tab):
+        return app.eval(tab, "document.cookie")
+
+    def probe_view(app):
+        """URLs and window ids the tabs probe sees from the focused profile.
+        Chrome loads --load-extension into each profile when it starts."""
+        wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
+        pop = app.call("popup", extension=PROBE)["identifier"]
+        wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
+        seen = app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll()]).then(([ts, ws]) =>"
+                             " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id)}))")
+        app.call("popup-close")
+        return seen
+
+    app = factory(urls=(), fresh=True)
+    try:
+        root = app.user_data
+        a = new_tab(app, default_url)
+        app.eval(a, 'document.cookie = "oe_default=1; max-age=86400"; localStorage.setItem("oe", "default"); 1')
+        home = [x for x in app.call("spaces") if x["focused"]][0]["id"]
+        work = app.call("space-create", title="Work", profile="Work")
+        b = new_tab(app, work_url)
+        work_dir = app.page(b)["context"]
+        app.eval(b, 'document.cookie = "oe_work=1; max-age=86400"; localStorage.setItem("oe", "work"); 1')
+        work_view = probe_view(app)
+        app.call("space", space=home)
+        app.call("select", tab=a)
+        default_view = probe_view(app)
+        results["extension_isolation"] = {
+            "ok": default_url in default_view["urls"] and work_url not in default_view["urls"]
+                  and work_url in work_view["urls"] and default_url not in work_view["urls"]
+                  and not set(default_view["windows"]) & set(work_view["windows"]),
+            "default_profile_probe_sees": default_view, "work_profile_probe_sees": work_view}
+        app.call("save")
+    finally:
+        app.quit()
+    layout = {
+        "engine_default_cookies": os.path.exists(os.path.join(root, "Engine", "Default", "Cookies")),
+        "engine_work_cookies": os.path.exists(os.path.join(root, "Engine", work_dir, "Cookies")),
+        "local_state": os.path.exists(os.path.join(root, "Engine", "Local State")),
+        "profiles_default": sorted(x for x in os.listdir(os.path.join(root, "Profiles", "Default")) if not x.startswith(".")),
+    }
+    results["engine_layout"] = {"ok": layout["engine_default_cookies"] and layout["engine_work_cookies"]
+                                      and layout["local_state"] and layout["profiles_default"] == ["AdBlock", "Boosts", "State"],
+                                "layout": layout, "work_dir": work_dir}
+
+    def check_cookies(app, label):
+        tabs = {t["url"]: t["id"] for t in app.call("tabs")}
+        app.call("select", tab=tabs[default_url])
+        app.call("wait", tab=tabs[default_url])
+        default_cookie = cookie(app, tabs[default_url])
+        app.call("space", space=work)
+        work_tab = [t["id"] for t in app.call("tabs") if t["url"] == work_url][0]
+        app.call("select", tab=work_tab)
+        app.call("wait", tab=work_tab)
+        work_cookie, work_storage = cookie(app, work_tab), app.eval(work_tab, 'localStorage.getItem("oe")')
+        app.call("space", space=home)
+        return {"default_cookie": default_cookie, "work_cookie": work_cookie, "work_storage": work_storage}
+
+    # Relaunch: each profile keeps its own cookie and storage.
+    app = factory(urls=())
+    try:
+        got = check_cookies(app, "relaunch")
+    finally:
+        app.quit()
+    results["durable_second_profile"] = {
+        "ok": "oe_work=1" in got["work_cookie"] and "oe_default" not in got["work_cookie"]
+              and got["work_storage"] == "work" and "oe_default=1" in got["default_cookie"]
+              and "oe_work" not in got["default_cookie"], **got}
+
+    # The old layout: root_cache_path was Profiles/. The default profile's
+    # Chromium files sat in Profiles/Default next to Open's folders,
+    # installation files in Profiles/, and other profiles kept nothing.
+    def make_legacy():
+        engine, profiles = os.path.join(root, "Engine"), os.path.join(root, "Profiles")
+        for name in os.listdir(os.path.join(engine, "Default")):
+            shutil.move(os.path.join(engine, "Default", name), os.path.join(profiles, "Default", name))
+        shutil.rmtree(os.path.join(engine, "Default"))
+        shutil.rmtree(os.path.join(engine, work_dir))
+        os.makedirs(os.path.join(profiles, work_dir, "Engine"), exist_ok=True)
+        os.makedirs(os.path.join(profiles, "Default", "Engine"), exist_ok=True)
+        for name in os.listdir(engine):
+            if not name.startswith("Singleton"):
+                shutil.move(os.path.join(engine, name), os.path.join(profiles, name))
+        shutil.rmtree(engine)
+
+    binary = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+
+    def crash_at(point):
+        env = dict(os.environ, OPEN_USER_DATA=root, OPENKIT_DEBUG_MIGRATION_CRASH=point)
+        with open(os.path.join(tmp, "crash-%s.log" % point), "w") as log:
+            return subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
+                                  timeout=60).returncode
+
+    def migrated(label):
+        app = factory(urls=())
+        try:
+            got = check_cookies(app, label)
+        finally:
+            app.quit()
+        profiles_default = sorted(x for x in os.listdir(os.path.join(root, "Profiles", "Default")))
+        engine_default = os.path.join(root, "Engine", "Default")
+        return {"ok": "oe_default=1" in got["default_cookie"] and os.path.exists(os.path.join(engine_default, "Cookies"))
+                      and profiles_default == ["AdBlock", "Boosts", "State"]
+                      and not os.path.exists(os.path.join(engine_default, ".open-engine-migration.json"))
+                      and not os.path.exists(os.path.join(root, "Profiles", "Local State"))
+                      and os.path.exists(os.path.join(root, "Engine", "Local State"))
+                      and not os.path.exists(os.path.join(root, "Profiles", work_dir, "Engine")),
+                "default_cookie": got["default_cookie"], "profiles_default": profiles_default}
+
+    make_legacy()
+    results["migration_from_legacy"] = migrated("legacy")
+
+    # A crash at each step resumes on the next launch; the originals stay
+    # until the copy is published.
+    for point in ("engine-copied", "engine-staged", "engine-published", "engine-cleanup"):
+        make_legacy()
+        code = crash_at(point)
+        state = {"exit": code,
+                 "original_cookies_kept": os.path.exists(os.path.join(root, "Profiles", "Default", "Cookies")),
+                 "published": os.path.exists(os.path.join(root, "Engine", "Default"))}
+        after = migrated(point)
+        published_expected = point in ("engine-published", "engine-cleanup")
+        results["migration_crash_" + point.split("-")[1]] = {
+            "ok": code == 86 and state["published"] == published_expected
+                  and (state["original_cookies_kept"] or point == "engine-cleanup") and after["ok"],
+            "at_crash": state, "after_relaunch": after}
+
+
+# ----------------------------------------------------------------------------
 # Measurements (run with --config Release)
 
 
@@ -1864,7 +2003,8 @@ def main():
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek"],
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
+                                       "profiles"],
                     required=True)
     opts = ap.parse_args()
 
@@ -1880,6 +2020,9 @@ def main():
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "profiles":
+        extra += ["--load-extension=" + os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"),
+                  "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "tabstrip":
         dirs = [os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"), os.path.join(opts.extensions, "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
@@ -1910,6 +2053,9 @@ def main():
         elif opts.only == "peek":
             results["peek"] = {}
             peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "profiles":
+            results["profiles"] = {}
+            profiles_checks(factory, results["profiles"], tmp, opts.config)
         elif opts.only == "measure":
             results["measure"] = {}
             measure(factory, results["measure"], tmp)
@@ -1934,7 +2080,7 @@ def main():
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "profiles"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
