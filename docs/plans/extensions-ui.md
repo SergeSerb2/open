@@ -451,15 +451,18 @@ The Site Control Center popover, its section headers, its footer menu,
 and its order of sections belong to `docs/plans/site-control-boost-editor.md`.
 This plan defines the two views that plan reuses for SC-4.
 
-Coordination (2026-10-25): that plan was written in parallel and its draft
-has its own extension button (`SiteControlTiles.swift`, 36 pt) and its
-own engine request E4 (`setPinned:forExtensionAction:atIndex:`,
-`showContextMenuForExtensionAction:`). The contract below was sent to its
-author. Rule for implementers: one extension item view exists, and it is
-`ExtensionItemView` from `OpenExtensionsUI`; the engine request names in
-§7 of this plan (E4, E7) are the ones the engine lead implements; the
-"Add Extension" item opens Arc's URL
-`https://chromewebstore.google.com/category/extensions` (§3.12).
+Coordination (2026-10-25, agreed with that plan's author): `OpenExtensionsUI`
+owns the section body, the items, pin order, and the intents. The SCC
+plan owns the section header ("Extensions", hover "Manage" →
+`manage-extensions`), section order, the panel, the footer menu, and the
+entry point `SiteControlController.present(anchor:tabID:mode:)` with
+`SiteControlPresentationMode.extensionPicker` (its §3.6.1). It hides the
+section until `OpenExtensionsUI` lands and builds no second grid. Rules
+for implementers: one extension item view exists, `ExtensionItemView`;
+the engine request names in §7 of this plan (E4, E7) are the ones the
+engine lead implements; the "Add Extension" item opens Arc's URL
+`https://chromewebstore.google.com/category/extensions` (§3.12). The
+Cmd+E conflict is this plan's Q1 (the SCC plan's Q11 defers to it).
 
 #### 3.9.1 `ExtensionItemView` (shared)
 
@@ -524,10 +527,11 @@ EX-6; the header view itself belongs to the SCC plan).
 
 Command `open-extensions-picker` (§6). EX-10.
 
-1. Cmd+E opens the Site Control Center of the focused content, anchored
-   as the SCC plan defines, in picker mode (entry point owned by
-   `site-control-boost-editor.md`; this plan needs: present the SCC with
-   `ExtensionsSectionBody` in picker mode and keyboard focus in it).
+1. Cmd+E calls `SiteControlController.present(anchor:tabID:mode:)`
+   (target `OpenSiteControl`, `site-control-boost-editor.md` §3.6.1) with
+   `mode: .extensionPicker`, the focused tab, and the anchor rule of that
+   plan: `.urlField` when the sidebar shows, else `.paneBar(<pane tab>)`
+   for a focused split pane, else `.contentTopLeading`.
 2. Picker mode: `focusedID` = the first pinned action, else the first
    item. Arrow keys move focus (rows: up/down; grid: all four, wrapping
    to the next row). Typing letters moves focus to the first item whose
@@ -536,8 +540,8 @@ Command `open-extensions-picker` (§6). EX-10.
    Cmd+E again closes it (toggle).
 3. No page loaded → the command beeps (`NSSound.beep()`) and does
    nothing (the SCC needs a site).
-4. With no extensions, the picker shows the section with the "Add
-   Extension" item focused.
+4. With no extensions, the SCC opens in `.standard` mode (the SCC
+   plan's rule).
 
 ### 3.11 Install, remove, and permission prompts
 
