@@ -13,7 +13,7 @@ public struct CapturesSection: View {
                         GeometryReader { geometry in
                             ZStack {
                                 RoundedRectangle(cornerRadius:8).fill(.quaternary)
-                                if let data=model.thumbnails[item.id],let image=NSImage(data:data) {Image(nsImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:150).clipped()}
+                                if let image=model.thumbnailImages[item.id] {Image(nsImage:image).resizable().scaledToFill().frame(width:geometry.size.width,height:150).clipped()}
                                 else {Image(systemName:"photo").foregroundStyle(.secondary)}
                             }.frame(width:geometry.size.width,height:150).clipShape(RoundedRectangle(cornerRadius:8))
                         }.frame(height:150).task {await model.loadThumbnail(item)}

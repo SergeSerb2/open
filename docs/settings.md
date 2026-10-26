@@ -14,7 +14,7 @@ settings.attach(adBlockStore: adBlockStore)
 let settingsPresenter = SettingsPresenter(viewModel: settings)
 ```
 
-Attach the shared `AdBlockStore`. Settings opens the selected profile on refresh/selection, including newly created profiles, and closes its state before profile deletion. The shared store owns update schedules and bundled defaults. Call `settings.adBlock?.refresh()` from its store-event adapter after external Site Control Center or list updates. List status reads cached typed receipts, with no file parsing during view drawing. The preview opens fixture profiles without a schedule. Refresh reconciles externally deleted profiles too. `settings.adBlock?.hasOtherBlocker` accepts the app's extension state.
+Attach the shared `AdBlockStore`. Settings opens the selected profile on refresh/selection, including newly created profiles, and tracks which opens have finished, and closes its state before profile deletion. The shared store owns update schedules and bundled defaults. Call `settings.adBlock?.refresh()` from its store-event adapter after external Site Control Center or list updates. List and allowed-site controls stay disabled until the selected Profile is open. Store faults use plain text; technical details remain in Copy Debug Info. List status reads cached typed receipts, with no file parsing during view drawing. The preview opens fixture profiles without a schedule. Refresh reconciles externally deleted profiles too. `settings.adBlock?.hasOtherBlocker` accepts the app's extension state.
 
 `SettingsPresenter.show(pane:)` reuses one standard titled window, 684×650 pt. Closing the window retains it. Showing or reactivating it refreshes external browser/store state. The root registers defaults when it is constructed; construct it once at launch. The selected pane writes `open.settings.lastPane`. The native tab bar changes the window title. Account, AI, internal, referral, and sync panes are absent.
 
@@ -67,13 +67,13 @@ The app's command router must preserve command-bar text capture rules. Settings 
 
 New profile fields decode with defaults and always encode at snapshot schema 1. A stored search-engine ID is preserved. Only a missing ID or a fresh profile defaults to Google. `SearchEngine` and `SuggestFormat` now live in `OpenModel`; `OpenSuggest` exports aliases to preserve source compatibility without a dependency cycle.
 
-`ProfilesSettingsModel` remains the profile mutation/validation owner. Auto-archive changes stay pending until This Profile Only or All Profiles is chosen. Cancel leaves the snapshot unchanged. Custom-engine removal resets a selected custom default to Google in the same save. The Profiles pane presents the notice on its first appearance with suggestions ON and the acknowledgement unset. Before a first remote query, call `settingsPresenter.prepareForRemoteSuggestions(profileID:)`. False means the request must wait (or suggestions are OFF). It presents the same notice; acknowledgement persists to the shared defaults. `profiles.allowsRemoteSuggestions` supplies the gate for `SuggestContext`. `SearchEngines.resolve(id:profile:)` includes custom engines and is used by Profiles, the real suggestions consumer, and Little Open. Editing an engine preserves its endpoint, format, and additional keywords.
+`ProfilesSettingsModel` remains the profile mutation/validation owner. Auto-archive changes stay pending until This Profile Only or All Profiles is chosen. Cancel leaves the snapshot unchanged. Custom-engine removal resets a selected custom default to Google in the same save. The Profiles pane presents the notice on its first appearance with suggestions ON and the acknowledgement unset. Before a first remote query, call `settingsPresenter.prepareForRemoteSuggestions(profileID:)`. This is a pure gate. It changes neither the selected Settings profile nor any window. False means the request must wait (or suggestions are OFF). When the user opens the notice, call `settingsPresenter.presentSearchSuggestionNotice(profileID:)`; only this explicit presentation selects the Profile. Acknowledgement persists to shared defaults. `profiles.allowsRemoteSuggestions` supplies the gate for `SuggestContext`. `SearchEngines.resolve(id:profile:)` includes custom engines and is used by Profiles, the real suggestions consumer, and Little Open. Editing an engine preserves its endpoint, format, and additional keywords.
 
-Routing binds `LinksSettingsModel` directly. The pane lists rules; a sheet edits a local draft and commits only on Save Rule. Invalid edits stay in the sheet and block save. An app picker stores a bundle ID without exposing an editable ID field. Space/profile assignment changes rebuild the routing model with current identities and retain drafts. Test uses the same evaluator and formatter as `openkit route`.
+Routing binds `LinksSettingsModel` directly. The pane lists rules; a sheet edits a local draft and commits only on Save Rule. Invalid edits stay in the sheet and block save. `commitLinks` and `saveLinkRule` return success, show a pane/sheet error on failure, and close the sheet only after a successful durable save. Links Test shows a plain one-line decision; the original trace stays under collapsed Details. An app picker stores a bundle ID without exposing an editable ID field. Space/profile assignment changes rebuild the routing model with current identities and retain drafts. Test uses the same evaluator and formatter as `openkit route`.
 
-Shortcut edits run `ConflictChecker` before every write. Unexpected conflicts retain the draft and leave the saved file and action log unchanged. Revert returns to the saved store; Reset All requires confirmation. Only customizable, non-reserved commands accept new keys.
+Shortcut edits run `ConflictChecker` before every write. Unexpected conflicts retain the draft and leave the saved file and action log unchanged. Revert returns to the saved store; Reset All requires confirmation. Only customizable, non-reserved commands accept new keys. Recording rejects typing keys, Space, Tab and Return unless ⌘, ⌃ or ⌥ is held. It keeps recording and shows a single instruction, including when a previous draft has a conflict. Bare function and arrow keys remain valid. The parsed key-binding store is cached by modification stamp, size and file identity; unchanged redraws do not parse JSON.
 
-Library reads bounded 100-row pages from the profile archive stores and merges them newest first. It never loads the whole archive on open. Delete and Clear use serial-queue transactions. Restore uses the model's Undo path. Restore reads without deleting, stages the model insertion, saves the snapshot, then removes the owning Archive row. A failed save removes the staged tab and publishes no Undo/action or Archive deletion. Delete groups IDs by their owning store; delete/clear report success or failure per profile, including partial completion. Captures use `State/captures.json` with Unix dates; deletion stages the file and atomically replaces the index, with rollback on a failed index write. Thumbnails load off the main actor and cache by ID.
+Library reads bounded 100-row pages from the profile archive stores and merges them newest first. It never loads the whole archive on open. Paging becomes available before favicon loading; a row-count task restarts the end sentinel after each page. The 225-row check covers the request during the first page’s favicon work and reaches the last row across two profiles. Delete and Clear use serial-queue transactions. Restore uses the model's Undo path. Restore reads without deleting, stages the model insertion, saves the snapshot, then removes the owning Archive row. A failed save removes the staged tab and publishes no Undo/action or Archive deletion. Delete groups IDs by their owning store; delete/clear report success or failure per profile, including partial completion. Captures use `State/captures.json` with Unix dates; deletion stages the file and atomically replaces the index, with rollback on a failed index write. Thumbnails load off the main actor. Decoded images are cached by capture UUID, Archive ItemID, and History URL row identity; redraws reuse the same NSImage. Missing Archive delete owners show “This archived tab is no longer available.”
 
 ## Verification
 
@@ -105,9 +105,9 @@ The import fixture contains two Spaces, three tabs, one skipped easel, and two c
 | Archive search/Space filter, restore/Undo/Redo, delete/clear confirmation and SQLite receipts | PASS |
 | Downloads progress, Retry/Reveal IDs, missing-file guard | PASS |
 | Captures thumbnail/Save As/delete file+index; profile History search/open | PASS |
-| Three Library empty states: native hosted AX labels and valid PNGs | PASS |
-| `settings-preview check` | PASS — 23 checks, 0 failed ([receipt](settings/checks.txt)) |
-| Renders | 78 PNGs: all panes/sections at both scales, General/Profiles in both appearances, long-pane details, every requested sheet, import Choose/Review/Passwords/Report, Library empty states, and shortcut recording/conflict/tab controls |
+| Four Library empty states: native hosted AX labels and valid PNGs | PASS |
+| `settings-preview check` | PASS — 28 checks, 0 failed ([receipt](settings/checks.txt)) |
+| Renders | 86 PNGs: all panes/sections at both scales, General/Profiles in both appearances, distinct long-pane details, every requested sheet, import Choose/Review/Passwords/Report and engine-ready Passwords copy, Library empty states, shortcut states, suggestion notice, engine editor, and invalid rule |
 | `dump-keys` | PASS — synthetic-root guard; sorted persisted values |
 
 `tools/verify-all.sh` now includes `settings-preview` checks, all renders, dimension validation, and `dump-keys`. The PR contains the final full-gate summary after merging `origin/main`.
@@ -118,7 +118,7 @@ No unit tests, desktop automation, engine build/sync, real import, or Keychain a
 
 The layout follows [interaction-states §18](re/interaction-states.md#18-settings-window), captured Settings frames F0147–F0151 and A0495–A0507 in the session index. Those reference images were viewed only. No reference image, artwork, icon, font, sound, or binary asset was copied. All committed screenshots below use the code-built synthetic fixture. Colors and typography use `OpenDesign`, with system grouped-control defaults where there is no Settings token.
 
-Every 1x and 2x pane and sheet was inspected locally. The final inventory has 78 PNGs. Switch bounds measure about 36×17 pt with `.mini`. Native controls render in their inactive appearance in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
+Every 1x and 2x pane and sheet was inspected locally. The final inventory has 86 PNGs. Switch bounds measure about 36×17 pt with `.mini`. Native controls render in their inactive appearance in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
 
 | Pane | 1x | 2x |
 |---|---|---|
@@ -126,7 +126,7 @@ Every 1x and 2x pane and sheet was inspected locally. The final inventory has 78
 | Profiles | [PNG](settings/profiles@1x.png) | [PNG](settings/profiles@2x.png) |
 | Links | [PNG](settings/links@1x.png) | [PNG](settings/links@2x.png) |
 | Shortcuts | [PNG](settings/shortcuts@1x.png) | [PNG](settings/shortcuts@2x.png) |
-| App Icon | [PNG](settings/app-icon@1x.png) | [PNG](settings/app-icon@2x.png) |
+| Icon | [PNG](settings/app-icon@1x.png) | [PNG](settings/app-icon@2x.png) |
 | Advanced | [PNG](settings/advanced@1x.png) | [PNG](settings/advanced@2x.png) |
 | Archive | [PNG](settings/library-archive@1x.png) | [PNG](settings/library-archive@2x.png) |
 | Downloads | [PNG](settings/library-downloads@1x.png) | [PNG](settings/library-downloads@2x.png) |
@@ -177,7 +177,7 @@ All links have a matching 1x and 2x render. These use only the synthetic fixture
 
 Source: lead-approved review decisions in this thread. Measurements use the existing private composite `a-settings.png`, frames A0499–A0507, at about 0.70 px per point (±1.5 pt). The image was viewed only. Color facts are from `assetutil` output in `.re/design/assetutil_Contents__Resources__ARC_PreferencesFeature.bundle__Contents__Resources__Assets.car.json`: `PreferencesButtonBackgroundColor` (light black 15%; dark RGB 0.878/0.875/0.878 at 7%) and `PreferencesLinkColor` (#458AFF). `SettingsTokens` owns Settings metrics, colors, and fonts. Light box colors use the native grouped-form convention (an Open choice).
 
-Guesses retained explicitly: placing Ad Blocking in General was a guess, so Open keeps it in Advanced. Favorites/ninth-tab/conflict controls appear when a Go-to-Tab command is selected (guess). Download location merges the folder and prompt choice based on strings `arc.folder`, `arc.promptForDownload`, and `arc.other` (guess). The lead approved the three Advanced boxes, removal of the inline General Previews switch, one-column App Icon list, and routing sheet.
+Guesses retained explicitly: placing Ad Blocking in General was a guess, so Open keeps it in Advanced. Favorites/ninth-tab controls appear when a Go-to-Tab command is selected (guess); round 2 makes the conflict picker available for every customizable command. Download location merges the folder and prompt choice based on strings `arc.folder`, `arc.promptForDownload`, and `arc.other` (guess). The lead approved the three Advanced boxes, removal of the inline General Previews switch, one-column App Icon list, and routing sheet.
 
 | Review item | Change | Proof |
 |---|---|---|
@@ -203,3 +203,39 @@ Guesses retained explicitly: placing Ad Blocking in General was a guess, so Open
 | Code 8 | Gate-only claim and counted consent-bearing action plans; 1-hour scope check; unseeded command priority check | `import-counts`, `profile-archive-scope`, `shortcuts-save` |
 | Code 9 | Sidebar file read and JSON parse off main actor; model build remains on main actor | `ArcImporter.readSidebar`, wizard detached task, import check |
 | Code 10 | Preserve suggest URL, format and other keywords on edit | `profile-search` disk roundtrip and real consumer |
+
+## Review round 2
+
+The lead chose **Icon** as the tab/window title (the stored pane ID and commands remain unchanged), allows the source-browser name inside the import wizard, and chose a plain Links Test result with the trace under collapsed Details. Default pane/Library renders now all use Dark; General and Profiles also have explicit Light/Dark pairs. The renderer applies the same appearance to NSApp, the host and window so native controls agree with SwiftUI. It yields during layout so SwiftUI tasks and the scroll destination settle before capture. Library toolbar pop-ups also use regular controls.
+
+| Item | Change | Proof |
+|---|---|---|
+| Design 1 | 13 pt regular, 24 pt buttons with 12 pt side padding/radius 6; regular native pop-ups with actual fixed widths and standard arrows | General/Profiles and sheet PNGs; SettingsPopUp |
+| Design 2 | General box 2 rows 43/47; Profiles box 1 rows 44/44/36 | General/Profiles pairs |
+| Design 3 | Secondary headers with >=4.5:1 token contrast; Your Profiles semibold; 10 pt header inset | SettingsTokens and Profiles Light/Dark |
+| Design 4 | Blue #007AFF selected segment and white text; 148/211 pt segments | Shortcuts pairs |
+| Design 5 | Priority picker for every selected customizable command; numbering only for Go to Tab | Recording/custom/tab-control states |
+| Design 6 | Rules intro/divider and match subtitles; Test a Link label; controls align at the trailing edge | Links rules/test and Link Routing sheet |
+| Design 7 | Plain import summary; ordered Choose categories; skipped item line; Done default at bottom right | Import Report pair |
+| Design 8 | Advanced/Shortcuts labels 13 pt; quote subtitle 11 pt and row 50 pt | Advanced and Shortcuts |
+| Design 9 | One status per recording/conflict state | Shortcut state pairs |
+| Design 10 | Both profile columns 420 pt; inset rounded selected row | Profiles pairs |
+| Design 11 | Icon row offsets 27/63/130 pt | Icon pair |
+| Design 12 | Aligned rule controls; contained built-in/custom engine list and one action row; hover-dependent Delay; named Profile and no destructive Return default; archive-scope question | Sheet pairs |
+| Design 13 | Distinct bottom-aligned detail targets, consistent default appearance, four added state pairs | PNG inventory and hashes |
+| Design 14 | Archive actions in header; fixed History separators; fixed empty icon/headline/message geometry; folder title first | Library populated/empty pairs |
+| Design 15 | Banner 13 pt; grey 11 pt info.circle | General pairs |
+| Design 16 | Shortcut label inset 25.5 pt; Use Automatic Appearance copy and matching search/sort | Shortcuts |
+| Code 1 | Central recording admission keeps invalid keys active and never writes | shortcuts-recording-admission, real keybindings file and action log |
+| Code 2 | Page state completes before favicon awaits; row-count sentinel task | archive-paging reaches all 225 real SQLite rows |
+| Code 3 | Pure profile-aware query gate; separate explicit notice presentation | suggestion-notice checks VM and presenter without opening a window |
+| Code 4 | Bool save result, visible error, durable save/rollback, sheet stays open on failure | links-save-failure (invalid sibling and simulated disk failure) |
+| Code 5 | Opened-profile readiness, disabled controls, plain fault text | adblock-readiness and lifecycle checks |
+| Code 6 | Passwords-not-imported copy only when secretsConsented is false | Import Report source and count-only flow |
+| Code 7 | File-change parsed-store cache and retained decoded images | settings-caches checks load count, real file replacement and image identity |
+| Code 8 | Unknown owners report the unavailable row | archive-paging final delete case |
+| Code 9 | File/JSON parsing and count readers stay off main; graph assembly cost is explicit below | ImportWizard, ArcImporter and model actor boundaries |
+
+Import graph assembly remains on the main actor. `ArcImporter.importAll(sidebar:)` walks the parsed item/Space/Profile graph and constructs actor-isolated OpenModel objects. Moving that work requires a separate Sendable intermediate model or a change to model isolation; this is not a cheap Settings-only move. The remaining walk is proportional to imported nodes and can pause the window for a very large sidebar. This PR claims off-main file/JSON parsing and count reads, not fully off-main model assembly or a large-import latency result.
+
+Additional states: [suggestion notice](settings/sheet-suggestion-notice@1x.png), [engine-ready Passwords copy](settings/import-passwords-ready@1x.png), [search-engine edit form](settings/sheet-search-engine-edit@1x.png), [invalid rule](settings/sheet-link-rule-invalid@1x.png), each with a matching @2x PNG. The engine-ready copy render stops before consent or import. It never requests a consent token or accesses Keychain.

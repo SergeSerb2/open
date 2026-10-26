@@ -60,6 +60,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let store = try AdBlockStore(root: root, policy: policy)
         for profile in settings.model.profiles { try await store.openProfile(profile.id, scheduleUpdates: false) }
         settings.attach(adBlockStore: store)
+        await settings.adBlock?.openSelectedProfile()
     }
     func close() { defaults.removePersistentDomain(forName: suite); defaults.synchronize(); try? FileManager.default.removeItem(at: root) }
     /// Read the real CFPreferences file after synchronize, not a second cached defaults object.
@@ -83,7 +84,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -305,7 +306,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 for item in env.captures.captures { try env.captures.remove(id: item.id) }
                 for (section, title) in [(LibrarySection.archive, "No archived tabs"), (.downloads, "No downloads"), (.captures, "No captures")] {
                     env.library.section = section; await env.library.reload()
-                    let labels = try render(LibraryContent(viewModel: env.library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("empty-\(section.rawValue).png"))
+                    let labels = try await render(LibraryContent(viewModel: env.library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("empty-\(section.rawValue).png"))
                     try require(labels.contains(title), "empty label missing from hosted accessibility tree: \(title) — \(labels)")
                 }
                 let emptyCount = await countArchive(env.archives); try require(emptyCount == 0 && (try FileCapturesProvider(root: env.root)).captures.isEmpty, "empty stores not on disk")
@@ -342,7 +343,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
                 try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"new profile was not attached")
                 try ad.store.closeProfile(created.id);ad.setExcluded("example.net",excluded:true)
-                try require(ad.errorText.hasPrefix("Could not save allowed sites."),"store fault was mislabeled as invalid host")
+                try require(ad.errorText == "Ad block settings are still loading for this Profile.","store fault was mislabeled as invalid host")
                 await ad.openSelectedProfile();try require(vm.profiles.delete(id:created.id),"new profile delete failed")
                 do {try ad.store.setExcluded("example.com",excluded:true,profile:created.id);throw CheckFailure(description:"deleted profile state stayed open")}
                 catch let error as CheckFailure {throw error} catch {try require(String(describing:error).contains("profile is not open"),"wrong deletion failure")}
@@ -368,7 +369,103 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let disk=try env.diskDefaults();try require(disk["open.general.searchSuggestNoticeDismissed"] as? Bool == true && vm.profiles.allowsRemoteSuggestions,"notice acknowledgement not persisted")
                 let reopened=SettingsViewModel(model:vm.model,actions:env.actions,defaults:UserDefaults(suiteName:env.suite)!,root:env.root,snapshot:vm.snapshot)
                 try require(reopened.profiles.prepareForRemoteSuggestions(profileID:personal) && !reopened.profiles.showsSuggestNotice,"notice repeated after restart")
-                vm.profiles.select(work);try require(!vm.profiles.prepareForRemoteSuggestions() && !vm.profiles.showsSuggestNotice,"OFF profile should not show notice or request")
+                let oldProfile=vm.selectedProfileID,oldRevision=vm.preferenceRevision
+                let oldLinks=vm.links
+                try require(!vm.profiles.prepareForRemoteSuggestions(profileID:work) && vm.selectedProfileID == oldProfile && vm.links === oldLinks && vm.preferenceRevision == oldRevision,"an OFF query changed Settings selection or routing")
+                vm.profiles.update{$0.searchSuggestEnabled=false};vm.profiles.select(work)
+                var workSettings=vm.model.profile(id:work)!.settings;workSettings.searchSuggestEnabled=true;vm.model.updateProfileSettings(id:work,settings:workSettings)
+                vm.set(false,for:"open.general.searchSuggestNoticeDismissed")
+                vm.profiles.select(personal)
+                try require(!vm.profiles.prepareForRemoteSuggestions(profileID:work) && vm.selectedProfileID == personal && !vm.profiles.showsSuggestNotice,"gate opened or selected another Profile")
+                let presenter=SettingsPresenter(viewModel:vm)
+                try require(!presenter.prepareForRemoteSuggestions(profileID:work) && vm.selectedProfileID == personal && presenter.window == nil,"presenter query gate changed selection or opened a window")
+                vm.profiles.presentSuggestNotice(profileID:work)
+                try require(vm.selectedProfileID == work && vm.profiles.showsSuggestNotice,"explicit notice presentation did not select the requested Profile")
+            case "shortcuts-recording-admission":
+                let id="new-window",before=try Data(contentsOf:vm.shortcuts.fileURL)
+                let keys:[OpenCommands.KeyboardShortcut]=[.init(key:"a"),.init(key:"a",modifiers:[.shift]),.init(key:"space"),.init(key:"tab"),.init(key:"return")]
+                vm.shortcuts.beginRecording(id)
+                for key in keys {
+                    vm.shortcuts.record(key,for:id)
+                    try require(vm.shortcuts.recordingCommandID == id && vm.shortcuts.statusText == "Use ⌘, ⌃, or ⌥ with a key.","unsafe key stopped recording")
+                    try require(try Data(contentsOf:vm.shortcuts.fileURL) == before && env.actions.log.isEmpty,"unsafe recording changed disk or menus")
+                }
+                vm.shortcuts.record(.init(key:"f20"),for:id)
+                try require(try KeyBindingStore.load(from:vm.shortcuts.fileURL).bindings[id]?.shortcuts == [.init(key:"f20")] && vm.shortcuts.recordingCommandID == nil,"bare function key did not persist")
+                vm.shortcuts.beginRecording(id);vm.shortcuts.record(.init(key:"left"),for:id)
+                try require(try KeyBindingStore.load(from:vm.shortcuts.fileURL).bindings[id]?.shortcuts == [.init(key:"left")] && vm.shortcuts.recordingCommandID == nil,"bare arrow key did not persist")
+                vm.shortcuts.beginRecording(id);vm.shortcuts.record(.init(key:"b",modifiers:[.control,.option]),for:id)
+                try require(try KeyBindingStore.load(from:vm.shortcuts.fileURL).bindings[id]?.shortcuts == [.init(key:"b",modifiers:[.control,.option])],"modified printable key failed")
+                vm.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:"new-tab")
+                vm.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:id)
+                try require(!vm.shortcuts.banner.isEmpty,"conflict fixture was not active")
+                let conflictBytes=try Data(contentsOf:vm.shortcuts.fileURL),calls=env.actions.log.count
+                vm.shortcuts.beginRecording(id);vm.shortcuts.record(.init(key:"a"),for:id)
+                try require(vm.shortcuts.statusMessage == "Use ⌘, ⌃, or ⌥ with a key." && vm.shortcuts.recordingCommandID == id,"old conflict hid the unsafe-key instruction")
+                try require(try Data(contentsOf:vm.shortcuts.fileURL) == conflictBytes && env.actions.log.count == calls,"unsafe key changed a conflicted draft on disk")
+            case "archive-paging":
+                try await env.prepareLibrary()
+                for store in env.archives.values {try await store.deleteAll()}
+                var ids:Set<ItemID>=[]
+                for index in 0..<225 {
+                    let profile=vm.model.profiles[index % 2],space=vm.model.spaces.first{$0.profileID == profile.id}!
+                    let tab=Tab(id:ItemID(),url:URL(string:"https://example.com/page/\(index)")!,title:"Example Page \(index)")
+                    ids.insert(tab.id)
+                    env.archives[profile.id]!.archive([ArchiveEntry(tab:tab,reason:.closed,originalLocation:"today:\(space.id)",spaceID:space.id,profileID:profile.id,archivedAt:SyntheticData.fixtureDate.addingTimeInterval(-Double(index)))])
+                }
+                for store in env.archives.values {store.flushQueue()}
+                let library=env.library
+                let first=Task {await library.reloadArchive()}
+                let deadline=Date().addingTimeInterval(10)
+                while library.archiveRows.count < 100 && Date() < deadline {await Task.yield()}
+                try require(library.archiveRows.count == 100,"initial Archive page did not finish")
+                // Reproduce the sentinel request while the first page still loads favicons.
+                await library.loadNextArchivePage();await first.value
+                try require(library.archiveRows.count >= 200,"paging request was lost behind favicon loading")
+                while library.archiveHasMore {await library.loadNextArchivePage()}
+                try require(library.archiveRows.count == 225 && Set(library.archiveRows.map(\.id)) == ids && library.archiveRows.last?.title == "Example Page 224","Archive did not reach the final cross-profile row")
+                let persisted=await countArchive(env.archives);try require(persisted == 225,"paged rows were not in the real stores")
+                library.requestDeleteArchive([ItemID()]);await library.deleteArchiveConfirmed()
+                try require(library.statusText == "This archived tab is no longer available.","missing owner vanished silently")
+            case "links-save-failure":
+                let before=try Data(contentsOf:vm.snapshot.fileURL)
+                vm.links.drafts[0].spaceID=SpaceID()
+                var edited=vm.links.drafts[1];edited.pattern="guide"
+                let accepted=vm.saveLinkRule(edited)
+                try require(!accepted && !vm.linksError.isEmpty,"invalid sibling route closed the editor without an error")
+                try require(try Data(contentsOf:vm.snapshot.fileURL) == before,"invalid routing reached disk")
+                vm.refreshLinks();edited=vm.links.drafts[1];edited.pattern="guide"
+                setenv("OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL","1",1)
+                let saved=vm.saveLinkRule(edited)
+                unsetenv("OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL")
+                try require(!saved && vm.linksError.contains("could not be saved") && (try Data(contentsOf:vm.snapshot.fileURL)) == before,"write failure claimed success")
+                try require(vm.saveLinkRule(edited),"valid retry was refused")
+                let disk=try env.diskModel();try require(disk.routingRules[1].match == .hostContains("guide"),"valid route retry did not persist")
+                vm.links.testURLString="https://guide.example.org/";vm.links.runTest()
+                try require(vm.linkTestSummary == "Opens in Office · matched “guide” (Host contains)","plain test summary differs from evaluator")
+            case "adblock-readiness":
+                try await env.prepareAdBlock();let ad=vm.adBlock!
+                let created=vm.profiles.create(name:"Example Loading Profile")!
+                let calls=env.actions.log.count
+                try require(!ad.isReady && !ad.openedProfiles.contains(created.id),"new Profile was ready before open")
+                ad.setExcluded("example.org",excluded:true)
+                try require(ad.errorText == "Ad block settings are still loading for this Profile." && env.actions.log.count == calls,"loading host control wrote or showed an internal fault")
+                await ad.openSelectedProfile()
+                try require(ad.isReady && ad.openedProfiles.contains(created.id),"successful open did not enable edits")
+                ad.setExcluded("example.org",excluded:true)
+                let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
+                try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"ready host change did not persist")
+                try require(vm.profiles.delete(id:created.id) && !ad.openedProfiles.contains(created.id),"deleted Profile remained ready")
+            case "settings-caches":
+                _=vm.shortcutsStore;let reads=vm.keyBindingLoadCount
+                for _ in 0..<20 {_=vm.shortcutsStore}
+                try require(vm.keyBindingLoadCount == reads,"unchanged key file was parsed on redraw")
+                vm.shortcuts.record(.init(key:"f20"),for:"new-window")
+                try require(vm.shortcutsStore.bindings["new-window"]?.shortcuts == [.init(key:"f20")] && vm.keyBindingLoadCount == reads+1,"changed key file was not reloaded once")
+                try await env.prepareLibrary();let library=env.library,item=env.captures.captures[0]
+                let image=library.thumbnailImages[item.id]
+                await library.loadThumbnail(item)
+                try require(image != nil && image === library.thumbnailImages[item.id] && library.faviconImages.count > 0 && library.historyFaviconImages.count > 0,"decoded Library images were not retained")
             case "app-icon":
                 vm.appIcon.select(.openColor)
                 let disk = try env.diskDefaults()

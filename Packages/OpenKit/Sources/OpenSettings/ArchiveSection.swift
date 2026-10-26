@@ -8,18 +8,17 @@ public struct ArchiveSection: View {
     public init(model: LibraryViewModel) { self.model = model }
     public var body: some View {
         VStack(spacing: 12) {
-            HStack { Spacer();Button("Delete Selected…",role:.destructive){model.requestDeleteArchive(model.archiveRows.filter{model.selectedIDs.contains($0.id.description)}.map(\.id))}.disabled(model.selectedIDs.isEmpty);Button("Clear Archive…"){model.requestClearArchive()}.disabled(model.archiveTotalCount == 0) }
             if model.archiveRows.isEmpty && !model.archiveLoading { LibraryEmptyState(title: "No archived tabs", message: "Tabs you close or auto-archive appear here.", symbol: "archivebox") }
             else {
                 List(selection: $model.selectedIDs) {
                     ForEach(model.archiveRows) { row in
                         let childCount = row.reason == .folderDeleted ? model.archivedChildCount(row) : 0
                         ArchiveHoverRow { HStack(spacing: 12) {
-                            if let data = model.favicons[row.id], let image = NSImage(data: data) { Image(nsImage: image).resizable().frame(width: 20, height: 20) }
+                            if let image = model.faviconImages[row.id] { Image(nsImage: image).resizable().frame(width: 20, height: 20) }
                             else { Image(systemName: row.reason == .folderDeleted ? "folder" : "globe").frame(width: 20) }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(row.reason == .folderDeleted ? "Folder · \(childCount) \(childCount == 1 ? "tab" : "tabs") · \(row.title)" : row.title).lineLimit(1)
-                                Text("\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
+                                Text(row.title).lineLimit(1)
+                                Text(row.reason == .folderDeleted ? "Folder · \(childCount) \(childCount == 1 ? "tab" : "tabs")" : "\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
                             }; Spacer()
                             Text(row.archivedAt.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
                             Button("Restore") { Task { await model.restore(id: row.id) } }.modifier(ArchiveHoverAction())
@@ -32,7 +31,7 @@ public struct ArchiveSection: View {
                             Button("Delete…", role: .destructive) { model.requestDeleteArchive([row.id]) }
                         }
                     }
-                    if model.archiveHasMore { ProgressView().frame(maxWidth: .infinity).task { await model.loadNextArchivePage() } }
+                    if model.archiveHasMore { ProgressView().frame(maxWidth: .infinity).task(id:model.archiveRows.count) { await model.loadNextArchivePage() } }
                 }.onDeleteCommand { model.requestDeleteArchive(model.archiveRows.filter { model.selectedIDs.contains($0.id.description) }.map(\.id)) }
             }
         }
@@ -48,7 +47,7 @@ struct LibraryEmptyState: View {
     let title: String
     let message: String
     let symbol: String
-    var body: some View { VStack(spacing: 12) { Image(systemName: symbol).font(.largeTitle).foregroundStyle(.tertiary); NativeEmptyStateTitle(title: title).frame(height: 26); Text(message).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityElement(children: .combine).accessibilityLabel(title + ". " + message) }
+    var body: some View { VStack(spacing: 12) { Image(systemName: symbol).font(.largeTitle).foregroundStyle(.tertiary).frame(height:32); NativeEmptyStateTitle(title: title).frame(height: 26); Text(message).foregroundStyle(.secondary).frame(height:16) }.frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityElement(children: .combine).accessibilityLabel(title + ". " + message) }
 }
 
 /// Native text gives never-ordered hosting windows the same concrete AX headline as the app.

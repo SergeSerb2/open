@@ -5,7 +5,7 @@ public enum PaneID: String, CaseIterable, Sendable {
     case general, profiles, links, shortcuts, appIcon, advanced
     public var title: String { switch self {
     case .general: "General"; case .profiles: "Profiles"; case .links: "Links"
-    case .shortcuts: "Shortcuts"; case .appIcon: "App Icon"; case .advanced: "Advanced"
+    case .shortcuts: "Shortcuts"; case .appIcon: "Icon"; case .advanced: "Advanced"
     } }
     public var symbol: String { switch self {
     case .general: "gearshape"; case .profiles: "person"; case .links: "rectangle.on.rectangle"

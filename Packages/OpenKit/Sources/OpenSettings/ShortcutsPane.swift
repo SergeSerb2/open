@@ -31,13 +31,21 @@ import OpenDesign
         let names = conflict.commandIDs.map { CommandRegistry.byID[$0]?.isReserved == true ? "reserved key" : CommandRegistry.byID[$0]?.title ?? $0 }
         return "\(conflict.shortcut.symbolDisplay) is used by \(names.joined(separator: " and ")). Clear one shortcut to save."
     }.joined(separator: "\n") }
+    public var statusMessage:String {recordingCommandID != nil || banner.isEmpty ? statusText:banner}
     public var commands: [CommandDefinition] { CommandRegistry.active.filter { command in
-        (query.isEmpty || ([command.title, command.id] + command.aliases).contains { $0.localizedCaseInsensitiveContains(query) }) && (!basics || !command.aliases.isEmpty || store.bindings[command.id] != nil)
-    }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending } }
+        (query.isEmpty || ([displayTitle(command), command.id] + command.aliases).contains { $0.localizedCaseInsensitiveContains(query) }) && (!basics || !command.aliases.isEmpty || store.bindings[command.id] != nil)
+    }.sorted { displayTitle($0).localizedStandardCompare(displayTitle($1)) == .orderedAscending } }
+    public func displayTitle(_ command:CommandDefinition)->String {command.title == "Automatic" ? "Use Automatic Appearance":command.title}
     public func beginRecording(_ id: String, append: Bool = false) { guard CommandRegistry.byID[id]?.isCustomizable == true else { return }; selectedCommandID = id; appendRecording = append; recordingCommandID = id; statusText = "Press a shortcut. Escape cancels; Delete clears." }
     public func cancelRecording() { recordingCommandID = nil; statusText = "Recording cancelled." }
     public func record(_ shortcut: OpenCommands.KeyboardShortcut, for id: String, append: Bool = false) {
         guard let command = CommandRegistry.byID[id], command.isCustomizable, !command.isReserved else { return }
+        let key=shortcut.key.lowercased()
+        let functionNumber=key.hasPrefix("f") ? Int(key.dropFirst()) : nil
+        let bareSpecial=["left","right","up","down"].contains(key) || functionNumber.map{(1...35).contains($0)} == true
+        guard !shortcut.modifiers.intersection([.command,.control,.option]).isEmpty || bareSpecial else {
+            recordingCommandID=id; statusText="Use ⌘, ⌃, or ⌥ with a key."; return
+        }
         selectedCommandID = id
         var keys = append ? store.effectiveShortcuts(for: command) : []; if !keys.contains(shortcut) { keys.append(shortcut) }
         let priority: ShortcutPriority?
@@ -66,7 +74,7 @@ public struct ShortcutsPane: View {
     public init(model:ShortcutsViewModel) {self.model=model}
     public var body:some View {
         VStack(spacing:30) {
-            ShortcutSegments(model:model).frame(width:380,height:35)
+            ShortcutSegments(model:model).frame(width:359,height:35)
             HStack(alignment:.top,spacing:16) {
                 VStack(spacing:0) {
                     HStack {Image(systemName:"magnifyingglass").foregroundStyle(.secondary);TextField("Type a feature name or shortcut",text:$model.query).textFieldStyle(.plain)}.padding(.horizontal,10).frame(height:38)
@@ -82,15 +90,17 @@ public struct ShortcutsPane: View {
                     HStack(spacing:8) {Image(systemName:"command");Image(systemName:"return")}.font(.system(size:25)).foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor)).frame(height:50)
                     Text("Custom Shortcuts").font(.system(size:13,weight:.semibold))
                     Text("Change shortcuts for your favorite actions, and choose whether Open or a website takes priority.").font(.system(size:11)).foregroundStyle(.secondary)
-                    if model.selectedCommandID?.hasPrefix("go-to-tab-") == true {
+                    if model.selectedCommandID.flatMap({CommandRegistry.byID[$0]})?.isCustomizable == true {
                         Text("When shortcuts conflict").font(.system(size:11))
-                        Picker("When shortcuts conflict",selection:Binding(get:{model.root.string("open.shortcuts.defaultPriority")},set:{model.root.set($0,for:"open.shortcuts.defaultPriority")})) {Text("Open wins").tag("browser");Text("Website wins").tag("site");Text("Website first, Open on double-press").tag("site-then-browser")}.labelsHidden()
+                        Picker("When shortcuts conflict",selection:Binding(get:{model.root.string("open.shortcuts.defaultPriority")},set:{model.root.set($0,for:"open.shortcuts.defaultPriority")})) {Text("Open wins").tag("browser");Text("Website wins").tag("site");Text("Website first, Open on double-press").tag("site-then-browser")}.labelsHidden().controlSize(.regular)
+                    }
+                    if model.selectedCommandID?.hasPrefix("go-to-tab-") == true {
                         PreferenceToggle(title:"Include Favorites in ordering.",key:"open.shortcuts.includeFavoritesInTabNumbering",root:model.root).font(.system(size:11))
                         PreferenceToggle(title:"Switch to ninth tab.",key:"open.shortcuts.switchToNinthEnabled",root:model.root).font(.system(size:11))
                     }
-                    if !model.banner.isEmpty {SettingsError(text:model.banner).font(.system(size:11));Button("Revert"){model.revert()}}
-                    if model.recordingCommandID != nil {Text("Press your shortcut…").font(.system(size:11));KeyRecorder(model:model).frame(height:1)}
-                    if !model.statusText.isEmpty {Text(model.statusText).font(.system(size:11)).foregroundStyle(.secondary)}
+                    if model.recordingCommandID == nil && !model.banner.isEmpty {SettingsError(text:model.statusMessage).font(.system(size:11));Button("Revert"){model.revert()}}
+                    if model.recordingCommandID != nil {KeyRecorder(model:model).frame(height:1)}
+                    if (model.recordingCommandID != nil || model.banner.isEmpty) && !model.statusMessage.isEmpty {Text(model.statusMessage).font(.system(size:11)).foregroundStyle(.secondary)}
                     Spacer(minLength:0)
                     HStack(spacing:6) {Spacer(minLength:0);Button("Reset All Shortcuts"){model.resetAll(confirmed:false)}.controlSize(.mini)
                         Menu {Button("Revert Unsaved Changes"){model.revert()};Button("Shortcut Help"){model.root.actions.openHelp(topic:"shortcuts")}} label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).fixedSize()
@@ -102,11 +112,11 @@ public struct ShortcutsPane: View {
     }
     private func row(_ command:CommandDefinition)->some View {
         HStack(spacing:8) {
-            Text(command.title).font(.system(size:12)).lineLimit(2);Spacer(minLength:0)
+            Text(model.displayTitle(command)).font(.system(size:13)).lineLimit(2);Spacer(minLength:0)
             Button {model.selectedCommandID=command.id;model.beginRecording(command.id,append:NSApp.currentEvent?.modifierFlags.contains(.shift) == true)} label:{
                 Text(model.recordingCommandID == command.id ? "Type…" : keyText(command)).font(Font(SettingsTokens.keycap.font)).frame(width:63,height:23).background(Color(nsColor:SettingsTokens.button.nsColor),in:RoundedRectangle(cornerRadius:4))
             }.buttonStyle(.plain).disabled(!command.isCustomizable)
-        }.frame(height:48).tag(command.id).listRowInsets(.init(top:0,leading:10,bottom:0,trailing:10)).contentShape(Rectangle())
+        }.frame(height:48).tag(command.id).listRowInsets(.init(top:0,leading:17.5,bottom:0,trailing:10)).contentShape(Rectangle())
         .contextMenu {
             if command.isCustomizable {Button("Record Shortcut"){model.beginRecording(command.id)};Button("Clear"){model.clear(command.id)};Button("Reset"){model.reset(command.id)}
                 Menu("When shortcuts conflict") {
@@ -144,7 +154,7 @@ private struct ShortcutSegments:NSViewRepresentable {
     func makeCoordinator()->Coordinator {Coordinator(model)}
     func makeNSView(context:Context)->Segments {
         let control=Segments(labels:["Start with the basics","Learn the Essential Shortcuts"],trackingMode:.selectOne,target:context.coordinator,action:#selector(Coordinator.select(_:)))
-        control.setWidth(174,forSegment:0);control.setWidth(206,forSegment:1);control.setAccessibilityLabel("Shortcuts");return control
+        control.setWidth(148,forSegment:0);control.setWidth(211,forSegment:1);control.setAccessibilityLabel("Shortcuts");return control
     }
     func updateNSView(_ control:Segments,context:Context){control.selectedSegment=model.basics ? 0:1;control.needsDisplay=true}
     @MainActor final class Coordinator:NSObject {
@@ -154,14 +164,14 @@ private struct ShortcutSegments:NSViewRepresentable {
     }
     @MainActor final class Segments:NSSegmentedControl {
         override var isFlipped:Bool {true}
-        override var intrinsicContentSize:NSSize {NSSize(width:380,height:35)}
+        override var intrinsicContentSize:NSSize {NSSize(width:359,height:35)}
         override func draw(_ dirtyRect:NSRect) {
             SettingsTokens.button.nsColor.setFill();NSBezierPath(roundedRect:bounds,xRadius:6,yRadius:6).fill()
-            let selected=selectedSegment == 0 ? NSRect(x:0,y:0,width:174,height:35):NSRect(x:174,y:0,width:206,height:35)
-            SettingsTokens.selectedTab.nsColor.setFill();NSBezierPath(roundedRect:selected,xRadius:6,yRadius:6).fill()
-            for (index,width) in [CGFloat(174),206].enumerated() {
-                let title=label(forSegment:index) ?? "";let attributes:[NSAttributedString.Key:Any]=[.font:SettingsTokens.tabLabel.font,.foregroundColor:NSColor.labelColor]
-                let size=(title as NSString).size(withAttributes:attributes);let x:CGFloat=index == 0 ? 0:174
+            let selected=selectedSegment == 0 ? NSRect(x:0,y:0,width:148,height:35):NSRect(x:148,y:0,width:211,height:35)
+            SettingsTokens.segmentAccent.nsColor.setFill();NSBezierPath(roundedRect:selected,xRadius:6,yRadius:6).fill()
+            for (index,width) in [CGFloat(148),211].enumerated() {
+                let title=label(forSegment:index) ?? "";let attributes:[NSAttributedString.Key:Any]=[.font:SettingsTokens.tabLabel.font,.foregroundColor:index == selectedSegment ? NSColor.white:NSColor.labelColor]
+                let size=(title as NSString).size(withAttributes:attributes);let x:CGFloat=index == 0 ? 0:148
                 (title as NSString).draw(at:.init(x:x+(width-size.width)/2,y:(35-size.height)/2),withAttributes:attributes)
             }
         }

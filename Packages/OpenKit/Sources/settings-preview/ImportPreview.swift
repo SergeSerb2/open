@@ -12,6 +12,9 @@ import OpenImport
         let source = try ArcImporter(arcDirectory:directory).importAll(sidebar:parsed)
         let candidate = SnapshotMapper.model(from: SnapshotMapper.dto(from: settings.model))
         let beforeSpaces = candidate.spaces.count, beforeTabs = candidate.index.count
+        let beforeTabIDs=Set(candidate.index.values.compactMap{$0.tab?.id})
+        let beforeFolderIDs=Set(candidate.index.values.compactMap{$0.folder?.id})
+        let beforeFavorites=Set(candidate.profiles.flatMap{$0.favorites.map(\.id)})
         var importedProfiles: [ProfileID: Profile] = [:]
         for profile in source.model.profiles {
             if let existing = candidate.profile(id: profile.id) { if plan.searchSettings { existing.settings.searchEngineID = profile.settings.searchEngineID }; importedProfiles[profile.id] = existing; continue }
@@ -67,8 +70,14 @@ import OpenImport
                 let report = await store.importRecords(rows); archiveInserted += report.inserted; archiveDuplicates += report.duplicates
             }
         }
+        let newTabs=Set(candidate.index.values.compactMap{$0.tab?.id}).subtracting(beforeTabIDs)
+        let newFavorites=Set(candidate.profiles.flatMap{$0.favorites.map(\.id)}).subtracting(beforeFavorites)
+        let newFolders=Set(candidate.index.values.compactMap{$0.folder?.id}).subtracting(beforeFolderIDs)
         // Phase 2 has no engine writer. Even explicit consent never reads Keychain here.
-        return ImportOutcome(counts: ["Imported Spaces": candidate.spaces.count - beforeSpaces, "Imported items": candidate.index.count - beforeTabs,
+        return ImportOutcome(counts: ["Spaces":candidate.spaces.count-beforeSpaces,"Pinned and Today tabs":newTabs.subtracting(newFavorites).count,
+                                      "Favorites":newFavorites.count,"Folders":newFolders.count,"Archive":archiveInserted,"History":0,
+                                      "Search settings":plan.searchSettings ? source.report.profiles:0,"Passwords and cookies":0,"Imported tabs":newTabs.count,
+                                      "Imported Spaces": candidate.spaces.count - beforeSpaces, "Imported items": candidate.index.count - beforeTabs,
                                       "Duplicates": duplicates + archiveDuplicates, "Imported Archive": archiveInserted,
                                       "Skipped easels": source.report.skippedEasels, "Skipped notes": source.report.skippedNotes,
                                       "Skipped unknown": source.report.skippedUnknown, "Archive accounted": source.report.archiveAccounted,

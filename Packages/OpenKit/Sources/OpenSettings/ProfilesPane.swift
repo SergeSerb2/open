@@ -38,18 +38,23 @@ import OpenDesign
     /// App calls this before its first remote query and presents Settings on Profiles when false.
     /// This uses the same notice state as pane appearance; the request must wait for dismissal.
     @discardableResult public func prepareForRemoteSuggestions(profileID: ProfileID? = nil) -> Bool {
-        if let profileID { root.selectedProfileID = profileID }
-        if !suggestions { showsSuggestNotice = false }
-        if suggestions && !root.bool("open.general.searchSuggestNoticeDismissed") { showsSuggestNotice = true }
-        return allowsRemoteSuggestions
+        let id=profileID ?? root.selectedProfileID
+        guard root.model.profile(id:id)?.settings.searchSuggestEnabled == true else { return false }
+        return root.bool("open.general.searchSuggestNoticeDismissed") && !showsSuggestNotice
     }
-    public func paneDidAppear() { refresh(); _ = prepareForRemoteSuggestions() }
+    public func presentSuggestNotice(profileID: ProfileID? = nil) {
+        let id=profileID ?? root.selectedProfileID
+        guard root.model.profile(id:id)?.settings.searchSuggestEnabled == true,
+              !root.bool("open.general.searchSuggestNoticeDismissed") else {return}
+        if root.selectedProfileID != id {root.selectedProfileID=id}; showsSuggestNotice=true
+    }
+    public func paneDidAppear() { refresh(); presentSuggestNotice() }
     public func dismissSuggestNotice() { root.set(true, for: "open.general.searchSuggestNoticeDismissed"); showsSuggestNotice = false }
     public var downloadDirectory: String { get { profile?.settings.downloadDirectory ?? "~/Downloads" } set { update { $0.downloadDirectory = newValue } } }
     public var askWhereToSave: Bool { get { profile?.settings.askWhereToSaveEachFile ?? false } set { update { $0.askWhereToSaveEachFile = newValue } } }
     public func nextDownloadSettings() -> (directory: String, ask: Bool) { (downloadDirectory.isEmpty ? "~/Downloads" : downloadDirectory, askWhereToSave) }
     public func refresh() { dataModel.refresh(from: root.model) }
-    public func select(_ id: ProfileID) { root.selectedProfileID = id; refresh(); _ = prepareForRemoteSuggestions() }
+    public func select(_ id: ProfileID) { root.selectedProfileID = id; refresh(); showsSuggestNotice=false; presentSuggestNotice() }
     public func update(_ change: (inout ProfileSettings) -> Void) {
         guard let profile else { return }; var settings = profile.settings; change(&settings)
         dataModel.updateSettings(in: root.model, id: profile.id, settings: settings); root.save()
@@ -74,7 +79,7 @@ import OpenDesign
     @discardableResult public func delete(id: ProfileID) -> Bool {
         if let block = root.model.deleteBlockReason(for: id) { errorText = block.message; return false }
         do { try root.adBlock?.closeProfile(id) }
-        catch { errorText = "Could not close this Profile's ad block settings. \(error.localizedDescription)"; return false }
+        catch { errorText = "This Profile’s block lists are updating. Try deleting it after the update finishes."; return false }
         if let error = root.actions.deleteProfileData(profileID: id) { root.adBlock?.refresh(); errorText = error; return false }
         do {
             guard try dataModel.deleteProfile(in: root.model, id: id) else { return false }
@@ -92,6 +97,8 @@ import OpenDesign
         }
         pendingArchive = nil; archiveProfileID = nil; root.save()
     }
+    public var archiveScopeProfileName:String {archiveProfileID.flatMap{root.model.profile(id:$0)?.name} ?? profile?.name ?? "this Profile"}
+    public var clearProfileName:String {clearProfileID.flatMap{root.model.profile(id:$0)?.name} ?? profile?.name ?? "this Profile"}
     public func cancelArchive() { pendingArchive = nil; archiveProfileID = nil }
     public func showClear() { clearProfileID = root.selectedProfileID; clearStatus = ""; showsClear = true }
     public func clear() async {
@@ -133,12 +140,12 @@ public struct ProfilesPane: View {
             HStack(alignment:.top,spacing:11) {
                 VStack(spacing:8) {
                     VStack(spacing:0) {
-                        Text("Your Profiles").font(Font(SettingsTokens.section.font)).foregroundStyle(.tertiary).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,10).frame(height:27)
+                        Text("Your Profiles").font(Font(SettingsTokens.sectionTitle.font)).foregroundStyle(Color(nsColor:SettingsTokens.secondary.nsColor)).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,10).frame(height:27)
                         Divider()
                         ForEach(model.dataModel.rows) { row in
                             Button { model.select(row.id) } label: {
                                 HStack(spacing:4) { Text(row.name).lineLimit(1);Spacer(minLength:2);Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size:11)).foregroundStyle(.secondary) }
-                                    .padding(.horizontal,10).frame(height:31).background(row.id == model.root.selectedProfileID ? Color(nsColor:SettingsTokens.selectedProfile.nsColor) : .clear)
+                                    .padding(.horizontal,26).frame(height:31).background {if row.id == model.root.selectedProfileID {RoundedRectangle(cornerRadius:6).fill(Color(nsColor:SettingsTokens.selectedProfile.nsColor)).padding(.horizontal,16)}}
                             }.buttonStyle(.plain)
                         }
                         Spacer(minLength:0)
@@ -151,26 +158,22 @@ public struct ProfilesPane: View {
                             profileTool("pencil",help:"Rename Profile") { model.nameDraft=model.profile?.name ?? "";model.showsRename=true }
                             Spacer(minLength:0)
                         }.frame(height:31)
-                    }.frame(height:446).background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:SettingsTokens.border.nsColor)))
+                    }.frame(height:420).background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:SettingsTokens.border.nsColor)))
                     if !model.unusedIDs.isEmpty { Button("Delete unused Profiles") { model.confirmsUnused=true }.buttonStyle(.plain).font(.system(size:11)) }
                 }.frame(width:205)
                 VStack(spacing:10) {
                     SettingsGroup {
-                        SettingsRow(height:36) { HStack { Text("Search engine");Spacer();Picker("Search engine",selection:$model.searchEngineID) { ForEach(model.engines) { Text($0.name).tag($0.id) } }.labelsHidden().frame(width:143) } }
-                        SettingsRow(height:36) { HStack { Text("Manage search");Spacer();Button("Search Settings…") { model.root.showsSearchEngines=true } } }
+                        SettingsRow(height:44) {HStack {Text("Search engine");Spacer();SettingsPopUp("Search engine",selection:$model.searchEngineID,width:137,entries:model.engines.map{.option($0.name,$0.id)})}}
+                        SettingsRow(height:44) {HStack {Text("Manage search");Spacer();Button("Search Settings…"){model.root.showsSearchEngines=true}}}
                         SettingsRow(height:36,divider:false) { SettingsSwitch("Include search engine suggestions",isOn:$model.suggestions) }
                     }
                     SettingsGroup {
                         SettingsRow(height:44) {
                             HStack(spacing:4) { Text("Archive tabs after");Image(systemName:"info.circle").font(.system(size:11)).foregroundStyle(.secondary);Spacer(minLength:2)
-                                Picker("Archive tabs after",selection:Binding(get:{model.pendingArchive ?? model.profile?.settings.autoArchiveAfter ?? .twelveHours},set:{model.proposeArchive($0)})) { ForEach(AutoArchiveInterval.allCases,id:\.self) { Text($0.settingsTitle + ($0 == .twelveHours ? " (default)" : "")).tag($0) } }.labelsHidden().frame(width:147)
+                                SettingsPopUp("Archive tabs after",selection:Binding(get:{model.pendingArchive ?? model.profile?.settings.autoArchiveAfter ?? .twelveHours},set:{model.proposeArchive($0)}),width:152,entries:AutoArchiveInterval.allCases.map{.option($0.settingsTitle + ($0 == .twelveHours ? " (default)":""),$0)})
                             }
                         }
-                        SettingsRow(height:44,divider:false) { HStack { Text("Download location");Spacer(minLength:2);Menu {
-                            Button { model.askWhereToSave=false } label: { Label(downloadName,systemImage:"folder.fill") }
-                            Button("Ask for each download") { model.askWhereToSave=true }
-                            Divider();Button("Other…") { chooseDownloads() }
-                        } label: { Label(model.askWhereToSave ? "Ask for each download" : downloadName,systemImage:"folder.fill").lineLimit(1) }.frame(width:160) } }
+                        SettingsRow(height:44,divider:false) {HStack {Text("Download location");Spacer(minLength:2);SettingsPopUp("Download location",selection:Binding(get:{model.askWhereToSave ? "ask":"folder"},set:{if $0 == "ask" {model.askWhereToSave=true} else if $0 == "other" {chooseDownloads()} else {model.askWhereToSave=false}}),width:137,entries:[.option(downloadName,"folder",symbol:"folder.fill"),.option("Ask for each download","ask"),.separator,.option("Other…","other")])}}
                     }
                     SettingsGroup("Your Data and Settings") {
                         page("Privacy and Security",symbol:"lock.fill",color:.blue,page:.privacy)
@@ -220,7 +223,7 @@ public struct ProfileNameSheet:View {
 public struct ArchiveScopeSheet:View {
     @Bindable var model:ProfilesViewModel
     public init(model:ProfilesViewModel) { self.model=model }
-    public var body:some View { VStack(spacing:24) { Text(model.pendingArchive == .never ? "Open will never auto-archive your tabs." : "Open will now archive your tabs after \(model.pendingArchive?.settingsTitle ?? "").")
+    public var body:some View { VStack(spacing:14) {Text("Apply to all Profiles or only “\(model.archiveScopeProfileName)”?").font(.headline); Text(model.pendingArchive == .never ? "Open will never auto-archive your tabs." : "Open will now archive your tabs after \(model.pendingArchive?.settingsTitle ?? "").")
         HStack { Button("Cancel") { model.cancelArchive() }.keyboardShortcut(.cancelAction);Button("All Profiles") { model.applyArchive(all:true) };Button("This Profile Only") { model.applyArchive(all:false) }.keyboardShortcut(.defaultAction) }
     }.padding(24).frame(width:500,height:160) }
 }
@@ -232,10 +235,10 @@ public struct SuggestNoticeSheet:View {
 public struct ClearBrowsingDataSheet:View {
     @Bindable var model:ProfilesViewModel
     public init(model:ProfilesViewModel) { self.model=model }
-    public var body:some View { VStack(alignment:.leading,spacing:20) { Text("Clear Browsing Data").font(.title2)
+    public var body:some View { VStack(alignment:.leading,spacing:20) { Text("Clear Browsing Data").font(.title2);Text("Clear data for “\(model.clearProfileName)”.").foregroundStyle(.secondary)
         ForEach([(ClearDataKinds.history,"Browsing history"),(.cookies,"Cookies and site data"),(.cache,"Cached files"),(.downloads,"Download history")],id:\.0.rawValue) { kind,title in Toggle(title,isOn:Binding(get:{model.clearKinds.contains(kind)},set:{if $0 {model.clearKinds.insert(kind)} else {model.clearKinds.remove(kind)}})) }
         Picker("Time range",selection:$model.clearRange) { ForEach(ClearDataRange.allCases,id:\.self) { Text($0.rawValue).tag($0) } }
         if model.clearing { ProgressView() };if !model.clearStatus.isEmpty {Text(model.clearStatus)};Spacer()
-        HStack { Button(model.clearStatus == "Done" ? "Done":"Cancel") { model.showsClear=false }.keyboardShortcut(.cancelAction).disabled(model.clearing);Spacer();Button("Clear Data",role:.destructive) { Task {await model.clear()} }.keyboardShortcut(.defaultAction).disabled(model.clearing || model.clearKinds.isEmpty) }
+        HStack { Button(model.clearStatus == "Done" ? "Done":"Cancel") { model.showsClear=false }.keyboardShortcut(.cancelAction).disabled(model.clearing);Spacer();Button("Clear Data",role:.destructive) { Task {await model.clear()} }.disabled(model.clearing || model.clearKinds.isEmpty) }
     }.padding(24).frame(width:460,height:360) }
 }

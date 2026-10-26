@@ -54,7 +54,7 @@ public struct AdvancedPane: View {
         if let ad=model.root.adBlock {
             SettingsGroup {
                 SettingsRow(height:36) { SettingsSwitch("Block ads, trackers, and popups",isOn:Binding(get:{ad.enabled},set:{ad.setEnabled($0)})) }
-                SettingsRow(height:44,divider:ad.hasOtherBlocker) { HStack { Text("Block lists");Text(ad.enabledIDs.joined(separator:", ")).foregroundStyle(.secondary).lineLimit(1);Spacer();Button("Ad Block Settings…") { showsAdBlock=true } } }
+                SettingsRow(height:44,divider:ad.hasOtherBlocker) { HStack { Text("Block lists");Text(ad.isReady ? ad.enabledIDs.joined(separator:", "):"Loading…").foregroundStyle(.secondary).lineLimit(1);Spacer();Button("Ad Block Settings…") { showsAdBlock=true } } }
                 if ad.hasOtherBlocker { SettingsRow(height:44,divider:false) { Text("More than one ad blocker is on. Blocking may break sites.").foregroundStyle(.orange) } }
             }.id("advanced-adblock").sheet(isPresented:$showsAdBlock) { AdBlockSettingsSheet(model:ad,onDone:{showsAdBlock=false}) }
         }
@@ -79,9 +79,9 @@ public struct AdvancedPane: View {
     case .never:"Tabs stay awake until you close them. This uses more memory."
     } }
     private func tile(_ title:String,key:String,symbol:String,color:Color,last:Bool=false,subtitle:String?=nil)->some View {
-        SettingsRow(height:40,divider:!last) { HStack(spacing:8) {
+        SettingsRow(height:subtitle == nil ? 40:50,divider:!last) { HStack(spacing:8) {
             Image(systemName:symbol).font(.system(size:12)).foregroundStyle(.white).frame(width:20,height:20).background(color,in:RoundedRectangle(cornerRadius:3))
-            VStack(alignment:.leading,spacing:1) {Text(title).font(.system(size:12));if let subtitle {Text(subtitle).font(.system(size:9)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}}
+            VStack(alignment:.leading,spacing:1) {Text(title).font(.system(size:13));if let subtitle {Text(subtitle).font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}}
             Spacer(minLength:0);Toggle(title,isOn:Binding(get:{model.root.bool("open.advanced."+key)},set:{model.root.set($0,for:"open.advanced."+key)})).labelsHidden().toggleStyle(.switch).controlSize(.mini)
         } }
     }
@@ -100,14 +100,14 @@ public struct AdBlockSettingsSheet:View {
             ForEach(["generic","cookies","privacy","regional"],id:\.self) {category in
                 let lists=model.lists.filter{$0.category.lowercased() == category && !$0.urls.isEmpty}
                 if !lists.isEmpty {DisclosureGroup(isExpanded:Binding(get:{expanded.contains(category) || !model.query.isEmpty},set:{if $0 {expanded.insert(category)} else {expanded.remove(category)}})) {
-                    ForEach(lists){list in HStack {Toggle(list.displayName,isOn:Binding(get:{model.enabledIDs.contains(list.id)},set:{on in Task {await model.setList(list.id,enabled:on)}})).disabled(model.busy);Spacer();Text(model.listStatus(list)).font(.caption).foregroundStyle(.secondary);Button {model.openInfo(list)} label:{Image(systemName:"info.circle")}.buttonStyle(.plain)}}
+                    ForEach(lists){list in HStack {Toggle(list.displayName,isOn:Binding(get:{model.enabledIDs.contains(list.id)},set:{on in Task {await model.setList(list.id,enabled:on)}})).disabled(model.busy || !model.isReady);Spacer();Text(model.listStatus(list)).font(.caption).foregroundStyle(.secondary);Button {model.openInfo(list)} label:{Image(systemName:"info.circle")}.buttonStyle(.plain)}}
                 } label:{Text(category.capitalized)} }
             }
             Divider();Text("Don't block on these sites")
-            ForEach(model.domains,id:\.self){host in HStack {Text(host);Spacer();Button("Remove"){model.setExcluded(host,excluded:false)}}}
-            HStack {TextField("example.com",text:$model.hostDraft);Button("Add"){model.setExcluded(model.hostDraft,excluded:true)}.disabled(model.hostDraft.isEmpty || model.busy)}
+            ForEach(model.domains,id:\.self){host in HStack {Text(host);Spacer();Button("Remove"){model.setExcluded(host,excluded:false)}.disabled(model.busy || !model.isReady)}}
+            HStack {TextField("example.com",text:$model.hostDraft).disabled(model.busy || !model.isReady);Button("Add"){model.setExcluded(model.hostDraft,excluded:true)}.disabled(model.hostDraft.isEmpty || model.busy || !model.isReady)}
         }.frame(maxWidth:.infinity,alignment:.leading) }
-        if model.busy {ProgressView()};SettingsError(text:model.errorText);if let error=model.lastError {SettingsError(text:error)}
-        HStack {Button("Copy Debug Info"){model.copyDebug()};Button("Reset List Choices"){Task {await model.reset()}}.disabled(model.busy);Spacer();Button("Done",action:onDone).keyboardShortcut(.defaultAction)}
-    }.padding(24).frame(width:600,height:560).task {await model.openSelectedProfile()} }
+        if model.busy || !model.isReady {ProgressView()};SettingsError(text:model.errorText);if let error=model.lastError {SettingsError(text:error)}
+        HStack {Button("Copy Debug Info"){model.copyDebug()};Button("Reset List Choices"){Task {await model.reset()}}.disabled(model.busy || !model.isReady);Spacer();Button("Done",action:onDone).keyboardShortcut(.defaultAction)}
+    }.padding(24).frame(width:600,height:560).task(id:model.profileID) {await model.openSelectedProfile()} }
 }

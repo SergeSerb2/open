@@ -67,6 +67,22 @@ import OpenImport
             readable = true
         } catch { counts = [:]; spaceMapping = []; errorText = "No readable import data found at \(plan.directory.path)." }
     }
+    public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
+    public var reportSummary:String {
+        let result=outcome?.counts ?? [:],spaces=result["Spaces"] ?? result["Imported Spaces",default:0]
+        let tabs=result["Imported tabs"] ?? result["Pinned and Today tabs",default:0]+result["Favorites",default:0]
+        return "Imported \(spaces) \(spaces == 1 ? "Space":"Spaces") and \(tabs) \(tabs == 1 ? "tab":"tabs")."
+    }
+    public func reportCount(_ category:String)->Int {outcome?.counts[category] ?? 0}
+    public var reportSkipped:String {
+        let result=outcome?.counts ?? [:]
+        var parts:[String]=[]
+        for (key,singular,plural) in [("Skipped easels","easel","easels"),("Skipped notes","note","notes"),("Skipped unknown","unsupported item","unsupported items")] {
+            let count=result[key,default:0];if count > 0 {parts.append("\(count) \(count == 1 ? singular:plural)")}
+        }
+        return parts.isEmpty ? "":"Skipped: " + parts.joined(separator:", ")
+    }
+    public var passwordsWereNotImported:Bool {!plan.secretsConsented}
     public var canImportPasswordsAndCookies: Bool { root.actions.canImportPasswordsAndCookies }
     public func review() { guard canContinue else { return }; step = .review }
     public func beginImport() async {
@@ -115,15 +131,18 @@ public struct ImportWizard: View {
                     }
                 case .progress: ProgressView(); Text("Importing selected data…")
                 case .report:
-                    ForEach((model.outcome?.counts ?? [:]).keys.sorted(), id: \.self) { name in HStack { Text(name); Spacer(); Text("\(model.outcome!.counts[name]!)").monospacedDigit() } }
-                    if model.plan.secretsRequested || model.consentWasDecided { Text("Passwords and cookies were not imported.").foregroundStyle(.secondary) }
+                    if model.outcome?.errorText == nil {
+                        Text(model.reportSummary).font(.headline)
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(name);Spacer();Text("\(model.reportCount(name))").monospacedDigit()}}
+                        if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
+                    }
+                    if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
                 }
                 SettingsError(text: model.errorText)
             }.frame(maxWidth: .infinity, alignment: .leading) }
             if model.busy { ProgressView() }
             HStack {
-                if model.step == .report { Button("Done") { model.finish() }.keyboardShortcut(.defaultAction) }
-                else { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
+                if model.step != .report { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
                 case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
@@ -134,7 +153,7 @@ public struct ImportWizard: View {
                         Button("Import Passwords and Cookies") { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction)
                     } else { Button("Continue Without Passwords") { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction) }
                 case .progress: EmptyView()
-                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } }
+                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction)
                 }
             }
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)

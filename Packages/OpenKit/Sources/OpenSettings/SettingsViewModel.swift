@@ -19,6 +19,7 @@ import OpenAdBlock
     /// Optional deep link into a long pane; used by the renderer and app presenters.
     public var scrollTarget: String?
     public var statusText = ""
+    public var linksError = ""
     public var preferenceRevision = 0
     public var adBlock: AdBlockSettingsModel?
     @ObservationIgnored public private(set) lazy var shortcuts = ShortcutsViewModel(root: self)
@@ -43,9 +44,21 @@ import OpenAdBlock
         links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: model.windows.map { RoutingWindowSnapshot(id: $0.id, kind: $0.style == .littleOpen ? .littleOpen : .standard, focusedSpaceID: $0.focusedSpaceID) }, rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: defaults.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser(), defaults: defaults)
         refreshLinks()
     }
-    public var shortcutsStore: KeyBindingStore { (try? KeyBindingStore.load(from: root.appendingPathComponent("State/keybindings.json"))) ?? .empty }
+    @ObservationIgnored private var keyBindingStamp = "unread"
+    @ObservationIgnored private var cachedKeyBindings = KeyBindingStore.empty
+    @ObservationIgnored public private(set) var keyBindingLoadCount = 0
+    public var shortcutsStore: KeyBindingStore {
+        let url=root.appendingPathComponent("State/keybindings.json")
+        let attributes=try? FileManager.default.attributesOfItem(atPath:url.path)
+        let stamp="\((attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)|\(attributes?[.size] as? NSNumber ?? 0)|\(attributes?[.systemFileNumber] as? NSNumber ?? 0)"
+        if stamp != keyBindingStamp {
+            cachedKeyBindings=(try? KeyBindingStore.load(from:url)) ?? .empty
+            keyBindingStamp=stamp; keyBindingLoadCount += 1
+        }
+        return cachedKeyBindings
+    }
     public var routingSpaces: [RoutingSpaceSnapshot] { model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) } }
-    public func commitLinks() {
+    @discardableResult public func commitLinks() -> Bool {
         let oldHotkey = bool("open.links.littleOpenHotkeyEnabled")
         set(links.externalLinksInLittleOpen, for: "open.links.externalInLittleOpen")
         set(links.littleOpenHotkeyEnabled, for: "open.links.littleOpenHotkeyEnabled")
@@ -55,8 +68,35 @@ import OpenAdBlock
             var settings = profile.settings; settings.littleOpenAutoArchiveAfter = links.littleOpenAutoArchiveAfter
             model.updateProfileSettings(id: selectedProfileID, settings: settings); save()
         }
-        guard !links.issues().contains(where: \.isError) else { return }
-        let copy = links.currentRouting(); model.routingRules = copy.rules; model.defaultDestination = copy.defaultDestination; save()
+        guard !links.issues().contains(where: \.isError) else {
+            linksError="Routes could not be saved. Check each pattern and choose an existing Space for every rule."
+            return false
+        }
+        let oldRules=model.routingRules,oldDestination=model.defaultDestination
+        let copy=links.currentRouting();model.routingRules=copy.rules;model.defaultDestination=copy.defaultDestination
+        do {try snapshot.saveNow(model:model);linksError="";return true}
+        catch {model.routingRules=oldRules;model.defaultDestination=oldDestination;linksError="Routes could not be saved. Try again when your data folder is available.";return false}
+    }
+    /// The sheet keeps its local draft open if another rule or the durable save fails.
+    @discardableResult public func saveLinkRule(_ draft: RuleDraft) -> Bool {
+        if let index=links.drafts.firstIndex(where:{$0.id == draft.id}) {links.drafts[index]=draft}
+        else {links.drafts.append(draft)}
+        return commitLinks()
+    }
+    public var linkTestSummary: String? {
+        guard let decision=links.testDecision else {return nil}
+        let target:String
+        switch decision.resolved {
+        case .littleOpen: target="Little Open"
+        case .space(let id,_): target=model.space(id:id).map{model.displayTitle(for:$0)} ?? "the selected Space"
+        case nil: return "This link cannot be opened. Use an http or https address."
+        }
+        if let rule=decision.traces.first(where:{$0.outcome == .matched})?.rule {
+            let pattern:String,kind:String
+            switch rule.match {case .hostContains(let value):pattern=value;kind="Host contains";case .hostEquals(let value):pattern=value;kind="Host equals";case .urlPrefix(let value):pattern=value;kind="URL starts with"}
+            return "Opens in \(target) · matched “\(pattern)” (\(kind))"
+        }
+        return "Opens in \(target) · default destination"
     }
     public func refreshLinks(preserveDrafts: Bool = false) {
         let previous = links

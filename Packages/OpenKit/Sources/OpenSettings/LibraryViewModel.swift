@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Observation
 import ImageIO
 import UniformTypeIdentifiers
@@ -34,6 +35,9 @@ import OpenStore
     public var historyProfileID: ProfileID
     public private(set) var historyRows: [HistoryMatch] = []
     public private(set) var historyFavicons: [URL: Data] = [:]
+    public private(set) var thumbnailImages: [UUID: NSImage] = [:]
+    public private(set) var faviconImages: [ItemID: NSImage] = [:]
+    public private(set) var historyFaviconImages: [URL: NSImage] = [:]
     public private(set) var thumbnails: [UUID: Data] = [:]
     public private(set) var favicons: [ItemID: Data] = [:]
     public let defaults: UserDefaults
@@ -46,6 +50,7 @@ import OpenStore
     public let faviconStore: FaviconStore?
     private let snapshot: SnapshotStore
     private var archiveOwners: [ItemID: ProfileID] = [:]
+    private var activeArchiveLoad = UUID()
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
     public init(model: BrowserModel, defaults: UserDefaults, actions: any LibraryActions, downloads: any DownloadsProvider, captures: any CapturesProvider,
@@ -73,8 +78,8 @@ import OpenStore
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
     public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {
-        guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation
-        defer { if request == generation { archiveLoading = false } }
+        guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
+        defer { if request == generation && load == activeArchiveLoad { archiveLoading = false } }
         var candidates: [(ProfileID, ArchivedTabRecord)] = []
         for (profile, store) in archives {
             let page = await store.page(offset: cursors[profile, default: 0], query: query, spaceID: archiveSpaceFilter, reason: archiveReasonFilter, origin: archiveOriginFilter.rawValue)
@@ -83,8 +88,10 @@ import OpenStore
         }
         let page = Array(candidates.sorted { a, b in a.1.archivedAt == b.1.archivedAt ? a.1.id.description < b.1.id.description : a.1.archivedAt > b.1.archivedAt }.prefix(100))
         for (profile, row) in page { cursors[profile, default: 0] += 1; archiveOwners[row.id] = profile }
-        archiveRows += page.map(\.1); archiveHasMore = page.count == 100
-        if let faviconStore { for (_, row) in page { let icon = await faviconStore.icon(for: row.url)?.png32; guard generation == request else { return }; favicons[row.id] = icon } }
+        archiveRows += page.map(\.1); archiveHasMore = page.count == 100; archiveLoading=false
+        if let faviconStore { for (_, row) in page { let icon = await faviconStore.icon(for: row.url)?.png32; guard generation == request, !Task.isCancelled else { return }
+            if favicons[row.id] != icon { faviconImages[row.id]=icon.flatMap{NSImage(data:$0)} }
+            favicons[row.id] = icon } }
     }
     public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
@@ -133,7 +140,9 @@ import OpenStore
                 archiveResults[owner] = "Deleted \(ownedIDs.count)."
             } catch { archiveResults[owner] = "Failed: \(error.localizedDescription)" }
         }
-        statusText = archiveResultText(); await reloadArchive()
+        let missing=ids.contains{archiveOwners[$0] == nil}
+        statusText = [archiveResultText(),missing ? "This archived tab is no longer available." : ""].filter{!$0.isEmpty}.joined(separator:" · ")
+        await reloadArchive()
     }
     public func requestClearArchive() { confirmsClear = true }
     public func clearArchiveConfirmed() async {
@@ -180,13 +189,13 @@ import OpenStore
             let output = NSMutableData(); guard let destination = CGImageDestinationCreateWithData(output, UTType.png.identifier as CFString, 1, nil) else { return nil }
             CGImageDestinationAddImage(destination, image, nil); guard CGImageDestinationFinalize(destination) else { return nil }; return output as Data
         }.value
-        if thumbnails.count >= 128 { thumbnails.removeAll(keepingCapacity: true) }; thumbnails[item.id] = data
+        if thumbnails.count >= 128 { thumbnails.removeAll(keepingCapacity: true);thumbnailImages.removeAll(keepingCapacity:true) }; thumbnails[item.id] = data;thumbnailImages[item.id]=data.flatMap{NSImage(data:$0)}
     }
     public func deleteCaptureConfirmed() {
         guard let id = pendingCaptureDelete else { return }; pendingCaptureDelete = nil
-        do { try captures.remove(id: id); thumbnails.removeValue(forKey: id); actions.deleteCapture(id: id); statusText = "Capture deleted." }
+        do { try captures.remove(id: id); thumbnails.removeValue(forKey: id); thumbnailImages.removeValue(forKey:id); actions.deleteCapture(id: id); statusText = "Capture deleted." }
         catch { statusText = "Could not delete the capture. \(error.localizedDescription)" }
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }
-    public func reloadHistory() async { let profile = historyProfileID, text = query; let rows = await histories[profile]?.search(text, limit: 100) ?? []; guard profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; historyFavicons = [:]; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard profile == historyProfileID, text == query, !Task.isCancelled else {return}; historyFavicons[row.url] = data } } }
+    public func reloadHistory() async { let profile = historyProfileID, text = query; let rows = await histories[profile]?.search(text, limit: 100) ?? []; guard profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; if historyFaviconImages.count > 512 {historyFavicons=[:];historyFaviconImages=[:]}; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard profile == historyProfileID, text == query, !Task.isCancelled else {return}; if historyFavicons[row.url] != data {historyFaviconImages[row.url]=data.flatMap{NSImage(data:$0)}};historyFavicons[row.url] = data } } }
 }

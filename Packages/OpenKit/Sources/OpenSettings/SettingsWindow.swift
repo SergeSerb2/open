@@ -29,11 +29,15 @@ public struct SettingsContent: View {
                             case .shortcuts: EmptyView()
                             }
                         }.padding(.horizontal, SettingsTokens.contentInset).padding(.top, SettingsTokens.firstBoxGap).padding(.bottom, 20)
-                    }.onAppear { if let target = viewModel.scrollTarget { proxy.scrollTo(target, anchor: .top) } }
-                     .onChange(of: viewModel.scrollTarget) { _, target in if let target { proxy.scrollTo(target, anchor: .top) } }
+                    }.task(id:viewModel.scrollTarget) {
+                        // Wait for the destination views to enter the laid-out scroll tree.
+                        guard let target=viewModel.scrollTarget else {return}
+                        await Task.yield()
+                        proxy.scrollTo(target,anchor:.bottom)
+                    }
                 }
             }
-        }.font(Font(SettingsTokens.label.font)).controlSize(.small)
+        }.font(Font(SettingsTokens.label.font)).controlSize(.regular)
         .background(Color(nsColor: SettingsTokens.content.nsColor)).buttonStyle(SettingsButtonStyle()).ignoresSafeArea()
         .onChange(of: viewModel.model.spaces.map { "\($0.id)|\($0.profileID)|\($0.title ?? "")" }) { _, _ in viewModel.refreshLinks(preserveDrafts: true); viewModel.profiles.refresh() }
         .onChange(of: viewModel.model.profiles.map { "\($0.id)|\($0.name)" }) { _, _ in viewModel.profiles.refresh(); viewModel.adBlock?.refresh() }
@@ -111,7 +115,12 @@ private final class SettingsTabButton: NSButton {
     public func show(pane: PaneID? = nil) { if let pane { viewModel.selectedPane=pane }; if window == nil { window=SettingsWindow.makeWindow(viewModel:viewModel);window?.delegate=self }; viewModel.refreshExternalState();window?.makeKeyAndOrderFront(nil) }
     /// App calls before its first remote suggestion query. False means present and await the notice.
     @discardableResult public func prepareForRemoteSuggestions(profileID: OpenModel.ProfileID) -> Bool {
-        if viewModel.profiles.prepareForRemoteSuggestions(profileID:profileID) { return true }; if viewModel.profiles.showsSuggestNotice { show(pane:.profiles) }; return false
+        viewModel.profiles.prepareForRemoteSuggestions(profileID:profileID)
+    }
+    /// Explicit presentation action. A query gate alone never changes Settings or opens a window.
+    public func presentSearchSuggestionNotice(profileID:OpenModel.ProfileID) {
+        viewModel.profiles.presentSuggestNotice(profileID:profileID)
+        if viewModel.profiles.showsSuggestNotice {show(pane:.profiles)}
     }
     public func windowDidBecomeKey(_ notification: Notification) { viewModel.refreshExternalState() }
 }
@@ -121,7 +130,7 @@ struct SettingsGroup<Content: View>: View {
     @ViewBuilder var content: Content
     init(_ title: String = "", @ViewBuilder content: () -> Content) { self.title=title;self.content=content() }
     var body: some View { VStack(alignment:.leading,spacing:5) {
-        if !title.isEmpty { Text(title).font(Font(SettingsTokens.section.font)).foregroundStyle(.tertiary).padding(.leading,2) }
+        if !title.isEmpty { Text(title).font(Font(SettingsTokens.section.font)).foregroundStyle(Color(nsColor:SettingsTokens.secondary.nsColor)).padding(.leading,10) }
         VStack(spacing:0) { content }.frame(maxWidth:.infinity,alignment:.leading)
             .background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:SettingsTokens.radius))
             .overlay(RoundedRectangle(cornerRadius:SettingsTokens.radius).stroke(Color(nsColor:SettingsTokens.border.nsColor),lineWidth:1))
@@ -150,8 +159,8 @@ struct SettingsSwitch:View {
 struct SettingsButtonStyle:ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration:Configuration)->some View {
-        configuration.label.font(.system(size:11,weight:.medium)).padding(.horizontal,7).padding(.vertical,3)
-            .background(Color(nsColor:SettingsTokens.button.nsColor).opacity(configuration.isPressed ? 1.8:1),in:RoundedRectangle(cornerRadius:4))
+        configuration.label.font(.system(size:13,weight:.regular)).padding(.horizontal,12).frame(height:24)
+            .background(Color(nsColor:SettingsTokens.button.nsColor).opacity(configuration.isPressed ? 1.8:1),in:RoundedRectangle(cornerRadius:6))
             .opacity(enabled ? 1:0.45)
     }
 }

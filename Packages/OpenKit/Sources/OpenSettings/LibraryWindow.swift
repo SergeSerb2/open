@@ -11,7 +11,9 @@ public struct LibraryContent:View {
         Divider()
         VStack(spacing:0) {
             VStack(spacing:8) {
-                Text(viewModel.section.title).font(.system(size:13,weight:.semibold)).frame(height:20)
+                ZStack {Text(viewModel.section.title).font(.system(size:13,weight:.semibold))
+                    if viewModel.section == .archive {HStack {Spacer();Button("Delete Selected…",role:.destructive){viewModel.requestDeleteArchive(viewModel.archiveRows.filter{viewModel.selectedIDs.contains($0.id.description)}.map(\.id))}.disabled(viewModel.selectedIDs.isEmpty);Button("Clear Archive…"){viewModel.requestClearArchive()}.disabled(viewModel.archiveTotalCount == 0)}.buttonStyle(SettingsButtonStyle())}
+                }.frame(height:24)
                 LibraryToolbar(model:viewModel)
             }.padding(.horizontal,18).padding(.top,4).padding(.bottom,12).background(.bar)
             Divider()
@@ -23,7 +25,7 @@ public struct LibraryContent:View {
             }}.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity)
             if !viewModel.statusText.isEmpty {HStack {Text(viewModel.statusText).font(.caption).foregroundStyle(.secondary);if let space=viewModel.restoredSpaceID {Button("View"){viewModel.actions.viewSpace(id:space)}};Spacer()}.padding(.horizontal,16).padding(.bottom,10)}
         }
-    }.font(Font(SettingsTokens.label.font)).controlSize(.small).background(Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
+    }.font(Font(SettingsTokens.label.font)).controlSize(.regular).background(Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
     .accessibilityElement(children:.contain).accessibilityLabel("Library")
     .task(id:viewModel.filterIdentity){await viewModel.reload()}
     .background(WindowTitle(title:viewModel.section.title).frame(width:0,height:0))}

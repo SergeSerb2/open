@@ -14,9 +14,9 @@ public struct AppIconPane:View {
     public init(model:AppIconViewModel) {self.model=model}
     public var body:some View {SettingsGroup {
         ForEach(Array(AppIconOption.allCases.enumerated()),id:\.element) {index,option in
-            SettingsRow(height:80,divider:index != AppIconOption.allCases.count-1) {Button {model.select(option)} label:{HStack(spacing:16) {
-                ZStack {Circle().stroke(Color.secondary,lineWidth:1).frame(width:20,height:20);if model.selected == option.rawValue {Circle().fill(Color(nsColor:SettingsTokens.link.nsColor)).frame(width:12,height:12)}}.frame(width:22)
-                OriginalOpenIcon(index:index).frame(width:52,height:52)
+            SettingsRow(height:80,divider:index != AppIconOption.allCases.count-1) {Button {model.select(option)} label:{HStack(spacing:0) {
+                ZStack {Circle().stroke(Color.secondary,lineWidth:1).frame(width:20,height:20);if model.selected == option.rawValue {Circle().fill(Color(nsColor:SettingsTokens.link.nsColor)).frame(width:12,height:12)}}.frame(width:22).padding(.leading,6).padding(.trailing,25)
+                OriginalOpenIcon(index:index).frame(width:52,height:52).padding(.trailing,15)
                 VStack(alignment:.leading,spacing:4) {Text(option.title).font(.system(size:13,weight:.semibold));if model.selected == option.rawValue {Text("CURRENT ICON").font(.system(size:10,weight:.bold)).foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor))}};Spacer()
             }}.buttonStyle(.plain).accessibilityLabel(option.title).accessibilityAddTraits(model.selected == option.rawValue ? .isSelected:[]) }
         }

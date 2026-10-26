@@ -51,7 +51,7 @@ PASS profile-archive-scope
 PASS profile-downloads
 ACTION clearBrowsingData 10000000-0000-0000-0000-000000000001 kinds=3 range=All time
 PASS clear-data
-ACTION deleteProfileData 4D59C647-63D9-4F35-9125-C9E18D3F7248
+ACTION deleteProfileData D6D7EF97-C8E9-47F7-AC3C-50F3C0FBA33F
 PASS profile-guards
 PASS links-rules
 ACTION keyBindingsDidChange
@@ -92,16 +92,28 @@ ACTION deleteCapture 60000000-0000-0000-0000-000000000001
 ACTION openHistoryItem
 ACTION openHistoryItem
 PASS library-captures-history
-PNG empty-archive.png 960x640 34967 bytes sha256=79dd20848f7c30a756b6347a6adc64b4716cfa96eb284a3d9bb0360faf3a183c
-PNG empty-downloads.png 960x640 32856 bytes sha256=ef59ae9033913a1331b1fab1b3d2de4c5d0132229c8d16a7b561cf5bc015a886
-PNG empty-captures.png 960x640 31777 bytes sha256=f19020c0de7af7f88690728ac4bfc99699298bf6e881c4fb89c4111e44756a11
+PNG empty-archive.png 960x640 36003 bytes sha256=a85398d99dc5bcc327bad304f82ebc998bc4e0ad9a6877a31e161d75fc3e7294
+PNG empty-downloads.png 960x640 33421 bytes sha256=7698760c1cca7f6fd91464cba4266de30d4a3f0f988c95b98754857cbe1cc693
+PNG empty-captures.png 960x640 31972 bytes sha256=1f06664ad964b60ad99515749fd3192e96ab43580c642250da1dee836949331e
 PASS empty-states
 PASS archive-save-failure
 ACTION deleteArchived 50000000-0000-0000-0000-000000000001
 ACTION deleteArchived 50000000-0000-0000-0000-000000000003
 PASS archive-owner-partial
-ACTION setAdBlockExcludedDomains example.org 5BDDAE2F-ECCB-44EF-90A6-93F7CFA5DB3A
-ACTION deleteProfileData 5BDDAE2F-ECCB-44EF-90A6-93F7CFA5DB3A
+ACTION setAdBlockExcludedDomains example.org F6D4BAEC-93D9-44A3-8230-0D8D2B4EE4A3
+ACTION deleteProfileData F6D4BAEC-93D9-44A3-8230-0D8D2B4EE4A3
 PASS adblock-profile-lifecycle
 PASS suggestion-notice
-SUMMARY 23 checks passed, 0 failed
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+PASS shortcuts-recording-admission
+PASS archive-paging
+PASS links-save-failure
+ACTION setAdBlockExcludedDomains example.org A6D1A314-D7EE-4AD1-9044-D92687F70C8F
+ACTION deleteProfileData A6D1A314-D7EE-4AD1-9044-D92687F70C8F
+PASS adblock-readiness
+ACTION keyBindingsDidChange
+PASS settings-caches
+SUMMARY 28 checks passed, 0 failed
