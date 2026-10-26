@@ -2,7 +2,7 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|dump|roundtrip|bench|commands-demo> ...")
+    print("usage: openkit <import-arc|dump|roundtrip|bench|commands-demo|suggest|suggest-check> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
@@ -19,6 +19,7 @@ do {
         await runBench()
     case "commands-demo":
         try await runCommandsDemo(args: rest)
+    case "suggest", "suggest-check": await runSuggestCommand(command, args: rest)
     default:
         print("unknown command: \(command)")
         exit(2)
