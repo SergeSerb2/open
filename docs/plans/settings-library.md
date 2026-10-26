@@ -126,7 +126,9 @@ except where a section says Save.
 | `open.links.openPeekOtherSites` | Bool | `true` | Links; Peek trigger B (`docs/re/features-advanced.md` section 2.2, guess ON) |
 | `open.links.openPeekShiftClick` | Bool | `true` | Links; Peek trigger C (guess ON) |
 | `open.advanced.restoreWindowsOnLaunch` | Bool | `true` | Advanced; launch (`docs/re/features-core.md` section 3.7, guess ON) |
-| `open.advanced.enablePictureInPictureOnLeave` | Bool | `true` | Advanced; PiP |
+| `open.advanced.enablePictureInPictureOnLeave` | Bool | `true` | Advanced; PiP (`docs/plans/media-pip.md` §5; Arc `autoPipGloballyDisabled` is the inverse) |
+| `open.pip.autoDisabledHosts` | [String] (lowercase hosts) | `[]` | PiP window menu "Turn off" / "Open automatically" (`docs/plans/media-pip.md` §4.4.5, §5). No Settings UI, as in Arc. |
+| `open.pip.keepOnTop` | Bool | `true` | PiP and Document PiP menu "Keep Window on Top" (`docs/plans/media-pip.md` §4.4.5, §5). No Settings UI. |
 | `open.advanced.allowWindowDraggingFromWebTop` | Bool | `false` | Advanced (Arc default unknown; Open choice OFF = safer) |
 | `open.advanced.showFullURLWithToolbar` | Bool | `false` | Advanced (unknown; Open choice OFF = trimmed) |
 | `open.advanced.enableBoosts` | Bool | `true` | Advanced; Boosts gate (feature plan owns detail) |

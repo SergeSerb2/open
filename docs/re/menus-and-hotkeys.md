@@ -652,6 +652,32 @@ Reset Name and Icon, Change Icon…, and Rename… (Open's splits have no custom
 name or icon), and without staff items. It puts "Move to" before the last
 separator, as in the captured tab menus.
 
+### Media and Picture in Picture (from code, 2026-10-25)
+
+Source: features-advanced §8 (PP-8, PP-16, PP-21); decompiles in
+`.re/media/ghidra-media.txt`; type metadata in `.re/media/swift-fields.tsv`.
+
+- No main-menu item and no default shortcut exists for media or PiP:
+  `MainMenuAction` has no such case, and the nib has no such item.
+- Command bar: "Mute all tabs" and "Unmute all tabs" (TypeTravel
+  candidates `muteAllTabs`, `unmuteAllTabs`).
+- Tab context menu: "Mute" / "Unmute" (`toggleMuted`), disabled when the
+  tab is silent and not muted (F0116 shows "Mute" disabled). Split pane
+  submenus have the same item (rule 6 above).
+- PiP window menu (the window's settings button), in this order: "Keep
+  Window on Top" (check mark), separator, a disabled header
+  "Picture-in-picture on <host>:", "Open automatically" (checked), "Turn
+  off", separator, "Copy URL", then "Mute" or "Unmute". The header block
+  shows only when the source URL has a host. The Document PiP window menu
+  has "Keep Window on Top" and the same header.
+- Button tooltips (all with a 0.45 s delay): mini player "Open Picture in
+  Picture", "Close Mini Player", "Toggle Microphone", "Toggle Camera",
+  "Previous Track", "Play" / "Pause", "Next Track", "Adjust Tab Volume";
+  PiP window "Close", "Minimize", "Skip back 15 seconds", "Skip ahead 15
+  seconds", scrubber hint "Drag upwards to seek precisely".
+- Keyboard media keys (play/pause, next, previous) reach the page through
+  Chromium's system media controls, not through Arc's menus (PP-22).
+
 ## Out of scope for Open v1 (present in this build)
 
 - Account/sync: Sign Out, Share Arc (referral), Import sync prompts,
@@ -713,3 +739,4 @@ except it omits most Arc-only keys. No DefKey key contradicts the nib.
 7. Which menu items the `arcKeyBindingID` set holds. Read the Shortcuts
    pane list. It is the ground truth for `Custom = Yes`.
 8. Command Bar Up/Down/Return/Esc and hold-Cmd overlay behavior.
+9. Keys inside a focused PiP window (space, arrows, Esc, Cmd+W), if any.
