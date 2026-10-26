@@ -125,6 +125,9 @@ final class EditorScene {
         if RenderCLI.value(args, "--hover") == "knob", let point = scene.view.pad.primaryKnobCenter {
             scene.mouse(.mouseMoved, at: point, in: scene.view.pad)
         }
+        if RenderCLI.value(args, "--hover") == "intensity" {
+            scene.mouse(.mouseMoved, at: CGPoint(x: scene.view.intensity.thumbFrame.midX, y: 28), in: scene.view.intensity)
+        }
         if let name = RenderCLI.value(args, "--hover"), name.hasPrefix("swatch-"), let index = Int(name.dropFirst(7)), (0..<9).contains(index) {
             scene.view.presets.visibleSwatches[index].forcedHover = true
         }

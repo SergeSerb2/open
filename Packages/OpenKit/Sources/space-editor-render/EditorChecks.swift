@@ -223,9 +223,12 @@ enum EditorChecks {
             let frames = scene.view.controlFrames
             let expected: [String: CGRect] = ["previous": CGRect(x: 9, y: 364, width: 32, height: 32),
                 "next": CGRect(x: 315, y: 364, width: 32, height: 32), "swatches": CGRect(x: 48, y: 364, width: 260, height: 32),
-                "intensity": CGRect(x: 18, y: 424, width: 224, height: 56), "thumb": CGRect(x: 180, y: 424, width: 24, height: 56),
+                "intensity": CGRect(x: 18, y: 424, width: 224, height: 56), "thumb": CGRect(x: 180.32, y: 424, width: 24.4, height: 56),
                 "noise": CGRect(x: 258, y: 412, width: 84, height: 80), "noise-center": CGRect(x: 278, y: 432, width: 40, height: 40)]
-            check(expected.allSatisfy { frames[$0.key] == $0.value } && (0..<9).allSatisfy {
+            check(expected.allSatisfy { name, expected in
+                guard let frame = frames[name] else { return false }
+                return zip([frame.minX, frame.minY, frame.width, frame.height], [expected.minX, expected.minY, expected.width, expected.height]).allSatisfy { abs($0 - $1) < 0.001 }
+            } && (0..<9).allSatisfy {
                 frames["swatch-\($0)"] == CGRect(x: 48 + 29.5 * Double($0), y: 368, width: 24, height: 24)
             }, "E1 remaining control frames and nine swatches at \(Int(scale))x")
             scene.controller.close()
@@ -246,7 +249,7 @@ enum EditorChecks {
                 scene.click(swatch)
                 let style = scene.space.theme.style!, preset = SpaceStylePresets.all[page * 9 + i].style
                 allPresets = allPresets && style.keyColor == preset.keyColor && style.colorCount == preset.colorCount && style.wheel == preset.wheel
-                    && style.appearance == .dark && style.noiseFactor == 0.45 && style.intensityFactor == 0.2 && style.texture == .tweed
+                    && style.appearance == .dark && style.noiseFactor == 0.8 && style.intensityFactor == 0.2 && style.texture == .tweed
             }
         }
         check(allPresets && allFrames && scene.view.presets.page == 4 && !scene.view.presets.next.enabled, "E4 all 45 real swatch clicks, five page frames, preserved modifiers, and last-page refusal")
@@ -279,12 +282,13 @@ enum EditorChecks {
         let scene = try EditorScene(), slider = scene.view.intensity, dial = scene.view.noise
         let original = scene.space.theme, before = scene.controller.previewCount
         let layouts = (slider.layoutPassCount, dial.layoutPassCount, scene.view.layoutPassCount)
-        scene.mouse(.leftMouseDown, at: CGPoint(x: 14, y: 28), in: slider)
-        for x in stride(from: 24.0, through: 114, by: 10) { scene.mouse(.leftMouseDragged, at: CGPoint(x: x, y: 28), in: slider) }
-        check(slider.value == 0.5 && scene.view.controlFrames["thumb"]?.midX == 132 && scene.controller.previewCount == before,
-              "E6 slider midpoint is literal content x=132 and queues pointer previews")
+        scene.mouse(.leftMouseDown, at: CGPoint(x: 7.8, y: 28), in: slider)
+        for x in stride(from: 18.0, through: 108, by: 10) { scene.mouse(.leftMouseDragged, at: CGPoint(x: x, y: 28), in: slider) }
+        scene.mouse(.leftMouseDragged, at: CGPoint(x: 112, y: 28), in: slider)
+        check(abs(slider.value - 0.5) < 1e-9 && scene.view.controlFrames["thumb"]?.midX == 130 && scene.controller.previewCount == before,
+              "E6 slider midpoint is literal content x=130 (panel x=143) and queues pointer previews")
         scene.controller.flushPreviewFrame(); OffscreenRenderer.settle(scene.view)
-        scene.mouse(.leftMouseUp, at: CGPoint(x: 114, y: 28), in: slider); scene.controller.flushPreviewFrame()
+        scene.mouse(.leftMouseUp, at: CGPoint(x: 112, y: 28), in: slider); scene.controller.flushPreviewFrame()
         check(scene.space.theme.style?.intensityFactor == 0.5 && scene.controller.commitCount == 1,
               "E6 slider drag previews once per frame and commits once")
         check(slider.layoutPassCount == layouts.0 && dial.layoutPassCount == layouts.1 && scene.view.layoutPassCount == layouts.2,
@@ -317,10 +321,16 @@ enum EditorChecks {
         check(abs(dial.value - 0.01) < 1e-9, "E6 noise scroll changes 0.01 per line")
         scene.key(124, target: dial); scene.controller.flushPreviewFrame()
         check(abs(dial.value - 0.06) < 1e-9, "E6 noise arrow changes 0.05")
-        var textures: [SpaceStyleTexture] = []
-        for _ in 0..<4 { scene.click(dial.centerButton); textures.append(dial.texture) }
-        check(textures == [.sand, .denim, .tweed, .grain], "E6 center button cycles grain, sand, denim, tweed, grain")
-        check(ThemeTexture.generationCount - generation <= 3, "E6 dial previews reuse their texture tiles while noise changes")
+        var textures: [String] = [], values: [Double] = []
+        for _ in 0..<5 {
+            scene.click(dial.centerButton); textures.append(dial.value == 0 ? "none" : dial.texture.rawValue); values.append(dial.value)
+        }
+        check(textures == ["sand", "denim", "tweed", "none", "grain"] && values == [0.8, 0.8, 0.8, 0, 0.8],
+              "E6 center cycles none/grain/sand/denim/tweed with exactly 0.8 or zero noise")
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(dial.value == 0 && dial.texture == .tweed, "E6 texture cycle undo restores both noise and retained texture in one step")
+        scene.undo.redo(); scene.controller.prepareForSnapshot()
+        check(ThemeTexture.generationCount - generation <= 4, "E6 dial previews reuse their texture tiles while noise changes")
         check(slider.accessibilityRole() == .slider && slider.accessibilityLabel() == "Intensity"
               && dial.accessibilityRole() == .slider && dial.accessibilityLabel() == "Noise"
               && dial.centerButton.accessibilityLabel() == "Cycle noise texture"
@@ -333,11 +343,11 @@ enum EditorChecks {
         let endpoints = try EditorScene()
         var mapping = true
         for value in [0.0, 0.5, 1.0] {
-            let x = 14 + 200 * value
+            let x = 7.8 + 208.4 * value
             endpoints.mouse(.leftMouseDown, at: CGPoint(x: x, y: 28), in: endpoints.view.intensity)
             endpoints.mouse(.leftMouseUp, at: CGPoint(x: x, y: 28), in: endpoints.view.intensity); endpoints.controller.flushPreviewFrame()
             mapping = mapping && abs(endpoints.view.intensity.value - value) < 1e-9
-                && abs(endpoints.view.controlFrames["thumb"]!.midX - (32 + 200 * value)) < 0.001
+                && abs(endpoints.view.controlFrames["thumb"]!.midX - (25.8 + 208.4 * value)) < 0.001
         }
         check(mapping, "E6 calibrated slider input and art agree at zero, midpoint, and one")
         endpoints.mouse(.leftMouseDown, at: CGPoint(x: -10, y: 28), in: endpoints.view.intensity)
@@ -346,6 +356,13 @@ enum EditorChecks {
         endpoints.mouse(.leftMouseDown, at: CGPoint(x: 250, y: 28), in: endpoints.view.intensity)
         endpoints.mouse(.leftMouseUp, at: CGPoint(x: 250, y: 28), in: endpoints.view.intensity); endpoints.controller.flushPreviewFrame()
         check(zero && endpoints.view.intensity.value == 1, "E6 slider input clamps beyond both ends")
+        endpoints.controller.apply(.setIntensity(0, final: true)); endpoints.controller.flushPreviewFrame()
+        check(endpoints.view.intensity.waveAmplitude == 0 && endpoints.view.intensity.thumbSize == CGSize(width: 12.2, height: 44.4),
+              "E6 intensity zero draws a flat wave and the captured small rest thumb")
+        endpoints.controller.apply(.setIntensity(1, final: true)); endpoints.controller.flushPreviewFrame()
+        check(endpoints.view.intensity.waveAmplitude == 14.4 && abs(endpoints.view.intensity.thumbSize.width - 27.05) < 1e-9
+              && abs(endpoints.view.intensity.thumbSize.height - 59.15) < 1e-9,
+              "E6 intensity one draws 14.4 pt amplitude and the captured 27.05 by 59.15 rest thumb")
         endpoints.controller.close()
     }
     static func reviewedControls() throws {
@@ -385,23 +402,31 @@ enum EditorChecks {
         check(abs(dial.value - 0.05) < 1e-9 && dial.hiddenDotIndices == [1], "E6 inside-dot click snaps and hides only the nearest slot")
         scene.controller.apply(.setNoise(0, final: true)); scene.controller.flushPreviewFrame()
         let previews = dial.previewCompositionCount
-        for _ in 0..<4 { scene.click(dial.centerButton) }
-        check(dial.previewCompositionCount == previews, "E6 zero noise skips preview composition across all textures")
-        scene.controller.apply(.setNoise(0.1, final: true)); scene.controller.flushPreviewFrame()
-        check(dial.previewCompositionCount == previews, "E6 returning to the same nonzero texture reuses the existing preview")
+        var quiet = scene.space.theme.style!
+        for texture in SpaceStyleTexture.allCases {
+            quiet.texture = texture; quiet.noiseFactor = 0
+            scene.model.previewSpaceTheme(id: scene.space.id, theme: SpaceTheme(style: quiet)); scene.controller.prepareForSnapshot()
+        }
+        check(dial.previewCompositionCount == previews, "E6 external zero-noise texture changes skip preview composition")
         let fresh = try EditorScene()
-        for _ in 0..<3 { fresh.click(fresh.view.noise.centerButton) }
-        check(fresh.view.noise.previewCompositionCount == 0, "E6 fresh zero-noise texture cycling composes nothing")
-        fresh.controller.apply(.setNoise(0.1, final: true)); fresh.controller.flushPreviewFrame()
-        check(fresh.view.noise.previewCompositionCount == 1, "E6 first nonzero noise composes the chosen preview once")
+        var freshQuiet = fresh.space.theme.style!
+        for texture in SpaceStyleTexture.allCases {
+            freshQuiet.texture = texture
+            fresh.model.previewSpaceTheme(id: fresh.space.id, theme: SpaceTheme(style: freshQuiet)); fresh.controller.prepareForSnapshot()
+        }
+        check(fresh.view.noise.previewCompositionCount == 0, "E6 fresh zero-noise model changes compose nothing")
+        fresh.click(fresh.view.noise.centerButton)
+        check(fresh.view.noise.previewCompositionCount == 1 && fresh.view.noise.texture == .grain && fresh.view.noise.value == 0.8,
+              "E6 center from none selects grain at 0.8 and composes once")
         let phaseEnd = fresh.controller.commitCount
         fresh.scroll(fresh.view.noise, y: 1, phase: 1); fresh.scroll(fresh.view.noise, phase: 4)
         RunLoop.main.run(until: Date().addingTimeInterval(0.12)); fresh.controller.flushPreviewFrame()
         check(fresh.controller.commitCount == phaseEnd + 1, "E6 phase end without momentum commits once after its grace interval")
         fresh.controller.close()
         let empty = try EditorScene(style: nil)
-        check(empty.view.intensity.alphaValue == 0.35 && empty.view.noise.alphaValue == 0.35,
-              "E1 empty state dims disabled slider and dial to 0.35")
+        check(empty.view.intensity.alphaValue == 1 && empty.view.noise.alphaValue == 1
+              && !empty.view.intensity.isThumbVisible && !empty.view.noise.isTickVisible && empty.view.noise.litDotCount == 0,
+              "E1 empty state has inactive wave, no thumb, no tick, and unlit dots")
         empty.controller.close()
         scene.panel.setFrameOrigin(CGPoint(x: -20000, y: -20000)); scene.panel.orderBack(nil)
         var nativePages = true

@@ -512,7 +512,7 @@ state (session 2 0010; supersedes the hidden-button guess). Each click is one co
 |---|---|
 | Arrows | `chevron.left` / `chevron.right` 13 pt, `glyph` color; disabled at the first / last page at alpha 0.35 (constant 0.35 in the picker code, **guess** for its role) |
 | Swatch | 24 pt circle filled with the key color; 1 pt inner rim of the same color × 0.9 (measured) |
-| Page 2 swatch | a 24 pt circle with a linear gradient from `c0` (top-leading) to `c1` (bottom-trailing) and a 9 pt disc of `c2` at the bottom-trailing corner (Open design; Arc's pill art was not captured) |
+| Page 2 swatch | own 3-stop diagonal sRGB gradient, no disc; measured stops from session 2 0016, stored as numbers in PresetStripView |
 | Hover | scale 1.1 over 0.12 s; press scale 0.9 (constants 0.9 / 0.85 in the picker code, **guess** for their role) |
 | Paging | horizontal slide of the strip by 265.5 pt, spring `Motion.spaceSwitch`; trackpad horizontal scroll pages too |
 | Selection | no visible selected state (none in F0137) |
@@ -524,19 +524,20 @@ state (session 2 0010; supersedes the hidden-button guess). Each click is one co
 | Property | Value |
 |---|---|
 | Track | capsule 224 × 16, `ThemeEditorColors.trackFill` (white ≈ 0.08) |
-| Wave | slider-local `y = 28 − 11.75·sin(2π(x − 7.8)/37.9)`, x 7.8…216.2 (5.5 periods, centerline endpoints); stroke 4.5 pt round caps. Left of the thumb `waveActive` (white ≈ 0.53), right `waveInactive` (white ≈ 0.15); disjoint masks prevent alpha stacking. |
-| Thumb | white capsule 24 × 56 (radius 12), faint white 0.04 halo / radius 3 / offset 0; light mode black 0.12 / 1 pt stroke |
-| Value | 0…1; thumb center x = 32 + 200·value; input uses the same mapping |
+| Wave | slider-local `y = 28 − 14.4·value·sin(2π(x − 7.8)/37.9)`, x 7.8…216.2. Flat at value 0. Stroke 4.5 pt round caps. Left of thumb `waveActive`, right `waveInactive`, with disjoint masks. Empty state: default value 0.8, all inactive. |
+| Thumb | white capsule, rest sizes interpolated through value 0: 12.2×44.4, 0.8: 24.4×56.0, 1: 27.05×59.15 pt. At 0 the measured hovered 13.25×48.4 is unscaled by 1.09 to get the rest fit. Hover/press ×1.09. Downward y +2 / radius 2 / alpha 0.06 shadow: white in dark, black in light. No normal outline or top halo. Empty: no thumb. |
+| Value | 0…1; thumb center panel x = `38.8 + 208.4·value`, content x = `25.8 + 208.4·value`, slider-local x = `7.8 + 208.4·value`; input uses the same mapping |
 | Interaction | mouse down on the track jumps the thumb, then drags; scroll wheel ± 0.02 per line; keys ←/→ ± 0.05 |
 | Label / tooltip | "Intensity" |
 | Live | preview per frame; commit on mouse up. Scroll phase plus momentum is one undo step, finished at momentum end; an 80 ms phase-end grace allows momentum to begin. Phase-free wheel mice finish after 150 ms idle. |
 
-Lead calibration decision (2026-10-26 01:43:21 and 01:43:54
+Historical calibration decision, **superseded by round 3 below** (2026-10-26 01:43:21 and 01:43:54
 America/Vancouver): F0137 and F0138 place the 24 × 56 pt thumb at panel
 `(193,437)`, hence content center x = 192 at value 0.8. The earlier
 `30 + 200·value` mapping was a guess and drew it 2 pt too far left.
-Use `32 + 200·value` for drawing and input. Keep the 200 pt travel,
-thumb size, track capsule, and AX hit frame.
+That historical fit used `32 + 200·value` and 200 pt travel. Round 3
+replaces drawing and input together with the wave-span law in the table
+above; track capsule and AX hit frame remain fixed.
 
 ### 5.8 Noise dial
 
@@ -549,9 +550,9 @@ input all use the calibrated art center.
 | Property | Value |
 |---|---|
 | Ring | 20 dot slots at an 18° pitch, radius 32.5, dot 4.5 pt. Unlit `dotUnlit` (white ≈ 0.15), lit `dotLit` (white ≈ 0.5). Slot `k` (0…19, clockwise from 12 o'clock) is lit when `k·18° ≤ noise·360°`. Hide only the nearest slot using non-wrapping distance over 0…342° and a 9° tolerance. At noise 0.98 hide none; at exactly 1 hide coincident slot 0. Lead decision 2026-10-26 09:56:38 America/Vancouver. |
-| Tick | white capsule 7.5 × 15.5, centered on the ring at `noise × 360°` clockwise from 12 o'clock, rotated to point at the center; light mode black 0.12 / 1 pt stroke |
-| Center | 40 pt disc. Noise 0: 1 pt ring `dotUnlit`, no fill or preview composition. Noise > 0: `ThemeTexture.knobPreview` of the selected texture, opacity `0.4 + 0.6·noise` (**guess**), 1 pt ring. Preview-only top-to-bottom gradient about ±7 gray levels and twice the grain contrast about its mean; Space tiles stay unchanged. |
-| Click center | cycle texture grain → sand → denim → tweed → grain (tooltip "Cycle noise texture"); one commit |
+| Tick | white capsule 8×16 pt, center snapped to the backing pixel grid; angle `noise×360°` clockwise from 12 o'clock. No normal light outline. Empty: no tick, all 20 dots unlit. |
+| Center | 40 pt disc. Noise 0: 1 pt ring, no fill or composition. Grain preview: source gray about 91 at alpha 0.29, raw top/bottom shade ±19 (about ±5.5 after composition). Sand/denim/tweed: nearly opaque mean gray 139/147/127, own procedural art, target standard deviation about 7.7/5.0/4.9. Tweed preview is a soft mottle; Space tiles remain Step 9 work. |
+| Click center | none → grain → sand → denim → tweed → none. Each texture sets noise exactly 0.80; none sets 0 and retains the last texture internally. One undo restores both texture and noise. Tooltip "Cycle noise texture". |
 | Drag on ring | noise = angle / 360°, clamped 0…1; a jump of more than 0.5 between ticks clamps to the nearer end (no wrap) |
 | Click a dot | inside a 3 pt radius, noise snaps to `k × 0.05`; between dots, keep the pressed angle continuous |
 | Scroll wheel | ± 0.01 per line (**guess**); phase and momentum commit once per gesture, with the same wheel idle fallback as the slider |
@@ -559,9 +560,9 @@ input all use the calibrated art center.
 | Keys | ←/→ ± 0.05 |
 | Label | "Noise" |
 
-R1 design correction: disabled slider and dial use alpha 0.35 in the empty
-state (**guess**, lead accepted). Light harness renders use a light backdrop.
-R1 does not change the approved thumb mapping, dial center, or hit frames.
+Session 2 supersedes the R1 alpha-0.35 guess: empty controls use normal
+track/dot intensity, with the thumb and tick absent and no input mutation.
+Light harness renders use FCFBFC. AX hit frames and the dial art center stay fixed.
 
 ### 5.9 Color tokens (`OpenDesign/ThemeEditorTokens.swift`, new)
 
@@ -583,7 +584,7 @@ are `2E3237` (dark session 2) and `FCFBFC` (light); private captures stay local.
 | `waveActive` | white 0.53 | black 0.40 |
 | `waveInactive` | white 0.15 | black 0.15 |
 
-| `thumb` | white 1.0 | white 1.0 (+ black 0.12 1 pt stroke) |
+| `thumb` | white 1.0 | white 1.0; no normal outline |
 | `dotUnlit` / `dotLit` | white 0.15 / 0.50 | black 0.15 / 0.40 |
 
 ### 5.10 Motion (PROVISIONAL tokens in `Motion`)
@@ -1133,7 +1134,7 @@ F0137 calibration (Step 3; sizes are SF point sizes, all Medium):
 | Remove | 13 pt; white 0.50 | unchanged | +0.5 / −0.5 | −1 | 0.30 → 0.30 |
 | Add | 13 pt; white 0.50 | 17 pt; sRGB (0.98, 0.98, 1), alpha 0.54 | +0.5 / −0.5 | +1 | 3.06 → 0.58 |
 
-The Add token's small cool tint fits F0137's core `#C1C1C4` over the fixed
+Historical fit, superseded by the shared glyph token: the Add tint fitted F0137's core `#C1C1C4` over the fixed
 offscreen material. Light appearance remains uncalibrated. These calibrated
 values supersede the corresponding values in §5.4, §5.5, and §5.9.
 
@@ -1302,3 +1303,28 @@ measurement. Half-peak boxes still report center/height. Disabled glyphs
 sit among brighter grid dots; their table samples fixed core coordinates
 instead of treating grid dots as symbol bounds. The light moon uses 17 pt
 (16 pt in dark) to retain the captured height in item 20 frame 0027.
+
+- **Thumb lock lifted / N1–N3:** round-3 lead decision supersedes the
+  01:43 `32 + 200·value` lock. Session 2 0098/0100/0063/0111 fixes panel
+  center x to `38.8 + 208.4·value`, with matching input. Amplitude is about
+  `14.4·value`, including a straight line at zero. Rest size interpolates
+  between the measured low/default/high points in §5.7; hover/press is
+  ×1.09. The former one-frame fixed size and amplitude were guesses.
+- **N8 / shadows:** session 2 0098–0111 and light 0159 supersede the R1
+  outline and symmetric halo advice: use a faint downward shadow only.
+- **Dial / N10–N11/N17:** 0112–0122 proves a five-state cycle with none and
+  exact noise 0.80 for every texture. 0137/0145/0148 fixes an 8×16 pt tick.
+  Preview brightness is calibrated now, separately from Step 9 Space-tile
+  calibration: translucent grain fits both dark/light backdrops; the other
+  previews are light and almost opaque. All art is Open's own procedure.
+- **Page 2 / N12:** 0016 shows three muted diagonal color stops and no disc.
+  The captured RGB stop numbers are facts, used in an original gradient.
+
+Round-3 comparison extends §12.3 with `--spec session2-editor` and states
+`empty`, `empty-light`, `slider --value V`, `preview`, and `page-two`.
+It reports real raster thumb geometry, fitted wave centroid amplitude,
+preview mean/contrast, and page-2 center colors. Session 2 private pixels
+are read only by this command; outputs stay under ignored `.re/`.
+The F0137/F0138 Automatic animation exemption and glyph-shape exemption
+remain. Raw new-capture color measurements are reported separately from
+formal native flow checks and from the unresolved Step 9 parity gate.

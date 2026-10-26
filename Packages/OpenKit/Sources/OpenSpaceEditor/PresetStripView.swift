@@ -77,11 +77,24 @@ public final class PresetSwatchView: NSView {
         let colors = ThemeColorMath.harmony(key: ThemeColorMath.toP3(preset.style.keyColor), count: preset.style.colorCount, wheel: preset.style.wheel)
         func color(_ c: P3) -> CGColor { CGColor(colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!, components: [c.r, c.g, c.b, 1])! }
         if colors.count == 3 {
+            // Session 2 item 17 frame 0016: measured sRGB stops are facts;
+            // this is our own axial gradient, with no copied pixels or disc.
+            let stops: [[UInt32]] = [
+                [0xD2D2CA, 0xD3D4CA, 0xC1BAB8],
+                [0xD3939D, 0xD39D90, 0xBE85A7],
+                [0x936883, 0x946874, 0x7A5E79],
+                [0xD37B5E, 0xCE9A5B, 0xBF6B86],
+                [0xDCA14E, 0xD4C949, 0xCC7A6D],
+                [0xBCCA53, 0x99D352, 0xBD8A54],
+                [0x34CCA9, 0x3FCAC8, 0x54B87F],
+                [0x6D8EC3, 0x7376C3, 0x5D94A1],
+                [0x685E7D, 0x735E7C, 0x59616F]
+            ]
             let gradient = CAGradientLayer(); gradient.frame = bounds
-            gradient.colors = [color(colors[0]), color(colors[1])]; gradient.startPoint = .zero; gradient.endPoint = CGPoint(x: 1, y: 1)
+            gradient.colors = stops[index % 9].map { RGBA(hex: $0).cgColor }
+            gradient.locations = [0, 0.5, 1]
+            gradient.startPoint = .zero; gradient.endPoint = CGPoint(x: 1, y: 1)
             art.addSublayer(gradient)
-            let disc = CAShapeLayer(); disc.path = CGPath(ellipseIn: CGRect(x: 12, y: 12, width: 9, height: 9), transform: nil)
-            disc.fillColor = color(colors[2]); art.addSublayer(disc)
         } else { art.backgroundColor = color(colors[0]) }
         rim.frame = bounds; rim.path = CGPath(ellipseIn: bounds.insetBy(dx: 0.5, dy: 0.5), transform: nil)
         rim.fillColor = nil; rim.lineWidth = 1

@@ -76,8 +76,13 @@ public struct ThemeEditorState: Equatable, Sendable {
         case .setNoise(let value, let final):
             style?.noiseFactor = value; isGestureInProgress = !final
         case .cycleTexture:
-            guard let texture = style?.texture, let index = SpaceStyleTexture.allCases.firstIndex(of: texture) else { return }
-            style?.texture = SpaceStyleTexture.allCases[(index + 1) % SpaceStyleTexture.allCases.count]
+            guard var value = style else { return }
+            if value.noiseFactor == 0 { value.texture = .grain; value.noiseFactor = 0.8 }
+            else if value.texture == .tweed { value.noiseFactor = 0 }
+            else if let index = SpaceStyleTexture.allCases.firstIndex(of: value.texture) {
+                value.texture = SpaceStyleTexture.allCases[index + 1]; value.noiseFactor = 0.8
+            }
+            style = value
         case .keyboardHue(let degrees):
             guard var value = style else { return }
             let hsl = ThemeColorMath.hsl(ThemeColorMath.toP3(value.keyColor))

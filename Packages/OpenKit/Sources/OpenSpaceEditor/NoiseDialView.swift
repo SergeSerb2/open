@@ -8,13 +8,17 @@ public final class NoiseDialView: NSView {
     public let centerButton = NoiseTextureButton(frame: CGRect(x: ThemeEditorMetrics.noiseCenter.x - 20, y: ThemeEditorMetrics.noiseCenter.y - 20, width: 40, height: 40))
     public private(set) var value = 0.0
     public private(set) var texture: SpaceStyleTexture = .grain
-    public var enabled = true { didSet { if enabled != oldValue { alphaValue = enabled ? 1 : 0.35 } } }
+    public var enabled = true
     public var renderScale: CGFloat = 1 { didSet { updatePreview() } }
     public private(set) var layoutPassCount = 0
     public private(set) var previewCompositionCount = 0
+    public var isTickVisible: Bool { !tick.isHidden }
     public var tickAngle: Double { value * 360 }
-    public var tickCenter: CGPoint { ringPoint(angle: tickAngle) }
-    public var litDotCount: Int { (0..<20).filter { !hidden($0) && Double($0) * 18 <= tickAngle + 1e-9 }.count }
+    public var tickCenter: CGPoint {
+        let point = ringPoint(angle: tickAngle), scale = max(1, renderScale)
+        return CGPoint(x: (point.x * scale).rounded() / scale, y: (point.y * scale).rounded() / scale)
+    }
+    public var litDotCount: Int { guard enabled else { return 0 }; return (0..<20).filter { !hidden($0) && Double($0) * 18 <= tickAngle + 1e-9 }.count }
     public var hiddenDotIndices: [Int] { (0..<20).filter { hidden($0) } }
     private let dots = (0..<20).map { _ in CAShapeLayer() }
     private let tick = CAShapeLayer()
@@ -39,7 +43,7 @@ public final class NoiseDialView: NSView {
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh() }
     public func apply(value: Double, texture: SpaceStyleTexture, enabled: Bool) {
         self.value = min(1, max(0, value)); self.texture = texture; self.enabled = enabled
-        centerButton.enabled = enabled; centerButton.setAccessibilityValue(texture.rawValue)
+        centerButton.enabled = enabled; centerButton.setAccessibilityValue(value == 0 ? "none" : texture.rawValue)
         refresh(); updatePreview()
     }
     public func ringPoint(angle: Double) -> CGPoint {
@@ -48,6 +52,7 @@ public final class NoiseDialView: NSView {
     private func hidden(_ index: Int) -> Bool {
         // Lead decision: non-wrapping distance to 0…342°, half a slot tolerance.
         // At the exact endpoint the tick coincides with slot zero again.
+        guard enabled else { return false }
         let angle = value == 1 ? 0 : tickAngle
         let nearest = min(19, max(0, Int((angle / 18).rounded())))
         return index == nearest && abs(Double(nearest) * 18 - angle) <= 9
@@ -61,25 +66,26 @@ public final class NoiseDialView: NSView {
                 dot.path = CGPath(ellipseIn: dot.bounds, transform: nil)
             }
             dot.position = ringPoint(angle: Double(index) * 18); dot.isHidden = hidden(index)
-            dot.fillColor = (Double(index) * 18 <= tickAngle + 1e-9 ? ThemeEditorColors.dotLit : ThemeEditorColors.dotUnlit).cgColor(contentAppearance)
+            dot.fillColor = (enabled && Double(index) * 18 <= tickAngle + 1e-9 ? ThemeEditorColors.dotLit : ThemeEditorColors.dotUnlit).cgColor(contentAppearance)
             dot.lineWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0
             dot.strokeColor = ThemeEditorColors.glyph.cgColor(contentAppearance)
         }
         if tick.path == nil {
             tick.bounds = CGRect(origin: .zero, size: ThemeEditorMetrics.noiseTickSize)
-            tick.path = CGPath(roundedRect: tick.bounds, cornerWidth: 3.75, cornerHeight: 3.75, transform: nil)
+            tick.path = CGPath(roundedRect: tick.bounds, cornerWidth: 4, cornerHeight: 4, transform: nil)
         }
+        tick.isHidden = !enabled
         tick.position = tickCenter; tick.transform = CATransform3DMakeRotation(value * 2 * .pi, 0, 0, 1)
         tick.fillColor = ThemeEditorColors.thumb.cgColor(contentAppearance)
         tick.strokeColor = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? ThemeEditorColors.glyph.cgColor(contentAppearance)
-            : contentAppearance == .light ? CGColor(gray: 0, alpha: 0.12) : nil
+            : nil
         tick.lineWidth = 1
         centerButton.layer?.borderColor = (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? ThemeEditorColors.glyph : ThemeEditorColors.dotUnlit).cgColor(contentAppearance)
-        centerButton.preview.opacity = value > 0 ? Float(0.4 + 0.6 * value) : 0
+        centerButton.preview.opacity = enabled && value > 0 ? 1 : 0
         CATransaction.commit()
     }
     private func updatePreview() {
-        guard value > 0 else { return }
+        guard enabled, value > 0 else { return }
         let key = "\(texture.rawValue)-\(renderScale)"
         guard key != previewKey else { return }; previewKey = key
         previewCompositionCount += 1

@@ -37,10 +37,9 @@ public enum ThemeEditorMetrics {
     public static let intensity = CGRect(x: 18, y: 424, width: 224, height: 56)
     public static let noise = CGRect(x: 258, y: 412, width: 84, height: 80)
     /// F0137/F0138 calibrated art positions; hit frames above stay AX-sized.
-    public static let intensityThumbStart: CGFloat = 14 // content x = 18 + 14 = 32
-    public static let intensityTravel: CGFloat = 200
-    public static let intensityThumbSize = CGSize(width: 24, height: 56)
+    public static let intensityThumbStart: CGFloat = 7.8 // panel x = 13 + 18 + 7.8 = 38.8
+    public static let intensityTravel: CGFloat = 208.4
     public static let noiseCenter = CGPoint(x: 40, y: 40) // content (298, 452)
     public static let noiseRadius: CGFloat = 32.5
-    public static let noiseTickSize = CGSize(width: 7.5, height: 15.5)
+    public static let noiseTickSize = CGSize(width: 8, height: 16)
 }
