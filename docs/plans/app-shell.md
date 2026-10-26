@@ -156,7 +156,7 @@ Implement this section in `OpenFeatures.BrowserWindowController` plus the App fa
 ### 3.1 Window and traffic lights
 
 - Style mask: `[.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]`. Set `titlebarAppearsTransparent = true`, `titleVisibility = .hidden`, `title = "Open"` (kept current with the selected tab title for accessibility and automation `windows`). `tabbingMode = .disallowed`, `isReleasedWhenClosed = false`, `isRestorable = false`, `isMovableByWindowBackground = false` (drag comes from the sidebar background and the empty toolbar area only; add `mouseDownCanMoveWindow` views there, never over rows or the page).
-- Do not use a borderless window for standard windows. Arc keeps system traffic lights and the system window corner (continuous, about 16 pt, `WindowMetrics.cornerRadius`). The system draws the traffic lights: 12 pt circles centered at x 12 / 35 / 58, y 16 in sidebar coordinates (`docs/design.md` §2.2). Never draw your own traffic lights in the real window. The `sidebar-render` stand-ins stay in the render harness only.
+- Do not use a borderless window for standard windows. Arc keeps system traffic lights and the system window corner (continuous, about 16 pt, `WindowMetrics.cornerRadius`). The system draws the traffic lights: 12 pt circles centered at x 20 / 43 / 66, y 24 (16 pt button frames at x 12 / 35 / 58, y 16; `docs/design.md` §2.2, §16). Never draw your own traffic lights in the real window. The `sidebar-render` stand-ins stay in the render harness only.
 - Minimum standard window size: 640 × 480 (keeps the M1 floor). Default frame: the persisted frame, else 1280 × 800 at (100, 100) from `BrowserWindowState` defaults.
 - `ThemeBackgroundView` fills the content view. It draws the Space theme behind both the sidebar and the web panel (`docs/design.md` §3). Assign it as `sidebar.themeBackground`. On Space switch the pager cross-fades it; do not rebuild the field per resize tick — coalesce through the existing display-link path (design.md §14 item 5).
 - The window becomes key/main normally. `context.isWindowActive` follows `NSWindow.didBecomeKey / didResignKey` (and main equivalents) so inactive glyph tones and the lighter theme underlay draw (`docs/design.md` §5.3).
@@ -171,7 +171,7 @@ Implement this section in `OpenFeatures.BrowserWindowController` plus the App fa
 | Pane clip inside container | radius 6 continuous, shadow black 0.25, radius 3, offset 1 pt down; empty panel fill white ≈ 10 % over the gradient | `PanelMetrics`, `WebPanelChromeLayer` |
 | Hover-reveal card | 5 pt from window edges, radius 10, 1 px stroke `SidebarColors.border` | `WindowMetrics.revealCard*` |
 | Find bar | top-right of the container, 260 × 24, 8 pt from the container's top-right (port the M1 placement into the container's coordinate space) | §4.9 |
-| Toast | bottom-center of the root, 280 × 34 (the OpenFeatures controller's existing toast) | M4 §4.4 |
+| Toast | top-right of the web panel, 8 pt from its top and 10 pt from its right edge; 42 pt tall (46 with a button) | `docs/plans/page-platform.md` §4.1 (replaces the bottom-center 280 × 34 toast) |
 
 Layout runs in `layoutContent()` on resize, sidebar width change, sidebar mode change, Space switch, and fullscreen change. During a live sidebar drag, update frames per tick but do not rebuild the theme field and do not write the model (D4).
 
@@ -180,7 +180,7 @@ Layout runs in `layoutContent()` on resize, sidebar width change, sidebar mode c
 - Drag handle: the 4 pt strip at the sidebar's right edge plus the container's left edge cursor (`NSCursor.resizeLeftRight`). Drag changes `S` live, clamped to 228–500 pt. On drag end, write `window.sidebarWidth = Double(S)` once and `scheduleSave()`.
 - Below 228 pt the drag keeps the visual width at 228 pt with rubber-band offset. If the pointer passes 180 pt from the window's left edge, the drop hides the sidebar (`sidebarMode = .hidden`). This resolves the D4 numbers: 228 is the resize floor, 180 is the hide threshold. Both `WindowMetrics` guesses stay marked guess until a capture proves them.
 - Cmd+S (`toggle-sidebar`) toggles `sidebarMode`. Hide and show animate the container frame and the sidebar alpha over 0.22 s (the row insert/remove motion token, `docs/design.md` §2.4). With `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`, set frames with no animation.
-- Hover-reveal: while `sidebarMode == .hidden`, a pointer in the left 8 pt of the window for 0.35 s reveals the sidebar as a card. Reuse the same `SidebarView` instance: set `presentation = .floatingCard`, frame `[5, 5, S, H − 10]`, keep it above the container. The pointer leaving the card for 0.25 s, any command-bar open, or any tab selection restores `presentation = .anchored` and hides it (frame off, `isHidden = true`). One sidebar view per window, always; two instances would split observation state. The card draws its own background through the existing `floatingCard` path (design.md §5.1).
+- Hover-reveal: while `sidebarMode == .hidden`, a pointer that dwells 0.15 s in a reveal zone reveals the sidebar as a card (zones and timing decoded from Arc, `docs/design.md` §16; this replaced the first guess of the left 8 pt for 0.35 s). Reuse the same `SidebarView` instance: set `presentation = .floatingCard`, frame `[5, 5, S, H − 10]`, keep it above the container. The pointer leaving the card and every zone for 0.15 s, any command-bar open, or any tab selection restores `presentation = .anchored` and hides it (frame off, `isHidden = true`). One sidebar view per window, always; two instances would split observation state. The card draws its own background through the existing `floatingCard` path (design.md §5.1).
 - Full screen and Peek: hover-reveal stays available in full screen. While a Peek is open, hover-reveal does not trigger (the scrim owns the pointer).
 
 ### 3.4 WebContentContainer (right side)
@@ -206,7 +206,7 @@ Use `OpenFeatures.WebContentContainer` as specified in M4 §5. The shell's dutie
 
 ### 3.7 Toasts
 
-Reuse the toast in `OpenFeatures.BrowserWindowController` (black 0.85, radius 8, optional Undo button). Sources: Peek close undo, "tab closed" undo where Arc shows one (verify against captures; if unverified, show only the Peek toast in v1 and say so in the PR), Boost apply feedback (§4.5), and sleep discard failure ("a tab could not sleep; it stays open"). One toast at a time; a new toast replaces the old and cancels its undo. Toast lifetime 5 s. Toasts never steal focus.
+Superseded by `docs/plans/page-platform.md` §4.1: one `ToastCenter` per window with Arc's look (Space-tinted, top-right of the web panel, overlap stacking, 3 s lifetime, 6 s with a button). Until that plan's Step 1 lands, reuse the toast in `OpenFeatures.BrowserWindowController` (black 0.85, radius 8, optional Undo button). Sources: Peek close undo, "tab closed" undo where Arc shows one (verify against captures; if unverified, show only the Peek toast in v1 and say so in the PR), Boost apply feedback (§4.5), and sleep discard failure ("a tab could not sleep; it stays open"). One toast at a time; a new toast replaces the old and cancels its undo. Toast lifetime 5 s. Toasts never steal focus.
 
 ### 3.8 Multiple windows, full screen, and persistence
 
@@ -487,7 +487,7 @@ These do not block Step A. Each names its owner and deadline. Implementers: buil
 |---|---|---|---|
 | Q1 | `OpenFeatures.BrowserWindowController` exact API after the library move (init, callbacks, toast, find). | Step B reads the merged library source and adapts the factory to it; renames are reported, not worked around. | Step B |
 | Q2 | `OpenCommandBar` delegate shape on `m3/commandbar-ui` at merge time. | §4.2 as documented on the branch 2026-10-25. Re-verify with `git show` before Step C. | Step C |
-| Q3 | Sidebar 180 pt hide threshold and hover-reveal delays (0.35 s / 0.25 s) are guesses. | Ship them; refine from a capture session later. | Capture session |
+| Q3 | Sidebar 180 pt hide threshold and hover-reveal delays (0.35 s / 0.25 s) are guesses. | Ship them; refine from a capture session later. Delays resolved 2026-10-26: 0.15 s dwell decoded from Arc (`docs/design.md` §16); the 180 pt threshold stays a guess. | Capture session |
 | Q4 | Peek Split-button semantics and expand state survival (M4 Q4/Q5, engine A2). | M4 §4.4 guess, marked in code; reload fallback if reparenting reloads. | Step E |
 | Q5 | Opt+Cmd-click → Little Open needs a modifier-aware navigation hook. | Ship without it if the hook is absent; record the gap. | Step E |
 | Q6 | Ad-block rule matching before the fork engine: does `OpenAdBlock` expose a rule-level API? | Bridge blocks nothing at rule level until it does; exclusions still work (§4.6). | Step F |

@@ -21,6 +21,25 @@ public struct ArchiveEntry: Sendable {
     }
 }
 
+public enum ArchiveRecordKind: String, Codable, Sendable { case tab, folder }
+
+/// A folder removed by Delete. Section preserves the fallback when its parent disappears.
+public struct ArchiveFolderEntry: Sendable {
+    public let folder: Folder
+    public let originalLocation: String
+    public let spaceID: SpaceID?
+    public let profileID: ProfileID?
+    public let archivedAt: Date
+    public let originalSection: String?
+    public let reason: ArchiveReason
+
+    public init(folder: Folder, originalLocation: String, spaceID: SpaceID?, profileID: ProfileID?, archivedAt: Date,
+                originalSection: String? = nil, reason: ArchiveReason = .folderDeleted) {
+        self.folder = folder; self.originalLocation = originalLocation; self.spaceID = spaceID
+        self.profileID = profileID; self.archivedAt = archivedAt; self.originalSection = originalSection; self.reason = reason
+    }
+}
+
 /// One stored archive row. Defined in OpenModel so `BrowserModel` can restore it
 /// without depending on OpenStore. OpenStore's ArchiveStore produces these.
 public struct ArchivedTabRecord: Sendable, Identifiable {
@@ -33,13 +52,14 @@ public struct ArchivedTabRecord: Sendable, Identifiable {
     public var reason: ArchiveReason
     public var originalLocation: String
     /// The tab JSON that ArchiveStore writes (OpenStore's `TabDTO`).
+    public var kind: ArchiveRecordKind
     public var payloadJSON: String
 
-    public init(id: ItemID, url: URL, title: String, spaceID: SpaceID? = nil, profileID: ProfileID? = nil, archivedAt: Date, reason: ArchiveReason, originalLocation: String, payloadJSON: String) {
+    public init(id: ItemID, url: URL, title: String, spaceID: SpaceID? = nil, profileID: ProfileID? = nil, archivedAt: Date, reason: ArchiveReason, originalLocation: String, payloadJSON: String, kind: ArchiveRecordKind = .tab) {
         self.id = id; self.url = url; self.title = title
         self.spaceID = spaceID; self.profileID = profileID
         self.archivedAt = archivedAt; self.reason = reason
-        self.originalLocation = originalLocation; self.payloadJSON = payloadJSON
+        self.originalLocation = originalLocation; self.payloadJSON = payloadJSON; self.kind = kind
     }
 }
 
@@ -49,6 +69,9 @@ public struct ArchivedTabRecord: Sendable, Identifiable {
 @MainActor
 public protocol ArchiveSink: AnyObject {
     /// Stores tabs that left the sidebar. A bulk command passes all of its tabs in one call.
+    func archiveFolder(_ entry: ArchiveFolderEntry)
+    /// One command batch, including folder deletions. Stores override this for one transaction.
+    func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry])
     func archive(_ entries: [ArchiveEntry])
     /// Waits for durable archive commit; a failure must leave the model unchanged.
     func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws
@@ -60,6 +83,12 @@ public protocol ArchiveSink: AnyObject {
 public enum ProfileArchiveError: Error { case confirmationUnavailable }
 
 public extension ArchiveSink {
+    func archiveFolder(_ entry: ArchiveFolderEntry) {}
+    func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry]) {
+        if !entries.isEmpty { archive(entries) }
+        for entry in folders { archiveFolder(entry) }
+    }
+
     func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
         throw ProfileArchiveError.confirmationUnavailable
     }
@@ -500,8 +529,8 @@ public final class BrowserModel {
     // MARK: - Commands: tabs
 
     @discardableResult
-    public func newTab(in spaceID: SpaceID, url: URL, title: String = "", at position: Int? = nil) -> Tab {
-        let tab = Tab(url: url, title: title)
+    public func newTab(in spaceID: SpaceID, url: URL, title: String = "", at position: Int? = nil, unread: Bool = false) -> Tab {
+        let tab = Tab(url: url, title: title, isUnread: unread)
         let parent = NodeParent.spaceToday(spaceID)
         guard let i = attach(.tab(tab), to: parent, at: position ?? 0) else { return tab }
         let revert: Revert = { $0.detach(tab.id) != nil }
@@ -547,6 +576,7 @@ public final class BrowserModel {
     }
 
     private func closeNode(_ id: ItemID) -> Revert? {
+        if index[id]?.folder != nil { return archiveFolderNode(id) }
         guard let node = index[id], let parent = parentByID[id] else { return nil }
         let entries = archiveEntries(for: node, in: parent, reason: node.folder != nil ? .folderDeleted : .closed)
         guard let removed = detach(id) else { return nil }
@@ -687,6 +717,7 @@ public final class BrowserModel {
 
     /// Keys of the payload JSON (OpenStore's `TabDTO`). All optional, so a partial payload still restores.
     private struct ArchivedTabPayload: Decodable {
+        var id: String?
         var url: String?
         var title: String?
         var customTitle: String?
@@ -715,6 +746,158 @@ public final class BrowserModel {
                    isMuted: payload?.isMuted ?? false,
                    openerID: payload?.openerID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) },
                    isUnread: payload?.isUnread ?? false)
+    }
+
+    // MARK: Folder archive (Delete retains the subtree as one record)
+
+    private func folderEntry(_ folder: Folder, parent: NodeParent, archivedAt: Date = Date()) -> ArchiveFolderEntry {
+        let owner = owner(of: parent)
+        return ArchiveFolderEntry(folder: folder, originalLocation: parent.archiveLocation,
+                                  spaceID: owner.space, profileID: owner.profile, archivedAt: archivedAt,
+                                  originalSection: section(of: parent)?.archiveLocation)
+    }
+
+    @discardableResult
+    public func archiveFolder(id: ItemID) -> Bool {
+        guard let revert = archiveFolderNode(id) else { return false }
+        registerUndo(revert, reapply: { $0.archiveFolderNode(id) ?? Self.noRevert })
+        return true
+    }
+
+    private func archiveFolderNode(_ id: ItemID) -> Revert? {
+        guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
+        let entry = folderEntry(folder, parent: parent)
+        guard let removed = detach(id) else { return nil }
+        archiveSink?.archiveFolder(entry)
+        return { model in
+            guard model.attach(removed.node, to: removed.parent, at: removed.index) != nil else { return false }
+            model.archiveSink?.discardArchived(ids: [id])
+            return true
+        }
+    }
+
+    /// Mirrors SnapshotDTOs' enum envelope and keys. Only folder records enter this path.
+    private indirect enum ArchivedNodePayload: Decodable {
+        case tab(ArchivedTabPayload), folder(ArchivedFolderPayload), split(ArchivedSplitPayload)
+    }
+    private struct ArchivedFolderPayload: Decodable {
+        var kind: ArchiveRecordKind?
+        var id: String
+        var title: String
+        var isExpanded: Bool
+        var customIcon: String?
+        var children: [ArchivedNodePayload]
+        var originalSection: String?
+    }
+    private struct ArchivedSplitPayload: Decodable {
+        var id: String
+        var orientation: SplitOrientation
+        var fractions: [Double]
+        var panes: [ArchivedTabPayload]
+        var focusedPaneID: String?
+    }
+
+    private func decodedFolder(_ record: ArchivedTabRecord) -> (Folder, String?)? {
+        guard record.kind == .folder, index[record.id] == nil,
+              let data = record.payloadJSON.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(ArchivedFolderPayload.self, from: data),
+              payload.kind == .folder, UUID(uuidString: payload.id) == record.id.rawValue else { return nil }
+        var used = Set(index.keys)
+        func identity(_ raw: String?) -> ItemID? {
+            guard let raw, let uuid = UUID(uuidString: raw) else { return nil }
+            let id = ItemID(rawValue: uuid)
+            return used.insert(id).inserted ? id : nil
+        }
+        func tab(_ payload: ArchivedTabPayload) -> Tab? {
+            guard let id = identity(payload.id) else { return nil }
+            return Tab(id: id, url: payload.url.flatMap(URL.init(string:)) ?? URL(string: "about:blank")!,
+                       title: payload.title ?? "", customTitle: payload.customTitle,
+                       pinnedURL: payload.pinnedURL.flatMap(URL.init(string:)), customIcon: payload.customIcon,
+                       createdAt: payload.createdAt.map(Date.init(timeIntervalSince1970:)) ?? record.archivedAt,
+                       lastActiveAt: Date(), isMuted: payload.isMuted ?? false,
+                       openerID: payload.openerID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) },
+                       isUnread: payload.isUnread ?? false)
+        }
+        func folder(_ payload: ArchivedFolderPayload) -> Folder? {
+            guard let id = identity(payload.id) else { return nil }
+            return Folder(id: id, title: payload.title, isExpanded: payload.isExpanded, customIcon: payload.customIcon,
+                          children: payload.children.compactMap(node))
+        }
+        func node(_ payload: ArchivedNodePayload) -> SidebarNode? {
+            switch payload {
+            case .tab(let payload): return tab(payload).map(SidebarNode.tab)
+            case .folder(let payload): return folder(payload).map(SidebarNode.folder)
+            case .split(let payload):
+                guard let id = identity(payload.id) else { return nil }
+                let panes = payload.panes.compactMap(tab)
+                if panes.count == 1 { return .tab(panes[0]) }
+                guard (2...4).contains(panes.count) else { return nil }
+                let shares = panes.map { pane in
+                    payload.panes.firstIndex { $0.id.flatMap(UUID.init(uuidString:)) == pane.id.rawValue }
+                        .flatMap { payload.fractions.indices.contains($0) ? payload.fractions[$0] : nil } ?? 0
+                }
+                let sum = shares.reduce(0, +)
+                let fractions = shares.allSatisfy { $0.isFinite && $0 >= 0 } && sum.isFinite && sum > 0
+                    ? shares.map { $0 / sum } : Array(repeating: 1 / Double(panes.count), count: panes.count)
+                let focused = payload.focusedPaneID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
+                return .split(Split(id: id, orientation: payload.orientation, fractions: fractions, panes: panes,
+                                    focusedPaneID: panes.first { $0.id == focused }?.id ?? panes.first?.id))
+            }
+        }
+        guard let result = folder(payload) else { return nil }
+        return (result, payload.originalSection)
+    }
+
+    private func folderRestoreDestination(_ record: ArchivedTabRecord, section originalSection: String?) -> NodeParent? {
+        if let original = NodeParent(archiveLocation: record.originalLocation), parentExists(original) {
+            switch original {
+            case .spacePinned, .spaceToday, .folder: return original
+            case .favorites, .splitPane: break
+            }
+        }
+        if let spaceID = record.spaceID, space(id: spaceID) != nil {
+            if let originalSection, case .spacePinned? = NodeParent(archiveLocation: originalSection) { return .spacePinned(spaceID) }
+            if case .spacePinned? = NodeParent(archiveLocation: record.originalLocation) { return .spacePinned(spaceID) }
+            return .spaceToday(spaceID)
+        }
+        return targetSpace(forProfile: record.profileID).map(NodeParent.spaceToday)
+    }
+
+    @discardableResult
+    public func restoreArchivedFolder(_ record: ArchivedTabRecord) -> Folder? {
+        // This overload has no I/O; the Library uses the durable-save overload below.
+        try? restoreArchivedFolder(record, saving: {}, discardArchive: true)
+    }
+
+    @discardableResult
+    public func restoreArchivedFolder(_ record: ArchivedTabRecord, saving: () throws -> Void) throws -> Folder? {
+        try restoreArchivedFolder(record, saving: saving, discardArchive: false)
+    }
+
+    private func restoreArchivedFolder(_ record: ArchivedTabRecord, saving: () throws -> Void, discardArchive: Bool) throws -> Folder? {
+        guard let (folder, originalSection) = decodedFolder(record),
+              let destination = folderRestoreDestination(record, section: originalSection) else { return nil }
+        func place(_ model: BrowserModel, discard: Bool) -> Revert? {
+            guard model.index[folder.id] == nil, model.parentExists(destination) else { return nil }
+            let prior = model.applyPinnedRule(to: .folder(folder), from: .spacePinned(record.spaceID ?? SpaceID()),
+                                              to: model.section(of: destination))
+            for tab in model.tabs(under: .folder(folder)) { tab.lastActiveAt = Date() }
+            guard model.attach(.folder(folder), to: destination, at: 0) != nil else { Self.restore(prior); return nil }
+            if discard { model.archiveSink?.discardArchived(ids: [folder.id]) }
+            return { model in
+                guard model.detach(folder.id) != nil else { return false }
+                Self.restore(prior)
+                model.archiveSink?.archiveFolder(ArchiveFolderEntry(folder: folder, originalLocation: record.originalLocation,
+                    spaceID: record.spaceID, profileID: record.profileID, archivedAt: record.archivedAt, originalSection: originalSection,
+                    reason: record.reason))
+                return true
+            }
+        }
+        guard let revert = place(self, discard: false) else { return nil }
+        do { try saving() } catch { _ = detach(folder.id); throw error }
+        if discardArchive { archiveSink?.discardArchived(ids: [folder.id]) }
+        registerUndo(revert, reapply: { place($0, discard: true) ?? Self.noRevert })
+        return folder
     }
 
     // MARK: move / folders / rename / expand
@@ -757,24 +940,341 @@ public final class BrowserModel {
         }
     }
 
+    /// Removes duplicates and descendants of selected containers, preserving display order.
+    private func topLevelSelection(_ ids: [ItemID]) -> [ItemID] {
+        let selected = Set(ids)
+        var seen = Set<ItemID>()
+        return ids.filter { id in
+            guard index[id] != nil, seen.insert(id).inserted else { return false }
+            var parent = parentByID[id]
+            while let current = parent {
+                switch current {
+                case .folder(let ancestor), .splitPane(let ancestor):
+                    if selected.contains(ancestor) { return false }
+                    parent = parentByID[ancestor]
+                default: return true
+                }
+            }
+            return true
+        }
+    }
+
+    private static func combined(_ reverts: [Revert]) -> Revert? {
+        guard !reverts.isEmpty else { return nil }
+        return { model in
+            var changed = false
+            for revert in reverts.reversed() { if revert(model) { changed = true } }
+            return changed
+        }
+    }
+
+    private func childIDs(in parent: NodeParent) -> [ItemID] {
+        switch parent {
+        case .spacePinned(let id): return space(id: id)?.pinned.map(\.id) ?? []
+        case .spaceToday(let id): return space(id: id)?.today.map(\.id) ?? []
+        case .folder(let id): return index[id]?.folder?.children.map(\.id) ?? []
+        case .favorites(let id): return profile(id: id)?.favorites.map(\.id) ?? []
+        case .splitPane(let id): return index[id]?.split?.panes.map(\.id) ?? []
+        }
+    }
+
+    /// Bulk drop positions count in the destination before removal, unlike moveNode.
+    @discardableResult
+    public func moveNodes(ids: [ItemID], to destination: NodeParent, at position: Int? = nil) -> Int {
+        let result = moveMany(ids, to: destination, at: position)
+        if let revert = result.revert {
+            registerUndo(revert, reapply: { $0.moveMany(ids, to: destination, at: position).revert ?? Self.noRevert })
+        }
+        return result.count
+    }
+
+    private func moveMany(_ ids: [ItemID], to destination: NodeParent, at position: Int?) -> (count: Int, revert: Revert?) {
+        let moving = topLevelSelection(ids).filter { canMoveNode(id: $0, to: destination) }
+        guard !moving.isEmpty else { return (0, nil) }
+        let old = childIDs(in: destination), selected = Set(moving)
+        let requested = max(0, min(position ?? old.count, old.count))
+        let start = requested - old.prefix(requested).filter { selected.contains($0) }.count
+        let remaining = old.filter { !selected.contains($0) }
+        var target = remaining
+        target.insert(contentsOf: moving, at: start)
+        guard old != target else { return (0, nil) }
+        let boundary = start < remaining.count ? remaining[start] : nil
+        var reverts: [Revert] = []
+        for id in moving {
+            var slot = boundary.flatMap { self.position(of: $0, in: destination) }
+            if let current = self.position(of: id, in: destination), let value = slot, current < value { slot = value - 1 }
+            if let revert = relocate(id, to: destination, at: slot) { reverts.append(revert) }
+        }
+        return (reverts.count, Self.combined(reverts))
+    }
+
+    @discardableResult
+    public func moveNodes(ids: [ItemID], toSpace spaceID: SpaceID, markUnread: Bool = false) -> Int {
+        let result = moveManyToSpace(ids, spaceID: spaceID, markUnread: markUnread)
+        if let revert = result.revert {
+            registerUndo(revert, reapply: { $0.moveManyToSpace(ids, spaceID: spaceID, markUnread: markUnread).revert ?? Self.noRevert })
+        }
+        return result.count
+    }
+
+    private func moveManyToSpace(_ ids: [ItemID], spaceID: SpaceID, markUnread: Bool) -> (count: Int, revert: Revert?) {
+        guard space(id: spaceID) != nil else { return (0, nil) }
+        let selected = topLevelSelection(ids).filter { canMoveNode(id: $0, to: .spaceToday(spaceID)) }
+        var pinned: [ItemID] = [], today: [ItemID] = []
+        for id in selected {
+            guard let parent = parentByID[id] else { continue }
+            if case .spacePinned? = section(of: parent) { pinned.append(id) } else { today.append(id) }
+        }
+        let unread = selected.compactMap { index[$0] }.flatMap { tabs(under: $0) }.map { ($0, $0.isUnread) }
+        let p = moveMany(pinned, to: .spacePinned(spaceID), at: 0)
+        let t = moveMany(today, to: .spaceToday(spaceID), at: 0)
+        guard let structural = Self.combined([p.revert, t.revert].compactMap { $0 }) else { return (0, nil) }
+        if markUnread {
+            for (tab, _) in unread where owner(of: parentByID[tab.id] ?? .spaceToday(spaceID)).space == spaceID { tab.isUnread = true }
+        }
+        return (p.count + t.count, { model in
+            guard structural(model) else { return false }
+            for (tab, old) in unread where model.tab(id: tab.id) === tab { tab.isUnread = old }
+            return true
+        })
+    }
+
+    @discardableResult
+    public func archiveNodes(ids: [ItemID]) -> Int {
+        let result = archiveMany(ids)
+        if let revert = result.revert { registerUndo(revert, reapply: { $0.archiveMany(ids).revert ?? Self.noRevert }) }
+        return result.count
+    }
+
+    private func archiveMany(_ ids: [ItemID]) -> (count: Int, revert: Revert?) {
+        let selected = topLevelSelection(ids)
+        // Stable parent grouping; remove the highest indexes first in each list.
+        var parents: [NodeParent] = []
+        var groups: [NodeParent: [ItemID]] = [:]
+        for id in selected {
+            guard let parent = parentByID[id] else { continue }
+            if groups[parent] == nil { parents.append(parent) }
+            groups[parent, default: []].append(id)
+        }
+        let ordered = parents.flatMap { parent in
+            (groups[parent] ?? []).sorted { (position(of: $0, in: parent) ?? 0) > (position(of: $1, in: parent) ?? 0) }
+        }
+        let now = Date()
+        // Capture direct parents before collapsing any selected panes.
+        let entries = ordered.flatMap { id -> [ArchiveEntry] in
+            guard let node = index[id], node.folder == nil, let parent = parentByID[id] else { return [] }
+            return archiveEntries(for: node, in: parent, reason: node.folder == nil ? .closed : .folderDeleted, at: now)
+        }
+        let folders = ordered.compactMap { id -> ArchiveFolderEntry? in
+            guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
+            return folderEntry(folder, parent: parent, archivedAt: now)
+        }
+        var reverts: [Revert] = []
+        for id in ordered {
+            if case .splitPane(let splitID)? = parentByID[id], let split = index[splitID]?.split,
+               let revert = takePane(id, from: split) { reverts.append(revert) }
+            else if let removed = detach(id) {
+                reverts.append { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+            }
+        }
+        guard let structural = Self.combined(reverts) else { return (0, nil) }
+        archiveSink?.archive(entries, folders: folders)
+        return (reverts.count, { model in
+            guard structural(model) else { return false }
+            model.archiveSink?.discardArchived(ids: (entries.map { $0.tab.id } + folders.map { $0.folder.id }).filter { model.index[$0] != nil })
+            return true
+        })
+    }
+
+    @discardableResult
+    public func setPinned(ids: [ItemID], pinned: Bool) -> Int {
+        let result = pinMany(ids, pinned: pinned)
+        if let revert = result.revert { registerUndo(revert, reapply: { $0.pinMany(ids, pinned: pinned).revert ?? Self.noRevert }) }
+        return result.count
+    }
+
+    private func pinMany(_ ids: [ItemID], pinned: Bool) -> (count: Int, revert: Revert?) {
+        var groups: [SpaceID: [ItemID]] = [:], order: [SpaceID] = []
+        for id in topLevelSelection(ids) {
+            guard let node = index[id], node.folder == nil, let parent = parentByID[id] else { continue }
+            if case .splitPane = parent { continue }
+            let spaceID: SpaceID
+            switch section(of: parent) {
+            case .spaceToday(let id)? where pinned: spaceID = id
+            case .spacePinned(let id)? where !pinned: spaceID = id
+            default: continue
+            }
+            if groups[spaceID] == nil { order.append(spaceID) }
+            groups[spaceID, default: []].append(id)
+        }
+        var reverts: [Revert] = [], count = 0
+        for spaceID in order {
+            let result = moveMany(groups[spaceID] ?? [], to: pinned ? .spacePinned(spaceID) : .spaceToday(spaceID), at: pinned ? nil : 0)
+            count += result.count
+            if let revert = result.revert { reverts.append(revert) }
+        }
+        return (count, Self.combined(reverts))
+    }
+
+    @discardableResult
+    public func duplicateNodes(ids: [ItemID]) -> [ItemID] {
+        var copies: [(node: SidebarNode, parent: NodeParent, source: ItemID)] = []
+        for id in topLevelSelection(ids) {
+            guard let node = index[id], let parent = parentByID[id] else { continue }
+            if case .splitPane = parent { continue }
+            let destination: NodeParent
+            if case .favorites(let profileID) = parent {
+                guard let spaceID = targetSpace(forProfile: profileID) else { continue }
+                destination = .spaceToday(spaceID)
+            } else { destination = parent }
+            copies.append((copyNode(node), destination, id))
+        }
+        func insert(_ model: BrowserModel) -> Revert? {
+            var inserted: [ItemID] = []
+            for copy in copies {
+                let slot = model.parentByID[copy.source] == copy.parent ? model.position(of: copy.source, in: copy.parent).map { $0 + 1 } : 0
+                guard model.parentExists(copy.parent), model.index[copy.node.id] == nil else { continue }
+                _ = model.applyPinnedRule(to: copy.node, from: model.parentByID[copy.source].flatMap { model.section(of: $0) }, to: model.section(of: copy.parent))
+                if model.attach(copy.node, to: copy.parent, at: slot) != nil { inserted.append(copy.node.id) }
+            }
+            let ids = inserted
+            guard !ids.isEmpty else { return nil }
+            return { model in
+                var changed = false
+                for id in ids.reversed() { if model.detach(id) != nil { changed = true } }
+                return changed
+            }
+        }
+        guard let revert = insert(self) else { return [] }
+        registerUndo(revert, reapply: { insert($0) ?? Self.noRevert })
+        return copies.map { $0.node.id }
+    }
+
+    private func copyNode(_ node: SidebarNode) -> SidebarNode {
+        func copyTab(_ tab: Tab) -> Tab {
+            Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
+                customIcon: tab.customIcon, isMuted: tab.isMuted)
+        }
+        switch node {
+        case .tab(let tab): return .tab(copyTab(tab))
+        case .folder(let folder):
+            return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded, customIcon: folder.customIcon,
+                                  children: folder.children.map { copyNode($0) }))
+        case .split(let split):
+            let panes = split.panes.map(copyTab)
+            let focus = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
+            return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focus))
+        }
+    }
+
+    @discardableResult
+    public func setAllFoldersExpanded(spaceID: SpaceID, expanded: Bool) -> Int {
+        guard let space = space(id: spaceID) else { return 0 }
+        var changed: [Folder] = []
+        func visit(_ nodes: [SidebarNode]) {
+            for node in nodes {
+                guard let folder = node.folder else { continue }
+                if folder.isExpanded != expanded { changed.append(folder) }
+                visit(folder.children)
+            }
+        }
+        visit(space.pinned); visit(space.today)
+        guard !changed.isEmpty else { return 0 }
+        for folder in changed { folder.isExpanded = expanded }
+        registerChange(undo: { for folder in changed { folder.isExpanded = !expanded } },
+                       redo: { for folder in changed { folder.isExpanded = expanded } })
+        return changed.count
+    }
+
+    @discardableResult
+    public func resetPinnedTabs(spaceID: SpaceID) -> [ItemID] {
+        guard let space = space(id: spaceID) else { return [] }
+        let changed = space.pinned.flatMap { tabs(under: $0) }.filter { Self.leftPinnedURL($0) }
+        guard !changed.isEmpty else { return [] }
+        let old = changed.map { ($0, $0.url, $0.lastActiveAt) }, now = Date()
+        for tab in changed { if let pinned = tab.pinnedURL { tab.url = pinned }; tab.lastActiveAt = now }
+        registerChange(undo: { for (tab, url, date) in old { tab.url = url; tab.lastActiveAt = date } },
+                       redo: { for tab in changed { if let pinned = tab.pinnedURL { tab.url = pinned }; tab.lastActiveAt = Date() } })
+        return changed.map(\.id)
+    }
+
+    private static func leftPinnedURL(_ tab: Tab) -> Bool {
+        guard let pinned = tab.pinnedURL else { return false }
+        return tab.url.host != pinned.host || tab.url.path != pinned.path
+    }
+
+    @discardableResult
+    public func separateFromPinnedTab(id: ItemID) -> Tab? {
+        guard let tab = tab(id: id), isPinned(tabID: id), Self.leftPinnedURL(tab),
+              let parent = parentByID[id], let spaceID = owner(of: parent).space else { return nil }
+        let copy = Tab(url: tab.url, title: tab.title, isMuted: tab.isMuted)
+        func separate(_ model: BrowserModel) -> Revert? {
+            guard model.tab(id: id) === tab, model.isPinned(tabID: id), let pinned = tab.pinnedURL else { return nil }
+            let oldURL = tab.url, oldDate = tab.lastActiveAt
+            guard model.attach(.tab(copy), to: .spaceToday(spaceID), at: 0) != nil else { return nil }
+            tab.url = pinned; tab.lastActiveAt = Date()
+            return { model in
+                guard model.detach(copy.id) != nil else { return false }
+                if model.tab(id: id) === tab { tab.url = oldURL; tab.lastActiveAt = oldDate }
+                return true
+            }
+        }
+        guard let revert = separate(self) else { return nil }
+        registerUndo(revert, reapply: { separate($0) ?? Self.noRevert })
+        return copy
+    }
+
+    @discardableResult
+    public func turnSpaceIntoFolder(id: SpaceID, destination: SpaceID) -> Folder? {
+        guard id != destination, spaces.count > 1, let source = space(id: id), space(id: destination) != nil else { return nil }
+        let folder = Folder(title: displayTitle(for: source))
+        func turn(_ model: BrowserModel) -> Revert? {
+            guard let source = model.space(id: id), model.space(id: destination) != nil, model.spaces.count > 1,
+                  let slot = model.spaces.firstIndex(where: { $0.id == id }), model.index[folder.id] == nil else { return nil }
+            let pinned = source.pinned, today = source.today
+            let focused = model.windows.filter { $0.focusedSpaceID == id }
+            model.removeSpace(id)
+            source.pinned = []; source.today = []
+            folder.children = pinned + today
+            let prior = model.applyPinnedRule(to: .folder(folder), from: .spaceToday(id), to: .spacePinned(destination))
+            model.attach(.folder(folder), to: .spacePinned(destination), at: 0)
+            for window in focused { window.focusedSpaceID = destination }
+            model.emit(.reload(parent: .spaceToday(id)))
+            return { model in
+                guard model.space(id: id) == nil, model.parentByID[folder.id] == .spacePinned(destination),
+                      model.detach(folder.id) != nil else { return false }
+                folder.children = []
+                source.pinned = pinned; source.today = today
+                Self.restore(prior)
+                model.insertSpace(source, at: slot)
+                for window in focused { window.focusedSpaceID = id }
+                model.emit(.reload(parent: .spaceToday(id)))
+                return true
+            }
+        }
+        guard let revert = turn(self) else { return nil }
+        registerUndo(revert, reapply: { turn($0) ?? Self.noRevert })
+        return folder
+    }
+
     /// Creates a folder at the end of `parent` and moves `nodeIDs` into it, in order.
     /// Nodes that may not move there are skipped. Nil when `parent` cannot hold a folder.
     @discardableResult
-    public func createFolder(in parent: NodeParent, title: String = "Folder", withNodes nodeIDs: [ItemID] = []) -> Folder? {
+    public func createFolder(in parent: NodeParent, at position: Int? = nil, title: String = "Folder", withNodes nodeIDs: [ItemID] = []) -> Folder? {
         switch parent {
         case .favorites, .splitPane: return nil
         case .spacePinned, .spaceToday, .folder: break
         }
         let folder = Folder(title: title)
-        guard let revert = fill(folder, in: parent, with: nodeIDs) else { return nil }
-        registerUndo(revert, reapply: { $0.fill(folder, in: parent, with: nodeIDs) ?? Self.noRevert })
+        guard let revert = fill(folder, in: parent, at: position, with: nodeIDs) else { return nil }
+        registerUndo(revert, reapply: { $0.fill(folder, in: parent, at: position, with: nodeIDs) ?? Self.noRevert })
         return folder
     }
 
-    private func fill(_ folder: Folder, in parent: NodeParent, with nodeIDs: [ItemID]) -> Revert? {
-        guard attach(.folder(folder), to: parent, at: nil) != nil else { return nil }
+    private func fill(_ folder: Folder, in parent: NodeParent, at position: Int?, with nodeIDs: [ItemID]) -> Revert? {
+        guard attach(.folder(folder), to: parent, at: position) != nil else { return nil }
         var moves: [Revert] = []
-        for id in nodeIDs where canMoveNode(id: id, to: .folder(folder.id)) {
+        for id in topLevelSelection(nodeIDs) where canMoveNode(id: id, to: .folder(folder.id)) {
             if let revert = relocate(id, to: .folder(folder.id), at: nil) { moves.append(revert) }
         }
         let reverts = moves
@@ -798,7 +1298,7 @@ public final class BrowserModel {
     }
 
     public func setExpanded(folderID: ItemID, expanded: Bool) {
-        guard let folder = index[folderID]?.folder else { return }
+        guard let folder = index[folderID]?.folder, folder.isExpanded != expanded else { return }
         let old = folder.isExpanded
         folder.isExpanded = expanded
         registerChange(undo: { folder.isExpanded = old }, redo: { folder.isExpanded = expanded })
@@ -1422,30 +1922,47 @@ public final class BrowserModel {
     /// Archives every Today node of a Space in one pass: one sink call, one `.reload`.
     /// Undo puts the section back and drops the archive rows.
     public func clearToday(space spaceID: SpaceID) {
-        guard let revert = clearTodayNodes(spaceID) else { return }
-        registerUndo(revert, reapply: { $0.clearTodayNodes(spaceID) ?? Self.noRevert })
+        clearToday(space: spaceID, keeping: [])
     }
 
-    private func clearTodayNodes(_ spaceID: SpaceID) -> Revert? {
-        guard let space = space(id: spaceID), !space.today.isEmpty else { return nil }
+    public func clearToday(space spaceID: SpaceID, keeping: Set<ItemID>) {
+        guard let revert = clearTodayNodes(spaceID, keeping: keeping) else { return }
+        registerUndo(revert, reapply: { $0.clearTodayNodes(spaceID, keeping: keeping) ?? Self.noRevert })
+    }
+
+    private func clearTodayNodes(_ spaceID: SpaceID, keeping: Set<ItemID>) -> Revert? {
+        guard let space = space(id: spaceID) else { return nil }
         let parent = NodeParent.spaceToday(spaceID)
-        let saved = space.today
-        let now = Date()
-        var entries: [ArchiveEntry] = []
-        for node in saved {
-            entries += archiveEntries(for: node, in: parent, reason: .clearedToday, at: now)
-            unregister(node)
+        func retained(_ node: SidebarNode) -> Bool {
+            if keeping.contains(node.id) { return true }
+            switch node {
+            case .tab: return false
+            case .folder(let folder): return folder.children.contains(where: retained)
+            case .split(let split): return split.panes.contains { keeping.contains($0.id) }
+            }
         }
-        space.today = []
+        let saved = space.today.enumerated().filter { !retained($0.element) }
+        guard !saved.isEmpty else { return nil }
+        let now = Date()
+        let entries = saved.flatMap { archiveEntries(for: $0.element, in: parent, reason: .clearedToday, at: now) }
+        let removedIDs = Set(saved.map { $0.element.id })
+        space.today.removeAll { removedIDs.contains($0.id) }
+        for entry in saved { unregister(entry.element) }
         emit(.reload(parent: parent))
         archive(entries)
         let ids = entries.map { $0.tab.id }
         return { model in
             guard model.space(id: spaceID) === space else { return false }
-            space.today = saved + space.today
-            for node in saved { model.register(node, under: parent) }
+            var restored = false
+            for entry in saved where model.index[entry.element.id] == nil {
+                let i = min(entry.offset, space.today.count)
+                space.today.insert(entry.element, at: i)
+                model.register(entry.element, under: parent)
+                restored = true
+            }
+            guard restored else { return false }
             model.emit(.reload(parent: parent))
-            model.archiveSink?.discardArchived(ids: ids)
+            model.archiveSink?.discardArchived(ids: ids.filter { model.index[$0] != nil })
             return true
         }
     }
