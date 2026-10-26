@@ -277,6 +277,7 @@ enum Checks {
         MediaChecks.runRowIndicators()
         ReviewChecks.run()
         VisualFinishChecks.run()
+        CompletionChecks.run()
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil

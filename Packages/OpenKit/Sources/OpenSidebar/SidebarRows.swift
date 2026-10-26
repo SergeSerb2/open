@@ -19,8 +19,12 @@ import OpenModel
 final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
+    private var animatesSelectionChange = false
     private var keyboardRing: CAShapeLayer?
-    weak var representedItem: AnyObject?
+    private var selectionState: SidebarRowSelectionState?
+    weak var representedItem: AnyObject? {
+        didSet { if representedItem !== oldValue { selectionState = nil; needsDisplay = true } }
+    }
     var isKeyboardFocused = false {
         didSet {
             guard isKeyboardFocused != oldValue else { return }
@@ -51,6 +55,7 @@ final class SidebarRowView: NSTableRowView {
         super.init(frame: frame)
         identifier = Self.identifier
         wantsLayer = true
+        fill.name = "sidebar-row-fill"
         fill.cornerCurve = .continuous
         fill.opacity = 0
         layer?.addSublayer(fill)
@@ -81,7 +86,11 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
-    override func updateLayer() { updateFill(animated: false) }
+    override func updateLayer() {
+        let animated = animatesSelectionChange
+        animatesSelectionChange = false
+        updateFill(animated: animated)
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -94,6 +103,15 @@ final class SidebarRowView: NSTableRowView {
 
     func updateFill(animated: Bool) {
         let appearance = contentAppearance
+        let multiselected = tracked({
+            guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
+            let state = selection.rowState(for: id)
+            selectionState = state
+            return state.isSelected
+        }) { [weak self] in
+            self?.animatesSelectionChange = true
+            self?.needsDisplay = true
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(isCurrent ? Motion.selectionFade : Motion.hoverFade)
@@ -105,6 +123,10 @@ final class SidebarRowView: NSTableRowView {
             let style = page?.style
             fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
             SelectionShadow.apply(to: fill, appearance: appearance)
+            fill.opacity = 1
+        } else if allowsHighlight && multiselected {
+            fill.backgroundColor = SidebarRole.rowMultiselected.cgColor(appearance)
+            fill.shadowOpacity = 0
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
             fill.backgroundColor = (isDropTarget ? SidebarColors.itemHoveredBackground : SidebarRole.rowHover).cgColor(appearance)
@@ -129,6 +151,17 @@ final class SidebarRowView: NSTableRowView {
         }
     }
     override func isAccessibilityFocused() -> Bool { isKeyboardFocused }
+    override func isAccessibilitySelected() -> Bool {
+        guard let id = itemID(of: representedItem) else { return false }
+        return page?.context.selection.contains(id) ?? false
+    }
+    // Preserve AXSelected for attribute-based accessibility clients as well as
+    // the modern NSAccessibility protocol used above.
+    @available(macOS, deprecated: 10.10)
+    override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
+        if attribute == .selected { return MainActor.assumeIsolated { isAccessibilitySelected() } }
+        return super.accessibilityAttributeValue(attribute)
+    }
     override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
     override func accessibilityPerformPress() -> Bool {
         guard let representedItem else { return false }
@@ -143,6 +176,7 @@ final class SidebarRowView: NSTableRowView {
         isCurrent = false
         isDropTarget = false
         isPeekSource = false
+        animatesSelectionChange = false
         fillIndent = 0
     }
 }

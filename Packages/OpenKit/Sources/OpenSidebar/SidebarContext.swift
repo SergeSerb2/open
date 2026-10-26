@@ -11,6 +11,7 @@ import OpenModel
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
+    public let selection = SidebarSelection()
     /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
@@ -60,6 +61,10 @@ public final class SidebarContext {
     public init(model: BrowserModel, windowID: WindowID) {
         self.model = model
         self.windowID = windowID
+        selection.onChange = { [weak self] in
+            guard let outline = self?.sidebar?.focusedOutline else { return }
+            NSAccessibility.post(element: outline, notification: .selectedRowsChanged)
+        }
     }
 
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
@@ -119,6 +124,10 @@ public final class SidebarContext {
 
     @discardableResult
     func send(_ intent: SidebarIntent) -> Bool {
+        switch intent {
+        case .select, .selectFavorite: selection.clear()
+        default: break
+        }
         guard let sidebar, let delegate = sidebar.delegate else { return false }
         return delegate.sidebar(sidebar, didRequest: intent)
     }

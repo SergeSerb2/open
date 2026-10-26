@@ -542,3 +542,76 @@ The real app (`OPEN_AUTOMATION=1 tools/build.sh Release`), driven only through t
 | `hide_reveal`, `fullscreen_hover_reveal` | rewritten: condition waits on the card (settled, or gone) instead of fixed sleeps, each sub-condition and its time recorded |
 
 The two rewritten checks failed in about one run of two before (docs/followups.md, PR #53), always on the first reveal after a hide. The reveal itself was not slow. guess (not traced): a pointer event at the real pointer cancelled the pending reveal. Both possible causes are gone: synthetic pointer events carry a tag and the reveal follows only tagged events once a check moves the pointer, and the waits are conditions.
+
+## 17. Sidebar completion S1 (2026-10-26)
+
+`SidebarContext.selection` owns transient multi-selection for one window.
+Cmd-click first includes the visible current row (lead decision Q9). Shift-click
+and Shift+Arrow use visible tabs, folders, and splits in display order, skipping
+all sentinel rows. Esc, plain clicks, and Space switches clear it. Removing or
+hiding rows prunes it; moves keep the IDs in display order. Favorites do not join.
+
+Each row observes one `SidebarRowSelectionState.isSelected` flag. A toggle marks
+only those row fills dirty, with no cell layout or full outline reload. Current
+rows keep their fill and shadow; other selected rows use
+`SidebarRole.rowMultiselected` (the existing `TabCellBackgroundMutiselected`
+color, documented in [sidebar-completion.md §3](re/sidebar-completion.md#3-multi-select)).
+Split pane cells appear only when the split is current. The multi-fill uses the
+existing hover geometry and `Motion.hoverFade`.
+
+Verification uses real window events and real offscreen AppKit views in
+`sidebar-render check`, plus `sidebar-render bench --rows 1000 --selection`.
+MS1–MS6 and MS13 cover current-row inclusion, range extension and shrinking,
+keyboard input, empty current state, pruning, folder/split fills, and row order.
+MS6 samples the rendered fill in light and dark appearances against the composited
+token (ΔE00 0.304 / 0.302, limit 0.5), and checks its exact geometry and shadow.
+The selection bench measured p95 0.46 ms with zero row layouts (limit 1 ms and at
+most two layouts). Scroll p95 was 2.83 ms; the saved pre-change run was 3.80 ms.
+These are local measurements, not a claim that S1 improves scroll performance.
+No unit tests, desktop input, or engine build ran. App automation E1–E4 remains
+with the later App lane.
+
+### 17.1 Durable 13-state comparison
+
+Lead waiver (review finding S1-1; originally §16.1 before the chrome merge):
+S1 retains byte-identical tables as a stricter interim rule. S4 (#99) replaces
+it with the lead gate in §15.1; SHA identity then becomes informational.
+S1 ships only as the base of S2 (#91), whose press/drag handling completes S1-5.
+
+The old git-ignored runners were lost. The committed replacement is
+`tools/verification/sidebar-compare-states.sh`, with a Python helper next to it.
+It reconstructs §15.1 with one state per render process, using absolute private
+input paths. The snapshot, frame, forced state, size, width, and compare switches
+for every state are in the helper. It retains the existing `Compare.swift` masks.
+F0079 uses the pre-theme static snapshot and reads the omitted first folder
+child's title from that frame's private AX input inside the compare harness.
+Blue-theme row text and New Tab differ from its snapshot, as in the earlier
+comparison; their ink is excluded. No private value is part of the script.
+
+```sh
+tools/verification/sidebar-compare-states.sh \
+  /absolute/path/to/.re/design-compare \
+  --renderer /absolute/path/to/Packages/OpenKit/.build/release/sidebar-render
+```
+
+The runner resolves `origin/main` to an immutable commit, exports its package
+source into `/tmp`, and makes a release build. `--baseline-renderer` can reuse an
+existing release binary built from `--baseline-ref`. It renders and compares both
+binaries sequentially and requires every state's table to be byte-identical.
+Known offscreen nondeterminism (§15.1) permits at most three paired attempts per
+state; every attempt is retained and the receipt lists the count. It never
+changes or removes table rows to hide a main-versus-branch difference. Outputs
+stay in a private `/tmp/open-sidebar-compare-*` directory, including images,
+commands' logs, the binary/input SHA-256 receipts, per-state tables, and the
+combined tables in sorted state-name order. Captures and snapshots stay in the
+main checkout's `.re`.
+
+All 13 per-state worst values and element counts reproduce §15.1, and all 13
+main-versus-S1 tables are byte-identical. **Baseline SHA re-derived:**
+`f820361b0b4baa3ad4e24b723ca807462f1b195d2f2391997815445ec77455e1`.
+The historical `2e7974…a278448` is still printed for comparison. Its original
+runner is unavailable, so main-versus-branch identity is the acceptance gate.
+`tools/verify-all.sh` includes `sidebar-compare`: it runs where the private inputs
+exist and SKIPs only when those inputs are absent. `SIDEBAR_CAPTURE_ROOT` selects
+a different private input root; `SIDEBAR_BASELINE_RENDERER` supplies a prebuilt
+main binary. The full local verification run passed every available row.

@@ -79,6 +79,31 @@ enum Bench {
         }
         clip.scroll(to: .zero)
 
+        if args.contains("--selection") {
+            let first = context.focusedSpace!.pinned[0].id
+            let frame = sidebar.rowFrame(nodeID: first)!
+            let point = sidebar.convert(NSPoint(x: 100, y: frame.midY), to: nil)
+            host.makeFirstResponder(outline)
+            scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+            let layouts = SidebarDiagnostics.tabRowLayouts
+            let reloads = SidebarDiagnostics.fullReloads
+            var toggles: [Double] = []
+            for _ in 0..<200 {
+                let event = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: .command,
+                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: host.windowNumber,
+                                              context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                toggles.append(time {
+                    outline.mouseDown(with: event)
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+            }
+            let p95 = toggles.sorted()[190]
+            print("MS14 selection toggle ×200 (real Cmd-click + display): p95 \(ms(p95)), row layouts \(SidebarDiagnostics.tabRowLayouts - layouts)")
+            guard p95 <= 0.001, SidebarDiagnostics.tabRowLayouts - layouts <= 2,
+                  SidebarDiagnostics.fullReloads == reloads else { throw CLIError(description: "selection performance budget exceeded") }
+            context.selection.clear()
+        }
+
         // Model edits: each command emits a TreeChange that the page applies as a diff.
         guard let space = context.focusedSpace else { return }
         var rng = SystemRandomNumberGenerator()
