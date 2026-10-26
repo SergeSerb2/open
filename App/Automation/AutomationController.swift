@@ -121,6 +121,15 @@
       case "split":
         w.addSplitView(nil)
         return w.visibleTabs.map { describe($0, in: w) }
+      case "folder":
+        // A pinned folder in the focused Space holding the given tabs.
+        guard let space = w.focusedSpace else { throw Failure(message: "no space") }
+        let ids = try (a["tabs"] as? [String] ?? []).map { try modelTab(["tab": $0], w).id }
+        guard
+          let folder = app.model.createFolder(
+            in: .spacePinned(space.id), title: a["title"] as? String ?? "Folder", withNodes: ids)
+        else { throw Failure(message: "folder not created") }
+        return folder.id.description
       case "navigate":
         try content(a, w).load(try url(a, "url"))
         return true

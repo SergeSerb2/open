@@ -787,6 +787,25 @@ def tabstrip_checks(app, results):
                       timeout=10)
     results["tabs_remove"] = {"ok": bool(gone)}
 
+    # Folders are not tab groups (lead decision; Arc does not map them either,
+    # docs/re/arccore-engine.md §4.3): a folder's tabs stay pinned with no
+    # group, and grouping fails with Chrome's own error.
+    folder = app.call("folder", tabs=[b], title="Probe folder")
+    def in_folder():
+        rows = {t["id"]: p for t, p in live()}
+        return rows.get(b) if b in rows else None
+    wait_until(in_folder, timeout=10)
+    time.sleep(1)
+    flags = ext_eval(pop, "chrome.tabs.query({currentWindow: true}).then(ts => ts.map(t => ({id: t.id,"
+                          " pinned: t.pinned, groupId: t.groupId})))")
+    grouped = ext_eval(pop, "chrome.tabs.group({tabIds: [%d]}).then(g => 'grouped ' + g, e => e.message)" % b_id)
+    groups = ext_eval(pop, "chrome.tabGroups.query({}).then(gs => gs.length, e => e.message)")
+    b_flags = [f for f in flags if f["id"] == b_id]
+    results["no_tab_groups"] = {
+        "ok": bool(b_flags) and b_flags[0]["pinned"] and all(f["groupId"] == -1 for f in flags)
+              and "support" in str(grouped) and groups == 0,
+        "folder": folder, "folder_tab": b_flags, "group_call": grouped, "tab_groups": groups}
+
     ev = events(pop)
     results["events_seen"] = sorted({e["type"] for e in ev})
     app.call("popup-close")

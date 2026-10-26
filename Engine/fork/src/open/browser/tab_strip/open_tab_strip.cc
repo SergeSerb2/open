@@ -517,6 +517,14 @@ bool IsHiddenTabStripBrowser(const BrowserWindowInterface* browser) {
   return OpenTabStrip::FromBrowser(browser) != nullptr;
 }
 
+bool SupportsTabGroups(const cef::BrowserDelegate::CreateParams* cef_params) {
+  // CEF passes only ChromeBrowserHostImpl::DelegateCreateParams here.
+  return !cef_params ||
+         !static_cast<const ChromeBrowserHostImpl::DelegateCreateParams*>(
+              cef_params)
+              ->create_params_.open_tab_strip_id;
+}
+
 }  // namespace open_engine
 
 // static
