@@ -46,17 +46,17 @@ All values are ms from kernel process start, with the presented-frame mark.
 
 | Case | Sidebar median (≤250) | First paint median (≤700) | Slowest first paint | Verdict |
 |---|---:|---:|---:|---|
-| Fresh profile (5 launches) | 225 | 443 | 1886 | PASS |
-| Warm relaunch (5 launches) | 229 | 433 | 465 | PASS |
+| Fresh profile (5 launches) | 224 | 461 | 1798 | PASS |
+| Warm relaunch (5 launches) | 242 | 452 | 485 | PASS |
 
 Fresh means a new data root/profile, with OS caches left intact. Warm means a
 new process restoring the same profile and two-row snapshot. All 10 runs have a
 kernel process-start timestamp. The paint-clock uncertainty is at most 0.11 ms
-in the ten benchmark launches. The first fresh launch took 1,886 ms to first paint; it remains in
+in the ten benchmark launches. The first fresh launch took 1,798 ms to first paint; it remains in
 the five-sample median. The plan's intermediate `main` and `modelLoaded` targets
-are still missed (128/131 ms and 129/132 ms respectively).
+are still missed (113/135 ms and 115/137 ms respectively).
 
-This was a loaded host (load averages 5.92/6.97/7.57), not a controlled idle
+This was a loaded host (load averages 6.61/7.14/7.54), not a controlled idle
 benchmark. An earlier review build measured 269/270 ms to the presented sidebar
 and 482/476 ms to paint; its sidebar budget misses are retained in
 [results-window-release-review-load.json](engine-spike/results-window-release-review-load.json).
@@ -67,6 +67,9 @@ is historical evidence only.
 Current raw samples, host counters, and lifecycle results:
 [results-window-release.json](engine-spike/results-window-release.json).
 Open's own window: [window-startup.png](engine-spike/window-startup.png).
+
+Merged `origin/main` through M4 visual finish `39fb0ed` before final builds,
+startup/shell checks and repository verification.
 
 ### End-to-end checks
 
@@ -85,7 +88,7 @@ Open's own window: [window-startup.png](engine-spike/window-startup.png).
 | `tools/verify-all.sh` after merging origin/main | 14 PASS, no SKIP |
 
 The Release window suite passes all 18 assertions. The forced timeout records
-3,193 ms to the unconfirmed timeout, 3,194 ms to engine start, and 3,394 ms to
+3,215 ms to the unconfirmed timeout, 3,216 ms to engine start, and 3,380 ms to
 first paint; it creates one host and loads the requested page.
 
 A test copy of Open.app has
