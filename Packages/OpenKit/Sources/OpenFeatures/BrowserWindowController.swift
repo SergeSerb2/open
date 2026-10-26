@@ -312,6 +312,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
             return true
         }
+        if event.keyCode == 53, !isCommandBarPresented, container.maximizedTabID != nil {
+            splitController.performCommand("escape"); container.cancelOperation(nil)
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
         let responder = eventWindow.firstResponder
         let view = responder as? NSView
         let textFocused = responder is NSTextView || responder is NSTextField
