@@ -1032,3 +1032,19 @@ on both pages; the same editor in macOS Light.
 | 7 | | |
 | 8 | | |
 | 9 | | |
+
+## Appendix — Lead decisions (2026-10-25)
+
+- Approved as the Space creation, editing, and theme editor plan. Implementation starts after the plan merges. It can run in parallel with the app-shell work, because Steps that touch only OpenKit come first.
+- Q1 Emoji data: generate it with our own script from Unicode `emoji-test.txt`, and keep the license row in `docs/release/licenses.md` (already added).
+- Q2 A new Space gets brand preset `spaces.count mod 9`, 1 color, Automatic mode. Replace this with Arc's rule if a capture shows a different one.
+- Q3 The Automatic text-color bias is 0.0.
+- Q4 Intensity uses the provisional `alpha = 0.8 × intensity`. Calibrate it from the theme-editor capture when it arrives.
+- Q5 Presets page 2: Brand 1–9 with 3 colors 40° apart.
+- Q6 The New Space form is a page in the sidebar.
+- Q7 A new Space goes at the end of the list.
+- Q8 Folders use the same 55-icon set as Spaces. The sidebar completion plan reuses this picker for Change Icon… on folders and pinned tabs.
+- Q9 The editor follows the system appearance and uses the guessed light colors, until a macOS Light capture confirms them.
+- Q10 The 2nd and 3rd color knobs are 30 pt, not draggable, and move with the main knob.
+- Q11 Spaces ▸ Rename Space edits the name in the sidebar header. A dialog appears only when the sidebar is hidden.
+- The capture request goes into the user's single combined Arc capture session.
