@@ -2445,3 +2445,20 @@ host, so its catalog entry is explicitly unavailable rather than using the mirro
 or inventing a URL. The Lead's 2026-10-25 generation decision in §9.2 supersedes
 the earlier list-directory and DAT placement contract. See [adblock-lists.md](../adblock-lists.md) for the Swift store
 contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.
+
+### Step 1 as built (2026-10-26)
+
+- **Target and epoch.** `gnrt` names the epoch `v0_8`, not `v0`: the target is `//third_party/rust/adblock/v0_8:lib`. Steps 2 onward use that label.
+- **Pins.** `rmp` resolved to 0.8.15, so the conditional pin `=0.8.11` is in the fragment as its own `[dependencies.rmp]` table (a bare line after `[dependencies.adblock]` would land inside that table).
+- **Crate patches** (`third_party/rust/chromium_crates_io/patches/`, captured in the Rust patch):
+  - `seahash-v3`: adds upstream's MIT license text (the crate shipped without one).
+  - `adblock-v0_8` and `libafl-v0_15`: regex without its `perf` features.
+  - `gnrt` applies crate patches only when it downloads a crate, so delete the vendor directory to re-apply one.
+- **gnrt config** (`gnrt_config.toml.open`):
+  - `regex` moves from `group = 'test'` to `'safe'`. Without that, `adblock` inherits test-only status and `libcef_static` cannot link it.
+  - `thiserror` and `idna` get per-epoch configs.
+  - Reasons: docs/engine-patches.md P8 "Security review" (lead decisions 2026-10-26).
+- **R4 (crate alone).** A vendored crate is not in the GN graph until something depends on it, and a target inside a `.gni` import is rejected. R4 therefore ran with the GN arg `root_extra_deps = [ "//third_party/rust/adblock/v0_8:lib" ]` (not committed): `engine-build --target third_party/rust/adblock/v0_8:lib` exit 0, `libadblock_lib.rlib` 5.1 MB, `rustc 1.100.0 1edd55dcfcd573872c727fa3e086369a71661ee0`. Step 2 makes the crate reachable for real.
+- **Size.** `patches/rust/0001-adblock-vendor.patch` is 11.3 MB (gate: 20 MB).
+- **Closure.** 23 new crate directories; all MIT, Apache-2.0, Unicode-3.0 or MPL-2.0 (adblock). No GPL-family license. Rows: `Engine/fork/licenses/THIRD_PARTY.md`.
+- **List pins.** The bundled list pins are stale: EasyList changed upstream. The perf bench used current lists from the official URLs (never Arc's bundle). Refreshing the pins is a reviewed Step 7 action (`docs/followups.md`).
