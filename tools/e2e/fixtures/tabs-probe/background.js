@@ -32,7 +32,15 @@ chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
 // Calls that switch tabs run here, not in the popup: a tab switch closes the
 // action popup (as in Chrome), which would end a popup-side call before its
 // result arrives. The result goes to chrome.storage.session.lastOp.
+const handledOps = new Set();
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message && message.seq !== undefined) {
+    if (handledOps.has(message.seq)) {
+      reply(true);
+      return;
+    }
+    handledOps.add(message.seq);
+  }
   const done = (result) => chrome.storage.session.set({ lastOp: { seq: message.seq, ...result } });
   if (message && message.op === "create") {
     chrome.tabs.create(message.props).then(
