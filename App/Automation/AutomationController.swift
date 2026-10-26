@@ -105,6 +105,7 @@
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return activationEvents
+      case "deactivate": NSApp.deactivate(); return true
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,

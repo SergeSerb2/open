@@ -1644,6 +1644,18 @@ def window_flow_checks(factory, results, tmp):
                                   "hidden": hidden["sidebarMode"], "panel_x": hidden["panel"][0],
                                   "revealed_s": reveal and reveal["elapsed"], "dismissed_s": dismissed and dismissed["elapsed"],
                                   "selected": selected, "revealed_again_s": again and again["elapsed"], "left_s": left and left["elapsed"]}
+        # Yield only our own app. Tagged pointer handling must still work while
+        # another process is foreground; no input is sent to that process.
+        app.call("deactivate")
+        inactive = state_when(app, lambda st: not st["appActive"])
+        app.call("mouse", action="move", x=600, y=300)
+        app.call("mouse", action="move", x=3, y=300)
+        background_reveal = wait_card(app, True)
+        app.call("mouse", action="move", x=600, y=300)
+        background_hide = wait_card(app, False)
+        results["background_tagged_pointer"] = {"ok": bool(inactive) and bool(background_reveal) and bool(background_hide)
+            and not background_reveal["state"]["appActive"], "inactive": bool(inactive),
+            "revealed": bool(background_reveal), "hidden": bool(background_hide)}
         app.call("key", key="s", modifiers=["cmd"], route="app")
         results["toggle_sidebar"] = {"ok": bool(sidebar_anchored(app))}
         app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
