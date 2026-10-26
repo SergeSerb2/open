@@ -50,6 +50,8 @@ public final class PeekController {
     @ObservationIgnored private var undoTask: Task<Void, Never>?
     @ObservationIgnored private var expandingGeneration = 0
     public private(set) var isExpanding = false
+    @ObservationIgnored private var isDismissing = false
+    @ObservationIgnored private var dismissGeneration = 0
     public var onChange: (() -> Void)?
     public var onToast: ((String, (() -> Void)?) -> Void)?
     public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
@@ -70,6 +72,7 @@ public final class PeekController {
     }
     public func open(url: URL, sourceTabID: ItemID) {
         guard let space = splitController.space else { return }
+        dismissGeneration += 1; isDismissing = false; overlay.alphaValue = 1
         if stack.count >= 5 { stack.last?.host?.load(url); return }
         let hostID = ItemID(), host = factory.makeHost(tabID: hostID, profileID: space.profileID, url: nil)
         let nodeID: ItemID = if case .splitPane(let id)? = model.parent(of: sourceTabID) { id } else { sourceTabID }
@@ -81,7 +84,10 @@ public final class PeekController {
         }
         host.onLoadingChange = { [weak self, weak host] loading in
             guard let self, let host, self.stack.last?.id == item.id, self.stack.last?.host === host else { return }
-            if !loading { NSAnimationContext.runAnimationGroup { c in c.duration = self.duration(0.12); host.view.animator().alphaValue = 1 } }
+            if !loading {
+                if self.duration(0.12) == 0 { host.view.alphaValue = 1 }
+                else { NSAnimationContext.runAnimationGroup { c in c.duration = self.duration(0.12); host.view.animator().alphaValue = 1 } }
+            }
         }
         host.shouldNavigate = { [weak self, weak host] target, flags in
             guard let self, let host, self.stack.last?.id == item.id, self.stack.last?.host === host else { return false }
@@ -126,7 +132,23 @@ public final class PeekController {
         else { dismissTop() }
     }
     public func dismissTop() {
-        guard !isExpanding, let item = stack.popLast() else { return }
+        guard !isExpanding, !isDismissing, let item = stack.last else { return }
+        let interval = duration(Motion.peekDismiss)
+        if interval == 0 { finishDismiss(); return }
+        isDismissing = true; dismissGeneration += 1; let generation = dismissGeneration, id = item.id
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 1; scale.toValue = 0.98
+            scale.duration = interval; overlay.panel.layer?.add(scale, forKey: "peekDismiss")
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = interval; overlay.animator().alphaValue = 0
+        } completionHandler: { [weak self] in MainActor.assumeIsolated {
+            guard let self, self.dismissGeneration == generation, self.stack.last?.id == id else { return }
+            self.isDismissing = false; self.finishDismiss(); self.overlay.alphaValue = 1
+        } }
+    }
+    private func finishDismiss() {
+        guard let item = stack.popLast() else { return }
         item.host?.close(); undoItem = (item.url, item.sourceTabID, Date().addingTimeInterval(5))
         onToast?("Peek closed", { [weak self] in self?.undoDismiss() })
         undoTask?.cancel(); undoTask = Task { [weak self] in
@@ -140,7 +162,8 @@ public final class PeekController {
         open(url: item.0, sourceTabID: item.1); onToast?("", nil)
     }
     public func dismissAll() {
-        expandingGeneration += 1; isExpanding = false
+        expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
+        undoTask?.cancel(); undoItem = nil; onToast?("", nil)
         for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; removeKeys(); onChange?()
     }
     private func removeKeys() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }

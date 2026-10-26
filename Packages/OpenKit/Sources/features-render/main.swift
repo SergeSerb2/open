@@ -12,8 +12,10 @@ enum FeatureCLI {
         let space = Space(title: "Research", profileID: profile.id, pinned: tabs.prefix(3).map { .tab($0) }, today: tabs.suffix(3).map { .tab($0) })
         return BrowserModel(profiles: [profile], spaces: [space], windows: [BrowserWindowState(focusedSpaceID: space.id)])
     }
+    static var defaultSuites: [String] = []
     static func defaults() -> UserDefaults {
-        let d = UserDefaults(suiteName: "Open.M4.Harness.\(UUID().uuidString)")!
+        let name = "Open.M4.Harness.\(UUID().uuidString)"; defaultSuites.append(name)
+        let d = UserDefaults(suiteName: name)!
         d.register(defaults: ["open.peek.otherSites": true, "open.peek.shiftClick": true, "open.links.littleOpenNUXSeen": true]); return d
     }
     static func run(_ args: [String]) async throws {
@@ -34,7 +36,7 @@ enum FeatureCLI {
             little.presentWindows = false; little.defaults = defaults; little.open(url: URL(string: RenderCLI.value(args, "--url") ?? "https://example.com")!, profileHint: nil)
             guard let c = little.sessions.first.flatMap({ little.controllers[$0.id] }) else { throw CLIError(description: "no Little Open session") }
             c.root.frame.size = size; c.window?.setContentSize(size)
-            try await Task.sleep(for: .milliseconds(350))
+            try await waitForLoads(factory, root: c.root)
             OffscreenRenderer.settle(c.root, runLoop: 0.01)
             try output(c.root, args: args, scale: scale); little.closeAll(); return
         }
@@ -46,7 +48,7 @@ enum FeatureCLI {
         func tabs(_ nodes: [SidebarNode]) -> [Tab] { nodes.flatMap { node in switch node { case .tab(let t): [t]; case .split(let s): s.panes; case .folder(let f): tabs(f.children) } } }
         let all = tabs(space.pinned + space.today)
         for tab in all { tab.live.sleepPhase = .live }
-        let fractions = (RenderCLI.value(args, "--fractions") ?? "0.5,0.5").split(separator: ",").compactMap { Double($0) }
+        let fractions = (RenderCLI.value(args, "--fractions") ?? (cmd == "bench" ? "0.25,0.25,0.25,0.25" : "0.5,0.5")).split(separator: ",").compactMap { Double($0) }
         let orientation: SplitOrientation = RenderCLI.value(args, "--orientation") == "vertical" ? .vertical : .horizontal
         let selected: ItemID
         if let raw = RenderCLI.value(args, cmd == "peek" ? "--source-tab" : "--select-node"), let uuid = UUID(uuidString: raw), model.node(id: ItemID(rawValue: uuid)) != nil { selected = ItemID(rawValue: uuid) }
@@ -71,7 +73,7 @@ enum FeatureCLI {
             let depth = max(1, min(5, Int(RenderCLI.value(args, "--depth") ?? "1") ?? 1))
             for _ in 0..<depth { c.peekController.open(url: URL(string: RenderCLI.value(args, "--peek-url") ?? "https://example.org/preview")!, sourceTabID: source.id) }
         }
-        try await Task.sleep(for: .milliseconds(350))
+        try await waitForLoads(factory, root: c.root)
         OffscreenRenderer.settle(c.root, runLoop: 0.01)
         if cmd == "bench" {
             var samples: [Double] = []
@@ -79,23 +81,36 @@ enum FeatureCLI {
             samples.sort(); print(String(format: "200 layouts: median %.3f ms, p95 %.3f ms", samples[100], samples[190])); return
         }
         if let frames = RenderCLI.value(args, "--frames") {
-            let rects = c.container.slots.map { slot -> [Double] in
-                let f = slot.convert(slot.bounds, to: c.root); return [f.minX, size.height - f.maxY, f.width, f.height]
+            func rect(_ view: NSView) -> [Double] {
+                let f = view.convert(view.bounds, to: c.root); return [f.minX, size.height - f.maxY, f.width, f.height]
             }
-            try JSONSerialization.data(withJSONObject: rects, options: [.prettyPrinted]).write(to: URL(fileURLWithPath: frames))
+            let payload: Any = cmd == "peek" ? ["panel": rect(c.peekController.overlay.panel), "buttons": c.peekController.overlay.buttons.map(rect)] as [String: Any]
+                : c.container.slots.map(rect)
+            try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]).write(to: URL(fileURLWithPath: frames))
         }
         try output(c.root, args: args, scale: scale)
     }
+    static func waitForLoads(_ factory: FakeWebContentHostFactory, root: NSView) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        repeat {
+            OffscreenRenderer.settle(root, runLoop: 0.01)
+            if factory.made.filter({ !$0.isClosed }).allSatisfy({ !$0.isLoading }) { return }
+            try await Task.sleep(for: .milliseconds(20))
+        } while ContinuousClock.now < deadline
+        throw CLIError(description: "fake host did not finish loading within 5 seconds")
+    }
     static func output(_ root: NSView, args: [String], scale: CGFloat) throws {
         guard let out = RenderCLI.value(args, "--out") else { throw CLIError(description: "--out required") }
-        OffscreenRenderer.writePNG(OffscreenRenderer().snapshot(root, scale: scale), to: URL(fileURLWithPath: out)); print("rendered \(out)")
+        root.window?.contentView = nil
+        OffscreenRenderer.writePNG(OffscreenRenderer().render(root, scale: scale), to: URL(fileURLWithPath: out)); print("rendered \(out)")
     }
 }
 
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.prohibited)
 Task { @MainActor in
-    do { try await FeatureCLI.run(Array(CommandLine.arguments.dropFirst())); exit(0) }
-    catch { FileHandle.standardError.write(Data("features-render: \(error)\n".utf8)); exit(1) }
+    @MainActor func cleanDefaults() { for name in FeatureCLI.defaultSuites { UserDefaults.standard.removePersistentDomain(forName: name) } }
+    do { try await FeatureCLI.run(Array(CommandLine.arguments.dropFirst())); cleanDefaults(); exit(0) }
+    catch { cleanDefaults(); FileHandle.standardError.write(Data("features-render: \(error)\n".utf8)); exit(1) }
 }
 RunLoop.main.run()

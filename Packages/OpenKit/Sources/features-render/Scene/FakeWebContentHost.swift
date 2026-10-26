@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import OpenModel
 
 @MainActor
@@ -16,7 +17,7 @@ public final class FakeWebContentHost: WebContentHost {
     private var history: [URL] = []
     private var cursor = -1
     private var loadGeneration = 0
-    private var loadingTask: Task<Void, Never>?
+    private var loadingWork: DispatchWorkItem?
     public var onURLChange: ((URL) -> Void)?
     public var onTitleChange: ((String) -> Void)?
     public var onLoadingChange: ((Bool) -> Void)?
@@ -38,20 +39,24 @@ public final class FakeWebContentHost: WebContentHost {
     }
     private func beginLoading() {
         loadGeneration += 1; let generation = loadGeneration
-        loadingTask?.cancel(); isLoading = true; onLoadingChange?(true)
-        loadingTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))
-            guard let self, !Task.isCancelled, !self.isClosed, self.loadGeneration == generation else { return }
-            self.isLoading = false; self.onLoadingChange?(false)
+        loadingWork?.cancel(); isLoading = true; onLoadingChange?(true)
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.isClosed, self.loadGeneration == generation else { return }
+                self.isLoading = false; self.onLoadingChange?(false)
+            }
         }
+        loadingWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
+
     public func reload() { guard !isClosed else { return }; loadCount += 1; beginLoading() }
-    public func stop() { loadingTask?.cancel(); loadGeneration += 1; isLoading = false; onLoadingChange?(false) }
+    public func stop() { loadingWork?.cancel(); loadGeneration += 1; isLoading = false; onLoadingChange?(false) }
     public func goBack() { guard !isClosed, canGoBack else { return }; cursor -= 1; publish() }
     public func goForward() { guard !isClosed, canGoForward else { return }; cursor += 1; publish() }
     public func focus() { guard !isClosed else { return }; surface.window?.makeFirstResponder(surface) }
     public func close() {
-        guard !isClosed else { return }; isClosed = true; loadingTask?.cancel(); loadGeneration += 1
+        guard !isClosed else { return }; isClosed = true; loadingWork?.cancel(); loadGeneration += 1
         onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
         surface.removeFromSuperview()
     }
@@ -63,16 +68,39 @@ public final class FakeWebContentHost: WebContentHost {
 }
 
 @MainActor
+public final class FakePageLabel: NSView {
+    public var stringValue = "New Tab" { didSet { needsDisplay = true } }
+    public var font = NSFont.systemFont(ofSize: 20) { didSet { needsDisplay = true } }
+    public var textColor = NSColor.darkGray { didSet { needsDisplay = true } }
+    public init() { super.init(frame: .zero); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    public override var isFlipped: Bool { true }
+    public override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    public override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: stringValue, attributes: [.font: font, .foregroundColor: textColor]))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        context.saveGState(); context.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        context.textPosition = CGPoint(x: max(0, (bounds.width - width) / 2), y: bounds.height / 2 + (font.ascender + font.descender) / 2)
+        CTLineDraw(line, context); context.restoreGState()
+    }
+}
+
+@MainActor
 public final class FakePageView: NSView {
-    public let label = NSTextField(labelWithString: "New Tab")
+    public let label = FakePageLabel()
     public private(set) var clickCount = 0
     public init(color: NSColor) {
         super.init(frame: .zero); wantsLayer = true; layer?.backgroundColor = color.cgColor
-        label.font = .systemFont(ofSize: 20); label.textColor = .darkGray; label.alignment = .center
+        label.font = .systemFont(ofSize: 20); label.textColor = .darkGray;
         addSubview(label)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var acceptsFirstResponder: Bool { true }
+    public override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize); needsLayout = true
+        label.frame = CGRect(x: 10, y: newSize.height / 2 - 15, width: max(0, newSize.width - 20), height: 30)
+    }
     public override func layout() { super.layout(); label.frame = CGRect(x: 10, y: bounds.midY - 15, width: max(0, bounds.width - 20), height: 30) }
     public override func mouseDown(with event: NSEvent) { clickCount += 1 }
 }

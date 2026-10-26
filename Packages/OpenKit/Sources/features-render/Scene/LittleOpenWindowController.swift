@@ -45,10 +45,10 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }
         root.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         root.addSubview(container); root.addSubview(toolbar); toolbar.addSubview(urlField)
-        urlField.font = .systemFont(ofSize: 13); urlField.placeholderString = "Search or Enter URL…"; urlField.delegate = self
+        urlField.font = .systemFont(ofSize: 13); urlField.textColor = .labelColor; urlField.placeholderString = "Search or Enter URL…"; urlField.delegate = self
         urlField.target = self; urlField.action = #selector(submit)
         for (i, spec) in [("arrow.left", "Go back"), ("arrow.right", "Go forward"), ("arrow.clockwise", "Reload"), ("person.crop.circle", "Profile"), ("arrow.down.circle", "Downloads"), ("arrow.up.right.square", "Open in Space")].enumerated() {
-            let b = ActionButton(symbol: spec.0, title: spec.1) { [weak self] in self?.press(i) }; toolbar.addSubview(b); buttons.append(b)
+            let b = ActionButton(symbol: spec.0, title: spec.1) { [weak self] in self?.press(i) }; b.contentTintColor = .labelColor; toolbar.addSubview(b); buttons.append(b)
         }
         buttons[4].isEnabled = false
         banner.wantsLayer = true; banner.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
@@ -108,7 +108,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     }
     public func moveMenu() -> NSMenu {
         let menu = NSMenu(title: "Open in Space")
-        for space in coordinator?.model.spaces ?? [] { menu.addItem(FeatureMenuItem(space.title) { [weak self] in
+        for space in coordinator?.model.spaces ?? [] { menu.addItem(FeatureMenuItem(coordinator?.model.displayTitle(for: space) ?? "Space") { [weak self] in
             guard let self else { return }; self.coordinator?.moveToSpace(sessionID: self.session.id, spaceID: space.id)
         }) }; return menu
     }

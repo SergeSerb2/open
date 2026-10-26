@@ -5,6 +5,7 @@ import OpenDesign
 final class ActionButton: NSButton {
     var perform: (() -> Void)?
     var circleFill: NSColor? { didSet { needsDisplay = true } }
+    var dimsWhenDisabled = true
     var glyphPointSize: CGFloat = 16
     var glyphOffset = CGSize.zero
     init(symbol: String, title: String, action: @escaping () -> Void) {
@@ -25,7 +26,7 @@ final class ActionButton: NSButton {
         let rect = backingAlignedRect(CGRect(x: (bounds.width - size.width) / 2 + glyphOffset.width,
                                              y: (bounds.height - size.height) / 2 + glyphOffset.height,
                                              width: size.width, height: size.height), options: .alignAllEdgesNearest)
-        let tint = (contentTintColor ?? .black).withAlphaComponent(isEnabled ? (contentTintColor?.alphaComponent ?? 1) : 0.24)
+        let tint = (contentTintColor ?? .black).withAlphaComponent(isEnabled || !dimsWhenDisabled ? (contentTintColor?.alphaComponent ?? 1) : 0.24)
         context.saveGState(); context.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
         symbol.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         context.setBlendMode(.sourceIn); context.setFillColor(tint.cgColor); context.fill(rect)
@@ -46,18 +47,20 @@ public final class PaneChromeView: NSView {
     public init() {
         super.init(frame: .zero); wantsLayer = true
         let specs = [("arrow.left", "Go back"), ("arrow.right", "Go forward"), ("arrow.clockwise", "Reload"),
-                     ("link", "Copy Current URL"), ("slider.horizontal.3", "Site Control Center"),
+                     ("link", "Copy Current URL"), ("slider.horizontal.2.square", "Site Control Center"),
                      ("square.split.2x1", "Split View Menu"), ("xmark", "Close This Pane")]
         for (i, spec) in specs.enumerated() {
             let button = ActionButton(symbol: spec.0, title: spec.1) { [weak self] in self?.press(i) }
             button.contentTintColor = NSColor.black.withAlphaComponent(0.55)
             if i == 0 || i == 1 { button.glyphPointSize = 14; button.glyphOffset = CGSize(width: 1, height: 1) }
-            if i == 2 { button.glyphPointSize = 17; button.glyphOffset = CGSize(width: 0, height: 1) }
+            if i == 3 { button.glyphPointSize = 12; button.glyphOffset = CGSize(width: 1, height: 1); button.contentTintColor = .black.withAlphaComponent(0.60) }
+            if i == 4 { button.glyphPointSize = 16; button.dimsWhenDisabled = false }
+            if i == 2 { button.glyphPointSize = 14; button.glyphOffset = CGSize(width: 0, height: 1) }
             if i == 5 { button.glyphOffset = CGSize(width: 0, height: 1) }
             if i >= 5 { button.contentTintColor = .black.withAlphaComponent(0.59) }
             addSubview(button); buttons.append(button)
         }
-        label.font = .systemFont(ofSize: 13); label.alignment = .center; label.textColor = .black.withAlphaComponent(0.8)
+        label.font = .systemFont(ofSize: 13); label.alignment = .center; label.textColor = .black.withAlphaComponent(0.6)
         addSubview(label)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -74,9 +77,9 @@ public final class PaneChromeView: NSView {
     public override func layout() {
         super.layout(); let w = bounds.width
         buttons[0].frame = SplitMetrics.back; buttons[1].frame = SplitMetrics.forward; buttons[2].frame = SplitMetrics.reload
-        let labelWidth = min(250, max(0, w - 300))
-        label.frame = CGRect(x: (w - labelWidth) / 2, y: 7, width: labelWidth, height: 18)
-        buttons[3].frame = CGRect(x: label.frame.minX - 26, y: 4, width: 24, height: 24)
+        let labelWidth = min(max(0, w - 300), ceil((label.stringValue as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width) + 4)
+        label.frame = CGRect(x: (w - labelWidth) / 2 - 2, y: 8, width: labelWidth, height: 16)
+        buttons[3].frame = CGRect(x: label.frame.minX - 25, y: 4, width: 24, height: 24)
         buttons[4].frame = CGRect(x: w - 105, y: 2, width: 32, height: 28)
         buttons[5].frame = CGRect(x: w - 69, y: 4, width: 32, height: 24)
         buttons[6].frame = CGRect(x: w - 37, y: 4, width: 32, height: 24)

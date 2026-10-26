@@ -25,9 +25,10 @@ public enum PeekMetrics {
     public static let buttonPitch: CGFloat = 43
     public static let scrimAlpha: Double = 0.70
     /// Default-Space fallback measured from F0090/F0102: §12 circle core and
-    /// backdrop fit in docs/re/interaction-states.md. No existing token is changed.
+    /// backdrop fit in docs/re/interaction-states.md. The default tint is
+    /// refitted against F0090 sidebar samples (docs/m4.md); the earlier tint was a guess. No existing token is changed.
     public static let defaultControls = RGBA(hex: 0x050627)
-    public static let defaultScrim = RGBA(hex: 0x0E0019, alpha: 0.70)
+    public static let defaultScrim = RGBA(hex: 0x000013, alpha: 0.70)
     /// F0090 core glyphs are lavender-white (sRGB); fitted source tint after AA.
     public static let defaultGlyph = RGBA(hex: 0xF0F1FF)
     /// Fitted guesses from F0090's ≈16 pt shadow, not measured animation values.

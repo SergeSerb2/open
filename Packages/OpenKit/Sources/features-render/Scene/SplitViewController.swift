@@ -29,7 +29,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         view = container
         container.tabProvider = { [weak model] in model?.tab(id: $0) }
         container.onPaneClicked = { [weak self] in self?.focus($0) }
-        container.onPaneClose = { [weak self] in self?.close($0, separate: false) }
+        container.onPaneClose = { [weak self] in self?.close($0, separate: false, option: NSApp.currentEvent?.modifierFlags.contains(.option) == true) }
         container.onPaneMenu = { [weak self] id, anchor in
             guard let self else { return }; self.focus(id); self.menu().popUp(positioning: nil, at: CGPoint(x: 0, y: anchor.bounds.height), in: anchor)
         }
@@ -74,7 +74,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
     }
     public func close(_ id: ItemID, separate: Bool, option: Bool = false) {
         guard let split, let space else { return }
-        if option || NSEvent.modifierFlags.contains(.option) {
+        if option {
             model.unsplit(splitID: split.id); select(id)
         } else {
             let survivor = split.panes.first { $0.id != id }?.id

@@ -21,7 +21,7 @@ enum FeatureChecks {
         let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
         let window = model.windows[0], space = model.spaces[0], first = space.pinned[0].tab!
         model.selectNode(windowID: window.id, spaceID: space.id, nodeID: first.id)
-        let store = SnapshotStore(root: temp), archive = ArchiveStore(root: temp)
+        let store = SnapshotStore(root: temp), archive = ArchiveStore(fileURL: temp.appendingPathComponent("State/archive.sqlite3"))
         model.archiveSink = archive
         let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults, snapshotStore: store)
         defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
@@ -49,12 +49,22 @@ enum FeatureChecks {
         c.performCommand("add-split-view"); settle()
         check(c.splitController.split?.panes.count == 2 && c.container.slots.count == 2, "S2 C1 creates two real slots")
         let split = c.splitController.split!, newID = split.panes[1].id
-        check(split.focusedPaneID == newID && c.container.host(for: first.id) != nil && c.container.host(for: newID) != nil, "S2 focus and lazy hosts")
+        let assignmentMatches = c.container.slots.allSatisfy { slot in
+            guard let host = c.container.host(for: slot.tabID) as? FakeWebContentHost else { return false }
+            return host.tabID == slot.tabID && slot.contentHostView === host.surface
+        }
+        check(split.focusedPaneID == newID && assignmentMatches && c.container.slots.map(\.tabID) == split.panes.map(\.id), "S2 focus and colored host assignment in pane order")
         let divider = c.container.divider(at: 0)!
+        let initialFractions = split.fractions
+        model.undoManager = undo
         divider.drag(by: 120); settle()
         check(split.fractions.count == 2 && abs(split.fractions.reduce(0, +) - 1) < 0.000001 && split.fractions[0] > 0.5, "S3 divider persists normalized widths")
-        store.saveNow(model: model); let loaded = try store.load()!
+        try store.saveNow(model: model); let loaded = try store.load()!
         check(loaded.node(id: split.id)?.split?.fractions == split.fractions, "S3 snapshot reload preserves fractions")
+        let draggedFractions = split.fractions
+        undo.undo(); check(split.fractions == initialFractions, "S3 one divider release undoes in one step")
+        undo.redo(); check(split.fractions == draggedFractions, "S3 divider redo restores drag result")
+        model.undoManager = nil
         let slot = c.container.slots[1], point = slot.convert(CGPoint(x: slot.bounds.midX, y: slot.bounds.midY), to: nil)
         let event = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: c.window!.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
         c.container.observeClick(event); slot.hitTest(slot.convert(point, from: nil))?.mouseDown(with: event); settle()
@@ -182,7 +192,7 @@ enum FeatureChecks {
         check(oldHost.isClosed, "C1 ninth hidden host evicted by LRU")
         let oldTitle = sleeping.title; staleCallback?("Stale title")
         check(sleeping.title == oldTitle, "C1 generation guard drops stale callback after eviction")
-        let image = OffscreenRenderer().snapshot(c.root, scale: 1)
+        let image = OffscreenRenderer().render(c.root, scale: 1)
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }

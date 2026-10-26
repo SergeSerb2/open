@@ -37,7 +37,7 @@ final class LittleHostFactory: WebContentHostFactory {
     init(_ make: @escaping (ProfileID) -> any LittleOpenWebContentProviding) { self.make = make }
     func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost {
         let base = make(profileID)
-        let host: any WebContentHost = (base as? any WebContentHost) ?? LittleHostAdapter(base: base, tabID: tabID)
+        let host: any WebContentHost = LittleHostAdapter(base: base, tabID: tabID)
         if let url { host.load(url) }; return host
     }
 }
@@ -48,9 +48,9 @@ private final class LittleHostAdapter: WebContentHost {
     var view: NSView { base.view }
     var currentURL: URL? { base.currentURL }
     var title = ""
-    var canGoBack: Bool { false }
-    var canGoForward: Bool { false }
-    var isLoading: Bool { false }
+    var canGoBack: Bool { (base as? any WebContentHost)?.canGoBack ?? false }
+    var canGoForward: Bool { (base as? any WebContentHost)?.canGoForward ?? false }
+    var isLoading: Bool { (base as? any WebContentHost)?.isLoading ?? false }
     var onURLChange: ((URL) -> Void)?
     var onTitleChange: ((String) -> Void)?
     var onLoadingChange: ((Bool) -> Void)?
@@ -60,12 +60,22 @@ private final class LittleHostAdapter: WebContentHost {
         self.base = base; self.tabID = tabID
         base.onURLChange = { [weak self] in self?.onURLChange?($0) }
         base.onTitleChange = { [weak self] title in self?.title = title; self?.onTitleChange?(title) }
+        if let rich = base as? any WebContentHost {
+            rich.onLoadingChange = { [weak self] in self?.onLoadingChange?($0) }
+            rich.onFaviconChange = { [weak self] in self?.onFaviconChange?($0) }
+            rich.shouldNavigate = { [weak self] url, flags in self?.shouldNavigate?(url, flags) ?? true }
+        }
     }
     func load(_ url: URL) { base.load(url) }
     func reload() { base.reload() }
-    func stop() {}
+    func stop() { (base as? any WebContentHost)?.stop() }
     func goBack() { base.goBack() }
     func goForward() { base.goForward() }
     func focus() { view.window?.makeFirstResponder(view) }
-    func close() { base.onURLChange = nil; base.onTitleChange = nil; onURLChange = nil; onTitleChange = nil; view.removeFromSuperview() }
+    func close() {
+        base.onURLChange = nil; base.onTitleChange = nil
+        (base as? any WebContentHost)?.close()
+        onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
+        view.removeFromSuperview()
+    }
 }

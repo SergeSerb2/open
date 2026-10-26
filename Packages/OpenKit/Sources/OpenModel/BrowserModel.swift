@@ -1124,7 +1124,10 @@ public final class BrowserModel {
         guard let split = index[splitID]?.split, fractions.count == split.panes.count,
               fractions.allSatisfy({ $0.isFinite && $0 >= 0 }),
               abs(fractions.reduce(0, +) - 1) <= 0.001 else { return }
+        let old = split.fractions
+        guard old != fractions else { return }
         split.fractions = fractions
+        registerChange(undo: { split.fractions = old }, redo: { split.fractions = fractions })
     }
 
     public func setSplitOrientation(splitID: ItemID, orientation: SplitOrientation) {

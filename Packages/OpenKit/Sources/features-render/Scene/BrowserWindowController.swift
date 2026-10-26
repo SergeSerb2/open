@@ -18,7 +18,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public let splitController: SplitViewController
     public let peekController: PeekController
     public var visibilityOverride: OpenSleepWindowState?
+    public var onOpenCommandBar: ((CommandBarSource, URL?) -> Void)?
     public var onVisibilityChange: (() -> Void)?
+    public private(set) var pendingMoveMenu: NSMenu?
     private var treeObserver: UUID?
     private var keyMonitor: Any?
     private let keyboard = KeyboardRouter()
@@ -44,7 +46,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         sidebar.delegate = self; sidebar.themeBackground = background
         container.onLinkClicked = { [weak self] id, url, flags in self?.peekController.intercept(tabID: id, url: url, flags: flags) ?? true }
         container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
-        container.onURLField = { [weak self] in self?.context.isNewTabCommandBarOpen = true }
+        container.onURLField = { [weak self] in guard let self else { return }; self.onOpenCommandBar?(.urlField, self.context.currentTab?.url) }
         container.onToast = { [weak self] in self?.showToast($0, undo: nil) }
         splitController.onChange = { [weak self] in self?.changed() }
         peekController.onChange = { [weak self] in self?.changed() }
@@ -107,9 +109,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func changed() { snapshotStore?.scheduleSave(model: model); peekController.refresh(); onVisibilityChange?() }
     private func showToast(_ title: String, undo: (() -> Void)?) { toastUndo = undo; toastLabel.stringValue = title; undoButton.isHidden = undo == nil; toast.isHidden = title.isEmpty }
     public var peekBadgeTabIDs: Set<ItemID> { peekController.peekBadgeTabIDs }
-    private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane"].contains(id) || id.hasPrefix("focus-split-pane-") }
+    private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
-        if id == "go-back", peekController.isShown { peekController.stack.last?.host?.goBack() }
+        if id == "open-in-current-space", peekController.isShown {
+            let menu = NSMenu(title: "Open in Space")
+            for space in model.spaces { menu.addItem(FeatureMenuItem(context.title(of: space)) { [weak self] in self?.peekController.expandTop(into: space.id) }) }
+            pendingMoveMenu = menu
+            if window?.isVisible == true { menu.popUp(positioning: nil, at: CGPoint(x: root.bounds.midX, y: root.bounds.midY), in: root) }
+        }
+        else if id == "go-back", peekController.isShown { peekController.stack.last?.host?.goBack() }
         else if id == "go-forward", peekController.isShown { peekController.stack.last?.host?.goForward() }
         else { splitController.performCommand(id) }
     }
@@ -129,6 +137,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         refresh(); changed(); return true
     }
+    public func windowWillClose(_ notification: Notification) { visibilityOverride = .closed; onVisibilityChange?() }
     public func windowDidMiniaturize(_ notification: Notification) { onVisibilityChange?() }
     public func windowDidDeminiaturize(_ notification: Notification) { onVisibilityChange?() }
     public func windowDidChangeOcclusionState(_ notification: Notification) { onVisibilityChange?() }

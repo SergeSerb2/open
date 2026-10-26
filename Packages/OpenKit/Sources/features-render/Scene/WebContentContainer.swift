@@ -103,7 +103,7 @@ public final class WebContentContainer: NSView {
         guard (1...4).contains(tabIDs.count), Set(tabIDs).count == tabIDs.count, tabIDs.contains(focusedTabID) else { return }
         if let currentProfile, currentProfile != profileID { closeAll() }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
-        let old = ids
+        let old = ids, previousFocus = focused
         for id in old where !tabIDs.contains(id) { cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
         for slot in slots where !tabIDs.contains(slot.tabID) { slot.removeFromSuperview() }
         let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
@@ -113,6 +113,7 @@ public final class WebContentContainer: NSView {
         self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
         hiddenLRU.removeAll { tabIDs.contains($0) }
         ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
+        if previousFocus != focusedTabID { cache[focusedTabID]?.focus() }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.showGeneration == generation else { return }
             for id in tabIDs where id != focusedTabID { self.ensureHost(id) }
@@ -127,7 +128,7 @@ public final class WebContentContainer: NSView {
     }
     private func bind(_ host: any WebContentHost, as id: ItemID) {
         nextGeneration += 1; let generation = nextGeneration
-        cache[id] = host; generations[id] = generation
+        cache[id] = host; generations[id] = generation; tabProvider(id)?.live.hasWebContent = true
         host.onURLChange = { [weak self, weak host] url in
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
             // No engine-to-model bridge exists before the App target; property writes are the bridge.
@@ -173,7 +174,7 @@ public final class WebContentContainer: NSView {
     public func adopt(_ host: any WebContentHost, for id: ItemID) {
         cache[id]?.close(); bind(host, as: id); refreshPlaceholders()
     }
-    public func closeHost(for id: ItemID) { generations[id] = nil; cache.removeValue(forKey: id)?.close(); hiddenLRU.removeAll { $0 == id } }
+    public func closeHost(for id: ItemID) { tabProvider(id)?.live.hasWebContent = false; generations[id] = nil; cache.removeValue(forKey: id)?.close(); hiddenLRU.removeAll { $0 == id } }
     public func closeAll() { for id in Array(cache.keys) { closeHost(for: id) } }
     private func trimCache() { while hiddenLRU.count > Self.maxCachedHiddenHosts { closeHost(for: hiddenLRU[0]) } }
     public func focus(tabID: ItemID) {
@@ -236,7 +237,9 @@ public final class WebContentContainer: NSView {
     public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         defer { dropOverlay.isHidden = true }
         guard let raw = sender.draggingPasteboard.string(forType: .init("com.open.sidebar.node")), let uuid = UUID(uuidString: raw) else { return false }
-        return handleDrop(ItemID(rawValue: uuid), point: convert(sender.draggingLocation, from: nil))
+        let point = convert(sender.draggingLocation, from: nil)
+        let index = slots.count > 1 && dropOverlay.zone(at: point) == .center ? slots.firstIndex { $0.frame.contains(point) } : nil
+        return handleDrop(ItemID(rawValue: uuid), point: point, paneIndex: index)
     }
     @discardableResult public func handleDrop(_ id: ItemID, point: CGPoint, paneIndex: Int? = nil) -> Bool {
         onDrop?(id, dropOverlay.zone(at: point), paneIndex) ?? false

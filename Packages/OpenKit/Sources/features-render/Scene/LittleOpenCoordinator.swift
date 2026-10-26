@@ -34,7 +34,7 @@ public final class LittleOpenCoordinator {
     }
     /// A fresh blank unless an existing blank window is key (also prevents shortcut double fire).
     public func openBlank(focusURLField: Bool) {
-        if let session = sessions.first(where: { controllers[$0.id]?.isKeyForReuse == true && $0.tab.url.scheme == "about" }) {
+        if let session = sessions.first(where: { controllers[$0.id]?.isKeyForReuse == true && $0.tab.url.absoluteString == "about:blank" }) {
             resurface(session.id); if focusURLField { controllers[session.id]?.focusURL() }; return
         }
         guard let profile = model.spaces.first?.profileID ?? model.profiles.first?.id else { return }
@@ -115,7 +115,7 @@ public final class LittleOpenCoordinator {
     }
     public func windowMenu() -> NSMenu {
         let menu = NSMenu(title: "Little Open Windows")
-        for s in sessions { menu.addItem(FeatureMenuItem(s.tab.title.isEmpty ? "Little Open" : s.tab.title) { [weak self] in self?.resurface(s.id) }) }
+        for s in sessions { menu.addItem(FeatureMenuItem(s.tab.title.isEmpty || s.tab.url.absoluteString == "about:blank" ? "Little Open" : s.tab.title) { [weak self] in self?.resurface(s.id) }) }
         menu.addItem(.separator()); menu.addItem(FeatureMenuItem("Show Little Open Windows") { [weak self] in self?.showAll() })
         menu.addItem(FeatureMenuItem("Close Little Open Windows") { [weak self] in self?.closeAll() }); return menu
     }

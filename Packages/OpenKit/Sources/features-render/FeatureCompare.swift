@@ -37,10 +37,20 @@ enum FeatureCompare {
                 ("Focused Back glyph", CGRect(x: 1227, y: 14, width: 32, height: 24)),
                 ("Focused Forward glyph", CGRect(x: 1264, y: 14, width: 32, height: 24)),
                 ("Focused Reload glyph", CGRect(x: 1301, y: 14, width: 32, height: 24)),
+                ("Focused Copy URL glyph", CGRect(x: 1647, y: 14, width: 24, height: 24)),
+                ("Focused Host label", CGRect(x: 1670, y: 16, width: 88, height: 22)),
+                ("Site Control glyph", CGRect(x: 2107, y: 17, width: 20, height: 20)),
                 ("Split menu glyph", CGRect(x: 2137, y: 14, width: 32, height: 24)),
                 ("Focused Close glyph", CGRect(x: 2169, y: 14, width: 32, height: 24))]
             for (name, region) in specs { results.append(Compare.measure(.init(name: name, region: region, kind: .ink), arc: arc, ours: ours, scale: 1)) }
         } else if state == "peek" {
+            guard let path = RenderCLI.value(args, "--frames"), let frames = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path))) as? [String: Any],
+                  let panel = frames["panel"] as? [Double], panel.count == 4,
+                  let controls = frames["buttons"] as? [[Double]], controls.count == 3 else { throw CLIError(description: "peek compare requires --frames JSON from the render") }
+            geometry("Peek panel frame", expected: CGRect(x: 427, y: 12, width: 1590, height: 1370), actual: CGRect(x: panel[0], y: panel[1], width: panel[2], height: panel[3]))
+            for (i, f) in controls.enumerated() {
+                geometry(["Close", "Expand", "Split"][i] + " control hit frame", expected: CGRect(x: 2030, y: 21 + Double(i) * 43, width: 35, height: 33), actual: CGRect(x: f[0], y: f[1], width: f[2], height: f[3]))
+            }
             // Edge profiles identify the opaque page boundary without comparing its content.
             func panelFrame(_ bitmap: Bitmap) -> CGRect {
                 let y = 700, start = 350, end = 2090
