@@ -1,0 +1,58 @@
+Building for production...
+[Computing dependencies]
+[Pre-planning 1 / 1400]
+[Planning deferred tasks]
+[1 / 89] OpenKit_OpenMedia
+[32 / 110]
+[33 / 106] OpenModel
+[35 / 107] OpenModel
+[47 / 118] OpenBoosts
+[50 / 121] OpenImport
+[54 / 125] OpenMedia
+[54 / 125] OpenBoosts
+[70 / 134] OpenSleep
+[74 / 135] OpenDesign
+[77 / 134] OpenMedia
+[81 / 134] OpenSidebar
+[82 / 135] OpenAdBlock
+[85 / 134] OpenStore
+[90 / 137] OpenSuggest
+[92 / 138] OpenImport
+[96 / 138] OpenSidebar
+[102 / 142] sidebar-render-product
+[103 / 143] OpenSuggest
+[109 / 149] OpenCommandBar
+[113 / 151] OpenCommandBar
+[117 / 154] commandbar-render-product
+[118 / 155] OpenCommands
+[124 / 161] OpenCommands
+[130 / 166] OpenCommands-product
+[133 / 177]
+[134 / 177]
+[136 / 177]
+[138 / 177]
+[140 / 177]
+[143 / 177] commands-dump-product
+[147 / 176]
+[148 / 176] commands-dump-product
+[150 / 178] sidebar-render-product
+[153 / 182] sidebar-render-product
+[154 / 182] sidebar-render-product
+[155 / 182] commandbar-render-product
+[157 / 182] commandbar-render-product
+[158 / 182] commandbar-render-product
+[160 / 184] OpenFeatures
+[168 / 185] openkit-product
+[172 / 187] OpenSettings
+[179 / 190] settings-preview-product
+[180 / 191] features-render-product
+[182 / 191] features-render-product
+[183 / 191] features-render-product
+[184 / 191] openkit-product
+[186 / 191] openkit-product
+[187 / 191] openkit-product
+[188 / 191] settings-preview-product
+[190 / 191] settings-preview-product
+[191 / 191] settings-preview-product
+Build complete! (75.41 secs.)
+build exit=0 warning_lines=0 error_lines=0

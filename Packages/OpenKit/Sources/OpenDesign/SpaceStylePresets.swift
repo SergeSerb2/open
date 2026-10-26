@@ -28,8 +28,6 @@ public enum SpaceStylePresets {
         }
     }()
 
-    public static func newSpaceStyle(spaceCount: Int) -> SpaceStyle { all[max(0, spaceCount) % 9].style }
-
     private static func srgb(_ hex: UInt32) -> RGBAColor { RGBA(hex: hex).modelColor }
     private static func p3(_ hex: UInt32) -> RGBAColor {
         let c = RGBA(hex: hex)
