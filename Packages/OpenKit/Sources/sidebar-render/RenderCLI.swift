@@ -32,7 +32,9 @@ enum RenderCLI {
                             [--multi-select ROW,ROW…] [--option-held] [--unread ROW,…] [--hover-favicon ROW]
                             [--banner auto-archive] [--preview folder:N]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
-          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
+          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media] [--crop-media-controls]
+          --media-hover card:N|title:N|stack --media-drawer N
+          --media-button-hover NAME [--media-button-pressed] [--media-tooltip] [--media-increase-contrast]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
@@ -40,7 +42,7 @@ enum RenderCLI {
       sidebar-render space-manager --out FILE.png [--snapshot DIR] [--size WxH] [--scale 1|2] [--profiles 2] [--columns N --rows N --scroll-x X]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card]
       sidebar-render check
     """
 
@@ -186,7 +188,7 @@ enum RenderCLI {
             options.previewFolderID = folders[index].id
         }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
-        let delegate = RecordingDelegate()
+        let delegate: any SidebarDelegate = context.media == nil ? RecordingDelegate() : MediaScene.delegate(context: context)
         let scene = RenderScene(context: context, options: options, delegate: delegate)
         scene.background.renderScale = scale
         var image: CGImage
@@ -200,8 +202,18 @@ enum RenderCLI {
             image = OffscreenRenderer().snapshot(scene, scale: scale, presentation: true)
             host.contentView = nil
             host.close()
+        } else if value(args, "--media-button-hover") != nil || args.contains("--media-tooltip") {
+            image = try MediaScene.captureInteraction(scene, args: args, scale: scale)
         } else {
             image = OffscreenRenderer().render(scene, scale: scale)
+        }
+        if args.contains("--crop-media-controls") {
+            let mediaFrame = scene.sidebar.mediaControls.convert(scene.sidebar.mediaControls.bounds, to: scene)
+            let y = max(0, mediaFrame.minY - 12)
+            guard let crop = image.cropping(to: CGRect(x: 0, y: y * scale, width: context.sidebarWidth * scale, height: (scene.bounds.height - y) * scale)) else {
+                throw CLIError(description: "could not crop media controls")
+            }
+            image = crop
         }
         if args.contains("--crop-media") {
             let ids = model.index.values.compactMap(\.tab).filter { $0.live.isAudible || $0.isMuted || $0.live.isCapturing }.map(\.id)

@@ -29,6 +29,7 @@ public final class SidebarView: NSView {
     let favorites: FavoritesView
     let pager: SpacePagerView
     let bottomBar: BottomBarView
+    public let mediaControls: MediaControlsView
     private var cardBackground: ThemeBackgroundView?
     private var pointerTracking: NSTrackingArea?
     private var observerID: UUID?
@@ -50,9 +51,11 @@ public final class SidebarView: NSView {
         favorites = FavoritesView(context: context)
         pager = SpacePagerView(context: context, menus: menus)
         bottomBar = BottomBarView(context: context, menus: menus)
+        mediaControls = MediaControlsView(context: context)
         super.init(frame: .zero)
         wantsLayer = true
         context.sidebar = self
+        mediaControls.onUpdateHeight = { [weak self] in self?.needsLayout = true }
         NotificationCenter.default.addObserver(self, selector: #selector(windowResignedKey(_:)), name: NSWindow.didResignKeyNotification, object: nil)
         modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             MainActor.assumeIsolated {
@@ -66,7 +69,7 @@ public final class SidebarView: NSView {
         favorites.menus = renaming
         pager.menus = renaming
         bottomBar.menus = renaming
-        for v in [pager, favorites, urlField, toolbar, bottomBar] as [NSView] { addSubview(v) }
+        for v in [pager, favorites, urlField, toolbar, bottomBar, mediaControls] as [NSView] { addSubview(v) }
         observerID = context.model.addObserver { [weak self] change in self?.apply(change) }
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
@@ -125,13 +128,37 @@ public final class SidebarView: NSView {
         let favH = favoritesHeight
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
+        let mediaHeight = mediaControls.requiredHeight
         let bannerHeight = bannerShown ? banner?.height(for: max(0, w - 2 * BannerMetrics.inset)) ?? 0 : 0
-        let listBottom = bottom - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
+        let listBottom = bottom - mediaHeight - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
+        let oldPager = pager.frame, oldMedia = mediaControls.frame
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, listBottom - favTop - favH))
+        mediaControls.frame = CGRect(x: 0, y: bottom - mediaHeight, width: w, height: mediaHeight)
+        CATransaction.commit()
+        if oldMedia.height != mediaHeight && oldPager != .zero && animatesMediaChanges {
+            for (view, old) in [(pager as NSView, oldPager), (mediaControls as NSView, oldMedia)] {
+                if SidebarDiagnostics.mediaReducesMotion {
+                    let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
+                    fade.duration = Motion.reducedMedia; view.layer?.add(fade, forKey: "media.reducedHeight")
+                } else {
+                    let spring = mediaControls.heightTransition == .stack
+                    let move = spring ? Motion.miniPlayerStack.animation(keyPath: "position") : CABasicAnimation(keyPath: "position")
+                    let resize = spring ? Motion.miniPlayerStack.animation(keyPath: "bounds.size") : CABasicAnimation(keyPath: "bounds.size")
+                    move.fromValue = CGPoint(x: old.midX, y: old.midY); move.toValue = view.layer?.position
+                    resize.fromValue = old.size; resize.toValue = view.bounds.size
+                    if !spring {
+                        let duration = mediaControls.heightTransition == .drawer ? Motion.miniPlayerResize : Motion.rowStructure
+                        for animation in [move, resize] { animation.duration = duration; animation.timingFunction = Motion.easeInOut }
+                    }
+                    view.layer?.add(move, forKey: "media.containerMove"); view.layer?.add(resize, forKey: "media.containerResize")
+                }
+            }
+        }
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
         if bannerShown, let banner {
             let height = banner.height(for: max(0, w - 2 * BannerMetrics.inset))
-            banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - BannerMetrics.inset - height,
+            banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - mediaControls.requiredHeight - BannerMetrics.inset - height,
                                   width: max(0, w - 2 * BannerMetrics.inset), height: height)
 
         }
@@ -155,6 +182,7 @@ public final class SidebarView: NSView {
         let dimmed = context.peekSourceNodeID != nil
         toolbar.alphaValue = dimmed ? SidebarRole.peekToolbarOpacity : 1
         bottomBar.alphaValue = dimmed ? SidebarRole.peekBottomBarOpacity : 1
+        mediaControls.alphaValue = dimmed ? SidebarRole.peekBottomBarOpacity : 1
     }
 
     /// Theme, appearance, and the window background.
@@ -299,6 +327,8 @@ public enum SidebarDiagnostics {
     public internal(set) static var peekBadgeDraws = 0
     /// Animate even in windows that are not on screen (frame captures of transitions).
     public static var forceAnimations = false
+    public static var mediaIncreaseContrastOverride: Bool?
+    public static var mediaIncreasesContrast: Bool { mediaIncreaseContrastOverride ?? NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
 }
 
 extension NSView {
