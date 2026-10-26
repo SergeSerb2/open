@@ -1,0 +1,7 @@
+# Open fragment. Merged into gnrt_config.toml by §7.4.
+# Add a [crate.adblock] table ONLY if gnrt vendor/gen requires one
+# (license file name, allow_unsafe, group). Default: no table.
+# The crate runs in the browser process. If the security review (F-11
+# checklist) finds the rule of 2 is not met, set group = "sandbox" here
+# and STOP — the ad-block design assumes browser-process execution;
+# a sandbox move needs a design change, not a config tweak.

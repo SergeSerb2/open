@@ -13,3 +13,8 @@ Vendor/adblock/
 
 # SwiftPM build output
 .build/
+
+# Open fork-infrastructure local state (pins and patches are committed; state is not)
+Engine/fork/scripts/.cache/
+*.rej
+*.orig

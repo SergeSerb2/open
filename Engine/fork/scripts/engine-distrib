@@ -1,0 +1,95 @@
+#!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+usage() {
+    cat <<'EOF'
+engine-distrib [--config dev|release] [--skip-build] [--dry-run] [--run]
+No arguments: show help. Use --run for the default dev distribution.
+Engine/fork/scripts/engine-distrib --run
+EOF
+}
+[[ $# -gt 0 ]] || { usage; exit 0; }
+config=dev skip=0 dry=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --run) shift ;;
+        --config) [[ $# -ge 2 ]] || die '--config needs a value'; config=$2; shift 2 ;;
+        --skip-build) skip=1; shift ;;
+        --dry-run) dry=1; shift ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+case "$config" in dev) out=$OUT_DIR_DEV ;; release) out=$OUT_DIR_RELEASE ;; *) die "invalid config: $config" ;; esac
+if [[ "$config" == release ]]; then
+    die "release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64; see docs/plans/fork-infra.md Step 10"
+fi
+if [[ $dry == 1 ]]; then
+    log "dry-run: would engine-build --config $config (skip-build=$skip)"
+    log "dry-run: python3 $ENGINE_ROOT/automate/automate-git.py --download-dir=$ENGINE_ROOT/chromium_git --depot-tools-dir=$ENGINE_ROOT/depot_tools --branch=$CEF_BRANCH --no-update --no-build --force-distrib --minimal-distrib-only --no-debug-build --arm64-build"
+    log "dry-run: would discover one updated child in $SRC_DIR/cef/binary_distrib and write $STATE_DIR/distrib.txt"
+    exit 0
+fi
+require_no_build_running
+acquire_lock distrib
+[[ $skip == 1 ]] || "$SCRIPT_DIR/engine-build" --config "$config"
+require_no_build_running
+export_engine_env
+[[ -f "$ENGINE_ROOT/automate/automate-git.py" ]] || die "missing $ENGINE_ROOT/automate/automate-git.py; stop and report the path mismatch"
+# The live automate/make_distrib flow hard-codes Release_GN_arm64.
+# It has no supported option for the separate official output directory.
+snapshot() {
+    python3 - "$1" <<'PY'
+import json, pathlib, sys
+base = pathlib.Path(sys.argv[1])
+result = {}
+if base.is_dir():
+    for child in sorted(base.iterdir()):
+        if child.is_dir() or child.name.endswith('.tar.bz2'):
+            files = [child] + (list(child.rglob('*')) if child.is_dir() else [])
+            result[str(child)] = [(str(f.relative_to(base)), f.stat().st_size, f.stat().st_mtime_ns) for f in sorted(files) if f.is_file()]
+print(json.dumps(result, sort_keys=True))
+PY
+}
+fingerprint=$(python3 - "$SRC_DIR/$out" "$CHROMIUM_COMMIT" "$CEF_COMMIT" <<'PY'
+import hashlib, pathlib, sys
+out = pathlib.Path(sys.argv[1])
+files = [out/'cefsimple'] + sorted(out.rglob('Chromium Embedded Framework.framework/Chromium Embedded Framework'))
+if not any(p.is_file() for p in files[1:]):
+    raise SystemExit('no built framework; run engine-build first')
+print(hashlib.sha256(repr((sys.argv[2:], [(str(p), p.stat().st_size, p.stat().st_mtime_ns) for p in files if p.is_file()])).encode()).hexdigest())
+PY
+)
+stamp="$STATE_DIR/distrib-$config.done"
+if [[ -f "$stamp" && "$(cat "$stamp")" == "$fingerprint" && -f "$STATE_DIR/distrib.txt" && -e "$(cat "$STATE_DIR/distrib.txt")" ]]; then
+    log "already up to date: $(cat "$STATE_DIR/distrib.txt")"
+    exit 0
+fi
+before=$(snapshot "$SRC_DIR/cef/binary_distrib")
+(cd "$SRC_DIR" && python3 "$ENGINE_ROOT/automate/automate-git.py" \
+    --download-dir="$ENGINE_ROOT/chromium_git" --depot-tools-dir="$ENGINE_ROOT/depot_tools" \
+    --branch="$CEF_BRANCH" --no-update --no-build --force-distrib \
+    --minimal-distrib-only --no-debug-build --arm64-build)
+after=$(snapshot "$SRC_DIR/cef/binary_distrib")
+chosen=$(python3 - "$before" "$after" <<'PY'
+import json, pathlib, sys
+before, after = map(json.loads, sys.argv[1:])
+changed = [p for p in after if before.get(p) != after[p]]
+# A directory and its archive represent the same distribution. Prefer the directory.
+dirs = [p for p in changed if pathlib.Path(p).is_dir()]
+candidates = dirs or changed
+if len(candidates) != 1:
+    raise SystemExit('expected exactly one updated distrib candidate: ' + repr(candidates))
+print(pathlib.Path(candidates[0]).resolve())
+PY
+) || die 'distribution discovery failed; inspect binary_distrib candidates'
+printf '%s\n' "$chosen" > "$STATE_DIR/distrib.txt.tmp"
+mv "$STATE_DIR/distrib.txt.tmp" "$STATE_DIR/distrib.txt"
+printf '%s\n' "$fingerprint" > "$stamp"
+du -sh "$chosen"
+if [[ -d "$chosen" ]]; then ls "$chosen"; else tar -tjf "$chosen"; fi
+log "distribution: $chosen"

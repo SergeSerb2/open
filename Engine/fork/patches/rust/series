@@ -1,0 +1,2 @@
+# Open patches for Rust. One patch per line: <file>.patch  # rationale
+# Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
