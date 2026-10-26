@@ -1046,7 +1046,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | Emoji data source for the picker. | Generate `emoji-index.json` from Unicode `emoji-test.txt` (Unicode License V3, pinned version + SHA-256) with our script, and add a row for it to `docs/release/licenses.md` in the same PR. Not the macOS Character Viewer (not Arc's look) and never Arc's `emojis.json`. |
-| Q2 | Which theme a brand-new Space starts with (not decoded). | Brand preset `spaces.count mod 9`, 1 color, Automatic, noise 0, intensity 0.8. Deterministic, and neighbors differ. |
+| Q2 | Which theme a brand-new Space starts with. | **Answered by capture session 2 (2026-10-26):** no theme. A new Space keeps the default theme (no stored `windowTheme`) unless the user picks a color in the New Space form. Evidence: both test Spaces made in session 2 had no `windowTheme` until the theme editor gave one a color (`docs/re/interaction-states.md` §20.0, §20.8; `appsupport/s2-final/StorableSidebar.json`; `docs/re/capture-session-2-results.md` C10). Replaces the Brand preset `spaces.count mod 9` recommendation. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
 | Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
 | Q5 | Page 2 of the presets. | Brand 1–9 with 3 analogous colors. Evidence: 2 of 3 stored gradients are Brand5 / Brand6 with exactly ±40°. |
@@ -1092,3 +1092,4 @@ on both pages; the same editor in macOS Light.
 - Q10 The 2nd and 3rd color knobs are 30 pt, not draggable, and move with the main knob.
 - Q11 Spaces ▸ Rename Space edits the name in the sidebar header. A dialog appears only when the sidebar is hidden.
 - The capture request goes into the user's single combined Arc capture session.
+- 2026-10-26 (capture session 2): Q2 superseded. A new Space starts with **no** theme (the default theme) unless a color is picked in the New Space form (C10).

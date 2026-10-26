@@ -1,6 +1,8 @@
 # Command bar and toolbar completion — implementation plan for Open
 
-Status: plan (2026-10-25). Not implemented. It closes `docs/status.md` §3.3 gaps 22–26: inline autocomplete, one row per Split View, the browser-actions scope (and the other missing command bar scopes), hold-Command shortcut hints with the Essential Keyboard Shortcuts window, and the optional toolbar.
+Status: plan (2026-10-25). Not implemented. It closes `docs/status.md` §3.3 gaps 22–26: inline autocomplete, one row per Split View, the browser-actions scope (and the other missing command bar scopes), the Cmd+1…9 numbering with the Essential Keyboard Shortcuts window, and the optional toolbar.
+
+Amended 2026-10-26 for Arc capture session 2 (`docs/re/commandbar-completion.md` §8, CC-39…CC-44; `docs/re/interaction-states.md` §20.9, §20.12). The changes: holding Command shows **no** hints (§4.4); the (i) button opens an **inline privacy footer** in the bar, not a window (§4.8); the bar has **no open or close animation** (§4.9); the Site Search chip and inline completion follow the captured look and keys (§4.1, §4.3.6). The lead decisions at the end record what this supersedes. Evidence notation: **S2 18/0044** = frame 0044 of `.re/runtime/sessions/20261026-103712-18-command-bar/`; **V 9.70 s** = time in `.re/runtime/video/21-motion.mov`. Frames S2 18/0003–0035 also show one of the user's own Spaces: masks and scene files for them stay in `.re/` (never committed).
 
 Implementers: coding agents with no other context. Follow this file literally. "Open choice" means the choice is final for v1 unless the lead changes it in §8. "guess" means: build the stated value, keep it in one token, and mark it `// guess` in code, so a later capture can fix it in one edit. Cite the finding IDs (CC-n) from `docs/re/commandbar-completion.md` in code comments where a behavior comes from Arc.
 
@@ -15,20 +17,23 @@ Finish Arc's command bar and window chrome in Open:
 1. Inline autocomplete in the command bar field, with Arc's selection look and Chromium-style key rules.
 2. One command bar row per Split View, with both pane icons and both titles.
 3. Command bar scopes: an "Actions" scope (browser actions only) and an entry for the existing Tabs scope. Every other Arc command bar mode is listed with an owner or a reason to skip.
-4. Hold-Command shortcut hints on the sidebar items that Cmd+1…9 select, and the Essential Keyboard Shortcuts window.
+4. One numbering model for the sidebar items that Cmd+1…9 select, and the Essential Keyboard Shortcuts window. Holding Command shows nothing, as in Arc (CC-39).
 5. The optional toolbar (View ▸ Show/Hide Toolbar, Cmd+Shift+D): a 32 pt bar on top of the page with navigation and the URL, and its rules next to the sidebar URL field.
+6. Arc's (i) privacy footer inside the bar (CC-42), and a bar that appears and goes with no animation (CC-44).
 
 ## Success criteria
 
 1. Typing a prefix of a strong tab or history host shows the rest of the host selected in the field in the same frame as the rows (tabs) or with the history snapshot. Return opens what row 1 shows. Backspace removes only the completion. IME composition never shows a completion.
 2. `commandbar-render compare` against F0043 and F0062 (completion), F0061 (accepted completion), and A0120 (split row): every element ≤ 1 pt, ΔE00 ≤ 2. The eight existing comparisons in `docs/commandbar.md` §8 keep their numbers (no regression).
 3. A Split View appears once in the command bar, with "Switch to Split View". Return selects the split and focuses the pane that matched.
-4. Typing `actions` then Tab enters the Actions scope (chip "Actions", placeholder "Search…"); typing `tabs` then Tab enters the Tabs scope. Backspace on the empty scope restores the text typed before the scope.
-5. Holding Command alone for 0.6 s in a browser window shows `⌘1`…`⌘9` badges on exactly the items that Cmd+1…9 select. Any other input hides them. Idle CPU stays at zero.
+4. Typing `actions` then Tab enters the Actions scope (chip "Actions", placeholder "Search…"); typing `tabs` then Tab enters the Tabs scope. Backspace on the empty scope restores the text typed before the scope. Typing `wikipedia` then Tab shows the captured Site Search chip (orange capsule, text only, placeholder "Search…"; §4.3.6), and `commandbar-render compare` against S2 18/0016 and 0018 is within the targets of criterion 2.
+5. Cmd+1…9 select exactly the items of `BrowserModel.goToItemTargets`. Holding Command alone for 2 s shows nothing: no badge, no timer, no event monitor (CC-39). Idle CPU stays at zero.
 6. Help ▸ Essential Keyboard Shortcuts, the command bar action, and Settings ▸ Shortcuts ▸ "Learn the Essential Shortcuts" all open one floating window with five items and the user's current keys.
 7. Cmd+Shift+D toggles a 32 pt toolbar on the key window. The menu item reads "Show Toolbar" or "Hide Toolbar". The page gets 32 pt shorter. The state survives relaunch. The sidebar hides its URL field and its back, forward, and reload buttons while the toolbar shows.
 8. Performance: the command bar shows first results ≤ 50 ms after Cmd+T in the real app; keystroke → rows drawn p95 ≤ 8 ms in `commandbar-render bench`; inline completion adds ≤ 0.3 ms p95 and no extra panel layout pass; the first snapshot stays < 5 ms p95 with 5,000 tabs (500 of them in splits).
 9. `tools/verify-all.sh` passes at every step. The App e2e checks in §5.3 pass after Step 9.
+10. The (i) button and Cmd+I show the inline footer (§4.8) and never open a window. "Dismiss" hides it and sets `open.general.searchSuggestNoticeDismissed`. `commandbar-render compare` against S2 18/0044 is within the targets of criterion 2.
+11. Cmd+T and Esc show and remove the whole panel between two frames: no scale, no fade, no animation key on any bar layer (CC-44).
 
 ## Non-goals
 
@@ -48,11 +53,14 @@ Finish Arc's command bar and window chrome in Open:
 | D4 | The engine query text is always the user's typed text (`userText`), never the field text. | CC-4: row 2 shows the typed text; CC-9 `lastUserInput`. |
 | D5 | Split View rows keep `SuggestionKind.switchToTab` with `tabLocation == .splitPane` and a new `split` payload. No new intent: `.switchToTab(paneTabID, spaceID:)` targets a pane; the App selects its split and focuses that pane. | Smallest change to `CommandBarIntent` and to `docs/plans/app-shell.md` §4.2. |
 | D6 | Scopes are one concept in the bar: `CommandBarScope` = Site Search, Actions, or Tabs. They share the chip, the Tab trigger, Backspace exit, and text restore. | CC-16, CC-19: Arc models TypeTravel and Site Search as peers. |
-| D7 | The Cmd+1…9 numbering is one model query, `BrowserModel.goToItemTargets`. The Cmd+N key handler (app-shell Step C) and the hint badges both call it. | Badges must never disagree with the keys. |
+| D7 | The Cmd+1…9 numbering is one model query, `BrowserModel.goToItemTargets`. The Cmd+N key handler (app-shell Step C) calls it. | One numbering rule for every caller. (The hint badges that also called it are removed, D13.) |
 | D8 | The optional toolbar is the existing `PaneChromeView` (the Split View pane bar) shown on a single pane. No second bar view. | CC-33: Arc's toolbar height default is 32, the same as the pane bar; CC-34 AX ids are shared. |
 | D9 | Toolbar visibility is per window: `BrowserWindowState.showsToolbar`. "Show full URL" is app-wide (`open.advanced.showFullURLWithToolbar`, exists). | CC-34, CC-37. |
 | D10 | The Essential Keyboard Shortcuts window lives in `OpenSettings` (SwiftUI, like the Settings and Library windows), created on first use, never at launch. | Static content; cheap in SwiftUI; same owner as the Shortcuts pane that opens it. |
 | D11 | No toolbar animation. Showing or hiding it resizes the page once. | Performance: a per-frame page resize costs Chromium a relayout per frame. Arc's motion is not captured. |
+| D12 | The command bar has no open or close animation. Present and dismiss change the panel in one frame. The `Motion.commandBarOpen*` and `Motion.commandBarClose*` tokens and their Core Animation code are deleted (§4.9). | CC-44: in the video the bar appears or goes between two frames ≤ 38 ms apart, 4 of 4 times (V 9.70, 10.88, 13.02, 14.20 s). |
+| D13 | No hold-Command hints. Open builds no badge view, no flags monitor, and no hints setting. Only the numbering model stays (§4.4). | CC-39: no hints after 2–4 s (S2 18/0001–0003). With CC-23 (flag default off) this is Arc's shipping behavior. |
+| D14 | The (i) button shows the search-suggestion privacy notice as a footer inside the bar (§4.8). It is the same notice as Settings "Code 4" and uses the same key, `open.general.searchSuggestNoticeDismissed`. | CC-42 (S2 18/0044); features-core §4.5 rule 13 (same text). |
 
 ## 1. What Arc does (summary)
 
@@ -65,12 +73,15 @@ Full evidence with addresses and frames: `docs/re/commandbar-completion.md`.
 | Hint while completing | "Search \<Engine\> [Tab]" from the typed text, never "or Space" (CC-5) | measured |
 | Letter case | The field shows the candidate's case (CC-6) | derived |
 | Accepted completion | Whole host, caret at end, row 1 = navigate row for the host, no further completion (CC-7) | measured |
-| Backspace and arrows | Tracked (`isBackspacingStatus`, `latestInputAndDidBackspace`, `onKeyboardLeft/Right`) (CC-9, CC-10) | string; exact rules guess |
+| Backspace and arrows | Tracked (`isBackspacingStatus`, `latestInputAndDidBackspace`, `onKeyboardLeft/Right`) (CC-9, CC-10). Session 2: "wiki" completes to "wikipedia.org" with the added part selected and the hint "Search Wikipedia [Tab]"; Backspace removes only the completion and leaves "wiki" (CC-40, S2 18/0009–0010) | Backspace measured; Right and Left still guess (no frame isolates them) |
 | Split row | One row; plate 30×30 at `[12, 10]`, radius ≈ 7, two cells split by a 1 pt gap, ≈ 9 pt pane icons; title at x 50; titles split by a 1 pt × 12 pt rule, white ≈ 0.17; "Switch to Split View" (CC-12…CC-15) | measured |
 | Actions scope | Pill "Actions"; placeholder "Search…"; scope restores the earlier text; pill close accessory; entry gesture unknown (CC-16…CC-20) | decoded, string |
 | Tabs scope | Uses the Site Search trigger mechanism (CC-21) | string |
-| Hold-Command hints | Favorites ("top apps") show their shortcuts while Command is held, behind a remote flag whose built-in default is off (CC-23, CC-24); no capture (CC-26) | decoded, derived |
-| Essential Keyboard Shortcuts | Floating, non-resizable titled window, hidden title, movable by background; five items (CC-27, CC-28); opened from Help, Settings ▸ Shortcuts callout button, welcome view (CC-29) | decoded |
+| Site Search chip | `wikipedia` + Tab: an orange capsule "Wikipedia" (`#FFA000`, white text, no icon, soft glow) at panel `[54, 20, 81, 24]`; the field moves to x 146 with the drawn placeholder "Search…"; the selected row in the scope is orange too; Backspace on the empty field removes the chip and gives back "wikipedia" (CC-41, S2 18/0016, 0018, 0021) | measured |
+| Hold-Command hints | Favorites ("top apps") show their shortcuts while Command is held, behind a remote flag whose built-in default is off (CC-23, CC-24). Session 2: holding Command 2–4 s shows no hints (CC-39, S2 18/0001–0003), so the shipping app has them off | measured |
+| (i) button | Opens an inline footer at the bottom of the bar: "We talk to your search engine to help us suggest results." / "Learn more about your data on Arc here." with the buttons "Search Settings…" and "Dismiss". Not a window (CC-42, S2 18/0044) | measured |
+| Open and close | No animation: the whole bar appears or goes between two video frames (CC-44, V 9.70–14.20 s) | measured |
+| Essential Keyboard Shortcuts | Floating, non-resizable titled window, hidden title, movable by background; five items (CC-27, CC-28); opened from Help, Settings ▸ Shortcuts callout button, welcome view (CC-29); not from (i) (CC-42) | decoded |
 | Optional toolbar | 32 pt content top bar, per window, menu title switches Show/Hide, URL pill menu "Show as Toolbar" / "Hide Toolbar" / "Show Full URL" / "Manage Extensions", Advanced setting "Show full URL when Toolbar is enabled" (CC-32…CC-38) | decoded, string |
 
 ## 2. Current state (origin/main `d1720e3`, 2026-10-25)
@@ -91,15 +102,15 @@ Full evidence with addresses and frames: `docs/re/commandbar-completion.md`.
 | Library | New files | Edited files |
 |---|---|---|
 | `OpenSuggest` | `InlineCompletion.swift` | `SuggestTypes.swift`, `Ranking.swift`, `Providers.swift`, `TabIndex.swift`, `SiteSearch.swift`, `SuggestEngine.swift`, `ActionRegistry.swift` (scope keywords only) |
-| `OpenCommandBar` | `CompletionSession.swift`, `ScopeChip.swift` | `CommandBarController.swift`, `CommandBarTypes.swift`, `InputRowView.swift`, `Presentation.swift`, `ResultRowView.swift`, `ResultsView.swift` (AX label only) |
-| `OpenDesign` | — | `CommandBarTokens.swift` (split row, chip close), `Metrics.swift` (`ShortcutHintMetrics`, `ToolbarMetrics`), `Motion.swift` (hint tokens) |
+| `OpenCommandBar` | `CompletionSession.swift`, `ScopeChip.swift`, `PrivacyFooterView.swift` | `CommandBarController.swift`, `CommandBarTypes.swift`, `CommandBarView.swift` (remove the open/close animation), `InputRowView.swift`, `Presentation.swift`, `ResultRowView.swift`, `ResultsView.swift` (AX label; list clip above the footer) |
+| `OpenDesign` | — | `CommandBarTokens.swift` (split row, chip look, chip close, footer; delete `commandBarOpen`, `commandBarOpenScale`, `commandBarClose`, `commandBarCloseScale`), `Metrics.swift` (`ToolbarMetrics`) |
 | `OpenModel` | `GoToItemNumbering.swift` | `Containers.swift` (`showsToolbar`), `BrowserModel.swift` (`setToolbarShown`) |
 | `OpenStore` | — | `SnapshotDTOs.swift` (`showsToolbar`, optional on decode) |
-| `OpenSidebar` | `ShortcutHintBadge.swift` | `SidebarContext.swift`, `SidebarRows.swift`, `FavoritesView.swift`, `ChromeViews.swift`, `SidebarView.swift`, `SidebarMenus.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift` |
+| `OpenSidebar` | — | `ChromeViews.swift`, `SidebarView.swift`, `SidebarMenus.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift` (toolbar only) |
 | `OpenFeatures` | — | `PaneChromeView.swift`, `WebContentContainer.swift`, `BrowserWindowController.swift` |
 | `OpenCommands` | — | `CommandRegistry.swift`, `MenuBuilder.swift` (title hook), `SuggestAdapter.swift` |
 | `OpenSettings` | `EssentialShortcutsWindow.swift` | `ShortcutsPane.swift`, `SettingsTypes.swift` |
-| Harnesses | — | `commandbar-render/*`, `sidebar-render`, `features-render`, `settings-preview`, `commands-dump`, `openkit` (`suggest`, `suggest-check`) |
+| Harnesses | — | `commandbar-render/*`, `sidebar-render`, `features-render`, `settings-preview`, `commands-dump`, `openkit` (`suggest`, `suggest-check`, `commands-demo`) |
 | App (Step 9) | — | `App/CommandBar/AppCommandBarDelegate.swift`, the App `CommandDispatcher` extension, `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py` |
 | Docs | — | `docs/commandbar.md`, `docs/suggest.md`, `docs/commands.md`, `docs/design.md` §2, `docs/settings.md`, `docs/status.md` |
 
@@ -175,7 +186,9 @@ Two more engine changes in the same step:
 | Selection box | From the last typed glyph's advance to the field's text end; box `[98, 21, 51, 21]` in panel points for F0043. AppKit's selection rect must match within 1 pt; if it ends 2 pt late, as in `docs/commandbar.md` §8.3, record it there. | CC-2 |
 | Caret | Hidden while the completion is selected (AppKit default for a selection) | CC-2 |
 | Leading icon | Row 1's icon (existing rule) | CC-4 |
-| Site Search hint | From `userText`; `hintAllowsSpace = false` while a completion shows | CC-5 |
+| Site Search hint | From `userText`; `hintAllowsSpace = false` while a completion shows. Session 2 shows the same rule: "wiki" with the completion "wikipedia.org" gives "Search Wikipedia" + [Tab], no "or Space" (AX button "Search Wikipedia, Tab" at panel `[597, 20, 147, 24]`) | CC-5, CC-40 (S2 18/0009) |
+
+Capture check (session 2, CC-40): the completed part is selected and the caret is hidden (S2 18/0009); this matches the rows above. The S2 frame is a blue Space at window 1728 × 1084 (panel top 373 = (1084 − 339) / 2, the existing position rule), so §5.2 adds it as a second completion comparison.
 
 #### 4.1.5 Keys while a completion shows
 
@@ -183,7 +196,7 @@ Two more engine changes in the same step:
 |---|---|---|
 | A character that equals the next completed character (case-insensitive) | Keep the completion: move the selection start by one, append the character to `userText`, query `userText`. No flicker: the field changes before the new snapshot arrives. | Open rule (Chromium behavior) |
 | Any other character, or Space | Replaces the selection (normal text system). Query `userText`. A new completion may show when its snapshot arrives. Space never enters Site Search here (CC-5). | derived |
-| Backspace, Forward Delete, Option/Cmd+Backspace | Remove only the completion; `userText` stays; completion is off until the next insertion at the end (`didBackspace`). Re-query `userText` with `allowsInlineCompletion = false` so the top hit can change (for example to the typed URL). | CC-9 string; rule guess (Chromium) |
+| Backspace, Forward Delete, Option/Cmd+Backspace | Remove only the completion; `userText` stays; completion is off until the next insertion at the end (`didBackspace`). Re-query `userText` with `allowsInlineCompletion = false` so the top hit can change (for example to the typed URL). | Backspace measured: "wikipedia.org" → "wiki" (CC-40, S2 18/0010); Forward Delete and Option/Cmd+Backspace guess (Chromium) |
 | Second Backspace | Deletes the last typed character as usual; completion stays off. | Open rule |
 | Right arrow, End, Cmd+Right, Ctrl+E | Accept: `userText = fieldText`, caret at the end, no selection. Query with `allowsInlineCompletion = false`. | CC-7; key set guess |
 | Left arrow, Home, Cmd+Left | The completed text becomes typed text; the caret goes to the selection start (Left) or the line start (Home, Cmd+Left). Query the new text with completion off. | guess (native NSTextView) |
@@ -278,11 +291,11 @@ public enum CommandBarMode { case newTab, editCurrentURL, searchTabs, searchActi
 
 | Scope | Chip | Placeholder | Engine |
 |---|---|---|---|
-| Site Search | site icon + site name (exists) | "Search \<Site\>…" (exists, guess) | `siteSearchID` (exists) |
-| Actions | SF Symbol `command` + "Actions" | "Search…" | `SuggestMode.searchActions` |
-| Tabs | SF Symbol `square.on.square` (guess) + "Tabs" (guess) | "Search…" (replaces the "Search Tabs…" guess) | `SuggestMode.searchTabs` (exists) |
+| Site Search | site name only, no icon (§4.3.6; replaces the icon + name guess in the library) | "Search…" (CC-41; replaces the "Search \<Site\>…" guess) | `siteSearchID` (exists) |
+| Actions | "Actions", no icon (guess: same chip view as Site Search) | "Search…" | `SuggestMode.searchActions` |
+| Tabs | "Tabs" (guess), no icon | "Search…" (replaces the "Search Tabs…" guess) | `SuggestMode.searchTabs` (exists) |
 
-Evidence: CC-17 (title "Actions"), CC-18 ("Search…"), CC-21 (Tabs uses the Site Search trigger).
+Evidence: CC-17 (title "Actions"), CC-18 ("Search…"), CC-21 (Tabs uses the Site Search trigger), CC-41 (the captured Site Search chip and placeholder, S2 18/0016).
 
 #### 4.3.2 Entering a scope
 
@@ -310,7 +323,9 @@ Scope hints use exact keyword matches only, so they never hide a Site Search hin
 | Click the chip's close glyph | Same as Backspace on empty | CC-19 |
 | Esc | Closes the bar (existing) | — |
 
-Chip close glyph: on pointer hover, the chip's leading icon is replaced by `xmark.circle.fill` at the same 11 pt frame; the chip width does not change. guess (no capture).
+Chip close glyph: on pointer hover, an `xmark.circle.fill` glyph (11 pt) replaces the chip's text at its left edge and the text moves right by 15 pt, so the chip grows by 15 pt while hovered. guess (no capture; the captured chip has no icon to replace, §4.3.6).
+
+Session 2 confirms the restore rule for Site Search: `wikipedia` + Tab, then Backspace on the empty field, gives back "wikipedia" with the caret at the end (CC-41, S2 18/0021).
 
 #### 4.3.5 Arc command bar modes and their owners
 
@@ -328,7 +343,28 @@ Chip close glyph: on pointer hover, the chip's leading icon is replaced by `xmar
 | Little Arc under the command bar | flag `little-arc-shows-under-command-bar-enabled` (built-in default false) | skip |
 | Control key opens actions (`controlKeyShowsTypeTravel`) | CC-20 (hidden default, off) | skip; §8 Q2 |
 
-### 4.4 Hold-Command shortcut hints
+#### 4.3.6 Chip look (CC-41)
+
+Measured on S2 18/0016 (chip, empty field) and 0018 (typed query); panel points from the panel's top-left (panel `[481, 373]` in the 1728 × 1084 window). The library today draws the theme focus color, a site icon, and radius 6 (`InputRowView.drawChip`, all guesses). Replace them with:
+
+| Part | Value | Mark, evidence |
+|---|---|---|
+| Frame | x 54 (1 pt after the field's old x 53), y 20, height 24; width = text width + 2 × 10 (81 for "Wikipedia") | measured (pixel bounds x 535…615, y 393…416) |
+| Shape | Capsule (radius = height / 2), continuous | visual |
+| Fill | `CommandBarColors.siteSearchChip` = `#FFA000` | measured (sRGB after the display profile, `interaction-states.md` §20.9). guess: one color for every site; the per-engine reading in CC-41 has no second sample |
+| Glow | An outer glow in the fill color, about 12 pt wide, fading to the panel fill; drawn as a shadow of the capsule path: color `siteSearchChip` a 0.35, blur radius 6, no offset | fitted (pixels 523…534 left of the chip rise from the panel fill toward orange) |
+| Text | The site name, 13 Semibold, white, centered; no icon | text and color measured; size and weight fitted (ink width 61 pt for "Wikipedia") |
+| Field | Text field x = chip max x + 11 (146 for "Wikipedia"); drawn placeholder "Search…" in the placeholder style (18 Medium, white 0.55). The AX placeholder value is empty in Arc; Open keeps the native placeholder equal to the drawn one (accessibility rule, `docs/commandbar.md` §4) | measured (AX `commandBarTextField` x 627 in the window; image), Open rule for AX |
+| Leading icon | Unchanged magnifier at `[23, 23, 18, 18]` | measured (S2 18/0016) |
+| Selected row inside the scope | Fill `siteSearchChip` (with the row selection radius), white title and icon | measured (S2 18/0018: the "bird" row is orange) |
+| Actions and Tabs chips | The same view and tokens with their titles (§4.3.1) | guess (no capture) |
+| Panel with the chip and no rows | Input row only, ≈ 64 pt tall | measured (S2 18/0016; confirms the `docs/commandbar.md` §3.1 guess) |
+
+Tokens: `CommandBarMetrics.chipHeight` 24 (exists), `chipRadius` = height / 2 (was 6), `chipPaddingX` 10 (was 8), `chipToText` 11 (was 8), `chipIconSize` deleted; `BarFont.chip` = 13 Semibold; new `CommandBarColors.siteSearchChip` and `CommandBarMetrics.chipGlowBlur` 6, `chipGlowAlpha` 0.35. Light appearance of the chip: not captured; use the same tokens (guess).
+
+### 4.4 Cmd+1…9 numbering (no hold-Command hints)
+
+Arc shows no hints while Command is held (CC-39, S2 18/0001–0003, D13). This section keeps only the numbering model, because the Cmd+1…9 key handler needs it. Do not build a badge view, a flags monitor, a delay timer, or a "Show shortcuts while holding ⌘" setting.
 
 #### 4.4.1 Numbering (`OpenModel/GoToItemNumbering.swift`, D7)
 
@@ -341,35 +377,13 @@ extension BrowserModel {
 
 Order: the Favorites of the focused Space's Profile in grid order (when `includeFavorites`), then the focused Space's pinned section, then Today, in sidebar row order. Expanded folders contribute their visible children; collapsed folders contribute nothing; folder rows themselves are not targets; a collapsed pinned section contributes nothing; a split counts once (its id). Slot 9: the ninth item when `ninthSelectsLast` is false, else the last item. Settings: `includeFavorites` = `open.shortcuts.includeFavoritesInTabNumbering` (true); `ninthSelectsLast` = NOT `open.shortcuts.switchToNinthEnabled` (true). Open choice (Arc's exact numbering is not captured; CC-25).
 
-#### 4.4.2 Behavior
+#### 4.4.2 What holding Command does
 
-| Event | Result |
-|---|---|
-| Command goes down alone (device-independent flags = `.command`) while a standard browser window is key, the command bar is closed, no menu is tracking, and no mouse button is down | Start the delay `Motion.shortcutHintDelay` (0.6 s, guess = the tooltip delay) |
-| The delay ends with Command still held and no other event | Show the badges in the key window |
-| Command up, any key down (also Cmd+1…9: the command still runs), another modifier added, mouse down, scroll, the window resigns key, the app resigns active, the command bar opens | Cancel the delay; hide the badges |
-| Setting `open.shortcuts.showHintsWhileHoldingCommand` is false | Nothing happens |
+Nothing. A Command press alone draws no badge, starts no timer, and installs no event monitor, so idle CPU and key latency do not change. Cmd+1…9 still run `go-to-tab-N` through `goToItemTargets` (D7).
 
-The sidebar must be visible (anchored or the hover-reveal card). With the sidebar hidden, no hints show (§8 Q1).
+The registry id `show-shortcuts-overlay` ("Show Shortcuts While Holding Command") stays registered with no handler: `isCommandEnabled` returns false, it has no menu item, and it stays out of the command bar (existing `SuggestAdapter` exclusion). Settings ▸ Shortcuts gets no hints toggle, and no `open.shortcuts.showHintsWhileHoldingCommand` key is added.
 
-#### 4.4.3 Badges (`OpenSidebar/ShortcutHintBadge.swift`, `ShortcutHintMetrics`)
-
-| Part | Value | Mark |
-|---|---|---|
-| Text | The display form of the item's effective `go-to-tab-N` shortcut (`KeyBindingStore` overrides apply), for example `⌘1`. A binding without Command, or a cleared binding, shows no badge. | Open rule |
-| Shape | Capsule, height 18, horizontal padding 6, minimum width 26 | guess |
-| Type | `Typography.keycap` (12 Medium) | existing token |
-| Colors | Fill `SpaceThemeStyle.tooltipFill`, text `tooltipText` (the tooltip look, IS §5) | Open choice |
-| Shadow | Black 0.20, radius 2, 1 pt down | guess |
-| Tab and split rows | Right edge at `W − 13`, vertically centered at row y + 20 (the close-button slot `[W − 39, y + 7, 26, 26]`). While badges show, the close and unload buttons hide and the title truncates 4 pt before the badge. | Open choice |
-| Favorites tiles | Top-right corner: `[tile.maxX − w − 4, tile.minY + 4, w, 18]` | guess |
-| Fade | In `Motion.shortcutHintFadeIn` 0.12 s (tooltip fade); out `Motion.shortcutHintFadeOut` 0.08 s (hover fade). Reduce Motion: no fade. | guess |
-
-Data flow: `SidebarContext.shortcutHints: [ItemID: String]` (empty when hidden). Rows and tiles read it through `tracked(_:invalidate:)`, build their badge view only when they have a label (like the close button), and redraw only when their own label changes. The outline never reloads.
-
-Performance: one App-wide local event monitor for `.flagsChanged`, `.keyDown`, mouse-down, and `.scrollWheel` events. One `DispatchWorkItem` per Command press. No timer runs while Command is up. Show or hide ≤ 2 ms on the main thread for 9 badges (`sidebar-render bench`).
-
-Settings: Settings ▸ Shortcuts gets a toggle "Show shortcuts while holding ⌘" bound to `open.shortcuts.showHintsWhileHoldingCommand` (default true, §8 Q1). The registry id `show-shortcuts-overlay` toggles the same preference (no menu item; it stays out of the command bar as today).
+Removed by the 2026-10-26 amendment (do not build): the badge view `ShortcutHintBadge`, `ShortcutHintMetrics`, `Motion.shortcutHintDelay` / `shortcutHintFadeIn` / `shortcutHintFadeOut`, `SidebarContext.shortcutHints`, and the App-wide flags monitor. Arc's code has the feature behind the remote flag `show-top-app-shortcuts-when-holding-cmd` (CC-23), and the shipping app keeps it off (CC-39).
 
 ### 4.5 Essential Keyboard Shortcuts window
 
@@ -411,8 +425,9 @@ A cleared binding shows "—". The window updates when the bindings change.
 | Help ▸ Essential Keyboard Shortcuts | `keyboard-shortcuts-edu` |
 | Command bar action "Essential Keyboard Shortcuts" | `keyboard-shortcuts` (mapped by `SuggestAdapter`) |
 | Settings ▸ Shortcuts callout | New callout (below) |
-| Command bar (i) button and Cmd+I (`.showHelp`) | Open choice: opens this window; replaces the app-shell §4.2 Help Center placeholder (§8 Q9) |
 | First run "Learn Essential Shortcuts" | Owner: `docs/plans/first-run.md` (call `keyboard-shortcuts-edu`) |
+
+The command bar (i) button and Cmd+I do **not** open this window. They show the inline privacy footer (§4.8, CC-42; supersedes the 2026-10-26 Q9 decision).
 
 Settings ▸ Shortcuts fix (CC-29, CC-30): replace the two-segment filter with a callout of the same frame (359×35, radius 6, `SettingsTokens.button`): the left label "Start with the basics" (not interactive) and a button "Learn the Essential Shortcuts" with `command.circle.fill`, accent fill, that opens the window through an `OpenSettings` callback the App sets. Remove the `basics` filter: the list shows every active command. Update `docs/settings.md` and the `settings-library` plan row (§5 "Shortcuts pane shape").
 
@@ -467,14 +482,54 @@ No animation (D11). The toggle changes the container layout once; Chromium resiz
 | `toggle-toolbar` | Show/Hide Toolbar (runtime: Show Toolbar / Hide Toolbar) | Cmd+Shift+D | View | exists | App: `setToolbarShown` on the key window |
 | `toggle-sidebar` | Show/Hide Sidebar (runtime: Show Sidebar / Hide Sidebar) | Cmd+S | View | exists | title hook only |
 | `keyboard-shortcuts-edu` | Essential Keyboard Shortcuts | — | Help | exists | App: show the window |
-| `show-shortcuts-overlay` | Show Shortcuts While Holding Command | — | — | exists | App: toggle `open.shortcuts.showHintsWhileHoldingCommand` |
+| `show-shortcuts-overlay` | Show Shortcuts While Holding Command | — | — | exists | none: stays disabled (no hints, D13, CC-39) |
 | `search-actions` | Search Actions | — (customizable) | — | new | App: present `.searchActions` |
 | `search-tabs` | Search Tabs | — (customizable) | — | new | App: present `.searchTabs` |
 | `go-to-tab-1…9` | Go to Tab N | Cmd+1…9 | — | exists | app-shell Step C; must use `goToItemTargets` (D7) |
 
 `search-actions` and `search-tabs` join the `SuggestAdapter` exclusion list (they make no sense as command bar rows; the keywords enter the scopes). `commands-dump` must stay at `missing=0 extra=0 different=0`, seed coverage 79/79, and no new conflicts.
 
-## 5. Verification
+### 4.8 (i) privacy footer (CC-42, D14)
+
+The (i) button shows Arc's search-suggestion privacy notice as a footer inside the bar. It is the notice that features-core §4.5 rule 13 decodes (`SearchSuggestionsPrivacyView`), with the same first line.
+
+Layout, measured on S2 18/0044 (a 5-row panel, height 329, at window `[481, 373]`; panel points, `H` = panel height, `W` = 766):
+
+| Part | Value | Mark, evidence |
+|---|---|---|
+| Band | Black, `[0, H − 61, W, 61]`, clipped by the panel corner (window y 641…700) | measured (pixels `#000000` across the band) |
+| Panel and list | The panel frame does not change. The list keeps its frame but its visible area ends at the band top, so the last visible row goes behind the band (5 rows → 4 visible); the list still scrolls to every row. Panels shorter than 2 rows grow by 61 pt so the footer never covers the only row (guess) | measured for 5 rows (AX table frame unchanged between 0043 and 0044); short panels guess |
+| (i) button | Hidden while the footer shows; the field gets its 42 pt back (field width 656 → 698) | measured (AX field width; no (i) in the image) |
+| Icon | SF Symbol `info.circle`, 13 × 13 at `[18, H − 37]`, white 0.55 | frame measured (AX `info.circle`); color fitted |
+| Line 1 | "We talk to your search engine to help us suggest results." at `[46, H − 48]`, 13 Semibold, white ≈ 0.93 | text and frame measured (AX 365 × 16); size fitted from the ink width; color from raw pixels (guess within ΔE00 3) |
+| Line 2 | "Learn more about your data on Open " + link "here" + "." at `[46, H − 30]`, 13 Regular, white ≈ 0.45; "here" in the same color, underlined (guess), pointer cursor | text measured (AX); "Arc" becomes "Open" (naming rule); size and color fitted |
+| "Search Settings…" | Button `[W − 223.5, H − 49.5, 132, 37]` | measured (AX) |
+| "Dismiss" | Button `[W − 82.5, H − 49.5, 72, 37]`: 9 pt after "Search Settings…", 10.5 pt from the panel's right edge | measured (AX) |
+| Button look | Fill `#302F63`, 1 pt edge `#494988`, radius 8 continuous (visual), title 13 Medium white | colors measured (§20.9); radius and type fitted |
+| Light appearance | Not captured. Use the same layout; band `CommandBarColors.bannerBackground` light (`#FDFDFE`), dark text (guess) | guess |
+
+Behavior:
+
+| Event | Result | Mark |
+|---|---|---|
+| Click (i), or Cmd+I while the field has focus | Show the footer (no animation, like the panel, D12). Cmd+I again hides it. | (i) measured; Cmd+I Open rule (it already maps to (i)) |
+| Bar opens while the profile's `searchSuggestEnabled` is true and `open.general.searchSuggestNoticeDismissed` is false | Show the footer at once. Remote suggestions stay off until "Dismiss" (the existing Settings gate `prepareForRemoteSuggestions`, `docs/settings.md`) | guess: rule 13 says the notice comes "before first use"; session 2 never showed it unasked because Arc had stored an earlier dismissal |
+| "Dismiss" | Hide the footer, set `open.general.searchSuggestNoticeDismissed = true` (the Settings "Code 4" key; no new key), and re-run the current query so remote rows can arrive | text measured; key reuse Open rule |
+| "Search Settings…" | New intent `.openSearchSettings(profileID:)`: the App closes the bar and opens Settings ▸ Profiles at the search engine section for the bar's Profile | target not captured; Open choice (Open keeps search engines in Profiles) |
+| "here" | `.open(CommandBarText.privacyURL, .newTab, [])`; the URL is Open's privacy page, owned by `docs/plans/release.md` (until it exists the link is hidden, not dead) | Open choice |
+| Esc | Closes the bar (one press, as today); the footer goes with it | existing rule |
+| Typing, Up, Down, Return | Unchanged; the footer stays until "Dismiss", Cmd+I, or close | guess |
+
+API: `CommandBarIntent.showHelp` is removed (the bar handles (i) itself). New intent `.openSearchSettings(profileID: ProfileID)`. `CommandBarRequest` gains `showsPrivacyNotice: Bool` (the App passes `searchSuggestEnabled && !noticeDismissed`) and the controller reports `didDismissPrivacyNotice` through the delegate so the App writes the key. AX: the footer is a group "Search suggestions privacy" with two static texts, a link "here", and the two buttons.
+
+### 4.9 Open and close: no animation (CC-44, D12)
+
+| Event | Result |
+|---|---|
+| `present` | The panel, its shadow, its rows, and the field show in the next frame at full size and alpha 1. |
+| `dismiss` | The panel and its shadow go in the next frame. |
+
+Delete `Motion.commandBarOpen`, `commandBarOpenScale`, `commandBarClose`, and `commandBarCloseScale` (`OpenDesign/CommandBarTokens.swift`) and the Core Animation code that uses them in `CommandBarView.swift` (scale and fade). Set the panel's frame and `isHidden` inside a `CATransaction` with actions disabled, so no implicit animation runs. Arc's AX shows a collapsed field (width 2) during a close (S2 18/0029, 0047); that is internal layout state with no visible frame, and Open does not reproduce it. `docs/commandbar.md` §5 is updated in the same step. PR #104's follow-up list also names this change; if #104 lands it first, Step 0 only adds flow 87 and the compare rows.
 
 ### 5.1 Harness checks (no unit tests; all run the real code paths)
 
@@ -496,7 +551,7 @@ No animation (D11). The toggle changes the container layout once; Chromium resiz
 | 43 | Scope keywords: `actions` and `tabs` give scope hints; `act` and `tab vs` do not; a site keyword still gives its site hint |
 | 44 | Performance: first snapshot p95 < 5 ms with 5,000 tabs incl. 500 two-pane splits and completion on; completion check p95 ≤ 0.05 ms |
 
-`commandbar-render` — new scenes (`render --state`): `completion`, `completion-case`, `completion-accepted`, `split-row`, `split-row-selected`, `actions-scope`, `actions-scope-empty`, `tabs-scope`, `scope-chip-hover`. New flows (69 onward; real key events through the window and the field editor):
+`commandbar-render` — new scenes (`render --state`): `completion`, `completion-case`, `completion-accepted`, `split-row`, `split-row-selected`, `actions-scope`, `actions-scope-empty`, `tabs-scope`, `scope-chip-hover`, `site-chip` (re-drawn to §4.3.6), `site-chip-query`, `privacy-footer`, `privacy-footer-light`. New flows (69 onward; real key events through the window and the field editor):
 
 | # | Flow |
 |---|---|
@@ -518,10 +573,17 @@ No animation (D11). The toggle changes the container layout once; Chromium resiz
 | 84 | Chip close glyph on hover; click → same as Backspace on empty |
 | 85 | `search-actions` present → scope set; Backspace on empty → `.newTab`, empty field |
 | 86 | AX: field value = whole text; selected text range = completion |
+| 87 | Present and dismiss: the panel is fully drawn at alpha 1 in the first frame after `present` and gone in the first frame after `dismiss`; no layer of the bar has an animation key (CC-44) |
+| 88 | Click (i): footer shows, (i) hides, field width +42; the list's visible area ends at the band top; Cmd+I hides the footer again; no window opens (CC-42) |
+| 89 | Footer "Dismiss": footer hides, the delegate gets `didDismissPrivacyNotice`, the current query re-runs; with `showsPrivacyNotice = true` in the request the footer shows on `present` |
+| 90 | Footer "Search Settings…" sends `.openSearchSettings(profileID)`; "here" sends `.open(privacyURL, .newTab, [])`, or is hidden while `privacyURL` is nil |
+| 91 | `wikipedia` + Tab: chip frame `[54, 20, 81, 24]` ± 0.5, fill `siteSearchChip`, no icon, field x 146, placeholder "Search…"; typing `bird` selects a row with the chip fill; Backspace on empty restores `wikipedia` (CC-41) |
 
 `commandbar-render check` must pass every old and new flow, render every state, and keep the keystroke budget.
 
-`sidebar-render` — scenes `hints-favorites`, `hints-rows` (light Space, dark Space, default theme), `hints-split-row`, `toolbar-shown` (no URL field; nav buttons hidden; Favorites at y 46), `url-field-menu`. Checks: badge labels equal `goToItemTargets` for 6 permutations (favorites on/off, ninth on/off, collapsed folder, collapsed pinned); badges never reload the outline (`SidebarDiagnostics.fullReloads` = 0); `bench`: show/hide ≤ 2 ms, scroll p95 unchanged.
+`sidebar-render` — scenes `toolbar-shown` (no URL field; nav buttons hidden; Favorites at y 46), `url-field-menu`. Check: a synthesized Command `flagsChanged` event with the sidebar visible changes no view (no layout, no redraw, `SidebarDiagnostics.fullReloads` = 0); `bench`: scroll p95 unchanged.
+
+`openkit commands-demo` — new checks N1–N6: `goToItemTargets` for 6 permutations (favorites on/off, ninth on/off, collapsed folder, collapsed pinned) against hand-written expected lists.
 
 `features-render` — scenes `toolbar-single` (host), `toolbar-full-url`, `toolbar-split` (unchanged split bars), `toolbar-menu`. Checks: page frame = slot − 32; control frames equal the split bar's for the same width; the bar takes the page color.
 
@@ -539,9 +601,13 @@ Targets: position ≤ 1 pt, ΔE00 ≤ 2. Scene files that copy capture titles st
 | F0062 | completion with candidate case | same, plus the case rule |
 | F0061 | accepted completion, caret at the end | field text, caret, row 1 navigate row without subtitle |
 | A0120 | split row (row 3) | plate, gap, both pane icons (masked content, box only), title start, title rule, accessory |
+| S2 18/0009 | completion in a blue Space (window 1728 × 1084) | typed text, completion selection box, hint group "Search Wikipedia" + [Tab], leading favicon (masked) |
+| S2 18/0016 | Site Search chip, empty field, no rows | chip frame and fill, chip text ink, glow at 4 pt and 8 pt outside the chip, placeholder origin, panel height |
+| S2 18/0018 | Site Search with a query | chip, field text, selected row fill (`siteSearchChip`) |
+| S2 18/0044 | privacy footer on a 5-row panel | band frame and fill, icon, both text lines (ink boxes), both buttons (frame, fill, edge), field width without (i) |
 | F0063, F0048, F0061, F0052, F0058, F0055, A0327, A0120 | the eight existing scenes | must keep their `docs/commandbar.md` §8.1 numbers |
 
-No capture exists for scopes, hold-Command badges, the Essential Keyboard Shortcuts window, or the toolbar on a single pane. For the toolbar, compare the `toolbar-single` render's control frames and fills with the F0081 pane bar (same component, IS §11). The others are Open design until the captures in §9 exist.
+No capture exists for the Actions and Tabs scopes, the Essential Keyboard Shortcuts window, or the toolbar on a single pane. (Hold-Command badges are not built, D13.) Frames S2 18/0009–0018 also show one of the user's own Spaces: mask the sidebar and page, and keep their scene files in `.re/`. For the toolbar, compare the `toolbar-single` render's control frames and fills with the F0081 pane bar (same component, IS §11). The others are Open design until the captures in §9 exist.
 
 ### 5.3 App end-to-end (`tools/e2e/engine_e2e.py`, after Step 9)
 
@@ -549,13 +615,13 @@ Automation additions (`App/Automation/AutomationController.swift`), only these:
 
 | Command | Returns or does |
 |---|---|
-| `commandbar` | `{open, mode, scope, fieldText, userText, selection: [location, length], rows: [{kind, title, accessory}]}` |
+| `commandbar` | `{open, mode, scope, fieldText, userText, selection: [location, length], footer, rows: [{kind, title, accessory}]}` |
+| `commandbar-press` | `control` = `info`, `dismiss`, `searchSettings`: performs that control's AX press action in the bar (real code path, no desktop input) |
 | `flags` | `modifiers`, `down` / `up`: posts a `flagsChanged` event through `NSApplication.sendEvent` |
 | `perform` | `id`: `CommandDispatcher.performCommand(id)` on the key window (skip if app-shell Step C already added it) |
-| `tabs` | adds `hint` per row and tile (the badge label or null) |
 | `windows` | adds `toolbar` (Bool) and `level` per window |
 
-Checks (extend the `commandbar` suite; add `toolbar` and `hints` suites):
+Checks (extend the `commandbar` suite; add `toolbar` and `numbering` suites):
 
 | Suite | Check |
 |---|---|
@@ -565,9 +631,12 @@ Checks (extend the `commandbar` suite; add `toolbar` and `hints` suites):
 | `commandbar` | Type `actions`, Tab, `side`, Return: the sidebar hides (`windows`) |
 | `commandbar` | First results ≤ 50 ms after Cmd+T (existing check, rerun with completion on) |
 | `toolbar` | Cmd+Shift+D: `windows.toolbar` true; `eval window.innerHeight` shrinks by 32; `snapshot` vs the `features-render` scene within targets; View menu title reads "Hide Toolbar"; relaunch keeps it; a Little Open window refuses the command |
-| `hints` | `flags command down`, wait 700 ms: `tabs` hints equal `⌘1`… on the expected rows; `key 2 modifiers command`: item 2 selected, hints gone; `flags command down` then `mouse` click before 600 ms: no hints |
-| `hints` | `perform keyboard-shortcuts-edu`: `windows` lists "Essential Keyboard Shortcuts" at floating level; `key escape` closes it |
-| `measure` | Idle CPU unchanged with the hint monitor installed |
+| `commandbar` | Fresh data dir (notice not dismissed, suggestions on): Cmd+T → `commandbar.footer` true; `commandbar-press control=dismiss` → footer false and `defaults key=open.general.searchSuggestNoticeDismissed` true; Cmd+T again → footer false; `commandbar-press control=info` → footer true; `windows` count unchanged (no window opened) |
+| `commandbar` | `commandbar-press control=searchSettings` → bar closed, `windows` lists Settings on the Profiles pane |
+| `commandbar` | Cmd+T then `snapshot` in the same runloop turn after the key: the panel is fully drawn (no partial alpha, compare with a later `snapshot`, max channel difference ≤ 2) |
+| `numbering` | `flags command down`, wait 2 s, `snapshot` equals a snapshot taken before the press (no badges); `key 2 modifiers command`: item 2 of `goToItemTargets` is selected (`tabs`) |
+| `numbering` | `perform keyboard-shortcuts-edu`: `windows` lists "Essential Keyboard Shortcuts" at floating level; `key escape` closes it |
+| `measure` | Idle CPU unchanged |
 
 ### 5.4 Performance gates
 
@@ -578,26 +647,27 @@ Checks (extend the `commandbar` suite; add `toolbar` and `hints` suites):
 | Keystroke → rows drawn (existing bench) | p95 ≤ 8 ms | `commandbar-render bench` |
 | Completion keystrokes (new `bench --completion`: the 30 queries typed against a history that completes them) | p95 ≤ plain bench + 0.3 ms; panel layout passes per keystroke ≤ 1 | `commandbar-render bench --completion` |
 | Cmd+T → first results in the real app | ≤ 50 ms | e2e `commandbar` |
-| Hint show / hide, 9 badges | ≤ 2 ms main thread | `sidebar-render bench` |
+| Cmd+T → panel fully drawn | first frame after the key (no animation, D12) | flow 87; e2e `commandbar` |
 | Sidebar scroll, 1,000 rows | p95 unchanged ± 10 % | `sidebar-render bench --rows 1000` |
 | Idle CPU | unchanged | e2e `measure` |
 
 ## 6. Implementation order
 
-One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste its table (AGENTS.md rule 10). Steps 1–8 are library work and can start now. Step 9 waits for app-shell Step C (command bar, menus, and keys in the App).
+One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste its table (AGENTS.md rule 10). Steps 0–8 are library work and can start now. Step 9 waits for app-shell Step C (command bar, menus, and keys in the App).
 
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
+| 0 | Capture fixes in the bar: delete the open/close animation (§4.9); the (i) privacy footer, `.openSearchSettings`, `showsPrivacyNotice`, `didDismissPrivacyNotice`, removal of `.showHelp` (§4.8) | `OpenCommandBar/PrivacyFooterView.swift` (new), `CommandBarView.swift`, `CommandBarController.swift`, `CommandBarTypes.swift`, `InputRowView.swift`, `ResultsView.swift`; `OpenDesign/CommandBarTokens.swift`; `commandbar-render` scenes `privacy-footer*`, flows 87–90; `docs/commandbar.md` §2, §4, §5, §11 | `commandbar-render check` all pass (old flows 31–34 and 45–51 updated for the footer instead of `.showHelp`); S2 18/0044 compare within targets; the eight §8 comparisons unchanged |
 | 1 | Engine completion: `allowsInlineCompletion`, `InlineCompletion`, rule T3a, current tab in Cmd+T, history carry-over; `openkit suggest --completion` | `OpenSuggest/InlineCompletion.swift` (new), `SuggestTypes.swift`, `Ranking.swift`, `Providers.swift`, `SuggestEngine.swift`; `openkit` suggest commands; `docs/suggest.md` | `suggest-check` 1–40 and 44 (completion half) pass; first snapshot p95 within 10 % of today |
 | 2 | Bar completion UI: `CompletionSession`, editor hooks, §4.1.4–4.1.8 | `OpenCommandBar/CompletionSession.swift` (new), `CommandBarController.swift`, `InputRowView.swift`; `commandbar-render` scenes, flows 69–80 and 86, `bench --completion`; `docs/commandbar.md` | `commandbar-render check` all pass; F0043, F0062, F0061 compare within targets; old §8 numbers unchanged; bench gates |
 | 3 | Engine split rows (§4.2.1) | `OpenSuggest/TabIndex.swift`, `Providers.swift`, `Ranking.swift`, `SuggestTypes.swift`; synthetic world with splits; `docs/suggest.md` (close Q1) | `suggest-check` 41 and 44 pass |
 | 4 | Split row drawing (§4.2.2) | `OpenCommandBar/Presentation.swift`, `ResultRowView.swift`, `ResultsView.swift`; `OpenDesign/CommandBarTokens.swift`; scenes and flow 81; `docs/commandbar.md` §8.3 row removed | A0120 split row within targets; `check` passes |
-| 5 | Scopes (§4.3) | `OpenSuggest/SiteSearch.swift`, `Providers.swift`, `Ranking.swift`, `SuggestTypes.swift`; `OpenCommandBar/ScopeChip.swift` (new), `CommandBarController.swift`, `CommandBarTypes.swift`, `InputRowView.swift`; `OpenCommands/CommandRegistry.swift`, `SuggestAdapter.swift`; `docs/commands.md` | `suggest-check` 42–43; flows 82–85; `commands-dump` exit 0 |
-| 6 | Essential Keyboard Shortcuts window, Shortcuts callout fix, hints toggle | `OpenSettings/EssentialShortcutsWindow.swift` (new), `ShortcutsPane.swift`, `SettingsTypes.swift`; `settings-preview` scenes; `docs/settings.md`, `docs/plans/settings-library.md` row | `settings-preview check` passes with the new scenes |
-| 7 | Numbering + hold-Command badges | `OpenModel/GoToItemNumbering.swift` (new); `OpenSidebar/ShortcutHintBadge.swift` (new), `SidebarContext.swift`, `SidebarRows.swift`, `FavoritesView.swift`; `OpenDesign/Metrics.swift`, `Motion.swift`; `sidebar-render` scenes and bench; `docs/design.md` §2 | `sidebar-render check` and bench gates pass |
+| 5 | Scopes (§4.3) and the captured chip look (§4.3.6) | `OpenSuggest/SiteSearch.swift`, `Providers.swift`, `Ranking.swift`, `SuggestTypes.swift`; `OpenCommandBar/ScopeChip.swift` (new), `CommandBarController.swift`, `CommandBarTypes.swift`, `InputRowView.swift`, `ResultRowView.swift` (scope selection fill); `OpenDesign/CommandBarTokens.swift` (chip tokens); `OpenCommands/CommandRegistry.swift`, `SuggestAdapter.swift`; `docs/commands.md`, `docs/commandbar.md` §11 q5 | `suggest-check` 42–43; flows 82–85 and 91; S2 18/0016 and 0018 compare within targets; `commands-dump` exit 0 |
+| 6 | Essential Keyboard Shortcuts window, Shortcuts callout fix (no hints toggle, D13) | `OpenSettings/EssentialShortcutsWindow.swift` (new), `ShortcutsPane.swift`, `SettingsTypes.swift`; `settings-preview` scenes; `docs/settings.md`, `docs/plans/settings-library.md` row | `settings-preview check` passes with the new scenes |
+| 7 | Numbering only (§4.4; no badges, D13) | `OpenModel/GoToItemNumbering.swift` (new); `openkit commands-demo` checks N1–N6; `sidebar-render` Command-press check | N1–N6 PASS; the `sidebar-render` Command-press check passes; scroll bench unchanged |
 | 8 | Toolbar library (§4.6) + menu title hook | `OpenModel/Containers.swift`, `BrowserModel.swift`; `OpenStore/SnapshotDTOs.swift`; `OpenFeatures/PaneChromeView.swift`, `WebContentContainer.swift`, `BrowserWindowController.swift`; `OpenSidebar/ChromeViews.swift`, `SidebarView.swift`, `SidebarMenus.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift`; `OpenCommands/MenuBuilder.swift`; harness scenes | `features-render`, `sidebar-render`, `commands-dump`, `roundtrip` (old snapshots decode) pass |
-| 9 | App wiring: `.switchToTab` for panes, scopes, `.showHelp`, `toggle-toolbar`, `keyboard-shortcuts-edu`, `search-actions`, `search-tabs`, `show-shortcuts-overlay`, `menuTitle`, the hint event monitor, the full-URL setting, go-to-tab via `goToItemTargets`; automation additions | `App/CommandBar/AppCommandBarDelegate.swift`, the App `CommandDispatcher` extension, `App/AppDelegate.swift` (monitor, EDU window), `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py` | e2e `commandbar`, `toolbar`, `hints`, `measure` checks in §5.3 pass; `--only shell` and `window` still pass |
-| 10 | Docs and status | `docs/status.md` (gaps 22–26 → done), `docs/commandbar.md` §10 gaps 2–3 closed | review only |
+| 9 | App wiring: `.switchToTab` for panes, scopes, `.openSearchSettings`, `showsPrivacyNotice` and the dismissal key, `toggle-toolbar`, `keyboard-shortcuts-edu`, `search-actions`, `search-tabs`, `menuTitle`, the full-URL setting, go-to-tab via `goToItemTargets`; automation additions | `App/CommandBar/AppCommandBarDelegate.swift`, the App `CommandDispatcher` extension, `App/AppDelegate.swift` (EDU window), `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py` | e2e `commandbar`, `toolbar`, `numbering`, `measure` checks in §5.3 pass; `--only shell` and `window` still pass |
+| 10 | Docs and status | `docs/status.md` (gaps 22–26 → done), `docs/commandbar.md` §10 gaps 2–4 closed | review only |
 
 ## 7. Risks
 
@@ -607,26 +677,29 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 | Writing text into the field editor re-enters `controlTextDidChange` | A guard flag in `CompletionSession` while applying; flows 69 and 86 count queries |
 | AppKit's selection rect for a partial range differs from Arc's (like the 2 pt Cmd+L difference) | Measure in Step 2; if > 1 pt, record it in `docs/commandbar.md` §8.3 and do not hand-draw the selection |
 | Rule T3a changes Return for URL-like text | Only with a strong tab or history row, and only until Backspace; `suggest-check` 35–36 pin the table in §4.1.3 |
-| Go-to-tab numbering differs from what app-shell Step C builds | D7: Step 9 switches the key handler to `goToItemTargets` and the e2e `hints` check presses Cmd+2 against the badge |
+| Go-to-tab numbering differs from what app-shell Step C builds | D7: Step 9 switches the key handler to `goToItemTargets`; the e2e `numbering` check presses Cmd+2 against `goToItemTargets` |
+| The auto-shown footer keeps remote suggestions off until the user dismisses it | It is the existing Settings gate (Code 4); the footer only makes it visible in the bar. Flow 89 and the e2e `commandbar` check prove that "Dismiss" turns suggestions on at once |
 | Hiding the sidebar URL field with the toolbar is wrong for Arc | One token (`showsURLFieldWithToolbar = false`); §9 item 1 asks for the capture |
 
 ## 8. Open questions (each has a default; build the default)
 
 | # | Question | Recommendation (default) |
 |---|---|---|
-| Q1 | Hold-Command hints: on by default, and on which items? Arc's flag defaults off locally; its server value is unknown (CC-23). | On by default, on every Cmd+1…9 target (Favorites first when included). No hints while the sidebar is hidden. One look at Arc (§9 item 3) settles it. |
+| Q1 | Hold-Command hints: on by default, and on which items? | **Answered by capture (CC-39): no hints.** Arc shows none after 2–4 s. Open builds none (D13); only the numbering stays. |
 | Q2 | How does a user enter the Actions scope? Arc's gesture is not proven (CC-20). | Keyword `actions` + Tab, plus the unbound `search-actions` command. Do not add a bare Control-key trigger. |
 | Q3 | Does the sidebar URL field hide while the toolbar shows? | Yes ("Show as Toolbar", CC-36). Favorites move up to y 46. |
 | Q4 | Toolbar show/hide animation? | None (D11). |
 | Q5 | Toolbar per window, and does Cmd+N inherit it? | Per window (CC-34); a new window copies the key window. |
 | Q6 | Does the field show the candidate's letter case (CC-6, one frame)? | Yes, as Arc does in F0062. `userText` keeps the user's case. |
-| Q7 | Left arrow with a completion? | Native: the completed text stays, caret at the selection start. |
+| Q7 | Left arrow with a completion? | Native: the completed text stays, caret at the selection start. Session 2 measured Backspace only (CC-40); Right and Left stay open (§9 item 5). |
 | Q8 | Arc's Copy URL strips trackers (CC-31). | Out of this plan. The window text says "Copy the current tab's URL". File a follow-up for tracker stripping in `copy-url`. |
-| Q9 | What do the (i) button and Cmd+I open? | The Essential Keyboard Shortcuts window (replaces the Help Center URL placeholder in app-shell §4.2). |
+| Q9 | What do the (i) button and Cmd+I open? | **Answered by capture (CC-42): an inline privacy footer in the bar** (§4.8), not a window. The Essential Keyboard Shortcuts window keeps its other entries (§4.5.3). |
 | Q10 | Split row icon for 3–4 panes and vertical splits? | 15 pt cells in a row, or stacked in a 30×30 plate for vertical. Refit when captured. |
 | Q11 | Remove the Shortcuts pane `basics` filter (CC-30)? | Yes. The settings-library plan owner confirms in the Step 6 PR. |
 | Q12 | Offer the current tab as "Switch to Tab" in Cmd+T? | Yes (`docs/suggest.md` "Input"; F0063, F0043). |
 | Q13 | When does Arc offer "or Space" for a whole host (F0040 yes, F0061 no)? | Keep Open's current rule (exact name, host, or keyword) when no completion shows. |
+| Q14 | Does the footer show unasked before the first remote suggestion? Session 2 could not show it (Arc had stored an earlier dismissal). | Yes, once, while `open.general.searchSuggestNoticeDismissed` is false (§4.8; features-core §4.5 rule 13). |
+| Q15 | Is the Site Search chip color per site? One sample (Wikipedia, `#FFA000`). | One token for every site and for the Actions and Tabs chips. One more capture with another site settles it. |
 
 ## 9. Screenshots needed from the user
 
@@ -634,9 +707,10 @@ Agents must not launch or drive Arc (AGENTS.md rules 4–5). These need the user
 
 1. Toolbar: View ▸ Show Toolbar (Cmd+Shift+D) on a normal tab, then the same with Settings ▸ Advanced ▸ "Show full URL when Toolbar is enabled" on. Shows the bar, the sidebar top, and where Favorites sit.
 2. Right-click on the sidebar URL field, and right-click on the toolbar URL (menu items and order).
-3. Hold Command for 2 s with the sidebar visible and a few Favorites and tabs (are there badges, where, and how they look).
+3. Done in session 2: no badges (CC-39).
 4. Help ▸ Essential Keyboard Shortcuts (the window).
-5. Command bar: type 4 letters of a host you have open, then press Backspace once, Right arrow once, and Left arrow once (one frame after each key).
+5. Command bar: type 4 letters of a host you have open, then press Right arrow once, and (after retyping) Left arrow once, one frame after each key. Backspace is done (CC-40).
+8. Site Search on a second site (for example YouTube): the chip color (Q15).
 6. A command bar list that shows a three-pane split and a vertical split.
 7. Command bar: type a full host (for example a site you have not opened today) and stop; then type the same host again after visiting it (the "or Space" difference, Q13).
 
@@ -657,3 +731,12 @@ Agents must not launch or drive Arc (AGENTS.md rules 4–5). These need the user
 - Q12 Cmd+T offers the current tab.
 - Q13 Keep the current "or Space" rule for a whole host.
 - The screenshots go into the user's single combined Arc capture session.
+
+## Appendix — Lead decisions (2026-10-26, capture session 2)
+
+These supersede the entries above where they conflict. Evidence: `docs/re/commandbar-completion.md` §8 (CC-39…CC-44), `docs/re/capture-session-2-results.md` C13, C14, C20.
+
+- Q1 superseded: holding Command shows **no** hints, as Arc does (CC-39, S2 18/0001–0003). Open builds no badges, no flags monitor, and no hints setting; `show-shortcuts-overlay` stays registered and disabled. The Cmd+1…9 numbering (`goToItemTargets`) stays.
+- Q9 superseded: the (i) button and Cmd+I show Arc's inline privacy footer in the bar ("We talk to your search engine…", "Search Settings…", "Dismiss"), not the Essential Keyboard Shortcuts window (CC-42, S2 18/0044). "Dismiss" writes the existing `open.general.searchSuggestNoticeDismissed` key.
+- New (D12): the command bar has **no** open or close animation (CC-44, V 9.70–14.20 s). The open spring and close fade are deleted. This replaces the provisional motion in `docs/commandbar.md` §5.
+- Inline completion and the Site Search chip follow the capture: completed part selected, Backspace removes only it (CC-40); the chip is an orange text-only capsule with the placeholder "Search…" and an orange scoped selection (CC-41). Right and Left arrow rules stay guesses until a frame isolates them.

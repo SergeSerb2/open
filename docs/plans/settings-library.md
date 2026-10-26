@@ -436,6 +436,19 @@ The former previewsOnHover key is no longer read. Close button "Done".
 App values use UserDefaults; no ProfileSettings fields or second store are added.
 Hover Preview reads these keys when it arms.
 
+Lead decision (2026-10-26, capture session 2): Open v1 keeps the **two**
+source switches, "Folders" and "Pinned tabs and Favorites", as an Open product
+choice. Arc's sheet (422 × 370, "Show Arc Previews:", a "Learn more" link,
+"Done") has **seven** source checkboxes, all on in a fresh Profile: Arc
+Folders · Google Calendar · Google Mail · Outlook Calendar · Outlook Mail ·
+Recent pages on Linear, Notion, and Figma · Notion Calendar
+(`docs/re/interaction-states.md` §20.13, S2 02/0050). "Folders" is Arc
+Folders. The other six read the user's accounts and site APIs (Arc's live-data
+integrations); v1 has no such integrations, so they are **post-v1** and the
+sheet does not list them. Two more differences, recorded and not changed by
+this decision (open question 7): Arc's General row has no switch, only
+"Previews Settings…", and Arc's sheet has no delay pop-up.
+
 ### 5.2 Profiles
 
 Window title "Profiles". Left: profile list. Right: form for
@@ -1227,6 +1240,18 @@ Run on the built app. Each line must pass. Note the result in the PR.
 6. Search privacy notice exact text and whether suggestions start ON
    need a fresh-profile check (`docs/re/features-core.md` Appendix
    C items 2 and 10). This plan ships ON with a one-time notice.
+   Capture session 2 (2026-10-26): a fresh Arc Profile has suggestions
+   ON (S2 02/0012), and the notice text is "We talk to your search engine
+   to help us suggest results." with "Learn more about your data on Arc
+   here." ("Open" in Open), shown by the command bar's (i) button as a
+   footer with "Search Settings…" and "Dismiss"
+   (`docs/plans/commandbar-completion.md` §4.8, which reuses
+   `open.general.searchSuggestNoticeDismissed`).
+7. Previews parity details (2026-10-26): Arc has no switch on the General
+   ▸ Previews row and no delay pop-up in its sheet (S2 02/0050). This plan
+   keeps Open's master switch and delay (both built) until the lead
+   decides; following Arc means removing the row switch (previews are off
+   when both sources are off) and keeping the delay key at 0.5 s with no UI.
 
 
 
@@ -1237,3 +1262,7 @@ Run on the built app. Each line must pass. Note the result in the PR.
 
 - Approved with the stated defaults for every open question (fresh-profile defaults, pinned-tab discard policy, Capture, Save-to-Library, icon art, search notice wording).
 - Sequencing: implementation starts after the Profiles model, OpenSleep S0, and ad-block lists PRs merge (it binds to their models). Visual styling follows OpenDesign tokens; an Opus design pass reviews the rendered panes before the PR merges.
+
+## Appendix — Lead decisions (2026-10-26, capture session 2)
+
+- Previews: Open v1 keeps two source switches, "Folders" and "Pinned tabs and Favorites", as an Open product choice. Arc's seven sources are mostly its live-data integrations (Google and Outlook Calendar and Mail, Notion, Linear, Figma), which v1 does not include; they are post-v1 (§5.1.1). This confirms the sidebar plan's Q3 decision with the captured source list.

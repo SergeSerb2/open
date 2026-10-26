@@ -248,6 +248,29 @@ Keep the existing slot logic in `TabCellView.layout()` (the button sits
 `RowMediaMetrics` (OpenDesign): `buttonSize 20`, `gapAfterTitle 2`,
 `y 10`, `recordingDot 7`, `recordingSlotWidth 14`, `glyphInsetX 2`.
 
+**Capture session 2 amendment (2026-10-26; follow-up Step 2b to merged #67).**
+Arc's row speaker is **leading**, not after the title, and uses outline
+glyphs (`docs/re/interaction-states.md` §20.7; `docs/re/capture-session-2-results.md`
+C18). Evidence: **S2 12/0022** (audible), **0027** (muted), **0013** (first
+frame with audio) = frames of `.re/runtime/sessions/20261026-102922-12-media-row/`.
+These rows replace the "Speaker button" row above and the trailing slot logic:
+
+| Item | Spec | Mark, evidence |
+|---|---|---|
+| Speaker button | 26 × 26 at `[41, y + 7, 26, 26]`, right after the favicon (`[17, y + 11, 18, 18]`), on every row that is audible or muted. AX id parity `sidebarTabCellMuteButton`. | measured (AX frame, S2 12/0013, 0022, 0027) |
+| Title | While the speaker shows, the title's AX frame moves from x 43 to x 69 and narrows by 26: Open's text origin moves from 44 to 70 (the 1 pt inset rule of `docs/design.md` §2.3). The right end is unchanged (close-button slot rule). | measured (AX title frames) |
+| Glyph | Outline SF Symbols: `speaker.wave.2` (audible) and `speaker.slash` (muted), Regular, sized so the ink is ≈ 19 × 13 and ≈ 16 × 16 (start at 13 pt and fit in Step 2b), centered in the button. Not the `.fill` variants. | ink sizes measured; symbol size fitted |
+| Tint | White ≈ 0.65 on the selected row (peak `#B8B8BE`), i.e. the row accessory tone; keep `SidebarRole.rowAccessory` and check it against the peak. | measured (S2 12/0022) |
+| When | From the first frame with audio. | measured (S2 12/0013) |
+| Hover plate | Like the close button: plate = button frame, radius 6, the row hover plate tone. | **guess** (the pointer did not trigger hover feedback) |
+| Tooltip | Unchanged ("Mute tab" / "Unmute tab", guess): the speaker tooltip did not show for the synthetic pointer. | not captured |
+| Recording dot | Not captured (the microphone steps were skipped). Keep it in the one placement function; default now **leading** too: a 14 pt slot directly after the favicon, before the speaker, and the title moves right by the slot width as well (**guess**: Arc names `hasLeadingRecordingIndicator`). | guess |
+| Click, mute transition, build on demand | Unchanged (§4.1 rows above). | — |
+
+`RowMediaMetrics` after Step 2b: `buttonSize 26`, `buttonX 41`, `buttonY 7`
+(row-relative), `titleShift 26`, `recordingSlotWidth 14`, `recordingDot 7`;
+`gapAfterTitle` and `glyphInsetX` are deleted.
+
 Lead review decisions (2026-10-26): speaker images share a left anchor at
 slot x + 2 pt on one fixed image-view frame in both states. Keep native
 replace outside a disable-actions transaction (lead clarification 2026-10-26).
@@ -1167,6 +1190,7 @@ widths 228 and 500.
 | RI2 | Clicking the speaker sends `.toggleMute` and does not change selection. |
 | RI3 | A capturing row shows the recording dot before the speaker; its tooltip text is exact. |
 | RI4 | The symbol transition runs once per mute change and leaves no animation on the layer afterwards. |
+| RI5 | Step 2b: an audible row draws the speaker at `[41, y + 7, 26, 26]` with the outline glyph and the title origin at x 70; `sidebar-render compare` against S2 12/0022 (audible) and 0027 (muted) is within 1 pt and ΔE00 2 for the button frame, glyph ink box and peak, and title start (favicon and title text masked). RI1 and RI3 use the new frames. |
 | MC1 | No source → container height 0 and the pager ends at `h − 50` (no layout change from today). |
 | MC2 | One source → container `C = 76`, card frame `[8, h − 50 − 72, W − 16, 68]` ± 0.5 pt. |
 | MC3 | Each button's frame, glyph, and tooltip match §4.2.3; Previous/Next hide without the actions. |
@@ -1288,6 +1312,7 @@ spot before Step 3; otherwise proceed after the plain-row gate passes.
 | 0 | Screenshots S1–S12 from the user (§11), through the lead. Runs in parallel; Steps 1–5 do not wait. | — | Lead files them under `.re/runtime/` (git-ignored) and adds measured values to `docs/re/interaction-states.md`. |
 | 1 | `OpenMedia` target: store, policy, session, site rules, settings; `OpenWeb` media types; `OpenSleep` `mediaControls` field; `openkit media-demo`; the two new defaults in `SettingsDefaults` (registry rows are already in settings-library §2.1). | §3.1 rows for `OpenMedia`, `OpenWeb`, `OpenSleep`, `OpenSettings`, `openkit`; `Package.swift`; `tools/verify-all.sh` | `media-demo` all PASS; `sleep-demo` still 105/105; `settings-preview` still PASS; `verify-all.sh` PASS. |
 | 2 | Tokens and row indicator: `MiniPlayerMetrics`, `PiPMetrics`, `RowMediaMetrics`, roles, fonts, motion, glyphs; speaker transition, tooltip, recording dot. | `OpenDesign/*` (listed), `OpenSidebar/SidebarRows.swift`, `sidebar-render` RI checks | RI1–RI4 PASS; existing `sidebar-render check` PASS; bench p95 unchanged. |
+| 2b | Follow-up to merged #67 (capture session 2, C18): leading 26 × 26 speaker after the favicon, outline glyphs, title shift, recording dot leading (§4.1 amendment). | `OpenDesign/FeatureMetrics.swift` (`RowMediaMetrics`), `OpenDesign/Icons.swift` (outline symbols), `OpenSidebar/SidebarRows.swift` (`TabCellView.layout()`), `sidebar-render` RI checks and a new RI5 | RI1–RI5 PASS; existing `sidebar-render check` PASS; the plain-row and mixed-row scroll budgets of the 2026-10-26 performance decision hold. |
 | 3 | Mini player stack in the sidebar with fake hosts. | `OpenSidebar/MediaControlsView.swift`, `MiniPlayerCardView.swift`, `MarqueeLabel.swift`, `SidebarView.swift`, `SidebarContext.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift`; `sidebar-render` media scenes | MC1–MC10 PASS; renders attached to the PR. |
 | 4 | Phase 2 PiP window and Document PiP window with a fake video view; menu builder. | `OpenFeatures/PictureInPictureWindowController.swift`, `PiPOverlayView.swift`, `PiPScrubberView.swift`, `PiPMenuBuilder.swift`, `DocumentPiPWindowController.swift`; `features-render` pip | PP1–PP8 PASS. |
 | 5 | [ENGINE] EM-1a, EM-5 interim, EM-8 (OpenEngine only, stock-CEF compatible). | `Engine/OpenEngine/src/OEApp.mm`, `OEWebContent.mm`, `include/OpenEngine/OEWebContent.h`; `docs/engine-api.md` | `--only features` unchanged; a `media` dump of `audio.html` shows playback and metadata. |
@@ -1388,6 +1413,11 @@ stays in `.re/` and is never committed.
 - Q12 The Meet chat toggle in Document PiP is deferred.
 - Q13 Mic and camera mini players ship with Step 8.
 - Q14 No audio badge on Favorites tiles, unless screenshot S9 shows one.
+
+## Appendix — Lead decisions (2026-10-26, capture session 2)
+
+- The tab-row speaker is **leading**: a 26 × 26 button with an outline glyph right after the favicon, and the title moves right by 26 (C18; S2 12/0022, 0027). This supersedes the trailing 20 × 20 filled speaker that #67 built. Follow-up Step 2b changes it; the recording dot follows the same leading slot until a capture shows otherwise.
+- Out of this amendment (handled separately): the mini player look and the PiP window size.
 - Q15 The scrolling title is on, with no setting.
 - Q16 Engine queue: Step 5 (EM-1a, EM-5 interim, EM-8) is OpenEngine-only and goes to the Steps 1–5 implementer, not the engine lead. The fork requests EM-1b, EM-2, EM-3 (P6), and EM-5 (fork path) queue after P2. EM-6 and EM-7 follow them. EM-4 (own PiP window) queues after the ad-block and tab-sleep patch series.
 - Q17 The PiP menu check mark shows the current state.
