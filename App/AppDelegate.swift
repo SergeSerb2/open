@@ -22,7 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var engineReady = false
   private(set) var terminationRequested = false
   lazy var stores = AppStores(app: self)
-  lazy var settingsPresenter = SettingsPlaceholder(app: self)
+  lazy var settingsPresenter = AppSettingsActions(app: self)
   var keyBindings = KeyBindingStore.empty
   let fallbackKeyboard = KeyboardRouter()
   var commandServicesPrepared = false
@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
   var littleOpenStub: NSWindowController?
+  var commandWindowObserver: NSObjectProtocol?
   private var activeWindowID: WindowID?
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
@@ -62,6 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     terminationRequested = true
+    if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     saveState()
     if !engineReady { CFRunLoopStop(CFRunLoopGetMain()) }
@@ -303,7 +305,12 @@ extension AppDelegate: CommandDispatcher {
   }
   func prepareCommandServices() {
     guard !commandServicesPrepared else { return }
-    commandServicesPrepared = true; reloadKeyBindings()
+    commandServicesPrepared = true
+    _ = settingsPresenter.settings
+    commandWindowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
+      MainActor.assumeIsolated { self?.scheduleMenuRebuild() }
+    }
+    reloadKeyBindings()
   }
   func reloadKeyBindings() {
     let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
@@ -345,7 +352,7 @@ extension AppDelegate: CommandDispatcher {
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
-    return ["new-window", "blank-window", "new-tab", "settings", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
+    return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) { performCommand(id) }
   func performCommand(_ id: String) {
@@ -355,7 +362,17 @@ extension AppDelegate: CommandDispatcher {
       let controller = frontWindowController ?? makeWindow()
       controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
     case "settings": settingsPresenter.show()
-    case "view-library", "view-downloads", "view-boosts": settingsPresenter.showLibrary()
+    case "search-settings": settingsPresenter.show(pane: .general)
+    case "air-traffic-control": settingsPresenter.show(pane: .links)
+    case "import-from-browser": settingsPresenter.show(pane: .general); settingsPresenter.settings.showsImport = true
+    case "set-default-browser": settingsPresenter.settings.general.setDefault()
+    case "check-for-updates": settingsPresenter.checkForUpdates()
+    case "view-library": settingsPresenter.showLibrary()
+    case "view-downloads": settingsPresenter.showLibrary(section: .downloads)
+    case "view-archive": settingsPresenter.showLibrary(section: .archive)
+    case "view-history": settingsPresenter.showLibrary(section: .history)
+    case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing arrives in the next app-shell step."
+    case "keyboard-shortcuts-edu": settingsPresenter.show(pane: .shortcuts)
     case "archive-tab", "close-window": NSApp.keyWindow?.performClose(nil)
     case "new-little-open-window", "little-open-global": showLittleOpenStub()
     case "quit-open": NSApp.terminate(nil)
@@ -363,7 +380,7 @@ extension AppDelegate: CommandDispatcher {
     case "hide-open": NSApp.hide(nil)
     case "hide-others": NSApp.hideOtherApplications(nil)
     case "show-all": NSApp.unhideAllApplications(nil)
-    case "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team":
+    case "help-center", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
       _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)
     default:

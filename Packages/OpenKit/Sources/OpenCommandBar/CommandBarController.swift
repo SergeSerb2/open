@@ -74,6 +74,7 @@ public final class CommandBarController: NSObject {
         view.onClickOutside = { [weak self] in self?.dismiss(reason: .clickOutside) }
         let field = panel.input.field
         field.delegate = self
+        panel.input.editor.onModifiedReturn = { [weak self] flags in self?.handle(#selector(NSResponder.insertNewline(_:)), flags: flags) ?? false }
         panel.input.editor.onCompositionEnded = { [weak self] in
             self?.queriedText = nil
             self?.textChanged()

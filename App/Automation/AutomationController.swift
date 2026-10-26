@@ -6,6 +6,7 @@
   import OpenFeatures
   import OpenSidebar
   import OpenCommands
+  import OpenSettings
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -76,14 +77,21 @@
         return ["prepared": app.commandServicesPrepared, "attempts": app.hotkeyAttempts, "registered": app.hotkeyService?.isRegistered ?? false,
           "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
       case "settings-state":
-        return ["settings": app.settingsPresenter.settings?.window?.windowNumber ?? 0,
-          "library": app.settingsPresenter.library?.window?.windowNumber ?? 0,
-          "hotkey": app.settingsPresenter.hotkeyToggle?.state == .on, "external": app.settingsPresenter.externalToggle?.state == .on] as [String: Any]
+        let adapter = app.settingsPresenter
+        return ["settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
+          "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
+          "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
+          "historyRows": adapter.library?.historyRows.count ?? 0,
+          "archive": (adapter.library?.archiveRows ?? []).map { ["id": $0.id.description, "url": $0.url.absoluteString] },
+          "sharedArchives": adapter.library?.archives.allSatisfy { $0.value === app.archiveSink.store(for: $0.key) } ?? false,
+          "sameSnapshot": adapter.settings.snapshot === app.snapshotStore,
+          "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
+          "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
       case "settings-toggle":
-        let presenter = app.settingsPresenter
-        let button = a["name"] as? String == "hotkey" ? presenter.hotkeyToggle : presenter.externalToggle
-        guard let button else { throw Failure(message: "settings not open") }
-        button.performClick(nil); return true
+        let settings = app.settingsPresenter.settings
+        if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
+        else { settings.links.externalLinksInLittleOpen.toggle() }
+        return settings.commitLinks()
       case "pasteboard": return NSPasteboard.general.string(forType: .string) ?? ""
       case "shell-windows":
         return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
@@ -102,6 +110,18 @@
       switch cmd {
 
       // Model-level tabs (the sidebar).
+      case "settings-custom-engine":
+        let settings = app.settingsPresenter.settings
+        guard let template = a["template"] as? String, let profile = w.focusedProfile else { throw Failure(message: "missing search template") }
+        settings.profiles.select(profile.id)
+        guard settings.profiles.saveEngine(id: "custom-e2e", name: "Local Search", keyword: "local-search", template: template) else { throw Failure(message: settings.profiles.errorText) }
+        settings.profiles.searchEngineID = "custom-e2e"; return true
+      case "library-restore":
+        guard let library = app.settingsPresenter.library, let raw = a["id"] as? String, let uuid = UUID(uuidString: raw) else { throw Failure(message: "missing Archive row") }
+        await library.restore(id: ItemID(rawValue: uuid)); return library.statusText
+      case "library-history-open":
+        guard let library = app.settingsPresenter.library, let url = (a["url"] as? String).flatMap(URL.init(string:)) else { throw Failure(message: "Library not open") }
+        library.actions.openHistoryItem(url: url); return true
       case "save-page-state": return ["requests": w.savePageRequestCount, "visible": w.pendingSavePanel?.isVisible == true, "pending": w.pendingSavePanel != nil, "number": w.pendingSavePanel?.windowNumber ?? 0] as [String: Any]
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
       case "suggest-remote":

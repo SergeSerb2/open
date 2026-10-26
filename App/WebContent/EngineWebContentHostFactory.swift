@@ -6,6 +6,7 @@ import OpenStore
 import OpenSidebar
 import OpenCommands
 import OpenCommandBar
+import OpenSuggest
 
 // App has no window controller of its own.
 typealias BrowserWindowController = OpenFeatures.BrowserWindowController
@@ -111,7 +112,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       earlyHostRequestsRefused = context(for: profile.id) == nil && ensureContent(for: tab) == nil
         && makeHost(tabID: tab.id, profileID: profile.id, url: nil) == nil && contentCreationCount == before
     }
-    if let url = Self.url(forInput: input, engine: focusedProfile?.settings.searchEngineID) { navigateFromCommandBar(url, current: true) }
+    if let url = Self.url(forInput: input, profile: focusedProfile) { navigateFromCommandBar(url, current: true) }
   }
   #endif
 
@@ -560,18 +561,14 @@ extension EngineWebContentHostFactory {
   }
 
   /// URL for address-field input: a URL, a host, or a search.
-  static func url(forInput text: String, engine: String?) -> URL? {
+  static func url(forInput text: String, profile: Profile?) -> URL? {
     if text.contains("://") || text.hasPrefix("about:") || text.hasPrefix("chrome:") {
       return URL(string: text)
     }
     if text.contains(".") && !text.contains(" ") {
       return URL(string: "https://\(text)")
     }
-    var c =
-      engine == "google"
-      ? URLComponents(string: "https://www.google.com/search")! : URLComponents(string: "https://duckduckgo.com/")!
-    c.queryItems = [URLQueryItem(name: "q", value: text)]
-    return c.url
+    return SearchEngines.resolve(profile: profile).searchURL(for: text)
   }
 
   /// Closes one page wherever it lives.
@@ -855,6 +852,7 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
+    app.settingsPresenter.noteDownload(download, context: context)
     record(
       "download", download.webContent,
       [

@@ -653,7 +653,7 @@ def shell_checks(app_factory, results, tmp):
         time.sleep(1.5)
         restored = [x for x in app.call("tabs") if new and x["id"] == new[0]["id"]]
         results["keyboard"] = {
-            "ok": route["cmd_l_window"] == "NSTextView" and route["cmd_t_app"] == "NSTextView"
+            "ok": route["cmd_l_window"] in ("NSTextView", "CommandBarFieldEditor") and route["cmd_t_app"] in ("NSTextView", "CommandBarFieldEditor")
                   and len(new) == 1 and n1 == n0 + 1 and n2 == n0 and len(restored) == 1,
             "routes": route, "tabs": [n0, n1, n2], "restored_same_id": bool(restored)}
 
@@ -1471,7 +1471,8 @@ def commandbar_checks(factory, results, tmp, config):
         results['duplicate_folder_lazy'] = {'ok': len(folders) == 2 and folders[0]['children'][0]['id'] != folders[1]['children'][0]['id'] and folders[1]['children'][0]['url'] == origin + '/cross' and not folders[1]['children'][0]['loaded'] and before == app.call('host-counts')['created'], 'folders': folders}
         press(',', modifiers=['cmd'], route='window'); time.sleep(.2)
         settings = app.call('settings-state'); app.call('menu-perform', id='settings'); time.sleep(.1)
-        results['settings_shared_window'] = {'ok': settings['settings'] > 0 and settings['settings'] == app.call('settings-state')['settings']}
+        shot(app, 'settings-live-%s.png' % config.lower(), window=settings['settings'])
+        results['settings_shared_window'] = {'ok': settings['settings'] > 0 and settings['settings'] == app.call('settings-state')['settings'] and settings['sameSnapshot']}
         original_hotkey = app.call('hotkey-state')['enabled']
         if not original_hotkey: app.call('settings-toggle', name='hotkey')
         app.call('settings-toggle', name='hotkey'); off = app.call('hotkey-state')
@@ -1480,7 +1481,29 @@ def commandbar_checks(factory, results, tmp, config):
         if not original_hotkey: app.call('settings-toggle', name='hotkey')
         press('l', modifiers=['cmd','shift'], route='window'); time.sleep(.2)
         library = app.call('settings-state')['library']; app.call('menu-perform', id='view-library')
+        shot(app, 'library-live-%s.png' % config.lower(), window=library)
         results['library_shared_window'] = {'ok': library > 0 and library == app.call('settings-state')['library']}
+        for command, section in [('view-downloads','downloads'),('view-archive','archive'),('view-history','history')]:
+            app.call('menu-perform', id=command); time.sleep(.2)
+            library_state = app.call('settings-state')
+            results[command + '_real_library'] = {'ok': library_state['library'] == library and library_state['librarySection'] == section and library_state['sharedArchives'], 'state': library_state}
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        archived = app.call('open', url=origin + '/archive')['id']; app.call('wait', tab=archived); app.call('close', tab=archived)
+        app.call('menu-perform', id='view-archive')
+        archive_state = wait_until(lambda: app.call('settings-state') if any(r['id'] == archived for r in app.call('settings-state')['archive']) else None, step=.1)
+        assert archive_state, app.call('settings-state')
+        app.call('library-restore', id=archived)
+        results['library_archive_restore'] = {'ok': app.tab(archived)['url'] == origin + '/archive' and not app.tab(archived)['hasWebContent'] and all(r['id'] != archived for r in app.call('settings-state')['archive'])}
+        app.call('menu-perform', id='view-history'); time.sleep(.2)
+        app.call('library-history-open', url=origin + '/history-open')
+        history_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/history-open'), None), step=.1)
+        results['library_history_profile_open'] = {'ok': bool(history_tab) and history_tab['profile'] == opened['profile']}
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('settings-custom-engine', template=origin + '/search?q=%s')
+        bar('t'); type_query('local custom query'); press('return')
+        custom_url = origin + '/search?q=local%20custom%20query'
+        custom = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == custom_url), None), step=.1)
+        results['custom_search_engine_navigation'] = {'ok': bool(custom), 'expectedURL': custom_url}
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         app.call('focus', tab=target); time.sleep(.2)
         press('s', modifiers=['cmd','shift'])

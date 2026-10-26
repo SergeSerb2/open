@@ -66,7 +66,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       currentTabID: peek ? nil : factory.selectedTab?.id,
       currentTabURL: peek ? factory.selectedContent?.url : factory.selectedTab?.url,
       currentTabTitle: peek ? factory.selectedContent?.title : factory.selectedTab?.displayTitle,
-      allowsRemoteSuggestions: profile.settings.searchSuggestEnabled, searchEngineID: profile.settings.searchEngineID))
+      allowsRemoteSuggestions: profile.settings.searchSuggestEnabled && factory.app.settingsPresenter.prepareForRemoteSuggestions(profileID: profile.id), searchEngineID: profile.settings.searchEngineID))
   }
   func contextDidChange() {
     guard isPresented else { return }

@@ -3,6 +3,7 @@ import OpenCommands
 import OpenModel
 import OpenStore
 import OpenSuggest
+import OpenAdBlock
 
 /// Shared command-bar backend. Profile stores open on their own actor, on use.
 @MainActor
@@ -11,6 +12,8 @@ final class AppStores {
   private var histories: [ProfileID: HistoryStore] = [:]
   private var currentProfile: ProfileID?
   private var currentSuggest: SuggestEngine?
+  lazy var adBlock = try? AdBlockStore(root: app.directories.root)
+  lazy var favicons = try? FaviconStore(databaseURL: app.directories.root.appendingPathComponent("State/favicons.sqlite3"))
   init(app: AppDelegate) { self.app = app }
 
   func history(for profileID: ProfileID?) -> HistoryStore? {
