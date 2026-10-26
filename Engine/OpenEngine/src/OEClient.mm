@@ -101,6 +101,7 @@ bool OEClient::DoClose(CefRefPtr<CefBrowser> browser) {
   OEWebContent* view = view_;
   if (!closing_ && view) {
     // window.close() from the page. Tell the shell; the close continues.
+    close_requested_ = true;
     [view oe_requestClose];
   }
   // The browser is a child view inside our window. Returning false would
@@ -114,6 +115,13 @@ bool OEClient::DoClose(CefRefPtr<CefBrowser> browser) {
 }
 
 void OEClient::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
+  // Chrome style pages never get DoClose: Chromium closes a hosted tab
+  // itself (window.close(), chrome.tabs.remove). Tell the shell first.
+  OEWebContent* view = view_;
+  if (!closing_ && !close_requested_ && view.oe_hostBrowser) {
+    close_requested_ = true;
+    [view oe_requestClose];
+  }
   [view_ oe_browserClosed];
   [[OEEngine shared] oe_browserDidClose];
 }

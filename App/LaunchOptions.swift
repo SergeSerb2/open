@@ -5,14 +5,16 @@ import OpenEngine
 /// CEF parses the process command line itself (for example
 /// `--load-extension=/path/to/unpacked`).
 ///
-///   Open [URL...] [--user-data-dir=DIR] [--style=chrome]
+///   Open [URL...] [--user-data-dir=DIR] [--style=alloy]
 ///        [--open-remote-debugging-port=N] [--automation-socket=PATH]
 ///        [--chrome-toolbar] [--verbose]
 struct LaunchOptions {
   /// Open's data root (docs/plans/profiles.md §5): State/browser.json and
   /// Profiles/<dir>/{Engine,State,...}.
   var userDataDirectory: URL
-  var defaultStyle: OERuntimeStyle = .alloy
+  /// Chrome: tabs are tabs of each window's hidden Chrome window (fork
+  /// patch P1), so chrome.tabs sees them. Alloy: the pre-P1 hosting.
+  var defaultStyle: OERuntimeStyle = .chrome
   var initialURLs: [URL] = []
   var remoteDebuggingPort = 0
   var verboseLogging = false
@@ -39,7 +41,7 @@ struct LaunchOptions {
       if let v = value("user-data-dir") {
         userDataDirectory = path(v)
       } else if let v = value("style") {
-        defaultStyle = v == "chrome" ? .chrome : .alloy
+        defaultStyle = v == "alloy" ? .alloy : .chrome
       } else if let v = value("open-remote-debugging-port") {
         remoteDebuggingPort = Int(v) ?? 0
       } else if let v = value("automation-socket") {

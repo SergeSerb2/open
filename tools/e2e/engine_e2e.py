@@ -11,6 +11,7 @@ system mouse and keyboard.
   tools/e2e/engine_e2e.py --style alloy  --only extensions
   tools/e2e/engine_e2e.py --style chrome --only extensions
   tools/e2e/engine_e2e.py --config Release --only measure
+  tools/e2e/engine_e2e.py --style chrome --only tabstrip   # fork patch P1
 
 Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 .re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}.
@@ -682,6 +683,156 @@ def shell_checks(app_factory, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Fork patch P1: chrome.tabs / chrome.windows see Open's tabs (run with
+# --style chrome). Extensions: the tabs probe fixture and Bitwarden.
+
+PROBE = "ajfcefhgbdgihmnmnjpbejdkclfopicb"  # tools/e2e/fixtures/tabs-probe
+
+
+def tabstrip_checks(app, results):
+    def live():
+        """Live sidebar tabs in tab-strip order: (tab, page)."""
+        rows = [(t, t["page"]) for t in app.call("tabs") if t.get("page") and t["page"]["live"]]
+        return sorted(rows, key=lambda r: r[1]["browserIndex"])
+
+    def ext_eval(page, js, timeout=20):
+        return app.eval(page, js, timeout=timeout)
+
+    def events(page):
+        return ext_eval(page, "chrome.storage.session.get({events: []}).then(r => r.events)")
+
+    wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
+    first = app.call("tabs")[0]["id"]
+    a = new_tab(app, "https://example.org/")
+    b = new_tab(app, "https://www.iana.org/help/example-domains")
+    app.call("select", tab=first)
+    time.sleep(1)
+
+    rows = live()
+    results["hosted_tabs"] = {
+        "ok": len(rows) >= 3 and all(p["style"] == "chrome" and p["chromeTabId"] > 0 for _, p in rows)
+              and len({p["chromeWindowId"] for _, p in rows}) == 1 and rows[0][1]["chromeWindowId"] > 0,
+        "tabs": [(t["section"], t["url"], p["chromeTabId"], p["chromeWindowId"]) for t, p in rows]}
+
+    # The action popup (Alloy until P2) asks for the page under it, as
+    # Bitwarden's popup does: chrome.tabs.query({active, currentWindow}).
+    pop = app.call("popup", extension=PROBE)["identifier"]
+    wait_until(lambda: ext_eval(pop, "window.currentTab !== undefined"), timeout=20)
+    selected = [t for t, _ in rows if t["id"] == first][0]
+    expect_id = [p["chromeTabId"] for t, p in rows if t["id"] == first][0]
+    q = ext_eval(pop, "chrome.tabs.query({active: true, currentWindow: true})"
+                      ".then(ts => ts.map(t => ({id: t.id, url: t.url, windowId: t.windowId})))")
+    results["query_active_current_window"] = {
+        "ok": len(q) == 1 and q[0]["id"] == expect_id and q[0]["url"].startswith(selected["url"].rstrip("/")),
+        "result": q, "expected_tab": expect_id}
+
+    wins = ext_eval(pop, "chrome.windows.getAll({populate: true}).then(ws => ws.map(w => ({id: w.id,"
+                         " type: w.type, focused: w.focused, tabs: w.tabs.map(t => ({id: t.id, index: t.index,"
+                         " url: t.url, active: t.active, pinned: t.pinned}))})))")
+    normal = [w for w in wins if w["type"] == "normal"]
+    rows = live()
+    results["windows_and_tabs"] = {
+        "ok": len(normal) == 1 and normal[0]["id"] == rows[0][1]["chromeWindowId"]
+              and [t["id"] for t in normal[0]["tabs"]] == [p["chromeTabId"] for _, p in rows]
+              and [t["active"] for t in normal[0]["tabs"]] == [t["id"] == first for t, _ in rows],
+        "windows": wins, "sidebar": [(t["id"], p["chromeTabId"]) for t, p in rows]}
+
+    # onActivated fires when the user switches tabs in Open.
+    app.call("select", tab=a)
+    a_id = [p["chromeTabId"] for t, p in live() if t["id"] == a][0]
+    got = wait_until(lambda: [e for e in events(pop) if e["type"] == "activated" and e["tabId"] == a_id], timeout=10)
+    results["on_activated"] = {"ok": bool(got), "events": got, "expected_tab": a_id}
+
+    # chrome.tabs.create makes a Today tab in Open (selected: active true).
+    made = ext_eval(pop, "chrome.tabs.create({url: 'https://example.net/?from=extension', active: true})"
+                         ".then(t => ({id: t.id, windowId: t.windowId}))")
+    def created():
+        for t, p in live():
+            if t["url"].startswith("https://example.net/?from=extension") and p["chromeTabId"] == made["id"]:
+                return t
+    tab = wait_until(created, timeout=15)
+    results["tabs_create"] = {
+        "ok": bool(tab) and tab["section"] == "today" and tab["visible"]
+              and made["windowId"] == live()[0][1]["chromeWindowId"],
+        "extension_result": made, "sidebar_tab": tab and {k: tab[k] for k in ("id", "section", "url", "visible")}}
+
+    # chrome.tabs.update({active}) selects the tab in Open.
+    b_id = [p["chromeTabId"] for t, p in live() if t["id"] == b][0]
+    ext_eval(pop, "chrome.tabs.update(%d, {active: true}).then(t => t.id)" % b_id)
+    on_b = wait_until(lambda: [t for t, _ in live() if t["id"] == b and t["visible"]], timeout=10)
+    results["tabs_update_active"] = {"ok": bool(on_b)}
+
+    # chrome.tabs.move within Today: the shell reorders its sidebar.
+    today = [(t, p) for t, p in live() if t["section"] == "today"]
+    order_before = [t["id"] for t, _ in today]
+    mover, target = today[-1], today[0]
+    ext_eval(pop, "chrome.tabs.move(%d, {index: %d}).then(t => t.index)" % (mover[1]["chromeTabId"],
+                                                                             target[1]["browserIndex"]))
+    def moved():
+        ids = [t["id"] for t, _ in live() if t["section"] == "today"]
+        return ids if ids and ids[0] == mover[0]["id"] else None
+    order_after = wait_until(moved, timeout=10)
+    strip = ext_eval(pop, "chrome.tabs.query({currentWindow: true}).then(ts => ts.map(t => t.id))")
+    results["tabs_move"] = {"ok": bool(order_after) and strip == [p["chromeTabId"] for _, p in live()],
+                            "today_before": order_before, "today_after": order_after}
+
+    # chrome.tabs.update({pinned}) pins the tab in Open.
+    ext_eval(pop, "chrome.tabs.update(%d, {pinned: true}).then(t => t.pinned)" % a_id)
+    pinned = wait_until(lambda: [t for t, _ in live() if t["id"] == a and t["section"] == "pinned"], timeout=10)
+    results["tabs_update_pinned"] = {"ok": bool(pinned)}
+
+    # chrome.tabs.remove closes the tab in Open.
+    ext_eval(pop, "chrome.tabs.remove(%d).then(() => true)" % made["id"])
+    gone = wait_until(lambda: not [t for t, _ in live() if t["url"].startswith("https://example.net/?from=extension")],
+                      timeout=10)
+    results["tabs_remove"] = {"ok": bool(gone)}
+
+    ev = events(pop)
+    results["events_seen"] = sorted({e["type"] for e in ev})
+    app.call("popup-close")
+
+    # Badge text set by the probe's service worker (needs patch P2).
+    actions = app.call("extensions")["actions"]
+    probe_action = [x for x in actions if x["id"] == PROBE]
+    results["badge_text"] = {"ok": bool(probe_action) and probe_action[0].get("badge") == "P1",
+                             "action": probe_action, "note": "needs patch P2 (action model)"}
+
+    # Bitwarden's popup leaves its loading state (its first step asks for
+    # the current tab).
+    app.call("select", tab=first)
+    time.sleep(1)
+    info = {}
+    try:
+        p = app.call("popup", extension=EXT["bitwarden"])["identifier"]
+        state_js = ('({elements: document.querySelectorAll("*").length,'
+                    ' spinner: !!document.querySelector(".bwi-spinner, app-loading, .loading-container"),'
+                    ' inputs: document.querySelectorAll("input").length,'
+                    ' text: document.body ? document.body.innerText.slice(0, 160) : ""})')
+        state = wait_until(lambda: (lambda s: s if not s["spinner"] and s["elements"] > 50 and s["text"] else None)(
+            app.eval(p, state_js, timeout=20)), timeout=30) or app.eval(p, state_js, timeout=20)
+        info["state"] = state
+        info["tabs_api"] = app.eval(p, "chrome.tabs.query({active: true, currentWindow: true})"
+                                       ".then(ts => ts.map(t => t.url))", timeout=20)
+        # Bitwarden opens its welcome page on install; the selected tab is
+        # whatever Open shows now.
+        info["selected_tab"] = [t["url"] for t in app.call("tabs") if t["selected"]]
+        wins = app.call("windows")
+        panel = [w for w in wins if w["visible"] and w["class"] == "NSPanel"]
+        if panel:
+            info["screenshot"] = shot(app, "p1-popup-bitwarden.png", window=panel[-1]["number"], max_px=800)
+        info["ok"] = (not state["spinner"] and state["elements"] > 50 and bool(state["text"])
+                      and info["tabs_api"] == info["selected_tab"])
+        info["note"] = ("The popup is narrow: Bitwarden uses its fixed popup width only when"
+                        " chrome.extension.getViews({type: 'popup'}) lists it (patch P2).")
+        app.call("popup-close")
+    except Exception as e:
+        info["ok"] = False
+        info["error"] = str(e)
+    results["bitwarden_popup"] = info
+    results["window_screenshot"] = shot(app, "p1-window.png")
+
+
+# ----------------------------------------------------------------------------
 # Measurements (run with --config Release)
 
 
@@ -755,7 +906,7 @@ def main():
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure"], required=True)
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip"], required=True)
     opts = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
@@ -769,6 +920,11 @@ def main():
         dirs = [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "1password", "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
+        extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
+    if opts.only == "tabstrip":
+        dirs = [os.path.join(ROOT, "tools", "e2e", "fixtures", "tabs-probe"), os.path.join(opts.extensions, "bitwarden")]
+        if not all(os.path.isdir(d) for d in dirs):
+            sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
@@ -790,14 +946,17 @@ def main():
             results[opts.only] = {}
             if opts.only == "extensions":
                 extension_checks(app, opts.style, results["extensions"])
+            elif opts.only == "tabstrip":
+                tabstrip_checks(app, results["tabstrip"])
             else:
                 feature_checks(app, opts.style, results["features"], tmp)
         finally:
             app.quit()
-    name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features") else opts.config.lower())
+    name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
+                                   else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))

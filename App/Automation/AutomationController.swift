@@ -407,6 +407,9 @@
         "zoom": c.zoomLevel, "popup": c.isPopup, "hidden": c.view.isHiddenOrHasHiddenAncestor,
         "browser": c.browser?.identifier ?? 0,
         "browserIndex": c.browser?.webContents.firstIndex(of: c) ?? -1,
+        // chrome.tabs / chrome.windows ids (fork patch P1); -1 if none.
+        "chromeTabId": c.chromeTabIdentifier,
+        "chromeWindowId": c.browser?.chromeWindowIdentifier ?? -1,
         "extension": c.extensionPopupIdentifier ?? "",
       ]
     }

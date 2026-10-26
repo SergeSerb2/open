@@ -1,0 +1,209 @@
+{
+  "config": "Release",
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "pid": 9277,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome/Profiles"
+  },
+  "started": "2026-10-25 21:19:09",
+  "style": "chrome",
+  "tabstrip": {
+    "badge_text": {
+      "action": [
+        {
+          "badge": null,
+          "enabled": true,
+          "icon": 0,
+          "id": "ajfcefhgbdgihmnmnjpbejdkclfopicb",
+          "popup": true,
+          "title": "Tabs probe"
+        }
+      ],
+      "note": "needs patch P2 (action model)",
+      "ok": false
+    },
+    "bitwarden_popup": {
+      "note": "The popup is narrow: Bitwarden uses its fixed popup width only when chrome.extension.getViews({type: 'popup'}) lists it (patch P2).",
+      "ok": true,
+      "screenshot": "p1-popup-bitwarden.png",
+      "selected_tab": [
+        "https://bitwarden.com/browser-start/"
+      ],
+      "state": {
+        "elements": 124,
+        "inputs": 0,
+        "spinner": false,
+        "text": "Make Bitwarden your browser's default password manager\n1\n\nSelect Continue.\n\n2\n\nSelect Allow from the browser prompt to give Bitwarden permission to change your "
+      },
+      "tabs_api": [
+        "https://bitwarden.com/browser-start/"
+      ]
+    },
+    "events_seen": [
+      "activated",
+      "created",
+      "moved",
+      "pinned",
+      "removed",
+      "updated"
+    ],
+    "hosted_tabs": {
+      "ok": true,
+      "tabs": [
+        [
+          "today",
+          "https://www.iana.org/help/example-domains",
+          175814668,
+          175814664
+        ],
+        [
+          "today",
+          "https://example.org/",
+          175814667,
+          175814664
+        ],
+        [
+          "today",
+          "https://bitwarden.com/browser-start/",
+          175814666,
+          175814664
+        ],
+        [
+          "today",
+          "https://example.com/",
+          175814665,
+          175814664
+        ]
+      ]
+    },
+    "on_activated": {
+      "events": [
+        {
+          "tabId": 175814667,
+          "time": 1792988360276,
+          "type": "activated",
+          "windowId": 175814664
+        },
+        {
+          "tabId": 175814667,
+          "time": 1792988361732,
+          "type": "activated",
+          "windowId": 175814664
+        }
+      ],
+      "expected_tab": 175814667,
+      "ok": true
+    },
+    "query_active_current_window": {
+      "expected_tab": 175814666,
+      "ok": true,
+      "result": [
+        {
+          "id": 175814666,
+          "url": "https://bitwarden.com/browser-start/",
+          "windowId": 175814664
+        }
+      ]
+    },
+    "tabs_create": {
+      "extension_result": {
+        "id": 175814670,
+        "windowId": 175814664
+      },
+      "ok": true,
+      "sidebar_tab": {
+        "id": "49A337AB-1BE1-4509-8543-C41A8F1E6329",
+        "section": "today",
+        "url": "https://example.net/?from=extension",
+        "visible": true
+      }
+    },
+    "tabs_move": {
+      "ok": true,
+      "today_after": [
+        "722F30EB-34EC-438E-B3CA-62A3959734DC",
+        "49A337AB-1BE1-4509-8543-C41A8F1E6329",
+        "7E13F53C-1F50-4DB3-8BBC-A20747A111DE",
+        "CBC02E1B-03D6-46B0-BB10-65A5D5AF47EF",
+        "201DBB46-B4C6-4197-B4EE-8A9AF44F0452"
+      ],
+      "today_before": [
+        "49A337AB-1BE1-4509-8543-C41A8F1E6329",
+        "7E13F53C-1F50-4DB3-8BBC-A20747A111DE",
+        "CBC02E1B-03D6-46B0-BB10-65A5D5AF47EF",
+        "201DBB46-B4C6-4197-B4EE-8A9AF44F0452",
+        "722F30EB-34EC-438E-B3CA-62A3959734DC"
+      ]
+    },
+    "tabs_remove": {
+      "ok": true
+    },
+    "tabs_update_active": {
+      "ok": true
+    },
+    "tabs_update_pinned": {
+      "ok": true
+    },
+    "window_screenshot": "p1-window.png",
+    "windows_and_tabs": {
+      "ok": true,
+      "sidebar": [
+        [
+          "7E13F53C-1F50-4DB3-8BBC-A20747A111DE",
+          175814668
+        ],
+        [
+          "CBC02E1B-03D6-46B0-BB10-65A5D5AF47EF",
+          175814667
+        ],
+        [
+          "201DBB46-B4C6-4197-B4EE-8A9AF44F0452",
+          175814666
+        ],
+        [
+          "722F30EB-34EC-438E-B3CA-62A3959734DC",
+          175814665
+        ]
+      ],
+      "windows": [
+        {
+          "focused": false,
+          "id": 175814664,
+          "tabs": [
+            {
+              "active": false,
+              "id": 175814668,
+              "index": 0,
+              "pinned": false,
+              "url": "https://www.iana.org/help/example-domains"
+            },
+            {
+              "active": false,
+              "id": 175814667,
+              "index": 1,
+              "pinned": false,
+              "url": "https://example.org/"
+            },
+            {
+              "active": true,
+              "id": 175814666,
+              "index": 2,
+              "pinned": false,
+              "url": "https://bitwarden.com/browser-start/"
+            },
+            {
+              "active": false,
+              "id": 175814665,
+              "index": 3,
+              "pinned": false,
+              "url": "https://example.com/"
+            }
+          ],
+          "type": "normal"
+        }
+      ]
+    }
+  }
+}

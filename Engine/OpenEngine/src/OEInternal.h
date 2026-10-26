@@ -11,6 +11,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_request_context.h"
+#include "include/cef_tab_strip.h"
 #include "include/cef_values.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
@@ -87,6 +88,14 @@ class OEClient;
 @property(nonatomic, weak, nullable) OEBrowser* oe_tabStrip;
 /// Set for extension action popups; resize/close go to this browser.
 @property(nonatomic, weak, nullable) OEBrowser* oe_popupOwner;
+/// The OEBrowser whose hidden Chrome window hosts this page as a tab (fork
+/// patch P1); nil for Alloy and Views-window Chrome style pages.
+@property(nonatomic, weak, nullable) OEBrowser* oe_hostBrowser;
+/// A content for a tab that Chromium creates in `browser` on its own
+/// (CefTabStripHandler::OnBeforeTabCreated). It never creates its own page.
+- (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser;
+- (CefRefPtr<CefDictionaryValue>)oe_extraInfo;
+- (CefBrowserSettings)oe_browserSettings;
 @property(nonatomic, copy, nullable) NSString* oe_popupExtension;
 /// Prepares this (not yet created) content to receive a popup browser from
 /// OnBeforePopup. Fills windowInfo/client for Alloy-style hosting.
@@ -118,6 +127,11 @@ class OEClient;
 @end
 
 @interface OEBrowser ()
+/// The hidden Chrome window (fork patch P1). Created on first use when
+/// `create` is YES; nullptr before the context is ready or after -close.
+- (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create;
+/// Puts Chromium's tab strip in -webContents order on the next turn.
+- (void)oe_setNeedsTabStripSync;
 - (void)oe_popupDidResize:(OEWebContent*)popup size:(NSSize)size;
 - (void)oe_popupRequestedClose:(OEWebContent*)popup;
 - (void)oe_webContentClosed:(OEWebContent*)webContent;

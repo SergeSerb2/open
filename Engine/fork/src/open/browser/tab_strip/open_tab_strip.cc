@@ -1,0 +1,446 @@
+// Copyright 2026 The Open Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "open/browser/tab_strip/open_tab_strip.h"
+
+#include <algorithm>
+
+#include "base/containers/flat_map.h"
+#include "base/functional/bind.h"
+#include "base/no_destructor.h"
+#include "cef/libcef/browser/browser_host_base.h"
+#include "cef/libcef/browser/chrome/browser_util.h"
+#include "cef/libcef/browser/chrome/chrome_browser_host_impl.h"
+#include "cef/libcef/browser/context.h"
+#include "cef/libcef/browser/request_context_impl.h"
+#include "cef/libcef/browser/thread_util.h"
+#include "cef/libcef/common/net/url_util.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/sessions/content/session_tab_helper.h"
+#include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/web_contents.h"
+#include "open/browser/tab_strip/hidden_browser.h"
+#include "open/browser/tab_strip/open_browser_window.h"
+#include "open/browser/tab_strip/open_hosted_platform_delegate.h"
+
+namespace open_engine {
+
+namespace {
+
+base::flat_map<int, OpenTabStrip*>& Strips() {
+  static base::NoDestructor<base::flat_map<int, OpenTabStrip*>> strips;
+  return *strips;
+}
+
+int g_next_strip_id = 1;
+
+}  // namespace
+
+OpenTabStrip::OpenTabStrip(CefRefPtr<CefRequestContextImpl> request_context,
+                           CefRefPtr<CefTabStripHandler> handler)
+    : id_(g_next_strip_id++),
+      request_context_(request_context),
+      handler_(handler) {
+  Strips()[id_] = this;
+}
+
+OpenTabStrip::~OpenTabStrip() {
+  Strips().erase(id_);
+  if (browser_) {
+    browser_->tab_strip_model()->RemoveObserver(this);
+  }
+}
+
+// static
+OpenTabStrip* OpenTabStrip::FromId(int id) {
+  auto it = Strips().find(id);
+  return it == Strips().end() ? nullptr : it->second;
+}
+
+// static
+OpenTabStrip* OpenTabStrip::FromBrowser(const BrowserWindowInterface* browser) {
+  if (!browser) {
+    return nullptr;
+  }
+  for (const auto& [id, strip] : Strips()) {
+    if (strip->browser_ && strip->browser_.get() == browser) {
+      return strip;
+    }
+  }
+  return nullptr;
+}
+
+// static
+int OpenTabStrip::IdForHost(const CefBrowserHostBase* host) {
+  if (!host || !host->platform_delegate()) {
+    return 0;
+  }
+  return OpenHostedPlatformDelegate::StripIdFor(host->platform_delegate());
+}
+
+// static
+std::unique_ptr<CefBrowserPlatformDelegate>
+OpenTabStrip::MaybeCreatePlatformDelegate(
+    const CefBrowserCreateParams& params,
+    std::unique_ptr<CefBrowserPlatformDelegateNative>& native_delegate) {
+  if (!params.open_tab_strip_id || !FromId(params.open_tab_strip_id)) {
+    return nullptr;
+  }
+  return std::make_unique<OpenHostedPlatformDelegate>(
+      std::move(native_delegate), params.open_tab_strip_id);
+}
+
+void OpenTabStrip::GetCreateParamsForNewTab(content::WebContents* contents,
+                                            CefBrowserCreateParams& params) {
+  params.open_tab_strip_id = id_;
+  if (pending_tab_) {
+    // CreateTab: the embedder already chose the client.
+    params.client = pending_tab_->client;
+    params.settings = pending_tab_->settings;
+    params.extra_info = pending_tab_->extra_info;
+    pending_tab_.reset();
+    return;
+  }
+  // Chromium creates this tab on its own: ask the embedder for a client.
+  CefRefPtr<CefClient> client;
+  CefBrowserSettings settings;
+  CefRefPtr<CefDictionaryValue> extra_info;
+  if (handler_) {
+    handler_->OnBeforeTabCreated(this, CefString(), client, settings,
+                                 extra_info);
+  }
+  params.client = client;
+  params.settings = settings;
+  params.extra_info = extra_info;
+}
+
+bool OpenTabStrip::AddPopupContents(
+    std::unique_ptr<content::WebContents>& contents) {
+  Browser* browser = EnsureBrowser();
+  if (!browser) {
+    return false;
+  }
+  // The embedder already knows this page from OnBeforePopup; it places the
+  // tab with UpdateTab.
+  ++applying_;
+  browser->tab_strip_model()->AddWebContents(
+      std::move(contents), TabStripModel::kNoTab, ui::PAGE_TRANSITION_LINK,
+      AddTabTypes::ADD_NONE);
+  --applying_;
+  return true;
+}
+
+bool OpenTabStrip::IsValid() {
+  return !closed_;
+}
+
+int OpenTabStrip::GetWindowId() {
+  CEF_REQUIRE_UIT_RETURN(-1);
+  return browser_ ? browser_->GetSessionID().id() : -1;
+}
+
+void OpenTabStrip::SetHostView(CefWindowHandle view) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  host_view_ = view;
+  if (window_) {
+    window_->SetHostView(view);
+  }
+}
+
+CefRefPtr<CefBrowser> OpenTabStrip::CreateTab(
+    CefRefPtr<CefClient> client,
+    const CefString& url,
+    const CefBrowserSettings& settings,
+    CefRefPtr<CefDictionaryValue> extra_info,
+    int index,
+    bool pinned) {
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  Browser* browser = EnsureBrowser();
+  if (!browser) {
+    return nullptr;
+  }
+  GURL gurl = url_util::MakeGURL(url, /*fixup=*/true);
+  if (gurl.is_empty()) {
+    // As ChromeBrowserHostImpl::Create: do not load the new tab page.
+    gurl = GURL("chrome://ignore/");
+  }
+  TabStripModel* model = browser->tab_strip_model();
+  if (index < 0 || index > model->count()) {
+    index = model->count();
+  }
+  pending_tab_ = PendingTab{client, settings, extra_info};
+  ++applying_;
+  content::WebContents* contents =
+      chrome::AddAndReturnTabAt(browser, gurl, index, /*foreground=*/false,
+                                /*group=*/std::nullopt, pinned);
+  --applying_;
+  pending_tab_.reset();
+  if (!contents) {
+    return nullptr;
+  }
+  return ChromeBrowserHostImpl::GetBrowserForContents(contents).get();
+}
+
+void OpenTabStrip::UpdateTab(CefRefPtr<CefBrowser> browser,
+                             int index,
+                             bool pinned) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  content::WebContents* contents = ContentsFor(browser);
+  if (!browser_ || !contents) {
+    return;
+  }
+  TabStripModel* model = browser_->tab_strip_model();
+  int from = model->GetIndexOfWebContents(contents);
+  if (from == TabStripModel::kNoTab) {
+    return;
+  }
+  ++applying_;
+  if (model->IsTabPinned(from) != pinned) {
+    from = model->SetTabPinned(from, pinned);
+  }
+  // Pinned tabs come first; keep |index| inside the tab's own section.
+  const int first_unpinned = model->IndexOfFirstNonPinnedTab();
+  const int low = pinned ? 0 : first_unpinned;
+  const int high = pinned ? first_unpinned - 1 : model->count() - 1;
+  const int to = std::clamp(index, low, std::max(low, high));
+  if (to != from) {
+    model->MoveWebContentsAt(from, to, /*select_after_move=*/false);
+  }
+  --applying_;
+}
+
+void OpenTabStrip::ActivateTab(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  content::WebContents* contents = ContentsFor(browser);
+  if (!browser_ || !contents) {
+    return;
+  }
+  TabStripModel* model = browser_->tab_strip_model();
+  const int index = model->GetIndexOfWebContents(contents);
+  if (index == TabStripModel::kNoTab || index == model->active_index()) {
+    return;
+  }
+  ++applying_;
+  model->ActivateTabAt(index);
+  --applying_;
+}
+
+int OpenTabStrip::GetTabId(CefRefPtr<CefBrowser> browser) {
+  CEF_REQUIRE_UIT_RETURN(-1);
+  content::WebContents* contents = ContentsFor(browser);
+  return contents ? sessions::SessionTabHelper::IdForTab(contents).id() : -1;
+}
+
+int OpenTabStrip::GetTabCount() {
+  CEF_REQUIRE_UIT_RETURN(0);
+  return browser_ ? browser_->tab_strip_model()->count() : 0;
+}
+
+CefRefPtr<CefBrowser> OpenTabStrip::GetTabAt(int index) {
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  if (!browser_ || index < 0 || index >= browser_->tab_strip_model()->count()) {
+    return nullptr;
+  }
+  return ChromeBrowserHostImpl::GetBrowserForContents(
+             browser_->tab_strip_model()->GetWebContentsAt(index))
+      .get();
+}
+
+int OpenTabStrip::GetActiveIndex() {
+  CEF_REQUIRE_UIT_RETURN(-1);
+  return browser_ ? browser_->tab_strip_model()->active_index() : -1;
+}
+
+void OpenTabStrip::Close() {
+  CEF_REQUIRE_UIT_RETURN_VOID();
+  if (closed_) {
+    return;
+  }
+  closed_ = true;
+  if (window_) {
+    // Closes the remaining tabs, then the Browser (OnBrowserDidClose).
+    window_->Close();
+  }
+}
+
+void OpenTabStrip::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (applying_ > 0 || closed_) {
+    return;
+  }
+  switch (change.type()) {
+    case TabStripModelChange::kInserted:
+      // A tab that Chromium created (chrome.tabs.create, a welcome page).
+      // Whether it is active is part of the creation request.
+      for (const auto& inserted : change.GetInsert()->contents) {
+        PostRequest(Request::kCreated, inserted.contents, inserted.index,
+                    selection.new_contents == inserted.contents);
+      }
+      return;
+    case TabStripModelChange::kMoved: {
+      const TabStripModelChange::Move* move = change.GetMove();
+      PostRequest(Request::kMove, move->contents, move->to_index, false);
+      return;
+    }
+    case TabStripModelChange::kRemoved:
+    case TabStripModelChange::kReplaced:
+      // Closes reach the embedder through the tab's own CEF client. When the
+      // active tab closes Chromium activates a neighbor; the embedder sets
+      // the tab it wants with ActivateTab.
+      return;
+    case TabStripModelChange::kSelectionOnly:
+      break;
+  }
+  if (selection.active_tab_changed() && selection.new_contents) {
+    PostRequest(Request::kActivate, selection.new_contents, -1, false);
+  }
+}
+
+void OpenTabStrip::OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) {
+  if (applying_ > 0 || closed_ || !tab) {
+    return;
+  }
+  PostRequest(Request::kPin, tab->GetContents(), index, tab->IsPinned());
+}
+
+Browser* OpenTabStrip::EnsureBrowser() {
+  if (browser_) {
+    return browser_;
+  }
+  if (closed_) {
+    return nullptr;
+  }
+  Profile* profile = CefRequestContextImpl::GetProfile(request_context_);
+  if (!profile || GetBrowserWindowCreationStatusForProfile(*profile) !=
+                      BrowserWindowInterface::CreationStatus::kOk) {
+    return nullptr;
+  }
+
+  BrowserWindowCreateParams chrome_params(BrowserWindowInterface::TYPE_NORMAL,
+                                          profile,
+                                          /*from_user_gesture=*/false);
+  // Open restores its own windows; Chrome's session service must not.
+  chrome_params.omit_from_session_restore = true;
+  chrome_params.should_trigger_session_restore = false;
+
+  // The Browser's CEF params: tabs created in it are hosted tabs of this
+  // strip (GetCreateParamsForNewTab sets their client).
+  CefBrowserCreateParams cef_params;
+  cef_params.request_context = request_context_.get();
+  cef_params.open_tab_strip_id = id_;
+  chrome_params.cef_params =
+      base::MakeRefCounted<ChromeBrowserHostImpl::DelegateCreateParams>(
+          cef_params);
+
+  auto* window = new OpenBrowserWindow(profile);  // Owned by the Browser.
+  chrome_params.window = window;
+  window_ = window;
+
+  browser_ = cef::BrowserForBWI(CreateBrowserWindow(std::move(chrome_params)));
+  CHECK(browser_);
+  window_->SetBrowser(browser_);
+  window_->SetHostView(host_view_);
+  browser_->tab_strip_model()->AddObserver(this);
+  did_close_subscription_ =
+      browser_->RegisterBrowserDidClose(base::BindRepeating(
+          &OpenTabStrip::OnBrowserDidClose, weak_ptr_factory_.GetWeakPtr()));
+  return browser_;
+}
+
+void OpenTabStrip::OnBrowserDidClose(BrowserWindowInterface* browser) {
+  if (browser != browser_.get()) {
+    return;
+  }
+  // Chrome deletes the Browser (and its window) on the next turn.
+  browser_->tab_strip_model()->RemoveObserver(this);
+  did_close_subscription_ = {};
+  browser_ = nullptr;
+  window_ = nullptr;
+}
+
+content::WebContents* OpenTabStrip::ContentsFor(
+    CefRefPtr<CefBrowser> browser) const {
+  auto host = CefBrowserHostBase::FromBrowser(browser);
+  return host ? host->GetWebContents() : nullptr;
+}
+
+void OpenTabStrip::PostRequest(Request request,
+                               content::WebContents* contents,
+                               int index,
+                               bool flag) {
+  if (!handler_ || !contents) {
+    return;
+  }
+  // Deliver after the TabStripModel notification unwinds: the embedder
+  // answers with UpdateTab/ActivateTab, and TabStripModel is not re-entrant.
+  CEF_POST_TASK(CEF_UIT, base::BindOnce(&OpenTabStrip::DeliverRequest,
+                                        weak_ptr_factory_.GetWeakPtr(), request,
+                                        contents->GetWeakPtr(), index, flag));
+}
+
+void OpenTabStrip::DeliverRequest(Request request,
+                                  base::WeakPtr<content::WebContents> contents,
+                                  int index,
+                                  bool flag) {
+  if (!handler_ || !contents || closed_) {
+    return;
+  }
+  auto host = ChromeBrowserHostImpl::GetBrowserForContents(contents.get());
+  if (!host) {
+    return;
+  }
+  CefRefPtr<CefTabStrip> self(this);
+  switch (request) {
+    case Request::kCreated: {
+      const int current =
+          browser_ ? browser_->tab_strip_model()->GetIndexOfWebContents(
+                         contents.get())
+                   : index;
+      handler_->OnTabCreated(self, host.get(), current, flag);
+      break;
+    }
+    case Request::kActivate:
+      handler_->OnTabActivateRequested(self, host.get());
+      break;
+    case Request::kMove:
+      handler_->OnTabMoveRequested(self, host.get(), index);
+      break;
+    case Request::kPin:
+      handler_->OnTabPinRequested(self, host.get(), flag);
+      break;
+  }
+}
+
+bool IsHiddenTabStripBrowser(const BrowserWindowInterface* browser) {
+  return OpenTabStrip::FromBrowser(browser) != nullptr;
+}
+
+}  // namespace open_engine
+
+// static
+CefRefPtr<CefTabStrip> CefTabStrip::Create(
+    CefRefPtr<CefRequestContext> request_context,
+    CefRefPtr<CefTabStripHandler> handler) {
+  if (!CONTEXT_STATE_VALID()) {
+    DCHECK(false) << "context not valid";
+    return nullptr;
+  }
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  if (!request_context) {
+    request_context = CefRequestContext::GetGlobalContext();
+  }
+  CefRefPtr<CefRequestContextImpl> impl(
+      static_cast<CefRequestContextImpl*>(request_context.get()));
+  if (!impl->VerifyBrowserContext()) {
+    return nullptr;
+  }
+  return new open_engine::OpenTabStrip(impl, handler);
+}

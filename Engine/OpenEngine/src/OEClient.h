@@ -196,5 +196,7 @@ class OEClient : public CefClient,
  private:
   __weak OEWebContent* view_;
   bool closing_ = false;
+  // The shell was told about a close it did not start (oe_requestClose).
+  bool close_requested_ = false;
   IMPLEMENT_REFCOUNTING(OEClient);
 };

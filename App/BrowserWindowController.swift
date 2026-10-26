@@ -156,19 +156,23 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   /// today), splits and folders flattened.
   var orderedTabs: [Tab] {
     var out: [Tab] = []
-    func walk(_ nodes: [SidebarNode]) {
-      for node in nodes {
-        switch node {
-        case .tab(let t): out.append(t)
-        case .folder(let f): walk(f.children)
-        case .split(let s): out.append(contentsOf: s.panes)
-        }
-      }
-    }
     if let profile = focusedProfile { out.append(contentsOf: profile.favorites) }
     if let space = focusedSpace {
-      walk(space.pinned)
-      walk(space.today)
+      out.append(contentsOf: Self.flatten(space.pinned))
+      out.append(contentsOf: Self.flatten(space.today))
+    }
+    return out
+  }
+
+  /// The tabs of `nodes` in sidebar order, splits and folders flattened.
+  static func flatten(_ nodes: [SidebarNode]) -> [Tab] {
+    var out: [Tab] = []
+    for node in nodes {
+      switch node {
+      case .tab(let t): out.append(t)
+      case .folder(let f): out.append(contentsOf: flatten(f.children))
+      case .split(let s): out.append(contentsOf: s.panes)
+      }
     }
     return out
   }
@@ -196,6 +200,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   }
 
   var focusedBrowser: OEBrowser? { focusedSpace.map { engineBrowser(for: $0.profileID) } }
+
+  /// The profile whose tab strip `browser` is in this window.
+  func profileID(for browser: OEBrowser) -> ProfileID? {
+    browsers.first { $0.value === browser }?.key
+  }
 
   func tabID(for content: OEWebContent) -> ItemID? { tabIDByContent[ObjectIdentifier(content)] }
 
@@ -427,20 +436,44 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     tab.live.isCrashed = false
   }
 
-  /// Keeps every OEBrowser's tab strip in sidebar order (the input of fork
-  /// patch P1).
-  private func syncTabStrips() {
-    guard let space = focusedSpace else { return }
-    let browser = engineBrowser(for: space.profileID)
-    let favorites = Set(focusedProfile?.favorites.map(\.id) ?? [])
-    var index = 0
-    for tab in orderedTabs {
-      guard let content = contents[tab.id] else { continue }
+  /// Keeps every OEBrowser's tab strip (one per profile in this window) in
+  /// a stable order, which chrome.tabs sees with fork patch P1: the
+  /// profile's favorites, then every Space's pinned tabs, then every Space's
+  /// Today tabs, in Space order. Only tabs with a page are in a strip, so a
+  /// Space switch does not change it. The focused tab is the active one.
+  func syncTabStrips() {
+    var next: [ProfileID: Int] = [:]
+    func place(_ tab: Tab, profile: ProfileID, pinned: Bool) {
+      guard let content = contents[tab.id] else { return }
+      let browser = engineBrowser(for: profile)
+      let index = next[profile, default: 0]
       browser.insert(content, at: UInt(index))
-      browser.setPinned(favorites.contains(tab.id) || model.isPinned(tabID: tab.id), for: content)
-      index += 1
+      browser.setPinned(pinned, for: content)
+      next[profile] = index + 1
     }
-    browser.activeWebContent = selectedContent
+    for profile in model.profiles {
+      for tab in profile.favorites { place(tab, profile: profile.id, pinned: true) }
+    }
+    for space in model.spaces {
+      for tab in Self.flatten(space.pinned) { place(tab, profile: space.profileID, pinned: true) }
+    }
+    for space in model.spaces {
+      for tab in Self.flatten(space.today) { place(tab, profile: space.profileID, pinned: false) }
+    }
+    focusedBrowser?.activeWebContent = selectedContent
+  }
+
+  /// Makes `content`, a page the engine opened on its own, the page of
+  /// `tab` (fork patch P1: chrome.tabs.create and similar).
+  func adopt(_ content: OEWebContent, for tab: Tab) {
+    content.delegate = self
+    content.isMuted = tab.isMuted
+    content.view.isHidden = true
+    content.view.frame = contentContainer.bounds
+    contentContainer.addSubview(content.view)
+    contents[tab.id] = content
+    tabIDByContent[ObjectIdentifier(content)] = tab.id
+    syncTabStrips()
   }
 
   /// Shows the selected node's page(s) and updates the chrome.

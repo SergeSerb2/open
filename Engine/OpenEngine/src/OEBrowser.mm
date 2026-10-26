@@ -1,13 +1,29 @@
-// OEBrowser: one shell window's tab strip and its extension actions.
+// OEBrowser: one shell window's tab strip (per profile) and its extension
+// actions.
 //
-// Stock CEF has no way to give Chromium's extension system a tab strip that
-// is not a Chrome window, so here the tab strip is bookkeeping that the shell
-// keeps exact. Fork patch P1 (docs/engine-patches.md) mirrors it into a
-// hidden Chrome Browser/TabStripModel; P2 replaces the manifest-based actions
-// and the URL-loaded popup with Chrome's ToolbarActionsModel and a real
-// ExtensionViewHost popup.
+// Fork patch P1 (docs/engine-patches.md): each OEBrowser owns a CefTabStrip,
+// one hidden Chrome Browser + TabStripModel with no Views. Chrome style
+// contents inserted here become its tabs, hosted in our views, so
+// chrome.tabs and chrome.windows see the shell's tabs. The shell owns order,
+// pinning, and selection; this class mirrors them into the strip, and turns
+// Chromium's own tab changes into delegate requests. P2 replaces the
+// manifest-based actions and the URL-loaded popup with Chrome's
+// ToolbarActionsModel and a real ExtensionViewHost popup.
 
-#import "OEInternal.h"
+#import "OEClient.h"
+
+#include "include/internal/cef_types_mac.h"
+
+@interface OEBrowser ()
+- (void)oe_prepareChromiumTabClient:(CefRefPtr<CefClient>&)client
+                           settings:(CefBrowserSettings&)settings
+                          extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo;
+- (void)oe_chromiumTabCreated:(CefRefPtr<CefBrowser>)browser
+                       active:(BOOL)active;
+- (void)oe_activationRequested:(CefRefPtr<CefBrowser>)browser;
+- (void)oe_moveRequested:(CefRefPtr<CefBrowser>)browser toStripIndex:(int)index;
+- (void)oe_pinRequested:(CefRefPtr<CefBrowser>)browser pinned:(BOOL)pinned;
+@end
 
 namespace {
 
@@ -18,6 +34,46 @@ constexpr NSSize kPopupMaxSize = {800, 600};
 
 NSInteger gNextBrowserIdentifier = 1;
 
+// Chromium's tab requests, on the browser UI thread (our main thread).
+class OETabStripHandler : public CefTabStripHandler {
+ public:
+  explicit OETabStripHandler(OEBrowser* browser) : browser_(browser) {}
+
+  void OnBeforeTabCreated(CefRefPtr<CefTabStrip> tab_strip,
+                          const CefString& target_url,
+                          CefRefPtr<CefClient>& client,
+                          CefBrowserSettings& settings,
+                          CefRefPtr<CefDictionaryValue>& extra_info) override {
+    [browser_ oe_prepareChromiumTabClient:client
+                                 settings:settings
+                                extraInfo:extra_info];
+  }
+  void OnTabCreated(CefRefPtr<CefTabStrip> tab_strip,
+                    CefRefPtr<CefBrowser> browser,
+                    int index,
+                    bool active) override {
+    [browser_ oe_chromiumTabCreated:browser active:active];
+  }
+  void OnTabActivateRequested(CefRefPtr<CefTabStrip> tab_strip,
+                              CefRefPtr<CefBrowser> browser) override {
+    [browser_ oe_activationRequested:browser];
+  }
+  void OnTabMoveRequested(CefRefPtr<CefTabStrip> tab_strip,
+                          CefRefPtr<CefBrowser> browser,
+                          int index) override {
+    [browser_ oe_moveRequested:browser toStripIndex:index];
+  }
+  void OnTabPinRequested(CefRefPtr<CefTabStrip> tab_strip,
+                         CefRefPtr<CefBrowser> browser,
+                         bool pinned) override {
+    [browser_ oe_pinRequested:browser pinned:pinned];
+  }
+
+ private:
+  __weak OEBrowser* browser_;
+  IMPLEMENT_REFCOUNTING(OETabStripHandler);
+};
+
 }  // namespace
 
 @implementation OEBrowser {
@@ -26,7 +82,15 @@ NSInteger gNextBrowserIdentifier = 1;
   NSArray<OEExtensionAction*>* _actions;
   OEWebContent* _popup;
   OEExtensionAction* _popupAction;
+  // Fork patch P1.
+  CefRefPtr<CefTabStrip> _strip;
+  // Pages Chromium is creating in the strip, until OnTabCreated.
+  NSMutableArray<OEWebContent*>* _chromiumTabs;
+  BOOL _stripSyncScheduled;
+  BOOL _closed;
 }
+
+@synthesize window = _window;
 
 - (instancetype)initWithContext:(OEBrowserContext*)context {
   if ((self = [super init])) {
@@ -34,15 +98,33 @@ NSInteger gNextBrowserIdentifier = 1;
     _context = context;
     _tabs = [NSMutableArray array];
     _pinned = [NSHashTable weakObjectsHashTable];
+    _chromiumTabs = [NSMutableArray array];
     [[OEEngine shared] oe_registerBrowser:self];
   }
   return self;
+}
+
+- (void)dealloc {
+  if (_strip) {
+    _strip->Close();
+  }
 }
 
 - (NSString*)description {
   return [NSString stringWithFormat:@"<OEBrowser %ld tabs=%lu>",
                                     (long)_identifier,
                                     (unsigned long)_tabs.count];
+}
+
+- (void)setWindow:(NSWindow*)window {
+  _window = window;
+  if (_strip) {
+    _strip->SetHostView(CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(window.contentView));
+  }
+}
+
+- (NSInteger)chromeWindowIdentifier {
+  return _strip ? _strip->GetWindowId() : -1;
 }
 
 #pragma mark Tab strip
@@ -56,8 +138,15 @@ NSInteger gNextBrowserIdentifier = 1;
   if (old && old != self) {
     [old removeWebContent:webContent];
   }
-  [_tabs removeObject:webContent];
-  [_tabs insertObject:webContent atIndex:MIN(index, _tabs.count)];
+  NSUInteger current = [_tabs indexOfObjectIdenticalTo:webContent];
+  NSUInteger target = MIN(index, _tabs.count - (current == NSNotFound ? 0 : 1));
+  if (current != target) {
+    if (current != NSNotFound) {
+      [_tabs removeObjectAtIndex:current];
+    }
+    [_tabs insertObject:webContent atIndex:target];
+    [self oe_setNeedsTabStripSync];
+  }
   webContent.oe_tabStrip = self;
 }
 
@@ -76,19 +165,25 @@ NSInteger gNextBrowserIdentifier = 1;
 }
 
 - (void)moveWebContent:(OEWebContent*)webContent toIndex:(NSUInteger)index {
-  if (![_tabs containsObject:webContent]) {
+  NSUInteger current = [_tabs indexOfObjectIdenticalTo:webContent];
+  if (current == NSNotFound) {
     return;
   }
-  [_tabs removeObject:webContent];
+  [_tabs removeObjectAtIndex:current];
   [_tabs insertObject:webContent atIndex:MIN(index, _tabs.count)];
+  [self oe_setNeedsTabStripSync];
 }
 
 - (void)setPinned:(BOOL)pinned forWebContent:(OEWebContent*)webContent {
+  if (pinned == [_pinned containsObject:webContent]) {
+    return;
+  }
   if (pinned) {
     [_pinned addObject:webContent];
   } else {
     [_pinned removeObject:webContent];
   }
+  [self oe_setNeedsTabStripSync];
 }
 
 - (BOOL)isPinnedWebContent:(OEWebContent*)webContent {
@@ -99,7 +194,11 @@ NSInteger gNextBrowserIdentifier = 1;
   if (activeWebContent && ![_tabs containsObject:activeWebContent]) {
     return;
   }
+  if (_activeWebContent == activeWebContent) {
+    return;
+  }
   _activeWebContent = activeWebContent;
+  [self oe_setNeedsTabStripSync];
 }
 
 - (void)oe_webContentClosed:(OEWebContent*)webContent {
@@ -107,6 +206,7 @@ NSInteger gNextBrowserIdentifier = 1;
     [self oe_finishPopup];
     return;
   }
+  [_chromiumTabs removeObject:webContent];
   [self removeWebContent:webContent];
 }
 
@@ -115,6 +215,163 @@ NSInteger gNextBrowserIdentifier = 1;
   for (OEWebContent* content in [_tabs copy]) {
     [self removeWebContent:content];
   }
+  for (OEWebContent* content in [_chromiumTabs copy]) {
+    [content close];
+  }
+  _closed = YES;
+  if (_strip) {
+    _strip->Close();
+    _strip = nullptr;
+  }
+}
+
+#pragma mark Hidden Chrome window (fork patch P1)
+
+- (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create {
+  if (!_strip && create && !_closed) {
+    _strip = CefTabStrip::Create(_context.oe_requestContext,
+                                 new OETabStripHandler(self));
+    if (_strip) {
+      _strip->SetHostView(
+          CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(_window.contentView));
+    }
+  }
+  return _strip;
+}
+
+- (void)oe_setNeedsTabStripSync {
+  if (!_strip || _stripSyncScheduled) {
+    return;
+  }
+  _stripSyncScheduled = YES;
+  __weak OEBrowser* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf oe_syncTabStrip];
+  });
+}
+
+// Puts the strip in -webContents order. Chrome keeps pinned tabs first; the
+// shell orders favorites and pinned tabs first anyway. Tabs the shell has not
+// placed (sized popups in panels) stay after these.
+- (void)oe_syncTabStrip {
+  _stripSyncScheduled = NO;
+  if (!_strip) {
+    return;
+  }
+  NSMutableArray<OEWebContent*>* pinned = [NSMutableArray array];
+  NSMutableArray<OEWebContent*>* unpinned = [NSMutableArray array];
+  for (OEWebContent* content in _tabs) {
+    if (content.oe_hostBrowser == self && content.oe_browser) {
+      [([_pinned containsObject:content] ? pinned : unpinned)
+          addObject:content];
+    }
+  }
+  int index = 0;
+  for (OEWebContent* content in [pinned arrayByAddingObjectsFromArray:unpinned]) {
+    _strip->UpdateTab(content.oe_browser, index++,
+                      [_pinned containsObject:content]);
+  }
+  OEWebContent* active = _activeWebContent;
+  if (active.oe_hostBrowser == self && active.oe_browser) {
+    _strip->ActivateTab(active.oe_browser);
+  }
+}
+
+- (nullable OEWebContent*)oe_contentForBrowser:(CefRefPtr<CefBrowser>)browser {
+  return browser ? [[OEEngine shared]
+                       webContentWithIdentifier:browser->GetIdentifier()]
+                 : nil;
+}
+
+- (void)oe_prepareChromiumTabClient:(CefRefPtr<CefClient>&)client
+                           settings:(CefBrowserSettings&)settings
+                          extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo {
+  OEWebContent* content =
+      [[OEWebContent alloc] initOEForChromiumTabInBrowser:self];
+  [_chromiumTabs addObject:content];
+  client = content.oe_client.get();
+  settings = [content oe_browserSettings];
+  extraInfo = [content oe_extraInfo];
+}
+
+- (void)oe_chromiumTabCreated:(CefRefPtr<CefBrowser>)browser
+                       active:(BOOL)active {
+  OEWebContent* content = nil;
+  for (OEWebContent* candidate in _chromiumTabs) {
+    if (candidate.oe_browser && candidate.oe_browser->IsSame(browser)) {
+      content = candidate;
+      break;
+    }
+  }
+  if (!content) {
+    return;
+  }
+  [_chromiumTabs removeObject:content];
+  if ([_delegate respondsToSelector:@selector(browser:
+                                        didOpenWebContent:active:)]) {
+    [_delegate browser:self didOpenWebContent:content active:active];
+  } else {
+    [content close];
+  }
+  [self oe_setNeedsTabStripSync];
+}
+
+- (void)oe_activationRequested:(CefRefPtr<CefBrowser>)browser {
+  OEWebContent* content = [self oe_contentForBrowser:browser];
+  if (content && [_tabs containsObject:content]) {
+    if ([_delegate respondsToSelector:@selector(browser:
+                                          requestsActivationOfWebContent:)]) {
+      [_delegate browser:self requestsActivationOfWebContent:content];
+    } else {
+      self.activeWebContent = content;
+    }
+  }
+  // Put back whatever the shell decided.
+  [self oe_setNeedsTabStripSync];
+}
+
+- (void)oe_moveRequested:(CefRefPtr<CefBrowser>)browser
+            toStripIndex:(int)index {
+  OEWebContent* content = [self oe_contentForBrowser:browser];
+  if (content && [_tabs containsObject:content]) {
+    // Chromium already moved the tab: place it before the tab that now
+    // follows it in the strip, else after the one before it.
+    OEWebContent* next = [self oe_contentForBrowser:_strip->GetTabAt(index + 1)];
+    OEWebContent* previous =
+        index > 0 ? [self oe_contentForBrowser:_strip->GetTabAt(index - 1)]
+                  : nil;
+    NSMutableArray* others = [_tabs mutableCopy];
+    [others removeObjectIdenticalTo:content];
+    NSUInteger target = others.count;
+    if (next && [others indexOfObjectIdenticalTo:next] != NSNotFound) {
+      target = [others indexOfObjectIdenticalTo:next];
+    } else if (previous &&
+               [others indexOfObjectIdenticalTo:previous] != NSNotFound) {
+      target = [others indexOfObjectIdenticalTo:previous] + 1;
+    }
+    if ([_delegate respondsToSelector:@selector(browser:
+                                          requestsMoveOfWebContent:toIndex:)]) {
+      [_delegate browser:self
+          requestsMoveOfWebContent:content
+                           toIndex:target];
+    } else {
+      [self moveWebContent:content toIndex:target];
+    }
+  }
+  [self oe_setNeedsTabStripSync];
+}
+
+- (void)oe_pinRequested:(CefRefPtr<CefBrowser>)browser pinned:(BOOL)pinned {
+  OEWebContent* content = [self oe_contentForBrowser:browser];
+  if (content && [_tabs containsObject:content]) {
+    if ([_delegate respondsToSelector:@selector(browser:
+                                          requestsPinned:forWebContent:)]) {
+      [_delegate browser:self requestsPinned:pinned forWebContent:content];
+    } else {
+      [self setPinned:pinned forWebContent:content];
+    }
+  }
+  [self oe_setNeedsTabStripSync];
 }
 
 #pragma mark Extension actions
@@ -168,8 +425,10 @@ NSInteger gNextBrowserIdentifier = 1;
   // return the page the user is looking at (patch P2).
   OEWebContentConfiguration* config =
       [[OEWebContentConfiguration alloc] initWithContext:_context];
-  config.runtimeStyle =
-      _activeWebContent ? _activeWebContent.runtimeStyle : config.runtimeStyle;
+  // Alloy until patch P2: a Chrome style popup would get its own Views
+  // window. Its chrome.tabs calls see this window as the current window
+  // (the most recently active Chrome window of the profile, P1).
+  config.runtimeStyle = OERuntimeStyleAlloy;
   OEWebContent* popup = [[OEWebContent alloc] initWithConfiguration:config
                                                                 URL:action.popupURL];
   popup.oe_popupOwner = self;
