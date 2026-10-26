@@ -76,6 +76,7 @@ public extension AutoArchiveInterval {
         "open.links.externalInLittleOpen": true, "open.links.littleOpenHotkeyEnabled": true,
         "open.links.optionCommandClickLittleOpen": true, "open.links.openPeekOtherSites": true,
         "open.links.openPeekShiftClick": true, "open.advanced.restoreWindowsOnLaunch": true,
+        "open.pip.autoDisabledHosts": [String](), "open.pip.keepOnTop": true,
         "open.advanced.enablePictureInPictureOnLeave": true, "open.advanced.allowWindowDraggingFromWebTop": false,
         "open.advanced.showFullURLWithToolbar": false, "open.advanced.enableBoosts": true,
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,

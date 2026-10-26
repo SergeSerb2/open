@@ -146,6 +146,14 @@ except where a section says Save.
 | `open.appIcon.selectedID` | String (`openDefault`/`openDark`/`openLight`/`openMono`/`openColor`/`openRetro`) | `openDefault` | App Icon; `NSApp.applicationIconImage` / alternate icon |
 | `open.import.lastArcDir` | String (path) | none | Import wizard (path only; never commit) |
 | `open.library.lastSection` | String (`archive`/`downloads`/`captures`/`media`/`history`) | `archive` | Library restore |
+| `open.translate.enabled` | Bool | `true` | Page translation offer (`docs/plans/page-platform.md` §4.7); no Settings row |
+| `open.translate.neverTranslateHosts` | [String] (lowercase hosts) | `[]` | "Never Translate This Site"; cleared by "Reset Translated-site Prompts" (page-platform §4.7.7) |
+| `open.capture.dragToCaptureEnabled` | Bool | `true` | Cmd+Shift drag to capture (page-platform §4.6.2); no Settings row |
+| `open.capture.shortcutHintLastShown` | Double (Unix time) | `0` | Capture shortcut hint toast cadence (page-platform §4.6.7) |
+| `open.capture.portraitBackground` | String (`theme`/`white`/`black`) | `theme` | Portrait capture background (page-platform §4.6.4, guess) |
+| `open.web.colorScheme` | String (`automatic`/`light`/`dark`) | `automatic` | View ▸ Appearance for websites (page-platform §4.8) |
+| `open.developer.allowJavaScriptFromAppleEvents` | Bool | `false` | View ▸ Developer ▸ Allow JavaScript from Apple Events; gates AppleScript `execute` (page-platform §4.10.2) |
+| `open.developer.modeHosts` | [String] (lowercase hosts) | `[]` | Per-site Developer Mode (page-platform §4.10.3) |
 
 Register app defaults once at launch with
 `UserDefaults.standard.register(defaults:)` using this table. Reads
