@@ -1127,7 +1127,12 @@ with the fixed gray harness backdrop, because the blue tint behind Add in
 F0137 belongs to the blur, not the glyph. Raw cores stay listed in the
 table. Add's raw ΔE is 2.02; material-compensated ΔE is 0.36.
 
-F0137 calibration (Step 3; sizes are SF point sizes, Medium modes, Semibold Remove/Add after review R3):
+Initial F0137 calibration (Step 3, before the session-2 R3 review; sizes are SF point sizes):
+
+This table preserves the initial comparison. R3 supersedes its Remove/Add
+tokens with Semibold 16 pt in the shared `glyph` color, and sets the light
+glyph alpha to 0.50 with disabled factor 0.32. See the corrected R3 sampling
+entry below for the current tokens and result.
 
 | Glyph | Old token | Calibrated token | Center error x/y (pt) | Height error (pt) | Core ΔE00 old → new |
 |---|---|---|---|---|---|
