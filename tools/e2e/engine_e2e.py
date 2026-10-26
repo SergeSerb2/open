@@ -870,7 +870,6 @@ def shell_checks(app_factory, results, tmp):
         app.quit()
 
     # Relaunch: same tabs, same IDs, only the selected tab loads (lazy).
-    t0 = time.time()
     app = app_factory(urls=())
     try:
         time.sleep(2)
@@ -2245,12 +2244,13 @@ def colored_look(png, scale, centers):
 def ensure_key(app, wid, timeout=15):
     """Makes the window key; macOS refuses to activate an app while someone uses another one,
     so this asks again until it holds. Returns the state, key or not."""
-    deadline = time.time() + timeout
+    app.begin_timing("key-window readiness")
+    deadline = time.monotonic() + timeout
     while True:
         app.call("window-focus", id=wid, activate=True)
         time.sleep(0.25)
         st = app.call("window-state", id=wid)
-        if (st["key"] and st["appActive"]) or time.time() > deadline:
+        if (st["key"] and st["appActive"]) or time.monotonic() > deadline:
             return st
 
 
@@ -2566,6 +2566,7 @@ def window_chrome_checks(factory, results, tmp):
         app.call("window-focus", id=wid, activate=True)
         card_activity = window_activity(app)
         app.call("snapshot", path=card_png)
+        app.begin_timing("reveal dismiss latency")
         t1 = time.monotonic()
         app.call("mouse", action="move", x=700, y=400)
         leaving = state_when(app, lambda st: st["reveal"]["phase"] == "idle", timeout=2, step=0.01)
