@@ -192,7 +192,8 @@ preferences or user Profile directories are written.
 ## CLI acceptance, 2026-10-25
 
 Host: Apple M5 Pro, macOS 27.2. Build from `Packages/OpenKit` only:
-`nice -n 10 swift build -c release -j 6`. No unit tests, app/desktop automation,
+`nice -n 10 swift build -c release -j 6`. Final verification ran after merging `origin/main` through `f4f87da` and retained
+all OpenKit targets and import CLI commands. No unit tests, app/desktop automation,
 engine build, or shared Chromium-tree operations ran.
 
 Commands below use `CLI=Packages/OpenKit/.build/release/openkit` and a fresh
@@ -206,7 +207,7 @@ of this real CLI. No mocked transport or injected list response was used.
 | Conditional GET | Repeat update | Both 304; zero downloaded body bytes; zero reloads |
 | Profile tamper | Flip byte 500 in `lists/EasyList.txt`, then update | Failed local integrity; unconditional 200; original good SHA restored; one reload |
 | Bundle tamper | Flip byte 500 in staged `easylist.txt`; open with `--bundled-dir`; then `adblock bundle --dir <stage>` | Pin mismatch rejected the seed; repair fetched official bytes and restored the fixed pin |
-| Unreachable network | `adblock update --dir "$ROOT" --proxy http://127.0.0.1:9 --timeout 2` | Exit 1; `EasyList: network error (310); attempts=3`; 3.15 s; both old list hashes unchanged; error persisted |
+| Unreachable network | `adblock update --dir "$ROOT" --proxy http://127.0.0.1:9 --timeout 2` | Exit 1; `EasyList: network error (310); attempts=3`; 3.34 s; both old list hashes unchanged; error persisted |
 | Size cap | `adblock update --dir "$ROOT" --max-bytes 100` | Exit 1; source size limit; one attempt; both old list hashes unchanged |
 | Allowlist persistence | Add/list/check/remove across separate CLI processes | Case/trailing-dot/wildcard normalization; subdomain true; adjacent-domain false; Unicode/punycode equivalent; removal persisted |
 | Private suffix + IP | Add `news.alice.github.io` and `127.0.0.1` | `alice.github.io` stored; `bob.github.io` remained blocked; IP allowlisted |
@@ -218,7 +219,7 @@ of this real CLI. No mocked transport or injected list response was used.
 | Multi-URL | Enable `fi`, then update | Both official sources fetched; final bytes equal source 0 + newline + source 1; later `304,304` |
 | Offline first open | `adblock status --bundled-dir <verified-stage> --proxy http://127.0.0.1:9 --dir <fresh>` | Both defaults seeded from pinned files with no download |
 | Incognito | `adblock status --incognito --bundled-dir <stage> --dir <unused>` | Temporary seeded directory removed at exit; supplied persistent root never created |
-| Performance | `adblock perf --dir <tmp>` | 10 groups × 1,000 lookups, 5,000 matches; combined saved-model load + 1,000 lookups p95 **0.7557 ms**, below 1 ms |
+| Performance | `adblock perf --dir <tmp>` | 10 groups × 1,000 lookups, 5,000 matches; combined saved-model load + 1,000 lookups p95 **0.8130 ms**, below 1 ms |
 | Existing CLIs | Real `import-arc`, `roundtrip`, `commands-demo`, `suggest-check`, `commands-dump` | Import accounting OK; roundtrip OK; commands-demo 66/66; suggest-check 31/31; commands-dump OK |
 
 The performance clock starts before each fresh `AdBlockStore` construction and
@@ -236,8 +237,25 @@ differ from bundled release pins):
 
 | List | Bytes | SHA-256 | ETag | Download / 304 duration |
 |---|---:|---|---|---|
-| EasyList | 2,250,219 | `a0d4febfde2357c05860a2f9d8ab8cd933fb4162c6da51785e428d864eb6ebca` | `W/"6adea500-2255eb"` | 83.87 / 51.33 ms |
-| EasyPrivacy | 1,511,221 | `909ce5a652f8929c3eda1da4a86f363b840f2932ff4139c0ee59f8fdef0da23c` | `W/"6adea5f5-170f35"` | 46.42 / 35.13 ms |
+| EasyList | 2,250,219 | `a0d4febfde2357c05860a2f9d8ab8cd933fb4162c6da51785e428d864eb6ebca` | `W/"6adea500-2255eb"` | 80.09 / 49.44 ms |
+| EasyPrivacy | 1,511,221 | `909ce5a652f8929c3eda1da4a86f363b840f2932ff4139c0ee59f8fdef0da23c` | `W/"6adea5f5-170f35"` | 43.05 / 55.76 ms |
+
+Final reviewed bundled seeds (separate from the runtime receipt above):
+
+| File | Bytes | Lines | SHA-256 |
+|---|---:|---:|---|
+| easylist.txt | 2,250,326 | 86,359 | `f167f3d1a0f5f0db5fcea739a51addc841c6abcd237a036963216b285403c13f` |
+| easyprivacy.txt | 1,511,221 | 57,181 | `909ce5a652f8929c3eda1da4a86f363b840f2932ff4139c0ee59f8fdef0da23c` |
+
+The final merged-tree run first encountered a new EasyList revision while repairing
+an older pinned seed. Repair exited 1 with `downloaded bundle SHA-256 pin mismatch`
+and did not overwrite the damaged file with unpinned bytes. After an explicit
+reviewed `--update-pins` refresh and the same bounded release build, the final pin
+check rejected the tampered seed and the repair fetched 2,250,326 bytes from the
+official host in 76.98 ms, verified the new pin, and replaced it. Offline seeding,
+incognito cleanup, and the performance budget then passed on that final build.
+The ordinary build-time fetch also passed with the reviewed pins. All other
+adblock flows and the five required existing CLIs passed on the merged sources.
 
 ## Scope deviations and remaining integration
 
