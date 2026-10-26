@@ -392,7 +392,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func syncSelectionIndexes() {
-        guard !applyingBulk, !mirroringSelection else { return }
+        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted else { return }
         let wanted = IndexSet(context.selection.ids.compactMap { id in
             guard let object = context.model.node(id: id)?.object else { return nil }
             let row = outline.row(forItem: object)
@@ -634,6 +634,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         draggingIDs = []
+        outline.dragWasStarted = false
+        syncSelectionIndexes()
         updateRowStates(animated: false)
     }
 
@@ -714,6 +716,16 @@ final class SidebarOutlineView: NSOutlineView {
         dragWasStarted = false
         let pressedRow = row(at: convert(event.locationInWindow, from: nil))
         let pressedItem = pressedRow >= 0 ? item(atRow: pressedRow) : nil
+        let pressedControl: NSView? = {
+            guard pressedRow >= 0, let row = rowView(atRow: pressedRow, makeIfNecessary: false), let parent = row.superview else { return nil }
+            var hit = row.hitTest(parent.convert(event.locationInWindow, from: nil))
+            while let view = hit, view !== row {
+                if view is PlateButton || view is NSControl { return view }
+                hit = view.superview
+            }
+            return nil
+        }()
+        if let pressedControl { pressedControl.mouseDown(with: event); return }
         if let page {
             let row = row(at: convert(event.locationInWindow, from: nil))
             if row >= 0, let item = item(atRow: row), page.modifySelection(item: item, modifiers: event.modifierFlags) {
@@ -729,7 +741,7 @@ final class SidebarOutlineView: NSOutlineView {
         super.mouseDown(with: event)
         // AppKit can omit its action for a row that was already in the mirrored
         // native selection. Preserve drag tracking, then handle a plain release.
-        if !didActivateMouseDown, !dragWasStarted, let pressedItem {
+        if !didActivateMouseDown, !dragWasStarted, pressedControl == nil, let pressedItem {
             if event.clickCount >= 2 { page?.beginRename(item: pressedItem as AnyObject) }
             else { page?.activate(item: pressedItem) }
         }

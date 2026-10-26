@@ -153,6 +153,11 @@ public final class SidebarContext {
         if consumes, !accepted {
             selection.select(previousIDs, anchor: previousAnchor)
             sidebar.pager.currentPage?.syncSelectionIndexes()
+        } else if accepted, case .archiveNodes = intent, let page = sidebar.pager.currentPage {
+            let visible = Set(page.selectableOrder)
+            let kept = previousIDs.filter { visible.contains($0) && model.node(id: $0) != nil }
+            selection.select(kept, anchor: previousAnchor.flatMap { kept.contains($0) ? $0 : nil } ?? kept.first)
+            page.syncSelectionIndexes()
         }
         return accepted
     }

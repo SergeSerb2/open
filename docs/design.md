@@ -663,8 +663,9 @@ animation is outside that command-work measurement. Menu actions have separate
 functional checks. Selection toggle p95 was 0.22 ms with zero row layouts; scroll
 p95 was 2.74 ms in that local cohort. These are load-dependent measurements.
 
-Option changes the label to **Clear unselected** (lead Q14), widens the control
-leftward, and updates its tooltip without pointer movement. Its action keeps the
+Lead Q14 clarification: Option changes only the tooltip to **Clear unselected
+Today tabs**. The label remains **↓ Clear** and its width never changes. The
+tooltip updates without pointer movement and resets when the window resigns key. Its action keeps the
 current row and selected rows through `clearToday(space:keeping:)`. The Today
 menu's Archive Other Tabs is a native Option alternate immediately after Archive
 Item. A per-window local flags monitor keeps this correct when web content has
@@ -678,5 +679,7 @@ The drag fixture supplies event metadata; it does not create a global desktop
 drag session. `sidebar-render bench --rows 1000 --selection --bulk 50` enforces
 the selection and bulk budgets and verifies row consistency with no full reload.
 The 13-state runner from §17.1 remains the visual regression gate. CU5 additionally
-compares synthetic divider renders at rest and with Clear against main. Native
+runs the committed `sidebar-render divider-check` command against the baseline
+release renderer: synthetic divider pixels at rest and with Clear must match.
+All bounded paired attempts remain in the comparison output directory. Native
 App flow E1–E4 and alert/clipboard/form integration remain with the App lane.

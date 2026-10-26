@@ -705,7 +705,7 @@ final class DividerCellView: SidebarCellView {
     private var pointerOnClear = false { didSet { if pointerOnClear != oldValue { clearLabel.needsDisplay = true; clearArrow.needsDisplay = true } } }
     private var tracking: NSTrackingArea?
     private var lastPointerLocation: NSPoint?
-    var clearTitle: String { context?.isOptionHeld == true ? "Clear unselected" : "Clear" }
+    var clearTitle: String { "Clear" }
     var clearTooltipTitle: String { context?.isOptionHeld == true ? "Clear unselected Today tabs" : "Clear Today tabs" }
 
     required init(frame: NSRect) {
@@ -733,13 +733,12 @@ final class DividerCellView: SidebarCellView {
         super.layout()
         let m = SpaceListMetrics.self
         let w = bounds.width
-        let option = tracked({ context?.isOptionHeld ?? false }) { [weak self] in self?.needsLayout = true }
-        let extra = option ? max(0, clearLabel.textWidth - 29) : 0
+        _ = tracked({ context?.isOptionHeld ?? false }) { [weak self] in self?.needsLayout = true }
         clearLabel.isHidden = !showsClear
         clearArrow.isHidden = !showsClear
-        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w - extra, dy: 0)
-        clearLabel.frame = CGRect(x: w + m.clearLabelX - extra, y: 0, width: 29 + extra, height: bounds.height)
-        let end = showsClear ? w + m.clearLineEnd - extra : w - m.dividerLineInset
+        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w, dy: 0)
+        clearLabel.frame = CGRect(x: w + m.clearLabelX, y: 0, width: 29, height: bounds.height)
+        let end = showsClear ? w + m.clearLineEnd : w - m.dividerLineInset
         CATransaction.begin(); CATransaction.setDisableActions(true)
         line.frame = CGRect(x: m.dividerLineInset, y: m.dividerLineY, width: max(0, end - m.dividerLineInset), height: 1)
         CATransaction.commit()
