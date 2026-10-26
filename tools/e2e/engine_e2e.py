@@ -1593,7 +1593,8 @@ def shutdown_order_checks(factory, results, tmp):
         app.call('wait'); app.call('background-read')
         app.call('menu-perform', id='save-page-as')
         assert wait_until(lambda: app.call('save-page-state')['visible'], timeout=5, step=.02)
-        app.call('save-page-confirm', path=destination)
+        configured = app.call('save-page-configure', path=destination)
+        app.call('key', key='return', window=configured['number'])
         pending = wait_until(lambda: (lambda s: s if s['captures'] > 0 and s['background'] > 0 else None)(app.call('async-engine-state')), timeout=5, step=.02)
         assert pending, app.call('async-engine-state')
     finally:
@@ -3276,9 +3277,11 @@ def commandbar_checks(factory, results, tmp, config):
         if save: press('escape', window=save['number'])
         wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
         capture = os.path.join(tmp, 'saved-command-page.mhtml')
+        assert wait_until(lambda: any(r['id'] == 'save-page-as' and r['enabled'] for r in app.call('menu-state')), timeout=3, step=.02), 'Save menu target did not return after sheet cancel'
         app.call('menu-perform', id='save-page-as')
         assert wait_until(lambda: app.call('save-page-state')['visible'], timeout=5, step=.02)
-        app.call('save-page-confirm', path=capture)
+        configured = app.call('save-page-configure', path=capture)
+        app.call('key', key='return', window=configured['number'])
         written = wait_until(lambda: os.path.exists(capture) and 'Shell C' in Path(capture).read_text(errors='replace'), timeout=10, step=.05)
         results['save_page_capture'] = {'ok': bool(written) and not app.call('save-page-state')['pending'],
             'written': bool(written), 'bytes': os.path.getsize(capture) if os.path.exists(capture) else 0}

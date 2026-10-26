@@ -155,11 +155,11 @@
         host.refreshPageBackground(); return true
       case "async-engine-state":
         return ["captures": w.saveCaptureTasks.count, "background": w.hosts.values.filter(\.hasBackgroundTask).count]
-      case "save-page-confirm":
+      case "save-page-configure":
         guard let panel = w.pendingSavePanel, let path = a["path"] as? String else { throw Failure(message: "no Save sheet") }
         let url = URL(fileURLWithPath: path)
         panel.directoryURL = url.deletingLastPathComponent(); panel.nameFieldStringValue = url.lastPathComponent
-        panel.ok(nil); return true
+        return ["number": panel.windowNumber, "path": panel.url?.path ?? ""]
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
       case "suggest-remote":
         guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }
