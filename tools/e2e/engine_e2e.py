@@ -2045,8 +2045,9 @@ def themed_card_checks(factory, results, private):
             common = ["render", "--snapshot", synth, "--size", "1280x800", "--scale", str(scale), "--space", str(space), "--hidden", "--page"]
             # Offscreen renders sometimes come back with garbage or missing (black) tiles
             # (docs/design.md section 15.1; about one in four at 2x here, more under memory
-            # pressure). A render is accepted once two in a row come out byte for byte the
-            # same and nothing near the card's edges is black (these scenes have no black).
+            # pressure, sometimes inside the card on a bottom-bar icon). A render is accepted
+            # once two in a row agree on every pixel near the card's corners and edges and
+            # none of those pixels is black (these scenes have no black).
             attempts = 0
             regions = [(x, y) for y in list(range(0, 46, 3)) + list(range(754, 800, 3)) for x in list(range(0, 46, 3)) + list(range(190, 250, 3))]
             regions += [(x, y) for y in range(46, 754, 24) for x in (0, 3, 6, 228, 231, 234, 237)]
@@ -2056,9 +2057,9 @@ def themed_card_checks(factory, results, private):
                 for _ in range(10):
                     attempts += 1
                     subprocess.run([binary] + common + extra + ["--out", out], check=True, stdout=subprocess.DEVNULL)
-                    data = open(out, "rb").read()
                     _, _, px = read_image(out)
-                    clean = all(max(px(x * scale, y * scale)) >= 8 for x, y in regions)
+                    data = [px(x * scale + dx, y * scale + dy) for x, y in regions for dx in range(int(scale)) for dy in range(int(scale))]
+                    clean = all(max(c) >= 8 for c in data)
                     if clean and data == previous:
                         accepted += 1
                         break
