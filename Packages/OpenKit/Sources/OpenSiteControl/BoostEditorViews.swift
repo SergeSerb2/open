@@ -109,6 +109,7 @@ public final class BoostColorWheelView: NSView {
     private var keyEnd: DispatchWorkItem?
     private static var ring: CGImage?
     private let puckLayer = CAShapeLayer()
+    private var puckState: (hue: Double,intensity: Double,bounds: CGRect)?
     public override var isFlipped: Bool { true }
     public override var wantsUpdateLayer: Bool { true }
     public override func updateLayer() {
@@ -171,6 +172,8 @@ public final class BoostColorWheelView: NSView {
     }
     func updatePuck() {
         let w = session.displayWheel
+        if let p = puckState, p.hue == w.hue, p.intensity == w.intensity, p.bounds == bounds { return }
+        puckState = (w.hue,w.intensity,bounds)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         puckLayer.position = puckPoint(w)
         if w.intensity < 0.02 {
@@ -382,7 +385,7 @@ public final class BoostEditorView: NSView {
     private func refreshColors() {
         let w = session.displayWheel
         wheel.updatePuck()
-        for (i,s) in sliders.enumerated() { s.doubleValue = [w.brightness,w.contrast,w.originalSaturation][i]; s.isEnabled = session.colorsReady }
+        for (i,s) in sliders.enumerated() { s.doubleValue = [w.brightness,w.contrast,w.originalSaturation][i]; if s.isEnabled != session.colorsReady { s.isEnabled = session.colorsReady } }
         let invert = control(id: "editor.color.invert") as! EditorButton
         if invert.selected != w.invertLightness { invert.selected = w.invertLightness; invert.symbol = w.invertLightness ? "lightbulb.fill" : "lightbulb"; invert.fill = w.invertLightness ? Core.brandBlue : BoostEditorColors.segmentBackground; invert.needsDisplay = true }
         let text = session.showsLegacyColors ? "Custom colors — editing replaces them." : session.colorsReady && w.baseHue == nil ? "Few colors here. Try Invert lightness." : ""
@@ -400,7 +403,7 @@ public final class BoostEditorView: NSView {
         control(id: "editor.color.invert")?.symbol = wheelValue.invertLightness ? "lightbulb.fill" : "lightbulb"
         (control(id: "editor.color.advanced") as? EditorButton)?.selected = advanced
         for id in ["invert","advanced","reset"] { (control(id: "editor.color."+id) as? EditorButton)?.fill = (id == "invert" && wheelValue.invertLightness || id == "advanced" && advanced) ? Core.brandBlue : BoostEditorColors.segmentBackground }
-        for (i,s) in sliders.enumerated() { s.doubleValue = [wheelValue.brightness,wheelValue.contrast,wheelValue.originalSaturation][i]; s.isEnabled = session.colorsReady }
+        for (i,s) in sliders.enumerated() { s.doubleValue = [wheelValue.brightness,wheelValue.contrast,wheelValue.originalSaturation][i]; if s.isEnabled != session.colorsReady { s.isEnabled = session.colorsReady } }
         refreshColors()
         control(id: "editor.color.invert")?.isEnabled = session.colorsReady
         control(id: "editor.color.reset")?.isEnabled = session.colorsReady

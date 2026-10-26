@@ -245,6 +245,11 @@ enum EditorFlows {
                 let expected = [color.redComponent,color.greenComponent,color.blueComponent].map { Int(($0*255).rounded()) }
                 let stableFill = zip(fill.prefix(3),expected).allSatisfy { abs(Int($0)-$1) <= 2 }
                 checks.append(.init(name: "render \(state) exact opaque editor surface after resize",pass: stableFill))
+                if state == "editor-simple" {
+                    let x = frame.minX+BoostEditorMetrics.shadowSide+134, y = 760-frame.maxY+BoostEditorMetrics.shadowTop+148
+                    let center = CLI.pixel(image,x: Int(x*scale),y: Int(y*scale)), pad = CLI.pixel(image,x: Int(x*scale),y: Int((y-23)*scale))
+                    checks.append(.init(name: "empty marker center shows the pad within 3/255",pass: zip(center.prefix(3),pad.prefix(3)).allSatisfy { abs(Int($0)-Int($1)) <= 3 }))
+                }
                 if state == "editor-interstitial" {
                     let origin = CGPoint(x: frame.minX+BoostEditorMetrics.shadowSide,y: 760-frame.maxY+BoostEditorMetrics.shadowTop)
                     let title = inkContrast(image,rect: CGRect(x: origin.x+22,y: origin.y+140,width: 224,height: 18),scale: scale,background: fill)
