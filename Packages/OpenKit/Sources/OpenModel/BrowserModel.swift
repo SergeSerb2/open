@@ -151,8 +151,10 @@ public final class BrowserModel {
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
     @ObservationIgnored public var undoManager: UndoManager?
-    /// Offscreen CLI fault injection. Nil in the app; never persisted or observed.
-    @ObservationIgnored public var diagnosticSpaceCreationFailureAtMove: Int?
+    #if DEBUG
+    /// Debug CLI seam for the rollback code; absent from release builds.
+    @ObservationIgnored public var diagnosticRollbackFailureAtMove: Int?
+    #endif
     @ObservationIgnored private var spaceCreationEvents: [TreeChange]?
 
     /// Invalidates derived tab ownership after structural edits or a full import/load.
@@ -1454,19 +1456,23 @@ public final class BrowserModel {
 
     // MARK: Spaces
 
+    /// Requires an ID obtained from a live Profile. Data/import/automation IDs
+    /// must use the failable at:moving: overload. A refusal is a programmer error.
     @discardableResult
     public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon? = nil, theme: SpaceTheme = SpaceTheme()) -> Space {
-        // An empty moving list and the default append index cannot fail validation.
-        createSpace(title: title, profileID: profileID, icon: icon, theme: theme, at: nil, moving: [])!
+        guard let space = createSpace(title: title, profileID: profileID, icon: icon, theme: theme, at: nil, moving: []) else {
+            preconditionFailure("createSpace requires a live Profile ID; invalid profileID: \(profileID)")
+        }
+        return space
     }
 
-    /// Validates the whole command before creating anything. A refusal has no observable writes.
+    /// Use for IDs supplied by data, import, automation, or restored state.
+    /// Unknown Profile or invalid placement returns nil without writes, undo, events, or save.
     @discardableResult
     public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?, theme: SpaceTheme,
                             at index: Int?, moving nodeIDs: [ItemID]) -> Space? {
-        guard validSpaceCreation(index: index, moving: nodeIDs) else { return nil }
-        let resolvedProfile = profile(id: profileID)?.id ?? defaultProfile?.id ?? profileID
-        let space = Space(title: title, icon: icon, theme: theme, profileID: resolvedProfile)
+        guard profile(id: profileID) != nil, validSpaceCreation(index: index, moving: nodeIDs) else { return nil }
+        let space = Space(title: title, icon: icon, theme: theme, profileID: profileID)
         let i = index ?? spaces.count
         guard let revert = insertSpaceMoving(space, at: i, moving: nodeIDs) else { return nil }
         registerUndo(revert, reapply: { $0.insertSpaceMoving(space, at: i, moving: nodeIDs) ?? Self.noRevert })
@@ -1497,16 +1503,17 @@ public final class BrowserModel {
         spaceCreationEvents = []
         insertSpace(space, at: i)
         var moves: [Revert] = []
-        for (moveIndex, id) in ids.enumerated() {
+        func rollback() {
+            for revert in moves.reversed() { _ = revert(self) }
+            removeSpace(space.id); spaceCreationEvents = nil
+        }
+        for id in ids {
             // Every source was validated before the first mutation. The fresh pinned
             // section accepts tabs, folders (with children), and whole splits.
-            guard diagnosticSpaceCreationFailureAtMove != moveIndex,
-                  let revert = relocate(id, to: .spacePinned(space.id), at: nil) else {
-                for revert in moves.reversed() { _ = revert(self) }
-                removeSpace(space.id)
-                spaceCreationEvents = nil
-                return nil
-            }
+            #if DEBUG
+            if diagnosticRollbackFailureAtMove == moves.count { rollback(); return nil }
+            #endif
+            guard let revert = relocate(id, to: .spacePinned(space.id), at: nil) else { rollback(); return nil }
             moves.append(revert)
         }
         emit(.reload(parent: .spaceToday(space.id)))
@@ -1564,7 +1571,8 @@ public final class BrowserModel {
 
     public func renameSpace(id: SpaceID, title: String) {
         guard let space = space(id: id) else { return }
-        let value: String? = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : title
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value: String? = trimmed.isEmpty ? nil : trimmed
         guard space.title != value else { return }
         let old = space.title
         space.title = value
