@@ -17,6 +17,9 @@ let package = Package(
         .library(name: "OpenAdBlock", targets: ["OpenAdBlock"]),
         .executable(name: "openkit", targets: ["openkit"]),
         .executable(name: "commands-dump", targets: ["commands-dump"]),
+        .library(name: "OpenDesign", targets: ["OpenDesign"]),
+        .library(name: "OpenSidebar", targets: ["OpenSidebar"]),
+        .executable(name: "sidebar-render", targets: ["sidebar-render"]),
     ],
     targets: [
         .target(name: "OpenModel"),
@@ -31,5 +34,8 @@ let package = Package(
         .target(name: "OpenAdBlock", dependencies: ["OpenModel", "OpenRouting"], resources: [.copy("Resources")]),
         .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenSleep", "OpenAdBlock"], resources: [.copy("Resources/sleep-schema1.json")]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
+        .target(name: "OpenDesign", dependencies: ["OpenModel"]),
+        .target(name: "OpenSidebar", dependencies: ["OpenModel", "OpenDesign"]),
+        .executableTarget(name: "sidebar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
     ]
 )
