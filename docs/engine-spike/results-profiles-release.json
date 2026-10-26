@@ -1,23 +1,39 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C4410-5555-3144-A12D-1F6DECA655A4",
-    "embeddedUUID": "4C4C4410-5555-3144-A12D-1F6DECA655A4",
+    "distributionUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "embeddedUUID": "4C4C44F5-5555-3144-A143-53034578039A",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793003176"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
   },
   "profiles": {
+    "disk_profiles_on_disk": {
+      "info_cache": [
+        "Default",
+        "Profile-C33C0064"
+      ],
+      "ok": true,
+      "work_chrome_window": 1471762496
+    },
     "durable_second_profile": {
       "default_cookie": "oe_default=1",
       "ok": true,
-      "work_cookie": "oe_work=1",
+      "work_cookie": "oe_work=1; oe_session=1",
       "work_storage": "work"
     },
     "engine_layout": {
       "layout": {
         "engine_default_cookies": true,
         "engine_work_cookies": true,
+        "layout_marker": true,
         "local_state": true,
+        "modes": {
+          "Engine": "0o700",
+          "Engine/Default": "0o700",
+          "Engine/Profile-C33C0064": "0o700",
+          "Profiles/Default": "0o700",
+          "Profiles/Profile-C33C0064": "0o700"
+        },
         "profiles_default": [
           "AdBlock",
           "Boosts",
@@ -25,105 +41,159 @@
         ]
       },
       "ok": true,
-      "work_dir": "Profile-D2E1FA23"
+      "work_dir": "Profile-C33C0064"
     },
     "extension_isolation": {
       "default_profile_probe_sees": {
+        "incognito": true,
         "urls": [
           "https://example.com/?profile=default"
         ],
         "windows": [
-          1032754262
+          1471762500
         ]
       },
+      "incognito_access": "ok",
       "ok": true,
       "work_profile_probe_sees": {
+        "incognito": false,
         "urls": [
           "https://example.com/?profile=work"
         ],
         "windows": [
-          1032754258
+          1471762496
         ]
       }
     },
     "migration_crash_cleanup": {
       "after_relaunch": {
-        "default_cookie": "oe_default=1",
-        "ok": true,
-        "profiles_default": [
-          "AdBlock",
-          "Boosts",
-          "State"
-        ]
+        "exit": 0,
+        "inventory_equal": true
       },
       "at_crash": {
+        "each_file_in_one_place": true,
         "exit": 86,
-        "original_cookies_kept": true,
-        "published": true
+        "local_state_copies": 1
       },
       "ok": true
     },
-    "migration_crash_copied": {
+    "migration_crash_installation": {
       "after_relaunch": {
-        "default_cookie": "oe_default=1",
-        "ok": true,
-        "profiles_default": [
-          "AdBlock",
-          "Boosts",
-          "State"
-        ]
+        "exit": 0,
+        "inventory_equal": true
       },
       "at_crash": {
+        "each_file_in_one_place": true,
         "exit": 86,
-        "original_cookies_kept": true,
-        "published": false
+        "local_state_copies": 1
+      },
+      "ok": true
+    },
+    "migration_crash_journaled": {
+      "after_relaunch": {
+        "exit": 0,
+        "inventory_equal": true
+      },
+      "at_crash": {
+        "each_file_in_one_place": true,
+        "exit": 86,
+        "local_state_copies": 1
+      },
+      "ok": true
+    },
+    "migration_crash_moved": {
+      "after_relaunch": {
+        "exit": 0,
+        "inventory_equal": true
+      },
+      "at_crash": {
+        "each_file_in_one_place": true,
+        "exit": 86,
+        "local_state_copies": 1
       },
       "ok": true
     },
     "migration_crash_published": {
       "after_relaunch": {
-        "default_cookie": "oe_default=1",
-        "ok": true,
-        "profiles_default": [
-          "AdBlock",
-          "Boosts",
-          "State"
-        ]
+        "exit": 0,
+        "inventory_equal": true
       },
       "at_crash": {
+        "each_file_in_one_place": true,
         "exit": 86,
-        "original_cookies_kept": true,
-        "published": true
+        "local_state_copies": 1
       },
       "ok": true
     },
     "migration_crash_staged": {
       "after_relaunch": {
-        "default_cookie": "oe_default=1",
-        "ok": true,
-        "profiles_default": [
-          "AdBlock",
-          "Boosts",
-          "State"
-        ]
+        "exit": 0,
+        "inventory_equal": true
       },
       "at_crash": {
+        "each_file_in_one_place": true,
         "exit": 86,
-        "original_cookies_kept": true,
-        "published": false
+        "local_state_copies": 1
       },
+      "ok": true
+    },
+    "migration_engine_in_use": {
+      "log": [
+        "engine layout: moved 34 Chromium item(s) to Engine/",
+        "engine layout: moved cache /Users/serge/Library/Caches/Open-E2E-profiles-chrome/Profiles/Default -> /Users/serge/Library/Caches/Open-E2E-profiles-chrome/Engine/Default",
+        "engine layout: skipped Profiles/Default: Engine/Default is in use; 73 old Chromium item(s) left in Profiles/Default"
+      ],
       "ok": true
     },
     "migration_from_legacy": {
       "default_cookie": "oe_default=1",
+      "files": 183,
+      "inventory_equal": true,
+      "layout": {
+        "cache_moved": true,
+        "journal": false,
+        "local_state_moved": true,
+        "marker": true,
+        "old_engine_folder_gone": true,
+        "profiles_default": [
+          "AdBlock",
+          "Boosts",
+          "State"
+        ],
+        "singletons_gone": true
+      },
       "ok": true,
-      "profiles_default": [
-        "AdBlock",
-        "Boosts",
-        "State"
+      "snapshot_byte_identical": true
+    },
+    "migration_locked_file": {
+      "after_unlock": {
+        "exit": 0,
+        "inventory_equal": true,
+        "snapshot_byte_identical": true
+      },
+      "first_launch": {
+        "default_cookie": "oe_default=1",
+        "exit": 0,
+        "log": [
+          "engine layout: legacy layout for this launch, retried next launch: Profiles/Default/Open E2E locked.bin: locked (immutable or append-only flag)",
+          "Open: engine layout legacy in 2.8 ms"
+        ],
+        "snapshot_byte_identical": true,
+        "untouched": true,
+        "work_page_live": false
+      },
+      "ok": true
+    },
+    "migration_unreadable_files": {
+      "inventory_equal": true,
+      "ok": true,
+      "snapshot_byte_identical": true,
+      "unreadable_entries": [
+        "Open E2E unreadable.bin",
+        "Open E2E/nested/unreadable.bin"
       ]
     }
   },
-  "started": "2026-10-26 01:39:39",
+  "started": "2026-10-26 09:51:00",
   "style": "chrome"
 }
