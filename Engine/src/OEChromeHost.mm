@@ -1,15 +1,15 @@
 // Chrome-style hosting. On macOS CEF accepts a Chrome-style browser only
 // inside its own Views window (cef_types_mac.h: "Alloy style will always be
 // used ... if |parent_view| is provided"). We create a frameless CefWindow per
-// OEWebView and keep it glued over the view as a child NSWindow.
+// OEWebContent and keep it glued over the view as a child NSWindow.
 
 #import "OEInternal.h"
 
 #include "include/views/cef_browser_view_delegate.h"
 #include "include/views/cef_window_delegate.h"
 
-@interface OEWebView (ChromeHost)
-- (nullable OEWebView*)oe_takePendingChromePopup;
+@interface OEWebContent (ChromeHost)
+- (nullable OEWebContent*)oe_takePendingChromePopup;
 - (void)oe_chromeWindowReady:(NSWindow*)window;
 @end
 
@@ -31,7 +31,7 @@ NSWindow* NSWindowFor(CefRefPtr<CefWindow> window) {
 
 class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
  public:
-  OEChromeBrowserViewDelegate(OEWebView* view, bool toolbar)
+  OEChromeBrowserViewDelegate(OEWebContent* view, bool toolbar)
       : view_(view), toolbar_(toolbar) {}
 
   cef_runtime_style_t GetBrowserRuntimeStyle() override {
@@ -57,7 +57,7 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
     if (is_devtools) {
       return false;
     }
-    OEWebView* target = [view_ oe_takePendingChromePopup];
+    OEWebContent* target = [view_ oe_takePendingChromePopup];
     if (!target) {
       return false;
     }
@@ -66,14 +66,14 @@ class OEChromeBrowserViewDelegate : public CefBrowserViewDelegate {
   }
 
  private:
-  __weak OEWebView* view_;
+  __weak OEWebContent* view_;
   bool toolbar_;
   IMPLEMENT_REFCOUNTING(OEChromeBrowserViewDelegate);
 };
 
 class OEChromeHostWindow : public CefWindowDelegate {
  public:
-  OEChromeHostWindow(OEWebView* view,
+  OEChromeHostWindow(OEWebContent* view,
                      CefRefPtr<CefClient> client,
                      const CefString& url,
                      const CefBrowserSettings& settings,
@@ -120,7 +120,7 @@ class OEChromeHostWindow : public CefWindowDelegate {
   }
 
   CefRect GetInitialBounds(CefRefPtr<CefWindow> window) override {
-    OEWebView* view = view_;
+    NSView* view = view_.view;
     NSWindow* host = view.window;
     if (!host) {
       return CefRect(100, 100, 800, 600);
@@ -142,7 +142,7 @@ class OEChromeHostWindow : public CefWindowDelegate {
   NSWindow* NativeWindow() { return NSWindowFor(window_); }
 
  private:
-  __weak OEWebView* view_;
+  __weak OEWebContent* view_;
   CefRefPtr<CefClient> client_;
   CefString url_;
   CefBrowserSettings settings_;
@@ -157,7 +157,7 @@ class OEChromeHostWindow : public CefWindowDelegate {
 }  // namespace
 
 CefRefPtr<CefWindowDelegate> OECreateChromeHostWindow(
-    OEWebView* webView,
+    OEWebContent* webContent,
     CefRefPtr<CefClient> client,
     const CefString& url,
     const CefBrowserSettings& settings,
@@ -166,7 +166,7 @@ CefRefPtr<CefWindowDelegate> OECreateChromeHostWindow(
     bool showToolbar,
     CefRefPtr<CefBrowserView> adoptedView) {
   CefRefPtr<OEChromeHostWindow> host =
-      new OEChromeHostWindow(webView, client, url, settings, extraInfo,
+      new OEChromeHostWindow(webContent, client, url, settings, extraInfo,
                              context, showToolbar, adoptedView);
   CefWindow::CreateTopLevelWindow(host.get());
   return host.get();

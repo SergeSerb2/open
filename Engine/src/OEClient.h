@@ -4,8 +4,8 @@
 
 #include "include/cef_devtools_message_observer.h"
 
-/// One per OEWebView. Every callback runs on the CEF UI thread, which is the
-/// main thread, and forwards to the (weak) OEWebView.
+/// One per OEWebContent. Every callback runs on the CEF UI thread, which is
+/// the main thread, and forwards to the (weak) OEWebContent.
 class OEClient : public CefClient,
                  public CefLifeSpanHandler,
                  public CefDisplayHandler,
@@ -20,7 +20,7 @@ class OEClient : public CefClient,
                  public CefFocusHandler,
                  public CefDevToolsMessageObserver {
  public:
-  explicit OEClient(OEWebView* view) : view_(view) {}
+  explicit OEClient(OEWebContent* content) : view_(content) {}
 
   void SetClosing() { closing_ = true; }
   void Detach() { view_ = nil; }
@@ -194,7 +194,7 @@ class OEClient : public CefClient,
                        size_t params_size) override;
 
  private:
-  __weak OEWebView* view_;
+  __weak OEWebContent* view_;
   bool closing_ = false;
   IMPLEMENT_REFCOUNTING(OEClient);
 };

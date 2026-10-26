@@ -25,8 +25,8 @@ OEOpenDisposition OEMapDisposition(cef_window_open_disposition_t d) {
 
 }  // namespace
 
-CefRefPtr<OEClient> OECreateClient(OEWebView* webView) {
-  return new OEClient(webView);
+CefRefPtr<OEClient> OECreateClient(OEWebContent* webContent) {
+  return new OEClient(webContent);
 }
 
 bool OEClient::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
@@ -56,11 +56,11 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              CefBrowserSettings& settings,
                              CefRefPtr<CefDictionaryValue>& extra_info,
                              bool* no_javascript_access) {
-  OEWebView* source = view_;
-  id<OEWebViewDelegate> delegate = source.delegate;
+  OEWebContent* source = view_;
+  id<OEWebContentDelegate> delegate = source.delegate;
   if (!source ||
-      ![delegate respondsToSelector:@selector(webView:
-                                        createWebViewForOpenRequest:)]) {
+      ![delegate respondsToSelector:@selector(webContent:
+                                        createWebContentForOpenRequest:)]) {
     return false;  // Chromium's default popup window.
   }
   NSRect frameRect = NSZeroRect;
@@ -77,8 +77,9 @@ bool OEClient::OnBeforePopup(CefRefPtr<CefBrowser> browser,
                              requestedFrame:frameRect
                             targetFrameName:OEString(target_frame_name)
                                      source:source
-                                    profile:source.profile];
-  OEWebView* target = [delegate webView:source createWebViewForOpenRequest:request];
+                                    context:source.context];
+  OEWebContent* target = [delegate webContent:source
+                createWebContentForOpenRequest:request];
   if (!target) {
     return true;  // Blocked by the shell.
   }
@@ -97,11 +98,10 @@ void OEClient::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 }
 
 bool OEClient::DoClose(CefRefPtr<CefBrowser> browser) {
-  OEWebView* view = view_;
-  if (!closing_ && view &&
-      [view.delegate respondsToSelector:@selector(webViewDidRequestClose:)]) {
+  OEWebContent* view = view_;
+  if (!closing_ && view) {
     // window.close() from the page. Tell the shell; the close continues.
-    [view.delegate webViewDidRequestClose:view];
+    [view oe_requestClose];
   }
   // The browser is a child view inside our window. Returning false would
   // send performClose: to OUR window; instead tear down the browser's view,
@@ -153,10 +153,10 @@ bool OEClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
                                 const CefString& message,
                                 const CefString& source,
                                 int line) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   if ([view.delegate respondsToSelector:@selector
-                     (webView:didLogConsoleMessage:level:source:line:)]) {
-    [view.delegate webView:view
+                     (webContent:didLogConsoleMessage:level:source:line:)]) {
+    [view.delegate webContent:view
         didLogConsoleMessage:OEString(message)
                        level:level
                       source:OEString(source)
@@ -167,14 +167,12 @@ bool OEClient::OnConsoleMessage(CefRefPtr<CefBrowser> browser,
 
 bool OEClient::OnAutoResize(CefRefPtr<CefBrowser> browser,
                             const CefSize& new_size) {
-  OEWebView* view = view_;
-  if ([view.delegate respondsToSelector:@selector(webView:
-                                            didRequestContentSize:)]) {
-    [view.delegate webView:view
-        didRequestContentSize:NSMakeSize(new_size.width, new_size.height)];
-    return true;
+  OEWebContent* view = view_;
+  if (!view) {
+    return false;
   }
-  return false;
+  [view oe_requestContentSize:NSMakeSize(new_size.width, new_size.height)];
+  return true;
 }
 
 void OEClient::OnLoadingProgressChange(CefRefPtr<CefBrowser> browser,
@@ -201,11 +199,11 @@ void OEClient::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
 void OEClient::OnLoadEnd(CefRefPtr<CefBrowser> browser,
                          CefRefPtr<CefFrame> frame,
                          int httpStatusCode) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   if (frame->IsMain() &&
-      [view.delegate respondsToSelector:@selector(webView:
+      [view.delegate respondsToSelector:@selector(webContent:
                                             didFinishLoadWithStatus:)]) {
-    [view.delegate webView:view didFinishLoadWithStatus:httpStatusCode];
+    [view.delegate webContent:view didFinishLoadWithStatus:httpStatusCode];
   }
 }
 
@@ -214,20 +212,22 @@ void OEClient::OnLoadError(CefRefPtr<CefBrowser> browser,
                            ErrorCode errorCode,
                            const CefString& errorText,
                            const CefString& failedUrl) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   if (!frame->IsMain() || errorCode == ERR_ABORTED) {
     return;
   }
-  if ([view.delegate respondsToSelector:@selector(webView:
+  if ([view.delegate respondsToSelector:@selector(webContent:
                                             didFailLoadWithError:)]) {
-    NSError* error = [NSError
-        errorWithDomain:@"org.chromium.net"
-                   code:errorCode
-               userInfo:@{
-                 NSLocalizedDescriptionKey : OEString(errorText),
-                 NSURLErrorFailingURLStringErrorKey : OEString(failedUrl)
-               }];
-    [view.delegate webView:view didFailLoadWithError:error];
+    NSMutableDictionary* info = [NSMutableDictionary
+        dictionaryWithObject:OEString(errorText)
+                      forKey:NSLocalizedDescriptionKey];
+    if (NSURL* failed = OEURL(failedUrl)) {
+      info[NSURLErrorFailingURLErrorKey] = failed;
+    }
+    NSError* error = [NSError errorWithDomain:@"org.chromium.net"
+                                         code:errorCode
+                                     userInfo:info];
+    [view.delegate webContent:view didFailLoadWithError:error];
   }
 }
 
@@ -237,27 +237,27 @@ bool OEClient::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
                              const CefKeyEvent& event,
                              CefEventHandle os_event,
                              bool* is_keyboard_shortcut) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   NSEvent* ns = (__bridge NSEvent*)os_event;
   if (!ns || ns.type != NSEventTypeKeyDown ||
-      ![view.delegate respondsToSelector:@selector(webView:
+      ![view.delegate respondsToSelector:@selector(webContent:
                                              handleKeyEventBeforePage:)]) {
     return false;
   }
-  return [view.delegate webView:view handleKeyEventBeforePage:ns];
+  return [view.delegate webContent:view handleKeyEventBeforePage:ns];
 }
 
 bool OEClient::OnKeyEvent(CefRefPtr<CefBrowser> browser,
                           const CefKeyEvent& event,
                           CefEventHandle os_event) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   NSEvent* ns = (__bridge NSEvent*)os_event;
   if (!ns || ns.type != NSEventTypeKeyDown) {
     return false;
   }
-  if ([view.delegate respondsToSelector:@selector(webView:
+  if ([view.delegate respondsToSelector:@selector(webContent:
                                             handleUnconsumedKeyEvent:)] &&
-      [view.delegate webView:view handleUnconsumedKeyEvent:ns]) {
+      [view.delegate webContent:view handleUnconsumedKeyEvent:ns]) {
     return true;
   }
   // Give the app menu its key equivalents (CEF does this for Alloy too; for
@@ -278,8 +278,8 @@ bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                           const CefString& default_prompt_text,
                           CefRefPtr<CefJSDialogCallback> callback,
                           bool& suppress_message) {
-  OEWebView* view = view_;
-  if (![view.delegate respondsToSelector:@selector(webView:
+  OEWebContent* view = view_;
+  if (![view.delegate respondsToSelector:@selector(webContent:
                                              runJavaScriptDialog:)]) {
     return false;
   }
@@ -294,15 +294,15 @@ bool OEClient::OnJSDialog(CefRefPtr<CefBrowser> browser,
                origin:OEURL(origin_url)
              isReload:NO
              callback:callback];
-  return [view.delegate webView:view runJavaScriptDialog:dialog];
+  return [view.delegate webContent:view runJavaScriptDialog:dialog];
 }
 
 bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
                                     const CefString& message_text,
                                     bool is_reload,
                                     CefRefPtr<CefJSDialogCallback> callback) {
-  OEWebView* view = view_;
-  if (![view.delegate respondsToSelector:@selector(webView:
+  OEWebContent* view = view_;
+  if (![view.delegate respondsToSelector:@selector(webContent:
                                              runJavaScriptDialog:)]) {
     return false;
   }
@@ -313,7 +313,7 @@ bool OEClient::OnBeforeUnloadDialog(CefRefPtr<CefBrowser> browser,
                origin:view.URL
              isReload:is_reload
              callback:callback];
-  return [view.delegate webView:view runJavaScriptDialog:dialog];
+  return [view.delegate webContent:view runJavaScriptDialog:dialog];
 }
 
 #pragma mark Permissions
@@ -324,8 +324,8 @@ bool OEClient::OnRequestMediaAccessPermission(
     const CefString& requesting_origin,
     uint32_t requested_permissions,
     CefRefPtr<CefMediaAccessCallback> callback) {
-  OEWebView* view = view_;
-  if (![view.delegate respondsToSelector:@selector(webView:
+  OEWebContent* view = view_;
+  if (![view.delegate respondsToSelector:@selector(webContent:
                                              decidePermissionRequest:)]) {
     return false;
   }
@@ -336,7 +336,7 @@ bool OEClient::OnRequestMediaAccessPermission(
           mediaCallback:callback
          mediaRequested:requested_permissions
          promptCallback:nullptr];
-  return [view.delegate webView:view decidePermissionRequest:request];
+  return [view.delegate webContent:view decidePermissionRequest:request];
 }
 
 bool OEClient::OnShowPermissionPrompt(
@@ -345,8 +345,8 @@ bool OEClient::OnShowPermissionPrompt(
     const CefString& requesting_origin,
     uint32_t requested_permissions,
     CefRefPtr<CefPermissionPromptCallback> callback) {
-  OEWebView* view = view_;
-  if (![view.delegate respondsToSelector:@selector(webView:
+  OEWebContent* view = view_;
+  if (![view.delegate respondsToSelector:@selector(webContent:
                                              decidePermissionRequest:)]) {
     return false;
   }
@@ -357,7 +357,7 @@ bool OEClient::OnShowPermissionPrompt(
           mediaCallback:nullptr
          mediaRequested:0
          promptCallback:callback];
-  return [view.delegate webView:view decidePermissionRequest:request];
+  return [view.delegate webContent:view decidePermissionRequest:request];
 }
 
 #pragma mark Context menu
@@ -367,14 +367,14 @@ bool OEClient::RunContextMenu(CefRefPtr<CefBrowser> browser,
                               CefRefPtr<CefContextMenuParams> params,
                               CefRefPtr<CefMenuModel> model,
                               CefRefPtr<CefRunContextMenuCallback> callback) {
-  OEWebView* view = view_;
-  if (![view.delegate respondsToSelector:@selector(webView:showContextMenu:)]) {
+  OEWebContent* view = view_;
+  if (![view.delegate respondsToSelector:@selector(webContent:showContextMenu:)]) {
     return false;
   }
   OEContextMenu* menu = [[OEContextMenu alloc] initOEWithParams:params
                                                            model:model
                                                         callback:callback];
-  return [view.delegate webView:view showContextMenu:menu];
+  return [view.delegate webContent:view showContextMenu:menu];
 }
 
 #pragma mark Downloads
@@ -389,11 +389,11 @@ bool OEClient::OnBeforeDownload(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefDownloadItem> download_item,
                                 const CefString& suggested_name,
                                 CefRefPtr<CefBeforeDownloadCallback> callback) {
-  OEWebView* view = view_;
-  OEProfile* profile = view.profile ?: OEEngine.shared.defaultProfile;
-  [profile oe_handleBeforeDownload:download_item
+  OEWebContent* view = view_;
+  OEBrowserContext* context = view.context ?: OEEngine.shared.defaultContext;
+  [context oe_handleBeforeDownload:download_item
                      suggestedName:OEString(suggested_name)
-                           webView:view
+                        webContent:view
                           callback:callback];
   return true;
 }
@@ -401,8 +401,8 @@ bool OEClient::OnBeforeDownload(CefRefPtr<CefBrowser> browser,
 void OEClient::OnDownloadUpdated(CefRefPtr<CefBrowser> browser,
                                  CefRefPtr<CefDownloadItem> download_item,
                                  CefRefPtr<CefDownloadItemCallback> callback) {
-  OEProfile* profile = view_.profile ?: OEEngine.shared.defaultProfile;
-  [profile oe_handleDownloadUpdated:download_item callback:callback];
+  OEBrowserContext* context = view_.context ?: OEEngine.shared.defaultContext;
+  [context oe_handleDownloadUpdated:download_item callback:callback];
 }
 
 #pragma mark Find
@@ -413,10 +413,10 @@ void OEClient::OnFindResult(CefRefPtr<CefBrowser> browser,
                             const CefRect& selectionRect,
                             int activeMatchOrdinal,
                             bool finalUpdate) {
-  OEWebView* view = view_;
-  if ([view.delegate respondsToSelector:@selector(webView:
+  OEWebContent* view = view_;
+  if ([view.delegate respondsToSelector:@selector(webContent:
                                             didUpdateFindResult:)]) {
-    [view.delegate webView:view
+    [view.delegate webContent:view
         didUpdateFindResult:[[OEFindResult alloc]
                                 initOEWithCount:count
                                           active:activeMatchOrdinal
@@ -431,10 +431,10 @@ bool OEClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
                                 const CefString& target_url,
                                 WindowOpenDisposition target_disposition,
                                 bool user_gesture) {
-  OEWebView* source = view_;
+  OEWebContent* source = view_;
   if (target_disposition == CEF_WOD_CURRENT_TAB || !source ||
-      ![source.delegate respondsToSelector:@selector(webView:
-                                               createWebViewForOpenRequest:)]) {
+      ![source.delegate respondsToSelector:@selector(webContent:
+                                               createWebContentForOpenRequest:)]) {
     return false;
   }
   OEOpenRequest* request =
@@ -444,9 +444,9 @@ bool OEClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
                              requestedFrame:NSZeroRect
                             targetFrameName:@""
                                      source:source
-                                    profile:source.profile];
-  OEWebView* target = [source.delegate webView:source
-                    createWebViewForOpenRequest:request];
+                                    context:source.context];
+  OEWebContent* target = [source.delegate webContent:source
+                       createWebContentForOpenRequest:request];
   if (target && request.URL && !target.live) {
     [target loadURL:request.URL];
   }
@@ -454,27 +454,27 @@ bool OEClient::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
 }
 
 void OEClient::OnRenderViewReady(CefRefPtr<CefBrowser> browser) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   if (!view) {
     return;
   }
   // New renderer process for this browser: give it the current scripts.
   CefRefPtr<CefProcessMessage> msg =
       CefProcessMessage::Create(kOEMsgScriptsUpdate);
-  msg->GetArgumentList()->SetList(0, [view.profile oe_scriptsValue]);
+  msg->GetArgumentList()->SetList(0, [view.context oe_scriptsValue]);
   browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
-  [view oe_setCrashState:OEWebViewCrashStateNone];
+  [view oe_setCrashState:OEWebContentCrashStateNone];
 }
 
 void OEClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
                                          TerminationStatus status,
                                          int error_code,
                                          const CefString& error_string) {
-  OEWebViewCrashState state = OEWebViewCrashStateCrashed;
+  OEWebContentCrashState state = OEWebContentCrashStateCrashed;
   if (status == TS_PROCESS_WAS_KILLED) {
-    state = OEWebViewCrashStateKilled;
+    state = OEWebContentCrashStateKilled;
   } else if (status == TS_PROCESS_OOM) {
-    state = OEWebViewCrashStateOutOfMemory;
+    state = OEWebContentCrashStateOutOfMemory;
   }
   [view_ oe_setCrashState:state];
 }
@@ -482,12 +482,12 @@ void OEClient::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
 bool OEClient::OnRenderProcessUnresponsive(
     CefRefPtr<CefBrowser> browser,
     CefRefPtr<CefUnresponsiveProcessCallback> callback) {
-  [view_ oe_setCrashState:OEWebViewCrashStateUnresponsive];
+  [view_ oe_setCrashState:OEWebContentCrashStateUnresponsive];
   return false;
 }
 
 void OEClient::OnRenderProcessResponsive(CefRefPtr<CefBrowser> browser) {
-  [view_ oe_setCrashState:OEWebViewCrashStateNone];
+  [view_ oe_setCrashState:OEWebContentCrashStateNone];
 }
 
 #pragma mark DevTools protocol
@@ -506,16 +506,16 @@ void OEClient::OnDevToolsEvent(CefRefPtr<CefBrowser> browser,
                                const CefString& method,
                                const void* params,
                                size_t params_size) {
-  OEWebView* view = view_;
+  OEWebContent* view = view_;
   if (![view.delegate respondsToSelector:@selector
-                      (webView:didReceiveDevToolsEvent:parameters:)]) {
+                      (webContent:didReceiveDevToolsEvent:parameters:)]) {
     return;
   }
   id obj = [NSJSONSerialization
       JSONObjectWithData:[NSData dataWithBytes:params length:params_size]
                  options:0
                    error:nil];
-  [view.delegate webView:view
+  [view.delegate webContent:view
       didReceiveDevToolsEvent:OEString(method)
                    parameters:[obj isKindOfClass:NSDictionary.class] ? obj : @{}];
 }

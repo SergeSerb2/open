@@ -14,7 +14,7 @@
   enum WindowSnapshot {
     private typealias CreateFromArray = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
 
-    static func capture(_ window: NSWindow, controller: BrowserWindowController, to url: URL) async throws -> String {
+    static func capture(_ window: NSWindow, to url: URL) async throws -> String {
       var base: NSImage
       var method: String
       if let image = windowServerImage(window), !isBlank(image) {
@@ -29,10 +29,11 @@
         throw AutomationController.Failure(message: "cannot capture window")
       }
       var overlays: [(NSRect, NSImage)] = []
-      for tab in controller.allTabs where tab.webView.window === window && !tab.webView.isHiddenOrHasHiddenAncestor {
-        guard let png = try? await tab.webView.takeSnapshot(), let page = NSImage(data: png) else { continue }
+      for content in OEEngine.shared.allWebContents
+      where content.view.window === window && !content.view.isHiddenOrHasHiddenAncestor && content.isLive {
+        guard let png = try? await content.takeSnapshot(), let page = NSImage(data: png) else { continue }
         // Window base coordinates cover the whole frame, origin bottom-left.
-        overlays.append((tab.webView.convert(tab.webView.bounds, to: nil), page))
+        overlays.append((content.view.convert(content.view.bounds, to: nil), page))
       }
       let size = window.frame.size
       let out = NSImage(size: size)

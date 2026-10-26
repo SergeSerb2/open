@@ -49,16 +49,21 @@ extern const char kOEExtraScripts[];        // extra_info key
 class OEClient;
 
 @interface OEEngine ()
-- (void)oe_registerWebView:(OEWebView*)webView;
-- (void)oe_unregisterWebView:(OEWebView*)webView;
+- (void)oe_registerWebContent:(OEWebContent*)webContent;
+- (void)oe_unregisterWebContent:(OEWebContent*)webContent;
+- (void)oe_registerBrowser:(OEBrowser*)browser;
 - (void)oe_browserDidClose;
+- (void)oe_contextInitialized;
+- (void)oe_extensionsChangedInContext:(OEBrowserContext*)context;
+- (OEBrowserContext*)oe_contextForRequestContext:
+    (CefRefPtr<CefRequestContext>)requestContext;
 - (CefRefPtr<CefClient>)oe_defaultClient;
 @property(nonatomic, readonly) BOOL oe_isTerminating;
 @end
 
-@interface OEProfile ()
+@interface OEBrowserContext ()
 - (instancetype)initOEWithIdentifier:(NSString*)identifier
-                            directory:(NSURL*)directory
+                            directory:(nullable NSURL*)directory
                                global:(BOOL)global;
 @property(nonatomic, readonly) CefRefPtr<CefRequestContext> oe_requestContext;
 /// Runs `block` once the request context finished initializing (browsers
@@ -69,22 +74,27 @@ class OEClient;
 - (CefRefPtr<CefListValue>)oe_scriptsValue;
 - (void)oe_handleBeforeDownload:(CefRefPtr<CefDownloadItem>)item
                   suggestedName:(NSString*)name
-                        webView:(nullable OEWebView*)webView
+                     webContent:(nullable OEWebContent*)webContent
                        callback:(CefRefPtr<CefBeforeDownloadCallback>)callback;
 - (void)oe_handleDownloadUpdated:(CefRefPtr<CefDownloadItem>)item
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback;
 @end
 
-@interface OEWebView ()
+@interface OEWebContent ()
 @property(nonatomic, readonly) CefRefPtr<CefBrowser> oe_browser;
 @property(nonatomic, readonly) CefRefPtr<OEClient> oe_client;
-/// Prepares this (not yet created) view to receive a popup browser from
+/// Set by OEBrowser when the content joins or leaves a tab strip.
+@property(nonatomic, weak, nullable) OEBrowser* oe_tabStrip;
+/// Set for extension action popups; resize/close go to this browser.
+@property(nonatomic, weak, nullable) OEBrowser* oe_popupOwner;
+@property(nonatomic, copy, nullable) NSString* oe_popupExtension;
+/// Prepares this (not yet created) content to receive a popup browser from
 /// OnBeforePopup. Fills windowInfo/client for Alloy-style hosting.
 - (BOOL)oe_adoptPopupWithWindowInfo:(CefWindowInfo&)windowInfo
                              client:(CefRefPtr<CefClient>&)client
                            settings:(CefBrowserSettings&)settings
                           extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo
-                             opener:(OEWebView*)opener;
+                             opener:(OEWebContent*)opener;
 /// Chrome style: adopt a popup CefBrowserView created by Chromium.
 - (void)oe_adoptPopupBrowserView:(CefRefPtr<CefBrowserView>)browserView;
 - (void)oe_browserCreated:(CefRefPtr<CefBrowser>)browser;
@@ -96,17 +106,37 @@ class OEClient;
 - (void)oe_setProgress:(double)progress;
 - (void)oe_setFullscreen:(BOOL)fullscreen;
 - (void)oe_setAudible:(BOOL)audible frame:(NSString*)frameId;
-- (void)oe_setCrashState:(OEWebViewCrashState)state;
+- (void)oe_setCrashState:(OEWebContentCrashState)state;
 - (void)oe_setMediaCaptureCamera:(BOOL)camera microphone:(BOOL)microphone;
 - (void)oe_setStatusText:(NSString*)text;
 - (void)oe_notifyZoomChanged;
+- (void)oe_requestContentSize:(NSSize)size;
+- (void)oe_requestClose;
 - (void)oe_devToolsResult:(int)messageId
                   success:(BOOL)success
                      json:(NSData*)json;
 @end
 
+@interface OEBrowser ()
+- (void)oe_popupDidResize:(OEWebContent*)popup size:(NSSize)size;
+- (void)oe_popupRequestedClose:(OEWebContent*)popup;
+- (void)oe_webContentClosed:(OEWebContent*)webContent;
+- (void)oe_extensionsChanged;
+@end
+
 @interface OEExtensionManager ()
-- (instancetype)initOEWithProfile:(OEProfile*)profile;
+- (instancetype)initOEWithContext:(OEBrowserContext*)context;
+@end
+
+@interface OEExtensionAction ()
+- (instancetype)initOEWithExtension:(OEExtension*)extension;
+@end
+
+@interface OEExtension ()
+@property(nonatomic, readonly) BOOL oe_hasAction;
+@property(nonatomic, readonly, copy, nullable) NSString* oe_actionTitle;
+@property(nonatomic, readonly, copy, nullable) NSURL* oe_actionPopupURL;
+@property(nonatomic, readonly, nullable) NSImage* oe_actionIcon;
 @end
 
 @interface OEOpenRequest ()
@@ -115,8 +145,8 @@ class OEClient;
                    userGesture:(BOOL)userGesture
                 requestedFrame:(NSRect)frame
                targetFrameName:(NSString*)targetFrameName
-                        source:(nullable OEWebView*)source
-                       profile:(OEProfile*)profile;
+                        source:(nullable OEWebContent*)source
+                       context:(OEBrowserContext*)context;
 @end
 
 @interface OEJavaScriptDialog ()
@@ -152,16 +182,15 @@ class OEClient;
 OEPermissionKind OEPermissionKindsFromPrompt(uint32_t prompt);
 OEPermissionKind OEPermissionKindsFromMedia(uint32_t media);
 
-/// The CEF client attached to one OEWebView. Implements every handler.
-CefRefPtr<OEClient> OECreateClient(OEWebView* webView);
+/// The CEF client attached to one OEWebContent. Implements every handler.
+CefRefPtr<OEClient> OECreateClient(OEWebContent* webContent);
 
 /// The app (browser + renderer process handlers).
 CefRefPtr<CefApp> OECreateApp(NSArray<NSString*>* _Nullable extraSwitches);
 
 /// Chrome-style Views hosting (OEChromeHost.mm).
-class OEChromeHost;
 CefRefPtr<CefWindowDelegate> OECreateChromeHostWindow(
-    OEWebView* webView,
+    OEWebContent* webContent,
     CefRefPtr<CefClient> client,
     const CefString& url,
     const CefBrowserSettings& settings,

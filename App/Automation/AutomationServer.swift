@@ -9,8 +9,8 @@
     private let controller: AutomationController
     private let queue = DispatchQueue(label: "app.open.automation")
     private var listenFD: Int32 = -1
-    private var acceptSource: DispatchSourceRead?
-    private var clients: [Int32: DispatchSourceRead] = [:]
+    private var acceptSource: (any DispatchSourceRead)?
+    private var clients: [Int32: any DispatchSourceRead] = [:]
     private var buffers: [Int32: Data] = [:]
 
     init(socketURL: URL, controller: AutomationController) {

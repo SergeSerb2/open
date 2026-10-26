@@ -3,16 +3,16 @@
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
-@class OEProfile;
-@class OEWebView;
+@class OEBrowser;
+@class OEBrowserContext;
+@class OEWebContent;
 @class OEOpenRequest;
 @class OEProcessMetrics;
 
 /// Startup options. Copied by -[OEEngine startWithConfiguration:error:].
-NS_SWIFT_NAME(EngineConfiguration)
 OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 
-/// Chromium "user data dir". Every profile lives in a subdirectory.
+/// Chromium "user data dir". Every browser context lives in a subdirectory.
 /// Default: ~/Library/Application Support/Open.
 @property(nonatomic, copy) NSURL* userDataDirectory;
 
@@ -22,7 +22,7 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// UI locale such as "en-US". nil uses the system locale.
 @property(nonatomic, copy, nullable) NSString* locale;
 
-/// Runtime style for web views that do not choose one. Default: Alloy.
+/// Runtime style for web contents that do not choose one. Default: Alloy.
 @property(nonatomic) OERuntimeStyle defaultRuntimeStyle;
 
 /// Opens the DevTools remote debugging port when > 0. Default: 0.
@@ -35,39 +35,38 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// Optional log file. Default: <userDataDirectory>/engine.log.
 @property(nonatomic, copy, nullable) NSURL* logFile;
 
-/// Verbose Chromium logging (LOGSEVERITY_VERBOSE). Default: NO.
+/// Verbose Chromium logging. Default: NO.
 @property(nonatomic) BOOL verboseLogging;
 
 @end
 
 /// Engine-level callbacks. All on the main thread.
 NS_SWIFT_UI_ACTOR
-NS_SWIFT_NAME(EngineDelegate)
 @protocol OEEngineDelegate <NSObject>
 @optional
-/// The browser process finished initialization (CEF OnContextInitialized).
-/// Create web views after this.
+/// The browser process finished initialization. Create web contents after
+/// this (earlier ones wait for it).
 - (void)engineDidInitialize;
 
-/// Chromium opened a page that no OEWebView asked for: chrome.tabs.create()
-/// from an extension, chrome.runtime.openOptionsPage(), a notification click,
-/// or a DevTools window. Return a web view to host it (the shell adds it as a
-/// tab), or nil to let Chromium show a default window.
-- (nullable OEWebView*)engineWebViewForUnownedOpenRequest:
+/// Chromium opened a page that no OEWebContent asked for: chrome.tabs.create()
+/// from an extension service worker, chrome.runtime.openOptionsPage(), or a
+/// notification click. Return a web content to host it (the shell adds it as
+/// a tab), or nil to let Chromium show its own window.
+- (nullable OEWebContent*)engineWebContentForUnownedOpenRequest:
     (OEOpenRequest*)request
-    NS_SWIFT_NAME(engineWebView(forUnownedOpenRequest:));
+    NS_SWIFT_NAME(engineWebContent(forUnownedOpenRequest:));
 
-/// Every OEWebView is closed and the message loop is about to quit.
+/// Every web content is closed and the message loop is about to quit.
 - (void)engineWillShutDown;
 @end
 
-/// Process-wide engine. Lifecycle:
+/// Process-wide engine (ADK "Application"). Lifecycle:
 ///
-///     Engine.shared.start(configuration)   // after NSApplication exists
-///     Engine.shared.runMessageLoop()       // blocks; runs NSApp
-///     Engine.shared.shutdown()             // after the loop returns
+///     let app = OEApplication.shared          // first AppKit call
+///     try OEEngine.shared.start(configuration: config)
+///     OEEngine.shared.runMessageLoop()        // blocks; runs NSApp
+///     OEEngine.shared.shutdown()              // after the loop returns
 NS_SWIFT_UI_ACTOR
-NS_SWIFT_NAME(Engine)
 OE_EXPORT @interface OEEngine : NSObject
 
 @property(class, nonatomic, readonly) OEEngine* shared;
@@ -75,46 +74,59 @@ OE_EXPORT @interface OEEngine : NSObject
 @property(nonatomic, weak, nullable) id<OEEngineDelegate> delegate;
 @property(nonatomic, readonly, copy) OEEngineConfiguration* configuration;
 @property(nonatomic, readonly, getter=isRunning) BOOL running;
+/// YES after -engineDidInitialize.
+@property(nonatomic, readonly, getter=isInitialized) BOOL initialized;
 
 /// "156.0.8078.48" and "156.0.14+g4fa4ab5+chromium-156.0.8078.48".
 @property(nonatomic, readonly, copy) NSString* chromiumVersion;
 @property(nonatomic, readonly, copy) NSString* cefVersion;
 
 /// Initializes Chromium. Call once, on the main thread, after
-/// NSApplication.shared (an OEApplication) exists.
+/// OEApplication.shared exists.
 - (BOOL)startWithConfiguration:(OEEngineConfiguration*)configuration
                          error:(NSError**)error
     NS_SWIFT_NAME(start(configuration:));
 
 /// Runs the NSApplication event loop under Chromium's message pump. Returns
-/// after -terminate finished closing every web view.
+/// after -terminate closed every web content.
 - (void)runMessageLoop;
 
-/// Closes all web views (running beforeunload handlers is skipped), then quits
+/// Closes every web content (beforeunload handlers are skipped), then quits
 /// the message loop. -[OEApplication terminate:] calls this.
 - (void)terminate;
 
 /// Releases Chromium. Call after -runMessageLoop returns.
 - (void)shutdown;
 
-/// The profile that uses <userDataDirectory>/Default.
-@property(nonatomic, readonly) OEProfile* defaultProfile;
+#pragma mark Browser contexts (profiles)
 
-/// Returns the profile stored in <userDataDirectory>/<identifier>, creating
-/// it if needed. Profiles have separate cookies, storage, cache, extensions,
+/// The context stored in <userDataDirectory>/Default.
+@property(nonatomic, readonly) OEBrowserContext* defaultContext;
+
+/// The context stored in <userDataDirectory>/<identifier>, created on first
+/// use. Contexts have separate cookies, storage, cache, extensions,
 /// permissions, and history (Arc "Profiles").
-- (OEProfile*)profileWithIdentifier:(NSString*)identifier
-    NS_SWIFT_NAME(profile(identifier:));
+- (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
+    NS_SWIFT_NAME(context(identifier:));
 
-@property(nonatomic, readonly, copy) NSArray<OEProfile*>* profiles;
+/// A new in-memory context that writes nothing to disk (incognito windows).
+- (OEBrowserContext*)makeEphemeralContext;
 
-/// Every live web view, in creation order.
-@property(nonatomic, readonly, copy) NSArray<OEWebView*>* allWebViews;
+@property(nonatomic, readonly, copy) NSArray<OEBrowserContext*>* contexts;
 
-/// Returns the web view whose identifier (CEF browser id, also the
-/// chrome.tabs tab id for Chrome-style views) matches.
-- (nullable OEWebView*)webViewWithIdentifier:(NSInteger)identifier
-    NS_SWIFT_NAME(webView(identifier:));
+#pragma mark Live objects
+
+/// Every OEBrowser, in creation order.
+@property(nonatomic, readonly, copy) NSArray<OEBrowser*>* browsers;
+
+/// Every live web content, in creation order.
+@property(nonatomic, readonly, copy) NSArray<OEWebContent*>* allWebContents;
+
+/// The web content whose identifier matches.
+- (nullable OEWebContent*)webContentWithIdentifier:(NSInteger)identifier
+    NS_SWIFT_NAME(webContent(identifier:));
+
+#pragma mark Diagnostics
 
 /// Samples Chromium's task manager (one entry per process) and calls back
 /// after `interval` seconds, so CPU usage has a measurement window.
@@ -134,10 +146,9 @@ typedef NS_ENUM(NSInteger, OEProcessKind) {
   OEProcessKindUtility,
   OEProcessKindServiceWorker,
   OEProcessKindOther,
-} NS_SWIFT_NAME(ProcessKind);
+};
 
 /// One task-manager row.
-NS_SWIFT_NAME(ProcessMetrics)
 OE_EXPORT @interface OEProcessMetrics : NSObject
 @property(nonatomic, readonly) int64_t taskIdentifier;
 @property(nonatomic, readonly) OEProcessKind kind;
@@ -150,12 +161,19 @@ OE_EXPORT @interface OEProcessMetrics : NSObject
 @property(nonatomic, readonly) double cpuUsage;
 @end
 
-/// NSApplication subclass that Chromium's message pump needs
-/// (CefAppProtocol). Set it as NSPrincipalClass and create it with
-/// `OEApplication.shared` before any other AppKit call.
+/// The NSApplication subclass that Chromium's message pump needs. Set it as
+/// NSPrincipalClass and create it with `OEApplication.shared` before any other
+/// AppKit call.
+///
+/// Keyboard: -sendEvent: offers every Command/Control key-down to
+/// `keyEquivalentHandler` before any view sees it. Return YES to consume it.
+/// The shell uses this for shortcuts that must win over the page (Arc
+/// reserves Cmd-T, Cmd-W, Cmd-L, Cmd-S, ...); all other shortcuts reach the
+/// page first and come back through -webContent:handleUnconsumedKeyEvent:.
 NS_SWIFT_UI_ACTOR
-NS_SWIFT_NAME(EngineApplication)
 OE_EXPORT @interface OEApplication : NSApplication
+@property(nonatomic, copy, nullable) BOOL (^keyEquivalentHandler)
+    (NSEvent* event);
 @end
 
 /// Entry point for the five helper executables (renderer, GPU, utility,

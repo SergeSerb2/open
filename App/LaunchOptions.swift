@@ -1,12 +1,19 @@
 import AppKit
 import OpenEngine
 
-/// Spike command-line options. Unknown `--switches` also reach Chromium,
-/// because CEF parses the process command line itself (for example
+/// Command-line options. Unknown `--switches` also reach Chromium, because
+/// CEF parses the process command line itself (for example
 /// `--load-extension=/path/to/unpacked`).
+///
+///   Open [URL...] [--user-data-dir=DIR] [--state-dir=DIR] [--style=chrome]
+///        [--open-remote-debugging-port=N] [--automation-socket=PATH]
+///        [--chrome-toolbar] [--verbose]
 struct LaunchOptions {
+  /// Chromium profiles (Default/, Local State, ...).
   var userDataDirectory: URL
-  var defaultStyle: RuntimeStyle = .alloy
+  /// OpenModel snapshot root (SnapshotStore: <root>/State/browser.json).
+  var stateDirectory: URL
+  var defaultStyle: OERuntimeStyle = .alloy
   var initialURLs: [URL] = []
   var remoteDebuggingPort = 0
   var verboseLogging = false
@@ -22,13 +29,19 @@ struct LaunchOptions {
       let defaultDir = support.appendingPathComponent("Open", isDirectory: true)
     #endif
     userDataDirectory = env["OPEN_USER_DATA"].map { URL(fileURLWithPath: $0, isDirectory: true) } ?? defaultDir
+    var state: URL? = env["OPEN_STATE_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
 
+    func path(_ v: String) -> URL {
+      URL(fileURLWithPath: (v as NSString).expandingTildeInPath, isDirectory: true)
+    }
     for arg in arguments.dropFirst() {
       func value(_ name: String) -> String? {
         arg.hasPrefix("--\(name)=") ? String(arg.dropFirst(name.count + 3)) : nil
       }
       if let v = value("user-data-dir") {
-        userDataDirectory = URL(fileURLWithPath: (v as NSString).expandingTildeInPath, isDirectory: true)
+        userDataDirectory = path(v)
+      } else if let v = value("state-dir") {
+        state = path(v)
       } else if let v = value("style") {
         defaultStyle = v == "chrome" ? .chrome : .alloy
       } else if let v = value("open-remote-debugging-port") {
@@ -43,13 +56,14 @@ struct LaunchOptions {
         initialURLs.append(url)
       }
     }
-    if automationSocket == nil, let path = env["OPEN_AUTOMATION_SOCKET"] {
-      automationSocket = URL(fileURLWithPath: path)
+    stateDirectory = state ?? userDataDirectory
+    if automationSocket == nil, let p = env["OPEN_AUTOMATION_SOCKET"] {
+      automationSocket = URL(fileURLWithPath: p)
     }
   }
 }
 
-/// Wall-clock marks for launch measurements (see docs/engine-spike.md).
+/// Wall-clock marks for launch measurements (docs/engine-spike.md).
 @MainActor
 final class LaunchTiming {
   static let shared = LaunchTiming()

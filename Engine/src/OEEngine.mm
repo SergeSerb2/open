@@ -2,6 +2,8 @@
 
 #include <crt_externs.h>
 
+#include <set>
+
 #include "include/cef_application_mac.h"
 #include "include/cef_task_manager.h"
 #include "include/cef_version.h"
@@ -51,6 +53,8 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
   BOOL _handlingSendEvent;
 }
 
+@synthesize keyEquivalentHandler = _keyEquivalentHandler;
+
 - (BOOL)isHandlingSendEvent {
   return _handlingSendEvent;
 }
@@ -61,6 +65,15 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
 
 - (void)sendEvent:(NSEvent*)event {
   CefScopedSendingEvent sendingEventScoper;
+  // App shortcuts that must beat the page. AppKit would otherwise send the
+  // key-down to Chromium's RenderWidgetHostViewCocoa first, and the page can
+  // swallow it.
+  if (event.type == NSEventTypeKeyDown && _keyEquivalentHandler &&
+      (event.modifierFlags &
+       (NSEventModifierFlagCommand | NSEventModifierFlagControl)) &&
+      _keyEquivalentHandler(event)) {
+    return;
+  }
   [super sendEvent:event];
 }
 
@@ -127,21 +140,69 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
 
 namespace {
 
-// Chrome style can create browsers that no OEWebView asked for (extension
-// chrome.tabs.create, options pages, DevTools). They use this client so the
-// engine can count them for shutdown and list them for automation.
-class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
+// Chromium can create browsers that no OEWebContent asked for:
+// chrome.tabs.create() from an extension service worker, an extension's
+// welcome page after install, chrome.runtime.openOptionsPage(). Stock CEF
+// shows them in its own Chrome window. This client catches the first
+// navigation, asks the shell for a web content (an Open tab) to load the URL
+// instead, and closes the Chrome window. Fork patch P1 replaces this with a
+// real tab-strip insertion (the new tab keeps its chrome.tabs identity).
+class OEDefaultClient : public CefClient,
+                        public CefLifeSpanHandler,
+                        public CefRequestHandler {
  public:
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
+  CefRefPtr<CefRequestHandler> GetRequestHandler() override { return this; }
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
     browsers_.push_back(browser);
-    NSLog(@"[OpenEngine] unowned browser %d created: %@",
-          browser->GetIdentifier(),
-          OEString(browser->GetMainFrame()->GetURL()));
+  }
+
+  bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
+                      CefRefPtr<CefFrame> frame,
+                      CefRefPtr<CefRequest> request,
+                      bool user_gesture,
+                      bool is_redirect) override {
+    if (!frame->IsMain() || redirected_.count(browser->GetIdentifier())) {
+      return false;
+    }
+    NSURL* url = OEURL(request->GetURL());
+    if (!url || [url.absoluteString isEqualToString:@"chrome://ignore/"]) {
+      return false;
+    }
+    OEEngine* engine = OEEngine.shared;
+    id<OEEngineDelegate> delegate = engine.delegate;
+    if (![delegate respondsToSelector:@selector
+                   (engineWebContentForUnownedOpenRequest:)]) {
+      return false;
+    }
+    OEBrowserContext* context =
+        [engine oe_contextForRequestContext:browser->GetHost()
+                                                ->GetRequestContext()];
+    OEOpenRequest* open = [[OEOpenRequest alloc]
+        initOEWithURL:url
+          disposition:OEOpenDispositionNewForegroundTab
+          userGesture:user_gesture
+       requestedFrame:NSZeroRect
+      targetFrameName:@""
+               source:nil
+              context:context];
+    OEWebContent* content =
+        [delegate engineWebContentForUnownedOpenRequest:open];
+    if (!content) {
+      return false;
+    }
+    redirected_.insert(browser->GetIdentifier());
+    [content loadURL:url];
+    CefRefPtr<CefBrowser> doomed = browser;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      doomed->GetHost()->CloseBrowser(true);
+    });
+    return true;  // Cancel the navigation in Chromium's own window.
   }
 
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
+    redirected_.erase(browser->GetIdentifier());
     for (auto it = browsers_.begin(); it != browsers_.end(); ++it) {
       if ((*it)->IsSame(browser)) {
         browsers_.erase(it);
@@ -165,6 +226,7 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
 
  private:
   std::vector<CefRefPtr<CefBrowser>> browsers_;
+  std::set<int> redirected_;
   IMPLEMENT_REFCOUNTING(OEDefaultClient);
 };
 
@@ -175,12 +237,13 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
 @implementation OEEngine {
   CefScopedLibraryLoader* _loader;
   OEEngineConfiguration* _configuration;
-  NSPointerArray* _webViews;  // weak, creation order
-  NSMutableDictionary<NSString*, OEProfile*>* _profiles;
-  OEProfile* _defaultProfile;
+  NSPointerArray* _webContents;  // weak, creation order
+  NSPointerArray* _browsers;     // weak, creation order
+  NSMutableDictionary<NSString*, OEBrowserContext*>* _contexts;
+  OEBrowserContext* _defaultContext;
   CefRefPtr<OEDefaultClient> _defaultClient;
   BOOL _terminating;
-  BOOL _initialized;
+  NSUInteger _ephemeralCount;
 }
 
 + (OEEngine*)shared {
@@ -194,8 +257,9 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
 
 - (instancetype)init {
   if ((self = [super init])) {
-    _webViews = [NSPointerArray weakObjectsPointerArray];
-    _profiles = [NSMutableDictionary dictionary];
+    _webContents = [NSPointerArray weakObjectsPointerArray];
+    _browsers = [NSPointerArray weakObjectsPointerArray];
+    _contexts = [NSMutableDictionary dictionary];
   }
   return self;
 }
@@ -242,11 +306,22 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
     return NO;
   }
 
+  [NSFileManager.defaultManager
+            createDirectoryAtURL:_configuration.userDataDirectory
+      withIntermediateDirectories:YES
+                       attributes:nil
+                            error:nil];
+  // CEF compares cache paths as strings: every profile's cache_path must be
+  // inside root_cache_path, so resolve symlinks (/tmp -> /private/tmp) once.
+  char resolved[PATH_MAX];
+  if (realpath(_configuration.userDataDirectory.fileSystemRepresentation,
+               resolved)) {
+    _configuration.userDataDirectory =
+        [NSURL fileURLWithFileSystemRepresentation:resolved
+                                       isDirectory:YES
+                                     relativeToURL:nil];
+  }
   NSString* root = _configuration.userDataDirectory.path;
-  [NSFileManager.defaultManager createDirectoryAtPath:root
-                          withIntermediateDirectories:YES
-                                           attributes:nil
-                                                error:nil];
 
   CefMainArgs args(*_NSGetArgc(), *_NSGetArgv());
   CefSettings settings;
@@ -293,11 +368,11 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
 }
 
 - (void)oe_contextInitialized {
-  _initialized = YES;
-  // With the Chrome runtime this runs nested inside CefInitialize(). A
+  // With the Chrome bootstrap this runs nested inside CefInitialize(). A
   // browser created there gets an empty first navigation entry, so tell the
   // shell once the message loop is running.
   dispatch_async(dispatch_get_main_queue(), ^{
+    self->_initialized = YES;
     if ([self->_delegate respondsToSelector:@selector(engineDidInitialize)]) {
       [self->_delegate engineDidInitialize];
     }
@@ -313,8 +388,11 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
     return;
   }
   _terminating = YES;
-  for (OEWebView* webView in self.allWebViews) {
-    [webView close];
+  for (OEBrowser* browser in self.browsers) {
+    [browser closeExtensionPopup];
+  }
+  for (OEWebContent* webContent in self.allWebContents) {
+    [webContent close];
   }
   _defaultClient->CloseAll();
   [self oe_quitIfDone];
@@ -330,9 +408,12 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
 }
 
 - (void)oe_quitIfDone {
+  if (!_running || !_defaultClient) {
+    return;  // Already shut down (browsers can close during CefShutdown).
+  }
   NSUInteger live = 0;
-  for (OEWebView* webView in self.allWebViews) {
-    if (webView.live) {
+  for (OEWebContent* webContent in self.allWebContents) {
+    if (webContent.live) {
       live++;
     }
   }
@@ -354,7 +435,7 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
 }
 
 - (void)oe_browserDidClose {
-  if (_terminating) {
+  if (_terminating && _running) {
     dispatch_async(dispatch_get_main_queue(), ^{
       [self oe_quitIfDone];
     });
@@ -365,8 +446,8 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
   if (!_running) {
     return;
   }
-  [_profiles removeAllObjects];
-  _defaultProfile = nil;
+  [_contexts removeAllObjects];
+  _defaultContext = nil;
   _defaultClient = nullptr;
   CefShutdown();
   _running = NO;
@@ -378,74 +459,115 @@ class OEDefaultClient : public CefClient, public CefLifeSpanHandler {
   return _defaultClient.get();
 }
 
-#pragma mark Profiles
+#pragma mark Browser contexts
 
-- (OEProfile*)defaultProfile {
-  if (!_defaultProfile) {
+- (OEBrowserContext*)defaultContext {
+  if (!_defaultContext) {
     NSURL* dir = [_configuration.userDataDirectory
         URLByAppendingPathComponent:@"Default"
                         isDirectory:YES];
-    _defaultProfile = [[OEProfile alloc] initOEWithIdentifier:@"Default"
-                                                     directory:dir
-                                                        global:YES];
-    _profiles[@"Default"] = _defaultProfile;
+    _defaultContext = [[OEBrowserContext alloc] initOEWithIdentifier:@"Default"
+                                                            directory:dir
+                                                               global:YES];
+    _contexts[@"Default"] = _defaultContext;
   }
-  return _defaultProfile;
+  return _defaultContext;
 }
 
-- (OEProfile*)profileWithIdentifier:(NSString*)identifier {
+- (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier {
   if ([identifier isEqualToString:@"Default"]) {
-    return self.defaultProfile;
+    return self.defaultContext;
   }
-  OEProfile* profile = _profiles[identifier];
-  if (!profile) {
+  OEBrowserContext* context = _contexts[identifier];
+  if (!context) {
     NSURL* dir =
         [_configuration.userDataDirectory URLByAppendingPathComponent:identifier
                                                           isDirectory:YES];
-    profile = [[OEProfile alloc] initOEWithIdentifier:identifier
-                                             directory:dir
-                                                global:NO];
-    _profiles[identifier] = profile;
+    context = [[OEBrowserContext alloc] initOEWithIdentifier:identifier
+                                                    directory:dir
+                                                       global:NO];
+    _contexts[identifier] = context;
   }
-  return profile;
+  return context;
 }
 
-- (NSArray<OEProfile*>*)profiles {
-  return [_profiles.allValues
-      sortedArrayUsingComparator:^NSComparisonResult(OEProfile* a,
-                                                     OEProfile* b) {
+- (OEBrowserContext*)makeEphemeralContext {
+  NSString* identifier =
+      [NSString stringWithFormat:@"Ephemeral-%lu", (unsigned long)++_ephemeralCount];
+  // Not stored in _contexts: it lives as long as the shell keeps it.
+  return [[OEBrowserContext alloc] initOEWithIdentifier:identifier
+                                              directory:nil
+                                                 global:NO];
+}
+
+- (NSArray<OEBrowserContext*>*)contexts {
+  return [_contexts.allValues
+      sortedArrayUsingComparator:^NSComparisonResult(OEBrowserContext* a,
+                                                     OEBrowserContext* b) {
         return [a.identifier compare:b.identifier];
       }];
 }
 
-#pragma mark Web views
-
-- (void)oe_registerWebView:(OEWebView*)webView {
-  [_webViews addPointer:(__bridge void*)webView];
+- (OEBrowserContext*)oe_contextForRequestContext:
+    (CefRefPtr<CefRequestContext>)requestContext {
+  if (requestContext) {
+    for (OEBrowserContext* context in _contexts.allValues) {
+      if (context.oe_requestContext->IsSharingWith(requestContext)) {
+        return context;
+      }
+    }
+  }
+  return self.defaultContext;
 }
 
-- (void)oe_unregisterWebView:(OEWebView*)webView {
-  for (NSUInteger i = 0; i < _webViews.count; ++i) {
-    if ([_webViews pointerAtIndex:i] == (__bridge void*)webView) {
-      [_webViews removePointerAtIndex:i];
-      break;
+- (void)oe_extensionsChangedInContext:(OEBrowserContext*)context {
+  for (OEBrowser* browser in self.browsers) {
+    if (browser.context == context) {
+      [browser oe_extensionsChanged];
     }
   }
 }
 
-- (NSArray<OEWebView*>*)allWebViews {
-  [_webViews compact];
+#pragma mark Live objects
+
+static NSArray* OELiveObjects(NSPointerArray* array) {
+  [array compact];
   NSMutableArray* out = [NSMutableArray array];
-  for (OEWebView* w in _webViews) {
-    if (w) {
-      [out addObject:w];
+  for (id object in array) {
+    if (object) {
+      [out addObject:object];
     }
   }
   return out;
 }
 
-- (nullable OEWebView*)webViewWithIdentifier:(NSInteger)identifier {
-  for (OEWebView* w in self.allWebViews) {
+- (void)oe_registerBrowser:(OEBrowser*)browser {
+  [_browsers addPointer:(__bridge void*)browser];
+}
+
+- (NSArray<OEBrowser*>*)browsers {
+  return OELiveObjects(_browsers);
+}
+
+- (void)oe_registerWebContent:(OEWebContent*)webContent {
+  [_webContents addPointer:(__bridge void*)webContent];
+}
+
+- (void)oe_unregisterWebContent:(OEWebContent*)webContent {
+  for (NSUInteger i = 0; i < _webContents.count; ++i) {
+    if ([_webContents pointerAtIndex:i] == (__bridge void*)webContent) {
+      [_webContents removePointerAtIndex:i];
+      break;
+    }
+  }
+}
+
+- (NSArray<OEWebContent*>*)allWebContents {
+  return OELiveObjects(_webContents);
+}
+
+- (nullable OEWebContent*)webContentWithIdentifier:(NSInteger)identifier {
+  for (OEWebContent* w in self.allWebContents) {
     if (w.identifier == identifier) {
       return w;
     }

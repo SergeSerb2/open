@@ -3,10 +3,10 @@
 
 NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
-@class OEProfile;
+@class OEBrowserContext;
 @class OEDownload;
 @class OEExtensionManager;
-@class OEWebView;
+@class OEWebContent;
 
 #pragma mark - User scripts (Boosts, Zap)
 
@@ -15,18 +15,18 @@ typedef NS_ENUM(NSInteger, OEUserScriptInjectionTime) {
   OEUserScriptInjectionTimeDocumentStart = 0,
   /// At DOMContentLoaded.
   OEUserScriptInjectionTimeDocumentEnd = 1,
-} NS_SWIFT_NAME(UserScriptInjectionTime);
+};
 
 typedef NS_ENUM(NSInteger, OEUserScriptKind) {
   OEUserScriptKindJavaScript = 0,
-  /// The source is a style sheet; the engine inserts it as a <style> element.
+  /// The source is a style sheet; the engine inserts it as a <style> element
+  /// as soon as <html> exists.
   OEUserScriptKindStyleSheet = 1,
-} NS_SWIFT_NAME(UserScriptKind);
+};
 
-/// A script or style sheet injected into matching frames of every web view in
-/// a profile. Runs in the page's main world (see docs/engine-api.md for the
+/// A script or style sheet injected into matching frames of every web content
+/// in a context. Runs in the page's main world (see docs/engine-api.md for the
 /// isolated-world gap).
-NS_SWIFT_NAME(UserScript)
 OE_EXPORT @interface OEUserScript : NSObject <NSCopying>
 - (instancetype)initWithIdentifier:(NSString*)identifier
                             source:(NSString*)source
@@ -62,12 +62,11 @@ typedef NS_ENUM(NSInteger, OEResourceType) {
   OEResourceTypeServiceWorker,
   OEResourceTypeFavicon,
   OEResourceTypeOther,
-} NS_SWIFT_NAME(ResourceType);
+};
 
 /// Read-only description of one network request. Immutable, so it is safe to
 /// use on the network thread.
 NS_SWIFT_SENDABLE
-NS_SWIFT_NAME(ResourceRequest)
 OE_EXPORT @interface OEResourceRequest : NSObject
 @property(nonatomic, readonly, copy) NSString* URLString;
 @property(nonatomic, readonly, copy) NSString* method;
@@ -77,21 +76,21 @@ OE_EXPORT @interface OEResourceRequest : NSObject
 @property(nonatomic, readonly, copy) NSString* initiator;
 @property(nonatomic, readonly) OEResourceType resourceType;
 @property(nonatomic, readonly) BOOL isNavigation;
-/// OEWebView identifier, or 0 for requests from service workers and other
-/// contexts without a web view.
-@property(nonatomic, readonly) NSInteger webViewIdentifier;
+/// OEWebContent identifier, or 0 for requests from service workers and
+/// other contexts without a web content.
+@property(nonatomic, readonly) NSInteger webContentIdentifier;
 @end
 
 typedef NS_ENUM(NSInteger, OERequestDecision) {
   OERequestDecisionAllow = 0,
   OERequestDecisionBlock = 1,
-} NS_SWIFT_NAME(RequestDecision);
+};
 
-/// Called on Chromium's network (IO) thread for every request in the profile,
-/// including extension and service-worker requests. Must be fast and
-/// thread-safe.
+/// Called on Chromium's network (IO) thread for every request in the
+/// context, including extension and service-worker requests. Must be fast
+/// and thread-safe.
 typedef OERequestDecision (^OERequestFilter)(OEResourceRequest* request)
-    NS_SWIFT_SENDABLE NS_SWIFT_NAME(RequestFilter);
+    NS_SWIFT_SENDABLE;
 
 #pragma mark - Site permissions (Site Control Center)
 
@@ -109,57 +108,57 @@ typedef NS_OPTIONS(uint32_t, OEPermissionKind) {
   OEPermissionKindLocalFonts = 1u << 10,
   OEPermissionKindIdleDetection = 1u << 11,
   OEPermissionKindOther = 1u << 31,
-} NS_SWIFT_NAME(PermissionKind);
+};
 
 typedef NS_ENUM(NSInteger, OEPermissionState) {
   OEPermissionStateAsk = 0,
   OEPermissionStateAllow = 1,
   OEPermissionStateBlock = 2,
-} NS_SWIFT_NAME(PermissionState);
+};
 
-#pragma mark - Profile
+#pragma mark - Browser context
 
 NS_SWIFT_UI_ACTOR
-NS_SWIFT_NAME(ProfileDelegate)
-@protocol OEProfileDelegate <NSObject>
+@protocol OEBrowserContextDelegate <NSObject>
 @optional
 /// A download is about to start. Call `completion` with a destination file
 /// URL, or nil to cancel. If not implemented, files go to ~/Downloads.
-- (void)profile:(OEProfile*)profile
+- (void)browserContext:(OEBrowserContext*)context
     decideDestinationForDownload:(OEDownload*)download
                suggestedFilename:(NSString*)suggestedFilename
                       completion:(void (^NS_SWIFT_UI_ACTOR)(
                                      NSURL* _Nullable destination))completion
-    NS_SWIFT_NAME(profile(_:decideDestinationFor:suggestedFilename:completion:));
+    NS_SWIFT_NAME(browserContext(_:decideDestinationFor:suggestedFilename:completion:));
 /// Progress, completion, cancel, or interruption.
-- (void)profile:(OEProfile*)profile
-    downloadDidUpdate:(OEDownload*)download
-    NS_SWIFT_NAME(profile(_:downloadDidUpdate:));
+- (void)browserContext:(OEBrowserContext*)context
+     downloadDidUpdate:(OEDownload*)download
+    NS_SWIFT_NAME(browserContext(_:downloadDidUpdate:));
 @end
 
-/// A browsing profile: its own cookie jar, storage, cache, extensions,
-/// permissions and history. Backed by a CefRequestContext with its own
-/// cache path (a Chrome Profile underneath).
+/// One browsing profile (ADK "BrowserContext"): its own cookie jar, storage,
+/// cache, extensions, permissions, and history. Backed by a CEF request
+/// context with its own cache path, which is a Chrome Profile underneath.
 NS_SWIFT_UI_ACTOR
-NS_SWIFT_NAME(Profile)
-OE_EXPORT @interface OEProfile : NSObject
+OE_EXPORT @interface OEBrowserContext : NSObject
 
 @property(nonatomic, readonly, copy) NSString* identifier;
-@property(nonatomic, readonly, copy) NSURL* directory;
-@property(nonatomic, weak, nullable) id<OEProfileDelegate> delegate;
+/// The profile folder. nil for ephemeral (in-memory) contexts.
+@property(nonatomic, readonly, copy, nullable) NSURL* directory;
+@property(nonatomic, readonly, getter=isEphemeral) BOOL ephemeral;
+@property(nonatomic, weak, nullable) id<OEBrowserContextDelegate> delegate;
 
-/// Extensions installed in this profile.
+/// Extensions installed in this context.
 @property(nonatomic, readonly) OEExtensionManager* extensions;
 
-/// User scripts. Changes apply to new documents in every web view of the
-/// profile, including documents in web views that already exist.
+/// User scripts. Changes apply to new documents in every web content of the
+/// context, including documents in web contents that already exist.
 @property(nonatomic, readonly, copy) NSArray<OEUserScript*>* userScripts;
 - (void)addUserScript:(OEUserScript*)script NS_SWIFT_NAME(addUserScript(_:));
 - (void)removeUserScriptWithIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(removeUserScript(identifier:));
 - (void)removeAllUserScripts;
 
-/// Network filter for the whole profile. nil allows everything. The block is
+/// Network filter for the whole context. nil allows everything. The block is
 /// read atomically on the network thread.
 @property(atomic, copy, nullable) OERequestFilter requestFilter;
 
@@ -172,14 +171,14 @@ OE_EXPORT @interface OEProfile : NSObject
                     origin:(NSURL*)origin
     NS_SWIFT_NAME(setPermissionState(_:for:origin:));
 
-/// Deletes cookies, cache, and site storage for every site, or for one origin
-/// when `origin` is non-nil.
+/// Deletes cookies (for one origin when `origin` is non-nil) and, for all
+/// sites, the HTTP cache.
 - (void)clearBrowsingDataForOrigin:(nullable NSURL*)origin
                         completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(void))
                                        completion
     NS_SWIFT_NAME(clearBrowsingData(origin:completion:));
 
-/// Every live download in this profile.
+/// Every download of this context since launch.
 @property(nonatomic, readonly, copy) NSArray<OEDownload*>* downloads;
 @end
 
@@ -191,10 +190,9 @@ typedef NS_ENUM(NSInteger, OEDownloadState) {
   OEDownloadStateComplete,
   OEDownloadStateCancelled,
   OEDownloadStateInterrupted,
-} NS_SWIFT_NAME(DownloadState);
+};
 
 NS_SWIFT_UI_ACTOR
-NS_SWIFT_NAME(Download)
 OE_EXPORT @interface OEDownload : NSObject
 @property(nonatomic, readonly) uint32_t identifier;
 @property(nonatomic, readonly, copy) NSURL* sourceURL;
@@ -206,8 +204,8 @@ OE_EXPORT @interface OEDownload : NSObject
 /// -1 when unknown.
 @property(nonatomic, readonly) int64_t totalBytes;
 @property(nonatomic, readonly) int64_t bytesPerSecond;
-/// Web view that started the download, if it still exists.
-@property(nonatomic, readonly, weak, nullable) OEWebView* webView;
+/// Web content that started the download, if it still exists.
+@property(nonatomic, readonly, weak, nullable) OEWebContent* webContent;
 - (void)cancel;
 - (void)pause;
 - (void)resume;

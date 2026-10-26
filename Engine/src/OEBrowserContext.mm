@@ -90,7 +90,7 @@ static OEResourceType OEMapResourceType(cef_resource_type_t t) {
     _initiator = [initiator copy];
     _resourceType = OEMapResourceType(request->GetResourceType());
     _isNavigation = navigation;
-    _webViewIdentifier = browserId;
+    _webContentIdentifier = browserId;
   }
   return self;
 }
@@ -116,14 +116,14 @@ class BlockingResourceHandler : public CefResourceRequestHandler {
 // requests get no per-request handler and no interception overhead.
 class OERequestContextHandler : public CefRequestContextHandler {
  public:
-  explicit OERequestContextHandler(OEProfile* profile)
-      : profile_(profile), block_(new BlockingResourceHandler()) {}
+  explicit OERequestContextHandler(OEBrowserContext* context)
+      : context_(context), block_(new BlockingResourceHandler()) {}
 
   void OnRequestContextInitialized(
       CefRefPtr<CefRequestContext> request_context) override {
-    __weak OEProfile* profile = profile_;
+    __weak OEBrowserContext* context = context_;
     dispatch_async(dispatch_get_main_queue(), ^{
-      [profile oe_contextInitialized];
+      [context oe_contextInitialized];
     });
   }
 
@@ -162,7 +162,7 @@ class OERequestContextHandler : public CefRequestContextHandler {
   }
 
  private:
-  __weak OEProfile* profile_;
+  __weak OEBrowserContext* context_;
   std::mutex mutex_;
   OERequestFilter filter_;
   CefRefPtr<CefResourceRequestHandler> block_;
@@ -256,7 +256,7 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 
 @interface OEDownload ()
 - (instancetype)initOEWithItem:(CefRefPtr<CefDownloadItem>)item
-                        webView:(nullable OEWebView*)webView;
+                     webContent:(nullable OEWebContent*)webContent;
 - (void)oe_updateWithItem:(CefRefPtr<CefDownloadItem>)item
                  callback:(CefRefPtr<CefDownloadItemCallback>)callback;
 @end
@@ -266,13 +266,13 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 }
 
 - (instancetype)initOEWithItem:(CefRefPtr<CefDownloadItem>)item
-                        webView:(OEWebView*)webView {
+                     webContent:(OEWebContent*)webContent {
   if ((self = [super init])) {
     _identifier = item->GetId();
     _sourceURL = OEURL(item->GetURL()) ?: [NSURL URLWithString:@"about:blank"];
     _suggestedFilename = OEString(item->GetSuggestedFileName());
     _MIMEType = OEString(item->GetMimeType());
-    _webView = webView;
+    _webContent = webContent;
     _totalBytes = -1;
     _state = OEDownloadStatePending;
   }
@@ -314,9 +314,9 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 
 @end
 
-#pragma mark - OEProfile
+#pragma mark - OEBrowserContext
 
-@implementation OEProfile {
+@implementation OEBrowserContext {
   CefRefPtr<CefRequestContext> _context;
   CefRefPtr<OERequestContextHandler> _handler;
   NSMutableArray<OEUserScript*>* _scripts;
@@ -327,11 +327,12 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 }
 
 - (instancetype)initOEWithIdentifier:(NSString*)identifier
-                            directory:(NSURL*)directory
+                            directory:(nullable NSURL*)directory
                                global:(BOOL)global {
   if ((self = [super init])) {
     _identifier = [identifier copy];
     _directory = [directory copy];
+    _ephemeral = directory == nil;
     _scripts = [NSMutableArray array];
     _downloads = [NSMutableDictionary dictionary];
     _whenReady = [NSMutableArray array];
@@ -341,16 +342,19 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
       _context = CefRequestContext::CreateContext(
           CefRequestContext::GetGlobalContext(), _handler.get());
     } else {
-      [NSFileManager.defaultManager createDirectoryAtURL:directory
-                             withIntermediateDirectories:YES
-                                              attributes:nil
-                                                   error:nil];
       CefRequestContextSettings settings;
-      CefString(&settings.cache_path) = directory.path.UTF8String;
-      settings.persist_session_cookies = true;
+      if (directory) {
+        [NSFileManager.defaultManager createDirectoryAtURL:directory
+                               withIntermediateDirectories:YES
+                                                attributes:nil
+                                                     error:nil];
+        CefString(&settings.cache_path) = directory.path.UTF8String;
+        settings.persist_session_cookies = true;
+      }
+      // An empty cache_path gives an in-memory (incognito) Chrome profile.
       _context = CefRequestContext::CreateContext(settings, _handler.get());
     }
-    _extensions = [[OEExtensionManager alloc] initOEWithProfile:self];
+    _extensions = [[OEExtensionManager alloc] initOEWithContext:self];
   }
   return self;
 }
@@ -430,17 +434,18 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
   return list;
 }
 
-// Sends the script list to the current renderer of every web view. New
+// Sends the script list to the current renderer of every web content. New
 // renderers get it from extra_info (creation) or OnRenderViewReady.
 - (void)oe_broadcastScripts {
-  for (OEWebView* webView in OEEngine.shared.allWebViews) {
-    if (webView.profile != self || !webView.oe_browser) {
+  for (OEWebContent* webContent in OEEngine.shared.allWebContents) {
+    if (webContent.context != self || !webContent.oe_browser) {
       continue;
     }
     CefRefPtr<CefProcessMessage> msg =
         CefProcessMessage::Create(kOEMsgScriptsUpdate);
     msg->GetArgumentList()->SetList(0, [self oe_scriptsValue]);
-    webView.oe_browser->GetMainFrame()->SendProcessMessage(PID_RENDERER, msg);
+    webContent.oe_browser->GetMainFrame()->SendProcessMessage(PID_RENDERER,
+                                                              msg);
   }
 }
 
@@ -522,10 +527,10 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
 
 - (void)oe_handleBeforeDownload:(CefRefPtr<CefDownloadItem>)item
                   suggestedName:(NSString*)name
-                        webView:(OEWebView*)webView
+                     webContent:(OEWebContent*)webContent
                        callback:(CefRefPtr<CefBeforeDownloadCallback>)callback {
   OEDownload* download = [[OEDownload alloc] initOEWithItem:item
-                                                     webView:webView];
+                                                 webContent:webContent];
   _downloads[@(download.identifier)] = download;
   CefRefPtr<CefBeforeDownloadCallback> cb = callback;
   void (^decide)(NSURL*) = ^(NSURL* destination) {
@@ -534,10 +539,10 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
     }
     // Not calling Continue cancels the download.
   };
-  id<OEProfileDelegate> delegate = _delegate;
+  id<OEBrowserContextDelegate> delegate = _delegate;
   if ([delegate respondsToSelector:@selector
-                (profile:decideDestinationForDownload:suggestedFilename:completion:)]) {
-    [delegate profile:self
+                (browserContext:decideDestinationForDownload:suggestedFilename:completion:)]) {
+    [delegate browserContext:self
         decideDestinationForDownload:download
                    suggestedFilename:name
                           completion:decide];
@@ -554,12 +559,12 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
                         callback:(CefRefPtr<CefDownloadItemCallback>)callback {
   OEDownload* download = _downloads[@(item->GetId())];
   if (!download) {
-    download = [[OEDownload alloc] initOEWithItem:item webView:nil];
+    download = [[OEDownload alloc] initOEWithItem:item webContent:nil];
     _downloads[@(download.identifier)] = download;
   }
   [download oe_updateWithItem:item callback:callback];
-  if ([_delegate respondsToSelector:@selector(profile:downloadDidUpdate:)]) {
-    [_delegate profile:self downloadDidUpdate:download];
+  if ([_delegate respondsToSelector:@selector(browserContext:downloadDidUpdate:)]) {
+    [_delegate browserContext:self downloadDidUpdate:download];
   }
 }
 

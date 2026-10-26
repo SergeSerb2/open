@@ -12,16 +12,16 @@
                    userGesture:(BOOL)userGesture
                 requestedFrame:(NSRect)frame
                targetFrameName:(NSString*)targetFrameName
-                        source:(OEWebView*)source
-                       profile:(OEProfile*)profile {
+                        source:(OEWebContent*)source
+                       context:(OEBrowserContext*)context {
   if ((self = [super init])) {
     _URL = [url copy];
     _disposition = disposition;
     _userGesture = userGesture;
     _requestedFrame = frame;
     _targetFrameName = [targetFrameName copy];
-    _sourceWebView = source;
-    _profile = profile;
+    _sourceWebContent = source;
+    _context = context;
   }
   return self;
 }

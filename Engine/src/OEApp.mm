@@ -16,10 +16,6 @@ const char kOEMsgScriptsUpdate[] = "oe.scripts.update";
 const char kOEMsgAudibleChanged[] = "oe.audible";
 const char kOEExtraScripts[] = "oe.scripts";
 
-@interface OEEngine (AppCallbacks)
-- (void)oe_contextInitialized;
-@end
-
 namespace {
 
 // Glob match where '*' matches any run of characters.

@@ -41,6 +41,11 @@ settings:
       # unless OPEN_AUTOMATION=1 is passed to tools/build.sh for Release.
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG OPEN_AUTOMATION
 
+packages:
+  # Engine-agnostic Swift packages (model, stores, web protocols).
+  OpenKit:
+    path: Packages/OpenKit
+
 targetTemplates:
   CEFHelper:
     type: application
@@ -63,7 +68,7 @@ targetTemplates:
 targets:
   # The only code that includes CEF headers. A dynamic framework so the main
   # app and the five helper executables share one copy of the engine code and
-  # the CEF C++ wrapper (see docs/engine-spike.md, "Project layout").
+  # the CEF C++ wrapper (docs/engine-api.md, "Build layout").
   OpenEngine:
     type: framework
     platform: macOS
@@ -72,6 +77,7 @@ targets:
         headerVisibility: public
         buildPhase: headers
       - path: Engine/src
+        headerVisibility: project
     settings:
       base:
         PRODUCT_NAME: OpenEngine
@@ -122,6 +128,12 @@ targets:
     dependencies:
       - target: OpenEngine
         embed: true
+      - package: OpenKit
+        product: OpenModel
+      - package: OpenKit
+        product: OpenStore
+      - package: OpenKit
+        product: OpenWeb
       - target: OpenHelper
         embed: false
         link: false

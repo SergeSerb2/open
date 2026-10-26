@@ -2,21 +2,21 @@
 
 #include "include/cef_parser.h"
 
-#pragma mark - OEWebViewConfiguration
+#pragma mark - OEWebContentConfiguration
 
-@implementation OEWebViewConfiguration
+@implementation OEWebContentConfiguration
 
-- (instancetype)initWithProfile:(OEProfile*)profile {
+- (instancetype)initWithContext:(OEBrowserContext*)context {
   if ((self = [super init])) {
-    _profile = profile;
+    _context = context;
     _runtimeStyle = OEEngine.shared.configuration.defaultRuntimeStyle;
   }
   return self;
 }
 
 - (id)copyWithZone:(NSZone*)zone {
-  OEWebViewConfiguration* c =
-      [[OEWebViewConfiguration alloc] initWithProfile:_profile];
+  OEWebContentConfiguration* c =
+      [[OEWebContentConfiguration alloc] initWithContext:_context];
   c.runtimeStyle = _runtimeStyle;
   c.backgroundColor = _backgroundColor;
   c.showsChromeToolbar = _showsChromeToolbar;
@@ -104,12 +104,82 @@ static NSView* _Nullable OEFindRenderWidgetView(NSView* _Nullable root) {
   return nil;
 }
 
-#pragma mark - OEWebView
+// CEF needs a browser's parent NSView to outlive the browser (until
+// OnBeforeClose). A web content that is deallocated without -close parks
+// CEF's view here, in a window that is never shown, while Chromium finishes
+// closing it.
+static NSView* OEParkingView() {
+  static NSWindow* window;
+  if (!window) {
+    window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 16, 16)
+                                         styleMask:NSWindowStyleMaskBorderless
+                                           backing:NSBackingStoreBuffered
+                                             defer:YES];
+    window.releasedWhenClosed = NO;
+  }
+  return window.contentView;
+}
+
+#pragma mark - OEWebContentView
+
+@interface OEWebContent (ViewEvents)
+- (void)oe_viewWillMoveToWindow:(nullable NSWindow*)window;
+- (void)oe_viewDidMoveToWindow;
+- (void)oe_viewGeometryChanged;
+@end
+
+// The page's view. CEF's host NSView becomes its only subview (Alloy), or a
+// Views child window is kept glued over it (Chrome). It holds its content
+// weakly: the shell owns the OEWebContent.
+@interface OEWebContentView : NSView
+@property(nonatomic, weak) OEWebContent* content;
+@end
+
+@implementation OEWebContentView
+
+- (BOOL)isFlipped {
+  return YES;
+}
+
+- (void)viewWillMoveToWindow:(NSWindow*)newWindow {
+  [_content oe_viewWillMoveToWindow:newWindow];
+  [super viewWillMoveToWindow:newWindow];
+}
+
+- (void)viewDidMoveToWindow {
+  [super viewDidMoveToWindow];
+  [_content oe_viewDidMoveToWindow];
+}
+
+- (void)setFrameSize:(NSSize)newSize {
+  [super setFrameSize:newSize];
+  [_content oe_viewGeometryChanged];
+}
+
+- (void)setFrameOrigin:(NSPoint)newOrigin {
+  [super setFrameOrigin:newOrigin];
+  [_content oe_viewGeometryChanged];
+}
+
+- (void)viewDidHide {
+  [super viewDidHide];
+  [_content oe_viewGeometryChanged];
+}
+
+- (void)viewDidUnhide {
+  [super viewDidUnhide];
+  [_content oe_viewGeometryChanged];
+}
+
+@end
+
+#pragma mark - OEWebContent
 
 typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable);
 
-@implementation OEWebView {
-  OEWebViewConfiguration* _configuration;
+@implementation OEWebContent {
+  OEWebContentConfiguration* _configuration;
+  OEWebContentView* _view;
   CefRefPtr<OEClient> _client;
   CefRefPtr<CefBrowser> _browser;
   NSURL* _pendingURL;
@@ -117,11 +187,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   BOOL _awaitingPopup;
   BOOL _closeRequested;
   BOOL _isPopup;
-  OEWebView* __weak _pendingChromePopup;
+  OEWebContent* __weak _pendingChromePopup;
   // Chrome style hosting.
   CefRefPtr<CefWindowDelegate> _chromeHost;
   CefRefPtr<CefBrowserView> _adoptedBrowserView;
   NSWindow* __weak _chromeWindow;
+  NSWindow* __weak _observedWindow;
   // DevTools protocol.
   CefRefPtr<CefRegistration> _devToolsRegistration;
   NSMutableDictionary<NSNumber*, OEDevToolsCompletion>* _devToolsCallbacks;
@@ -131,11 +202,14 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   BOOL _autoResize;
   NSSize _autoResizeMin;
   NSSize _autoResizeMax;
+  // Keeps this object (and so the parent view) alive from -close until
+  // Chromium reports the browser closed.
+  OEWebContent* _closingSelf;
 }
 
-- (instancetype)initWithConfiguration:(OEWebViewConfiguration*)configuration
+- (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
                                   URL:(NSURL*)URL {
-  if ((self = [super initWithFrame:NSMakeRect(0, 0, 800, 600)])) {
+  if ((self = [super init])) {
     _configuration = [configuration copy];
     _pendingURL = URL;
     _title = @"";
@@ -143,10 +217,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _devToolsCallbacks = [NSMutableDictionary dictionary];
     _audibleFrames = [NSMutableSet set];
     _client = OECreateClient(self);
-    self.wantsLayer = YES;
+    _view = [[OEWebContentView alloc] initWithFrame:NSMakeRect(0, 0, 800, 600)];
+    _view.content = self;
+    _view.wantsLayer = YES;
     NSColor* bg = _configuration.backgroundColor ?: NSColor.whiteColor;
-    self.layer.backgroundColor = bg.CGColor;
-    [[OEEngine shared] oe_registerWebView:self];
+    _view.layer.backgroundColor = bg.CGColor;
+    [[OEEngine shared] oe_registerWebContent:self];
   }
   return self;
 }
@@ -155,27 +231,42 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _client->Detach();
   if (_browser) {
     _client->SetClosing();
+    if (_configuration.runtimeStyle == OERuntimeStyleAlloy) {
+      NSView* host = (__bridge NSView*)_browser->GetHost()->GetWindowHandle();
+      [OEParkingView() addSubview:host];
+    }
     _browser->GetHost()->CloseBrowser(true);
   }
   if (_chromeHost) {
     OEChromeHostClose(_chromeHost);
   }
+  if (_observedWindow) {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+  }
 }
 
-- (OEWebViewConfiguration*)configuration {
+- (NSView*)view {
+  return _view;
+}
+
+- (OEWebContentConfiguration*)configuration {
   return [_configuration copy];
 }
 
-- (OEProfile*)profile {
-  return _configuration.profile;
+- (OEBrowserContext*)context {
+  return _configuration.context;
 }
 
 - (OERuntimeStyle)runtimeStyle {
   return _configuration.runtimeStyle;
 }
 
-- (BOOL)isFlipped {
-  return YES;
+- (nullable OEBrowser*)browser {
+  return _oe_tabStrip;
+}
+
+- (nullable NSString*)extensionPopupIdentifier {
+  return _oe_popupExtension;
 }
 
 - (BOOL)isLive {
@@ -198,11 +289,17 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   return _client;
 }
 
+- (NSString*)description {
+  return [NSString stringWithFormat:@"<OEWebContent %p id=%ld %@>", self,
+                                    (long)self.identifier,
+                                    _URL ?: _pendingURL];
+}
+
 #pragma mark Creation
 
 - (CefRefPtr<CefDictionaryValue>)oe_extraInfo {
   CefRefPtr<CefDictionaryValue> extra = CefDictionaryValue::Create();
-  extra->SetList(kOEExtraScripts, [self.profile oe_scriptsValue]);
+  extra->SetList(kOEExtraScripts, [self.context oe_scriptsValue]);
   return extra;
 }
 
@@ -217,17 +314,17 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   return settings;
 }
 
-- (void)viewDidMoveToWindow {
-  [super viewDidMoveToWindow];
-  // Wait one run-loop turn: a view returned from
-  // -webView:createWebViewForOpenRequest: is usually added to a window before
-  // OnBeforePopup hands it the popup browser (-oe_adoptPopup...).
-  __weak OEWebView* weakSelf = self;
+- (void)oe_viewDidMoveToWindow {
+  // Wait one run-loop turn: a content returned from
+  // -webContent:createWebContentForOpenRequest: is usually put in a window
+  // before OnBeforePopup hands it the popup browser (-oe_adoptPopup...).
+  __weak OEWebContent* weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
-    OEWebView* view = weakSelf;
-    if (view && view.window && !view->_browser && !view->_creating &&
-        !view->_awaitingPopup && !view->_closeRequested) {
-      [view oe_createBrowser];
+    OEWebContent* content = weakSelf;
+    if (content && content->_view.window && !content->_browser &&
+        !content->_creating && !content->_awaitingPopup &&
+        !content->_closeRequested) {
+      [content oe_createBrowser];
     }
   });
   [self oe_syncChromeWindow];
@@ -235,8 +332,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 - (void)oe_createBrowser {
   _creating = YES;
-  __weak OEWebView* weakSelf = self;
-  [self.profile oe_whenReady:^{
+  __weak OEWebContent* weakSelf = self;
+  [self.context oe_whenReady:^{
     [weakSelf oe_createBrowserNow];
   }];
 }
@@ -247,8 +344,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     return;
   }
   CefString url = OECef(_pendingURL.absoluteString ?: @"about:blank");
-  NSLog(@"[OpenEngine] create browser url=%@ style=%ld", _pendingURL, (long)_configuration.runtimeStyle);
-  CefRefPtr<CefRequestContext> context = self.profile.oe_requestContext;
+  CefRefPtr<CefRequestContext> context = self.context.oe_requestContext;
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {
     _chromeHost = OECreateChromeHostWindow(
         self, _client.get(), url, [self oe_browserSettings],
@@ -256,9 +352,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
         nullptr);
     return;
   }
-  NSRect b = self.bounds;
+  NSRect b = _view.bounds;
   CefWindowInfo info;
-  info.SetAsChild((__bridge CefWindowHandle)self,
+  info.SetAsChild((__bridge CefWindowHandle)_view,
                   CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
   CefBrowserHost::CreateBrowser(info, _client.get(), url,
@@ -270,7 +366,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                              client:(CefRefPtr<CefClient>&)client
                            settings:(CefBrowserSettings&)settings
                           extraInfo:(CefRefPtr<CefDictionaryValue>&)extraInfo
-                             opener:(OEWebView*)opener {
+                             opener:(OEWebContent*)opener {
   if (_browser || _creating) {
     return NO;
   }
@@ -286,16 +382,16 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     _configuration.runtimeStyle = OERuntimeStyleChrome;
     return YES;
   }
-  NSRect b = self.bounds;
-  windowInfo.SetAsChild((__bridge CefWindowHandle)self,
+  NSRect b = _view.bounds;
+  windowInfo.SetAsChild((__bridge CefWindowHandle)_view,
                         CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   windowInfo.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
   _configuration.runtimeStyle = OERuntimeStyleAlloy;
   return YES;
 }
 
-- (nullable OEWebView*)oe_takePendingChromePopup {
-  OEWebView* popup = _pendingChromePopup;
+- (nullable OEWebContent*)oe_takePendingChromePopup {
+  OEWebContent* popup = _pendingChromePopup;
   _pendingChromePopup = nil;
   return popup;
 }
@@ -308,7 +404,6 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 
 - (void)oe_browserCreated:(CefRefPtr<CefBrowser>)browser {
-  NSLog(@"[OpenEngine] browser %d created, main frame url=%@", browser->GetIdentifier(), OEString(browser->GetMainFrame()->GetURL()));
   _browser = browser;
   _creating = NO;
   _awaitingPopup = NO;
@@ -324,7 +419,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
     host.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [self oe_layoutBrowserView];
   }
-  [self oe_notify:OEWebViewChangeURL | OEWebViewChangeLoading];
+  [self oe_notify:OEWebContentChangeLive | OEWebContentChangeURL |
+                  OEWebContentChangeLoading];
 }
 
 - (void)oe_browserClosed {
@@ -332,14 +428,16 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _devToolsRegistration = nullptr;
   for (OEDevToolsCompletion done in _devToolsCallbacks.allValues) {
     done(nil, [NSError errorWithDomain:OEErrorDomain
-                                  code:OEErrorWebViewClosed
+                                  code:OEErrorWebContentClosed
                               userInfo:nil]);
   }
   [_devToolsCallbacks removeAllObjects];
   _chromeHost = nullptr;
   _adoptedBrowserView = nullptr;
   _closeRequested = YES;
-  [[OEEngine shared] oe_unregisterWebView:self];
+  [[OEEngine shared] oe_unregisterWebContent:self];
+  [self oe_notify:OEWebContentChangeLive];
+  _closingSelf = nil;
 }
 
 - (void)oe_chromeWindowReady:(NSWindow*)window {
@@ -347,51 +445,36 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   [self oe_syncChromeWindow];
   // Views applies its own initial bounds (clamped to the primary display)
   // after Show(); place the window again once that has happened.
-  __weak OEWebView* weakSelf = self;
+  __weak OEWebContent* weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC / 10),
                  dispatch_get_main_queue(), ^{
                    [weakSelf oe_syncChromeWindow];
                  });
 }
 
-#pragma mark Chrome-style child window placement
+#pragma mark View geometry
 
-- (void)setFrameSize:(NSSize)newSize {
-  [super setFrameSize:newSize];
+- (void)oe_viewGeometryChanged {
   [self oe_layoutBrowserView];
   [self oe_syncChromeWindow];
 }
 
-// Alloy: CEF's host NSView is our only subview; keep it filling our bounds.
+// Alloy: CEF's host NSView is our view's only subview; keep it filling it.
 - (void)oe_layoutBrowserView {
   if (!_browser || _configuration.runtimeStyle != OERuntimeStyleAlloy) {
     return;
   }
   NSView* host = (__bridge NSView*)_browser->GetHost()->GetWindowHandle();
-  if (host && !NSEqualRects(host.frame, self.bounds)) {
-    host.frame = self.bounds;
+  if (host && !NSEqualRects(host.frame, _view.bounds)) {
+    host.frame = _view.bounds;
   }
 }
 
-- (void)setFrameOrigin:(NSPoint)newOrigin {
-  [super setFrameOrigin:newOrigin];
-  [self oe_syncChromeWindow];
-}
-
-- (void)viewDidHide {
-  [super viewDidHide];
-  [self oe_syncChromeWindow];
-}
-
-- (void)viewDidUnhide {
-  [super viewDidUnhide];
-  [self oe_syncChromeWindow];
-}
-
-- (void)viewWillMoveToWindow:(NSWindow*)newWindow {
+- (void)oe_viewWillMoveToWindow:(NSWindow*)newWindow {
   NSNotificationCenter* nc = NSNotificationCenter.defaultCenter;
-  if (self.window) {
-    [nc removeObserver:self name:nil object:self.window];
+  if (_observedWindow) {
+    [nc removeObserver:self name:nil object:_observedWindow];
+    _observedWindow = nil;
   }
   if (newWindow && _configuration.runtimeStyle == OERuntimeStyleChrome) {
     for (NSNotificationName name in @[
@@ -403,28 +486,29 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                  name:name
                object:newWindow];
     }
+    _observedWindow = newWindow;
   }
-  [super viewWillMoveToWindow:newWindow];
 }
 
 - (void)oe_hostWindowChanged:(NSNotification*)note {
   [self oe_syncChromeWindow];
 }
 
+// Chrome style: keep the Views window over our view, as a child window.
 - (void)oe_syncChromeWindow {
   NSWindow* child = _chromeWindow;
   if (!child) {
     return;
   }
-  NSWindow* host = self.window;
-  if (!host || self.isHiddenOrHasHiddenAncestor) {
+  NSWindow* host = _view.window;
+  if (!host || _view.isHiddenOrHasHiddenAncestor) {
     if (child.parentWindow) {
       [child.parentWindow removeChildWindow:child];
     }
     [child orderOut:nil];
     return;
   }
-  NSRect inWindow = [self convertRect:self.bounds toView:nil];
+  NSRect inWindow = [_view convertRect:_view.bounds toView:nil];
   NSRect onScreen = [host convertRectToScreen:inWindow];
   if (child.parentWindow != host) {
     [child.parentWindow removeChildWindow:child];
@@ -440,9 +524,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 #pragma mark State updates (from OEClient)
 
-- (void)oe_notify:(OEWebViewChange)changes {
-  if ([_delegate respondsToSelector:@selector(webView:didChange:)]) {
-    [_delegate webView:self didChange:changes];
+- (void)oe_notify:(OEWebContentChange)changes {
+  if ([_delegate respondsToSelector:@selector(webContent:didChange:)]) {
+    [_delegate webContent:self didChange:changes];
   }
 }
 
@@ -452,12 +536,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   _URL = [url copy];
   [_audibleFrames removeAllObjects];
-  [self oe_notify:OEWebViewChangeURL];
+  [self oe_notify:OEWebContentChangeURL];
 }
 
 - (void)oe_setTitle:(NSString*)title {
   _title = [title copy];
-  [self oe_notify:OEWebViewChangeTitle];
+  [self oe_notify:OEWebContentChangeTitle];
 }
 
 - (void)oe_setFaviconURL:(NSURL*)url {
@@ -466,19 +550,19 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   _faviconURL = [url copy];
   _favicon = nil;
-  [self oe_notify:OEWebViewChangeFavicon];
+  [self oe_notify:OEWebContentChangeFavicon];
   if (!url || !_browser) {
     return;
   }
-  __weak OEWebView* weakSelf = self;
+  __weak OEWebContent* weakSelf = self;
   NSURL* requested = url;
   _browser->GetHost()->DownloadImage(
       OECef(url.absoluteString), true, 64, false,
       new FaviconCallback(^(NSImage* image) {
-        OEWebView* strongSelf = weakSelf;
+        OEWebContent* strongSelf = weakSelf;
         if (strongSelf && [strongSelf->_faviconURL isEqual:requested]) {
           strongSelf->_favicon = image;
-          [strongSelf oe_notify:OEWebViewChangeFavicon];
+          [strongSelf oe_notify:OEWebContentChangeFavicon];
         }
       }));
 }
@@ -486,15 +570,15 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 - (void)oe_setLoading:(BOOL)loading
             canGoBack:(BOOL)back
          canGoForward:(BOOL)forward {
-  OEWebViewChange changes = 0;
+  OEWebContentChange changes = 0;
   if (_loading != loading) {
     _loading = loading;
-    changes |= OEWebViewChangeLoading;
+    changes |= OEWebContentChangeLoading;
   }
   if (_canGoBack != back || _canGoForward != forward) {
     _canGoBack = back;
     _canGoForward = forward;
-    changes |= OEWebViewChangeNavigationHistory;
+    changes |= OEWebContentChangeNavigationHistory;
   }
   if (changes) {
     [self oe_notify:changes];
@@ -503,15 +587,16 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 - (void)oe_setProgress:(double)progress {
   _estimatedProgress = progress;
-  [self oe_notify:OEWebViewChangeProgress];
+  [self oe_notify:OEWebContentChangeProgress];
 }
 
 - (void)oe_setFullscreen:(BOOL)fullscreen {
   _fullscreen = fullscreen;
-  if ([_delegate respondsToSelector:@selector(webView:didRequestFullscreen:)]) {
-    [_delegate webView:self didRequestFullscreen:fullscreen];
+  if ([_delegate respondsToSelector:@selector(webContent:
+                                        didRequestFullscreen:)]) {
+    [_delegate webContent:self didRequestFullscreen:fullscreen];
   }
-  [self oe_notify:OEWebViewChangeFullscreen];
+  [self oe_notify:OEWebContentChangeFullscreen];
 }
 
 - (void)oe_setAudible:(BOOL)audible frame:(NSString*)frameId {
@@ -523,31 +608,54 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   BOOL now = _audibleFrames.count > 0;
   if (now != _audible) {
     _audible = now;
-    [self oe_notify:OEWebViewChangeAudio];
+    [self oe_notify:OEWebContentChangeAudio];
   }
 }
 
-- (void)oe_setCrashState:(OEWebViewCrashState)state {
+- (void)oe_setCrashState:(OEWebContentCrashState)state {
   if (_crashState == state) {
     return;
   }
   _crashState = state;
-  [self oe_notify:OEWebViewChangeCrash];
+  [self oe_notify:OEWebContentChangeCrash];
 }
 
 - (void)oe_setMediaCaptureCamera:(BOOL)camera microphone:(BOOL)microphone {
   _capturingCamera = camera;
   _capturingMicrophone = microphone;
-  [self oe_notify:OEWebViewChangeMediaCapture];
+  [self oe_notify:OEWebContentChangeMediaCapture];
 }
 
 - (void)oe_setStatusText:(NSString*)text {
   _statusText = [text copy];
-  [self oe_notify:OEWebViewChangeStatusText];
+  [self oe_notify:OEWebContentChangeStatusText];
 }
 
 - (void)oe_notifyZoomChanged {
-  [self oe_notify:OEWebViewChangeZoom];
+  [self oe_notify:OEWebContentChangeZoom];
+}
+
+- (void)oe_requestContentSize:(NSSize)size {
+  OEBrowser* owner = _oe_popupOwner;
+  if (owner) {
+    [owner oe_popupDidResize:self size:size];
+    return;
+  }
+  if ([_delegate respondsToSelector:@selector(webContent:
+                                        didRequestContentSize:)]) {
+    [_delegate webContent:self didRequestContentSize:size];
+  }
+}
+
+- (void)oe_requestClose {
+  OEBrowser* owner = _oe_popupOwner;
+  if (owner) {
+    [owner oe_popupRequestedClose:self];
+    return;
+  }
+  if ([_delegate respondsToSelector:@selector(webContentDidRequestClose:)]) {
+    [_delegate webContentDidRequestClose:self];
+  }
 }
 
 #pragma mark Navigation
@@ -580,8 +688,9 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 
 - (void)sendDevToolsMethod:(NSString*)method
                 parameters:(NSDictionary<NSString*, id>*)parameters
-                completion:(void (^)(NSDictionary* _Nullable,
-                                     NSError* _Nullable))completion {
+                completion:(void (^NS_SWIFT_UI_ACTOR)(
+                               NSDictionary<NSString*, id>* _Nullable,
+                               NSError* _Nullable))completion {
   OEDevToolsCompletion done = [completion copy];
   if (!done) {
     done = ^(NSDictionary* r, NSError* e) {
@@ -589,7 +698,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   if (!_browser) {
     done(nil, [NSError errorWithDomain:OEErrorDomain
-                                  code:OEErrorWebViewClosed
+                                  code:OEErrorWebContentClosed
                               userInfo:nil]);
     return;
   }
@@ -774,22 +883,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                                   new PdfCallback(completion));
 }
 
-- (BOOL)executeChromeCommand:(NSInteger)commandIdentifier {
-  if (!_browser ||
-      !_browser->GetHost()->CanExecuteChromeCommand((int)commandIdentifier)) {
-    return NO;
-  }
-  _browser->GetHost()->ExecuteChromeCommand((int)commandIdentifier,
-                                            CEF_WOD_CURRENT_TAB);
-  return YES;
-}
-
 - (void)setMuted:(BOOL)muted {
   _muted = muted;
   if (_browser) {
     _browser->GetHost()->SetAudioMuted(muted);
   }
-  [self oe_notify:OEWebViewChangeAudio];
+  [self oe_notify:OEWebContentChangeAudio];
 }
 
 - (void)enableAutoResizeWithMinimumSize:(NSSize)minimumSize
@@ -831,16 +930,21 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 
 - (void)close {
+  if (_closeRequested && !_browser) {
+    return;
+  }
   _closeRequested = YES;
   _client->SetClosing();
+  [_oe_tabStrip oe_webContentClosed:self];
   if (_browser) {
+    _closingSelf = self;
     _browser->GetHost()->CloseBrowser(true);
   }
   if (_chromeHost) {
     OEChromeHostClose(_chromeHost);
   }
   if (!_browser) {
-    [[OEEngine shared] oe_unregisterWebView:self];
+    [[OEEngine shared] oe_unregisterWebContent:self];
   }
 }
 

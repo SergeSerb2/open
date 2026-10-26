@@ -2,6 +2,7 @@
 
 #import <OpenEngine/OEDefines.h>
 #import <OpenEngine/OEEngine.h>
+#import <OpenEngine/OEBrowserContext.h>
+#import <OpenEngine/OEBrowser.h>
+#import <OpenEngine/OEWebContent.h>
 #import <OpenEngine/OEExtension.h>
-#import <OpenEngine/OEProfile.h>
-#import <OpenEngine/OEWebView.h>

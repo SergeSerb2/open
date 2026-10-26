@@ -2,10 +2,11 @@
 //
 // CEF has no extension API since M128 (CefExtension and
 // CefRequestContext::LoadExtension were removed with the Alloy runtime). The
-// Chrome extension system still runs inside every profile, so we read its
-// state from the profile on disk: "extensions.settings" in Preferences /
-// Secure Preferences, plus each extension's manifest.json and _locales.
-// Dynamic action state (badge, setIcon, setTitle) is not on disk: gap G3.
+// Chrome extension system still runs inside every context, so until fork
+// patch P3 we read its state from the profile on disk: "extensions.settings"
+// in Preferences / Secure Preferences, plus each extension's manifest.json
+// and _locales. Dynamic action state (badge, setIcon, setTitle) is not on
+// disk; patch P2 adds it.
 
 #import "OEInternal.h"
 
@@ -100,14 +101,14 @@ NSDictionary* ReadJSON(NSURL* url) {
 
   NSDictionary* action = manifest[@"action"] ?: manifest[@"browser_action"]
                                                    ?: manifest[@"page_action"];
-  _hasAction = [action isKindOfClass:NSDictionary.class];
+  _oe_hasAction = [action isKindOfClass:NSDictionary.class];
   NSString* base =
       [NSString stringWithFormat:@"chrome-extension://%@/", identifier];
-  if (_hasAction) {
-    _actionTitle = [self oe_localize:action[@"default_title"]];
+  if (_oe_hasAction) {
+    _oe_actionTitle = [self oe_localize:action[@"default_title"]];
     NSString* popup = action[@"default_popup"];
     if ([popup isKindOfClass:NSString.class] && popup.length) {
-      _actionPopupURL =
+      _oe_actionPopupURL =
           [NSURL URLWithString:[base stringByAppendingString:popup]];
     }
   }
@@ -118,8 +119,10 @@ NSDictionary* ReadJSON(NSURL* url) {
   if ([options isKindOfClass:NSString.class] && options.length) {
     _optionsURL = [NSURL URLWithString:[base stringByAppendingString:options]];
   }
-  _icon = [self oe_bestIcon:(_hasAction ? action[@"default_icon"] : nil)]
-              ?: [self oe_bestIcon:manifest[@"icons"]];
+  _icon = [self oe_bestIcon:manifest[@"icons"]];
+  _oe_actionIcon =
+      (_oe_hasAction ? [self oe_bestIcon:action[@"default_icon"]] : nil)
+          ?: _icon;
 
   NSMutableArray* perms = [NSMutableArray array];
   NSMutableArray* hosts = [NSMutableArray array];
@@ -207,6 +210,24 @@ NSDictionary* ReadJSON(NSURL* url) {
 
 @end
 
+#pragma mark - OEExtensionAction
+
+@implementation OEExtensionAction
+
+- (instancetype)initOEWithExtension:(OEExtension*)extension {
+  if ((self = [super init])) {
+    _extensionIdentifier = [extension.identifier copy];
+    _title = [extension.oe_actionTitle ?: extension.name copy];
+    _icon = extension.oe_actionIcon;
+    _enabled = extension.enabled;
+    _popupURL = [extension.oe_actionPopupURL copy];
+    _hasPopup = _popupURL != nil;
+  }
+  return self;
+}
+
+@end
+
 #pragma mark - OEExtensionManager
 
 @implementation OEExtensionManager {
@@ -215,9 +236,9 @@ NSDictionary* ReadJSON(NSURL* url) {
   BOOL _reloadScheduled;
 }
 
-- (instancetype)initOEWithProfile:(OEProfile*)profile {
+- (instancetype)initOEWithContext:(OEBrowserContext*)context {
   if ((self = [super init])) {
-    _profile = profile;
+    _context = context;
     _installed = @[];
     [self reload];
     [self oe_watch];
@@ -255,7 +276,11 @@ NSDictionary* ReadJSON(NSURL* url) {
 }
 
 - (void)reload {
-  NSURL* dir = _profile.directory;
+  NSURL* dir = _context.directory;
+  if (!dir) {
+    // Ephemeral contexts have no folder (patch P3 reads the live registry).
+    return;
+  }
   NSMutableDictionary* settings = [NSMutableDictionary dictionary];
   // Secure Preferences holds MAC-protected entries; Preferences holds the
   // rest. Merge both, Secure Preferences winning.
@@ -300,22 +325,31 @@ NSDictionary* ReadJSON(NSURL* url) {
     }
   }
   _installed = out;
-  if (changed &&
-      [_delegate respondsToSelector:@selector(extensionManagerDidChange)]) {
-    [_delegate extensionManagerDidChange];
+  if (changed) {
+    if ([_delegate respondsToSelector:@selector(extensionManagerDidChange)]) {
+      [_delegate extensionManagerDidChange];
+    }
+    OEBrowserContext* context = _context;
+    if (context) {
+      [OEEngine.shared oe_extensionsChangedInContext:context];
+    }
   }
 }
 
 // Chromium rewrites Preferences atomically (write + rename) a few seconds
 // after a change, so watch the directory and debounce.
 - (void)oe_watch {
-  int fd = open(_profile.directory.fileSystemRepresentation, O_EVTONLY);
+  NSURL* dir = _context.directory;
+  if (!dir) {
+    return;
+  }
+  int fd = open(dir.fileSystemRepresentation, O_EVTONLY);
   if (fd < 0) {
-    [NSFileManager.defaultManager createDirectoryAtURL:_profile.directory
+    [NSFileManager.defaultManager createDirectoryAtURL:dir
                            withIntermediateDirectories:YES
                                             attributes:nil
                                                  error:nil];
-    fd = open(_profile.directory.fileSystemRepresentation, O_EVTONLY);
+    fd = open(dir.fileSystemRepresentation, O_EVTONLY);
     if (fd < 0) {
       return;
     }
@@ -343,19 +377,6 @@ NSDictionary* ReadJSON(NSURL* url) {
     close(fd);
   });
   dispatch_resume(_watcher);
-}
-
-- (nullable OEWebView*)makeActionPopupWebViewForExtension:(OEExtension*)extension
-                                            activeWebView:(OEWebView*)activeWebView {
-  if (!extension.actionPopupURL) {
-    return nil;
-  }
-  OEWebViewConfiguration* config =
-      [[OEWebViewConfiguration alloc] initWithProfile:_profile];
-  config.runtimeStyle =
-      activeWebView ? activeWebView.runtimeStyle : config.runtimeStyle;
-  return [[OEWebView alloc] initWithConfiguration:config
-                                              URL:extension.actionPopupURL];
 }
 
 @end
