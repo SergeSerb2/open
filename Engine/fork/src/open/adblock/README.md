@@ -1,14 +1,23 @@
-# Open ad-block build placeholder
+# Open ad-block engine (`//open/adblock`)
 
-No code until Step 8 of [fork-infra](../../../../../docs/plans/fork-infra.md).
-The crate pin is `adblock = "=0.8.11"` (MPL-2.0), recorded in `VERSIONS`.
+Native ad blocking in the browser process, built on Brave's `adblock` crate
+0.8.11 (MPL-2.0), vendored with Chromium's `gnrt`
+(`Engine/fork/patches/rust/0001-adblock-vendor.patch`). The plan is
+[adblock-fork](../../../../../docs/plans/adblock-fork.md); the security
+review is in [engine-patches.md](../../../../../docs/engine-patches.md) P8.
 
-The target shape is `OpenAdBlockService` plus
-`OpenAdBlockURLLoaderThrottle` under `//open/adblock`, as specified in
-[adblock-design](../../../../../docs/adblock-design.md). This placeholder
-does not enable a dependency or a GN target.
+| Path | What | Step |
+|---|---|---|
+| `rust/` | `//open/adblock/rust:open_adblock_rust`: the CXX bridge (`src/lib.rs`). C++ includes `open/adblock/rust/src/lib.rs.h`, namespace `open_adblock`. | 2 |
+| `//open:open` (`../BUILD.gn`) | Group of every Open GN target. | 2 |
 
-Step 8 follows fork-infra §7.4 R1–R6: merge the `.open` fragments, vendor
-with Chromium's `gnrt`, generate GN files, build with Chromium's Rust
-toolchain, review the full dependency closure, then capture the result in
-`patches/rust/`. Normal apply uses the captured patch with no network.
+Rules for the Rust shim:
+
+- Nothing in it may panic: Chromium builds Rust with `-Cpanic=abort`
+  (`build/config/compiler/BUILD.gn`), so a panic ends the browser process.
+  Use only crate calls that return a `Result` or an empty value.
+- `OpenAdblockEngine` must stay `Send + Sync` (the assertion at the end of
+  `lib.rs`); if it stops compiling, a thread-unsafe crate feature came back.
+- Scriptlet and redirect resources arrive as the crate's own JSON
+  `Vec<Resource>` (Step 7 produces it), not through the crate's
+  path-based assembler, which panics on malformed files.

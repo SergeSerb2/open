@@ -1,0 +1,8 @@
+# Copyright 2026 The Open Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Every Open GN target (docs/plans/adblock-fork.md §3.4).
+group("open") {
+  deps = [ "//open/adblock/rust:open_adblock_rust" ]
+}

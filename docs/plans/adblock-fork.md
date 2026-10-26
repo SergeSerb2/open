@@ -2462,3 +2462,19 @@ contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.
 - **Size.** `patches/rust/0001-adblock-vendor.patch` is 11.3 MB (gate: 20 MB).
 - **Closure.** 23 new crate directories; all MIT, Apache-2.0, Unicode-3.0 or MPL-2.0 (adblock). No GPL-family license. Rows: `Engine/fork/licenses/THIRD_PARTY.md`.
 - **List pins.** The bundled list pins are stale: EasyList changed upstream. The perf bench used current lists from the official URLs (never Arc's bundle). Refreshing the pins is a reviewed Step 7 action (`docs/followups.md`).
+
+### Step 2 as built (2026-10-26)
+
+- **Files.** `open/adblock/rust/{BUILD.gn,src/lib.rs}` (about 250 lines) and `open/BUILD.gn` (`group("open")`). The shim's `deps`: `//third_party/rust/adblock/v0_8:lib` and `//third_party/rust/serde_json/v1:lib`. `serde_json` is already a Chromium direct dependency with no visibility limit, so the §4.2 fragment needs no line. `visibility` also lists `//open:*`, so the root group can hold the shim until Step 3 adds `//open/adblock`.
+- **Include path.** The generated header is `gen/open/adblock/rust/src/lib.rs.h`. C++ includes `open/adblock/rust/src/lib.rs.h`, namespace `open_adblock` (the plan's expected spelling).
+- **R-2 (resources): JSON form.** `open_adblock_build(list_texts, resources_json)` takes the crate's own serialized `Vec<Resource>`, parsed with `serde_json` (a `Result`, no new parser). The crate's assembler only reads paths, its scriptlet entry point is `#[deprecated]`, and it panics on malformed files (`resource_assembler.rs:125,168,190,248-254,271,295`). Step 7 must produce `resources.json` in that format.
+- **R-3 (no panics).** Chromium builds Rust with `-Cpanic=abort` (`build/config/compiler/BUILD.gn:1035-1041`), so `catch_unwind` cannot help. The shim calls only crate functions that return a `Result` or an empty value: `Request::new`, `deserialize`, `serialize_raw`, and `url_cosmetic_resources` (which returns empty for a bad URL). A failed deserialize resets the engine to empty. Fuzzing the crate's parsers remains a follow-up.
+- **R-5 (redirect).** In 0.8.11, `BlockerResult.redirect` is already a complete `data:` URL (base64; the crate's tests at `blocker.rs:1405,1691`), so there is no percent-encoder. Scripts get the crate's URL. Any other type gets `has_redirect = true` with an empty URL, so C++ blocks it.
+- **R-7.** Selectors are sorted. Removals (`remove_selectors`, `remove_attrs`, `remove_classes`) go to the agent as `window.__openAdBlockProcedural=<JSON>;` ahead of the scriptlets. `exceptions` is sorted.
+- **Build.** `engine-build --target open/adblock/rust:open_adblock_rust` exit 0. The target is reachable through a temporary `root_extra_deps = [ "//open" ]`, which is not committed (Step 3 wires `//open/adblock` into `libcef_static`).
+- **Driver** (`/tmp/adblock-shim-driver`, a Cargo crate with Chromium's `rustc 1.100.0` that compiles this `lib.rs` as a module; not committed):
+  - Build 124 ms. Trackers blocked, first-party CSS and reCAPTCHA allowed, the same after a serialize round trip.
+  - DAT 6.47 MiB (F-15: ~6.8 MiB); serialize 46 ms, deserialize 31 ms.
+  - Script redirect gives a `data:application/javascript;base64,…` URL; image redirect is blocked.
+  - nytimes.com gets 443 hide selectors; `.ad--300x250` gets a generic selector.
+  - Bad URLs, a garbage or truncated DAT, and broken resources JSON all degrade without a panic.
