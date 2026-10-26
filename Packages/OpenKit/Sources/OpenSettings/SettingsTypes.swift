@@ -71,7 +71,7 @@ public extension AutoArchiveInterval {
     public static let values: [String: Any] = [
         "open.settings.lastPane": "general", "open.general.automaticallyUpdate": true,
         "open.general.warnBeforeQuitting": true, "open.general.previewsEnabled": true,
-        "open.general.previewsOnHover": true, "open.general.previewsDelaySeconds": 0.5,
+        "open.general.previewsFolders": true, "open.general.previewsPages": true, "open.general.previewsDelaySeconds": 0.5,
         "open.general.searchSuggestNoticeDismissed": false,
         "open.links.externalInLittleOpen": true, "open.links.littleOpenHotkeyEnabled": true,
         "open.links.optionCommandClickLittleOpen": true, "open.links.openPeekOtherSites": true,
@@ -82,8 +82,25 @@ public extension AutoArchiveInterval {
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,
         "open.advanced.playSoundEffects": false, "open.advanced.hapticOnTabReorder": true,
         "open.advanced.tabSleepMode": "automatic", "open.appIcon.selectedID": "openDefault",
+        "open.sidebar.hideHintShown": false, "open.sidebar.autoArchiveBannerDismissed": false,
+        "open.sidebar.autoArchiveBannerEligible": true,
         "open.library.lastSection": "archive", "open.shortcuts.defaultPriority": "browser",
         "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": true,
     ]
-    public static func register(in defaults: UserDefaults) { defaults.register(defaults: values) }
+    public static func register(in defaults: UserDefaults) {
+        // Registration fallbacks can already exist from another Settings or
+        // Library instance. Inspect stored choices without those two fallbacks;
+        // this synchronous main-actor operation never removes persistent values.
+        if let legacy = defaults.object(forKey: "open.general.previewsOnHover") as? Bool {
+            let keys = ["open.general.previewsFolders", "open.general.previewsPages"]
+            let registered = defaults.volatileDomain(forName: UserDefaults.registrationDomain)
+            var inspection = registered
+            for key in keys { inspection.removeValue(forKey: key) }
+            defaults.setVolatileDomain(inspection, forName: UserDefaults.registrationDomain)
+            let missing = keys.filter { defaults.object(forKey: $0) == nil }
+            defaults.setVolatileDomain(registered, forName: UserDefaults.registrationDomain)
+            for key in missing { defaults.set(legacy, forKey: key) }
+        }
+        defaults.register(defaults: values)
+    }
 }

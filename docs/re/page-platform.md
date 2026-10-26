@@ -331,3 +331,17 @@ and the type list `ToastController`, `ToastWindow`, `ToastAnimator`,
 | C-D1 | Ctrl+D on a localhost page: what changes | PG-10.3 |
 | C-N1 | A site notification banner and a click on it while the tab is in another Space | PG-5 click behavior |
 | C-Q1 | Copy URL as Quote, then paste into TextEdit (plain text) | PG-2.2 clipboard format |
+
+## PG-14 Capture session 2 results (2026-10-26)
+
+Measured in the second capture session (1x, sRGB after the display profile; `interaction-states.md` §20, notation S2 `<item>/<frame>` and V `<seconds>` for `video/21-motion.mov`).
+
+| Item | Result | Evidence |
+|---|---|---|
+| C-T1, light Space | In macOS Light with the default theme, the "Copied Current URL" toast is a lavender pill (`#CABEEB` area) with dark text and the share button. Selected text, the quote offer, and the zoom toasts were not captured. | S2 20/0048 |
+| C-T1, lifetime and motion | The copy toast grows from a small pill at the top center of its final place while moving down (≈ 0.20 s, settled by ≈ 0.46 s), stays ≈ 4.95 s, and shrinks back up in ≈ 0.16 s. | V 69.99–75.11 s |
+| Link status bubble (new) | Hovering a link shows a capsule at the bottom-left of the web content: 10 pt from its left edge, 12 pt above its bottom edge, 23 pt tall, fill `#0A0D4F` in the default dark theme, white text, the URL without the scheme. No AX element. | S2 04/0021, 0033 |
+| Developer Mode tile | The Site Control Center lists "Developer Mode" / "Off" under Settings on a public site. ⌃D was not tested. | S2 09/0010 |
+| C-C1, C-C2 | The Site Control Center action row has "Capture" (camera) and a second capture button (viewfinder). Not opened. | S2 09/0010 |
+
+C-S1, C-R1, C-D1, C-N1, and C-Q1 stay open.

@@ -1,0 +1,188 @@
+{
+  "baseline_ref": "15e261e4fe06fb77149ddda446b9e4f0522490b8",
+  "binary_sha256": {
+    "baseline": "c23d7058f840726e73de9dfe27eba38b189043fb712b55b35d683d9ff9ca4442",
+    "head": "01c09b933f451a0bfe6b4f99e1c33d81a4345921ba86549dff4969ebd9e670de"
+  },
+  "records": [
+    {
+      "build": "baseline",
+      "pair": 1,
+      "p95_ms": 3.16
+    },
+    {
+      "build": "head",
+      "pair": 1,
+      "p95_ms": 3.23
+    },
+    {
+      "build": "head",
+      "pair": 2,
+      "p95_ms": 5.17
+    },
+    {
+      "build": "baseline",
+      "pair": 2,
+      "p95_ms": 3.03
+    },
+    {
+      "build": "baseline",
+      "pair": 3,
+      "p95_ms": 2.19
+    },
+    {
+      "build": "head",
+      "pair": 3,
+      "p95_ms": 2.32
+    },
+    {
+      "build": "head",
+      "pair": 4,
+      "p95_ms": 2.68
+    },
+    {
+      "build": "baseline",
+      "pair": 4,
+      "p95_ms": 2.04
+    },
+    {
+      "build": "baseline",
+      "pair": 5,
+      "p95_ms": 2.07
+    },
+    {
+      "build": "head",
+      "pair": 5,
+      "p95_ms": 3.17
+    },
+    {
+      "build": "head",
+      "pair": 6,
+      "p95_ms": 2.45
+    },
+    {
+      "build": "baseline",
+      "pair": 6,
+      "p95_ms": 1.71
+    },
+    {
+      "build": "baseline",
+      "pair": 7,
+      "p95_ms": 1.69
+    },
+    {
+      "build": "head",
+      "pair": 7,
+      "p95_ms": 2.57
+    },
+    {
+      "build": "head",
+      "pair": 8,
+      "p95_ms": 1.98
+    },
+    {
+      "build": "baseline",
+      "pair": 8,
+      "p95_ms": 1.76
+    },
+    {
+      "build": "baseline",
+      "pair": 9,
+      "p95_ms": 1.89
+    },
+    {
+      "build": "head",
+      "pair": 9,
+      "p95_ms": 1.76
+    },
+    {
+      "build": "head",
+      "pair": 10,
+      "p95_ms": 1.65
+    },
+    {
+      "build": "baseline",
+      "pair": 10,
+      "p95_ms": 2.75
+    },
+    {
+      "build": "baseline",
+      "pair": 11,
+      "p95_ms": 1.51
+    },
+    {
+      "build": "head",
+      "pair": 11,
+      "p95_ms": 2.42
+    },
+    {
+      "build": "head",
+      "pair": 12,
+      "p95_ms": 3.4
+    },
+    {
+      "build": "baseline",
+      "pair": 12,
+      "p95_ms": 3.26
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "runs": [
+        3.16,
+        3.03,
+        2.19,
+        2.04,
+        2.07,
+        1.71,
+        1.69,
+        1.76,
+        1.89,
+        2.75,
+        1.51,
+        3.26
+      ],
+      "median_p95_ms": 2.0549999999999997,
+      "mean_p95_ms": 2.255
+    },
+    "head": {
+      "runs": [
+        3.23,
+        5.17,
+        2.32,
+        2.68,
+        3.17,
+        2.45,
+        2.57,
+        1.98,
+        1.76,
+        1.65,
+        2.42,
+        3.4
+      ],
+      "median_p95_ms": 2.51,
+      "mean_p95_ms": 2.7333333333333334
+    },
+    "median_p95_ms_delta": 0.45500000000000007,
+    "mean_p95_ms_delta": 0.4783333333333335,
+    "paired_deltas": [
+      0.06999999999999984,
+      2.14,
+      0.1299999999999999,
+      0.6400000000000001,
+      1.1,
+      0.7400000000000002,
+      0.8799999999999999,
+      0.21999999999999997,
+      -0.1299999999999999,
+      -1.1,
+      0.9099999999999999,
+      0.14000000000000012
+    ],
+    "paired_median_delta": 0.43000000000000005,
+    "paired_trimmed20_mean_delta": 0.46625,
+    "original_gate": "FAIL",
+    "paired_gate": "FAIL"
+  },
+  "MC9": "FAIL"
+}

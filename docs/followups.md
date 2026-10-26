@@ -38,3 +38,4 @@ Small items found during review and verification. Each line: area — issue — 
   the symbol/string evidence and confirm the tooltip text/case with S9.
 - Shell (P2) — an extension action while Peek is open acts on the tab under the Peek page (`activeTab`, `chrome.tabs.query` see that tab). Decide when the toolbar UI lands: close Peek first, or refuse the action. — engine review r1 of #93 (Q4), 2026-10-26
 - Engine (P2) — a window without a live Chrome tab reads the profile's action list, but nothing tells it when pins change in another window (only the live model observes `ToolbarActionsModel`). Observe the profile's model in the strip when the toolbar UI needs it. — engine lead, 2026-10-26
+- Offscreen text anti-aliasing is nondeterministic between builds (row-title color metrics only); investigate font smoothing in the shared Renderer.
