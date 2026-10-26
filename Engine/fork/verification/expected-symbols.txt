@@ -1,0 +1,5 @@
+# Stock CEF C API entry points (prove with nm at Step 7; fix spellings from real output)
+_cef_execute_process
+_cef_initialize
+_cef_shutdown
+_cef_version_info

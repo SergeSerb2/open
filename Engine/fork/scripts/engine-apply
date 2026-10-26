@@ -1,0 +1,145 @@
+#!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+usage() {
+    cat <<'EOF'
+engine-apply [--dry-run] [--only chromium|cef|rust|overlay] [--status-file <path>]
+No arguments: show help. Use --only or --status-file to run, or --all for all layers.
+Engine/fork/scripts/engine-apply --all
+Engine/fork/scripts/engine-apply --dry-run
+EOF
+}
+[[ $# -gt 0 ]] || { usage; exit 0; }
+dry=0 only=all status_file=
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --all) shift ;;
+        --dry-run) dry=1; shift ;;
+        --only) [[ $# -ge 2 ]] || die '--only needs a value'; only=$2; shift 2 ;;
+        --status-file) [[ $# -ge 2 ]] || die '--status-file needs a path'; status_file=$2; shift 2 ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+case "$only" in all|chromium|cef|rust|overlay) ;; *) die "invalid series: $only" ;; esac
+# Validate every series before running even CEF's patcher.
+plan=$("$SCRIPT_DIR/engine-status" --patch-plan) || die 'invalid patch series'
+for pair in "$SRC_DIR:$CHROMIUM_COMMIT" "$SRC_DIR/cef:$CEF_COMMIT"; do
+    path=${pair%:*} expected=${pair##*:}
+    actual=$(git -C "$path" rev-parse HEAD) || die "missing repository: $path"
+    [[ "$actual" == "$expected" ]] || die "$path HEAD $actual; expected $expected; run engine-bootstrap or engine-rebase"
+done
+export_engine_env
+if [[ $dry == 0 ]]; then
+    require_no_build_running
+    acquire_lock apply
+fi
+if [[ $dry == 1 ]]; then
+    log 'dry-run: CEF patch step skipped'
+elif [[ "$only" == overlay ]]; then
+    log 'CEF patch step skipped: overlay-only selection'
+else
+    if ! cef_output=$(cd "$SRC_DIR/cef" && python3 tools/patcher.py 2>&1); then
+        log "$cef_output"
+        die "CEF patcher failed; see $LOG_DIR/engine-apply.log"
+    fi
+    log "$cef_output"
+    [[ "$cef_output" =~ [1-9][0-9]*\ failed ]] && die "CEF patches failed; see $LOG_DIR/engine-apply.log"
+fi
+applied=0 already=0 disabled=0 copied=0 overlays=0 outcomes=
+while IFS=$'\t' read -r kind series name line; do
+    [[ -n "$kind" ]] || continue
+    [[ "$only" == all || "$only" == "$series" ]] || continue
+    if [[ "$kind" == disabled ]]; then
+        log "skipped-disabled: $series/$name ($line)"
+        disabled=$((disabled + 1))
+        outcomes+="$series/$name"$'\t''disabled'$'\n'
+        continue
+    fi
+    patch="$FORK_DIR/patches/$series/$name"
+    git_apply=(git -C "$SRC_DIR" apply -p1)
+    [[ "$series" != cef ]] || git_apply=(git -C "$SRC_DIR/cef" apply -p2)
+    if ${git_apply[@]+"${git_apply[@]}"} --reverse --check "$patch" >/dev/null 2>&1; then
+        log "already applied: $name"
+        already=$((already + 1))
+        outcomes+="$series/$name"$'\t''already-applied'$'\n'
+        continue
+    fi
+    if [[ $dry == 1 ]]; then
+        ${git_apply[@]+"${git_apply[@]}"} --check "$patch" || die "dry-run: patch cannot apply directly: $series/$name (no 3-way writes attempted)"
+        log "dry-run: would apply --3way --whitespace=nowarn $patch"
+        continue
+    fi
+    if output=$(${git_apply[@]+"${git_apply[@]}"} --3way --whitespace=nowarn "$patch" 2>&1); then
+        log "applied: $name"
+        applied=$((applied + 1))
+        outcomes+="$series/$name"$'\t''applied'$'\n'
+    else
+        mkdir -p "$LOG_DIR/conflicts"
+        dest="$LOG_DIR/conflicts/$(date +%Y%m%d-%H%M%S)"
+        if [[ -e "$dest" ]]; then
+            dest=$(mktemp -d "$dest-XXXXXXXX")
+        else
+            mkdir "$dest"
+        fi
+        cp "$patch" "$dest/patch.txt"
+        printf '%s\n' "$output" > "$dest/git-apply.out"
+        git -C "${git_apply[2]}" status --short > "$dest/status.txt"
+        git -C "${git_apply[2]}" diff > "$dest/diff.txt"
+        printf '%s\n' "$name" "$line" \
+            'fix the tree or the patch, then run engine-refresh-patches, then re-run engine-apply' \
+            '.rej files (if any) are in the tree and must be resolved by hand; never auto-delete .rej/.orig files.' > "$dest/README.txt"
+        die "patch failed: $series/$name; conflict report: $dest"
+    fi
+done <<< "$plan"
+if [[ "$only" == all || "$only" == overlay ]]; then
+    while IFS= read -r -d '' file; do
+        relative=${file#"$FORK_DIR/src/"}
+        dest="$SRC_DIR/$relative"
+        overlays=$((overlays + 1))
+        if ! cmp -s "$file" "$dest"; then
+            if [[ $dry == 1 ]]; then
+                log "dry-run: would copy $file -> $dest"
+            else
+                mkdir -p "$(dirname "$dest")"
+                cp "$file" "$dest"
+                log "copied overlay: $relative"
+                copied=$((copied + 1))
+            fi
+        fi
+    done < <(find "$FORK_DIR/src" -type f ! -name '*.open' ! -name .gitkeep -print0)
+fi
+if [[ $dry == 1 ]]; then
+    log "dry-run: would atomically write $STATE_DIR/applied.json"
+    [[ -z "$status_file" ]] || log "dry-run: would copy applied.json -> $status_file"
+else
+    python3 - "$STATE_DIR/applied.json" "$CHROMIUM_COMMIT" "$CEF_COMMIT" "$overlays" "$outcomes" "$only" <<'PY'
+import datetime, json, os, sys, tempfile
+path, chromium, cef, count, outcomes, scope = sys.argv[1:]
+state = {}
+if scope != 'all' and os.path.exists(path):
+    with open(path) as stream:
+        state = json.load(stream)
+    if state.get('chromium') != chromium or state.get('cef') != cef:
+        raise SystemExit('applied.json pins differ; run engine-apply --all before a partial apply')
+patches = state.setdefault('patches', {})
+patches.update(dict(line.split('\t') for line in outcomes.splitlines()))
+if scope in ('all', 'overlay'):
+    state['overlay_files'] = int(count)
+else:
+    state.setdefault('overlay_files', 0)
+state.update(chromium=chromium, cef=cef, scope=scope,
+             applied_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+fd, temp = tempfile.mkstemp(dir=os.path.dirname(path), prefix='applied-', suffix='.tmp')
+with os.fdopen(fd, 'w') as stream:
+    json.dump(state, stream, indent=2)
+    stream.write('\n')
+os.replace(temp, path)
+PY
+    [[ -z "$status_file" ]] || cp "$STATE_DIR/applied.json" "$status_file"
+fi
+log "apply complete: $applied applied, $already already applied, $disabled disabled, $copied overlay files copied"
