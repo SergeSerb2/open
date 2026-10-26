@@ -15,6 +15,8 @@ typealias BrowserWindowController = OpenFeatures.BrowserWindowController
 final class AuxiliaryPage {
   let content: OEWebContent
   let panel: NSPanel
+  /// The panel's close button closes the page too.
+  var closeObserver: NSObjectProtocol?
   init(content: OEWebContent, panel: NSPanel) { self.content = content; self.panel = panel }
 }
 
@@ -138,8 +140,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       switch node { case .tab(let tab): [tab]; case .folder(let folder): flattened(folder.children); case .split(let split): split.panes }
     }
   }
+  /// A profile's tabs in tab-strip order: favorites, then every Space's
+  /// pinned tabs, then every Space's Today tabs, in Space order (Chromium
+  /// keeps one pinned prefix, so chrome.tabs indexes match this order).
   func tabs(in profileID: ProfileID) -> [Tab] {
-    (model.profile(id: profileID)?.favorites ?? []) + model.spaces.filter { $0.profileID == profileID }.flatMap { flattened($0.pinned) + flattened($0.today) }
+    let spaces = model.spaces.filter { $0.profileID == profileID }
+    return (model.profile(id: profileID)?.favorites ?? []) + spaces.flatMap { flattened($0.pinned) }
+      + spaces.flatMap { flattened($0.today) }
   }
   func space(for tabID: ItemID) -> Space? {
     model.spaces.first { (flattened($0.pinned) + flattened($0.today)).contains { $0.id == tabID } }
@@ -171,8 +178,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
     if let host = hosts[tabID], !host.closed { return host }
     let config = OEWebContentConfiguration(context: context)
-    config.runtimeStyle = app.options.defaultStyle; config.showsChromeToolbar = app.options.chromeToolbar
-    if model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
+    // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
+    // P1). Hosts that are not model tabs (Peek) stay Alloy: a Chrome style
+    // page outside a strip would get its own Chrome window.
+    let isModelTab = model.tab(id: tabID) != nil
+    config.runtimeStyle = isModelTab ? app.options.defaultStyle : .alloy
+    config.showsChromeToolbar = app.options.chromeToolbar
+    if isModelTab, model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
     contentCreationCount += 1
     let content = OEWebContent(configuration: config, url: nil)
     content.isMuted = model.tab(id: tabID)?.isMuted ?? false
@@ -192,6 +204,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
           profile(for: tabID)?.id == host.profileID else { return false }
+    // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
+    // P1); a Peek page is Alloy. Refusing closes it, and the container makes a
+    // Chrome host for the tab at its URL: one reload, accepted for v1
+    // (docs/m4.md, Peek expand).
+    if model.tab(id: tabID) != nil, host.content.runtimeStyle != app.options.defaultStyle { return false }
     if host.tabID != tabID {
       let oldID = host.tabID
       if let previous = hosts[tabID], previous !== host { controller?.container.closeHost(for: tabID); previous.close() }
@@ -331,11 +348,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     }
   }
 
+  /// One close rule for Cmd-W, the sidebar, window.close() and
+  /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
+  /// unload; Today tabs close (archived).
   func closeTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
-    if model.isPinned(tabID: id) || focusedProfile?.favorites.contains(where: { $0.id == id }) == true {
+    var isFavorite = false
+    if case .favorites? = model.parent(of: id) { isFavorite = true }
+    if model.isPinned(tabID: id) || isFavorite {
       controller?.container.closeHost(for: id); hosts[id]?.close()
     } else { model.closeTab(id: id) }
     if wasSelected {
@@ -346,7 +368,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
-    for page in auxiliaryPages { page.content.close(); page.panel.close() }; auxiliaryPages.removeAll()
+    for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
     popupPanel?.close(); mirror.close()
   }
   func content(forAutomationHandle handle: Any?) -> OEWebContent? {
@@ -589,9 +611,12 @@ extension EngineWebContentHostFactory {
   }
 
   func closeAuxiliary(_ page: AuxiliaryPage) {
+    guard auxiliaryPages.contains(where: { $0 === page }) else { return }
+    auxiliaryPages.removeAll { $0 === page }
+    if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
+    page.closeObserver = nil
     page.content.close()
     page.panel.orderOut(nil)
-    auxiliaryPages.removeAll { $0 === page }
   }
 }
 
@@ -631,17 +656,38 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       host(popup, in: panel)
       panel.center()
       present(panel)
-      auxiliaryPages.append(AuxiliaryPage(content: popup, panel: panel))
+      let page = AuxiliaryPage(content: popup, panel: panel)
+      page.closeObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification, object: panel, queue: .main
+      ) { [weak self, weak page] _ in
+        MainActor.assumeIsolated { if let self, let page { self.closeAuxiliary(page) } }
+      }
+      auxiliaryPages.append(page)
       record("open", popup, ["disposition": "popup", "url": request.url?.absoluteString ?? ""])
       return popup
     case .newWindow:
       let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let controller = app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
+      if webContent.runtimeStyle == .chrome, let url = request.url {
+        // The engine would make the page a tab of the opener window's hidden
+        // Chrome window (P1), which closes with that window. A new window
+        // needs no opener: open the URL as a new tab there instead.
+        target.openNewTab(url: url, background: false)
+        record("open", webContent, ["disposition": "newWindow", "url": url.absoluteString, "newTab": true])
+        return nil
+      }
       return target.adoptUnownedRequest(request)
     case .currentTab, .saveToDisk:
       return nil
     default:
       let opener = tabID(for: webContent)
+      if let opener, model.tab(id: opener) == nil, app.options.defaultStyle == .chrome, let url = request.url {
+        // A Peek page (a host that is not a model tab) is Alloy, and so would
+        // be the page it opens: not a chrome.tabs tab. Open the URL as a tab.
+        openNewTab(url: url, background: request.disposition == .newBackgroundTab)
+        record("open", webContent, ["disposition": request.disposition.rawValue, "url": url.absoluteString, "fromPeek": true])
+        return nil
+      }
       let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
@@ -665,7 +711,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     if let page = auxiliaryPages.first(where: { $0.content === webContent }) {
       closeAuxiliary(page)
     } else if let id = tabID(for: webContent) {
-      model.closeTab(id: id)
+      closeTab(id: id)
     }
   }
 
@@ -745,11 +791,26 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
     }
+    func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
+      items.flatMap { item -> [[String: Any]] in
+        if item.isSeparator { return [] }
+        if !item.submenu.isEmpty { return commands(item.submenu, in: item.title) }
+        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": submenu]]
+      }
+    }
     record(
       "contextMenu", webContent,
-      ["items": menu.items.map(\.title), "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue])
+      [
+        "items": menu.items.map(\.title), "commands": commands(menu.items),
+        "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+      ])
     if contextMenuPolicy == "record" {
       menu.cancel()
+      return true
+    }
+    if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
+      // After the right click returns, as a picked menu item would.
+      DispatchQueue.main.async { menu.select(command: command) }
       return true
     }
     let point = menu.location
@@ -840,6 +901,197 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
     popupPanel?.orderOut(nil)
     popupPanel = nil
     record("extensionPopup", popup, ["open": false])
+  }
+}
+
+// MARK: - OEBrowserDelegate (tab requests from Chromium, fork patch P1)
+
+/// Tab changes that Chromium asks for on its own: chrome.tabs calls from
+/// extensions, and pages extensions open (docs/engine-patches.md, P1). Each
+/// arrives as a request; the handler changes OpenModel and then calls
+/// mirror.sync(), the only owner of strip order. Handlers never insert, move,
+/// pin, or activate in an OEBrowser themselves. Closes arrive as
+/// webContentDidRequestClose(_:) and follow closeTab(id:).
+extension EngineWebContentHostFactory {
+  /// chrome.tabs.create, an extension's welcome or options page: a new Today
+  /// tab at the top of the Space (Arc's placement for new tabs). pinned,
+  /// index and openerTabId are not applied (documented P1 gap).
+  @objc(browser:didOpenWebContent:active:)
+  func browser(_ browser: OEBrowser, didOpen webContent: OEWebContent, active: Bool) {
+    guard let space = space(forNewTabIn: browser), let profileID = profile(for: browser.context)?.id else {
+      webContent.close()
+      return
+    }
+    let url = webContent.url ?? URL(string: "about:blank")!
+    let tab = model.newTab(in: space.id, url: url, at: 0)
+    adopt(webContent, for: tab, profileID: profileID)
+    record("open", webContent, ["disposition": "chromium", "active": active, "url": url.absoluteString])
+    if active {
+      if space.id != focusedSpace?.id { focus(space: space) }
+      select(nodeID: tab.id)
+    }
+  }
+
+  /// chrome.tabs.update({active: true}): select the tab, in its own Space.
+  @objc(browser:requestsActivationOfWebContent:)
+  func browser(_ browser: OEBrowser, requestsActivationOf webContent: OEWebContent) {
+    defer { mirror.sync() }
+    guard let id = requestTabID(for: webContent) else { return }
+    if let space = space(containing: id), space.id != focusedSpace?.id { focus(space: space) }
+    select(nodeID: id)
+    record("tab-request", webContent, ["request": "activate"])
+  }
+
+  /// chrome.tabs.move: applied only when one position in the tab's own
+  /// parent (section, folder, or Favorites) puts the tab between exactly the
+  /// two strip tabs Chromium put it between. Otherwise nothing changes and
+  /// the resync puts Chromium's strip back (folders, splits, other sections
+  /// and Spaces cannot be reached by a strip index).
+  @objc(browser:requestsMoveOfWebContent:toIndex:)
+  func browser(_ browser: OEBrowser, requestsMoveOf webContent: OEWebContent, to index: UInt) {
+    defer { mirror.sync() }
+    guard let id = requestTabID(for: webContent), let profileID = profile(for: browser.context)?.id,
+      let parent = model.parent(of: id), let node = model.node(id: id),
+      let current = children(of: parent), let from = current.firstIndex(where: { $0.id == id })
+    else {
+      record("tab-request", webContent, ["request": "move", "refused": true])
+      return
+    }
+    let siblings = current.filter { $0.id != id }
+    let others = browser.webContents.filter { $0 !== webContent }
+    let target = Int(index)
+    let previous = target > 0 && target - 1 < others.count ? tabID(for: others[target - 1]) : nil
+    let next = target < others.count ? tabID(for: others[target]) : nil
+    let position = (0...siblings.count).first { candidate in
+      var moved = siblings
+      moved.insert(node, at: candidate)
+      let order = stripOrder(profile: profileID, replacing: parent, with: moved)
+      guard let i = order.firstIndex(of: id) else { return false }
+      return (i > 0 ? order[i - 1] : nil) == previous && (i + 1 < order.count ? order[i + 1] : nil) == next
+    }
+    guard let position else {
+      record("tab-request", webContent, ["request": "move", "refused": true])
+      return
+    }
+    if position != from { model.moveNode(id: id, to: parent, at: position) }
+    record("tab-request", webContent, ["request": "move", "position": position])
+  }
+
+  /// chrome.tabs.update({pinned}): pin or unpin the tab. Favorites are
+  /// pinned tabs to Chromium and stay Favorites: both are no-ops for them.
+  @objc(browser:requestsPinned:forWebContent:)
+  func browser(_ browser: OEBrowser, requestsPinned pinned: Bool, for webContent: OEWebContent) {
+    defer { mirror.sync() }
+    guard let id = requestTabID(for: webContent), let parent = model.parent(of: id) else { return }
+    if case .favorites = parent {
+      record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
+      return
+    }
+    guard model.isPinned(tabID: id) != pinned else { return }
+    if pinned { model.pinTab(id: id) } else { model.unpinTab(id: id) }
+    record("tab-request", webContent, ["request": pinned ? "pin" : "unpin"])
+  }
+
+  /// chrome.tabs.discard: a tab that is not on screen unloads in place, the
+  /// way sleep unloads it (OpenSleep is not wired to this shell yet). It
+  /// stays in the sidebar and loads again when shown.
+  @objc(browser:requestsDiscardOfWebContent:)
+  func browser(_ browser: OEBrowser, requestsDiscardOf webContent: OEWebContent) -> Bool {
+    guard let id = requestTabID(for: webContent), !visibleTabs.contains(where: { $0.id == id }) else {
+      record("tab-request", webContent, ["request": "discard", "refused": true])
+      return false
+    }
+    record("tab-request", webContent, ["request": "discard"])
+    // Not inside the engine's call.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let host = self.hosts[id], host.content === webContent, !host.closed else { return }
+      self.controller?.container.closeHost(for: id)
+      host.close()
+      self.model.tab(id: id)?.live.sleepPhase = .sleeping
+      self.mirror.sync()
+    }
+    return true
+  }
+
+  /// chrome.windows.remove on this window: refused in v1. The window and its
+  /// tabs stay; the user closes windows.
+  @objc(browserRequestsClose:)
+  func browserRequestsClose(_ browser: OEBrowser) {
+    NSLog("Open: refused chrome.windows.remove for window %ld", browser.chromeWindowIdentifier)
+    record("window-request", nil, ["request": "close", "refused": true, "window": browser.chromeWindowIdentifier])
+  }
+
+  /// Makes `content`, a page the engine opened on its own, the page of `tab`.
+  private func adopt(_ content: OEWebContent, for tab: Tab, profileID: ProfileID) {
+    let host = EngineWebContentHost(tabID: tab.id, profileID: profileID, content: content, owner: self)
+    hosts[tab.id] = host
+    modelHostIDs.insert(tab.id)
+    tab.live.sleepPhase = .live
+    content.isMuted = tab.isMuted
+    controller?.container.adopt(host, for: tab.id)
+    if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
+    mirror.sync()
+  }
+
+  /// The model tab of a request's page: sidebar tabs only (Peek hosts have
+  /// transient ids).
+  private func requestTabID(for content: OEWebContent) -> ItemID? {
+    guard let id = tabID(for: content), model.tab(id: id) != nil, modelHostIDs.contains(id) else { return nil }
+    return id
+  }
+
+  /// The focused Space if it belongs to the strip's profile, else that
+  /// profile's first Space.
+  private func space(forNewTabIn browser: OEBrowser) -> Space? {
+    guard let profile = profile(for: browser.context)?.id else { return nil }
+    if let space = focusedSpace, space.profileID == profile { return space }
+    return model.spaces.first { $0.profileID == profile }
+  }
+
+  /// The Space whose sidebar shows `id` (favorites: the focused Space of
+  /// that profile, else its first Space).
+  private func space(containing id: ItemID) -> Space? {
+    var current = id
+    while let parent = model.parent(of: current) {
+      switch parent {
+      case .spacePinned(let space), .spaceToday(let space): return model.space(id: space)
+      case .folder(let folder), .splitPane(let folder): current = folder
+      case .favorites(let profile):
+        if let space = focusedSpace, space.profileID == profile { return space }
+        return model.spaces.first { $0.profileID == profile }
+      }
+    }
+    return nil
+  }
+
+  private func children(of parent: NodeParent) -> [SidebarNode]? {
+    switch parent {
+    case .spacePinned(let space): return model.space(id: space)?.pinned
+    case .spaceToday(let space): return model.space(id: space)?.today
+    case .folder(let folder): return model.node(id: folder)?.folder?.children
+    case .favorites(let profile): return model.profile(id: profile)?.favorites.map { .tab($0) }
+    case .splitPane: return nil
+    }
+  }
+
+  /// The tab ids of `profile`'s strip in mirror order (tabs(in:), tabs with
+  /// a page only), with `parent`'s children replaced by `children`.
+  private func stripOrder(profile: ProfileID, replacing parent: NodeParent, with children: [SidebarNode]) -> [ItemID] {
+    let loaded = contents
+    func ids(_ nodes: [SidebarNode], in container: NodeParent) -> [ItemID] {
+      (container == parent ? children : nodes).flatMap { node -> [ItemID] in
+        switch node {
+        case .tab(let t): return loaded[t.id] == nil ? [] : [t.id]
+        case .folder(let f): return ids(f.children, in: .folder(f.id))
+        case .split(let s): return ids(s.panes.map { .tab($0) }, in: .splitPane(s.id))
+        }
+      }
+    }
+    let spaces = model.spaces.filter { $0.profileID == profile }
+    var order = ids((model.profile(id: profile)?.favorites ?? []).map { .tab($0) }, in: .favorites(profile))
+    for space in spaces { order += ids(space.pinned, in: .spacePinned(space.id)) }
+    for space in spaces { order += ids(space.today, in: .spaceToday(space.id)) }
+    return order
   }
 }
 

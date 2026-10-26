@@ -1,0 +1,34 @@
+diff --git a/cef/libcef/browser/chrome/chrome_context_menu_handler.cc b/cef/libcef/browser/chrome/chrome_context_menu_handler.cc
+index 32b59e9ed..7c4e830f1 100644
+--- a/cef/libcef/browser/chrome/chrome_context_menu_handler.cc
++++ b/cef/libcef/browser/chrome/chrome_context_menu_handler.cc
+@@ -11,6 +11,7 @@
+ #include "cef/libcef/browser/context_menu_params_impl.h"
+ #include "cef/libcef/browser/simple_menu_model_impl.h"
+ #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
++#include "ui/base/models/menu_model.h"
+ 
+ namespace context_menu {
+ 
+@@ -291,7 +292,20 @@ class CefContextMenuObserver : public RenderViewContextMenuObserver,
+ 
+   void ExecuteCommandCallback(int command_id, int event_flags) {
+     if (command_id != kInvalidCommandId) {
+-      context_menu_->ExecuteCommand(command_id, event_flags);
++      // Open: a submenu with its own delegate runs its own commands (macOS
++      // text services: Speech, Writing Direction). RenderViewContextMenu
++      // does not know them (NOTREACHED in RecordUsedItem).
++      ui::MenuModel* model =
++          const_cast<ui::SimpleMenuModel*>(&context_menu_->menu_model());
++      ui::MenuModel* root = model;
++      size_t index = 0;
++      if (ui::MenuModel::GetModelAndIndexForCommandId(command_id, &model,
++                                                      &index) &&
++          model != root) {
++        model->ActivatedAt(index, event_flags);
++      } else {
++        context_menu_->ExecuteCommand(command_id, event_flags);
++      }
+     }
+     context_menu_->Cancel();
+     OnMenuClosed();

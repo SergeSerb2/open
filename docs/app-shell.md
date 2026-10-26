@@ -175,12 +175,16 @@ failure alert, guarded/queued navigation, and close without loading.
 ### Window and engine behavior
 
 - Standard titled system window, transparent hidden titlebar, system traffic
-  lights at centers (12,16), (35,16), (58,16), 640×480 minimum.
+  lights at centers (20,24), (43,24), (66,24) (Arc's 16 pt frames at x 12/35/58,
+  y 16), 640×480 minimum. The window-chrome PR (design.md §16) corrected the
+  centers, which Step B had placed at the frame origins.
 - One production sidebar per window. Resize is 228–500 pt, with a rubber-band
   region below 228 and hide below 180. Width commits once on drag end. Cmd+S
   animates hide/show over 0.22 s, with Reduce Motion support.
-- Hidden sidebar reveals the same view as a floating card after 0.35 s in the
-  left 8 pt. Leaving for 0.25 s or selecting dismisses it. It works in full
+- Hidden sidebar reveals the same view as a floating card after Arc's 0.15 s
+  dwell in a reveal zone (left edge, the strip left of the window, the top-left
+  corner, the traffic-light region; design.md §16). It hides 0.15 s after the
+  pointer leaves the card and every zone, or on selection. It works in full
   screen. An existing Peek suppresses reveal.
 - WebContentContainer uses PanelMetrics insets, radius 6, continuous clipping,
   shadow, and the 10% white empty panel. Hosts are created only on selection
