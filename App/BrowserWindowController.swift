@@ -363,7 +363,8 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   private func rebuildSpaceMenu() {
     spacePopup.removeAllItems()
     for space in model.spaces {
-      spacePopup.addItem(withTitle: space.title.isEmpty ? "Space" : space.title)
+      let title = space.title ?? ""
+      spacePopup.addItem(withTitle: title.isEmpty ? "Space" : title)
       spacePopup.lastItem?.representedObject = space.id
     }
     if let i = model.spaces.firstIndex(where: { $0.id == focusedSpace?.id }) {

@@ -51,6 +51,7 @@ OEEngine.shared.shutdown()                             // CefShutdown
 
 - `OEEngineDelegate.engineDidInitialize()` arrives once Chromium is ready. Its order relative to `applicationDidFinishLaunching` is not fixed (with the Chrome bootstrap, initialization finishes inside `CefInitialize`), so the shell builds its windows at whichever comes first. Web contents created earlier wait inside the engine.
 - `-[OEApplication terminate:]` asks the app delegate (`applicationShouldTerminate`), then `-[OEEngine terminate]` closes every page and quits the loop. A renderer that never answers cannot block quit for more than 3 s.
+- OpenEngine always adds `--disable-field-trial-config` in the browser process: non-official Chromium builds apply the field-trial testing config, which breaks child-process launch on macOS 27.2 beta (docs/followups.md). It can go once `Engine/fork/gn/dev.args.gn` sets `disable_fieldtrial_testing_config=true`.
 - Keychain: cookies and passwords are encrypted with a key in the keychain item `keychainServiceName`/`keychainAccountName` (default "Open Safe Storage"/"Open"), never Chromium's shared "Chromium Safe Storage" item, whose access prompt otherwise blocks page loads. `useMockKeychain` uses an in-memory key; the app turns it on for ad-hoc signed builds (no Team ID), whose signature changes on every build.
 
 ## Keyboard

@@ -203,6 +203,12 @@ class OEApp : public CefApp,
     if (!process_type.empty()) {
       return;
     }
+    // Non-official Chromium builds (our fork's dev build) apply the
+    // field-trial testing config, which breaks child-process launch on
+    // macOS 27.2 beta (docs/followups.md, lead 2026-10-25). Harmless for the
+    // official CDN build. Remove once dev.args.gn sets
+    // disable_fieldtrial_testing_config=true.
+    command_line->AppendSwitch("disable-field-trial-config");
     for (const std::string& s : switches_) {
       std::string sw = s.rfind("--", 0) == 0 ? s.substr(2) : s;
       size_t eq = sw.find('=');

@@ -70,7 +70,7 @@
       case "spaces":
         return app.model.spaces.map { space in
           [
-            "id": space.id.description, "title": space.title, "focused": space.id == w.focusedSpace?.id,
+            "id": space.id.description, "title": space.title ?? "", "focused": space.id == w.focusedSpace?.id,
             "pinned": space.pinned.count, "today": space.today.count,
           ] as [String: Any]
         }
