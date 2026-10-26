@@ -1,5 +1,40 @@
 {
   "actions": {
+    "action_image_cache": {
+      "first": {
+        "bytes": 279,
+        "hash": -5413176373887871345,
+        "object": 1003482868525504210,
+        "pixels": [
+          [
+            16,
+            16
+          ],
+          [
+            32,
+            32
+          ]
+        ],
+        "width": 16
+      },
+      "ok": true,
+      "tab_b": {
+        "bytes": 279,
+        "hash": -5413176373887871345,
+        "object": 1003482868525504210,
+        "pixels": [
+          [
+            16,
+            16
+          ],
+          [
+            32,
+            32
+          ]
+        ],
+        "width": 16
+      }
+    },
     "action_menu_commands": {
       "commands": {
         "Manage Extension": {
@@ -47,11 +82,23 @@
         "enabled": true,
         "hasPopup": true,
         "icon": {
-          "bytes": 292,
-          "hash": 8083657103300457312,
+          "bytes": 279,
+          "hash": -5413176373887871345,
+          "object": 7678011885870776715,
+          "pixels": [
+            [
+              16,
+              16
+            ],
+            [
+              32,
+              32
+            ]
+          ],
           "width": 16
         },
         "id": "jihnllejimhgcmfmcnchbekapeajboik",
+        "live": true,
         "name": "Open action probe",
         "pinned": false,
         "pinnedIndex": -1,
@@ -60,7 +107,18 @@
         "title": "Action probe",
         "toolbarImage": {
           "bytes": 384,
-          "hash": 3541469537752315754,
+          "hash": 4970769887197729846,
+          "object": -1709981756824026447,
+          "pixels": [
+            [
+              28,
+              28
+            ],
+            [
+              56,
+              56
+            ]
+          ],
           "width": 28
         },
         "tooltip": "Action probe",
@@ -85,19 +143,127 @@
       ],
       "ok": true
     },
+    "developer_mode_on": {
+      "ok": true
+    },
+    "disabled_action_requests_menu": {
+      "ok": true,
+      "ran": true,
+      "requests": [
+        {
+          "content": 0,
+          "extension": "jihnllejimhgcmfmcnchbekapeajboik",
+          "tab": "",
+          "time": 1793047675.027277,
+          "type": "extensionMenuRequest"
+        }
+      ]
+    },
+    "extension_reload_with_popup": {
+      "back": true,
+      "closed": true,
+      "ok": true,
+      "opened": true,
+      "pinned": true,
+      "popup_after": true,
+      "version": "1.1"
+    },
+    "extension_update_with_popup": {
+      "back": true,
+      "closed": true,
+      "ok": true,
+      "opened": true,
+      "pinned": true,
+      "popup_after": true,
+      "version": "1.1"
+    },
+    "menu_keeps_model": {
+      "item": [
+        "Pin"
+      ],
+      "ok": true,
+      "ran": true
+    },
+    "no_live_tab_actions": {
+      "listed": {
+        "accessibleName": "Bitwarden",
+        "badge": "",
+        "badgeColor": null,
+        "badgeTextColor": null,
+        "enabled": true,
+        "hasPopup": true,
+        "icon": {
+          "bytes": 1689,
+          "hash": 2819455305332755805,
+          "object": -2733864730757984953,
+          "pixels": [
+            [
+              16,
+              16
+            ],
+            [
+              32,
+              32
+            ]
+          ],
+          "width": 16
+        },
+        "id": "nngceckbapebfimnlniiiahkandclblb",
+        "live": false,
+        "name": "Bitwarden Password Manager",
+        "pinned": true,
+        "pinnedIndex": 0,
+        "showingPopup": false,
+        "siteAccess": 0,
+        "title": "Bitwarden",
+        "toolbarImage": {
+          "bytes": 4895,
+          "hash": -4766810185910770839,
+          "object": 4981110020381508879,
+          "pixels": [
+            [
+              28,
+              28
+            ],
+            [
+              56,
+              56
+            ]
+          ],
+          "width": 28
+        },
+        "tooltip": "Bitwarden",
+        "wantsToRun": false
+      },
+      "live_again": true,
+      "not_ready": true,
+      "ok": true,
+      "popup": false,
+      "ran": false
+    },
     "on_clicked": {
       "ok": true,
       "popup_less_on_tab": true,
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 1984525594
+        "lastClickTab": 926603843
       }
     },
     "open_popup_api": {
+      "key": true,
       "ok": true,
       "result": "ok",
       "source": "api"
+    },
+    "open_popup_refused_while_open": {
+      "key": true,
+      "ok": true,
+      "result": "Failed to open popup.",
+      "same_popup": true
+    },
+    "page_close_closes_popup": {
+      "ok": true
     },
     "per_tab_state": {
       "ok": true,
@@ -147,27 +313,70 @@
       "showing_popup": true,
       "source": "user"
     },
+    "popup_keys": {
+      "closed": true,
+      "ctrl_d_stages": [
+        "beforePage",
+        "unconsumed"
+      ],
+      "ok": true,
+      "opened": true,
+      "still_open": true,
+      "tabs_kept": true
+    },
+    "popup_renderer_crash": {
+      "action_gone": true,
+      "alive": true,
+      "closed": true,
+      "crash_call": "devtools: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
+      "ok": true,
+      "opened": true
+    },
+    "popup_stays_open_on_blur": {
+      "after_alert": true,
+      "after_devtools": true,
+      "after_webauthn": true,
+      "alert": true,
+      "devtools": true,
+      "devtools_dismissed": [
+        "window:NativeWidgetMacNSWindow"
+      ],
+      "idle": false,
+      "ok": true,
+      "webauthn": true,
+      "webauthn_aborted": "AbortError: signal is aborted without reason",
+      "webauthn_popup_still_open": true,
+      "webauthn_request": "pending"
+    },
     "run_again_closes_popup": {
       "ok": true
     },
-    "window_close_closes_popup": {
+    "tab_switch_closes_popup": {
       "ok": true
+    },
+    "window_close_with_popup": {
+      "alive": true,
+      "new_window_popup": false,
+      "ok": true,
+      "opened": true,
+      "popup_page_gone": true,
+      "windows_after_close": true
     }
   },
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44F5-5555-3144-A143-53034578039A",
-    "embeddedUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 16454,
+    "pid": 8228,
     "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome/Profiles"
   },
-  "started": "2026-10-26 02:38:20",
+  "started": "2026-10-26 13:47:47",
   "style": "chrome"
 }
