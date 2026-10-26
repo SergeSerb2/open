@@ -62,20 +62,26 @@ public final class ThemeEditorContentView: NSView {
     public let modes = AppearanceModeBar(frame: ThemeEditorMetrics.modeBar)
     public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color")
     public let add = ThemeEditorButton(symbol: "plus", label: "Add color", pointSize: 17, glyphColor: ThemeEditorColors.addGlyph)
+    public let presets = PresetStripView(frame: CGRect(x: 0, y: 364, width: 356, height: 32))
+    public let intensity = SineSliderView(frame: ThemeEditorMetrics.intensity)
+    public let noise = NoiseDialView(frame: ThemeEditorMetrics.noise)
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
     public private(set) var layoutPassCount = 0
-    public var renderScale: CGFloat = 1 { didSet { pad.renderScale = renderScale } }
+    public var renderScale: CGFloat = 1 { didSet { pad.renderScale = renderScale; noise.renderScale = renderScale } }
 
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
         content.wantsLayer = true; addSubview(content)
-        let controls: [NSView] = [pad, modes, remove, add]
+        let controls: [NSView] = [pad, modes, remove, add, presets, intensity, noise]
         for view in controls { content.addSubview(view) }
         remove.frame = ThemeEditorMetrics.remove; add.frame = ThemeEditorMetrics.add
         pad.onAction = { [weak self] in self?.onAction?($0) }
         modes.onSelect = { [weak self] in self?.onAction?(.setAppearance($0)) }
         remove.onPress = { [weak self] in self?.onAction?(.removeColor) }
         add.onPress = { [weak self] in self?.onAction?(.addColor) }
+        presets.onAction = { [weak self] in self?.onAction?($0) }
+        intensity.onChange = { [weak self] value, final in self?.onAction?(.setIntensity(value, final: final)) }
+        noise.onAction = { [weak self] in self?.onAction?($0) }
         configureKeyViews()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -88,6 +94,11 @@ public final class ThemeEditorContentView: NSView {
         pad.apply(state); modes.mode = state.appearance
         remove.isHidden = state.style == nil; add.isHidden = state.style == nil
         remove.enabled = state.style != nil; add.enabled = state.style.map { $0.colorCount < 3 } ?? false
+        let pageChanged = presets.page != state.presetPage
+        presets.apply(page: state.presetPage)
+        intensity.apply(value: state.style?.intensityFactor ?? 0.8, enabled: state.style != nil)
+        noise.apply(value: state.style?.noiseFactor ?? 0, texture: state.style?.texture ?? .grain, enabled: state.style != nil)
+        if pageChanged { configureKeyViews() }
     }
     public var controlFrames: [String: CGRect] {
         var result = ["pad": pad.frame, "remove": remove.frame, "add": add.frame]
@@ -95,10 +106,17 @@ public final class ThemeEditorContentView: NSView {
             result[["automatic", "light", "dark"][index]] = content.convert(button.bounds, from: button)
         }
         if let frame = pad.primaryKnobFrame { result["knob"] = content.convert(frame, from: pad) }
+        result["previous"] = content.convert(presets.previous.bounds, from: presets.previous)
+        result["next"] = content.convert(presets.next.bounds, from: presets.next)
+        result["swatches"] = content.convert(presets.viewport.bounds, from: presets.viewport)
+        for (i, swatch) in presets.visibleSwatches.enumerated() { result["swatch-\(i)"] = content.convert(swatch.bounds, from: swatch) }
+        result["intensity"] = intensity.frame; result["thumb"] = content.convert(intensity.thumbFrame, from: intensity)
+        result["noise"] = noise.frame; result["noise-center"] = content.convert(noise.centerButton.bounds, from: noise.centerButton)
         return result
     }
     public func configureKeyViews(extra: [NSView] = []) {
-        let views: [NSView] = modes.buttons + [pad, remove, add] + extra
+        let views: [NSView] = modes.buttons + [pad, remove, add, presets.previous] + presets.visibleSwatches
+            + [presets.next, intensity, noise.centerButton, noise] + extra
         for (index, view) in views.enumerated() { view.nextKeyView = views[(index + 1) % views.count] }
     }
 }

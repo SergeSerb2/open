@@ -26,6 +26,105 @@ enum EditorChecks {
             scene.controller.close()
         }
         try drag(); try addRemove(); try modes(); try keyboardAndAccessibility()
+        try controls()
+    }
+    static func controls() throws {
+        for scale in [1.0, 2.0] {
+            let scene = try EditorScene(scale: scale)
+            let frames = scene.view.controlFrames
+            let expected: [String: CGRect] = ["previous": CGRect(x: 9, y: 364, width: 32, height: 32),
+                "next": CGRect(x: 315, y: 364, width: 32, height: 32), "swatches": CGRect(x: 48, y: 364, width: 260, height: 32),
+                "intensity": CGRect(x: 18, y: 424, width: 224, height: 56), "thumb": CGRect(x: 178, y: 424, width: 24, height: 56),
+                "noise": CGRect(x: 258, y: 412, width: 84, height: 80), "noise-center": CGRect(x: 280, y: 432, width: 40, height: 40)]
+            check(expected.allSatisfy { frames[$0.key] == $0.value } && (0..<9).allSatisfy {
+                frames["swatch-\($0)"] == CGRect(x: 48 + 29.5 * Double($0), y: 368, width: 24, height: 24)
+            }, "E1 remaining control frames and nine swatches at \(Int(scale))x")
+            scene.controller.close()
+        }
+        let scene = try EditorScene()
+        scene.controller.apply(.setAppearance(.dark)); scene.controller.apply(.setNoise(0.45, final: true)); scene.controller.flushPreviewFrame()
+        scene.controller.apply(.setIntensity(0.2, final: true)); scene.controller.flushPreviewFrame()
+        scene.controller.apply(.cycleTexture); scene.controller.apply(.cycleTexture); scene.controller.apply(.cycleTexture)
+        let beforePages = scene.space.theme, commits = scene.controller.commitCount
+        check(!scene.view.presets.previous.enabled && scene.view.presets.next.enabled, "E4 first page disables Previous")
+        var allPresets = true, allFrames = true
+        for page in 0..<5 {
+            if page > 0 { scene.click(scene.view.presets.next) }
+            allFrames = allFrames && scene.view.presets.page == page && (0..<9).allSatisfy {
+                scene.view.controlFrames["swatch-\($0)"] == CGRect(x: 48 + 29.5 * Double($0), y: 368, width: 24, height: 24)
+            }
+            for (i, swatch) in scene.view.presets.visibleSwatches.enumerated() {
+                scene.click(swatch)
+                let style = scene.space.theme.style!, preset = SpaceStylePresets.all[page * 9 + i].style
+                allPresets = allPresets && style.keyColor == preset.keyColor && style.colorCount == preset.colorCount && style.wheel == preset.wheel
+                    && style.appearance == .dark && style.noiseFactor == 0.45 && style.intensityFactor == 0.2 && style.texture == .tweed
+            }
+        }
+        check(allPresets && allFrames && scene.view.presets.page == 4 && !scene.view.presets.next.enabled, "E4 all 45 real swatch clicks, five page frames, preserved modifiers, and last-page refusal")
+        for _ in 0..<4 { scene.click(scene.view.presets.previous) }
+        scene.click(scene.view.presets.next)
+        scene.click(scene.view.presets.visibleSwatches[4])
+        check(scene.space.theme.style?.colorCount == 3 && scene.space.theme.style?.wheel == .analogous, "E4 page two gives three analogous colors")
+        scene.scroll(scene.view.presets, x: 1)
+        check(scene.view.presets.page == 2, "E4 horizontal line scroll pages the strip")
+        // Page movement itself never writes or commits a theme.
+        scene.undo.removeAllActions()
+        let theme = scene.space.theme, count = scene.controller.commitCount
+        scene.click(scene.view.presets.previous)
+        check(scene.space.theme == theme && scene.controller.commitCount == count && !scene.undo.canUndo && beforePages.style != nil && commits > 0,
+              "E4 paging has no model write or undo step")
+        scene.controller.close()
+        try sliderAndDial()
+    }
+    static func sliderAndDial() throws {
+        let scene = try EditorScene(), slider = scene.view.intensity, dial = scene.view.noise
+        let original = scene.space.theme, before = scene.controller.previewCount
+        let layouts = (slider.layoutPassCount, dial.layoutPassCount, scene.view.layoutPassCount)
+        scene.mouse(.leftMouseDown, at: CGPoint(x: 12, y: 28), in: slider)
+        for x in stride(from: 22.0, through: 112, by: 10) { scene.mouse(.leftMouseDragged, at: CGPoint(x: x, y: 28), in: slider) }
+        check(slider.value == 0.5 && slider.thumbFrame.midX == 112 && scene.controller.previewCount == before, "E6 slider value maps to 200 pt travel and queues pointer previews")
+        scene.controller.flushPreviewFrame(); OffscreenRenderer.settle(scene.view)
+        scene.mouse(.leftMouseUp, at: CGPoint(x: 112, y: 28), in: slider); scene.controller.flushPreviewFrame()
+        check(scene.space.theme.style?.intensityFactor == 0.5 && scene.controller.commitCount == 1,
+              "E6 slider drag previews once per frame and commits once")
+        check(slider.layoutPassCount == layouts.0 && dial.layoutPassCount == layouts.1 && scene.view.layoutPassCount == layouts.2,
+              "E6 slider and dial use layer updates without per-frame view layout")
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(scene.space.theme == original && slider.value == 0.8, "E6 slider undo restores full value and thumb")
+        scene.scroll(slider, y: 1); scene.controller.flushPreviewFrame()
+        check(abs(slider.value - 0.82) < 1e-9, "E6 intensity scroll changes 0.02 per line")
+        scene.key(123, target: slider); scene.controller.flushPreviewFrame()
+        check(abs(slider.value - 0.77) < 1e-9, "E6 intensity arrow changes 0.05")
+        let point = dial.ringPoint(angle: 162)
+        scene.mouse(.leftMouseDown, at: point, in: dial); scene.mouse(.leftMouseUp, at: point, in: dial); scene.controller.flushPreviewFrame()
+        check(abs(dial.value - 0.45) < 1e-9 && dial.tickAngle == 162 && dial.litDotCount == 9,
+              "E6 dot click snaps 0.05 steps; noise 0.45 gives 162 degrees and exactly nine lit dots")
+        let generation = ThemeTexture.generationCount
+        scene.mouse(.leftMouseDown, at: dial.ringPoint(angle: 342), in: dial)
+        scene.mouse(.leftMouseDragged, at: dial.ringPoint(angle: 2), in: dial)
+        scene.mouse(.leftMouseUp, at: dial.ringPoint(angle: 2), in: dial); scene.controller.flushPreviewFrame()
+        check(dial.value == 1, "E6 clockwise drag past one clamps at one without wrapping")
+        scene.mouse(.leftMouseDown, at: dial.ringPoint(angle: 18), in: dial)
+        scene.mouse(.leftMouseDragged, at: dial.ringPoint(angle: 358), in: dial)
+        scene.mouse(.leftMouseUp, at: dial.ringPoint(angle: 358), in: dial); scene.controller.flushPreviewFrame()
+        check(dial.value == 0, "E6 counterclockwise drag past zero clamps at zero without wrapping")
+        scene.scroll(dial, y: 1); scene.controller.flushPreviewFrame()
+        check(abs(dial.value - 0.01) < 1e-9, "E6 noise scroll changes 0.01 per line")
+        scene.key(124, target: dial); scene.controller.flushPreviewFrame()
+        check(abs(dial.value - 0.06) < 1e-9, "E6 noise arrow changes 0.05")
+        var textures: [SpaceStyleTexture] = []
+        for _ in 0..<4 { scene.click(dial.centerButton); textures.append(dial.texture) }
+        check(textures == [.sand, .denim, .tweed, .grain], "E6 center button cycles grain, sand, denim, tweed, grain")
+        check(ThemeTexture.generationCount - generation <= 3, "E6 dial previews reuse their texture tiles while noise changes")
+        check(slider.accessibilityRole() == .slider && slider.accessibilityLabel() == "Intensity"
+              && dial.accessibilityRole() == .slider && dial.accessibilityLabel() == "Noise"
+              && dial.centerButton.accessibilityLabel() == "Cycle noise texture"
+              && scene.view.presets.visibleSwatches[0].accessibilityLabel()?.hasPrefix("Set Space color to ") == true,
+              "E1 remaining native accessibility roles, labels, and texture value")
+        check(scene.view.add.nextKeyView === scene.view.presets.previous
+              && scene.view.presets.next.nextKeyView === slider && slider.nextKeyView === dial.centerButton
+              && dial.centerButton.nextKeyView === dial, "E1 complete keyboard focus order")
+        scene.controller.close()
     }
     static func drag() throws {
         let scene = try EditorScene()
