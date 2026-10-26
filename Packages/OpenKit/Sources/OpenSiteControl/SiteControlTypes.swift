@@ -67,6 +67,12 @@ public enum SiteControlPresentationMode: Sendable, Equatable { case standard, ex
 public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(ItemID), contentTopLeading }
 public enum SiteControlDismissReason: Sendable, Equatable { case escape, outside, anchor, action, command, sourceUnavailable }
 
+/// Registration identity, scoped to the source that returned it.
+public struct SiteControlObservationToken: Hashable, Sendable {
+    public let rawValue: UUID
+    public init() { rawValue = UUID() }
+}
+
 /// Coordinates are in the overlay's flipped (top-left) coordinate space. The shell
 /// supplies geometry; this library never reaches into sidebar or engine views.
 public struct SiteControlGeometry: Sendable {

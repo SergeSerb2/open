@@ -3,8 +3,8 @@ import QuartzCore
 
 // Layout guesses and measured colors from site-control-boost-editor.md §§3–4.
 public enum SiteControlMetrics {          // §3; all guess unless a section cites evidence
-    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 12
-    public static let arrowBase: CGFloat = 18, arrowHeight: CGFloat = 9, anchorGap: CGFloat = 2
+    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 16
+    public static let sidebarPanelGap: CGFloat = 13, panePanelGap: CGFloat = 11
     public static let inset: CGFloat = 14, headerHeight: CGFloat = 48, actionRowHeight: CGFloat = 44
     public static let actionButton = CGSize(width: 44, height: 36), actionGap: CGFloat = 4, actionRadius: CGFloat = 8
     public static let sectionHeaderHeight: CGFloat = 28, sectionBottomPadding: CGFloat = 10
@@ -46,12 +46,31 @@ extension Typography {
 }
 
 public extension SiteControlMetrics {
-    static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12, anchorAlignmentY: CGFloat = 30
+    static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12, anchorAlignmentY: CGFloat = 24
     static let faviconFrame = CGRect(x: 14, y: 16, width: 16, height: 16)
-    static let titleX: CGFloat = 38, titleBaseline: CGFloat = 29
-    static let actionGlyph: CGFloat = 18, disabledAlpha: CGFloat = 0.3
+    static let titleX: CGFloat = 36, titleBaseline: CGFloat = 29
+    static let actionGlyph: CGFloat = 18, actionButtonInsetY: CGFloat = 0, disabledAlpha: CGFloat = 0.3
     static let separatorInset: CGFloat = 12
     static let footerInset: CGFloat = 10, footerButton: CGFloat = 28, footerY: CGFloat = 8
     static let securityPadding: CGFloat = 6, securityGlyph: CGFloat = 12, securityRadius: CGFloat = 6
     static let moreGlyph: CGFloat = 13, focusWidth: CGFloat = 2
+}
+
+/// A continuous superellipse corner. Fill, inner edge and shadow share this path.
+public enum SiteControlShape {
+    public static func path(in rect: CGRect, radius: CGFloat) -> CGPath {
+        let r = min(radius, rect.width / 2, rect.height / 2)
+        let path = CGMutablePath()
+        let centers = [CGPoint(x: rect.maxX-r, y: rect.minY+r), CGPoint(x: rect.maxX-r, y: rect.maxY-r),
+                       CGPoint(x: rect.minX+r, y: rect.maxY-r), CGPoint(x: rect.minX+r, y: rect.minY+r)]
+        for (corner, center) in centers.enumerated() {
+            for step in 0...24 {
+                let angle = (-CGFloat.pi / 2) + CGFloat(corner) * .pi / 2 + CGFloat(step) * .pi / 48
+                let c = cos(angle), s = sin(angle)
+                let point = CGPoint(x: center.x + r * copysign(sqrt(abs(c)), c), y: center.y + r * copysign(sqrt(abs(s)), s))
+                if corner == 0 && step == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+        }
+        path.closeSubpath(); return path
+    }
 }

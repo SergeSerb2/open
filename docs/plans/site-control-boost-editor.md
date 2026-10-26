@@ -153,9 +153,9 @@ inline.
 
 | Entry | Anchor | Edge |
 |---|---|---|
-| Sidebar URL field button (`.showSiteControls`) | The button frame `[W − 42, 49, 30, 30]` (sidebar space) | Panel opens to the right of the sidebar. The arrow points left at the button's center y. |
+| Sidebar URL field button (`.showSiteControls`) | The button frame `[W − 42, 49, 30, 30]` (sidebar space) | Panel opens 13 pt right of the sidebar edge, without a pointer (lead decision A, 2026-10-26 review of PR #69; supplied capture F0137). |
 | Floating sidebar card (hover-reveal) | The card's URL field button | Same as above, relative to the card. |
-| Split pane bar button (`PaneChromeView` index 4, enable it) | The button frame in the pane bar | Panel opens below the bar, right-aligned to the button; arrow points up. |
+| Split pane bar button (`PaneChromeView` index 4, enable it) | The button frame in the pane bar | Panel opens below the bar, right-aligned to the button, without a pointer. |
 
 - The panel always describes the tab of its anchor: the selected tab, or the focused split pane
   (SV-8). Opening it from an unfocused pane's bar is impossible (the unfocused bar hides the
@@ -164,11 +164,12 @@ inline.
   Open (no button in its toolbar; Open choice), `chrome://` and `open://` internal pages show only
   header, actions (Copy URL, Share) and footer (Open choice; Boosts cannot match them because
   `BoostMatcher` needs an http(s) host).
-- Geometry (guess, NSPopover-like): arrow base 18, height 9. For the sidebar anchor: arrow tip at
-  `(sidebarMaxX + 2, anchorMidY)`, panel body `x = sidebarMaxX + 2 + 9`,
-  `y = clamp(anchorMidY − 30, 8, H − panelHeight − 8)`. For the pane
-  anchor: `y = anchorMaxY + 2 + 9`, panel right edge = anchor right edge + 8, clamped inside the
-  window with 8 pt margins.
+- Geometry (lead decisions A/B, 2026-10-26 review of PR #69): no arrow. For the sidebar
+  anchor: `x = sidebarMaxX + 13`, `y = clamp(anchorMidY − 24, 8, H − panelHeight − 8)`.
+  At the standard anchor this is y 40; the title baseline is y 69, aligned with the URL host.
+  The supplied reference capture F0137 has no visible arrow and a 13 pt sidebar gap.
+  For the pane anchor: `y = anchorMaxY + 11`, panel right edge = anchor right edge + 8,
+  clamped inside the window with 8 pt margins.
 - One panel per window. Opening it again on the same anchor closes it (toggle). Opening from
   another anchor moves it.
 
@@ -178,14 +179,14 @@ inline.
 |---|---|---|
 | Width | 320 | guess (Arc's theme popover content is 356, `interaction-states.md` §14) |
 | Max height | `min(windowContentHeight − 16, 640)`; content scrolls inside (overlay scroller) | Open choice |
-| Corner radius | 12 | guess (command bar panel 12, `CommandBarMetrics.cornerRadius`) |
+| Corner radius | 16, continuous (`.continuous`); hover plates also use continuous corners | Lead decision C, 2026-10-26 review of PR #69 |
 | Fill | `Core.popoverBackground` (light `#FAFBFF`, dark `#151C30`, P3) | Arc's own popover token name (`ARCClients_BaseAssets`); its use here is a guess |
 | Edge | 1 px `CommandBarColors.hairlineDivider` (black 10 % / white 10 %) inside the edge | guess |
 | Shadow | black 0.25, radius 16, y offset 6 | guess (smaller than the command bar's σ 48) |
 | Appearance | Follows the macOS appearance (`NSApp.effectiveAppearance`), not the Space's content appearance | Open choice: system popovers follow the system |
-| Header | Height 48. Favicon 16×16 at `[14, 16]` (fallback `Glyph.globe`). Title = human-readable host (host without a leading `www.`; TopDomains display name when it exists, TD-1) at x 38, 14 pt Semibold (`Typography.siteControlTitle`), `Core.foregroundPrimary`, baseline 29, tail truncation | SC-9 `humanReadableHost`, TD-1 |
-| Action row | y 48, height 44. Six buttons 44×36, gap 4, centered (284 pt wide). Radius 8. Rest fill clear; hover `SidebarColors.itemBackground`; pressed `SidebarColors.itemHoveredBackground`. Glyph 18 pt template, `Core.foregroundSecondary`. Tooltip = Arc label + shortcut keycaps (Open's tooltip window, `OpenSidebar/Tooltip.swift` style). | SC-15 |
-| Separator | 1 px `CommandBarColors.hairlineDivider`, inset 12 left and right, after the action row and between sections | guess |
+| Header | Height 48. Favicon 16×16 at `[14, 16]` (fallback `Glyph.globe`, 14 pt Regular, `Core.foregroundSecondary`). Title = human-readable host (host without a leading `www.`; TopDomains display name when it exists, TD-1) in a frame at x 36 (ink starts at 38), 14 pt Semibold (`Typography.siteControlTitle`), `Core.foregroundPrimary`, baseline 29, tail truncation | SC-9 `humanReadableHost`, TD-1 |
+| Action row | y 48, height 44. Buttons are top-aligned (`actionButtonInsetY = 0`, lead decision 2026-10-26). Six buttons 44×36, gap 4, centered (284 pt wide). Radius 8. Rest fill clear; hover `SidebarColors.itemBackground`; pressed `SidebarColors.itemHoveredBackground`. Glyph 18 pt Regular template, `Core.foregroundSecondary`; multiply its resolved alpha by 0.3 when disabled. Tooltip = Arc label + shortcut keycaps (shared capsule and presenter in `OpenDesign/TooltipView.swift`). | SC-15 |
+| Separator | 1 px `CommandBarColors.hairlineDivider`, inset 12 left and right, after the action row and between sections. Stroke center = separator y + half a device pixel (first separator: `92 + px/2`). | guess; pixel snapping per PR #69 lead review |
 
 Action buttons (enum order, SC-15). Each runs an existing command id so menus, keys, and the panel
 share one implementation (`docs/commands.md`):
@@ -195,8 +196,8 @@ share one implementation (`docs/commands.md`):
 | 1 | Share | `square.and.arrow.up` | `share-page` (system share picker anchored to the button) | page loaded |
 | 2 | Copy URL (⇧⌘C) | `link` | `copy-url` (existing toast "Copied Current URL") | always |
 | 3 | New Boost | `paintbrush.pointed` | §3.5 "New Boost" flow | http(s) page, not incognito, `open.advanced.enableBoosts` |
-| 4 | Capture a portion of this page (⇧⌘2) | `camera.viewfinder` | `capture-page` | command enabled |
-| 5 | Capture the full page | `rectangle.portrait.and.arrow.forward` | `capture-full-page` | command enabled |
+| 4 | Capture a portion of this page (⇧⌘2) | `viewfinder` | `capture-page` | command enabled |
+| 5 | Capture the full page | `doc.viewfinder` | `capture-full-page` | command enabled |
 | 6 | Capture in Portrait Mode | `rectangle.portrait` | `capture-portrait` | command enabled |
 
 Disabled buttons draw at 30 % alpha and do not show a hover fill. A button action closes the panel
@@ -373,13 +374,13 @@ Height 44, separator above.
 
 | State | Visual |
 |---|---|
-| Open | Scale 0.66 → 1.0 around the arrow tip plus opacity 0 → 1, 0.18 s ease-out (`Motion.popoverOpen`, new). Evidence: Arc's theme popover is 66 % size one frame before full (A0465 → A0466). Duration guess. |
+| Open | Scale 0.66 → 1.0 around the panel's top-leading corner (lead decision A, PR #69) plus opacity 0 → 1, 0.18 s ease-out (`Motion.popoverOpen`, new). Evidence: Arc's theme popover is 66 % size one frame before full (A0465 → A0466). Duration guess. |
 | Close | Opacity 1 → 0 and scale 1.0 → 0.96, 0.12 s ease-in (`Motion.popoverClose`, new). |
 | Reduce Motion | Opacity only, same durations. |
 | Tile toggle | Icon circle fill cross-fade 0.12 s (`Motion.selectionFade`); subtitle swaps at once. |
 | Hover | Fills fade 0.08 s (`Motion.hoverFade`). |
 | Rows added or removed while open (store change, permission prompt answered) | Height animates 0.22 s (`Motion.rowStructure`). |
-| Live data | The panel observes its data source; changes arriving while open update in place (no reopen). No timers. |
+| Live data | The panel registers an independent, token-based data source observer per window; changes arriving while open update in place (no reopen). No timers. |
 
 ### 3.9 Keyboard
 
@@ -849,11 +850,12 @@ public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(Item
     /// Current snapshot for the anchor tab. Must not block: reads stores and engine state already in memory.
     func snapshot(for tabID: ItemID) -> SiteControlSnapshot?
     /// Called when anything in the snapshot may have changed (store change, permission answered, extension update).
-    var onChange: (@MainActor (ItemID) -> Void)? { get set }
+    func observeChanges(_ observer: @escaping @MainActor (ItemID) -> Void) -> SiteControlObservationToken
+    func removeChangeObserver(_ token: SiteControlObservationToken)
 }
 
 @MainActor public protocol SiteControlActions: AnyObject {
-    func toggle(_ tile: SiteSettingTile, tabID: ItemID)            // writes per §5.1, then onChange
+    func toggle(_ tile: SiteSettingTile, tabID: ItemID)            // writes per §5.1, then notify observers
     func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID)
     func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode)   // nil = new Boost
     func perform(command: String, tabID: ItemID, anchor: NSRect?)  // share-page, copy-url, capture-*, view-boosts, settings
@@ -874,7 +876,8 @@ public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(Item
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
     func requestZapCounts(tabID: ItemID)                            // zap:list
-    var onPickerEvent: (@MainActor (ItemID, BoostPickerEvent) -> Void)? { get set }   // committed, removed, exited, listResult
+    func observePickerEvents(_ observer: @escaping @MainActor (ItemID, BoostPickerEvent) -> Void) -> SiteControlObservationToken
+    func removePickerObserver(_ token: SiteControlObservationToken)   // committed, removed, exited, listResult
     func setDevToolsVisible(_ visible: Bool, tabID: ItemID)
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?
@@ -1121,8 +1124,9 @@ Steps B and D. Step 5 needs Step F.
 
 ```swift
 public enum SiteControlMetrics {          // §3; all guess unless a section cites evidence
-    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 12
-    public static let arrowBase: CGFloat = 18, arrowHeight: CGFloat = 9, anchorGap: CGFloat = 2
+    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 16
+    public static let sidebarPanelGap: CGFloat = 13, panePanelGap: CGFloat = 11
+    public static let anchorAlignmentY: CGFloat = 24, actionButtonInsetY: CGFloat = 0
     public static let inset: CGFloat = 14, headerHeight: CGFloat = 48, actionRowHeight: CGFloat = 44
     public static let actionButton = CGSize(width: 44, height: 36), actionGap: CGFloat = 4, actionRadius: CGFloat = 8
     public static let sectionHeaderHeight: CGFloat = 28, sectionBottomPadding: CGFloat = 10

@@ -16,7 +16,8 @@ public final class SiteControlController: NSObject {
     private let source: SiteControlDataSource
     private let actions: SiteControlActions
     private weak var previousResponder: NSResponder?
-    private var unavailableTab: ItemID?
+    private var unavailableTabs: Set<ItemID> = []
+    private var changeObserver: SiteControlObservationToken?
 
     public init(source: SiteControlDataSource, actions: SiteControlActions) {
         self.source = source; self.actions = actions
@@ -29,38 +30,32 @@ public final class SiteControlController: NSObject {
             guard let self, let tabID = self.tabID else { return }
             self.actions.showSecurityDetails(tabID: tabID)
         }
-        source.onChange = { [weak self] changed in
+        changeObserver = source.observeChanges { [weak self] changed in
             guard let self, self.isPresented, self.tabID == changed else { return }
             guard let snapshot = self.source.snapshot(for: changed) else {
-                self.dismiss(reason: .sourceUnavailable); return
+                self.reportUnavailable(changed); return
             }
             self.view.panel.apply(snapshot); self.layout()
         }
     }
+    isolated deinit { if let changeObserver { source.removeChangeObserver(changeObserver) } }
     public func toggle(anchor: SiteControlAnchor, tabID: ItemID, animated: Bool = true) {
         if isPresented && self.anchor == anchor && self.tabID == tabID { dismiss(reason: .anchor, animated: animated) }
         else { present(anchor: anchor, tabID: tabID, mode: .standard, animated: animated) }
     }
     public func present(anchor: SiteControlAnchor, tabID: ItemID, mode: SiteControlPresentationMode = .standard, animated: Bool = true) {
-        guard let snapshot = source.snapshot(for: tabID) else {
-            if unavailableTab != tabID {
-                unavailableTab = tabID
-                FileHandle.standardError.write(Data("SiteControl: no snapshot for tab \(tabID)\n".utf8))
-                onUnavailable?(tabID)
-            }
-            return
-        }
-        guard geometry?(anchor) != nil else { return }
-        unavailableTab = nil
+        guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if !isPresented { previousResponder = view.window?.firstResponder }
         self.anchor = anchor; self.tabID = tabID; self.mode = mode
         isPresented = true; view.isHidden = false
         view.panel.apply(snapshot); layout()
+        guard isPresented else { return }
         view.window?.makeFirstResponder(view)
         animateOpen(animated)
     }
     public func layout() {
-        guard let anchor, let g = geometry?(anchor) else { return }
+        guard let anchor, let tabID else { return }
+        guard let g = geometry?(anchor) else { reportUnavailable(tabID); return }
         view.anchorFrame = g.anchor
         let m = SiteControlMetrics.self
         let h = min(view.panel.preferredHeight, m.maxHeight, max(0, view.bounds.height - 2 * m.windowMargin))
@@ -68,21 +63,23 @@ public final class SiteControlController: NSObject {
         let point: CGPoint
         switch anchor {
         case .urlField:
-            point = CGPoint(x: g.sidebarMaxX + m.anchorGap + m.arrowHeight,
+            point = CGPoint(x: g.sidebarMaxX + m.sidebarPanelGap,
                             y: min(max(g.anchor.midY - m.anchorAlignmentY, m.windowMargin), max(m.windowMargin, view.bounds.height - h - m.windowMargin)))
-            view.arrowTip = CGPoint(x: point.x - m.arrowHeight, y: g.anchor.midY); view.arrowPointsUp = false
         case .paneBar:
             point = CGPoint(x: min(max(g.anchor.maxX + m.windowMargin - w, m.windowMargin), max(m.windowMargin, view.bounds.width - w - m.windowMargin)),
-                            y: min(g.anchor.maxY + m.anchorGap + m.arrowHeight, max(m.windowMargin, view.bounds.height - h - m.windowMargin)))
-            view.arrowTip = CGPoint(x: min(max(g.anchor.midX, point.x + m.cornerRadius + m.arrowBase / 2), point.x + w - m.cornerRadius - m.arrowBase / 2), y: point.y - m.arrowHeight)
-            view.arrowPointsUp = true
+                            y: min(g.anchor.maxY + m.panePanelGap, max(m.windowMargin, view.bounds.height - h - m.windowMargin)))
         case .contentTopLeading:
             point = CGPoint(x: g.content.minX + m.contentAnchorInset, y: g.content.minY + m.contentAnchorInset)
-            view.arrowTip = nil
         }
         view.panel.frame = CGRect(origin: point, size: CGSize(width: w, height: h))
-        view.panel.needsLayout = true; view.layoutSubtreeIfNeeded()
+        view.panel.needsLayout = true; view.needsLayout = true; view.layoutSubtreeIfNeeded()
         view.needsDisplay = true
+    }
+    private func reportUnavailable(_ tabID: ItemID) {
+        if isPresented { dismiss(reason: .sourceUnavailable, animated: false) }
+        guard unavailableTabs.insert(tabID).inserted else { return }
+        FileHandle.standardError.write(Data("SiteControl: snapshot or geometry unavailable for tab \(tabID)\n".utf8))
+        onUnavailable?(tabID)
     }
     public func dismiss(reason: SiteControlDismissReason, animated: Bool = true) {
         guard isPresented else { return }

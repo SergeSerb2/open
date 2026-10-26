@@ -9,10 +9,16 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
     let profileID = ProfileID()
     var value: SiteControlSnapshot?
     var calls: [String] = []
-    var onChange: (@MainActor (ItemID) -> Void)?
+    var observers: [SiteControlObservationToken: @MainActor (ItemID) -> Void] = [:]
+    func observeChanges(_ observer: @escaping @MainActor (ItemID) -> Void) -> SiteControlObservationToken {
+        let token = SiteControlObservationToken(); observers[token] = observer; return token
+    }
+    func removeChangeObserver(_ token: SiteControlObservationToken) { observers.removeValue(forKey: token) }
+    func changed() { for observer in Array(observers.values) { observer(tabID) } }
     init() {
         value = SiteControlSnapshot(context: SiteControlContext(tabID: tabID, profileID: profileID,
-            url: URL(string: "https://news.example.com/")!, displayHost: "news.example.com", security: .secure))
+            url: URL(string: "https://news.example.com/")!, displayHost: "news.example.com", security: .secure),
+            commandsEnabled: ["capture-page": true, "capture-full-page": true, "capture-portrait": true])
     }
     func snapshot(for tabID: ItemID) -> SiteControlSnapshot? { tabID == self.tabID ? value : nil }
     func toggle(_ tile: SiteSettingTile, tabID: ItemID) { calls.append("toggle:" + tile.id) }

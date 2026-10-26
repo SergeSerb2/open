@@ -1,5 +1,4 @@
 import AppKit
-import OpenDesign
 
 /// Arc-style tooltip content: a capsule in the Space's title color with a label,
 /// an optional second line, and keycaps (docs/re/interaction-states.md §5).
@@ -88,6 +87,7 @@ public final class TooltipView: NSView {
     }
 }
 
+
 /// Shows one tooltip at a time in a borderless child panel after a hover delay.
 @MainActor
 public final class TooltipController {
@@ -99,7 +99,7 @@ public final class TooltipController {
     public private(set) var scheduleCount = 0
     public private(set) var showCount = 0
 
-    func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
+    public func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
         if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }
         cancel(for: owner)
         owner = view
@@ -116,7 +116,7 @@ public final class TooltipController {
         DispatchQueue.main.asyncAfter(deadline: .now() + TooltipMetrics.showDelay, execute: work)
     }
 
-    func cancel(for view: NSView?) {
+    public func cancel(for view: NSView?) {
         guard view == nil || owner === view else { return }
         pending?.cancel(); pending = nil
         owner = nil
