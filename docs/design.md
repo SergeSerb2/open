@@ -540,3 +540,27 @@ The real app (`OPEN_AUTOMATION=1 tools/build.sh Release`), driven only through t
 | `hide_reveal`, `fullscreen_hover_reveal` | rewritten: condition waits on the card (settled, or gone) instead of fixed sleeps, each sub-condition and its time recorded |
 
 The two rewritten checks failed in about one run of two before (docs/followups.md, PR #53), always on the first reveal after a hide. The reveal itself was not slow. guess (not traced): a pointer event at the real pointer cancelled the pending reveal. Both possible causes are gone: synthetic pointer events carry a tag and the reveal follows only tagged events once a check moves the pointer, and the waits are conditions.
+
+## 17. Media tokens (review r1, 2026-10-26)
+
+No Arc capture yet shows these surfaces. **Code** means a value decoded from
+Arc's types; **fact** means a measured existing sidebar token; **guess** means
+Open's provisional design pending capture session 2. The full specification
+and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
+[features-advanced.md](re/features-advanced.md) §8 (PP-1…PP-22).
+
+| Surface / token | Value | Status |
+|---|---|---|
+| Mini-player card | Insets 8/4, height 68, corner 10; title 13 Medium | Insets/corner reuse sidebar facts; height/font/fill guess |
+| Mini-player controls | 24×24, radius 6; foreground black .50 / white .66 | Code PP-16 / design-tokens §1.8; placement guess |
+| Media tooltip | Above, delay .45 s | Code PP-6; title wording PP-16 |
+| Volume drawer | +28 pt; track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | Guess; inset correction from design r1 |
+| Collapsed stack | Offset 5, width inset 6, opacity 1−.3i; back-card top edge .5 pt separator | Guess; top edge added by design r1, confirm S6 |
+| Expanded stack | Gap 6; collapse delay .3 s; spring response .3/damping 1 | Guess, PP-14 names states |
+| Marquee | Fade 4 left/8 right; delay 3 s; speed 30 pt/s; gap 32 | Left fade code PP-17; remainder guess |
+| PiP window | Corner 12, min 284×160, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
+| PiP corners | Buttons 28×28, padding 8 compact / 10 regular | Code PP-6 |
+| PiP scrubber | Bar 4/6 pt, hit 20; precision step 40 pt, cap 8× | Hit height code PP-7; other geometry/math Open design |
+| Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
+
+Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.

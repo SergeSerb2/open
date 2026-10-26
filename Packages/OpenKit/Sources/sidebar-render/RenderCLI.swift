@@ -30,6 +30,7 @@ enum RenderCLI {
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media] [--crop-media-controls]
           --media-hover card:N|title:N|stack --media-drawer N
+          --media-button-hover NAME [--media-button-pressed] [--media-tooltip] [--media-increase-contrast]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
@@ -167,6 +168,8 @@ enum RenderCLI {
             image = OffscreenRenderer().snapshot(scene, scale: scale, presentation: true)
             host.contentView = nil
             host.close()
+        } else if value(args, "--media-button-hover") != nil || args.contains("--media-tooltip") {
+            image = try MediaScene.captureInteraction(scene, args: args, scale: scale)
         } else {
             image = OffscreenRenderer().render(scene, scale: scale)
         }

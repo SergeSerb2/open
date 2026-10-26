@@ -84,6 +84,7 @@ public enum MiniPlayerMetrics {
     public static let stackOffset: CGFloat = 5
     public static let stackWidthOffset: CGFloat = 6
     public static let stackOpacity: Float = 0.3
+    public static let stackEdge: CGFloat = 0.5 // guess, review r1; confirm S6
     public static let expandedGap: CGFloat = 6
     public static let collapseDelay: TimeInterval = 0.3
     public static let tooltipDelay: TimeInterval = 0.45 // PP-6

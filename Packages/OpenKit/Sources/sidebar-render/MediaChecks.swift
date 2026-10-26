@@ -19,8 +19,8 @@ import OpenWeb
             || (layer.sublayers ?? []).contains { hasFallback($0) }
     }
     static func animatedLayers(_ layer: CALayer?) -> Int { animationKeys(layer).count }
-    static func inkLeft(_ view: NSView) -> CGFloat? {
-        guard let glyph = descendants(view).first(where: { $0.identifier?.rawValue == "media.speakerGlyph" }),
+    static func inkLeft(_ view: NSView, direct: Bool = false) -> CGFloat? {
+        guard let glyph = direct ? view : descendants(view).first(where: { $0.identifier?.rawValue == "media.speakerGlyph" }),
               let bitmap = glyph.bitmapImageRepForCachingDisplay(in: glyph.bounds) else { return nil }
         // The static glyph draws with AppKit. Read it synchronously rather than sampling
         // a GPU layer clone while its contents are still being published.
@@ -206,8 +206,8 @@ extension MediaChecks {
         if let volume = first.control(named: "volume")?.view { click(volume, "volume drawer") }
         Checks.check(first.drawerIsOpen && first.cardHeight == 96 && controls.requiredHeight == 104, "MC3 drawer adds 28 pt")
         if let slider = descendants(first).first(where: { $0.accessibilityLabel() == "Tab Volume" }) {
-            click(slider, "volume slider", fraction: 0.4)
-            Checks.check(mediaHost.calls.contains(.volume(0.4)) && slider.accessibilityValue() as? String == "40 %", "MC5 slider delivers volume and percentage")
+            click(slider, "volume slider", fraction: (6 + 0.4 * (slider.bounds.width - 12)) / slider.bounds.width)
+            Checks.check(mediaHost.calls.contains(.volume(0.4)) && slider.accessibilityValue() as? String == "40%", "MC5 slider delivers volume and percentage")
             _ = slider.accessibilityPerformIncrement(); pump()
             Checks.check(abs((mediaHost.mediaState.volume ?? -1) - 0.5) < 0.001, "MC5 slider accessibility increments by 10 percent")
         } else { Checks.check(false, "MC3 volume slider exists") }
@@ -233,6 +233,7 @@ extension MediaChecks {
         store.remove(tabID: extra1.id); store.remove(tabID: extra2.id); pump(0.7)
         tab.title = "A deliberately long playing title which must overflow this narrow mini player and keep scrolling"; mediaHost.perform(.play); pump(0.25)
         Checks.check(first.marquee.isOverflowing && first.marquee.isRunning, "MC7 overflowing playing title runs in a visible window")
+        Checks.check(inkLeft(first.marquee, direct: true) != nil, "MC7 live cacheDisplay snapshot contains playing long-title ink")
         context.forcedMediaHover = .title(tab.id); pump(0.25)
         Checks.check(!first.marquee.isRunning, "MC7 title hover stops the marquee")
         context.forcedMediaHover = nil; mediaHost.perform(.pause); pump(0.25)
@@ -276,9 +277,27 @@ extension MediaChecks {
         Checks.check(delegate.intents.last == .close(tab.id) && mediaHost.calls.last == .action(.pause) && controls.cards.isEmpty && controls.requiredHeight == 0,
                      "MC5 close pauses and removes the last card")
         mediaHost.perform(.play); pump(0.5)
-        let old = card(); store.remove(tabID: tab.id); mediaHost.publish(); pump(0.8)
+        let old = card(); store.remove(tabID: tab.id); mediaHost.publish(); pump(0.01)
+        if let old, let replacement = card(), let button = replacement.control(named: "play")?.view {
+            // Put A above B to prove A itself refuses hits throughout its finite fade.
+            controls.addSubview(old, positioned: .above, relativeTo: replacement)
+            Checks.check(old.isRetiring && !old.isHidden && old.layer?.animation(forKey: "media.disappear") != nil,
+                         "MC retiring card stays visible for its fade but is marked non-interactive")
+            let before = mediaHost.calls.count
+            click(button, "replacement B during A fade")
+            Checks.check(mediaHost.calls.count == before + 1 && mediaHost.calls.last == .action(.pause), "MC replacement B receives the click during A fade")
+        } else { Checks.check(false, "MC replacement card exists during fade") }
+        pump(0.8)
         Checks.check(card() !== old && controls.cards.count == 1 && controls.subviews.compactMap { $0 as? MiniPlayerCardView }.count == 1,
                      "MC source replacement within one event turn leaves one fresh card and no retired view")
+        if let volume = card()?.control(named: "volume")?.view { mediaHost.mediaState.volume = 1; mediaHost.publish(); pump(); click(volume, "drawer before tab close") }
+        Checks.check(context.mediaDrawers.contains(tab.id), "MC3 drawer is open before tab close")
+        let undo = UndoManager(); undo.groupsByEvent = false; model.undoManager = undo
+        model.closeTab(id: tab.id); store.remove(tabID: tab.id); pump(0.25)
+        Checks.check(!context.mediaDrawers.contains(tab.id), "MC5 tab close prunes its drawer ID")
+        undo.undo(); mediaHost.publish(); pump(0.4)
+        Checks.check(card()?.cardHeight == 68 && card()?.drawerIsOpen == false, "MC3 recreated source returns as a 68 pt card")
+        model.undoManager = nil
         store.remove(tabID: tab.id); context.forcedMediaHover = nil; pump(0.5)
         let recording = model.newTab(in: space.id, url: URL(string: "https://meeting.example.test/")!, title: "Meeting")
         recording.live.isCapturing = true

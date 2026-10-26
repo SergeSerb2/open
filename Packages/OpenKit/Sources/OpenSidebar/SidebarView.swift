@@ -250,6 +250,8 @@ public enum SidebarDiagnostics {
     public internal(set) static var peekBadgeDraws = 0
     /// Animate even in windows that are not on screen (frame captures of transitions).
     public static var forceAnimations = false
+    public static var mediaIncreaseContrastOverride: Bool?
+    public static var mediaIncreasesContrast: Bool { mediaIncreaseContrastOverride ?? NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast }
 }
 
 extension NSView {
