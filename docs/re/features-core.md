@@ -452,7 +452,8 @@ the fit script are local in `.re/theme-pad/`):
     | Preset tap (`didSelectColorSet`), Automatic | `l ± 0.25` as above | `max(0.01, s)`, or 1.0 when the color has no P3 form | Reducer case 1 `0x1017aa388`; the call to `0x1017a9414` at `0x1017aafa4` is skipped when the bias tag is `forceAppearance` (`0x1017aaf98`). |
     | Preset tap, forced Light / Dark | unchanged | as above | same branch |
     | Force Light / Dark (`didForceAppearance`) | Light 0.575…0.97, Dark 0.01…0.425 | unchanged | Reducer case 4 `0x1017aa854`: `t = clamp((l − lo)/(hi − lo))` with the **current** range, then `l' = lo' + span'·t` (spans 0.395 / 0.415 at `0x1017aa904`, `0x1017aa918`). Hue and saturation stay. |
-    | Drag, add, remove, intensity, noise | unchanged | unchanged | Reducer cases 0, 2, 3, 9, 10 do not write the range fields (`+0x48`, `+0x50`). |
+    | Drag, add, intensity, noise | unchanged | unchanged | Reducer cases 0, 2, 3, 9 do not write the range fields (`+0x48`, `+0x50`). |
+    | Remove the last color | 0.01…0.97 | 1.0 | Reducer case 10 `0x1017aa26c`: when the count reaches 0 it stores the same reset values as `didDeleteAllColors` (`0x1017aa334`–`0x1017aa364`). Other removes keep the range. |
 
     `l` and `s` are P3 HSL lightness and saturation of the key color. The range
     is not stored in the theme JSON (no such field in the reflection records or

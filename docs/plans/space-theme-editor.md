@@ -1314,11 +1314,12 @@ pixel       = a · key + (1 − a) · underlay                   gamma-encoded D
 - `U0` keeps `lightUnderlayActive` 0.694 and `lightUnderlayInactive` 0.83.
   Dividing by 0.825 keeps both values exact at intensity ≥ 0.55. This is
   equivalent to a material of 0.8412 (active) under Arc's wash (**fit**; this
-  capture's material is 0.8246, ΔE00 ≤ 0.6 apart on every row below).
+  capture's material is 0.8246; every §17.4 sidebar row passes with either value).
   Inactive scaling by the same wash is a **guess**.
-- Dark appearance only. Arc's other branch is a white wash at `min(a, 0.5)`.
-  Keep today's light/dark-translucency underlays without a wash until a
-  light-theme capture exists (**guess**).
+- The black wash applies when the window's color scheme is Dark. The
+  capture is macOS Dark with `translucencyStyle: light`. In Light, Arc's
+  other branch is a white wash at `min(a, 0.5)`. It is not captured over a
+  theme, so in Light keep today's underlays without a wash (**guess**).
 - Composite editor styles in gamma-encoded Display P3: convert the key to P3
   (it already is, from `ThemeColorMath`), mix with the gray underlay, then
   convert the result to extended sRGB for the field image. The pad-center
