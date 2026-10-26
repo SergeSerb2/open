@@ -36,8 +36,11 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     public var fill: Fill
     /// Grain amount, 0…1 (`modifiers.noiseFactor`).
     public var noiseFactor: Double
-    /// `modifiers.intensityFactor`. Its effect is not yet known; see docs/design.md.
+    /// Editor opacity is 0.8 × intensity; imports keep the fitted opacity until calibration.
     public var intensityFactor: Double
+    public var texture: SpaceStyleTexture
+    /// Imported/stops themes keep their original field, opacity, and exact grain path.
+    public var usesLegacyIntensity: Bool
     public var translucency: Translucency
     /// Text palette. `nil` follows the macOS appearance (default theme only).
     public var contentAppearance: ContentAppearance?
@@ -46,13 +49,19 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     public var darkPalette: SemanticPalette?
     /// `primaryColorPalette.shaded`: the theme's strong accent. Nil for the default theme.
     public var accent: RGBA?
+    public var shadedDarkAccent: RGBA?
+    public var tintedLightAccent: RGBA?
 
     public init(fill: Fill, noiseFactor: Double = 0, intensityFactor: Double = 0.8, translucency: Translucency = .light,
                 contentAppearance: ContentAppearance? = .light, isVibrant: Bool = true,
-                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil) {
+                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil,
+                shadedDarkAccent: RGBA? = nil, tintedLightAccent: RGBA? = nil,
+                texture: SpaceStyleTexture = .grain, usesLegacyIntensity: Bool = false) {
         self.fill = fill; self.noiseFactor = noiseFactor; self.intensityFactor = intensityFactor
         self.translucency = translucency; self.contentAppearance = contentAppearance; self.isVibrant = isVibrant
         self.lightPalette = lightPalette; self.darkPalette = darkPalette; self.accent = accent
+        self.shadedDarkAccent = shadedDarkAccent; self.tintedLightAccent = tintedLightAccent
+        self.texture = texture; self.usesLegacyIntensity = usesLegacyIntensity
     }
 
     /// Content appearance after applying the system fallback.
@@ -90,6 +99,39 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         accent ?? Core.brandBlue.resolved(appearance)
     }
 
+    /// Guess pending C5/C6: preserve the Space accent if it meets the target,
+    /// then try the theme's darker accent, then the title color. Folder glyphs
+    /// retain their separately measured accent role. Callers with a solid card
+    /// supply its actual background; rows conservatively cover the gradient.
+    public func contrastAccent(_ appearance: ContentAppearance, against background: RGBA? = nil, minimumContrast: Double = 3) -> RGBA {
+        let backgrounds: [RGBA]
+        if let background { backgrounds = [background] }
+        else {
+            let field = ThemeField.Evaluator(style: self, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
+            backgrounds = [0.0, 0.5, 1.0].flatMap { u in
+                [0.0, 0.5, 1.0].map { v in
+                    let (r, g, b) = field.color(u: u, v: v)
+                    return RGBA(r, g, b)
+                }
+            }
+        }
+        func luminance(_ color: RGBA) -> Double {
+            func linear(_ value: Double) -> Double {
+                let x = min(1, max(0, value))
+                return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
+            }
+            return linear(color.red) * 0.2126 + linear(color.green) * 0.7152 + linear(color.blue) * 0.0722
+        }
+        for candidate in [accentColor(appearance), shadedDarkAccent].compactMap({ $0 }) {
+            let ink = luminance(candidate)
+            if backgrounds.allSatisfy({ base in
+                let background = luminance(base)
+                return (max(ink, background) + 0.05) / (min(ink, background) + 0.05) >= minimumContrast
+            }) { return candidate.withAlpha(1) }
+        }
+        return titleColor(appearance).withAlpha(1)
+    }
+
     /// Tooltip capsule fill: the theme's `light.title`, opaque (exact match, F0021–F0033).
     /// Without a theme: guess, a neutral near-black.
     public var tooltipFill: RGBA { lightPalette?.title.withAlpha(1) ?? RGBA(hex: 0x1C1B22) }
@@ -114,16 +156,46 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     // MARK: From the model
 
     public init(theme: SpaceTheme, system: ContentAppearance) {
+        if let style = theme.style {
+            self.init(style: style, system: system)
+            return
+        }
         if let data = theme.importedArcThemeJSON, let parsed = SpaceThemeStyle(arcWindowThemeJSON: data) {
             self = parsed
             return
         }
         if theme.gradientStopsLight.count >= 1 {
             let stops = theme.gradientStopsLight.sorted { $0.location < $1.location }.map { RGBA(rgba: $0.color) }
-            self.init(fill: .blended(base: Array(stops.prefix(2)), overlay: []), contentAppearance: nil)
+            self.init(fill: .blended(base: Array(stops.prefix(2)), overlay: []), contentAppearance: nil, usesLegacyIntensity: true)
             return
         }
         self = .defaultTheme(system: system)
+    }
+
+    public init(style: SpaceStyle, system: ContentAppearance) {
+        guard style.mathVersion == 1 else {
+            // Never reinterpret inputs whose derivation version is not implemented.
+            self = .defaultTheme(system: system)
+            return
+        }
+        let key = ThemeColorMath.toP3(style.keyColor)
+        let primary = ThemeColorMath.primaryPalette(key: key)
+        let palettes = ThemeColorMath.semanticPalettes(primary)
+        let colors = ThemeColorMath.harmony(key: key, count: style.colorCount, wheel: style.wheel)
+            .map { RGBA(rgba: ThemeColorMath.toExtendedSRGB($0)) }
+        let bias: Double
+        switch style.appearance {
+        case .automatic: bias = ThemeTuning.automaticBias
+        case .light: bias = -ThemeTuning.forcedBias
+        case .dark: bias = ThemeTuning.forcedBias
+        }
+        self.init(fill: .blended(base: Array(colors.prefix(2)), overlay: colors.count == 3 ? [.clear, colors[2]] : []),
+                  noiseFactor: style.noiseFactor, intensityFactor: style.intensityFactor,
+                  contentAppearance: ThemeColorMath.contentAppearance(key: key, light: palettes.light, dark: palettes.dark, bias: bias),
+                  lightPalette: palettes.light, darkPalette: palettes.dark, accent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shaded)),
+                  shadedDarkAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shadedDark)),
+                  tintedLightAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.tintedLight)),
+                  texture: style.texture, usesLegacyIntensity: false)
     }
 
     /// Parses Arc's `customInfo.windowTheme` object (schema in
@@ -177,7 +249,11 @@ public struct SpaceThemeStyle: Sendable, Hashable {
                   translucency: translucency,
                   contentAppearance: appearance ?? .light,
                   isVibrant: single["isVibrant"] as? Bool ?? true,
-                  lightPalette: palette("light"), darkPalette: palette("dark"), accent: shaded)
+                  lightPalette: palette("light"), darkPalette: palette("dark"), accent: shaded,
+                  shadedDarkAccent: (primary?["shadedDark"] as? [String: Any]).flatMap(RGBA.init(arcColor:)),
+                  tintedLightAccent: (primary?["tintedLight"] as? [String: Any]).flatMap(RGBA.init(arcColor:)),
+                  texture: SpaceStyleTexture(rawValue: modifiers["overlay"] as? String ?? "grain") ?? .grain,
+                  usesLegacyIntensity: true)
     }
 }
 

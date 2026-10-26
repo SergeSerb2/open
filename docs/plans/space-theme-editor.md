@@ -139,6 +139,14 @@ black at fixed alphas). Aliases: `runtime-observations.md` §3.3.
 Harmony colors for count `n` and wheel `w`: `analogous` → `[k, +40°, −40°]`
 (first `n`); `complementary` → `n = 2: [k, +180°]`, `n = 3: [k, +150°, +210°]`.
 
+Add transition (lead, 2026-10-26 11:57 America/Vancouver): when count is
+exactly 1, Add sets `wheel = .complementary` and count 2. A second Add keeps
+that mode and gives +150°/+210°. At count ≥2, Add preserves the stored
+wheel (including a page-2 analogous style reduced to two colors). Count and
+mode change in one undoable command; undo restores both. Do not change the
+harmony function or rewrite stored styles. Evidence: session 2 item 17,
+frames 0065/0067/0069, page-1 Brand 8, +180° then +150°/+210°.
+
 Background layout: `n = 1` → single color; `n = 2` → base `[c0, c1]`, no
 overlay; `n = 3` → base `[c0, c1]`, overlay `[clear, c2]`. Translucency is
 always `light` (all 4 stored themes, including the dark-content one).
@@ -150,6 +158,11 @@ the dark text that light content uses (both from the semantic palettes). Bias: A
 `ThemeTuning.automaticBias` (= 0.0, guess, §15 Q3), Light −21, Dark +21.
 
 ### 2.2 Pad mapping
+
+**Provisional, not a parity gate:** capture session 2 contradicts this
+linear radius law. See the dated lead amendment and mandatory Step 9 gate
+below. Keep current stored styles and mathVersion semantics until that work
+is implemented with an explicit compatibility decision.
 
 Unit disc, y down, angle clockwise from 3 o'clock. Lightness range by mode:
 Automatic `0.01…0.97`, Light `0.575…0.97`, Dark `0.01…0.425`.
@@ -220,6 +233,12 @@ default case (write a custom `init(from:)` for the three enums; synthesized
 `Codable` would throw) and are written as that default on the next save (Open
 has no released users; `docs/model.md` precedent). Add `style: SpaceStyle? = nil`
 to `SpaceTheme.init`.
+
+Lead review amendment (2026-10-26, Step 1 round 1): fields inside `style`
+decode with `decodeIfPresent` and their documented defaults. Wrongly typed
+optional inputs also use those defaults. An unusable optional style (no
+valid key color or invalid object shape) is nil, so it cannot fail the
+whole snapshot. The legacy theme fields keep their original decode rules.
 
 ### 3.2 Rendering precedence and write rules
 
@@ -345,8 +364,8 @@ public enum ThemeTexture {
 ```
 
 All four are black tiles with darkness in alpha (the `Grain` scheme from
-`docs/design.md` §3.6), peak alpha `noiseFactor × 0.1`, and the same mean
-darkness as grain within 10 %. Our own patterns, seeded and deterministic:
+`docs/design.md` §3.6), pattern-mark peak alpha `noiseFactor × 0.1`, and the
+same mean darkness as grain within 10 %. Our own patterns, seeded and deterministic:
 
 | Texture | Pattern (Open design) |
 |---|---|
@@ -355,9 +374,41 @@ darkness as grain within 10 %. Our own patterns, seeded and deterministic:
 | denim | 45° twill: lines 3 pt apart, 1 pt wide, alpha modulated by 1D value noise along the line |
 | tweed | short orthogonal dashes (4–7 pt) on a 3 pt grid, random orientation, slight jitter |
 
+Lead amendment, user message **2026-10-25 23:58:10 America/Vancouver**, on
+§4.4: keep equal mean darkness so a texture switch does not change the
+Space's overall brightness. At tile-build time, at the same noise factor,
+compute `base = max(0, grainMean − patternMean)` for sand, denim, and tweed.
+Composite each pattern mark over the uniform base:
+`alpha = base + mark × (1 − base)`. The mark's own peak remains
+`noiseFactor × 0.1`; the composited pixel can exceed it. Grain never gains
+a base. The cache key remains (texture, noise bucket, scale), since the base
+is derived from those inputs. This is **Open design**, to calibrate against
+the editor capture in Step 9.
+
+The `space-editor-render` texture check (M5) asserts every texture's mean is
+within 10% of grain at noise factors 0.25, 0.5, and 1.0, at 1x and 2x. For
+sand at noise 1, the mean alpha of peak marks minus the base must be at
+least 0.03. Peak marks are the marks in the top 10% of the prescribed mark
+alpha range.
+
 Tiles are generated lazily on first use, cached per (texture, noise bucket of
 0.05, scale), shared by all windows. `ThemeLayer` uses `ThemeTexture` instead
 of `Grain`. Cross-fades already cover texture changes (two layers).
+
+Review R1: the tile cache caps at 32 entries and evicts its oldest half.
+Grain image/mean pairs cache per (bucket, scale), bounded at 64 entries;
+normalized denim patterns are reused across buckets, bounded at four scales.
+The harness gates cold 2x tile generation at a loose 500 ms and a 64×64
+field rebuild per preset style at 250 ms; strict B1 stays in Step 5.
+
+Lead design decision (2026-10-26): D-8 keeps grain strength and monochrome
+bytes unchanged. F0139's noise-0.45 strength gap and per-channel grain are
+Step 9 calibration items. No strength or chromatic adjustment lands here.
+New editor-style fill colors clamp to sRGB 0…1 at render time; legacy
+imports/stops keep their original extended-color and exact-noise grain
+render path to satisfy §3.4. Stored extended keys
+and primary/semantic palette derivation remain unchanged. F0139 is checked
+with `compare --spec theme-window` over six background-only regions.
 
 ### 4.5 Intensity
 
@@ -592,9 +643,10 @@ buttons), each fading in and rising 6 pt over 0.2 s ease-out (constants
 - The name field has focus on appear. Return creates. Esc cancels.
 - An empty or all-space name creates an untitled Space ("Space N", existing
   `displayTitle`).
-- Draft defaults: no icon; theme per §15 Q2 (recommended: Brand preset at
-  index `spaces.count mod 9`, count 1, automatic); Profile = the focused
-  Space's Profile (`SpaceCreationProfilePickerModel` default).
+- Draft defaults: no icon; no theme (`SpaceTheme()`, `style == nil`) unless
+  the user picks a color in the New Space form (§15 Q2, capture session 2).
+  Profile = the focused Space's Profile (`SpaceCreationProfilePickerModel`
+  default).
 - "New Profile…" switches the Profile card into the existing inline
   create-Profile mode of `SpaceCreationProfilePickerModel` (name field +
   validation messages from `ProfileNameIssue.message`).
@@ -748,12 +800,43 @@ public func renameSpace(id: SpaceID, title: String)
 /// Extends createSpace: insertion index (nil = end) and nodes moved into the new Space's
 /// pinned section in order (folders keep their children). One undo step for all of it.
 @discardableResult public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?,
-    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space
+    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space?
 ```
 
-The existing `createSpace(title:profileID:icon:theme:)` forwards with
-`at: nil, moving: []`. Model rules from `docs/model.md` apply (refused
-commands change nothing and register no undo).
+Lead amendment (2026-10-25): creation with moves is all or nothing. Before
+any mutation, validate that every moving node exists, is not a split pane,
+occurs only once, and satisfies the placement rules in `docs/model.md`
+(including no move into its own descendant). An explicit insertion index
+must be in `0...spaces.count`. On any refusal return nil: no Space, moves,
+undo, TreeChange, or snapshot dirty state. After validation, create and move
+the nodes as one undo step. An empty moving list with a valid index and a
+live Profile ID never fails.
+
+Lead review amendment (2026-10-26, Step 1 round 1): refuse a moving list
+that includes both an ancestor and its descendant. If any relocation fails
+after insertion, reverse the earlier moves and remove the inserted Space,
+then return nil. Buffer structural events until success, so a rollback emits
+none. The real CLI exercises a forced late failure and checks snapshot
+bytes, undo depth, and the index. Success emits one `.move` per node, no
+source-parent reload, and has byte-identical undo and redo snapshots.
+
+Lead review decision (2026-10-26 09:36 America/Vancouver): unknown Profile
+IDs refuse the failable overload before any mutation, undo, event, or save.
+The existing nonoptional `createSpace(title:profileID:icon:theme:)` requires
+a live Profile ID, delegates with `at: nil, moving: []`, and treats nil as
+a programmer error with a precondition naming the bad ID. Data/import/
+automation/restored-state callers use the failable overload. The caller
+audit changed the Settings selector, profiles CLI, and automation boundary;
+the remaining callers obtain IDs from live model objects or synthetic
+fixtures. Rollback fault injection is DEBUG-only, absent in production.
+Step 7's
+`moveToNewSpace` and `turnFolderIntoSpace` likewise return false or nil on
+refusal and change nothing.
+
+Step 1 acceptance adds refused create-with-moves rows to
+`openkit commands-demo`: both a split pane and a missing ID leave the
+snapshot byte-identical and the undo stack depth unchanged. Model rules
+from `docs/model.md` apply to every refusal.
 
 ### 10.2 `OpenSpaceEditor` (new library)
 
@@ -874,12 +957,19 @@ executable `space-editor-render` → `OpenModel`, `OpenStore`, `OpenDesign`,
 `ThemeBackgroundView.swift`, `Motion.swift`, `OpenModel/NamedSpaceIcons.swift`
 (`order` array), `OpenSidebar/SidebarView.swift`,
 `SpacePagerView.swift`, `SidebarContext.swift`, `Controls.swift` (icon
-precedence), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
+precedence), `SidebarRows.swift` (Step 1: folder and tab icon resolution;
+lead-approved addition), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
 (`change-space-icon`), `SuggestAdapter.swift` (its symbol `face.smiling`),
 `OpenFeatures/BrowserWindowController.swift`,
 `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`,
 `tools/verify-all.sh` (add `space-editor`), `docs/release/licenses.md` (emoji data row, Step 6), `docs/model.md`,
 `docs/design.md` (new §: editor), `docs/commands.md`.
+
+Step 1 review additions: `sidebar-render/OffscreenRenderer.swift` synchronizes
+render and readback on one Metal queue for P1. `Fixtures/space-schema1/`
+holds the frozen synthetic schema-1 snapshot and its three pre-change PNGs;
+the `space-legacy` entry in `tools/verify-all.sh` and
+`tools/verification/check.py` gate their round trip and byte equality.
 
 ## 12. Verification (no unit tests)
 
@@ -908,7 +998,7 @@ space-editor-render bench    # B1
 | ID | Check |
 |---|---|
 | M1 | The committed fixture is the example theme in `runtime-observations.md` §3.3 (key `#FF8558`): our primary palette within 1/255 and both semantic palettes within 0.003 of the listed values. With `--arc-json FILE` (a local read-only copy of `StorableSidebar.json`, never committed) the same check runs over every stored theme and prints only counts and max errors. |
-| M2 | Harmony: analogous and complementary, n = 1…4, hue offsets within 0.1°, S and L unchanged. |
+| M2 | Harmony: analogous and complementary, n = 1…3, hue offsets within 0.1°, S and L unchanged. |
 | M3 | Pad round trip: 2,000 seeded random colors inside each mode's range: color → knob → color within 1/255. |
 | M4 | Appearance: forced Light / Dark always win for 500 random keys. Automatic with bias 0 gives light, light, light, dark for the key colors `#FF8558`, `#2F83E4`, `#F8D558`, `#926400` (extended sRGB; the 4 stored samples, colors only). |
 | E1 | Editor layout: every control frame equals §5.2 within 0.5 pt at 1x and 2x. |
@@ -1002,9 +1092,10 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | Emoji data source for the picker. | Generate `emoji-index.json` from Unicode `emoji-test.txt` (Unicode License V3, pinned version + SHA-256) with our script, and add a row for it to `docs/release/licenses.md` in the same PR. Not the macOS Character Viewer (not Arc's look) and never Arc's `emojis.json`. |
-| Q2 | Which theme a brand-new Space starts with (not decoded). | Brand preset `spaces.count mod 9`, 1 color, Automatic, noise 0, intensity 0.8. Deterministic, and neighbors differ. |
+| Q2 | Which theme a brand-new Space starts with. | **Answered by capture session 2 (2026-10-26):** no theme. A new Space keeps the default theme (no stored `windowTheme`) unless the user picks a color in the New Space form. Evidence: both test Spaces made in session 2 had no `windowTheme` until the theme editor gave one a color (`docs/re/interaction-states.md` §20.0, §20.8; `appsupport/s2-final/StorableSidebar.json`; `docs/re/capture-session-2-results.md` C10). Replaces the Brand preset `spaces.count mod 9` recommendation. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
 | Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
+| Q4 review capture detail | Intensity zero. | Capture intensity **0** explicitly and determine whether Arc keeps a visible tint. Keep Open's current gray-at-zero result and provisional law until Step 9. |
 | Q5 | Page 2 of the presets. | Brand 1–9 with 3 analogous colors. Evidence: 2 of 3 stored gradients are Brand5 / Brand6 with exactly ±40°. |
 | Q6 | New Space form placement. | Sidebar page (code evidence: 190 / 227 pt width breakpoints). Ask the user for a 30 s capture of "New Space…" before Step 7 if certainty is needed. |
 | Q7 | Where a new Space is inserted. | At the end of the Space list for every entry point. Arc supports "after Space X"; we can switch to "after the focused Space" with one parameter. |
@@ -1023,8 +1114,8 @@ on both pages; the same editor in macOS Light.
 
 | Step | Date | Result |
 |---|---|---|
-| 1 | | |
-| 2 | | |
+| 1 | 2026-10-26 | PR #68, review round 1 fixes: commands-demo 163/163; roundtrip PASS; sidebar-render 125/125. Automated `space-legacy` gate: all original snapshot semantic fields unchanged (only main's additive `keepAliveSites: []` default is added), encoded DTO roundtrip byte-identical, all 3 committed pre-change PNGs byte-identical. Metal readback synchronization fixed; 24/24 repeated renders match the unchanged baselines. Full verify-all after merging `origin/main` at `bfef13c`: 17 PASS, no SKIP. |
+| 2 | 2026-10-26 | M1–M5 and P1: 36/36. Four private stored themes: primary and semantic max error 0.000000. F0069 final PNG/table and 13 sidebar scene PNGs byte-identical to Step 1 head `2eedbfc`; sidebar-render output unchanged at 125/125. Provisional imported opacity 0.80 worsened worst ΔE00 2.38 → 2.93, so §4.5's imported 0.64 fallback stays. Lead's §4.4 base-alpha rule recorded above. Merged main at `005e065`, retaining media targets/checks and Space editor targets/checks; full verify-all 19 PASS, no SKIP; commands-demo 199/199. Main's new duplication path now preserves typed tab/folder/pane icon overrides. |
 | 3 | | |
 | 4 | | |
 | 5 | | |
@@ -1048,3 +1139,46 @@ on both pages; the same editor in macOS Light.
 - Q10 The 2nd and 3rd color knobs are 30 pt, not draggable, and move with the main knob.
 - Q11 Spaces ▸ Rename Space edits the name in the sidebar header. A dialog appears only when the sidebar is hidden.
 - The capture request goes into the user's single combined Arc capture session.
+- 2026-10-26 (capture session 2): Q2 superseded. A new Space starts with **no** theme (the default theme) unless a color is picked in the New Space form (C10).
+
+
+### Lead round-3 overrides — 2026-10-26
+
+Evidence: `theme-design-r2.md`, capture session 2 item 17
+(`20261026-104045-17-theme-editor`) and item 20
+(`20261026-103516-20-light-mode`); private frames remain local under `.re/`.
+
+- **Harmony / N5:** the 11:57 lead clarification supersedes the earlier
+  suggestion to alter the harmony function. Add switches a one-color style
+  to complementary, in one undo step; Add at two colors preserves its mode.
+  No preset or persisted style is rewritten. Frames 0065/0067/0069 prove the
+  page-1 complementary offsets. The editor wiring lands in Step 3, where
+  `ThemeEditorState` exists; Step 2 keeps and gates both harmony modes.
+- **Step 9 is a hard written acceptance gate, not optional polish.** Decode
+  Arc's knob-radius ↔ color function before claiming pad parity. Frames
+  0027–0049 show shared radii for mid greys; 0091–0097 show a deep color at
+  the center (lightness about 0.45), not black. Do not decode it in this
+  review pass. Current M3 proves an internal round trip only.
+- **Q4 / intensity:** Step 9 must reproduce the tint at intensity zero.
+  Frames 0098/0100/0111: Arc keeps a tint at 0 (current Open ΔE00 7.30),
+  and the measured intensity-1 alpha is about 0.75. The provisional law is
+  not a verified Arc law. Preserve these capture values as the calibration
+  acceptance inputs; no stored-value meaning changes in this review pass.
+- **D-8 / equal mean darkness:** the earlier equal-darkness requirement is
+  superseded as an Arc parity target. Step 9 must calibrate per-texture
+  darkness and contrast from 0112/0114/0116/0118 at noise 0.8. Arc tweed is
+  darkest and smoothest, with mean (209.6,184.8,185.8) and L standard
+  deviation 2.53, versus no-texture (228.9,201.9,202.7). Grain, sand, denim,
+  and tweed do not share one mean. Keep existing procedural Space tiles and
+  current compatibility checks until Step 9 replaces this provisional fit;
+  they are regression checks, not a claim that Arc uses equal darkness.
+  Grain strength and per-channel calibration belong to this same gate.
+
+
+Round-3 compatibility correction: main's new paired sidebar capture gate
+exposed two accidental legacy-path changes: the editor fill clamp reached
+imported extended colors, and the texture cache quantized imported noise
+to 0.05 buckets. Legacy (`style == nil`) themes now retain their original
+field inputs, 0.64 opacity, and exact `Grain.tile` path. Editor styles keep
+the F0139 clamp and bounded texture cache. This enforces §3.4's byte-identical
+legacy rendering requirement without changing any stored value or gate.

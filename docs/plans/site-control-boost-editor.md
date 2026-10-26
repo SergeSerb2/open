@@ -1,33 +1,46 @@
 # Site Control Center and Boost editor — implementation plan for Open
 
-Status: plan (2026-10-25). Implementer: a coding agent with no other context. Follow this file
-top to bottom. Where it says "Open choice", the choice is final for v1 unless a lead decision in
-the appendix changes it. Where it says "guess", build the stated value and keep the value in one
-token so a later capture changes one line.
+Status: plan, revised 2026-10-26 from Arc capture session 2 (first version 2026-10-25).
+Implementer: a coding agent with no other context. Follow this file top to bottom. Where it says
+"Open choice", the choice is final for v1 unless a lead decision in Appendix C changes it. Where
+it says "guess", build the stated value and keep the value in one token so a later capture changes
+one line. Where it cites a frame ("S2 09/0010"), the value is measured; the notation is defined in
+`docs/re/interaction-states.md` §20.0.
 
-Read first, in this order: `AGENTS.md`; `docs/architecture.md`; `docs/re/features-advanced.md`
-§4 (Boosts), §5 (Zap), §6 (Site Control Center), §7 (ad blocking) — §4.7 and §6.5 hold the new
-findings this plan uses; `docs/boosts.md`; `docs/plans/boosts-zap.md` §0.2, §3, §8–§9 and Appendix
-C; `docs/adblock-lists.md`; `docs/plans/adblock-fork.md` §12; `docs/plans/app-shell.md` §2,
-§4.5, §4.6, §4.9, §6; `docs/plans/settings-library.md` §2 and §5.5; `docs/engine-api.md`;
+Read first, in this order: `AGENTS.md`; `docs/architecture.md`; `docs/re/interaction-states.md`
+§20.5, §20.6 and §20.15 (the measured facts this revision uses); `docs/re/capture-session-2-results.md`
+§1 (C1–C9) and §2.3–§2.4; `docs/re/features-advanced.md` §4 (Boosts), §5 (Zap), §6 (Site Control
+Center), §7 (ad blocking); `docs/boosts.md`; `docs/plans/boosts-zap.md` §0.2, §3, §8–§9 and
+Appendix C; `docs/plans/space-theme-editor.md` §2.2 and §5.3 (the pad this plan reuses);
+`docs/adblock-lists.md`; `docs/plans/adblock-fork.md` §12; `docs/plans/app-shell.md` §2, §4.5,
+§4.6, §4.9, §6; `docs/plans/settings-library.md` §2 and §5.5; `docs/engine-api.md`;
 `docs/automation.md`; `docs/design.md` §2 and §7.
 
 User-visible names: never "Arc". "Import from Arc" is the only exception. Arc strings quoted in
 this plan are facts used for parity; any that name Arc are rewritten in Open's own words.
 
+What changed in this revision (details in §12 and Appendix C): the Site Control Center drops down
+from the URL field with a top arrow, has no header, is 236 pt wide and translucent, shows 4 action
+buttons, and orders its sections Extensions, Boosts, Settings as rows (not tiles). The Boost editor
+is a light 183 × 588 window with a square color pad (not a hue wheel), an advanced-colors popover,
+a 5 × 4 font grid, and Size / Case / Zap / Code buttons. §12 says what changes in open PRs #69, #96
+and #103. Lead rulings of 2026-10-26 on this revision (Appendix C): Boost colors move to an
+engine-level color remap after #103 (Step 4R; Q4 superseded), and both sparkle animations stay
+static because their motion is not measurable.
+
 ## Goal
 
 Ship the two Boost and site surfaces that `docs/plans/boosts-zap.md` §0.2 left out:
 
-1. **Site Control Center** — the per-site panel that opens from the URL field (and from a split
-   pane's bar). It shows site settings (permissions and content blocking), the Boosts that match
-   the site, the window's extensions, page actions (Share, Copy URL, Capture ×3, New Boost), the
-   connection security state, and a "⋯" menu (clear cookies or cache, manage Boosts and
-   extensions, all site settings).
-2. **Boost editor** — a floating editor panel for one Boost on the current site: color wheel,
-   invert lightness, advanced color sliders, fonts, text size, text case, Zap entry and the list
-   of Zaps, CSS and JS code panels, rename, delete, shuffle, undo and redo, per-site scope, live
-   preview on every matching tab. Plus a **Boosts list** in the Library for all Boosts of a Profile.
+1. **Site Control Center** — the per-site panel that drops down from the URL field's Site Control
+   button (and from a split pane's bar). It shows page actions (Share, New Boost, two Capture
+   actions), the window's extensions, the Boosts that match the site, site settings (changed
+   permissions and content blocking), the connection security state, and a "⋯" menu (clear cookies
+   or cache, manage Boosts and extensions, all site settings).
+2. **Boost editor** — a floating light window for one Boost on the current site: color pad, invert
+   lightness, advanced color sliders, a font grid, text size, text case, Zap, CSS and JS code,
+   rename, delete, shuffle, reset, undo, per-site scope, and live preview on every matching tab.
+   Plus a **Boosts list** in the Library for all Boosts of a Profile.
 
 Both surfaces only edit data that already has an owner: `BoostStore` (OpenBoosts),
 `AdBlockStore` (OpenAdBlock), Chromium content settings (through `OpenWeb.WebProfile`), and the
@@ -35,43 +48,44 @@ engine extension state. This plan adds no second store for any of those values (
 
 ## Success criteria
 
-1. Clicking the URL field's Site Controls button opens the panel in ≤ 1 frame of main-thread work
+1. Clicking the URL field's Site Control button opens the panel in ≤ 1 frame of main-thread work
    (< 8 ms from click to first draw, release, M5 Pro). Esc, a click outside, or a second click on
    the button closes it. Idle CPU stays at zero while it is open.
 2. Every control in §3 writes exactly the store in §5 and the live effect happens at once: a
-   permission tile changes the Chromium content setting; the ad-block tile changes the Profile's
-   `exclusions.json` and the engine exclusion set; a Boost switch changes `isEnabled` and the page
-   re-renders without a reload (CSS components) within 100 ms.
-3. "New Boost" from the panel creates a Boost for the site and opens the editor. Each editor control
-   changes the live page within one frame of input for the active tab (drag) and within 150 ms for
-   other matching tabs. Closing the editor on an unchanged new Boost deletes it.
-4. Zap mode starts from the editor, picks elements on the live page with the existing picker, lists
-   them in the editor, and exits on Esc, Done, the editor toggle, editor close, tab switch, or
-   navigation. No Zap message is accepted without the native session capability (`docs/boosts.md`).
+   permission row changes the Chromium content setting; the ad-block row changes the Profile's
+   `exclusions.json` and the engine exclusion set; a Boost row's circle changes `isEnabled` and the
+   page re-renders without a reload (CSS components) within 100 ms.
+3. "New Boost" creates a Boost for the site and opens the editor. Each editor control changes the
+   live page within one frame of input for the active tab (drag) and within 150 ms for other
+   matching tabs. Closing the editor on an unchanged new Boost deletes it.
+4. Zap mode starts from the editor, picks elements on the live page with the existing picker, shows
+   the count on the editor's Zap button, and exits on Esc, Done, the Zap button, editor close, tab
+   switch, or navigation. No Zap message is accepted without the native session capability
+   (`docs/boosts.md`).
 5. The CSS panel applies live as the user types. The JS panel shows "Refresh to Run" until the page
    reloads with the new JS. Both editors are native AppKit text views with syntax colors, line
    numbers, and no third-party dependency.
 6. Keyboard: every control is reachable with Tab; the panel and the editor have the key handling in
-   §3.9 and §4.10. VoiceOver reads every tile, row, switch, and button with a label and a value.
-7. `sitecontrol-render check` (new, `commandbar-render` style) passes: flows, a render of every
-   state at 1x and 2x, and the budgets in §7. It runs in `tools/verify-all.sh`.
-8. Two new automation suites in `tools/e2e/engine_e2e.py` — `sitecontrol` and `boosteditor` — pass
-   on the real app once the app-shell hooks exist (§8.2).
-9. No unit tests (`AGENTS.md` rule 6). No Arc asset in the repo (`AGENTS.md` rule 1).
+   §3.12 and §4.12. VoiceOver reads every row, button, and slider with a label and a value.
+7. `sitecontrol-render check` passes: flows, a render of every state at 1x and 2x, the geometry
+   probes in §8.1, and the budgets in §7. It runs in `tools/verify-all.sh`.
+8. Two automation suites in `tools/e2e/engine_e2e.py` — `sitecontrol` and `boosteditor` — pass on
+   the real app once the app-shell hooks exist (§8.2).
+9. No unit tests (`AGENTS.md` rule 6). No Arc asset in the repo (`AGENTS.md` rule 1): the hue ring,
+   the dot grid, the wavy footer, the first-run icon, and every glyph are drawn by Open.
 
 ## Non-goals
 
 - Boost sharing, install links, the online Boost Gallery, "Report Boost", preview images, Boost
   authors (BO-6; accounts are out of v1 scope). `boost-gallery` stays disabled.
-- Arc's palette-remap color engine (`colorWheelDriven` / `themeDriven` schemes with curves). Open
-  keeps the existing CSS-filter runtime (`ColorAdjustment`, lead decision Q7 in
-  `docs/plans/boosts-zap.md`). The analogous / complementary secondary hue has no filter
-  equivalent and is not built (§4.4, open question Q4).
-- A certificate viewer of our own. The security button opens the system certificate panel once the
+- The design of the engine color remap. It is a v1 step with its own RE study and engine plan
+  (Step 4R, Q12 ruling). This plan only fixes its place in the order and its gates. #103 ships the
+  existing CSS-filter runtime as an interim.
+- A certificate viewer of our own. The security pill opens the system certificate panel once the
   engine reports the chain (E3). Until then it shows the state only.
 - A cookie browser or a site-data size display (SC-8: no evidence in Arc).
-- The per-site Developer Mode tool bar and the per-site Preview toggle. Their rows are hidden in v1
-  (§3.4, Q2, Q3).
+- The per-site Developer Mode tool bar and the per-site Preview toggle. Their rows stay hidden in v1
+  (Q2, Q3), although Arc shows a "Developer Mode — Off" row by default (S2 09/0010).
 - Monaco or any web-based code editor. Fonts beyond the macOS system set.
 - Peek and Little Open entry points. The panel is unavailable in a Peek and in Little Open (§3.1).
 
@@ -81,167 +95,300 @@ engine extension state. This plan adds no second store for any of those values (
 
 | # | Decision | Why / evidence |
 |---|---|---|
-| D-1 | New SwiftPM library target `OpenSiteControl` in `Packages/OpenKit`. It holds the Site Control Center view and controller, the Boost editor views and session, and the code editor. It depends on `OpenModel`, `OpenDesign`, `OpenBoosts`, `OpenAdBlock` (only for `AdBlockSites` registrable domains), `OpenWeb`, and — once it lands — `OpenExtensionsUI` (§3.6) only. The Library Boosts list is a SwiftUI section in `OpenSettings` (§4.11), because the Library window is SwiftUI (settings plan D-2). It never imports `OpenEngine` or CEF. | `docs/architecture.md`: packages never import the engine. One target keeps shared parts (tiles, rows, switches) in one place. |
-| D-2 | `OpenSiteControl` uses AppKit views only. No SwiftUI. Layer-backed, drawn with `OpenDesign` tokens. | The panel opens on a click on the hot path and must hit < 8 ms. `AGENTS.md`: SwiftUI only where cheap. The Library section (§4.11) follows the Library window's SwiftUI rule instead. |
-| D-3 | The Site Control Center is an in-window overlay view (like the command bar overlay in `OpenCommandBar`), not an `NSPopover` and not a separate window. | Arc uses an `NSPopover` (`onPopoverClose`, SC-9). On macOS 26 a system popover draws Liquid Glass; `AGENTS.md` says keep Arc's look. An in-window overlay also keeps the browser window key, so the sidebar never flips to its inactive tones (`docs/design.md` §5.3). The command bar already proves an overlay above CEF content works. |
-| D-4 | The Boost editor is a child `NSPanel` of the browser window: `.borderless`, `.nonactivatingPanel`, `becomesKeyOnlyIfNeeded = true`. It becomes key only for text input (rename field, code editors). | Arc's editor is a window (`BoostsEditorWindowController`, `BoostsEditorWindowContent`, `codeEditingWindowSize`, BO-14). `becomesKeyOnlyIfNeeded` keeps the browser window active while the user drags the wheel or clicks tools. |
-| D-5 | Data owners do not change. Permissions: `WebProfile.permission(_:origin:)` / `setPermission(_:for:origin:)` (OpenWeb, exists). Ad blocking: `AdBlockStore.setExcluded(_:excluded:profile:)` and `siteSnapshot(for:)` (exists). Boosts: `BoostStore` (exists). Global Boosts switch: `UserDefaults` `open.advanced.enableBoosts` (settings plan §2.1 A-5). The panel and the editor never write files themselves. | `docs/plans/settings-library.md` D-5: no second store for one value. |
-| D-6 | Live preview goes through the App's `BoostEngineAdapter` (`docs/plans/app-shell.md` §4.5): store mutation → matcher rebuild → `BoostInjectionPlanner.plan` → `boost:apply` to each live page whose URL matches. During a drag, only the editor's own page gets frames (≤ 60 Hz); the store and other pages get the value on drag end. | BO-8 (apply on edit), BO-13 (live preview), Arc state `boostDataBeforeInteractiveUpdates` / `_interactivelyUpdating` (BO-14, BO-15). |
-| D-7 | Color wheel → `ColorAdjustment` math is fixed in §4.4 and lives in one function in OpenBoosts (`BoostColorWheel.adjustment`). The editor's inputs are stored in a new optional field `Boost.colorWheel`; `colorAdjustment` stays the runtime value and is always derived from `colorWheel` when `colorWheel` is set. | `docs/plans/boosts-zap.md` Q7 left the conversion to this plan. One derivation function, one writer (§5.2). |
-| D-8 | Zap keeps the existing in-page picker (`zap-picker.js`, closed shadow overlay, its bottom bar). The editor adds the native Zap toggle and the list of Zaps. No native page overlay. | The picker is built and verified 26/26 (`docs/boosts.md`). Arc draws hover rects natively (`BoostsEditorOverlayController`, BO-13, BO-14); Open's in-page overlay already covers that need. |
-| D-9 | Code editors are `NSTextView` with a small regex highlighter and an `NSRulerView` gutter. No dependency. | Arc ships a native text-view path next to Monaco: placeholder strings "your css here" / "your javascript here" drawn at 12 pt, black 30 % (`placeholderAttributedString`, BO-19). Monaco is a web page per editor (memory, cold start) and a large dependency. |
-| D-10 | Boost editing and creation are disabled in incognito windows. Existing Boosts still apply there (boosts plan Q4 default). | Arc refuses Boost install in Incognito ("Open this link outside Incognito Mode to install this Boost", BO-10). Editing in incognito would write a site visit into the persistent Profile store. Lead question Q6 confirms. |
-| D-11 | The panel shows Arc's sections in Arc's order: header, actions, Settings, Boosts, Extensions, footer. Labels are Arc's decoded labels (§2, Appendix B). Layout values are Open choices or guesses until a capture exists (§11.1 R-1). | No capture of the panel exists (`docs/re/interaction-states.md` §2, "Only its tooltip"). Labels and structure are proven by strings and decompiled constants (SC-9 to SC-16). |
+| D-1 | New SwiftPM library target `OpenSiteControl` in `Packages/OpenKit`. It holds the Site Control Center view and controller, the Boost editor views and session, and the code editor. It depends on `OpenModel`, `OpenDesign`, `OpenBoosts`, `OpenAdBlock` (only for `AdBlockSites` registrable domains), `OpenWeb`, and — once it lands — `OpenExtensionsUI` (§3.6) only. The Library Boosts list is a SwiftUI section in `OpenSettings` (§4.13). It never imports `OpenEngine` or CEF. | `docs/architecture.md`: packages never import the engine. |
+| D-2 | `OpenSiteControl` uses AppKit views only. No SwiftUI. Layer-backed, drawn with `OpenDesign` tokens. | The panel opens on a click on the hot path and must hit < 8 ms. |
+| D-3 | **Kept, amended 2026-10-26.** The Site Control Center is an in-window overlay view (like the command bar overlay), not an `NSPopover` and not a separate window. It draws a top arrow, a translucent blurred material, and covers the sidebar and the page (§3.2). | Arc's panel is its own popover window (`windows.tsv` S2 09/0009: 262 x 323). Every captured property can be drawn in-window: the arrow, the blur over the sidebar and the page, and the browser window keeping its active look while the panel is open (sidebar pixel #252538 unchanged, IS §20.15). An in-window view keeps the window key and avoids Liquid Glass (`AGENTS.md`). Accepted difference: Arc's popover may extend past the window edge; Open clamps inside the window and scrolls (§3.1). Risk R-7 covers the blur over engine content. |
+| D-4 | **Kept, amended 2026-10-26.** The Boost editor is a child `NSPanel` of the browser window: `.borderless`, `.nonactivatingPanel`, `becomesKeyOnlyIfNeeded = true`, always light (`NSAppearance(named: .aqua)`), system shadow, 12 pt corners. Pointer use of the simple controls never makes it key; text input and the keyboard-entry shortcut do. The full key-window rule is in §4.12. Placement in §4.2. | Arc's editor is its own window (AX id `boostsEditor`, subrole `AXSystemDialog`, layer 3, 183 x 588) and is light in macOS Dark (S2 10/0018). It is not key while simple controls are used and becomes key after a click into the code view (AX `focused,main` from S2 10/0079). Corner ≈ 12 (IS §20.15). |
+| D-5 | Data owners do not change. Permissions: `WebProfile.permission(_:origin:)` / `setPermission(_:for:origin:)` (OpenWeb). Ad blocking: `AdBlockStore.setExcluded(_:excluded:profile:)` and `siteSnapshot(for:)`. Boosts: `BoostStore`. Global Boosts switch: `UserDefaults` `open.advanced.enableBoosts` (settings plan §2.1 A-5). The panel and the editor never write files themselves. | `docs/plans/settings-library.md` D-5: no second store for one value. |
+| D-6 | Live preview goes through the App's `BoostEngineAdapter` (`docs/plans/app-shell.md` §4.5): store mutation → matcher rebuild → `BoostInjectionPlanner.plan` → `boost:apply` to each live page whose URL matches. During a drag, only the editor's own page gets frames (≤ 60 Hz); the store and other pages get the value on drag end. | BO-8, BO-13, BO-14, BO-15. |
+| D-7 | **Amended 2026-10-26.** The pad maps a screen point to `BoostColorWheel` inputs (§4.4.2). Interim runtime (#103): the CSS-filter math (`BoostColorWheel.adjustment`) does not change; `colorAdjustment` is derived from `colorWheel` when it is set. v1 target: an engine-level color remap applied at paint time, with images, video, and canvas untouched (Step 4R). | Q12 ruling 2026-10-26 (Q4 superseded). One derivation function, one writer (§5.2). |
+| D-8 | **Amended 2026-10-26.** Zap keeps the existing in-page picker (`zap-picker.js`, closed shadow overlay). Its bar and popup take Arc's look (§4.8). The list of Zaps lives in the page bar ("Click to reveal"); the editor shows only the count on the Zap button. | Arc: bar, popup, and count measured (S2 10/0058, 0060, 0067; IS §20.6). Supersedes Q10. |
+| D-9 | Code editors are `NSTextView` with a small regex highlighter and an `NSRulerView` gutter. No dependency. | Arc's code body is an internal web page that was disabled on the capture machine (S2 10/0071), so its look is not known; the native path keeps memory and cold start low. |
+| D-10 | Boost editing and creation are disabled in incognito windows. Existing Boosts still apply there. | BO-10; lead Q6. |
+| D-11 | **Superseded 2026-10-26.** The panel has no header. Order: action row, Extensions, Boosts, Settings, footer. Rows replace tiles (§3.3). | S2 09/0010, 11/0005 (C2). |
+| D-12 | **New 2026-10-26.** The Boost color pad and the Space theme editor's pad share one AppKit core, `OpenDesign/ColorPad.swift` (plate, dot grid, knobs, drag and keyboard handling). Each owner supplies its geometry and color law. | Both pads are square dot-grid plates whose knob hue equals the screen angle, clockwise from 3 o'clock (theme: `space-theme-editor.md` §2.2; Boost: IS §20.15). One implementation, two styles. |
 
-## 1. Current state (verified 2026-10-25 on `origin/main` c95be65, after M5 #51 and #56; re-verify before you edit)
-
-Run `git log --oneline -3` and read each file below before you change its area.
+## 1. Current state (verified 2026-10-26 on `origin/main` f965b20; re-verify before you edit)
 
 | Area | State | Evidence |
 |---|---|---|
-| URL field button | Exists, sends `.showSiteControls`. Frame `[W − 42, 49, 30, 30]` in sidebar space, glyph `slider.horizontal.2.square` 18 pt, tooltip "Site Controls". Shown only while a page is loaded and the pointer is over the sidebar. | `Packages/OpenKit/Sources/OpenSidebar/ChromeViews.swift` `URLFieldView`; `OpenDesign/Metrics.swift` `URLFieldMetrics.siteControlsTrailing = 12`. |
-| Pane bar button | Exists in `PaneChromeView` (button index 4, "Site Control Center", frame `[w − 105, 2, 32, 28]`) and is always disabled. | `Packages/OpenKit/Sources/OpenFeatures/PaneChromeView.swift`. |
-| Intents | `.showSiteControls` and `.customizePage(tabID:)` exist in `SidebarIntent`. Neither `OpenFeatures.BrowserWindowController` nor `ModelSidebarActions` handles them today: they fall through and return `false`. | `OpenSidebar/SidebarIntent.swift`; `OpenFeatures/BrowserWindowController.swift` (the `default:` branch). |
-| Commands | `new-boost`, `edit-boost`, `new-legacy-boost`, `boost-gallery` (File), `view-boosts` (Window) exist with no handler. "Customize Page…" exists in the pinned-tab menu. | `OpenCommands/CommandRegistry.swift`; `OpenSidebar/SidebarMenus.swift`; `docs/re/interaction-states.md` §15. |
-| OpenBoosts | `Boost`, `SiteMatch`, `ColorAdjustment`, `ZappedElement`, `BoostStore(root:profileID:fileURL:)`, `BoostMatcher`, `BoostInjectionPlanner`, `BoostPickerCoordinator`, `BridgeDecode`, `BoostResources`. No `colorWheel` field yet. Text zoom clamps 0.5–2; transforms none/uppercase/lowercase/capitalize. | `Packages/OpenKit/Sources/OpenBoosts/*.swift`, `docs/boosts.md`. |
-| Zap picker | In-page bar "Zap mode · Zap all related (N) · Undo · Done", Esc exits, Cmd/Ctrl+Z undoes. Click commits a Zap. No "select only" mode. | `OpenBoosts/Resources/zap-picker.js` lines ~246–366. |
-| OpenAdBlock | `AdBlockStore` (`@MainActor`): `isEnabled` (global, `<root>/adblock-settings.json` `nativeAdBlockEnabled`), `setExcluded(_:excluded:profile:)` writes `<root>/Profiles/<profile UUID>/adblock/exclusions.json` and emits `AdBlockEngineEvent.exclusions`, `siteSnapshot(for:).isAllowlisted(host:)`. Registrable-domain scope via the bundled public suffix list. | `Packages/OpenKit/Sources/OpenAdBlock/AdBlockStore.swift`, `SiteRules.swift`; `docs/adblock-lists.md`. |
-| OpenWeb | `WebProfile.permission(_:origin:)`, `setPermission(_:for:origin:)` for 12 `SitePermission` kinds with `ask/allow/block`. `WebContent.snapshotPNG()`, `evaluateJavaScript` (main world). | `Packages/OpenKit/Sources/OpenWeb/OpenWeb.swift`. |
-| Engine | `OEBrowserContext.permissionState/setPermissionState` (12 kinds → Chromium content settings), `clearBrowsingData(origin:completion:)` (cookies for one origin and the HTTP cache of all sites), user scripts (main world only, P7), `OEWebContent.showDevTools()`, `takeSnapshot()`, `isCapturingCamera/Microphone`, `OEExtensionManager.installedExtensions`, `OEBrowser.extensionActions` (manifest defaults until P2). No security state. No per-origin cache clear. No "changed settings" query. No extension pin API. | `Engine/OpenEngine/include/OpenEngine/OEBrowserContext.h`, `OEWebContent.h`; `docs/engine-api.md`. |
-| App wiring | None for this feature. `app-shell.md` §4.5 (Boost adapter), §4.6 (ad-block adapter), §4.9 (an interim `NSPopover` with rows) and Step D/F own the hooks. This plan (§3, §6.4) replaces the §4.9 interim popover. | `docs/plans/app-shell.md`. |
-| Settings / Library | `OpenSettings` exists (M5, #51): SwiftUI Settings and Library windows. `LibrarySection` = `archive, downloads, captures, media, history`; section files sit at `Sources/OpenSettings/*Section.swift`; data comes through snapshot providers (`DownloadsProvider`, `CapturesProvider`) and `LibraryActions`. `SettingsDefaults.values` registers `open.advanced.enableBoosts = true`; the Advanced pane shows the tile "Enable Boosts on websites you visit". No App code reads the key yet. The ad-block allowlist (`AdBlockSettingsModel.setExcluded`) calls `AdBlockStore.setExcluded` and then `SettingsActions.setAdBlockExcludedDomains(_:profileID:)`. `settings-preview` runs in `tools/verify-all.sh`. | `Packages/OpenKit/Sources/OpenSettings/LibraryTypes.swift`, `SettingsTypes.swift`, `AdvancedPane.swift`, `AdBlockSettingsModel.swift`. |
-| Harness | `features-render`, `commandbar-render`, `sidebar-render` exist; `commandbar-render check` runs in `tools/verify-all.sh`. | `Packages/OpenKit/Package.swift`, `tools/verify-all.sh` `NAMES`. |
-
-Path note (not this plan's to fix): `ProfileDirectories.adBlockListsDirectory` builds
-`Profiles/<dataDirectoryName>/AdBlock/lists`, while `AdBlockStore` uses `Profiles/<UUID>/adblock/`.
-The Site Control Center only calls `AdBlockStore`, so it is not affected. Report it to the
-ad-block owner (Q9).
+| URL field button | Exists, sends `.showSiteControls`. Frame `[W − 42, 49, 30, 30]` in sidebar space, glyph `slider.horizontal.2.square` 18 pt, tooltip "Site Controls". Shown only while a page is loaded and the pointer is over the sidebar. No open or Boost state. | `OpenSidebar/ChromeViews.swift` `URLFieldView`; `OpenDesign/Metrics.swift` `URLFieldMetrics` (field `[8, 46, W − 16, 36]`). |
+| Pane bar button | Exists in `PaneChromeView` (button index 4, "Site Control Center", frame `[w − 105, 2, 32, 28]`) and is always disabled. | `OpenFeatures/PaneChromeView.swift`. |
+| Intents | `.showSiteControls` and `.customizePage(tabID:)` exist in `SidebarIntent`; no handler yet. | `OpenSidebar/SidebarIntent.swift`; `OpenFeatures/BrowserWindowController.swift`. |
+| Commands | `new-boost`, `edit-boost`, `new-legacy-boost`, `boost-gallery` (File), `view-boosts` (Window) exist with no handler. "Customize Page…" exists in the pinned-tab menu. | `OpenCommands/CommandRegistry.swift`. |
+| OpenBoosts | `Boost`, `SiteMatch`, `ColorAdjustment`, `ZappedElement`, `BoostStore`, `BoostMatcher`, `BoostInjectionPlanner`, `BoostPickerCoordinator`. No `colorWheel` on main (PR #103 adds it). | `Packages/OpenKit/Sources/OpenBoosts/*.swift`. |
+| Zap picker | In-page bar "Zap mode · Zap all related (N) · Undo · Done", Esc exits, Cmd/Ctrl+Z undoes. | `OpenBoosts/Resources/zap-picker.js`. |
+| OpenSiteControl | Not on main. Open PRs: #69 (Step 1 shell), #96 (Step 2 sections), #103 (Step 4 editor), stacked with merge commits (#96 contains #69; #103 contains both). They implement the 2026-10-25 version of this plan and must change (§12). | `gh pr view 69 / 96 / 103`. |
+| Space theme pad | The view is not on main: PR #86 adds `OpenSpaceEditor/ColorPadView.swift` (square plate, dot grid, knobs, relative/jump drag, arrow keys). Main has the theme color math in `OpenDesign/ThemeColorMath.swift` and the `space-editor-render` harness (#82). | `origin/t3/space-editor-shell`; main f965b20. |
+| OpenAdBlock, OpenWeb, Engine, Settings | Unchanged from the first version of this plan: `AdBlockStore` exclusions, `WebProfile` 12 permission kinds, `clearBrowsingData(origin:)`, `showDevTools()`, `takeSnapshot()`, `SettingsDefaults.values` with `open.advanced.enableBoosts`. | Source files named in `docs/engine-api.md` and `docs/plans/settings-library.md`. |
 
 ---
 
-## 2. Arc facts this plan builds on (summary; full evidence in `docs/re/features-advanced.md`)
+## 2. Arc facts this plan builds on
+
+Decoded facts (first version; evidence in `docs/re/features-advanced.md`):
 
 | ID | Fact | Used in |
 |---|---|---|
-| SC-9 | The panel is an `NSPopover` hosting SwiftUI; its controller tracks an Option-key state and an extension-picker key monitor. | D-3, §3.9 |
-| SC-10 | Sections and labels: section titles "Settings", "Boosts", "Extensions"; on hover each header shows an accessory text: "More" (Settings), "Manage" (Boosts, Extensions); clicking the header runs that action. | §3.3–§3.6 |
-| SC-11 | Setting rows are an enum `contentSettings(type)`, `sidebarPreview`, `developerMode`, `contentBlocking`, `popupBlocking` with titles "Block Ads & Trackers", "Preview", "Developer Mode", "Block Pop-ups". Subtitles: content settings "Allowed" (Chromium ALLOW or SESSION_ONLY) or "Blocked" (anything else); content blocking "On" (enabled) or "Off" (disabled or unavailable); developer mode "On"/"Off"; preview "Enabled"/"Disabled". Pop-up blocking logs "not supported" and returns no subtitle. Ad-block tooltips: "The built-in ad blocker is turned on for this site." / "…is disabled for this site." / "…is off. You can change this in Settings." | §3.4 |
-| SC-12 | Arc reads the site's changed content settings (`getChangedContentSettingsForOrigin:`), not every kind. Content-setting display names come from one table (camera, microphone, location, notifications, javascript, images, popups, intrusive ads, background sync, sound, MIDI devices, clipboard, usb, hid, serial port, fonts, bluetooth, hand tracking, idle detection, keyboard lock, pointer lock, local network, …). | §3.4, E1 |
-| SC-13 | Boost rows: subtitle "Enabled"/"Disabled", a toggle and an edit action. | §3.5 |
-| SC-14 | Extensions: buttons with click, right-click, and a pin button whose tooltip is "Pin"/"Unpin"; an "Add Extension" button. | §3.6, E4 |
-| SC-15 | Action buttons in enum order: Share, Copy URL, New Boost, Capture ("Capture a portion of this page"), Capture Full Page ("Capture the full page"), Capture in Portrait Mode. Each can carry a keyboard shortcut. | §3.2 |
-| SC-16 | Footer: a security button titled "Secure" / "Insecure", and a menu: Clear Cache · Clear Cookies · — · Manage Boosts… · New Boost… (only when Boosts are not shown as a section) · — · Manage Extensions… · Add Extension… · — · All Site Settings…. | §3.7 |
-| BO-14 | Editor window with two modalities (`none`, `code`), a remembered code-editing window size, an interstitial, an overlay, and a shelf. | D-4, §4 |
-| BO-15 | Editor actions include `undo`, `redo`, `shuffle`, `resetAll`, `resetColorMapping`, `rename`, `delete`, `showSelectorPicker`, `copySelectorToPasteboard`, `toggleDevTools`, `reloadPage`, `editCSS`, `editJS`. A change stack holds before/after pairs. | §4.6, §4.7 |
-| BO-16 | Menu items: "Undo", "Rename this Boost…", "Shuffle", "Delete this Boost", "Report Boost…" (Arc only), "Reset all Edits", "All Boosts…". Rename alert buttons "Done"/"Cancel"; delete alert "Delete this Boost?" with "Delete". Default name "My Boost". | §4.7 |
-| BO-17 | Color controls: a hue ring (asset 256 px @2x = 128 pt), "Invert lightness" (lightbulb), "Advanced color controls" (`slider.horizontal.3`) with "Brightness", "Contrast", "Original Saturation", "Reset to original colors" (`arrow.counterclockwise`), scheme icons for analogous and complementary. | §4.4 |
-| BO-18 | Text controls: "Change text size" with options small, normal, medium, large, larger; "Change text case" with capitalize, uppercase, lowercase. A font picker of font options. A macOS font list sits beside the Boost strings (Helvetica Neue … Wingdings; guess on ownership). | §4.5 |
-| BO-19 | Code mode: "your css here" / "your javascript here" placeholders, 12 pt, black 30 %; buttons "Pick Selector" / "Hide Selector Picker", "Refresh to Run" (tooltip "Refresh this Page"), "Show Developer Tools" / "Hide Developer Tools". | §4.8 |
-| BO-20 | Zap UI: "Click elements on the page to Zap them", "Zap this", "Zap all related elements", "Copy selector for this", "Copy selector for related". Shelf of Zap tiles; hovering a tile previews it (`zapToPreview`). Preview color `ZapPreviewBackground #D9D9D9`. | §4.6 |
-| BO-21 | First-run interstitial: "Edit the Internet with Boosts", button "Make your own!". Dismissal stored (`hasDismissedBoostsInterstitial`). | §4.9 |
-| BO-22 | Editor colors (BoostsEditor bundle): segmented background black 7 % / white 10 %, selection white / white 30 %, slider track `#3B3746` 5 %, slider tint `#017AFF`, warning `#FF5A5F`, puck `#FAFBFF`, label white / black 80 %, interstitial `#2E2740` on `#CEDBFC`, accents Blue `#300EFF`, Green `#55B948` (P3), Magenta `#DD0EFF`, Orange `#FF560E`, Pink `#FF0E82`, Purple `#860EFF`, Red `#FF0E0E`, Yellow `#F1A23C` (P3). | §3.8, §4.3 |
+| SC-9 | The panel is an `NSPopover` hosting SwiftUI; its controller tracks an Option-key state and an extension-picker key monitor. | D-3, §3.12 |
+| SC-10 | Section titles "Settings", "Boosts", "Extensions"; on hover each header shows an accessory text: "More" (Settings), "Manage" (Boosts, Extensions); clicking the header runs that action. | §3.5 |
+| SC-11 | Setting rows: `contentSettings(type)`, `sidebarPreview`, `developerMode`, `contentBlocking`, `popupBlocking`; titles "Block Ads & Trackers", "Preview", "Developer Mode", "Block Pop-ups"; subtitles "Allowed"/"Blocked", "On"/"Off", "Enabled"/"Disabled". Ad-block tooltips for on, excluded, and master-off. | §3.8 |
+| SC-12 | Arc reads the site's changed content settings (`getChangedContentSettingsForOrigin:`); display names come from one table. | §3.8, E1 |
+| SC-13 | Boost rows: subtitle "Enabled"/"Disabled". | §3.7 |
+| SC-14 | Extensions: buttons with click, right-click, a pin button ("Pin"/"Unpin"); an "Add Extension" item. | §3.6, E4 |
+| SC-15 | Action enum order: Share, Copy URL, New Boost, Capture ("Capture a portion of this page"), Capture Full Page ("Capture the full page"), Capture in Portrait Mode. | §3.4 (subset; S2-3) |
+| SC-16 | Footer: a security button "Secure" / "Insecure", and a menu: Clear Cache · Clear Cookies · — · Manage Boosts… · New Boost… · — · Manage Extensions… · Add Extension… · — · All Site Settings…. | §3.9 |
+| BO-14 | Editor window with modalities (`none`, `code`), a remembered code-editing window size, an interstitial, an overlay, and a shelf. | D-4, §4 |
+| BO-15 | Editor actions include `undo`, `redo`, `shuffle`, `resetAll`, `resetColorMapping`, `rename`, `delete`, `showSelectorPicker`, `copySelectorToPasteboard`, `toggleDevTools`, `reloadPage`, `editCSS`, `editJS`. | §4.9 |
+| BO-16 | Strings "Rename this Boost…", "Shuffle", "Delete this Boost", "Reset all Edits", "All Boosts…", "Delete this Boost?", "Delete"; default name "My Boost". | §4.9 |
+| BO-17 | "Invert lightness", "Advanced color controls" with "Brightness", "Contrast", "Original Saturation", "Reset to original colors"; assets `HueRing`, `DotGrid` 8 pt, `AnalogousColorScheme`, `ComplementaryColorScheme`. | §4.4, §4.5 |
+| BO-18 | "Change text size" (small, normal, medium, large, larger), "Change text case" (capitalize, uppercase, lowercase); font kinds `custom`, `system`; 18 macOS family names in binary order Helvetica Neue … Wingdings; "Arial Rounded MT Bold" near the editor strings. | §4.6, §4.7 |
+| BO-19 | Code mode strings "Pick Selector" / "Hide Selector Picker", "Refresh to Run" ("Refresh this Page"), "Show Developer Tools" / "Hide Developer Tools", placeholders "your css here" / "your javascript here". | §4.10 |
+| BO-20 | Zap strings "Click elements on the page to Zap them", "Zap this", "Zap all related elements", "Copy selector for this", "Copy selector for related". | §4.8 |
+| BO-21 | First-run interstitial "Edit the Internet with Boosts"; dismissal stored (`hasDismissedBoostsInterstitial`). | §4.11 |
+
+Measured facts (capture session 2; `interaction-states.md` §20.5, §20.6, §20.15; abbreviated "IS"):
+
+| ID | Fact | Evidence | Used in |
+|---|---|---|---|
+| S2-1 | The panel drops down from the URL field with a **top arrow** centered on the Site Control button: the standard macOS popover arrow (45° sides, rounded tip), visible tip at y ≈ 81 (2 pt below the button, 1 pt over the field's bottom edge), body top y 91, body 236 pt wide (x 83 … 318 at sidebar width 228), over the sidebar and the page. | S2 09/0010; IS §20.5, §20.15 | §3.1, §3.2 |
+| S2-2 | No header. Order: action row, Extensions, Boosts (only with a matching Boost), Settings, footer. | S2 09/0010, 11/0011 | §3.3 |
+| S2-3 | 4 action buttons 48 × 32, gap 8: Share, New Boost, Capture (camera), Capture area (viewfinder). No Copy URL. | S2 09/0010 | §3.4 |
+| S2-4 | Body is translucent and blurred: #403E54 over the dark sidebar, #7B7B7B over white; a 1 px light rim (white ≈ 0.20) runs along the body and the arrow. | S2 09/0010; IS §20.15 | §3.2 |
+| S2-5 | Rows: 32 pt icon circle, title (14 pt Semibold), subtitle (13 pt Regular), pitch 43. On / allowed / enabled = disc #ECEDFF; off = disc #84849A; in both the glyph is knocked out, so the material shows through. Titles truncate with "…". | S2 09/0010, 11/0005; IS §20.15 | §3.7, §3.8 |
+| S2-6 | Extensions section shows with no extensions installed: one "+" tile 48 × 32. | S2 09/0010 | §3.6 |
+| S2-7 | Footer: "Secure" pill (≈ 82 × 32) and a 32 pt round ⋯ (#595B5F). | S2 09/0010 | §3.9 |
+| S2-8 | Section header hover shows "Manage" at the right; Boost row hover shows a chevron. | notes 10:47:57 | §3.5, §3.7 |
+| S2-9 | ⋯ menu shows "New Boost…" and "Manage Boosts…" even while a Boosts section is shown. | S2 11/0011 | §3.9 |
+| S2-10 | The Site Control button draws a filled variant while the panel is open, and small sparkles while the site has a Boost. ⌥-click on the button does not open the panel. | S2 11/0011, 0016; notes 10:28:02 | §3.10 |
+| S2-11 | The panel grows from the button (popover window 38 × 47 at the button center during the open) and overshoots ≈ 1.5 % (266 × 405 before 262 × 398). | `windows.tsv` S2 09/0008, 11/0003 | §3.11 |
+| S2-12 | Editor: own light window 183 × 588, centered on the browser window's right edge, 160 pt below its top (one sample). Header: Done (x circle), name button with chevron, Undo. | S2 10/0018, 0030; IS §20.6, §20.15 | §4.2, §4.3 |
+| S2-13 | Color pad: square dot-grid plate 133 pt inside a 7 pt hue ring (frame 147); two knobs; the second knob sits 45° clockwise of the first on the same radius; knob hue = screen angle clockwise from 3 o'clock; grey ring before a color, rainbow after. | S2 10/0030, 0038–0041; IS §20.15 | §4.4 |
+| S2-14 | Three 42 × 38 color buttons: Invert lightness (bulb), Advanced color controls (sliders), Reset to original colors (prohibited sign, disabled until a change). | S2 10/0030, 0039 | §4.5 |
+| S2-15 | Advanced color controls is a light popover 250 × 232: Contrast, Brightness, Original Saturation, sliders 186 × 16 at value 50. | S2 10/0042 | §4.5 |
+| S2-16 | Fonts: 5 × 4 grid of 26 pt "Aa" cells in a white card; selected cell = 26 pt grey circle. | S2 10/0030, 0046 | §4.6 |
+| S2-17 | "Size" and "Case" half-width buttons (70 × 38); "Zap" and "Code" full-width rows (147 × 38). Zap on = #333333 with white text; count after a Zap ("Zap, 1"). | S2 10/0030, 0058, 0067 | §4.7 |
+| S2-18 | Name menu: Rename this Boost… · Shuffle · Reset all Edits · Delete this Boost · — · All Boosts…. Delete alert "Delete this Boost?" / "This can't be undone." with Cancel (Esc) and a red Delete (Return). | notes 10:48:09, 10:48:18 | §4.3, §4.9 |
+| S2-19 | Zap mode on the page: 3 pt blue content frame, 56 pt white bottom bar with the instruction and "Done", yellow hover tint, a popup with "Zap this", "Zap all related elements", "Cancel" and the selector; afterwards "Click to reveal". | S2 10/0060; notes 10:26:49 | §4.8 |
+| S2-20 | Code mode widens the window to 480 × 588 to the left: "← Back", CSS · JS, a code view, a 70 pt bottom bar with "Pick Selector" and "Show Developer Tools". | S2 10/0071 | §4.10 |
+| S2-21 | First-run card covers the lower part and dims the rest; "Edit the Internet with Boosts", "Make <host> your own!", "Make a Boost", "Maybe Later"; lavender footer with a wavy edge. | S2 10/0018 | §4.11 |
+| S2-22 | One color on archive.org turned white areas pale toward the first knob's hue (#FFFFFF → #E4E2F3) and dark areas toward the second knob's hue (#222222 → #56285D); images kept their colors. | S2 10/0018 vs 0039 | §4.4.4, Q12 |
 
 ---
 
 ## 3. Site Control Center — design spec
 
-All frames are points, origin at the panel's top-left, y down. "guess" marks a value with no
-capture behind it. Put every number below in `OpenDesign/SiteControlTokens.swift` (§6.1), never
-inline.
+All frames are points at 1x. Panel frames have their origin at the body's top-left (y down).
+"S2 …" cites a measured value; "guess" and "Open choice" mark the rest. Put every number in
+`OpenDesign/SiteControlTokens.swift` (Appendix A), never inline. Values were measured in macOS Dark;
+macOS Light values are guesses (§13).
 
 ### 3.1 Entry points and anchoring
 
-| Entry | Anchor | Edge |
+One rule for every anchor with an arrow: the arrow's visible tip sits 2 pt below the anchor
+button's bottom edge, and the body top sits 10 pt below the tip (S2 09/0010: button bottom y 79,
+tip y ≈ 81, body top y 91; the advanced popover follows the same rule, S2 10/0042: button bottom
+258, tip 260, body top 271, IS §20.15).
+
+| Entry | Anchor | Rule |
 |---|---|---|
-| Sidebar URL field button (`.showSiteControls`) | The button frame `[W − 42, 49, 30, 30]` (sidebar space) | Panel opens 13 pt right of the sidebar edge, without a pointer (lead decision A, 2026-10-26 review of PR #69; supplied capture F0137). |
-| Floating sidebar card (hover-reveal) | The card's URL field button | Same as above, relative to the card. |
-| Split pane bar button (`PaneChromeView` index 4, enable it) | The button frame in the pane bar | Panel opens below the bar, right-aligned to the button, without a pointer. |
+| Sidebar URL field button (`.showSiteControls`) | Button frame `[W − 42, 49, 30, 30]` (sidebar space) | Tip at `(button.midX, button.maxY + 2)` = (201, 81) at W = 228; it overlaps the URL field's bottom edge (y 82) by 1 pt. Body top = tip + 10 = y 91. Body x = `button.midX − 118` (S2 09/0010: 83 at W = 228). |
+| Floating sidebar card (hover-reveal) | The card's URL field button | Same rule, relative to the card (guess: not captured). |
+| Split pane bar button (`PaneChromeView` index 4, enable it) | Button frame in the pane bar | Same rule: tip 2 pt below the button, centered on it (guess: not captured). |
+| Key binding with no visible anchor (`.contentTopLeading`) | Web content top-left | No arrow; body at 12 pt from the content's top-left (Open choice, unchanged). |
 
-- The panel always describes the tab of its anchor: the selected tab, or the focused split pane
-  (SV-8). Opening it from an unfocused pane's bar is impossible (the unfocused bar hides the
-  button, F0081).
-- Not available: no page loaded (button hidden today), a Peek (no URL field; guess, SC-1), Little
-  Open (no button in its toolbar; Open choice), `chrome://` and `open://` internal pages show only
-  header, actions (Copy URL, Share) and footer (Open choice; Boosts cannot match them because
-  `BoostMatcher` needs an http(s) host).
-- Geometry (lead decisions A/B, 2026-10-26 review of PR #69): no arrow. For the sidebar
-  anchor: `x = sidebarMaxX + 13`, `y = clamp(anchorMidY − 24, 8, H − panelHeight − 8)`.
-  At the standard anchor this is y 40; the title baseline is y 69, aligned with the URL host.
-  The supplied reference capture F0137 has no visible arrow and a 13 pt sidebar gap.
-  For the pane anchor: `y = anchorMaxY + 11`, panel right edge = anchor right edge + 8,
-  clamped inside the window with 8 pt margins.
-- One panel per window. Opening it again on the same anchor closes it (toggle). Opening from
-  another anchor moves it.
+- Horizontal clamp (Open choice): keep the body ≥ 8 pt inside the window. When clamped, the arrow
+  stays on `button.midX`, but its center stays at least `cornerRadius + 15` (16 + half the arrow's
+  30 pt footprint) from the body's left and right edges.
+- Height: body height = min(content height, `SiteControlMetrics.maxHeight` 640,
+  `windowContentMaxY − 8 − bodyTop`). Past that, the sections scroll inside the body (overlay
+  scroller; Open choice). Arc's popover window could extend past the window instead (accepted
+  difference, D-3).
+- The panel describes the tab of its anchor: the selected tab, or the focused split pane (SV-8).
+- Not available: no page loaded (button hidden), a Peek, Little Open. Internal pages (`chrome://`,
+  `open://`) show the action row (Share only enabled), the Extensions section, and the footer
+  without a security label (Open choice; not captured).
+- One panel per window. Opening it again on the same anchor closes it (toggle). Opening it from
+  another anchor closes the current panel without animation and opens it at the new anchor with
+  the §3.11 open motion (Open choice).
+- v1 is left-to-right only: no mirroring of the arrow clamp, the action order, rows, or the footer
+  (Open choice).
 
-### 3.2 Panel chrome, header, and action row
+### 3.2 Panel chrome: shape, arrow, rim, material
 
 | Part | Value | Source |
 |---|---|---|
-| Width | 320 | guess (Arc's theme popover content is 356, `interaction-states.md` §14) |
-| Max height | `min(windowContentHeight − 16, 640)`; content scrolls inside (overlay scroller) | Open choice |
-| Corner radius | 16, continuous (`.continuous`); hover plates also use continuous corners | Lead decision C, 2026-10-26 review of PR #69 |
-| Fill | `Core.popoverBackground` (light `#FAFBFF`, dark `#151C30`, P3) | Arc's own popover token name (`ARCClients_BaseAssets`); its use here is a guess |
-| Edge | 1 px `CommandBarColors.hairlineDivider` (black 10 % / white 10 %) inside the edge | guess |
-| Shadow | black 0.25, radius 16, y offset 6 | guess (smaller than the command bar's σ 48) |
-| Appearance | Follows the macOS appearance (`NSApp.effectiveAppearance`), not the Space's content appearance | Open choice: system popovers follow the system |
-| Header | Height 48. Favicon 16×16 at `[14, 16]` (fallback `Glyph.globe`, 14 pt Regular, `Core.foregroundSecondary`). Title = human-readable host (host without a leading `www.`; TopDomains display name when it exists, TD-1) in a frame at x 36 (ink starts at 38), 14 pt Semibold (`Typography.siteControlTitle`), `Core.foregroundPrimary`, baseline 29, tail truncation | SC-9 `humanReadableHost`, TD-1 |
-| Action row | y 48, height 44. Buttons are top-aligned (`actionButtonInsetY = 0`, lead decision 2026-10-26). Six buttons 44×36, gap 4, centered (284 pt wide). Radius 8. Rest fill clear; hover `SidebarColors.itemBackground`; pressed `SidebarColors.itemHoveredBackground`. Glyph 18 pt Regular template, `Core.foregroundSecondary`; multiply its resolved alpha by 0.3 when disabled. Tooltip = Arc label + shortcut keycaps (shared capsule and presenter in `OpenDesign/TooltipView.swift`). | SC-15 |
-| Separator | 1 px `CommandBarColors.hairlineDivider`, inset 12 left and right, after the action row and between sections. Stroke center = separator y + half a device pixel (first separator: `92 + px/2`). | guess; pixel snapping per PR #69 lead review |
+| Body width | 236 | S2 09/0010 |
+| Body corner radius | 16, continuous (`SiteControlShape`) | measured ≈ 16–18 (S2 09/0010); lead decision C kept |
+| Arrow | The standard macOS popover arrow. Points up, centered on the anchor x. Sides at 45° (90° apex); the apex is rounded with radius 7, so the visible tip is 10 pt above the body top. Where the sides meet the body top the arrow is 26 pt wide; 2 pt concave fillets join it to the body (≈ 28–30 overall). One path with the body: fill, material mask, rim, and shadow use the same `CGPath`. Widths to check (±1 pt): 9 at tip + 1, 12.3 at tip + 3, 16.3 at tip + 5, 20.3 at tip + 7. | S2 09/0010 rows 81–90 (widths 6.5, 9, 10.3, 12.3, …, 26: 2 pt per row = 45°); same shape in the advanced popover, S2 10/0042 (IS §20.15); fillet radius guess |
+| Rim | 1 px inner rim, white 0.20 (Dark), along the whole body + arrow path. The material is also ≈ 8 levels lighter in the first ≈ 6 pt inside the top and bottom edges (the system popover's edge glow). If the shipped material is a system `NSVisualEffectView` that already draws a rim, probe it first and do not draw a second one. | S2 09/0010: top edge #75738F–#7A7A8D over the sidebar #252538 with interior #515163–#636374; bottom edge #706C87–#77738E; arrow right side +0x1F over the interior; the left edge reads fainter at 1x (may be a 0.5 pt hairline, §13). Light value: black 0.10, guess. |
+| Material | `NSVisualEffectView`, material `.popover`, blending `.withinWindow`, state `.active`, masked by the body + arrow path. **One shared token with the Space theme editor's popover material** (`space-theme-editor.md` D-4, "the system popover material"): over a white page in Dark the theme popover reads #797979 (IS §14) and this panel #7B7B7B. Calibrate once, on the real app, to the S2 probes (window points, S2 09/0010): (88, 215) over the dark sidebar → #403E54 ± 3 levels; (300, 140) over a white page → #7B7B7B ± 3 levels. If `.popover` misses, try `.hudWindow`, then a flat tint layer over the effect view; record the choice in the token. | S2 09/0010; IS §20.15 (probe coordinates); material choice guess |
+| Open-motion technique | The panel's container layer has its `anchorPoint` at the arrow's visible tip and carries the scale (§3.11). The effect view is a sublayer of that container. During the 0.20 s open the system may sample the backdrop at the scaled size, so the blur can "swim"; this is accepted (R-7) and recorded by the §8.1 `motion` check. | Open choice (review r1, plan F4) |
+| Offscreen fallback (harness only) | WindowServer blur is not available offscreen. `sitecontrol-render` draws `0.28 × blur(backdrop, σ 5) + 0.72 × #49475A` (blue channel 0.21 / 0.79). Validated against Arc pixels it was not fitted to (S2 09/0010 vs the 09/0004 backdrop): (150, 330) ΔE00 2.1, (180, 240) 1.7, (240, 330) 1.8, (260, 250) 1.2; misses near page content: (235, 180) 3.6, (300, 330) 5.0 (blue link text under the panel). | fit P1 (88, 215) and P2 (300, 140); validation IS §20.15 |
+| Shadow | Not measurable (the composite window image has no popover shadow). Black 0.25, radius 12, y 4; the same token as the theme editor popover's shadow. | guess |
+| Appearance | **The browser window's effective appearance, that is the Space's resolved mode** (Automatic → macOS, Light, Dark): the same source as the theme editor popover, which turns light or dark with the Space's mode (IS §20.8 "Modes"). Dark is measured. Light proxy until an SCC Light capture exists: the theme popover in macOS Light (#FFFFFF / #FAFAFF, S2 20/0027, IS §20.11). | IS §20.8; Light values guess |
 
-Action buttons (enum order, SC-15). Each runs an existing command id so menus, keys, and the panel
-share one implementation (`docs/commands.md`):
+### 3.3 Vertical layout
 
-| # | Tooltip | Glyph (Open's own) | Runs | Enabled when |
+Body padding 10 on every side (S2 09/0010). Blocks from the top (S2 09/0010 without a Boost, total
+297; S2 11/0005 with one Boost, total 372):
+
+| y (body) | Block | Height | Source |
+|---|---|---|---|
+| 0 | top padding | 10 | S2 09/0010 |
+| 10 | action row (§3.4) | 32 | S2 09/0010 |
+| 42 | gap holding the "Extensions" label | 37 | S2 09/0010 |
+| 79 | Extensions items (§3.6) | 32 for one tile row; each further row adds 40 (pitch 40 = 32 + gap 8) | S2 09/0010 (one row); pitch guess |
+| … | gap holding the next section label | 43 | S2 09/0010, 11/0005 |
+| … | section rows (§3.7, §3.8): row pitch 43 (32 circle + 11) | 32 + 43 · (n − 1) | S2 09/0010, 11/0005 |
+| … | reload row (§3.8.1), when shown | 11 + 32 | Open choice |
+| … | gap | 15 | S2 09/0010 |
+| … | separator | 1 | S2 09/0010 |
+| … | gap | 10 | S2 09/0010 |
+| … | footer (§3.9) | 32 | S2 09/0010 |
+| … | bottom padding | 10 | S2 09/0010 |
+
+Section label: baseline 14 pt above the section's first item (S2 09/0010). A section with no items
+is removed with its gap. Order: Extensions, Boosts, Settings (D-11 superseded; S2-2).
+
+### 3.4 Action row
+
+Four buttons, 48 × 32, gap 8, from x 10 (x 10, 66, 122, 178) (S2 09/0010). Each button is a
+recessed "key":
+
+| Part | Value | Source |
+|---|---|---|
+| Fill | Vertical linear gradient #272727 (top) → #161616 (bottom) | S2 09/0010, Share button x 96: #272727 (y 103), #212121 (112), #1A1A1A (124), #161616 (131) |
+| Top highlight | 1 pt #575757 on the first row only | S2 09/0010 y 101 |
+| Ring and shadow | 1 pt outer ring, black 0.30, all sides; shadow black 0.20, radius 1, y 1 | S2 09/0010: ring pixels #343340 next to material #47475B; under the button #212027 then #434154; fit |
+| Corner | 6, continuous | S2 09/0010 corner insets ≈ 2.5, 1, 0.5, 0 per row |
+| Hover | The highlight drops to #484848; nothing else changes | S2 09/0016, 0018, 0019, 0021 |
+| Pressed | The gradient darkens by 6 levels (#212121 → #101010) | guess |
+| Glyph | 17 pt Regular template, white 0.85 | glyph ink 15–19 pt tall, peak #CDCDCD on 1x strokes (visual fit) |
+| Disabled | Glyph alpha × 0.3, no hover | Open choice |
+| Focus ring | The button's own rounded rect, outset 2, keyboard focus only | Open choice |
+
+Tooltips were not captured: use the labels below with the shortcut keycaps (shared capsule in
+`OpenDesign/TooltipView.swift`). Glyphs are Open's own SF choices; the Boost glyph is one token,
+`BoostGlyph` (§3.7), so a later choice changes one line.
+
+| # | Tooltip and AX label | Glyph | Runs | Enabled when |
 |---|---|---|---|---|
 | 1 | Share | `square.and.arrow.up` | `share-page` (system share picker anchored to the button) | page loaded |
-| 2 | Copy URL (⇧⌘C) | `link` | `copy-url` (existing toast "Copied Current URL") | always |
-| 3 | New Boost | `paintbrush.pointed` | §3.5 "New Boost" flow | http(s) page, not incognito, `open.advanced.enableBoosts` |
-| 4 | Capture a portion of this page (⇧⌘2) | `viewfinder` | `capture-page` | command enabled |
-| 5 | Capture the full page | `doc.viewfinder` | `capture-full-page` | command enabled |
-| 6 | Capture in Portrait Mode | `rectangle.portrait` | `capture-portrait` | command enabled |
+| 2 | New Boost | `BoostGlyph.outline` = `paintbrush.pointed` + one Open-drawn 4-point sparkle at its top-left | §3.7 New Boost flow | http(s) page, not incognito, `open.advanced.enableBoosts` |
+| 3 | Capture a portion of this page (⇧⌘2) | `camera` | `capture-page` | command enabled |
+| 4 | Capture the full page | `text.viewfinder` | `capture-full-page` | command enabled |
 
-Disabled buttons draw at 30 % alpha and do not show a hover fill. A button action closes the panel
-first, then runs the command (Open choice: the share picker and capture overlay must not sit under
-the panel).
+Arc's New Boost glyph is a diagonal paintbrush (bristles up-right) with a small sparkle at its
+top-left, and its fourth glyph is corner brackets around three text lines with no page outline
+(S2 09/0010, 09/0016). The mapping of the camera and viewfinder glyphs to the two SC-15 capture actions is a guess (no
+tooltip was captured). Copy URL and Capture in Portrait Mode are not in the row (S2-3); Copy URL
+stays on ⇧⌘C and on the URL field's copy button. A button action closes the panel first, then runs
+the command (Open choice).
 
-### 3.3 Sections (shared shape)
+### 3.5 Section labels and header actions
 
-| Part | Value |
-|---|---|
-| Section header | Height 28. Title at x 14, 12 pt Semibold, `Core.foregroundSecondary`. Hover over the header row shows the accessory text right-aligned at `W − 14`: 12 pt Medium, `Core.brandBlue`, followed by `chevron.right` 9 pt. The accessory fades in over `Motion.hoverFade` (0.08 s). Click anywhere on the header runs the header action. |
-| Section body | Starts 2 pt below the header. Bottom padding 10. |
-| Order | Settings, Boosts, Extensions (D-11). A section with no rows is hidden, except Settings, which always has the ad-block tile on http(s) pages. |
+| Part | Value | Source |
+|---|---|---|
+| Label | x 10, 14 pt Semibold, white 0.86 (#DBDBDF) | S2 09/0010: ink width 55 for "Settings" (14 Semibold advance 56.3, 13 Semibold 52.8) and 72 for "Extensions" (73.5 vs 68.9) |
+| Hover | The whole label row (full width, 24 pt tall) shows the accessory text right-aligned at x `236 − 10`: 13 pt Regular #9F9EA9 (the measured secondary text color). Fade `Motion.hoverFade`. Click anywhere on the label row runs the header action. | text "Manage" measured (notes 10:47:57); size and color guess |
+| Focus ring | The 24 pt label row, keyboard focus only | Open choice |
 
 | Section | Title | Hover accessory | Header action |
 |---|---|---|---|
-| Settings | "Settings" | "More" | All Site Settings (§3.7 menu item 10) |
-| Boosts | "Boosts" | "Manage" | `view-boosts` → Library Boosts list (§4.11) |
-| Extensions | "Extensions" | "Manage" | `manage-extensions` (§3.7 menu item 7) |
+| Extensions | "Extensions" | "Manage" | `manage-extensions` |
+| Boosts | "Boosts" | "Manage" | `view-boosts` → Library Boosts list (§4.13) |
+| Settings | "Settings" | "More" (SC-10; not re-observed) | All Site Settings (§3.9 menu item 10) |
 
-### 3.4 Settings section (tiles)
+### 3.6 Extensions section
 
-Tile grid: 2 columns, tile 142×48, column gap 8, row gap 8, grid inset 14 (2 × 142 + 8 = 292 =
-320 − 2 × 14). Radius 10. Tile fill `SidebarColors.itemBackground` (black 5 % / white 10 %), hover
-`SidebarColors.itemHoveredBackground`. Icon circle 28 at `[10, 10]`: on state `Core.brandBlue` with
-a white 14 pt glyph; off state `GrayScale.a(4)` with a `Core.foregroundSecondary` glyph. Title at x
-46, 12 pt Semibold, baseline 21. Subtitle at x 46, 11 pt Regular, `Core.foregroundSecondary`,
-baseline 36. Both truncate at the tile's right edge − 8. All values guess except the labels (SC-11).
+Always shown on http(s) and internal pages (S2-6). Items are tiles 48 × 32 in rows of 4, gap 8
+both ways (row pitch 40), from x 10 (tile size S2 09/0010; 4 columns, gap, and pitch guess, matching
+the action row). Tile fill white 0.08 (≈ +12–16 levels over the material, S2 09/0010), corner 6
+(the action buttons' radius). Item icon 16 pt, centered (guess); the badge text and color follow
+`extensions-ui.md`, drawn at the tile's top-right. The last tile is always "+" (`plus` 14 pt, white
+0.85): AX label and tooltip "Add Extension", runs `add-extension`. Focus ring: the tile's rounded
+rect, outset 2.
 
-Rows, in this order:
+Body ownership is unchanged: `docs/plans/extensions-ui.md` owns `ExtensionsSectionBody` and
+`ExtensionItemView` (style `.tile`, which must use the metrics above), item data, pin order, and the
+item intents `.run(id, anchor)`, `.togglePin(id)`, `.contextMenu(id, anchor)`. This plan owns the
+label, the section's place, the "+" tile until `OpenExtensionsUI` lands, and the footer menu.
 
-| # | Tile | Shown when | Title | Subtitle | Click writes | Live effect |
+| Part | Value |
+|---|---|
+| Before `OpenExtensionsUI` | The section shows only the "+" tile (supersedes "section hidden"; S2-6). |
+| Click | `.run(id, anchor)` → App runs the action; the popup opens at the item's screen rect. The panel closes first. |
+| Pin | `.togglePin(id)` (E4). Hidden until E4 lands. |
+| Right-click | `.contextMenu(id, anchor)` → Chromium's extension context menu. Before E4: "Manage Extensions…" only. |
+
+#### 3.6.1 Extension picker mode
+
+- API (unchanged): `SiteControlController.present(anchor:tabID:mode:)`,
+  `enum SiteControlPresentationMode { case standard, extensionPicker }`,
+  `enum SiteControlAnchor { case urlField, paneBar(ItemID), contentTopLeading }`.
+- `.extensionPicker`: the panel opens, then keyboard focus goes to the first extension item; arrows
+  move; Return runs it; Esc closes. With no extensions the first item is the "+" tile, so Return runs
+  `add-extension` (supersedes the "focus ⋯" fallback; guess on Arc's behavior).
+- The key binding and its command id belong to the extensions-UI plan (Q11).
+
+### 3.7 Boosts section
+
+Shown when at least one Boost of the tab's Profile matches the page (`BoostMatcher.matching(url:)`
+over all Boosts, enabled or not; build a second matcher from `allBoosts()` with `isEnabled` forced
+true, cached per store change). Hidden otherwise.
+
+Row (one per matching Boost, matcher order) — the shared `SiteControlRow` (§3.8 geometry):
+
+| Part | Value | Source |
+|---|---|---|
+| Circle | 32 pt at x 10. Enabled: disc #ECEDFF; disabled: disc white 0.28 (#84849A over the dark material). In both states the glyph (`BoostGlyph.fill` = `paintbrush.pointed.fill`, 15 pt) is a **knock-out**: it is cut out of the disc, so the panel material shows through. Draw the disc layer with the glyph as a mask hole (`CALayer` mask or `kCGBlendModeDestinationOut`); never draw a glyph color. Pressed: disc −8 levels (guess). Focus ring: a 36 pt circle. | S2 11/0005: glyph pixels #4A485F–#4C4A61 equal the material just outside the circle (#4E4D65); disabled guess, from the settings "Off" circle |
+| Title | Boost name (or the site domain when empty), x 50, 14 pt Semibold, #DFDFE2, one line, tail "…" | S2 11/0005; size from ink widths (§3.8) |
+| Subtitle | "Enabled" / "Disabled", 13 pt Regular, #9F9EA9 | S2 11/0005 (SC-13); size from ink widths (§3.8) |
+| Hover | No row plate. `chevron.right` 11 pt Semibold #9F9EA9 at x `236 − 10 − 11`. Focus ring (keyboard): the text area `[46, −4, 180, 40]` relative to the row, corner 8. | chevron measured (notes 10:47:57); no plate and style guess |
+| Sparkles | Three Open-drawn 4-point sparkles on the circle, at the brush's top-left, top-right, and bottom-right, knocked out like the glyph. Static: the top-right at full opacity, the top-left and bottom-right at 0.35 (the average look of the captured frames; no frame shows all three at full). Each opacity is one token, so the Q15 follow-up can animate the same layers. Arc fades them in and out one by one while the panel is open, but the motion is **not measurable** from session 2: the two recorders give frame pairs 0.03–0.2 s apart with 1.6–2.5 s gaps, and the video does not show the panel. Q15 ruling: static until a capture measures it (`docs/followups.md`). | S2 11/0004–0017 (sheet in `.re/scb-design/`); IS §20.15; Q15 |
+| Global off | `open.advanced.enableBoosts` false: rows draw at 50 % alpha, circles do nothing, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." 13 pt Regular #9F9EA9. | Open choice |
+| Incognito | Circle and row actions disabled; tooltip "Boosts can't be edited in a private window." | D-10 |
+
+Actions (guesses on Arc's click targets; Open choice):
+
+- Click on the circle → `BoostStore.setEnabled(id:enabled:)` → adapter refresh (D-6). Subtitle and
+  circle update at once; CSS components re-render without reload; JS stays until reload.
+- Click elsewhere on the row, the chevron, or Return on a focused row → close the panel, open the
+  editor on this Boost (§4).
+- New Boost (action button 2 or ⋯ "New Boost…") → create
+  `Boost(name: "My Boost", siteMatch: SiteMatch(domain: defaultDomain(host)))` (host without a
+  leading `www.`); `BoostStore.upsert`; close the panel; open the editor with `isNew = true`.
+
+### 3.8 Settings section
+
+Rows, in this order, with the `SiteControlRow` geometry: height 32, pitch 43; circle 32 at x 10;
+title x 50, cap top +2, baseline +13, 14 pt Semibold #DFDFE2; subtitle baseline +29, 13 pt Regular
+#9F9EA9; text ends at x `236 − 10`, one line, tail "…" (S2 09/0010). The sizes come from ink
+widths: "Developer Mode" 108 (14 Semibold advance 109.6, 13 Semibold 102.7), "Off" 19 (13 Regular
+19.2, 12 Regular 17.9), "Allowed" 47 (13 Regular 47.5, 12 Regular 44.3) (design review r1). The
+two-line title rule of the first version is superseded.
+
+| # | Row | Shown when | Title | Subtitle | Circle on when | Click writes |
 |---|---|---|---|---|---|---|
-| 1 | Content blocking | http(s) page | "Block Ads & Trackers" | "On" when `AdBlockStore.isEnabled && !isAllowlisted(host)`; "Off" otherwise | `AdBlockStore.setExcluded(host, excluded: wasOn, profile:)` where `wasOn` is the tile state before the click (the store keeps the registrable domain). When the master switch is off the tile is in state `unavailable`: drawn off, click opens Settings → Advanced → Ad Blocking (`settings` command with pane `advanced`) and writes nothing. | `AdBlockEngineEvent.exclusions` reaches the engine; the change applies on the next navigation (adblock-fork §1.1). The panel shows the reload row (§3.4.1). |
-| 2… | One tile per changed content setting | E1 available: every setting the engine reports as changed for the origin. Before E1: each of the 12 `SitePermission` kinds whose state is not `.ask`. | Display name (table below) | "Allowed" (allow) or "Blocked" (block) | Toggle: allow ↔ block through `WebProfile.setPermission(_:for:origin:)` (E1: `setSiteSetting`) | Takes effect on the next permission request; the panel shows the reload row. A tile whose permission is in use right now (camera or microphone capture) shows a 6 pt `Core.brandBlue` dot after the title (Open choice). |
-| — | Preview | Hidden in v1 (Q3) | "Preview" | "Enabled"/"Disabled" | — | — |
+| 1 | Content blocking | http(s) page | "Block Ads & Trackers" | "On" / "Off" | on | `AdBlockStore.setExcluded(host, excluded: wasOn, profile:)`. Master switch off → state `unavailable`: circle off, click runs `openAdBlockSettings(tabID:)`, writes nothing (Q13). |
+| 2… | One per changed content setting | E1: every changed setting; before E1: each of the 12 `SitePermission` kinds whose state is not `.ask` | Display name (table) | "Allowed" / "Blocked" | allowed | Toggle allow ↔ block through `WebProfile.setPermission(_:for:origin:)` (E1: `setSiteSetting`) |
 | — | Developer Mode | Hidden in v1 (Q2) | "Developer Mode" | "On"/"Off" | — | — |
-| — | Pop-ups | Never (Arc logs "not supported", SC-11) | — | — | — | — |
+| — | Preview | Hidden in v1 (Q3) | "Preview" | "Enabled"/"Disabled" | — | — |
 
-Ad-block tooltips (Open's words for Arc's three states, SC-11): on — "The built-in ad blocker is on
-for this site."; excluded — "The built-in ad blocker is off for this site."; master off — "The
-built-in ad blocker is off. You can turn it on in Settings."
-
-Display names and glyphs (Open's own SF Symbol choices; titles capitalized from SC-12's table):
+- Circle: on = disc #ECEDFF; off = disc white 0.28. The glyph (15 pt, visual) is knocked out of
+  the disc in both states, so it shows the material (S2 09/0010: the "Allowed" gear's core #545467
+  vs the material outside #565669; the "Off" hammer's core #4E4E63–#525268 vs #515167). The "off"
+  glyph therefore reads darker than its grey disc. Pressed: disc −8 levels (guess). No hover plate
+  (guess: Arc's hover was seen only as the Boost row chevron). Click anywhere on the row toggles
+  (guess). Focus ring: a 36 pt circle around the disc, keyboard focus only.
+- In use (camera or microphone capturing): a 6 pt `Core.brandBlue` dot after the title (Open choice;
+  recording states not captured, §13).
+- Ad-block tooltips (Open's words): on — "The built-in ad blocker is on for this site."; excluded —
+  "The built-in ad blocker is off for this site."; master off — "The built-in ad blocker is off.
+  You can turn it on in Settings."
+- Display names and glyphs (Open's own SF choices; titles from SC-12). Any kind without its own
+  glyph uses `gearshape.fill` (Arc showed a gear for "Automatic Picture-In-Picture", S2 09/0010).
 
 | `SitePermission` / E1 kind | Title | Glyph |
 |---|---|---|
@@ -259,229 +406,250 @@ Display names and glyphs (Open's own SF Symbol choices; titles capitalized from 
 | idleDetection | Idle Detection | `moon.zzz.fill` |
 | E1 only: javascript, images, popups, sound, ads, backgroundSync, sensors, usb, hid, serial, bluetooth, localNetwork, protocolHandlers | JavaScript, Images, Pop-ups and Redirects, Sound, Intrusive Ads, Background Sync, Motion Sensors, USB Devices, HID Devices, Serial Ports, Bluetooth, Local Network, Protocol Handlers | `curlybraces`, `photo.fill`, `macwindow.badge.plus`, `speaker.wave.2.fill`, `rectangle.badge.xmark`, `arrow.triangle.2.circlepath`, `gyroscope`, `cable.connector`, `keyboard`, `cable.connector.horizontal`, `antenna.radiowaves.left.and.right`, `network`, `link.badge.plus` |
 
-#### 3.4.1 Reload row
+#### 3.8.1 Reload row (Open-only)
 
-After any tile change, a 32 pt row slides in under the Settings tiles (height animation 0.22 s,
-`Motion.rowStructure`): text "Reload to apply changes." 12 pt Regular, `Core.foregroundSecondary`,
-at x 14, and a "Reload" text button 12 pt Semibold `Core.brandBlue` at the right. Click reloads
-the tab and closes the panel. Open choice: Arc's reload follow-up for ad blocking
-(`AdBlockReloadFollowUpAction`) is listed among Dia analytics events and its UI is not proven in
-Arc 1.170 (SC-6 correction in `docs/re/features-advanced.md`). The panel never reloads on its own.
+After any row change, a 32 pt row appears 11 pt under the last Settings row (height motion §3.11):
+"Reload to apply changes." 13 pt Regular #9F9EA9 at x 10, baseline row top + 20 (lead round 2), and
+a "Reload" text button 13 pt Semibold #DFDFE2 at the right (sizes follow the measured row text). Click reloads the
+tab and closes the panel. The panel never reloads on its own (Q7).
 
-### 3.5 Boosts section
+### 3.9 Footer and ⋯ menu
 
-Shown when at least one Boost of the tab's Profile matches the page (`BoostMatcher.matching(url:)`
-over **all** Boosts, enabled or not — the matcher index holds only enabled ones, so build a second
-`BoostMatcher` from `allBoosts()` with every `isEnabled` forced true, cached per store change).
-When none match, the section is hidden and the ⋯ menu shows "Manage Boosts…" and "New Boost…"
-(SC-16 `includeBoostsInContextMenu`; inferred).
+| Part | Value | Source |
+|---|---|---|
+| Security pill | x 10, height 32, corner 8 (visual), fill white 0.05, padding 10. `lock.fill` ≈ 13 pt (ink 10 × 14), 6 pt gap, "Secure" 14 pt Medium #DBDBDF (ink width 46; 14 Medium advance 46.3, 13 Medium 43.4); width fits the content (≈ 82). Focus ring: the pill's own shape, outset 2. Insecure: `lock.open.fill` + "Insecure" in `CommandBarColors.lockInsecure` (guess: not captured). `https` → Secure, `http` → Insecure, any other scheme hides the pill and its AX element (lead decision). Click: E3 → certificate viewer; before E3 a static label. | S2 09/0010 |
+| ⋯ button | 32 pt circle at x 194, fill black 0.28 over the material (#595B5F measured), `ellipsis` 13 pt Bold white. Focus ring: a 36 pt circle. Opens a native `NSMenu` at the click point (top-left at the pointer; keyboard activation: under the button). | S2 09/0010, 11/0011 |
 
-Row (one per matching Boost, matcher order): height 40, inset 14.
+⋯ menu (S2 11/0011 order and titles):
 
-| Part | Value |
-|---|---|
-| Icon | 18 pt `paintbrush.pointed.fill`, tinted with the Boost's accent (§4.3, from its ID) at x 14, centered |
-| Name | `boost.name`, or the site domain when empty (boosts-zap §3.3), 13 pt Medium, `Core.foregroundPrimary`, x 42, baseline 18 |
-| Subtitle | "Enabled" / "Disabled", 11 pt Regular, `Core.foregroundSecondary`, baseline 32 (SC-13) |
-| Switch | Our switch 26×16 at `W − 14 − 26`, centered: on `Core.brandBlue`, off `GrayScale.a(6)`, knob white 12 pt, knob slide 0.12 s |
-| Edit | `pencil` 13 pt in a 24×24 button left of the switch (gap 6); visible on row hover or keyboard focus |
-| Global off | When `open.advanced.enableBoosts` is false: rows draw at 50 % alpha, switches disabled, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." (Open choice) |
-| Incognito | Rows show; switch and edit disabled with tooltip "Boosts can't be edited in a private window." (D-10) |
-
-Actions:
-
-- Switch → `BoostStore.setEnabled(id:enabled:)` → adapter refresh (D-6). The subtitle updates at
-  once; the page re-renders CSS components without reload. JS components stay until reload
-  (applier contract A5).
-- Edit (or double-click the row, or Return on a focused row) → close the panel, open the editor on
-  this Boost for the anchor tab (§4).
-- New Boost (action button 3, or ⋯ "New Boost…") → create
-  `Boost(name: "My Boost", siteMatch: SiteMatch(domain: defaultDomain(host)))` with
-  `defaultDomain` = host without a leading `www.`; `BoostStore.upsert`; close the panel; open the
-  editor with `isNew = true` (§4.1).
-
-### 3.6 Extensions section
-
-Shared with `docs/plans/extensions-ui.md` (extensions-UI plan, in review on branch
-`docs/plan-extensions-ui`). That plan owns the section **body**: `ExtensionsSectionBody` and
-`ExtensionItemView` in its new target `OpenExtensionsUI` (item styles `.tile` for this grid and
-`.row`), the item data (`ExtensionItem` from the extended OpenWeb `ExtensionHost`), pin order
-(Chromium pref `extensions.pinned_extensions`, no second store), and the item intents
-`.run(id, anchor)`, `.togglePin(id)`, `.contextMenu(id, anchor)`. This plan owns the section
-header, its place in the panel, the panel itself, and the footer menu.
-
-Arc evidence (SC-14 plus the extensions-UI planner's findings): items are an extension button and a
-pin button; fields name, isPinned, isFocused, fallbackIcon, title, isActive; grid and row layouts;
-"Add Extension" as the last item; per-site access is **not** in the panel — it is in Chromium's
-extension context menu on right-click.
-
-| Part | Value |
-|---|---|
-| Shown | When the tab's window has at least one extension item. |
-| Body frame | x 14, width 292 (panel width − 2 × 14), height from `ExtensionsSectionBody` (its grid metrics). |
-| Click | `.run(id, anchor)` → the App runs the action; the popup opens at the item's screen rect (app-shell §4.12). The Site Control Center closes first. |
-| Pin | `.togglePin(id)` → App → `ExtensionHost.setPinned` (E4). Hidden until E4 lands. |
-| Icon and badge | Drawn by `ExtensionItemView` from `toolbarImage` (Chromium's badge is baked in). This plan draws no badge of its own. |
-| Right-click | `.contextMenu(id, anchor)` → App → Chromium's extension context menu (site access lives there). Before E4: an NSMenu with "Manage Extensions…" only. |
-| Add Extension | Runs the `add-extension` command (exists in `OpenCommands`). |
-| Header "Manage" | Runs the `manage-extensions` command (exists). |
-
-Until `OpenExtensionsUI` lands, the section stays hidden (the ⋯ menu still has both extension
-items). No second grid implementation is built here.
-
-#### 3.6.1 Extension picker mode
-
-The panel has a presentation mode for keyboard use of the Extensions section (Arc's extension picker,
-`ExtensionPickerState`, SC-9):
-
-- API: `SiteControlController.present(anchor: SiteControlAnchor, tabID: ItemID,
-  mode: SiteControlPresentationMode)` with `enum SiteControlPresentationMode { case standard,
-  extensionPicker }` and `enum SiteControlAnchor { case urlField, paneBar(ItemID), contentTopLeading }`.
-- `.extensionPicker`: the panel opens as usual, then sets keyboard focus on the first extension item
-  (`ExtensionsSectionBody.focusedID`); arrow keys move, Return runs the focused item, Esc closes the
-  panel. With no extension items it opens in `.standard` mode with focus on "Add Extension…" in the
-  ⋯ menu button (Open choice).
-- Anchor when the call comes from a key binding: `.urlField` when the sidebar is shown, else
-  `.paneBar` for a focused split pane, else `.contentTopLeading` (panel at 12 pt from the web
-  content's top-left, no arrow).
-- The key binding and its command id belong to the extensions-UI plan (Q11).
-
-### 3.7 Footer
-
-Height 44, separator above.
-
-| Part | Value |
-|---|---|
-| Security button | Left, x 10, height 28, padding 6. Glyph `lock.fill` 12 pt + "Secure" (12 pt Medium) in `CommandBarColors.lockSecure`, or `lock.open.fill` + "Insecure" in `CommandBarColors.lockInsecure` (`#F53714` / `#F25E6B`). Hover fill `SidebarColors.itemBackground`, radius 6. Click: E3 available → `showCertificateViewer` for the tab; before E3 → no action (button stays a status label, AX role static text). State before E3: `https` → Secure, `http` → Insecure, and every other scheme hides the label and its AX element (including `chrome`, `open`, `chrome-extension`, `about`, `data`, and `file`; lead decision 2026-10-26) (limitation: misses certificate errors and mixed content; named in E3). |
-| ⋯ button | Right, 28×28 at `W − 10 − 28`, `ellipsis` 13 pt Bold. Opens an `NSMenu` (native, `MenuColors` do not apply). |
-
-⋯ menu (SC-16 order; titles are Arc's):
-
-| # | Item | Shown | Action |
+| # | Item | Shown / enabled | Action |
 |---|---|---|---|
-| 1 | Clear Cache | http(s) page | E2 available → `clearSiteData(origin:kinds:[.cache])`. Before E2 → hidden (today's API clears the cache of every site; not acceptable). Then the reload row. |
-| 2 | Clear Cookies | http(s) page | E2 → `clearSiteData(origin:kinds:[.cookies])`. Before E2 → `clearBrowsingData(origin:)` (also drops the shared HTTP cache; side effect stated in the PR). Then the reload row. |
+| 1 | Clear Cache | http(s); hidden before E2 | `clearSiteData(origin:kinds:[.cache])`, then the reload row |
+| 2 | Clear Cookies | http(s) | E2 → `[.cookies]`; before E2 → `clearBrowsingData(origin:)` (side effect stated in the PR); then the reload row |
 | 3 | — | | |
-| 4 | Manage Boosts… | Boosts section hidden | `view-boosts` |
-| 5 | New Boost… | Boosts section hidden and New Boost enabled | §3.5 New Boost |
+| 4 | Manage Boosts… | always | `view-boosts` |
+| 5 | New Boost… | always shown (S2-9); enabled when New Boost is | §3.7 New Boost |
 | 6 | — | | |
-| 7 | Manage Extensions… | always | `manage-extensions` command (extensions-UI plan owns its target page; today `OEExtensionManager.managementPageURL`, Chrome-style tab until P3) |
-| 8 | Add Extension… | always | `add-extension` command (opens `https://chromewebstore.google.com/category/extensions`, the URL in Arc's binary; extensions-UI plan §3.12 owns it) |
+| 7 | Manage Extensions… | always | `manage-extensions` |
+| 8 | Add Extension… | always | `add-extension` |
 | 9 | — | | |
-| 10 | All Site Settings… | http(s) page | Opens `chrome://settings/content/siteDetails?site=<origin>` in a new Today tab (same mechanism as Settings "More Settings…", settings plan §5.5) |
+| 10 | All Site Settings… | http(s) | `chrome://settings/content/siteDetails?site=<origin>` in a new Today tab |
 
-### 3.8 States and animation
+### 3.10 URL field button states (new work, Step 3)
 
-| State | Visual |
-|---|---|
-| Open | Scale 0.66 → 1.0 around the panel's top-leading corner (lead decision A, PR #69) plus opacity 0 → 1, 0.18 s ease-out (`Motion.popoverOpen`, new). Evidence: Arc's theme popover is 66 % size one frame before full (A0465 → A0466). Duration guess. |
-| Close | Opacity 1 → 0 and scale 1.0 → 0.96, 0.12 s ease-in (`Motion.popoverClose`, new). |
-| Reduce Motion | Opacity only, same durations. |
-| Tile toggle | Icon circle fill cross-fade 0.12 s (`Motion.selectionFade`); subtitle swaps at once. |
-| Hover | Fills fade 0.08 s (`Motion.hoverFade`). |
-| Rows added or removed while open (store change, permission prompt answered) | Height animates 0.22 s (`Motion.rowStructure`). |
-| Live data | The panel registers an independent, token-based data source observer per window; changes arriving while open update in place (no reopen). No timers. |
+| State | Look | Source |
+|---|---|---|
+| Rest | Today's outline glyph `slider.horizontal.2.square`. | main |
+| Panel open | `slider.horizontal.2.square.fill` tinted #ECEDFF. The slider strokes are the symbol's own transparent cut-outs, so the URL field shows through them (a knock-out, as in §3.7); do not draw dark sliders. Shown while the panel is open even when the pointer leaves the sidebar. | S2 11/0011: stroke pixels #454558–#67677A over the field #3A3A4C (thin anti-aliased strokes) |
+| Site has an enabled matching Boost | Three small 4-point sparkles at the glyph's top-left, top-right, and bottom-right corners, ≈ 4 pt (our own drawing), drawn static at white 0.45 each (the average look: about 28 of 48 captured frames show none). Each opacity is one token for the Q15 follow-up. Arc fades them in and out (also after the panel closes); the motion is not measurable (same reason as §3.7, Q15). | S2 11/0016, 11/0011–0031 (meaning guess) |
+| ⌥-click | Does not open the panel (S2-10). Open: no other effect (the small dot Arc showed afterwards is unexplained, §13). | notes 10:28:02 |
 
-### 3.9 Keyboard
+### 3.11 States and motion
 
-The overlay takes first responder when it opens; the page loses key focus until it closes.
+| State | Visual | Source |
+|---|---|---|
+| Open | Body + arrow scale from 0.15 to 1 around the arrow's **visible** tip (y 81, not the virtual apex), spring response 0.20 s, damping 0.8 (peak ≈ 0.17 s, ≈ 1.5 % overshoot, settled ≈ 0.25 s); opacity 0 → 1 over the first 0.08 s. Token `Motion.popoverOpen` becomes a `SpringToken`. Technique in §3.2. | S2 09/0008, 11/0003 (origin, overshoot); theme popover ≈ 0.20 s (IS §20.12); curve guess |
+| Close | Scale 1 → 0.9 around the visible tip and opacity 1 → 0, 0.19 s ease-in (`Motion.popoverClose`). | duration: theme popover ≈ 0.19 s (IS §20.12); curve and scale guess; SCC close not timed |
+| Reduce Motion | Opacity only, same durations. | Open choice |
+| Row toggle | Disc fill cross-fades 0.12 s (`Motion.selectionFade`); the knocked-out glyph needs no animation; the subtitle swaps at once. | guess |
+| Hover | Fills fade 0.08 s (`Motion.hoverFade`). | guess |
+| Height change (rows added or removed, reload row, scrolling limit) | The body height, rim, mask, and shadow path animate together; the footer moves with the bottom edge; the arrow and everything above the change stay fixed. Grow: ease-out 0.20 s. Shrink: the CA default curve, 0.25 s. An added row fades in over the last 0.12 s of the grow; a removed row fades out over the first 0.08 s of the shrink. | Arc's folder expand (ease-out ≈ 0.20 s) and collapse (CA default ≈ 0.25 s), IS §20.12; the panel's own height change not captured (guess); fades guess |
+| Live data | Token-based observer per window (lead round 1); updates in place. No timers. | lead decision |
+
+### 3.12 Keyboard
 
 | Key | Effect |
 |---|---|
-| Esc | Close; focus returns to the page (or to the sidebar if the click came from there). |
-| Tab / Shift+Tab | Next / previous control: action buttons, section headers, tiles, Boost switches and edit buttons, extension buttons, security button, ⋯. Focus ring 2 pt `Core.focusRing`, radius = control radius + 2. |
-| Arrow keys | Move inside the current grid (action row, tiles, extension items) and between Boost rows. In `.extensionPicker` mode focus starts on the first extension item (§3.6.1). |
-| Space / Return | Activate the focused control (Return on a Boost row = Edit). |
-| Option held | No change in v1 (Arc's `_optionKeyDown` purpose is unknown, Q8). |
-| Any Command shortcut (for example Cmd+Shift+C) | Closes the panel, then routes normally through `KeyboardRouter`. |
+| Esc | Close; focus returns to the saved first responder. |
+| Tab / Shift+Tab | Action buttons → Extensions label → extension items → Boosts label → Boost rows (circle, then row) → Settings label → Settings rows → security pill → ⋯. Focus ring 2 pt `Core.focusRing`, keyboard focus only (lead round 2), in the shape listed for each control (§3.4–§3.9). |
+| Arrow keys | Move inside the action row and the extension grid, and between rows. |
+| Space / Return | Activate the focused control (Return on a Boost row = edit). Command-modified Return/Space do nothing (lead round 2). |
+| Option held | No change inside the panel (Q8). |
+| Any Command shortcut | Closes the panel, then routes normally through `KeyboardRouter`. |
 
-Clicks outside the panel close it and are delivered to their target (transient behavior). The
-click that toggles the anchor button closes the panel and is consumed.
+Clicks outside close the panel and are delivered to their target (left, right, and other buttons;
+lead round 2). The click that toggles the anchor button closes the panel and is consumed.
 
-### 3.10 Accessibility
+### 3.13 Accessibility
 
-- Container: `NSAccessibility.Role.popover`, label "Site Control Center", description = host.
-- Section header: role `.button`, label "Settings, More" etc.; a heading child with the title.
-- Tile: role `.checkBox` for on/off tiles (value 1/0) with label "<Title>" and value description
-  "<Subtitle>"; the unavailable ad-block tile is `.button` with help = the tooltip text.
-- Boost row: group "<Name>, Enabled"; switch `.checkBox` "Enable <Name>"; edit `.button` "Edit
-  <Name>".
-- Extension button: `.button` "<Title>", help "Pin"/"Unpin" when E4 exists.
-- The visible host label is hidden from AX; the panel description exposes the host once.
+- Container: role `.popover`, label "Site Control Center", description = host (the host is exposed
+  once; there is no visible host text).
+- Section label row: `.button` "Extensions, Manage" etc., with a heading child.
+- Row: `.checkBox` with label "<Title>" and value description "<Subtitle>"; the unavailable ad-block
+  row is `.button` with help = the tooltip. Boost row: the circle is `.checkBox` "Enable <Name>", the
+  row is `.button` "Edit <Name>".
+- Action buttons: label = tooltip text without keycaps. "+": "Add Extension".
 - Security: `.button` "Connection: Secure" (static text before E3); ⋯ `.menuButton` "More".
-- Every action button has an AX label equal to its tooltip text without the keycaps.
 
 ---
 
 ## 4. Boost editor — design spec
 
+Frames are editor-window points (origin top-left, y down), measured from the AX tree of S2 10/0030
+unless another frame is cited. The editor is always light; there are no dark tokens.
+
 ### 4.1 Lifecycle
 
 | Event | Behavior |
 |---|---|
-| Open | From the Site Control Center (row edit, New Boost), `new-boost`, `edit-boost`, `new-legacy-boost`, and "Customize Page…". One editor per window. Opening for another Boost closes the current one first (finalizing it). |
-| `new-boost` | Always creates a new Boost (§3.5 New Boost) and opens the editor in simple mode. |
-| `edit-boost` / "Customize Page…" | Opens the first matching Boost in matcher order (enabled or not); if none, behaves as `new-boost`. |
-| `new-legacy-boost` | As `new-boost`, then switches to code mode on the CSS tab (Arc's "Legacy Boost (Advanced)" is its code-first editor; Open choice mapping). |
+| Open | From the Site Control Center (row, New Boost), `new-boost`, `edit-boost`, `new-legacy-boost`, and "Customize Page…". One editor per window. Opening for another Boost finalizes the current one first. |
+| `new-boost` | Creates a new Boost (§3.7) and opens the editor in simple mode. |
+| `edit-boost` / "Customize Page…" | Opens the first matching Boost in matcher order; if none, behaves as `new-boost`. |
+| `new-legacy-boost` | As `new-boost`, then code mode on the CSS tab (Open choice). |
 | `boost-gallery` | `isCommandEnabled` returns `false`. |
-| Bound tab | The editor is bound to the tab (and pane) it opened for. Switching tab, Space, or window focus to another tab closes the editor (Open choice; Arc behavior unknown). Navigating the bound tab to a URL the Boost does not match keeps the editor open and shows the "Not active" banner (§4.3). |
-| Close | Header ×, Esc (§4.10), the bound tab closes, or the profile is closed. Close exits Zap first, flushes pending live state to the store, and if the Boost was created in this session (`isNew`) and `Boost.isEmpty` is still true, deletes it (`BoostStore.delete`). |
-| Incognito | `new-boost`, `edit-boost`, `new-legacy-boost`, and "Customize Page…" are disabled in incognito windows (D-10). |
-| Global off | When `open.advanced.enableBoosts` is false the same commands stay enabled; the editor opens with a banner "Boosts are off. Changes show when you turn Boosts on in Settings." and live preview is skipped (the planner gets `boostsGloballyEnabled: false`). Open choice: editing still works. |
+| Bound tab | The editor is bound to the tab (and pane) it opened for. Switching tab, Space, or window to another tab closes it (Open choice). Navigating the bound tab to a URL the Boost does not match keeps it open with the "Not active" banner (§4.3). |
+| Close | Done (header), Esc (§4.12), the bound tab closes, or the profile closes. Close exits Zap, flushes pending state with `BoostStore.saveNow` (lead round 2), and deletes the Boost if it was created in this session and is still empty. |
+| Incognito | The four open commands are disabled (D-10). |
+| Global off | The commands stay enabled; the "Boosts are off" banner shows and live preview is skipped. |
 
 ### 4.2 Window and placement
 
-- Child `NSPanel` (D-4), `hasShadow = false` (we draw the shadow), clear background, level
-  `.floating` relative to its parent (child window ordering keeps it above the parent only).
-- Simple mode: width 268, height = content (≈ 470 with no Zaps; max `contentHeight − 24`, then the
-  Zaps list scrolls). Position: top-right of the web content panel, inset 12 from the panel's
-  right edge and 12 from its top (`docs/re/interaction-states.md` §16 toast inset). guess.
-- Drag the header to move the panel within the window; the position is not persisted
-  (Open choice). Window resize keeps the panel's offset from the content's top-right corner.
-- Code mode: the panel grows to `open.boosts.codeEditorSize` (default 560×640, min 420×360, max
-  content size − 24) anchored at its top-right corner; it is resizable from its left and bottom
-  edges (8 pt hit strips). The size persists on resize end (BO-14 `codeEditingWindowSize`).
-- Chrome: radius 12, fill `Core.popoverBackground`, 1 px `CommandBarColors.hairlineDivider` edge,
-  shadow black 0.25 radius 16 y 6 (same recipe as §3.2). Appearance follows macOS.
+| Part | Value | Source |
+|---|---|---|
+| Window | Child `NSPanel` (D-4), 183 × 588 in simple mode, corner radius 12, `hasShadow = true` (system shadow), opaque light content, level `.floating` relative to the parent. No padding layer of our own (supersedes the 30 / 24 / 36 shadow padding). | S2 10/0018 (size), IS §20.15 (corner) |
+| Appearance | `NSAppearance(named: .aqua)` always. | S2 10/0018 (light in macOS Dark) |
+| Placement | Window center x = browser window frame `maxX` (the editor straddles the right edge: 91 pt inside, 92 pt outside); top = browser window top + 160. Clamp with 8 pt margins against the `visibleFrame` of **the screen that contains the browser window's right-edge midpoint** (`NSScreen` whose frame contains `(window.maxX − 1, window.midY)`); the editor never spans two displays. In full screen the right edge is the screen edge, so the clamp puts the editor fully inside, over the right 183 pt of the page (R-8). | S2 10/0018 `windows.tsv` (one sample; rule guess); screen choice and clamp Open choice (review r1, plan F6) |
+| Banners | An Open-only banner (§4.3) adds its height under the header and grows the window downward; everything below moves by that height. | Open choice |
+| Code mode | Width 480, height 588, right edge fixed (grows to the left). The frame change animates over 0.20 s ease-in-out with the right edge fixed; the simple controls fade out over the first 0.08 s and the code view fades in over the last 0.12 s. Back reverses it. Resizable from the left and bottom edges (8 pt hit strips); size persists on resize end in `open.boosts.codeEditorSize` (default `"480x588"`, min 360 × 420). | S2 10/0071 (480 × 588, right edge fixed); S2 10/0070 → 0071 is one frame, so the motion is a guess; resizing Open choice (BO-14 `codeEditingWindowSize`) |
+| Open and close | The editor window fades in over 0.15 s with scale 0.97 → 1 about its center; close fades out over 0.12 s. Reduce Motion: fade only. Never the default `NSWindow` zoom. | guess (S2 10/0017 → 0018 jumps; not captured) |
+| Moving | The browser window drags the child panel with it. Dragging the header moves the panel (not persisted). | Open choice |
 
-### 4.3 Header and banners
+### 4.3 Header, name menu, banners
 
-| Part | Value |
+| Part | Frame | Value | Source |
+|---|---|---|---|
+| Header band | `[0, 0, 183, 40]` | Fill #F5F5F7; 1 pt hairline #E9E9EB at y 39. Body below: #FDFDFF. | S2 10/0041 |
+| Done | `[0, 0, 40, 40]` | `xmark.circle.fill` 16 pt, #ACACAD. Closes the editor (keeps changes). AX "Done". | S2 10/0030 |
+| Name button | `[46, 8, 91, 24]` | Boost name 13 pt Medium #252526, an 11 pt gap, then `chevron.down` 12 pt Regular #949495 (ink 11 × 6). The name + chevron group centers on x 91.5; max width 91 (x 46…137); the name truncates first (tail "…"). Click opens the name menu. AX label = name. Focus ring: the button rect, outset 2. | S2 10/0030, 0041: name ink x 51–107 (width 57; 13 Medium advance 58.0, 15 Medium 65.8), chevron ink x 119–129 |
+| Undo | `[143, 0, 40, 40]` | `arrow.counterclockwise` 17 pt, #ACACAD. Undo one editor step; disabled when the stack is empty (same color in both captured states; enabled color guess = #6E6E70). Redo has no button: ⇧⌘Z only (Open choice). | S2 10/0030, 0041 |
+
+Name menu (native `NSMenu` under the name button; S2-18 order, then Open's scope addition):
+
+| # | Item | Action |
+|---|---|---|
+| 1 | Rename this Boost… | Alert "Rename this Boost" with a text field (prefilled, all selected), "Done" (default) / "Cancel". Empty text allowed. Writes `name`. (Rename alert look not captured.) |
+| 2 | Shuffle | Random hue `θ ∈ [0, 360)`, intensity `ρ ∈ [0.6, 1.0]`, random font from the grid except Wingdings; text size and case unchanged. One undo step. |
+| 3 | Reset all Edits | Clears color, font, size, case, Zaps, CSS, JS (keeps name, scope, enabled). Confirmation: "Reset all edits?" / "This removes every change in this Boost." / "Reset" / "Cancel" (Open's words). One undo step. |
+| 4 | Delete this Boost | Alert "Delete this Boost?" / "This can't be undone." / "Cancel" (Esc) / "Delete" (red, default, Return). On Delete: `BoostStore.delete(id:)`, close the editor. (S2-18; Arc's alert is 450 × 273 and centered; Open uses the system alert as a sheet on the editor, Open choice.) |
+| 5 | — | |
+| 6 | All Boosts… | `showBoostsLibrary(profileID:)` (editor stays open) |
+| 7 | — | Open addition (Arc's editor shows no scope control) |
+| 8 | Apply to ▸ | Submenu with the scope items below |
+
+Scope submenu (lead decisions 2026-10-25 23:46 and 2026-10-26 03:37 / 09:26, kept; writes `siteMatch`
+through `BoostStore.upsert`, then refresh):
+
+- "All of <registrable domain>" — `SiteMatch(domain: registrableDomain)`; omitted for IP hosts.
+- "<host> and subdomains" for each host between the page host (without `www.`) and the registrable
+  domain — `SiteMatch(domain: thatHost)`.
+- "Only pages under /<segment>" — `SiteMatch(domain: current.domain, pathPrefix: "/<segment>")`;
+  hidden when the path is `/`. A saved `pathPrefix` is always offered and checked, even on another
+  path.
+- IP hosts: one "<ip>" item plus the path item. The current choice has a checkmark.
+
+Banners (Open-only; lead round 2 geometry, adapted to the narrow window): 14 pt text insets, 7 pt
+vertical padding, 11 pt Medium #252526 text on `BoostEditorColors.warning` (`#FF5A5F`) at 15 %;
+28 pt for one line, 42 pt for two; the 183 pt width wraps most texts to two lines.
+
+- Not active: "This Boost doesn't apply to <host>."
+- Global off: "Boosts are off. Changes show when you turn Boosts on in Settings."
+
+### 4.4 Color pad
+
+#### 4.4.1 Geometry and drawing (measured)
+
+| Part | Value | Source |
+|---|---|---|
+| Ring frame | `[18, 58, 147, 147]`, outer corner radius 20 | AX "Color wheel"; IS §20.15 |
+| Plate | `[25, 65, 133, 133]`, corner radius 13.5; the ring is the 7 pt band between frame and plate | AX "Color wheel" (inner image); IS §20.15 |
+| Pad center, radius | `(91.5, 131.5)`, `R = 66.5` (half the plate side, the theme pad's rule) | center measured; R = theme law (guess for the Boost pad) |
+| Frame shadow | Black 0.08, radius 4, y 2 (fit to a ≈ 9 pt fade under the frame; guess) | S2 10/0041 |
+| Plate fill | #FAFAFA; after a color, a faint tint of the ring: the ring image blurred (σ 12) at 4 % over the plate (guess fit to #FBFFFA near green, #FDFAF6 near orange) | S2 10/0030, 0041 |
+| Dot grid | 1 pt round dots, pitch 4.0, aligned to the plate origin, black 0.075. Our own cached `CGImage` tile per scale (as `ColorPadView.DotGrid`). | S2 10/0030 |
+| Hue ring (color chosen) | Conic gradient centered on the pad center, angle 0 at 3 o'clock, increasing clockwise on screen. Stops (sRGB): 0° #EB4838 · 30° #EB7636 · 60° #F4BA49 · 90° #D4FD58 · 120° #90FC74 · 150° #80FCAD · 180° #7CF8F1 · 210° #356FF6 · 240° #392EF4 · 270° #8237F5 · 300° #DD31BF · 330° #DF3470 · 360° = 0°. Clipped to the 7 pt band. | IS §20.15 |
+| Hue ring (no color) | The same stops converted to grey by Rec. 709 luma (for example 90° #EAEAEA, 225° #454545). | IS §20.15 (within ≈ 10 levels) |
+| Ring vs knob hue | The ring's own hue leads or lags the angle by up to ≈ 20° (for example 90° reads HSL hue 75°), while each knob's fill hue equals its angle within 1.5°. Compute knob fills from θ (§4.4.2); never sample the ring. | IS §20.15 |
+| Primary knob | 30 pt disc + 2 pt white ring (34 outside) + shadow black 0.10 radius 1.5 y 0.5 (guess). On mouse down the disc grows 30 → 38 (scale 1.27) with `Motion.knobRelease`; on mouse up it springs back to 30 with the same token. | S2 10/0039 (38 while dragging), 0040 (32, returning), 0041 (30) |
+| Secondary knob | 19 pt disc + 2 pt white ring + 1 pt outline #C8C2CA (23 + 2 outside). Not draggable (guess: only the primary was dragged in the capture). | S2 10/0041 |
+| Knob fill gradient | Each disc fill is a vertical linear gradient: the §4.4.2 color at the center, ≈ 14 levels darker at the top (HSB brightness −0.055) and ≈ 12 levels lighter at the bottom. This is Boost-only; do not put it in the shared `ColorPadStyle` default (the theme pad gets it only if its captures show it). | S2 10/0041 primary top #4A2ABE / center #5C3CC8 / bottom #694CCB; secondary #321533 / #3D203C / #533953; S2 10/0030 no-color primary #636363 / #717171 / #7D7D7D, secondary #252525 / #333333 / #414141 |
+| Drag guide | While dragging: a 2 pt circle, black 0.06, centered on the pad center, through the primary knob's center. Removed on mouse up. | S2 10/0038–0040 |
+| Knob z-order | Knobs draw above the ring and are not clipped by the plate (Open choice; the measured knobs stayed inside the plate). | guess |
+
+#### 4.4.2 Interim mapping (Open's law until Arc's math is decoded)
+
+Screen ↔ inputs (shared with the theme pad, `space-theme-editor.md` §2.2):
+
+```text
+p = point − padCenter                                 // points, y down
+θ = (atan2(p.y, p.x) in degrees + 360) mod 360          // 0 at 3 o'clock, clockwise on screen
+t = min(hypot(p.x, p.y) / R / 0.99, 1)                  // R = 66.5
+knob center = padCenter + 0.99 · t · R · (cos θ, sin θ)
+BoostColorWheel.hue = θ                                 // the target hue; screen angle = hue
+BoostColorWheel.intensity = t
+secondary knob: angle θ + 45°, same radius
+```
+
+Knob fills: the center color of each knob's gradient (§4.4.1), fitted to S2 10/0041 (one sample; guess elsewhere):
+
+```text
+primary   = HSB(θ,        s: t,        b: 0.78)        // measured #5C3CC8 at θ 252.3°, t 0.70
+secondary = HSB(θ + 45°,  s: 0.68 · t, b: 0.24)        // measured #3D203C at 296.6°
+no color (colorWheel nil or identity): knobs at θ 0°, t 0.61 (r = 40 pt), fills #717171 and #333333,
+grey ring                                                // S2 10/0030, 0038
+```
+
+- `BoostColorWheel` keeps its fields and ranges; only the doc comment of `hue` changes ("target hue
+  in degrees; drawn at the same screen angle, clockwise from 3 o'clock"). `adjustment` (the §4.4.5
+  filter math) does not change. No stored data exists yet (the model is only on PR #103).
+- The first press anywhere on the plate creates `colorWheel` if it is nil (sampling `baseHue` first,
+  §4.4.5) and sets it from the press point; a press on the primary knob drags relatively, a press
+  elsewhere jumps the knob there, then drags (theme pad rules). The default knob position before a
+  color is only a drawing; it does not imply `t = 0.61`.
+- Each drag event sends one live plan to the bound page (≤ 60 Hz, coalesced per display frame);
+  the store commit and one undo step happen on mouse up (D-6).
+- Keyboard (pad focused, editor key per §4.12; shared with the theme pad): ←/→ hue ∓/± 5° (Shift
+  20°), ↑/↓ intensity ± 0.03 (Shift 0.1). Repeats coalesce for 1 s and commit on focus loss (lead
+  round 2). Focus ring around the ring frame (radius 22), keyboard focus only.
+- Accessibility (Open choice): the pad exposes two adjustable AX children, "Hue" (value in
+  degrees, increment ± 5°) and "Intensity" (value in percent, increment ± 3 %), so VoiceOver can
+  set both dimensions. The pad itself is an AX group named "Color" (Arc's AX name is "Color
+  wheel"; Open's type names never use "wheel").
+
+#### 4.4.3 Reuse: one pad core (D-12)
+
+Move the reusable part of `OpenSpaceEditor/ColorPadView.swift` (PR #86) into
+`OpenDesign/ColorPad.swift`; do not copy it.
+
+| `OpenDesign/ColorPad.swift` (shared) | Owner-specific |
 |---|---|
-| Header | Height 52, inset 14. Boost glyph 18 pt `paintbrush.pointed.fill` in the Boost's accent at x 14. Name 14 pt Semibold at x 40, baseline 22, tail truncation; double-click starts inline rename. Scope button below the name: "<domain><pathPrefix> ▾" 11 pt Regular `Core.foregroundSecondary`, baseline 39. Right: ⋯ menu button 24×24 at `W − 14 − 24 − 6 − 24` and close × 24×24 at `W − 14 − 24` (`xmark` 11 pt Semibold). |
-| Accent | `BoostEditorColors.accents[hash(boost.id) % 8]` (Blue, Green, Magenta, Orange, Pink, Purple, Red, Yellow, BO-22). Use: header glyph, the Boost icon in the panel and Library rows. guess on Arc's use of these colors. |
-| Not active banner | 28 pt row under the header, fill `BoostEditorColors.warning` (`#FF5A5F`) at 15 % alpha, text 11 pt Medium `Core.foregroundPrimary`: "This Boost doesn't apply to <host>." Shown when the bound tab's URL does not match the Boost's `siteMatch`. |
-| Global-off banner | Same shape, text from §4.1. |
+| `ColorPadView` (`NSView`, layer-backed, flipped): plate layer, dot-grid layer from a cached tile, up to 3 knob layers, an optional ring layer, an optional guide layer; relative drag on the primary knob (hit radius = knob outer radius + 4), jump elsewhere; arrow keys with begin/end gesture callbacks; focus ring; AX role `.slider` with increment/decrement. | Geometry and colors: `ColorPadStyle` (plate size and corner, dot pitch and color, knob disc / ring / outline sizes, drag scale, ring width, guide). |
+| Unit-disc conversion with `R` and the 0.99 rim clamp. | Color law: `ColorPadLaw` protocol — `knobs(for state) -> [ColorPadKnob]` (unit position + fill) and `value(at unit point, relative:)`. Theme: lightness by radius (`space-theme-editor.md` §2.2). Boost: §4.4.2. |
+| Knob hover / drag scale animations. | AX value text. |
 
-Scope menu (writes `siteMatch` through `BoostStore.upsert`, then refresh):
+`OpenSpaceEditor.ColorPadView` becomes a thin wrapper with `ColorPadStyle.theme` (340 plate, pitch
+4.25, 44 / 27 knobs: 27 is #86's code, `ColorPadView.swift` `index == 0 ? 44 : 27`; the capture
+says ≈ 28, IS §20.8). The extraction is a refactor, not a file move: #86's view is coupled to
+`ThemeEditorState`, `ThemeEditorAction`, its empty-state label, and a full-plate dot image, and the
+Boost side adds ring and guide layers that #86 does not have. `OpenSiteControl.BoostColorPadView` uses `ColorPadStyle.boost` (values in
+§4.4.1) plus the ring and guide layers. Landing order is in §12.4.
 
-- "All of <registrable domain>" — `SiteMatch(domain: registrableDomain)` (via `AdBlockSites.registrableDomain`; IP hosts list only the IP).
-- "<host> only" for each intermediate host between the page host (without `www.`) and the
-  registrable domain — `SiteMatch(domain: thatHost)`.
-- "Only pages under <first path segment>" — `SiteMatch(domain: current.domain, pathPrefix: "/<segment>")`; hidden when the path is `/`.
-- The current choice has a checkmark. Default for a new Boost: host without `www.` (§3.5).
-  Arc uses a host pattern only (`hostPattern`, BO-1); path prefixes are an Open addition the model
-  already supports.
+#### 4.4.4 What is still unknown about Arc's color math
 
-### 4.4 Color controls (simple mode)
+| Unknown | What the capture says | Interim |
+|---|---|---|
+| Radius meaning | One sample: at t ≈ 0.70 the primary fill is HSB(253.6°, 0.70, 0.78). Two points cannot tell saturation from intensity or lightness. The theme pad's law (radius → lightness 0.01 … 0.97) predicts HSL L 0.68; measured 0.51, so the Boost knob does not follow the theme's lightness law with the theme's ranges (derived). | `t` = intensity (§4.4.2). |
+| Pad radius `R` | The drag reached 46 pt; the rim was not tested. | `R = 66.5` (theme rule). |
+| Secondary knob | Always +45° on the same radius in both samples; darker fill. BO-17 names analogous and complementary scheme assets, but no scheme control is visible in the captured editor. Whether the offset can change, or the knob can be dragged, is unknown. | Fixed +45°, not draggable. |
+| Page remap | One color recolored white to a pale tint of the primary's hue and near-black to a saturated tint of the secondary's hue; images kept their colors (S2-22). Arc does this inside the engine (`arc.mojom.EffectsAgent`, "Boosts effects via `EffectsAgent`", `docs/re/arccore-engine.md`). Open's filters rotate hues and cannot tint white or grey (R-2). | Interim: filters (#103). v1: engine remap (Step 4R, Q12 ruling). |
+| Invert lightness, sliders | Effects not measured. Sliders sit at 50 = neutral. | Map 0…100 → brightness and contrast 0.5…1.5 and original saturation 0…2 (50 → 1). |
+| Theme pad law | `space-theme-editor.md` now marks its linear radius law as provisional, not a parity gate: capture session 2 contradicts it, and its Step 9 must decode Arc's knob-radius ↔ color function first (lead round-3 overrides, 2026-10-26). This plan reuses only the pad geometry, the angle law, and the 0.99 rim clamp. | Decode the Boost radius meaning in the same work as the theme Step 9; until then the §4.4.2 law is interim. |
 
-Layout (y from the panel top, simple mode, no banner):
+#### 4.4.5 Interim runtime math (unchanged until Step 4R) and notes
 
-| Part | Frame / value |
-|---|---|
-| Wheel area | y 60, height 176. Hue ring outer diameter 128 at the area's center (BO-17 asset size), ring width 18, drawn by us as a conic gradient: hue = angle, saturation 0.85, brightness 1.0 (sRGB), with a 1 px black 8 % inner and outer stroke. The ring's inside is the drag pad: a disc of radius 46 filled `BoostEditorColors.puckPad` (black 4 % / white 6 %). |
-| Puck | 24 pt circle filled with the current target color (`hsb(hue, 0.85 × intensity, 1)` blended over white), 3 pt white ring, shadow black 0.25 radius 3 y 1. Center = pad center + `(r · sin θ, −r · cos θ)` (y down, θ = 0 at 12 o'clock) with `r = intensity × 46`. At intensity 0 the puck sits in the center and draws hollow (ring only). |
-| Side buttons | Under the wheel, y 240: three 28 pt round buttons, gap 12, centered: "Invert lightness" (`lightbulb` / `lightbulb.fill` when on), "Advanced color controls" (`slider.horizontal.3`), "Reset to original colors" (`arrow.counterclockwise`). Fill `BoostEditorColors.segmentBackground`; on state `Core.brandBlue` with white glyph. Tooltips = Arc labels. |
-| Advanced sliders | When "Advanced color controls" is on, a block of three 28 pt rows slides in under the side buttons (0.22 s): label 11 pt Medium at x 14 ("Brightness", "Contrast", "Original Saturation"), slider x 110 to `W − 14`, track 4 pt `BoostEditorColors.sliderTrack` (`#3B3746` 5 %), fill and knob tint `BoostEditorColors.sliderTint` (`#017AFF`), knob 14 pt white with shadow. |
-
-Interaction:
-
-- Drag on the pad or ring: angle `θ` (0° at 12 o'clock, clockwise) and `ρ = min(distance / 46, 1)`.
-  Dragging on the ring itself keeps `ρ = 1`. Clicking without drag sets the value at that point.
-- Each drag event sends a live plan to the bound page (≤ 60 Hz, coalesced per display frame); the
-  store commit and one undo entry happen on mouse-up (D-6).
-
-Math (normative; `BoostColorWheel.adjustment` in OpenBoosts):
+`BoostColorWheel.adjustment` (OpenBoosts) keeps the first version's normative math for #103. `θ` is
+the stored `hue` and `ρ` the stored `intensity`; only the screen mapping (§4.4.2) changed. Step 4R
+replaces this runtime; the engine plan decides how the stored pad inputs map to the remap and how
+existing `colorAdjustment` values migrate.
 
 ```text
 inputs:  hue θ ∈ [0, 360), intensity ρ ∈ [0, 1], baseHue h0 ∈ [0, 360) or nil,
@@ -503,95 +671,153 @@ identity (→ colorAdjustment = nil, colorWheel = nil) when ρ < 0.02, !invertLi
   take the peak bin and its two neighbours, and return their weighted circular mean. If the kept
   weight is < 2 % of the pixel count, `h0 = nil` (a neutral page). Store `h0` in
   `colorWheel.baseHue`; never re-sample while `colorWheel` exists (the page is already recolored).
-- Neutral page (`h0 == nil`): the wheel still works on colored elements. Under the wheel a 11 pt
-  hint shows: "This page has few colors. Try Invert lightness." (Open choice.)
-- Reset to original colors: `colorWheel = nil`, `colorAdjustment = nil`; puck animates to the
-  center (0.22 s ease-out); advanced sliders reset to 1.
-- Invert lightness toggles `colorWheel.invertLightness` (creating `colorWheel` with `ρ = 0` if
-  needed). The applier already counter-inverts images and video (`docs/boosts.md` "Picture
-  invert").
-- Analogous and complementary schemes (BO-17) are not built: a CSS filter has one hue rotation
-  (Q4).
 
-### 4.5 Font and text controls
+- Neutral page (`baseHue == nil`): the hint "Few colors here. Try Invert lightness." (lead
+  2026-10-26 09:32) draws inside the plate, centered on its lower third, 10 pt Medium #8E8E93, up to
+  two lines, hidden while dragging (geometry amended for the 133 pt plate).
+- Legacy filters (lead 2026-10-26 03:21, kept): a Boost with `colorAdjustment` but no `colorWheel`
+  keeps that exact filter until the first color edit. Before that edit the pad shows the closest
+  values it can represent and the note "Custom colors — editing replaces them." in the same place as
+  the hint. The displayed pad keeps any representable hue and saturation, clamps brightness and
+  contrast to their ranges, and picks the nearer invert endpoint (0.5 rounds up); these displayed
+  values do not change the stored filter. The first color edit replaces the filter with
+  pad-derived values as one undo step; undo restores the exact legacy `colorAdjustment` and leaves
+  `colorWheel` nil. Non-color edits never convert the legacy filter.
+- Reset to original colors: `colorWheel = nil`, `colorAdjustment = nil`; knobs animate to the
+  no-color position (0.22 s ease-out) and the ring fades to grey (0.22 s); sliders reset to 50.
 
-| Part | Value |
-|---|---|
-| Font strip | y after the color block + 12. Height 44: a horizontal scroll of chips 56×36, gap 6, inset 14, inside a track filled `BoostEditorColors.segmentBackground` radius 10. Each chip draws "Aa" 17 pt in its family (fallback system font when not installed; then hidden), with the family name as tooltip and AX label. Selected chip: `BoostEditorColors.segmentSelection` fill (white / white 30 %) with shadow black 0.10 radius 2. Scroll with trackpad, Shift+wheel, or arrow keys. |
-| Fonts | "Original" (no override, `fontFamily = nil`), "System" (`system-ui, -apple-system, sans-serif`), then Helvetica Neue, Avenir, Futura, DIN Alternate, PT Mono, Courier, Times New Roman, Charter, Baskerville, Hoefler Text, Palatino, Chalkboard, SignPainter, Snell Roundhand, Papyrus, Apple Chancery, Luminari, Wingdings (BO-18 list; each written as `<Family>, <generic>` with generic serif / sans-serif / monospace / cursive / fantasy). Values contain no quotes or semicolons (the planner rejects `;{}"` and newlines, boosts-zap §3.5). |
-| Tool tiles | y after the font strip + 12. Four square tiles 54×54, gap 8, inset 14 (4 × 54 + 3 × 8 = 240 = 268 − 28). Radius 12. Fill = accent color (Zap `Yellow`, Code `Blue`, Text size `Pink`, Text case `Green`; BO-22 colors, guess on Arc's mapping) at 100 % when on, 14 % when off; glyph 18 pt + label 10 pt Semibold below it; label color `BoostEditorColors.label` (white) when on, `Core.foregroundPrimary` when off. |
+### 4.5 Color buttons and the advanced popover
 
-Tool tiles:
+Three buttons at y 220, height 38: x 18 (w 42), 70 (w 43), 123 (w 42), gap ≈ 10 (S2 10/0030). Fill
+#EBEBED, corner 9 (visual), glyph 17 pt Regular #3A3A3B; pressed fill #DFDFE0 (S2 10/0041); disabled
+glyph #BDBDBF (visual). No hover change (guess: like Arc's panel buttons, only the pressed and "on"
+states change the fill). "On" fills (Invert on, advanced popover open) cross-fade over 0.12 s
+(`Motion.selectionFade`). Focus ring: the button rect, outset 2.
 
-| Tile | Glyph | Label | Click | Writes |
-|---|---|---|---|---|
-| Zap | `bolt.fill` | "Zap" | Toggle Zap mode (§4.6) | — (Zaps write on commit) |
-| Code | `chevron.left.forwardslash.chevron.right` | "Code" | Switch to code mode (§4.8) | — |
-| Text size | `textformat.size` | current option: "Small", "Normal", "Medium", "Large", "Larger" | Cycle forward (Shift-click: back). Right-click: menu with the five options. | `textZoom`: small 0.9, normal nil, medium 1.1, large 1.25, larger 1.5 (BO-18 names; values guess) |
-| Text case | `textformat` | "Aa", "Abc" (capitalize), "AB" (uppercase), "ab" (lowercase) | Cycle none → capitalize → uppercase → lowercase → none. Right-click: menu. | `textTransform`: nil / "capitalize" / "uppercase" / "lowercase" |
+| Button | Glyph (Open's SF choice) | AX / tooltip | Behavior |
+|---|---|---|---|
+| Invert lightness | `lightbulb` (on: `lightbulb.fill`, fill #333333, white glyph — guess, same as Zap on) | "Invert lightness" | Toggles `colorWheel.invertLightness` (creates `colorWheel` with t 0 if needed). |
+| Advanced color controls | `slider.horizontal.3` | "Advanced color controls" | Toggles the advanced popover. While it is open the button is #474747 with a white glyph (S2 10/0042). |
+| Reset to original colors | `nosign` | "Reset to original colors" | Disabled until a color change (S2 10/0030 disabled, 0039 enabled). §4.4.5. |
 
-A tile is "on" when its value is not the default (Zap: picker active).
+Advanced popover (S2 10/0042): a light popover drawn by Open (not `NSPopover`, to avoid Liquid
+Glass, D-3), in a child borderless panel of the editor because it extends past the editor's left
+edge. Window 250 × 232 at editor (−34, 258); body ≈ 222 × 205 (14 pt shadow margins), corner 12.
 
-### 4.6 Zap: entry, list, exit
+- Arrow: the §3.2 arrow (same `PopoverShape`), with the §3.1 rule: tip 2 pt below the sliders
+  button (y 260), body top y 271, centered on the button (x 91.5). Measured in S2 10/0042: widths
+  grow 2 pt per row from a ≈ 4.5 pt tip row (45° sides), then flare into the body over the last ≈ 4
+  rows; visible height 11 vs the panel's 10, inside the ±1 pt tolerance (IS §20.15).
+- Material: the light popover material, translucent: #EDEDED over the editor's #FDFDFF at editor
+  (91, 300), #E5E5E6 over the Zap button's #EBEBED at editor (26, 470) (S2 10/0042, IS §20.15).
+  Use the shared popover-material token (§3.2) in Light; the material choice is a guess.
+- Rim: Light rim token (§3.2, black 0.10, guess).
+- Motion: open and close use `Motion.popoverOpen` / `popoverClose` about its arrow tip, like the
+  panel (§3.11); Arc's is an `NSPopover` too (BO-17, IS §20.6).
+- Placement: the popover clamps inside the `visibleFrame` of the editor's screen (§4.2) with 8 pt
+  margins; the arrow stays on the button within the §3.1 corner limits.
+
+Content inset 18:
+
+| Row | Label (13 pt Regular #3A3A3B) | Slider |
+|---|---|---|
+| 1 | "Contrast" at y 299 (editor space) | 186 × 16 at y 318 |
+| 2 | "Brightness" at y 361 | 186 × 16 at y 380 |
+| 3 | "Original Saturation" at y 423 | 186 × 16 at y 442 |
+
+Slider: track 4 pt, unfilled #D8D8DA, filled #A9A9AB (visual), knob a white capsule 20 × 16 with
+shadow black 0.15 radius 1.5 (AX value indicator 20 × 16). Range 0…100, 50 = neutral (S2 10/0042).
+Drag previews live; one undo step per drag. Esc, a click outside, or the button closes the popover.
+
+### 4.6 Font grid
+
+| Part | Value | Source |
+|---|---|---|
+| Card | `[18, 273, 147, 120]`, white, corner 11, shadow black 0.06 radius 8 y 1 (fit to the 7–9 pt fades) | S2 10/0041 |
+| Grid | 5 columns at x 23, 51, 79, 106, 134 (pitch ≈ 27.75); 4 rows at y 281, 307, 333, 359; cells 26 × 26 | AX S2 10/0018 |
+| Cell | "Aa" ≈ 14 pt in the cell's family, #999999, centered | S2 10/0030 |
+| Selected | A 26 pt circle #D9D9D9 behind the cell; glyph #8C8C8C. No cell is selected for "Original". | S2 10/0046 |
+| Hover / pressed | Circle #ECECEC / #D9D9D9 (guess). The selected circle cross-fades over 0.12 s (`Motion.selectionFade`). | guess |
+| Focus ring | A 30 pt circle around the cell, keyboard focus only | Open choice |
+
+Fonts, row by row (the 18 named faces in the binary's string order; cells 1 and 6 are visual guesses,
+IS §20.15): System (`system-ui, -apple-system, sans-serif`), Helvetica Neue, Avenir, Futura, DIN
+Alternate · Arial Rounded MT Bold, PT Mono, Courier, Times New Roman, Charter · Baskerville, Hoefler
+Text, Palatino, Chalkboard, SignPainter · Snell Roundhand, Papyrus, Apple Chancery, Luminari,
+Wingdings. CSS values are `<Family>, <generic>` with no quotes or semicolons (the planner rejects
+`;{}"`).
+
+- Click a cell → `fontFamily` = its value. Click the selected cell → `fontFamily = nil` (Original;
+  guess). One undo step.
+- A family that is not installed: the cell draws "Aa" in the system font at 30 % and is disabled
+  (Open choice; the grid keeps its shape).
+- Tooltip and AX label: the family name (Open choice; Arc's AX label is "Aa"). AX group
+  "Fonts", role grid; arrows move, Space/Return applies.
+
+### 4.7 Size, Case, Zap, Code
+
+| Button | Frame | Look | Behavior |
+|---|---|---|---|
+| Size | `[18, 408, 70, 38]` | #EBEBED, corner 9, "Size" 14 pt Medium #3A3A3B centered (ink 27; 14 Medium advance 27.8, 15 Medium 29.5) | Cycle small → normal → medium → large → larger → small (Shift-click: back; right-click: menu of the five, Open addition). Writes `textZoom` (0.9, nil, 1.1, 1.25, 1.5; values guess). AX "Change text size", value = option name. The label never shows the value (S2 10/0050). |
+| Case | `[96, 408, 69, 38]` | same, "Case" (ink 32; 14 Medium 33.2) | Cycle none → capitalize → uppercase → lowercase → none (Shift-click back; right-click menu). Writes `textTransform`. AX "Change text case", value "Original" / "Capitalize" / "Uppercase" / "Lowercase". |
+| Zap | `[18, 461, 147, 38]` | "Zap" 14 pt Medium at x 12 inside the button (ink 25; 14 Medium 25.5), `bolt.fill` 15 pt with its ink ending 15 pt from the right edge. Zap mode on: fill #333333, white text and glyph (fill cross-fade 0.12 s). With Zaps: the count replaces the bolt ("1"). | Toggle Zap mode (§4.8). AX "Zap" or "Zap, <count>". Before P7: disabled, tooltip "Zap isn't available yet." (lead 09:32, kept). |
+| Code | `[18, 514, 147, 38]` | "Code" 14 pt Medium at x 12 (ink 34; 14 Medium 34.9) + `curlybraces` with its ink ending 15 pt from the right edge | Switch to code mode (§4.10). Before Step 7: disabled, tooltip "Code editing isn't available yet." |
+
+Ink measurements: S2 10/0030 (label ink of "Zap" and "Code" starts at editor x 30, the button at
+x 18; the trailing glyphs end at x 150 and 165), design review r1. The cycling behavior of Size and
+Case is a guess: the capture showed only the pressed fill and no menu (IS §20.15). No hover change
+on these buttons (guess). Pressed fill #DFDFE0 (S2 10/0041). Disabled (Zap before P7, Code before
+Step 7): label and glyph #BDBDBF, fill unchanged. Focus ring: the button rect, outset 2. The four
+colored tool tiles and the editor accent colors of the first version are removed.
+
+### 4.8 Zap mode
 
 Entry and exit (D-8):
 
 | Event | Effect |
 |---|---|
-| Zap tile on | `BoostPickerCoordinator.enterZap(boostID:for: pageID)` with the bound page's engine document identity; send the command through the adapter. The editor shows the Zaps list header "Click elements on the page to Zap them" (BO-20) in 11 pt Medium. Focus moves to the page so Esc and Cmd+Z reach the picker. |
-| Picker commits (`zap:committed`, `zap:replaced`) | `coordinator.handle` persists; the editor reloads the list from `BoostStore` and asks `zap:list` for match counts. One undo entry per commit (§4.7). |
-| Zap tile off | `coordinator.exitZap(for:)`; send. |
-| Picker exits by itself (`picker:exited` esc / done) | Editor turns the tile off. |
+| Zap button on | `BoostPickerCoordinator.enterZap(boostID:for: pageID)` with the bound page's engine document identity; the adapter sends the command. Focus moves to the page so Esc and Cmd+Z reach the picker. The button turns dark (§4.7). |
+| Picker commits (`zap:committed`, `zap:replaced`) | `coordinator.handle` persists; the editor reloads the count from `BoostStore`. One undo step per commit. |
+| "Click to reveal" (page bar) | `BoostStore.removeZap(boostID:selector:)` and `coordinator.removeZap(selector:for:)`; refresh; one undo step. |
+| Zap button off | `coordinator.exitZap(for:)`; send. |
+| Picker exits by itself (`picker:exited`, Esc or Done) | The button turns light again. |
 | Editor close, tab switch, navigation, frame destruction, transport loss | `exitZap` or `invalidate(pageID:)` per `docs/boosts.md`. |
-| Before P7 | The Zap tile is disabled with tooltip "Zap needs the isolated script world (engine patch P7)." and the adapter's Zap send path carries the `// Blocked on P7: isolated world` marker (app-shell D8). The list still shows and removes stored Zaps. |
+| Before P7 | The button is disabled with the tooltip "Zap isn't available yet." and the adapter's Zap send path carries the `// Blocked on P7: isolated world` marker (app-shell D8). |
 
-Zaps list (Open's form of Arc's shelf, BO-20; placed in the editor, not over the page — D-8):
+Page UI (in-page picker, restyled in Step 6 to Arc's look; S2 10/0058–0060, IS §20.6):
 
-| Part | Value |
-|---|---|
-| Header | "Zaps" 12 pt Semibold `Core.foregroundSecondary` at x 14, count on the right ("3"); while Zap mode is on, the instruction text replaces the title. Hidden when there are no Zaps and Zap mode is off. |
-| Row | Height 30. Label (`ZappedElement.label`, else the selector) 12 pt Regular, middle truncation, x 14 to `W − 70`. Match count from the last `zap:list-result` ("4 hidden", 11 pt, secondary; "—" before a result). Remove × 20×20 at `W − 14 − 20`, visible on hover and focus. |
-| Hover a row | Preview: send a live plan without that selector, so the element shows again, and draw nothing else (Arc `zapToPreview`). On hover end, send the full plan again. Debounce 50 ms. |
-| Remove | `BoostStore.removeZap(boostID:selector:)`; if picker active, also `coordinator.removeZap(selector:for:)` so the session list stays in sync; refresh; undo entry. |
-| Context menu | "Copy Selector" (pasteboard; Arc `copySelectorToPasteboard`), "Remove Zap". |
-| Max height | 5 rows visible, then the list scrolls. |
+| Part | Value | Source |
+|---|---|---|
+| Content frame | 3 pt inner border #3139FF around the web content while Zap mode is on | S2 10/0060 |
+| Bottom bar | 56 pt, #FBFBFD, full content width: "Click elements on the page to Zap them" centered, 13 pt, with the word "Zap" in the accent color. With the click popup open the text is very faint lavender (darkest #DBDFFF on #FBFBFD); the idle color is a guess (grey; it may be a fade). "Done" at the right: a rounded rect 59 × 38, corner 8, fill #EDEEFF, 10 pt below the bar top, 13 pt Medium text | S2 10/0060 (Done rows 1026–1031; popup-open text color measured); idle text color guess |
+| Hover | The hovered element gets a yellow tint overlay (rgba(255, 214, 10, 0.35), guess) | S2 10/0060 |
+| Click popup | White card ≈ 428 × 90, corner 12, shadow: "Zap this" (red fill), "Zap all related elements" (orange fill), "Cancel" (grey fill), each ≈ 38 tall, white 13 pt text; a grey band below with "<count> <selector>" in 11 pt monospace | S2 10/0060 |
+| After a Zap | The bar offers "Click to reveal" with the zapped elements; clicking one reveals it (removes the Zap). Layout not captured: one chip per Zap, label = `ZappedElement.label` (guess). Hover on a chip previews the element (Arc `zapToPreview`). | notes 10:26:49 |
 
-Picker bar text change (small runtime edit, Step 6): the picker's bar label "Zap mode" becomes
-"Click elements on the page to Zap them" (Arc string, BO-20). The "Zap all related (N)" text stays
-(`tools/verification/boosts.mjs` line 95 asserts it).
+The bar label change replaces "Zap mode"; keep the "Zap all related (N)" check in
+`tools/verification/boosts.mjs` by renaming it to the popup's "Zap all related elements" with the
+count in the band.
 
-### 4.7 Menu, undo, rename, delete, shuffle
+### 4.9 Undo, rename, delete, shuffle, reset
 
-⋯ menu (BO-16, Open drops "Report Boost…"):
+- Undo model (unchanged): one `UndoManager` per session (`groupsByEvent = false`); each committed
+  change registers the previous full `Boost` and restores it with `BoostStore.upsert` plus a refresh;
+  drags register on mouse up; code editors register one Boost-level step on focus loss; owner tokens
+  end a previous control's group (lead round 2).
+- Undo: header button and Cmd+Z (editor key, outside text views). Redo: ⇧⌘Z only.
+- Menu items in §4.3. Delete has no undo (Open choice).
 
-| # | Item | Enabled | Action |
-|---|---|---|---|
-| 1 | Undo | undo stack not empty | `undoManager.undo()` |
-| 2 | Redo | redo stack not empty | `undoManager.redo()` (Arc has `redo`; menu label is Open's) |
-| 3 | — | | |
-| 4 | Rename this Boost… | always | Sheet on the panel: title "Rename this Boost", text field (prefilled, select all), buttons "Done" (default) / "Cancel". Empty text is allowed (display falls back to the domain). Writes `name`. |
-| 5 | Shuffle | always | Random `θ ∈ [0, 360)`, `ρ ∈ [0.6, 1.0]`, random font from the list except Original and Wingdings, `textZoom`/`textTransform` unchanged. One undo entry. |
-| 6 | Reset all Edits | Boost not empty | Clears color, font, text size, case, Zaps, CSS, JS (keeps name, scope, enabled). Confirmation alert: "Reset all edits?" / "This removes every change in this Boost." / "Reset" / "Cancel". One undo entry. |
-| 7 | All Boosts… | always | `view-boosts` (the editor stays open) |
-| 8 | — | | |
-| 9 | Delete this Boost | always | Alert "Delete this Boost?" / "This removes the Boost and its changes from this site." / "Delete" (destructive) / "Cancel". On Delete: `BoostStore.delete(id:)`, close the editor (no undo; Open choice). |
+### 4.10 Code mode
 
-Undo model: one `UndoManager` per editor session (`groupsByEvent = false`). Each committed change
-registers the previous full `Boost` value (a Boost is small) and restores it with
-`BoostStore.upsert` plus a refresh; when the picker is active, a restore also sends `zap:list` so
-the picker's view of the Boost matches. Drags register on mouse-up only. Typing in a code editor
-uses the text view's own undo (one group per 1 s pause) and registers one Boost-level entry when
-the code editor loses focus. Undo stacks die with the session.
+| Part | Value | Source |
+|---|---|---|
+| Header | 40 pt: "← Back" `[10, 9, 60, 23]` (`arrow.left` + "Back" 13 pt Medium) returns to simple mode; CSS · JS segmented control `[190, 8, 100, 24]` (two 50 × 24 segments, centered in the 480 window: x = width / 2 − 50). Done, name, and Undo are hidden in code mode. | S2 10/0071 |
+| Code view | `[0, 40, width, height − 110]`; native `NSTextView` (D-9): monospaced system 12 pt, line height 16, inset 8 × 6, white background, gutter `NSRulerView` 36 pt (10 pt digits, #A0A0A5). Placeholders "your css here" / "your javascript here", 12 pt, black 30 %. Arc's body was not captured. | layout S2 10/0071; look Open choice |
+| Bottom bar | 70 pt, white: "Pick Selector" `[15, h − 53, 38, 38]` (`eyedropper`) and "Show Developer Tools" `[63, h − 53, 38, 38]` (`hammer`), fill #EBEBED, corner 9. "Refresh to Run" (JS tab, when the JS differs from the JS the page loaded with): text button 13 pt Medium at the bar's right, x `width − 15 − w` (guess: not captured). | S2 10/0071 |
 
-### 4.8 Code mode (CSS and JS)
-
-| Part | Value |
-|---|---|
-| Header | Same header (§4.3), plus a back button `chevron.left` 24×24 left of the glyph that returns to simple mode. |
-| Tabs | y 52 + 8: segmented control 2 segments "CSS" / "JS", height 28, width 160, at x 14. Track `BoostEditorColors.segmentBackground`, radius 8; selected segment `BoostEditorColors.segmentSelection`, 12 pt Semibold. |
-| Tool bar | Same row, right-aligned, 12 pt Medium text buttons with 8 pt gaps: "Pick Selector" ↔ "Hide Selector Picker" (Step 8; hidden before it lands), "Refresh to Run" (JS tab only, shown when the JS text differs from the JS the page loaded with; tooltip "Refresh this Page"), "Show Developer Tools" ↔ "Hide Developer Tools" (`OEWebContent.showDevTools()` / `closeDevTools()` through the App). Arc labels (BO-19). |
-| Editor | Under the tool bar, inset 0, fills the rest; top hairline. `NSScrollView` + `NSTextView`: font `NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)`, line height 16, text inset 8×6, background `Core.backgroundPrimary` at 60 % over the panel fill. Gutter: `NSRulerView` 36 pt, line numbers 10 pt monospaced digits, `Core.foregroundTertiary`, right-aligned with 6 pt padding. Placeholder (empty text): "your css here" / "your javascript here", 12 pt, black 30 % / white 30 % (BO-19). |
-| Footer note (JS only) | First time the JS tab has text: a 28 pt dismissible row "JavaScript in a Boost runs on this site like the site's own code." with × (stores `open.boosts.hasDismissedJSNotice`). Open's words; Arc's banner is about sharing (BO-19), which Open does not have. |
+JS notice (Open's words, unchanged): the first time the JS tab has text, a 28 pt dismissible row
+above the bottom bar: "JavaScript in a Boost runs on this site like the site's own code." with ×
+(stores `open.boosts.hasDismissedJSNotice`).
 
 Editing rules:
 
@@ -602,10 +828,10 @@ Editing rules:
   whitespace-only line outdents it. Cmd+/ toggles `/* */` (CSS) or `//` (JS) on the selected
   lines. Cmd+] / Cmd+[ indent and outdent.
 - Highlighter: re-color only the edited paragraph range ± 1 line and the visible range, on the main
-  thread, after each edit (budget §7). Tokens: comments `GrayScale.a(9)`; strings `#C41A16` / `#FC6A5D`;
-  numbers and units `#1C00CF` / `#D0BF69`; CSS at-rules, JS keywords `#9B2393` / `#FC5FA3` Semibold;
-  CSS property names `#326D74` / `#67B7A4`; selectors and identifiers default text. (Open's own
-  palette, Xcode-like; no Arc evidence.)
+  thread, after each edit (budget §7). Tokens (light only; the editor is always
+  light): comments `#8E8E93`; strings `#C41A16`; numbers and units `#1C00CF`; CSS at-rules and JS
+  keywords `#9B2393` Semibold; CSS property names `#326D74`; selectors and identifiers default text.
+  (Open's own palette, Xcode-like; no Arc evidence.)
 - CSS live: 150 ms after the last keystroke, write `css` with `BoostStore.upsert` and refresh all
   matching pages (D-6). Invalid CSS is applied as written (browsers skip bad rules).
 - JS: 500 ms after the last keystroke, write `js` with `BoostStore.upsert`. The adapter reinstalls
@@ -614,34 +840,57 @@ Editing rules:
   installed when the bound page last committed; it reloads the bound tab.
 - The editor scrolls to and selects nothing on open; caret at the end of the text.
 
-### 4.9 First-run interstitial
+### 4.11 First-run card
 
-The first time an editor opens (`open.boosts.hasDismissedInterstitial` false), the panel shows an
-interstitial instead of the controls (BO-21):
+Shown the first time an editor opens (`open.boosts.hasDismissedInterstitial` false; BO-21):
 
-| Part | Value |
-|---|---|
-| Art | Our own drawn illustration, 70×70, `paintbrush.pointed.fill` in a 70 pt circle of the Boost accent; a wavy line under it drawn with `NSBezierPath` (no Arc asset). |
-| Title | "Edit the Internet with Boosts", 16 pt Bold, `BoostEditorColors.interstitialForeground` (`#2E2740`) |
-| Body | "Change colors, fonts, and text on any site, hide parts of a page, or add your own CSS." 12 pt Regular (Open's words) |
-| Footer | Fill `BoostEditorColors.interstitialFooter` (`#CEDBFC`) 64 pt with a button "Make your own!" (Arc label) 13 pt Semibold. Click sets the flag and shows the controls. × closes the editor without setting the flag. |
+| Part | Value | Source |
+|---|---|---|
+| Dim | The whole window above the card is dimmed with black 0.30 (controls stay drawn under it, inactive). | S2 10/0018 |
+| Card | White, from y 271 to the bottom, with a soft top shadow (black 0.25 fading over 9 pt). | S2 10/0018 |
+| Icon | Open's own 70 pt rounded-square badge: brand blue #4848FF, a 3 pt white border, and Open's outlined brush (`BoostGlyph.outline`, 34 pt) with two Open-drawn sparkles in white. Rotated 12° counter-clockwise on screen (its top edge rises to the right; write the angle for the layer's flip state, since "−12°" flips on a non-flipped AppKit layer). Centered at x 91.5, overlapping the card top (bounding box ≈ `[49, 238, 86, 86]`). Not Arc's asset. | position S2 10/0018 AX `InterstitialIcon`; border and tilt direction measured (design review r1, work file `badge.png`); art Open's |
+| Title | "Edit the Internet with Boosts", 22 pt Bold, default design (SF Pro, flat terminals; not Rounded), #3139FF, centered, three lines with cap tops at y 332, 355, 378 and baselines at 347, 370, 393 (pitch 23) | S2 10/0018: ink widths 78 / 131 / 69 vs SF Pro 22 Bold advances 78.3 / 130.8 / 71.3 (20 Bold: 71.9 / 120.3 / 65.3); cap height ≈ 15 |
+| Body | "Make <host> your own!" with the host in Semibold, 13 pt, #95939F, centered, two lines from y 411 (ink 107). A long host truncates in the middle so the body keeps two lines. | S2 10/0018; truncation Open choice |
+| Footer | #CEDBFC from the wavy edge to the bottom. Wavy edge: our own sine path, crest line y 463, peak-to-trough 3.9 (amplitude 1.95), period 17, first crest at x 7. | S2 10/0018 edge profile x 0–59: crests y 463.06 at x 7, 24, 41, 58; troughs y 466.98 |
+| Make a Boost | `[14, 493, 155, 38]`, corner 10, vertical gradient #4E4FFF (top) → #4848FF (y 500) → #333AFF (bottom), flat horizontally; white 14 pt Medium (ink 85; 14 Medium advance 88.8, 15 Semibold 95.6). Sets the flag and removes the card (fade 0.2 s, guess). | S2 10/0018 (x 25, y 493 → 530) |
+| Maybe Later | `[46, 541, 91, 31]`, text 12 pt Medium #7F819E (ink 69; 12 Medium 71.8, 13 Medium 76.9). Closes the editor without setting the flag; an untouched new Boost is deleted (Open choice). | S2 10/0018 |
 
-### 4.10 Keyboard (editor)
+### 4.12 Key window and keyboard (editor)
+
+Key-window rule (review r1, plan F1; evidence S2 10/0018–0079):
+
+1. Pointer use of the simple controls (pad, color buttons, font grid, Size, Case, Zap, Code, the
+   header buttons, the advanced popover) never makes the editor key. The controls accept the first
+   mouse and work while the browser window stays key, so the browser keeps its active look. Arc:
+   the editor window had no `focused` flag in AX from S2 10/0018 to 0078 while these controls were
+   used, and the sidebar kept its active color (#272538 at (20, 500)).
+2. A click into a text input (the rename field, the code view) makes the editor key. The browser
+   window then shows its inactive look, as Arc's did: AX `focused,main` from S2 10/0079, and the
+   sidebar at (20, 500) went from #272538 to #0C0A1D (S2 10/0078).
+3. Keyboard entry without a text input (Open choice): the system shortcut "Move focus to
+   floating window" (System Settings ▸ Keyboard ▸ Keyboard Shortcuts ▸ Keyboard, default ⌃F6) makes the editor
+   key, because it is a floating panel with `canBecomeKey = true`. Focus lands on Done; Tab then
+   moves through the order below.
+4. While the editor is key: Tab, arrows, and Cmd+Z / ⇧⌘Z go to the editor. While the browser window
+   is key, Cmd+Z goes to the browser window as usual; the editor's undo is then only on the header
+   Undo button (Arc's Cmd+Z routing with the editor open is not captured, §13).
+5. Key status returns to the browser window on Done, on Esc when it closes the editor, on Back from
+   code mode when no text input is focused, on a click in the browser window, and when the editor
+   closes for any reason (`parent.makeKeyAndOrderFront`).
 
 | Key | Where | Effect |
 |---|---|---|
-| Esc | Panel key, no field editing | Zap on → exit Zap. Else close the editor. |
-| Esc | Text field / code editor | End editing (rename: cancel); second Esc follows the row above. |
-| Esc | Page key, Zap on | The picker exits (existing). |
-| Cmd+Z / Cmd+Shift+Z | Panel key, outside a text view | Editor undo / redo (§4.7). |
-| Cmd+Z | Page key, Zap on | Picker undo (existing). |
-| Cmd+R | anywhere | Reload command (existing) — also runs changed JS. |
-| Tab / Shift+Tab | Panel | Header controls → wheel → side buttons → sliders → font strip → tiles → Zaps rows. |
-| Arrow keys | Wheel focused | Left/Right: hue ∓/± 5° (Shift: 15°). Up/Down: intensity ± 0.05. One undo entry per 1 s of key repeat. |
-| Arrow keys | Font strip / tiles | Move selection; Space or Return applies. |
-| Cmd+1 / Cmd+2 | Code mode | CSS / JS tab (Open choice; the browser's Cmd+1…9 tab jumps apply only while the page or sidebar is key). |
+| Esc | Editor key, no field editing | Advanced popover open → close it. Zap on → exit Zap. Code mode → back to simple mode. Else close the editor. |
+| Esc | Text field / code view | End editing (rename: cancel); a second Esc follows the row above. |
+| Esc, Cmd+Z | Page key, Zap on | The picker exits / undoes (existing). |
+| Cmd+Z / ⇧⌘Z | Editor key, outside a text view | Editor undo / redo. |
+| Cmd+R | anywhere | Reload (existing); also runs changed JS. |
+| Tab / Shift+Tab | Editor | Done → name → Undo → pad → color buttons → font grid → Size → Case → Zap → Code. |
+| Arrows | Pad | §4.4.2. |
+| Arrows | Font grid | Move the focus; Space / Return applies. |
+| Cmd+1 / Cmd+2 | Code mode | CSS / JS tab (Open choice). |
 
-### 4.11 Boosts list (Library)
+### 4.13 Boosts list (Library)
 
 The `view-boosts` command, the "Manage" header, and "All Boosts…" open the Library window on a new
 section "Boosts". Arc keeps Boosts in its Home/Library (`BoostsPage`, `HomeBoostsDelegateAction`,
@@ -650,7 +899,7 @@ BO-12). Add `case boosts` to `LibrarySection` (after `captures`; symbol `paintbr
 `Sources/OpenSettings/BoostsSection.swift`, like `DownloadsSection.swift`. Data follows the
 existing snapshot-provider pattern in `LibraryTypes.swift`, so `OpenSettings` gains no `OpenBoosts`
 dependency: `public struct BoostItemSnapshot: Identifiable, Sendable { id: String (Boost UUID),
-name, domain, pathPrefix: String?, isEnabled, accentIndex: Int }`, `@MainActor public protocol
+name, domain, pathPrefix: String?, isEnabled }`, `@MainActor public protocol
 BoostsProvider: AnyObject { func boosts(profileID: ProfileID) -> [BoostItemSnapshot] }`, and four
 `LibraryActions` methods: `setBoostEnabled(id:enabled:profileID:)`, `renameBoost(id:to:profileID:)`,
 `deleteBoost(id:profileID:)`, `editBoost(id:profileID:)`. The App implements them over `BoostStore`
@@ -660,79 +909,49 @@ pattern in `LibraryViewModel`).
 | Part | Value |
 |---|---|
 | Source | The selected Profile's `BoostStore.allBoosts()` (Profile picker at the top when more than one Profile exists). |
-| Row | Height 52: site favicon 20 pt (`FaviconStore` by domain, fallback the Boost glyph in its accent), name 13 pt Semibold, subtitle "Made for <domain><pathPrefix>" 11 pt secondary (Arc's "Made for" form, BO-16 evidence), switch on the right, ⋯ menu: Edit…, Rename…, Delete…. |
+| Row | Height 52: site favicon 20 pt (`FaviconStore` by domain, fallback `BoostGlyph.fill` (`paintbrush.pointed.fill`) in `Core.brandBlue`), name 13 pt Semibold, subtitle "Made for <domain><pathPrefix>" 11 pt secondary (Arc's "Made for" form, BO-16 evidence), switch on the right, ⋯ menu: Edit…, Rename…, Delete…. |
 | Edit… | Opens the site (`https://<domain><pathPrefix>`) in a new Today tab in the front window and opens the editor on that Boost when the tab commits its first URL. |
 | Empty state | "Nothing Boosted Yet!" 15 pt Semibold, body "Open a site and choose New Boost in Site Controls." 12 pt (Open's words). |
-| Global off | The same note as §3.5, plus a "Turn On" button that writes `open.advanced.enableBoosts = true`. |
+| Global off | The same note as §3.7, plus a "Turn On" button that writes `open.advanced.enableBoosts = true`. |
 
 ---
 
 ## 5. Data and persistence
 
-### 5.1 Where every value lives (complete; no other writes)
+### 5.1 Where every value lives (no other writes)
+
+Unchanged from the first version, with one default changed:
 
 | Value | Written by | API | Storage |
 |---|---|---|---|
-| Site permission (12 kinds today) | Settings tiles | `WebProfile.setPermission(_:for:origin:)` → `OEBrowserContext.setPermissionState` | Chromium content settings of the Profile's engine directory (`Preferences`, `profile.content_settings.exceptions`). Open keeps no copy. |
-| Other content settings (E1) | Settings tiles | `WebProfile.setSiteSetting(_:kind:origin:)` (new, E1) | Same Chromium store |
-| Per-site ad-block exclusion | Ad-block tile; Settings allowlist (`AdBlockSettingsModel.setExcluded`) | `AdBlockStore.setExcluded(_:excluded:profile:)`, then the App's `setAdBlockExcludedDomains(_:profileID:)` engine path — the same two calls the Settings allowlist makes, so both writers behave the same | `<root>/Profiles/<profile UUID>/adblock/exclusions.json` (registrable domains). Engine via `AdBlockEngineEvent.exclusions`. |
-| Ad-block master switch | Settings only (the panel reads it) | `AdBlockStore.setEnabled` | `<root>/adblock-settings.json` `nativeAdBlockEnabled` |
-| Boost enabled | Boost switch, Library switch | `BoostStore.setEnabled(id:enabled:)` | `<root>/Profiles/<dataDirectoryName>/Boosts/boosts.json` (`ProfileDirectories.boostsFileURL(for:)`) |
-| Boost name, scope, color, font, text size, case, CSS, JS | Editor | `BoostStore.upsert` | same file |
-| Zaps | Picker commits (coordinator), editor remove | `BoostStore.appendZap` / `removeZap` | same file |
-| Editor color inputs | Editor | `BoostStore.upsert` with `colorWheel` set (§5.2) | same file |
-| Global Boosts switch | Settings (A-5); Library "Turn On" | `UserDefaults` `open.advanced.enableBoosts` (default true) | `UserDefaults.standard` |
-| Interstitial dismissed | Editor | `open.boosts.hasDismissedInterstitial` Bool (false) | `UserDefaults` |
-| JS notice dismissed | Editor | `open.boosts.hasDismissedJSNotice` Bool (false) | `UserDefaults` |
-| Code editor size | Editor | `open.boosts.codeEditorSize` String `"<w>x<h>"` ("560x640") | `UserDefaults` |
-| Extension pin | Pin button (E4) | `ExtensionHost.setPinned` → `-[OEBrowser setExtensionAction:pinned:]` (extensions-UI plan E4) | Chromium prefs (`extensions.pinned_extensions`) |
+| Site permission | Settings rows | `WebProfile.setPermission(_:for:origin:)` | Chromium content settings |
+| Other content settings (E1) | Settings rows | `WebProfile.setSiteSetting(_:kind:origin:)` | Chromium |
+| Per-site ad-block exclusion | Ad-block row; Settings allowlist | `AdBlockStore.setExcluded`, then `setAdBlockExcludedDomains(_:profileID:)` | `<root>/Profiles/<UUID>/adblock/exclusions.json` |
+| Boost enabled | Boost row circle, Library switch | `BoostStore.setEnabled(id:enabled:)` | `boosts.json` |
+| Boost name, scope, color, font, size, case, CSS, JS | Editor | `BoostStore.upsert` (color via `colorWheel`) | `boosts.json` |
+| Zaps | Picker commits; "Click to reveal" | `BoostStore.appendZap` / `removeZap` | `boosts.json` |
+| Global Boosts switch | Settings; Library "Turn On" | `open.advanced.enableBoosts` | `UserDefaults` |
+| Interstitial dismissed | Editor ("Make a Boost") | `open.boosts.hasDismissedInterstitial` (false) | `UserDefaults` |
+| JS notice dismissed | Editor | `open.boosts.hasDismissedJSNotice` (false) | `UserDefaults` |
+| Code window size | Editor | `open.boosts.codeEditorSize` `"<w>x<h>"` (**`"480x588"`**, was `"560x640"`) | `UserDefaults` |
+| Extension pin | Pin (E4) | `ExtensionHost.setPinned` | Chromium prefs |
 | Cookies, cache | ⋯ menu | `WebProfile.clearSiteData(origin:kinds:)` (E2) | Chromium |
-| Panel state | — | none | Arc has `PersistedSiteControlCenterState` (contents unknown); Open persists nothing (Open choice) |
-
-Register the three new `open.boosts.*` defaults in `SettingsDefaults.values`
-(`Sources/OpenSettings/SettingsTypes.swift`, the one registry) and add them to the settings plan's
-§2.1 table in the same PR. `OpenSiteControl` reads them with `UserDefaults.standard` and the same
-fallbacks.
+| Panel and editor position | — | none (Open choice) | — |
 
 ### 5.2 Model change (the only OpenBoosts model edit)
 
-Add to `Packages/OpenKit/Sources/OpenBoosts/Boost.swift`:
-
-```swift
-/// Editor inputs for the color wheel (docs/plans/site-control-boost-editor.md §4.4).
-/// When set, `Boost.colorAdjustment` is derived from it; the runtime reads only colorAdjustment.
-public struct BoostColorWheel: Codable, Hashable, Sendable {
-    public var hue: Double                 // θ, degrees, 0 at 12 o'clock, clockwise
-    public var intensity: Double           // ρ, 0...1
-    public var baseHue: Double?            // h0, page dominant hue at first color; nil = neutral page
-    public var invertLightness: Bool       // default false
-    public var brightness: Double          // 0.5...1.5, default 1
-    public var contrast: Double            // 0.5...1.5, default 1
-    public var originalSaturation: Double  // 0...2, default 1
-    public init(hue: Double = 0, intensity: Double = 0, baseHue: Double? = nil, invertLightness: Bool = false,
-                brightness: Double = 1, contrast: Double = 1, originalSaturation: Double = 1)
-    public func clamped() -> BoostColorWheel     // wrap hue, clamp ranges, NaN → default
-    public var isIdentity: Bool { get }          // §4.4 identity rule
-    public var adjustment: ColorAdjustment? { get } // §4.4 math; nil when identity
-}
-
-// In Boost: an optional, defaulted Codable field (old files decode without it).
-public var colorWheel: BoostColorWheel?
-```
-
-- `BoostStore.normalized` (private) also clamps `colorWheel` and, when it is non-nil, sets
-  `colorAdjustment = colorWheel.adjustment` (single writer of the derived value). When
-  `colorWheel` is nil, `colorAdjustment` is left as stored (imported or hand-edited Boosts).
-- `Boost.isEmpty` treats `colorWheel` like `colorAdjustment` (identity or nil = empty).
-- The planner, the applier, the bridge, and the file schema version do not change.
-- `docs/boosts.md` gets one API line for the new type in the same PR.
+`BoostColorWheel` and `Boost.colorWheel` as in PR #103 (fields `hue`, `intensity`, `baseHue`,
+`invertLightness`, `brightness`, `contrast`, `originalSaturation`; `clamped()`, `isIdentity`,
+`adjustment`). The only change from #103: the `hue` doc comment (§4.4.2). `BoostStore.normalized`
+clamps `colorWheel` and sets `colorAdjustment = colorWheel.adjustment` when it is non-nil. The
+planner, the applier, the bridge, and the file schema version do not change.
 
 ### 5.3 Live preview path
 
 ```text
 editor input ─┬─ drag event ──► BoostEditorSession.preview(boost')   (no store write)
               │                    └─► adapter.preview(plan for bound page only)   ≤ 60 Hz
-              └─ commit ─────────► BoostStore.upsert(boost')  (1 s debounced save)
+              └─ commit ─────────► BoostStore.upsert(boost')  (1 s debounced save; saveNow on close/delete)
                                    └─► session publishes change
                                        └─► adapter.refresh(profile:)  rebuild matcher once,
                                            plan + boost:apply for every live page of the Profile
@@ -758,57 +977,56 @@ editor input ─┬─ drag event ──► BoostEditorSession.preview(boost')  
 ### 6.1 Files
 
 ```text
-Packages/OpenKit/Package.swift                         add OpenSiteControl library + sitecontrol-render executable
-Packages/OpenKit/Sources/OpenDesign/SiteControlTokens.swift   SiteControlMetrics, BoostEditorMetrics, BoostEditorColors, new Motion and Typography tokens
+Packages/OpenKit/Package.swift                         OpenSiteControl library + sitecontrol-render executable
+Packages/OpenKit/Sources/OpenDesign/SiteControlTokens.swift   SiteControlMetrics, SiteControlColors, BoostEditorMetrics, BoostEditorColors, Motion, Typography (Appendix A)
+Packages/OpenKit/Sources/OpenDesign/ColorPad.swift      shared pad core (D-12, §4.4.3)
+Packages/OpenKit/Sources/OpenDesign/PopoverShape.swift  body + arrow path (continuous corners) for the panel and the advanced popover
+Packages/OpenKit/Sources/OpenDesign/TooltipView.swift   shared capsule tooltip (moved from OpenSidebar in #69)
 Packages/OpenKit/Sources/OpenBoosts/Boost.swift        BoostColorWheel + Boost.colorWheel (§5.2)
-Packages/OpenKit/Sources/OpenBoosts/BoostStore.swift   normalization of colorWheel (§5.2)
-Packages/OpenKit/Sources/OpenBoosts/Resources/zap-picker.js   bar label (Step 6); select mode (Step 8)
-Packages/OpenKit/Sources/OpenBoosts/PickerMessages.swift      select-mode messages (Step 8)
+Packages/OpenKit/Sources/OpenBoosts/BoostStore.swift   normalization, saveNow, stale temp files (#103)
+Packages/OpenKit/Sources/OpenBoosts/Resources/zap-picker.js   Arc-look bar, popup, frame, "Click to reveal" (Step 6); select mode (Step 8)
 Packages/OpenKit/Sources/OpenSiteControl/
   SiteControlTypes.swift          value types (§6.2)
   SiteControlDataSource.swift     protocols the App implements (§6.3)
-  SiteControlController.swift     overlay presentation, anchoring, dismissal, keyboard
-  SiteControlView.swift           panel view: header, actions, sections, footer
-  SiteControlTiles.swift          tile, Boost row, extension button, switch, section header
-  BoostEditorSession.swift        editing state, undo, preview/commit, wheel math use, h0 sampling
-  BoostEditorPanel.swift          BoostEditorController (public entry), NSPanel, placement, resize, simple/code switch
-  BoostEditorViews.swift          header, banners, wheel, sliders, font strip, tool tiles, Zaps list, interstitial
-  CodeEditorView.swift            NSTextView subclass, highlighter, gutter, indentation rules
-Packages/OpenKit/Sources/OpenSettings/BoostsSection.swift          Library "Boosts" section (SwiftUI, §4.11)
-Packages/OpenKit/Sources/OpenSettings/LibraryTypes.swift           LibrarySection.boosts, BoostItemSnapshot, BoostsProvider, LibraryActions additions
-Packages/OpenKit/Sources/OpenSettings/SettingsTypes.swift          three open.boosts.* defaults in SettingsDefaults.values
-Packages/OpenKit/Sources/settings-preview/LibraryPreview.swift     boosts section states (empty, 3 Boosts, global off)
-Packages/OpenKit/Sources/sitecontrol-render/          main.swift, Scenes.swift, Flows.swift, Bench.swift, FakeSources.swift (+ reuse OffscreenRenderer pattern)
-Packages/OpenKit/Sources/OpenFeatures/PaneChromeView.swift   enable button 4, forward its action
-Packages/OpenKit/Sources/OpenFeatures/BrowserWindowController.swift  handle .showSiteControls, .customizePage, commands (§6.4)
-App/SiteControl/AppSiteControlSource.swift            SiteControlDataSource over the engine and stores (§6.3)
-App/Boosts/BoostEngineAdapter.swift                   (app-shell §4.5) + preview/refresh API (§5.3)
-App/Automation/AutomationController.swift             site-controls, boost-editor, boosts, pasteboard commands (§8.2)
-tools/e2e/engine_e2e.py                               --only sitecontrol, --only boosteditor
-tools/verify-all.sh, tools/verification/check.py      add sitecontrol-render (runs `sitecontrol-render check`)
-docs/boosts.md, docs/commands.md, docs/plans/settings-library.md   one-line updates each (§5.1, §4.1, §4.11)
+  SiteControlController.swift     overlay presentation, anchoring, arrow, dismissal, keyboard, menu
+  SiteControlView.swift           panel: material, action row, sections, footer
+  SiteControlRows.swift           SiteControlRow, section label row, action button, extension "+" tile, footer pill
+  BoostEditorSession.swift        editing state, undo, preview/commit, baseHue sampling
+  BoostEditorPanel.swift          BoostEditorController, NSPanel, placement, simple/code switch
+  BoostEditorViews.swift          header, banners, color buttons, font grid, Size/Case/Zap/Code, first-run card
+  BoostColorPadView.swift         Boost pad on the shared core (ring, guide, law)
+  BoostAdvancedPopover.swift      child panel with the three sliders
+  CodeEditorView.swift            NSTextView subclass, highlighter, gutter
+Packages/OpenKit/Sources/OpenSpaceEditor/ColorPadView.swift   thin wrapper over OpenDesign/ColorPad (§12.4)
+Packages/OpenKit/Sources/OpenSidebar/ChromeViews.swift        URL field button states (§3.10, Step 3)
+Packages/OpenKit/Sources/OpenSettings/BoostsSection.swift, LibraryTypes.swift, SettingsTypes.swift   Library section and defaults
+Packages/OpenKit/Sources/sitecontrol-render/          main, Scenes, Flows, Bench, FakeSources, EditorScenes, EditorFlows, EditorBench, NativeOverlayCapture
+Packages/OpenKit/Sources/OpenFeatures/PaneChromeView.swift, BrowserWindowController.swift   anchors and handlers (§6.4)
+App/SiteControl/AppSiteControlSource.swift, App/Boosts/BoostEngineAdapter.swift, App/Automation/AutomationController.swift
+tools/e2e/engine_e2e.py, tools/verify-all.sh, tools/verification/check.py
 ```
 
-`OpenSiteControl` must not import `OpenFeatures` (the controller sits in OpenFeatures and imports
-OpenSiteControl, not the other way round) or `OpenSidebar`.
+`OpenSiteControl` must not import `OpenFeatures`, `OpenSidebar`, or `OpenSpaceEditor`.
 
 ### 6.2 Value types (`SiteControlTypes.swift`)
+
+`SiteSettingTile` keeps its name (it is the data of a Settings row; renaming is not worth the
+churn). `BoostItemSnapshot.accentIndex` is removed (§4.13).
 
 ```swift
 public struct SiteControlContext: Sendable, Equatable {
     public var tabID: ItemID
     public var profileID: ProfileID
     public var url: URL
-    public var displayHost: String          // humanReadableHost (§3.2)
+    public var displayHost: String          // humanReadableHost; AX description only (no header)
     public var isIncognito: Bool
     public var security: SiteSecurity       // .secure, .insecure, .unknown (before E3: by scheme)
-    public var faviconPNG: Data?
 }
 
 public enum SiteSettingKind: Hashable, Sendable {
     case contentBlocking
     case permission(SitePermission)          // OpenWeb's 12 kinds
-    case content(String)                     // E1 kind id, e.g. "javascript"; display via table §3.4
+    case content(String)                     // E1 kind id, e.g. "javascript"; display via table §3.8
 }
 
 public enum SiteSettingState: Sendable, Equatable { case on, off, unavailable }
@@ -819,7 +1037,7 @@ public struct SiteSettingTile: Sendable, Equatable, Identifiable {
     public var title: String
     public var subtitle: String              // "On"/"Off"/"Allowed"/"Blocked"
     public var state: SiteSettingState
-    public var symbol: String
+    public var symbol: String                // default "gearshape.fill"
     public var inUse: Bool
     public var help: String?
 }
@@ -829,7 +1047,7 @@ public struct SiteControlSnapshot: Sendable, Equatable {
     public var tiles: [SiteSettingTile]
     public var boosts: [Boost]               // matching, matcher order
     public var boostsGloballyEnabled: Bool
-    public var extensions: [ExtensionActionInfo]
+    // extensions: absent until OpenExtensionsUI (#96 decision); the "+" tile needs no data
     public var capabilities: Set<SiteCapability>   // which E-items exist (§9 E1–E5)
     public var commandsEnabled: [String: Bool]     // action buttons and menu items
 }
@@ -838,6 +1056,7 @@ public enum SiteCapability: Hashable, Sendable { case changedSettings, clearCach
 public enum SiteSecurity: Sendable, Equatable { case secure, insecure, unknown }
 public struct SiteDataKinds: OptionSet, Sendable { public let rawValue: Int
     public static let cookies = SiteDataKinds(rawValue: 1), cache = SiteDataKinds(rawValue: 2), storage = SiteDataKinds(rawValue: 4) }
+public enum SiteControlAction: Sendable, CaseIterable { case share, newBoost, capturePortion, captureFullPage }   // §3.4
 public enum BoostCodeTab: Sendable, Equatable { case css, js }
 public enum BoostEditorMode: Sendable, Equatable { case simple, code(BoostCodeTab) }
 public enum SiteControlPresentationMode: Sendable, Equatable { case standard, extensionPicker }   // §3.6.1
@@ -845,6 +1064,8 @@ public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(Item
 ```
 
 ### 6.3 Protocols the App implements (`SiteControlDataSource.swift`)
+
+As on PR #103 (lead round 1 and 2 changes kept), plus `browserWindowFrame(tabID:)`:
 
 ```swift
 @MainActor public protocol SiteControlDataSource: AnyObject {
@@ -859,20 +1080,21 @@ public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(Item
     func toggle(_ tile: SiteSettingTile, tabID: ItemID)            // writes per §5.1, then notify observers
     func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID)
     func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode)   // nil = new Boost
-    func perform(command: String, tabID: ItemID, anchor: NSRect?)  // share-page, copy-url, capture-*, view-boosts, settings
+    func perform(command: String, tabID: ItemID, anchor: NSRect?)  // share-page, capture-page, capture-full-page, view-boosts, manage-extensions, add-extension
     func runExtension(_ id: String, tabID: ItemID, anchor: NSRect)
     func setExtensionPinned(_ id: String, pinned: Bool)            // E4
     func showSecurityDetails(tabID: ItemID)                         // E3
     func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID)       // E2 / interim
     func openURLInNewTab(_ url: URL, tabID: ItemID)                 // chrome://settings site details
     func reload(tabID: ItemID)
+    func openAdBlockSettings(tabID: ItemID)  // Settings → Advanced → Ad Blocking; App adapter in Step 3
 }
 
 @MainActor public protocol BoostEditorHost: AnyObject {
     func store(for profile: ProfileID) -> BoostStore
     func preview(_ boost: Boost, tabID: ItemID)                     // §5.3 bound page only
     func refresh(profile: ProfileID)                                // §5.3 all matching pages
-    func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for h0
+    func pageSnapshot(tabID: ItemID) async -> Data?                 // PNG for baseHue
     func enterZap(boostID: BoostID, tabID: ItemID) -> Bool           // coordinator + send; false if blocked (P7)
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
@@ -882,6 +1104,8 @@ public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(Item
     func setDevToolsVisible(_ visible: Bool, tabID: ItemID)
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?
+    func showBoostsLibrary(profileID: ProfileID)
+    func browserWindowFrame(tabID: ItemID) -> NSRect?               // §4.2 placement (screen coordinates)
 }
 ```
 
@@ -898,7 +1122,7 @@ the render harness passes fakes).
 
 | Intent / command | Handler |
 |---|---|
-| `.showSiteControls` | `siteControl.toggle(anchor: .urlField, tabID: focused tab)` (toggle = `present(…, mode: .standard)` or close) |
+| `.showSiteControls` | `siteControl.toggle(anchor: .urlField, tabID: focused tab)` (toggle = `present(…, mode: .standard)` or close). ⌥-click is ignored (§3.10). |
 | Pane bar button 4 | `siteControl.toggle(anchor: .paneBar(paneTabID), tabID: paneTabID)` |
 | Extension picker key binding (extensions-UI plan, Q11) | `siteControl.present(anchor: §3.6.1 rule, tabID: focused tab, mode: .extensionPicker)` |
 | `.customizePage(tabID:)` | `edit-boost` for that tab |
@@ -906,6 +1130,7 @@ the render harness passes fakes).
 | `view-boosts` | Library window, section `boosts` |
 | `boost-gallery` | disabled |
 | Tab selection change, Space switch, window resign main | Close the panel; close the editor if its bound tab is no longer shown |
+| Panel open/close; matcher result for the selected tab | Set the URL field's `siteControlState` (§3.10): `rest`, `open`, `boosted`, or `openBoosted` (enum declared in OpenSidebar next to `URLFieldView`, because OpenSidebar must not import OpenSiteControl) |
 
 `isCommandEnabled` returns false for the Boost commands in incognito windows and on non-http(s)
 pages.
@@ -914,18 +1139,24 @@ pages.
 
 ## 7. Performance budgets (release build, M5 Pro, 2x)
 
-| Path | Budget | How measured (`sitecontrol-render bench`) |
+| Path | Budget | How measured |
 |---|---|---|
-| Click → panel first draw | p95 < 8 ms main thread | build view + layout + first `display`, 20 Boosts, 12 tiles, 30 extensions |
-| Panel open, idle | 0 timers, 0 % CPU after the open animation | run loop observer counts timer fires over 2 s = 0 |
-| Wheel drag event → preview plan handed to host | p95 < 2 ms | 500 synthetic drag events |
-| Live preview frame rate | ≤ 60 Hz to the page, coalesced | count preview calls during a 1 s, 120 Hz drag = ≤ 61 |
-| Commit → all matching pages refreshed | < 100 ms for 10 open matching tabs (fake host) | |
-| Code editor keystroke → highlight done | p95 < 2 ms on a 2,000-line CSS file | insert 200 characters at the middle |
-| Editor open (simple mode) | p95 < 12 ms | |
-| h0 sampling (64×64 histogram from a 2216×1394 PNG) | < 15 ms, off the main thread | |
+| Click → panel first draw | p95 < 8 ms main thread (material view included) | `sitecontrol-render bench`: 20 Boosts, 12 rows, 30 extensions |
+| Panel open, idle | 0 timers, 0 % CPU after the open animation (no sparkle animation) | run-loop observer over 2 s |
+| Pad drag event → preview plan handed to host | p95 < 2 ms | 500 synthetic drag events |
+| Live preview rate | ≤ 60 Hz to the page | 1 s, 120 Hz drag = ≤ 61 calls |
+| Commit → matching pages refreshed | < 100 ms for 10 tabs (fake host) | |
+| Code editor keystroke → highlight | p95 < 2 ms on a 2,000-line CSS file | |
+| Editor open (simple mode) | p95 < 12 ms (font grid images cached per family) | |
+| baseHue sampling | < 15 ms, off the main thread | |
+| Page scroll under the open panel (real app, Step 3) | Scroll frame time p95 with the panel open ≤ panel-closed p95 + 1 ms, and no dropped frames beyond the panel-closed run + 1 %, on the e2e heavy fixture page at 120 Hz | e2e `sitecontrol` S13: the same scripted scroll twice (panel closed, panel open over sidebar and page); the system re-blurs the backdrop each frame (review r1, plan F4) |
 
-Never parse or highlight on the network thread; never hold the store lock during layout.
+The lead's 2026-10-26 timing exception for a loaded machine still applies to review runs; rerun the
+budgets before merge. Run every build and `verify-all` through `~/Library/Caches/OpenRE/scripts/heavy.sh`.
+
+Step 4R (engine color remap) has its own gates: zero added paint cost with no Boost color (zero
+within the measurement noise band that the engine plan defines), and scroll p95 and paint time on
+three heavy pages, which the engine plan names, within the budget it sets.
 
 ---
 
@@ -933,59 +1164,66 @@ Never parse or highlight on the network thread; never hold the store lock during
 
 ### 8.1 Offscreen renders and flows: `sitecontrol-render`
 
-New executable target in `commandbar-render` style: real `OpenSiteControl` views and controllers,
-fake data source/host (`FakeSources.swift`) that records every action call, a synthetic window
-backdrop (sidebar + page color) so the panel renders over realistic content.
+Commands unchanged (`render`, `ax`, `flows`, `check`, `bench`, `screens`, `motion`, `compare`).
 
-```text
-sitecontrol-render render --state NAME --out FILE.png [--scale 1|2] [--appearance light|dark]
-sitecontrol-render ax --state NAME          # accessibility tree of the rendered state
-sitecontrol-render flows                    # scripted keyboard and mouse flows; exit 1 on failure
-sitecontrol-render check                    # flows + render of every state at 1x and 2x + bench budgets (verify-all)
-sitecontrol-render bench
-sitecontrol-render screens --out DIR        # every state, for docs (our renders only)
-sitecontrol-render motion --out DIR         # open/close frames (presentation values)
-sitecontrol-render compare --arc CAPTURE.png --ours RENDER.png --out DIR   # when a capture exists (R-1)
-```
-
-States: `scc-basic` (https, ad block on, camera allowed + notifications blocked, 2 Boosts one
-disabled, 3 extensions), `scc-insecure`, `scc-adblock-excluded`, `scc-adblock-unavailable`,
-`scc-no-boosts` (menu shows Boost items), `scc-boosts-off`, `scc-incognito`, `scc-internal-page`,
-`scc-many` (scrolls), `scc-pane-anchor`, `scc-dark`, `editor-interstitial`, `editor-simple`,
-`editor-advanced-color`, `editor-neutral-page`, `editor-not-active`, `editor-zap-on` (3 Zaps),
-`editor-zap-blocked-p7`, `editor-code-css`, `editor-code-js-dirty`, `editor-menu`. (The Library
-section renders through `settings-preview`, not here.)
+States: `scc-no-boosts` (S2 09/0010 content: "+", Developer Mode hidden, one allowed setting),
+`scc-boost` (S2 11/0005 content plus one Boost), `scc-adblock-on`, `scc-adblock-excluded`,
+`scc-adblock-unavailable`, `scc-insecure`, `scc-boosts-off`, `scc-incognito`, `scc-internal-page`,
+`scc-many` (scrolls), `scc-pane-anchor`, `scc-clamped` (narrow window), `scc-light` (guess),
+`scc-hover-label`, `scc-hover-boost`, `scc-hover-action`, `scc-keyboard-focus`, `scc-reload`, `scc-menu`, `scc-picker`;
+`editor-first-run`, `editor-no-color`, `editor-color` (S2 10/0041 values), `editor-dragging`,
+`editor-advanced`, `editor-font-selected`, `editor-zap-on`, `editor-zap-count`, `editor-name-menu`,
+`editor-scope-menu`, `editor-delete-alert`, `editor-not-active`, `editor-global-off`,
+`editor-legacy`, `editor-neutral-page`, `editor-code-css`, `editor-code-js-dirty` (code states from
+Step 7). Editor states render in light only.
 
 Flows (each asserts the fake's recorded calls and the view state):
 
 | # | Flow | Pass |
 |---|---|---|
-| F1 | Click the anchor → panel presented; click again → closed | presented/closed, no action calls |
-| F2 | Esc closes; click outside closes and the click reaches the backdrop view | `dismissed(.escape)`, `.outside`, backdrop hit count 1 |
-| F3 | Tab cycles in §3.9 order; arrows move in the tile grid; Space toggles the focused tile | focus order list matches; one `toggle(tile)` |
-| F4 | Ad-block tile on → off → on | `toggle` ×2 with `contentBlocking`; subtitle On/Off/On; reload row appears once |
-| F5 | Unavailable ad-block tile | one `perform(command: "settings")`, no `toggle` |
-| F6 | Permission tile toggle | `toggle(permission.camera)`; subtitle Allowed → Blocked |
-| F7 | Boost switch, edit button, Return on a row | `setBoostEnabled`, `openEditor(id)` ×2 |
-| F8 | New Boost (action button and ⋯ item when the section is hidden) | `openEditor(nil, .simple)` ×2 |
-| F9 | Every ⋯ menu item in each capability set | exact item list per §3.7; each action call once |
-| F10 | Editor wheel drag of 40 events | ≤ frame-count `preview` calls, exactly 1 store write and 1 undo entry on mouse-up; stored `colorAdjustment == colorWheel.adjustment` |
-| F11 | Wheel math table: 12 fixed inputs (θ, ρ, h0, invert, b, c, s0) | outputs equal §4.4 to 1e-9 |
-| F12 | Font chip, text size cycle (5 steps + Shift-click back), case cycle | store values per §4.5 |
-| F13 | Zap tile on/off, picker exit event, commit event, remove row, hover row | host calls in order; list rows; hover sends a preview without the selector, then the full plan |
-| F14 | Undo/redo after F10–F13 | store returns to each previous value |
+| F1 | Click the anchor → presented; click again → closed | no action calls |
+| F2 | Esc closes; outside clicks (left, right, other) close and reach their target | dismiss reasons; target hit counts |
+| F3 | Tab order of §3.12; arrows in the action row and between rows; Space toggles the focused row | focus list; one `toggle` |
+| F4 | Ad-block row on → off → on | `toggle` ×2; subtitles On/Off/On; reload row once |
+| F5 | Unavailable ad-block row | one `openAdBlockSettings`, no `toggle` |
+| F6 | Permission row toggle | Allowed → Blocked; circle on → off |
+| F7 | Boost row: circle click, row click, chevron, Return | `setBoostEnabled` ×1; `openEditor(id)` ×3 |
+| F8 | New Boost from action 2 and from ⋯ (with and without a Boosts section) | `openEditor(nil, .simple)` ×3 |
+| F9 | Every ⋯ item in each capability set | §3.9 list, always with Manage Boosts… and New Boost… |
+| F10 | Pad drag of 40 events from the knob and from the plate | ≤ frame-count previews; 1 store write and 1 undo step on mouse up; stored `colorAdjustment == colorWheel.adjustment` |
+| F11 | Pad law table: 12 screen points → (θ, t) and back; knob centers for stored values; secondary at θ + 45° | equal to §4.4.2 within 0.01 pt / 1e-9 |
+| F12 | Font cell select and reselect; Size cycle (5 steps, Shift back); Case cycle | store values per §4.6–§4.7 |
+| F13 | Zap on/off, picker exit, commit (count updates), reveal | host calls in order; button label and AX |
+| F14 | Undo / redo after F10–F13 | store returns to each previous value |
 | F15 | Rename (Done, Cancel, empty), Shuffle, Reset all Edits (Cancel, Reset), Delete (Cancel, Delete) | store values; editor closed after Delete |
-| F16 | Close a new untouched Boost; close a new Boost after one change | first deleted, second kept |
-| F17 | Code editor: type CSS, wait 150 ms | one `upsert` with the text, one `refresh`; Tab inserts 2 spaces; Return after `{` indents; Cmd+/ comments |
-| F18 | JS tab: type, "Refresh to Run" appears; host reload; after reload with equal JS it hides | |
-| F19 | Interstitial "Make your own!" sets the flag; × does not | UserDefaults (suite-scoped) |
-| F20 | Incognito context | New Boost disabled, Boost switches disabled, no `openEditor` on click |
-| F21 | VoiceOver labels and roles for every control in `scc-basic` and `editor-simple` | AX dump contains every §3.10 label; no unlabeled button |
-| F22 | Empty/failure: snapshot returns nil (tab closed while opening) | panel does not open; no crash; error logged once |
+| F16 | Close a new untouched Boost; close after one change; "Maybe Later" on a new Boost | deleted, kept, deleted |
+| F17 | Code editor: type CSS, wait 150 ms (Step 7) | one `upsert` with the text, one `refresh`; Tab inserts 2 spaces; Return after `{` indents; Cmd+/ comments |
+| F18 | JS tab: type; "Refresh to Run" appears; host reload; after reload with equal JS it hides (Step 7) | host calls in order; button visibility |
+| F19 | First-run "Make a Boost" sets the flag; "Maybe Later" does not | UserDefaults (suite-scoped) |
+| F20 | Incognito | New Boost disabled, circles disabled, no `openEditor` |
+| F21 | AX labels and roles for `scc-boost` and `editor-color` | every §3.13 label; no unlabeled button |
+| F22 | Snapshot nil while opening | panel does not open; one error log |
+| F23 | Anchor geometry at sidebar widths 228, 300, 500 and a 400 pt window | visible arrow tip `(button.midX, button.maxY + 2)` = y 81, body top 91, body x `midX − 118` or clamped with the arrow inside the corner limits; arrow widths at tip + 1 / + 3 / + 5 / + 7 = 9 / 12.3 / 16.3 / 20.3 (±1 pt) |
+| F25 | Editor key window (§4.12): pad drag, button clicks, and grid clicks with the browser window key; then a click into the rename field; then the "Move focus to floating window" action; then Done | the browser window stays key for the pointer steps; the editor becomes key for the text field and for the shortcut (focus on Done); Tab follows the §4.12 order; Done returns key to the browser window |
+| F24 | Advanced popover open/close by button, Esc, outside click; slider drag | one undo step per drag; popover frame `(−34, 258, 250, 232)` relative to the editor |
 
-`check` adds a render smoke per state (panel pixels differ from the backdrop at a probe point,
-image size correct) and the §7 budgets. Add `sitecontrol-render` to `NAMES` in
-`tools/verify-all.sh` and to `tools/verification/check.py` (same branch as `commandbar-render`).
+`check` adds render probes (all on synthetic backdrops: a #252538 sidebar beside a white page):
+
+| Probe | Pass |
+|---|---|
+| Size | Body width 236; height 297 / 372 for `scc-no-boosts` / `scc-boost` |
+| Positions | Action buttons at x 10, 66, 122, 178; row circles at the §3.3 positions; editor control frames equal to the §4 AX frames within 0.5 pt |
+| Arrow (§3.2) | Rendered widths at tip + 1 / + 3 / + 5 / + 7 within ±1 pt of 9 / 12.3 / 16.3 / 20.3 |
+| Rim (§3.2) | The top-edge pixel at body x 37 over the sidebar reads #75738F ± 3 levels |
+| Action button (§3.4) | Fill at the button's x 3: top row + 2 #272727 ± 3, bottom row − 1 #161616 ± 3; the ring pixel 1 pt outside the top edge is darker than the material 3 pt outside |
+| Knock-out (§3.7, §3.8) | On `scc-no-boosts`, the core pixel of the Settings glyph equals the material sample 2 pt outside its circle within ΔE00 3 |
+| Knob gradient (§4.4.1) | `editor-color`: primary knob top / bottom pixels on its center column within ± 4 levels of #4A2ABE / #694CCB; the no-color knobs likewise (#636363 / #7D7D7D) |
+| Fallback formula | The fallback reproduces its two fit probes (P1 #403E54, P2 #7B7B7B) within ΔE00 2. This is a regression test of the formula only; it cannot show that the fallback matches Arc. The Arc-match gate is the §8.3 validation probes, and the real material is checked by S11 and S12. |
+
+`motion` adds pass rules: during open, close, and height changes the visible arrow tip does not
+move (± 0.5 pt); the open's peak scale is 1.010–1.020; the panel settles by 0.30 s after the click;
+the close ends by 0.20 s; on a height change the top 42 pt of the body (actions) does not move. The
+recorded frames also show the material's backdrop sampling during the open (R-7).
 
 ### 8.2 Real app: automation and e2e suites (after app-shell Steps B, D, F)
 
@@ -994,8 +1232,8 @@ document them in `docs/automation.md`):
 
 | Command | Args | Does |
 |---|---|---|
-| `site-controls` | `action: open\|close\|state\|tap\|menu`, `via: urlField\|pane`, `id` (tile/row/button id), `item` (menu title) | `open` clicks the real anchor button (`performClick` on the `PlateButton` / pane button); `tap` performs the click on the real control view; `menu` picks a ⋯ item through the real `NSMenu` item action; `state` returns the snapshot as shown (titles, subtitles, states, rows, items, visible flags). |
-| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type`, `boost`, `mode`, `points` (wheel drag path in panel coordinates), `id`, `text`, `tab: css\|js` | Drives the real panel views with synthesized `NSEvent`s inside Open's own windows (no system input, `docs/automation.md`). `state` returns the session (Boost value, modality, Zap on, list rows, undo count). |
+| `site-controls` | `action: open\|close\|state\|tap\|menu`, `via: urlField\|pane`, `id` (row/button id), `item` (menu title) | `open` clicks the real anchor button (`performClick` on the `PlateButton` / pane button); `tap` performs the click on the real control view; `menu` picks a ⋯ item through the real `NSMenu` item action; `state` returns the snapshot as shown (titles, subtitles, states, rows, items, visible flags). |
+| `boost-editor` | `action: open\|close\|state\|drag\|key\|tap\|type`, `boost`, `mode`, `points` (pad drag path in editor-window coordinates), `id`, `text`, `tab: css\|js` | Drives the real panel views with synthesized `NSEvent`s inside Open's own windows (no system input, `docs/automation.md`). `state` returns the session (Boost value, modality, Zap on, Zap count, undo count). |
 | `boosts` | `action: list\|get`, `profile` | Reads `BoostStore` contents. |
 | `pasteboard` | — | Returns the general pasteboard string (Copy URL / Copy Selector checks). |
 
@@ -1017,28 +1255,31 @@ No external network is needed by these suites.
 
 | # | Check |
 |---|---|
-| S1 | Open `http://127.0.0.1:<port>/ads.html`. `site-controls open via=urlField` → `state` shows header host, Settings with "Block Ads & Trackers — On", footer "Insecure" (scheme rule before E3). Window `snapshot` PNG saved. |
-| S2 | `tap id=contentBlocking` → subtitle "Off"; `exclusions.json` on disk contains `127.0.0.1`; reload row visible; `tap id=reload` → `filter-stats` shows the ad fixture request allowed. Tap again → "On", file no longer contains it, reload → blocked. |
-| S3 | `permission origin=… kind=camera state=1` (existing command) → reopen panel → tile "Camera — Allowed"; `tap id=permission.camera` → "Blocked"; `permission` read returns 2. |
-| S4 | Create a Boost through `boost-editor open` (New Boost), set CSS `body{outline:3px solid red}`, close. Reopen panel → Boosts row "My Boost — Enabled"; `eval` shows the outline. `tap id=boost.<id>.switch` → "Disabled", `boosts get` `isEnabled == false`, `eval` shows no outline without reload. |
+| S1 | Open `http://127.0.0.1:<port>/ads.html`. `site-controls open via=urlField` → `state` shows 4 action buttons, the Extensions section with the "+" tile, Settings with "Block Ads & Trackers — On", footer "Insecure" (scheme rule before E3), and the arrow tip at the Site Control button. Window `snapshot` PNG saved. |
+| S2 | `tap id=row.contentBlocking` → subtitle "Off"; `exclusions.json` on disk contains `127.0.0.1`; reload row visible; `tap id=reload` → `filter-stats` shows the ad fixture request allowed. Tap again → "On", file no longer contains it, reload → blocked. |
+| S3 | `permission origin=… kind=camera state=1` (existing command) → reopen panel → row "Camera — Allowed"; `tap id=row.permission.camera` → "Blocked"; `permission` read returns 2. |
+| S4 | Create a Boost through `boost-editor open` (New Boost), set CSS `body{outline:3px solid red}`, close. Reopen panel → Boosts row "My Boost — Enabled"; `eval` shows the outline. `tap id=boost.<id>.circle` → "Disabled", `boosts get` `isEnabled == false`, `eval` shows no outline without reload. |
 | S5 | `menu item="Clear Cookies"` after the fixture sets a cookie → reload → `eval document.cookie` is empty. "Clear Cache" absent before E2. |
-| S6 | `tap id=action.copyURL` → `pasteboard` equals the page URL; toast event recorded. |
+| S6 | The panel has no Copy URL button: `state` lists exactly Share, New Boost, and the two Capture actions. Copy URL still works through ⇧⌘C (`key route=app key=c modifiers=["cmd","shift"]`) → `pasteboard` equals the page URL; toast event recorded. |
 | S7 | Esc (`key route=app key=escape`) closes; `state` reports closed; a page `click` while open closes the panel and the page receives the click (`eval` counter + 1). |
-| S8 | Split: `split` (existing) → `site-controls open via=pane` → header shows the focused pane's host. |
-| S9 | Empty case: `about:blank` → `site-controls open` returns error "no site"; internal page → only header, Copy URL, Share, footer. |
-| S10 | Incognito window (when app-shell §4.8 lands): New Boost disabled, Boost switch disabled. Until then: reported `blocked: incognito`, never pass. |
+| S8 | Split: `split` (existing) → `site-controls open via=pane` → `state` reports the focused pane's tab and host (AX description). |
+| S9 | Empty case: `about:blank` → `site-controls open` returns error "no site"; internal page → action row (Share enabled), Extensions "+", footer without a security label. |
+| S10 | Incognito window (when app-shell §4.8 lands): New Boost disabled, Boost circles disabled. Until then: reported `blocked: incognito`, never pass. |
+| S11 | Material on engine content (R-7): default dark theme, sidebar 228, a white page. Window `snapshot` probes at the S2 coordinates (window points): (88, 215) over the sidebar → #403E54 ± 3 levels; (300, 140) over the page → #7B7B7B ± 3; and the validation points (150, 330) → #454459 and (260, 250) → #7A7A7B, ΔE00 ≤ 3. |
+| S12 | Real-app element compare (the only check of the real `NSVisualEffectView`): run the §8.3 element compare on the S1 snapshot (default dark theme, sidebar 228) against S2 09/0010 for the non-material elements (action buttons, circles and their knock-outs, text ink boxes, rim, arrow), with the §8.3 thresholds. Needs the local `.re/` frames; on a machine without them it reports `skipped: no captures`, never pass. |
+| S13 | Scroll under the open panel (§7): the heavy fixture page scrolled by the same script with the panel closed, then open; frame-time p95 and dropped frames within the §7 budget. |
 
 `--only boosteditor`
 
 | # | Check |
 |---|---|
-| B1 | New Boost from the panel → `boosts list` has one Boost named "My Boost" with `siteMatch.domain == 127.0.0.1`; editor `state` shows simple mode (interstitial first on a fresh profile; `tap id=interstitial.start`). |
-| B2 | On `boost.html`: `drag points=[…]` on the wheel → `eval getComputedStyle(document.documentElement).filter` contains `hue-rotate`; `boosts get` has `colorWheel.baseHue` within ± 10° of 216 (the fixture header `#2E7DF6`) and `colorAdjustment` equal to §4.4 for the stored θ, ρ, h0. |
-| B3 | `tap id=font.Avenir` → the `h1` computed `font-family` starts with `Avenir`; one text-size click → root `zoom` is 1.1; one case click → body `text-transform` is `capitalize`. |
-| B4 | Zap (after P7, else `blocked: P7`): tile on → `click` on the fixture banner (existing page click command) → `boosts get` has one Zap; banner hidden probe; list row shows "div#promo-banner" with "1 hidden"; remove row → banner visible without reload. |
+| B1 | New Boost from the panel → `boosts list` has one Boost named "My Boost" with `siteMatch.domain == 127.0.0.1`; editor `state` shows simple mode (first-run card first on a fresh profile; `tap id=firstRun.makeABoost`). |
+| B2 | On `boost.html`: `drag points=[…]` on the pad (pad coordinates) → `eval getComputedStyle(document.documentElement).filter` contains `hue-rotate`; `boosts get` has `colorWheel.baseHue` within ± 10° of 216 (the fixture header `#2E7DF6`); `colorWheel.hue` equal to the screen angle of the last point (§4.4.2), and `colorAdjustment` equal to §4.4.5 for the stored θ, ρ, h0. |
+| B3 | `tap id=font.Avenir` (grid cell) → the `h1` computed `font-family` starts with `Avenir`; one text-size click → root `zoom` is 1.1; one case click → body `text-transform` is `capitalize`. |
+| B4 | Zap (after P7, else `blocked: P7`): Zap button on → `click` on the fixture banner (existing page click command) → `boosts get` has one Zap; banner hidden probe; the Zap button reads "Zap, 1"; "Click to reveal" on its chip → banner visible without reload. |
 | B5 | Code: `type tab=css text="h1{color:rgb(1,2,3)}"` → within 300 ms `eval` reads the color; `type tab=js text="document.body.dataset.boosted=1"` → "Refresh to Run" visible → `reload` → `eval document.body.dataset.boosted == "1"`. |
 | B6 | Undo: `key route=app key=z modifiers=["cmd"]` with the panel key → last change reverted in `boosts get`. |
-| B7 | Menu: Rename → "Docs Boost" stored; Delete → store empty, editor closed. |
+| B7 | Name menu: Rename → "Docs Boost" stored; Delete (alert "This can't be undone.") → store empty, editor closed. |
 | B8 | New Boost, close at once → store empty. |
 | B9 | Quit and relaunch with a saved Boost → the style applies at document start (existing `boosts` suite probe) and the panel lists it. |
 | B10 | `defaults write <bundle> open.advanced.enableBoosts -bool false` before launch → panel shows "Boosts are off…", editor banner, no `hue-rotate` on the page. |
@@ -1048,21 +1289,47 @@ passes by itself.
 
 ### 8.3 Visual comparison
 
-When the user records captures #19, #21, and #22 of `docs/re/runtime-observations.md` §7 (Site
-Control Center, Boost editor, full Site Control Center; rows #21 and #22 are added with this plan), run
-`sitecontrol-render compare` against our render at the same size and appearance, using the
-`docs/design.md` §7 method. Targets: layout ≤ 1 pt, fills and text ΔE00 ≤ 2. Update only
-`SiteControlTokens.swift` values. Never commit the captures (`AGENTS.md` rules 1, 5).
+The captures exist locally (`.re/runtime/sessions/…-09-site-controls-first`, `…-10-boost-editor`,
+`…-11-site-controls-full`). Run `sitecontrol-render compare` with colors converted to sRGB from the
+embedded profile (IS §20.0). Never commit captures or crops (`AGENTS.md` rules 1, 5); the frames also
+show the user's own Spaces in some menus.
+
+Method: the element method of `docs/design.md` §7. One element per label, glyph, circle, button,
+rim segment, arrow row, and knob. Each element gets an ink box with the plane-fit ring; the position
+error is the largest edge difference. Text is compared by its ink box, not by color, so a wrong font
+size fails on the ink width.
+
+| Frame | Our state | Elements |
+|---|---|---|
+| S2 09/0010 | `scc-no-boosts` | arrow rows 81–90, rim (top, bottom), 4 action buttons (fill top/bottom, ring, glyph), "Extensions" and "Settings" labels, "+" tile, Settings rows (circle, knock-out glyph, title, subtitle), separator, pill (lock, text), ⋯. **Mask the "Developer Mode" row**: Arc shows it and Open hides it (Q14), so compare the remaining row against Arc's second row. |
+| S2 09/0016 | `scc-hover-action` | action button 1 hover highlight (#484848) |
+| S2 11/0005 | `scc-boost` | Boosts label, Boost row (circle, knocked-out brush, sparkles, text), total height 372 |
+| S2 11/0011 | `scc-menu` | open-state URL field button (knocked-out sliders), ⋯ menu anchor point |
+| S2 10/0018 | `editor-first-run` | dim, card edge, badge box, title lines (ink widths), body, wave crests, "Make a Boost" (gradient, text ink), "Maybe Later" |
+| S2 10/0030 | `editor-no-color` | header (Done, name + chevron ink, Undo), grey ring, plate dots, grey knobs (gradient), color buttons, font cells, Size / Case / Zap / Code (label ink, trailing glyph) |
+| S2 10/0039 | `editor-dragging` | 38 pt knob, guide circle |
+| S2 10/0041 | `editor-color` | ring stops at 12 angles, knob gradients, plate tint |
+| S2 10/0042 | `editor-advanced` | popover arrow rows 260–270, material at editor (91, 300) and (26, 470), labels, sliders |
+| S2 10/0046 | `editor-font-selected` | selected-cell circle #D9D9D9 |
+| S2 10/0058 | `editor-zap-on` | Zap button on (#333333, white label) |
+| S2 10/0067 | `editor-zap-count` | Zap button with the count "1" |
+| S2 10/0071 | `editor-code-css` (bars only) | header (Back, segments), bottom bar buttons |
+
+Targets: position ≤ 1 pt; fills and glyph cores ΔE00 ≤ 2. Panel material: the offscreen fallback
+must match Arc at the validation probes it was **not** fitted to (IS §20.15): (150, 330), (180, 240),
+(240, 330), (260, 250) at ΔE00 ≤ 3; the known misses near page content, (235, 180) and
+(300, 330), are reported, not gated. The fit probes (88, 215) and (300, 140) are not part of this
+gate. Update only token values.
 
 ---
 
-## 9. Engine capabilities the UI needs (not in `docs/engine-api.md` today)
+## 9. Engine capabilities the UI needs
 
 | ID | Capability | Needed for | Today | Proposed OpenEngine API (engine team owns the final shape) |
 |---|---|---|---|---|
-| E1 | List the content settings a site has changed, for every Chromium content-setting type (not only the 12 permission kinds), and set them | Settings tiles beyond the 12 kinds (JavaScript, Images, Pop-ups, Sound, Ads, …) | 12 kinds, ask/allow/block, no enumeration | `-[OEBrowserContext changedSiteSettingsForOrigin:] -> NSArray<OESiteSetting *>` (`kind` string id, `state` allow/block/ask/session); `-setSiteSetting:state:origin:`. OpenWeb: `WebProfile.changedSiteSettings(origin:)`, `setSiteSetting(_:kind:origin:)`. Arc: `getChangedContentSettingsForOrigin:` |
+| E1 | List the content settings a site has changed, for every Chromium content-setting type (not only the 12 permission kinds), and set them | Settings rows beyond the 12 kinds (JavaScript, Images, Pop-ups, Sound, Ads, …) | 12 kinds, ask/allow/block, no enumeration | `-[OEBrowserContext changedSiteSettingsForOrigin:] -> NSArray<OESiteSetting *>` (`kind` string id, `state` allow/block/ask/session); `-setSiteSetting:state:origin:`. OpenWeb: `WebProfile.changedSiteSettings(origin:)`, `setSiteSetting(_:kind:origin:)`. Arc: `getChangedContentSettingsForOrigin:` |
 | E2 | Clear one origin's cookies, cache, or storage separately | ⋯ Clear Cache / Clear Cookies | `clearBrowsingData(origin:)` = cookies of one origin + cache of all sites | `-clearSiteDataForOrigin:types:completion:` with `OESiteDataTypeCookies \| Cache \| Storage` (Chromium `BrowsingDataRemover` + origin filter). OpenWeb: `clearSiteData(origin:kinds:)` |
-| E3 | Security state and certificate | Footer security button | none | `OEWebContent.securityLevel` (`secure`, `neutral`, `insecure`, `dangerous`, `mixedContent`) + change flag `OEWebContentChangeSecurity`; `certificateChain -> NSArray (SecCertificateRef)` so Swift shows `SFCertificatePanel`. Arc: `ArcSecureContext`, `showCertificateDialog` |
+| E3 | Security state and certificate | Footer security pill | none | `OEWebContent.securityLevel` (`secure`, `neutral`, `insecure`, `dangerous`, `mixedContent`) + change flag `OEWebContentChangeSecurity`; `certificateChain -> NSArray (SecCertificateRef)` so Swift shows `SFCertificatePanel`. Arc: `ArcSecureContext`, `showCertificateDialog` |
 | E4 | Extension pin state, pin/unpin, the per-action context menu, and the toolbar image | Extensions section pin, right-click, item icon | manifest defaults, no pin | Names owned by `docs/plans/extensions-ui.md` §7 (use these, not new ones): its E2 adds `OEExtensionAction.toolbarImage` (28×28 pt with Chromium's badge baked in), `pinned`, `pinnedIndex`; its E4 is `-[OEBrowser setExtensionAction:pinned:]` and `-moveExtensionAction:toPinnedIndex:`; its E7 is `-contextMenuForExtensionAction:source:` returning `OEExtensionActionMenu` (items reuse `OEContextMenuItem`; `select(command:)` / `cancel()`). Engine work rides P2 (`docs/engine-patches.md`). |
 | E5 | Evaluate in the isolated world and deliver picker/applier messages there | Zap, secure live preview | main world only | P7 |
 | E6 | Blocked request count per page | Not shown in v1 (Q5); automation only | — | adblock-fork §12.1 `blockedResourceCountForBrowser:` |
@@ -1071,24 +1338,24 @@ Interim behaviors are stated per row in §3 and are listed in the PR of the step
 
 ---
 
-## 10. Implementation order (small PRs; each step: files, then acceptance)
+## 10. Implementation order
 
-Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary (`AGENTS.md` rule 10).
+Each PR: merge `origin/main`, run `tools/verify-all.sh` through `~/Library/Caches/OpenRE/scripts/heavy.sh`,
+paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are reworked in place
+(§12). Step 4R is a v1 step in the engine lane (Q12 ruling).
 
-| Step | Work | Files | Acceptance |
+| Step | PR | Work | Acceptance |
 |---|---|---|---|
-| 1 | Target skeleton, tokens, empty panel with header/actions/footer on fake data; harness with `render`, `ax`, `check` | `Package.swift`, `OpenDesign/SiteControlTokens.swift`, `OpenSiteControl/SiteControlTypes.swift`, `SiteControlDataSource.swift`, `SiteControlController.swift`, `SiteControlView.swift`, `sitecontrol-render/*`, `tools/verify-all.sh`, `tools/verification/check.py` | `sitecontrol-render check` PASS (F1, F2, F21 partial, F22), renders `scc-basic` header/footer at 1x/2x; `verify-all` row PASS |
-| 2 | Sections: tiles, Boost rows, Extensions section host (body from `OpenExtensionsUI` when it exists, else hidden), ⋯ menu, reload row, keyboard, picker mode, AX, animations | `SiteControlTiles.swift`, `SiteControlView.swift`, `SiteControlController.swift` | F3–F9, F20–F22 PASS; all `scc-*` states render; bench "click → first draw" < 8 ms |
-| 3 | App data source + actions; anchors (URL field, pane bar); intents and commands; automation `site-controls`, `pasteboard`; e2e `sitecontrol` | `App/SiteControl/AppSiteControlSource.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenFeatures/PaneChromeView.swift`, `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`, `docs/automation.md` | `--only sitecontrol` S1–S9 PASS (S10 blocked) on the real app; `--only features` still PASS |
-| 4 | OpenBoosts `BoostColorWheel` + normalization; editor session (undo, preview/commit, h0); simple-mode views; interstitial; menu | `OpenBoosts/Boost.swift`, `BoostStore.swift`, `docs/boosts.md`, `OpenSiteControl/BoostEditorSession.swift`, `BoostEditorPanel.swift`, `BoostEditorViews.swift` | F10–F12, F14–F16, F19 PASS; `editor-*` simple states render; `boosts` harness (verify-all) still 26/26 |
-| 5 | App editor host: adapter preview/refresh, commands `new-boost`/`edit-boost`/`new-legacy-boost`/`view-boosts`, `.customizePage`; Library Boosts section + App provider; automation `boost-editor`, `boosts`; e2e `boosteditor` B1–B3, B6–B10 | `App/Boosts/BoostEngineAdapter.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenSettings/BoostsSection.swift`, `OpenSettings/LibraryTypes.swift`, `settings-preview/LibraryPreview.swift`, the App's Library provider, automation, e2e | Listed e2e checks PASS on the real app; `settings-preview check` (verify-all) PASS with the new `boosts` section states |
-| 6 | Zap integration: tile, list, hover preview, remove, picker events; picker bar label | `BoostEditorViews.swift`, `BoostEditorSession.swift`, `App/Boosts/BoostEngineAdapter.swift`, `zap-picker.js` | F13 PASS; `boosts` harness PASS; B4 PASS after P7, else `blocked: P7` |
-| 7 | Code mode: code editor, highlighter, gutter, CSS live, JS refresh, devtools toggle, size persistence | `CodeEditorView.swift`, `BoostEditorPanel.swift`, `BoostEditorViews.swift` | F17, F18 PASS; bench keystroke < 2 ms; B5 PASS |
-| 8 | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `zap-picker.js`, `PickerMessages.swift`, `docs/boosts.md` (bridge table), `tools/verification/boosts.mjs` (new check: select mode commits nothing and returns the same selector a click would commit) | `boosts` harness PASS including the new check; flow "Pick Selector inserts the selector" PASS |
-| 9 | Engine items as they land: E1 tiles, E2 menu items, E3 security, E4 pins | the source + views | The interim rows in §3 switch; S5 "Clear Cache" and E-dependent checks PASS |
-
-Steps 1–2 and 4 need no App or engine and can run before app-shell Step B. Step 3 needs app-shell
-Steps B and D. Step 5 needs Step F.
+| 1 | #69 (rework) | Target, tokens, panel chrome: body + arrow path, material, anchoring, open/close motion, action row, footer (pill, ⋯ button), no header; harness with geometry probes | F1, F2, F21 (partial), F22, F23 PASS; size, arrow, rim, and action-button probes; `motion` pass rules; `scc-no-boosts` chrome renders at 1x/2x |
+| 2 | #96 (rework) | Sections: label rows, `SiteControlRow` for Boosts and Settings, Extensions "+" tile, reload row, ⋯ menu (always with Boost items), keyboard, picker mode, AX, height animation | F3–F9, F20–F22 PASS; all `scc-*` states; height probes 297 / 372; knock-out probe |
+| 3 | new (App) | App data source and actions; URL field and pane anchors; URL field button states (§3.10); intents and commands; automation; e2e `sitecontrol` | S1–S9, S11–S13 PASS (S10 blocked; S12 skipped without local captures) |
+| 4 | #103 (rework) | `BoostColorWheel` (as is); `OpenDesign/ColorPad.swift` (§12.4); editor window, placement, header, name menu with scope submenu, pad, color buttons, advanced popover, font grid, Size/Case/Zap/Code (Zap and Code disabled), first-run card, banners | F10–F12, F14–F16, F19, F24, F25 PASS; `check` knob-gradient probe; `editor-*` simple states; `boosts` harness 26/26 |
+| 4R | new (engine lane) | **Boost color remap (engine)**, Q12 ruling. Starts after #103 merges; runs beside Steps 5–7. (a) RE study of ArcCore's `EffectsAgent` (a separate task; findings land in `docs/re/features-advanced.md` as **BO-23**, the next free id; BO-12 is "Editor lifecycle" and stays as cited in §4.13). (b) An engine plan (`docs/plans/`) for a paint-time color remap in our fork, the same kind of mechanism as Chromium's auto dark mode (`DarkModeFilter`, which classifies images separately): page colors remap toward the pad's two knob colors, while images, video, and canvas stay untouched. (c) Implementation in the fork, then the App switches Boost colors from filters to the remap. | No Boost color: zero added paint cost (measured; zero within the noise band the engine plan defines). One Boost color: scroll p95 and paint time on three heavy pages (named by the engine plan) within the budget the engine plan sets. B2 rewritten to probe a white background and an image pixel (tinted vs. unchanged). |
+| 5 | new (App) | App editor host (placement frame, preview/refresh), Boost commands, Library Boosts section | B1–B3, B6–B10 PASS; `settings-preview check` PASS |
+| 6 | new | Zap: picker restyle (frame, bar, popup, "Click to reveal"), count on the button, picker events | F13 PASS; `boosts` harness PASS; B4 after P7 |
+| 7 | new | Code mode (480 × 588 window, header, code view, bottom bar, CSS live, JS refresh, devtools, size persistence) | F17, F18, B5 PASS |
+| 8 | new | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `boosts` harness incl. a check that select mode commits nothing; flow "Pick Selector inserts the selector" |
+| 9 | new | Engine items E1–E4 as they land | interim rows switch |
 
 ---
 
@@ -1098,109 +1365,409 @@ Steps B and D. Step 5 needs Step F.
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R-1 | No capture of Arc's panel or editor: layout values are guesses. | Every value is one token in `SiteControlTokens.swift`. This PR adds capture rows #21 (Boost editor) and #22 (full Site Control Center, hover and ⋯ menu, Option held) to `docs/re/runtime-observations.md` §7; #19 already covers a first look. After a user records them, run §8.3. |
-| R-2 | CSS filters cannot tint white backgrounds the way Arc's palette remap does, so the wheel looks weak on white sites. | §4.4 "pull" math moves the page's own hue and keeps the center at identity; the neutral-page hint points to Invert lightness. Q4 asks the lead about a tint component. |
-| R-3 | Live preview through `evaluateJavaScript` per frame could cost the renderer. | ≤ 60 Hz, bound page only, plans are small (CSS text + numbers); the applier is rAF-throttled. Bench in Step 5 on a heavy page; drop to 30 Hz if the page frame time grows > 4 ms. |
-| R-4 | Main-world picker and applier before P7 leak Boost state to page scripts. | Zap stays disabled until P7 (app-shell D8); live preview of CSS/filters in the main world is acceptable (the page can already see its own styles). |
+| R-1 | Several values are still guesses (§13): Light appearance, 2x shapes, tooltips, the shadow, the pane anchor, Size/Case behavior, the pad's radius law. | Every value is one token; §13 lists what a future capture must cover. |
+| R-2 | **Interim only (#103 → Step 4R).** CSS filters cannot tint white or grey pages; Arc's remap does (S2-22). Boosts on white sites look weak until the engine remap lands. | Step 4R replaces the filter runtime in v1 (Q12 ruling). Until then the neutral-page hint points to Invert lightness. |
+| R-3 | Live preview through `evaluateJavaScript` per frame could cost the renderer. | ≤ 60 Hz, bound page only, small plans; drop to 30 Hz if page frame time grows > 4 ms. |
+| R-4 | Main-world picker and applier before P7 leak Boost state to page scripts. | Zap stays disabled until P7. |
 | R-5 | Users lose a Boost by closing a new one quickly. | Only an unchanged new Boost is deleted (F16). |
-| R-6 | The in-window overlay must stay above web content in every layout (split, full screen, hover-reveal sidebar). | Reuse the command bar overlay container order; render states `scc-pane-anchor` and a full-screen e2e check. |
+| R-6 | The overlay must stay above web content in every layout. | Reuse the command bar overlay container order; `scc-pane-anchor`, full-screen e2e. |
+| R-7 | A `.withinWindow` material may not blur the engine's remote layer content; it costs a re-blur on every page frame while the panel is open; and the blur may "swim" while the container scales during the 0.20 s open (§3.2). | S11 and S12 on the real app in Step 3; the §7 scroll budget (S13); the swim is accepted and recorded by the `motion` check. Fallback: host the panel in a borderless child window with `.behindWindow` blending. That changes key handling (`becomesKeyOnlyIfNeeded = false`, a key-window check against `BrowserWindowController.windowDidResignKey`, whose inactive look follows key status) and reworks the §3.12 focus restore and the dismissal code; Steps 1–2 harness flows survive. |
+| R-8 | The editor straddles the browser window's right edge. On a full-width window, in full screen (the right edge is the screen edge), or when the right edge is on a display join, the clamp moves it fully inside the window's screen and it covers the right 183 pt of the page. | Clamp rule and screen choice (§4.2); the user can drag it. |
 
 ### 11.2 Open questions (need a lead decision; recommendation first)
 
-| # | Question | Recommendation |
-|---|---|---|
-| Q1 | Panel host: in-window overlay (D-3) or `NSPopover` with a custom background? | Overlay. Keeps Arc's look on macOS 26, keeps the window key, matches the command bar. |
-| Q2 | Developer Mode row (`toggle-developer-mode`, Ctrl+D, exists in the registry): ship the per-site Developer Mode feature (Arc's tool bar with console, network, inspect, and a store like `StorableDeveloperModeState.json`) in v1? | No. Hide the row in v1; plan Developer Mode separately if wanted. The command stays a no-op toast "Developer Mode is not available yet." |
-| Q3 | Preview row (per-site sidebar Preview): show it? | Hide until the Previews feature (settings plan G-3) has per-site state; then add the row with its own store. |
-| Q4 | Color: keep filters only (this plan), or add a `tint` component (multiply overlay) so white pages take the hue? | Filters only for v1 (no runtime change, no compositing cost). Re-evaluate with captures; if the lead wants tint, add it as a separate OpenBoosts runtime step with a scroll-performance gate. |
-| Q5 | Show the blocked-request count on the ad-block tile (adblock-design asked for it; Arc shows only On/Off)? | No (Arc parity). Keep the count for automation and debug info. |
-| Q6 | Disable Boost editing in incognito (D-10)? | Yes. |
-| Q7 | After a tile change: reload row (this plan), auto-reload on close, or nothing? | Reload row. It never surprises and works for permissions and ad blocking alike. |
-| Q8 | Option key in the panel (Arc tracks it; purpose unknown). | Ignore in v1; revisit with capture #22 (Option held). |
-| Q9 | Ad-block path mismatch: `ProfileDirectories.adBlockListsDirectory` (`Profiles/<dataDirectoryName>/AdBlock/lists`) vs `AdBlockStore` (`Profiles/<UUID>/adblock/`). | Ad-block owner picks one (recommend `AdBlockStore`'s, it is the code that writes) and removes the other helper. This plan only calls `AdBlockStore`. |
-| Q10 | Zap list placement: in the editor (this plan) or Arc-style shelf over the page bottom? | In the editor. The in-page picker bar already sits at the page bottom; a second strip there would overlap it. Revisit with capture #21. |
-| Q11 | Arc binds Cmd+E to a hidden "Open Extensions" item that opens the extension picker (extensions-UI planner's finding), but Open's registry binds Cmd+E to `use-selection-to-find`. Which wins? | Owned by the extensions-UI plan. This plan only provides `present(anchor:tabID:mode: .extensionPicker)` (§3.6.1). |
+Q1–Q15 are answered (Appendix C). The questions this revision raised, with the lead's rulings of
+2026-10-26:
 
-## Appendix A — New tokens (`OpenDesign/SiteControlTokens.swift`)
+| # | Question | Ruling (2026-10-26) |
+|---|---|---|
+| Q12 | The capture shows Arc remaps page colors: white → a pale tint of the primary hue, dark → a saturated tint of the secondary hue, images untouched (S2-22). Keep Q4 (filters only) for v1? | **Q4 superseded.** Arc recolors inside the engine (`EffectsAgent`, `docs/re/arccore-engine.md`); a page-wide filter cannot match. #103 ships the filter runtime as an interim with no runtime change. v1 adds Step 4R, "Boost color remap (engine)": RE study, engine plan, fork implementation, with the gates in §10. R-2 is interim only. |
+| Q13 | Arc showed no "Block Ads & Trackers" row on the test Profile (its blocker state was not recorded). Hide the row when the master switch is off? | **Accepted:** keep the `unavailable` row. A future capture with Arc's blocker on must check the row (§13). |
+| Q14 | Arc shows "Developer Mode — Off" in Settings by default. Q2 hides it. Keep? | **Accepted:** keep Developer Mode hidden (Q2). |
+| Q15 | Arc animates the Boost icon's sparkles. Build it? | Build it only if it is pure Core Animation (no timers, no main-thread work per frame, running only while the panel is open, removed on close) **and** its motion is measurable from session 2. The motion is not measurable (§3.7), so the sparkles are static, with a `docs/followups.md` entry. |
+
+---
+
+## 12. Migration of the open PRs (#69, #96, #103)
+
+The three PRs implement the 2026-10-25 plan. Rework each in place; do not open replacement PRs. The
+only new code unit is `OpenDesign/ColorPad.swift`, which lands inside #103's rework (§12.4). Each
+PR drops its own edits to this plan file when it merges `origin/main` (take main's version; record
+nothing new here without a lead decision) and regenerates its `docs/sitecontrol/step-N/` renders and
+`SHA256SUMS`.
+
+### 12.1 Landing order
+
+```text
+this docs PR → main
+      │
+      ▼
+#69 rework (chrome) ──merge──► main
+      │  #96 merges the reworked #69 branch (merge commit, no rebase)
+      ▼
+#96 rework (sections, menu) ──merge──► main
+      │  #103 merges the reworked #96 branch
+      ▼
+#103 rework (editor + OpenDesign/ColorPad.swift) ──merge──► main
+      │
+      ├──► #86 (Space editor shell) adopts OpenDesign/ColorPad.swift on its next merge of main (§12.4)
+      │
+      ▼
+Step 4R, Boost color remap (engine): EffectsAgent RE study (BO-23) → engine plan → fork implementation
+```
+
+#69 and #96 can be reworked in parallel if #96 merges #69 again before its review. #103's
+non-pad work (window, header, grid, buttons) can start at once; its pad work waits for §12.4.
+
+### 12.2 #69 — Site Control Center Step 1 (library shell and render harness)
+
+| Area | Change | Stays |
+|---|---|---|
+| `OpenDesign/SiteControlTokens.swift` | Rewrite `SiteControlMetrics` to Appendix A: width 236, padding 10, the popover arrow (45°, tip r 7, visible height 10, 26 pt base + 2 pt fillets), action button 48 × 32 gap 8 radius 6, footer 32, pill and ⋯ metrics. Remove `headerHeight`, `faviconFrame`, `titleX`, `titleBaseline`, `sidebarPanelGap`, `panePanelGap`, `anchorAlignmentY`, `actionButtonInsetY`, `openScale` 0.66, `separatorInset` 12, `footerButton` 28, the 6-button and 44 × 36 values. Add `SiteControlColors` (dark measured values, light guesses: rim, action gradient, ring, shadow, discs; no glyph-color tokens) and the spring `Motion.popoverOpen`. `Typography` per Appendix A (14 Semibold labels and titles, 13 Regular subtitles, 14 Medium pill). | `cornerRadius` 16 and `SiteControlShape` (lead decision C) |
+| `OpenDesign/PopoverShape.swift` (new, or inside `SiteControlShape`) | One path = continuous r16 body + the §3.2 popover arrow (45° sides, tip r 7, 2 pt fillets) at an x offset. Fill, mask, rim, and shadow use it; the editor's advanced popover reuses it (§4.5). | — |
+| `OpenSiteControl/SiteControlView.swift` | `SiteControlPanelView`: delete the header (`SiteControlFaviconView`, the host `SiteControlBaselineLabel`); replace the opaque fill and inner edge with the material view masked by the shape (harness: fitted fallback layer, σ 5) plus the 1 px rim; appearance from the window (the Space's resolved mode), not `NSApp`; 4 action buttons at x 10/66/122/178, y 10, drawn as gradient wells with ring and shadow (§3.4); New Boost glyph `BoostGlyph.outline`, fourth glyph `text.viewfinder`; footer = pill (14 pt Medium, 13 pt lock, 6 pt gap) + 32 pt circle; separator full width minus padding. | dismissal view, outside-click forwarding, Esc responder restore |
+| `OpenSiteControl/SiteControlController.swift` | `geometry` returns the button rect and URL field max Y; place the arrow tip and body per §3.1 (clamp, arrow limits); open/close animate around the arrow's visible tip, with the container-layer technique of §3.2 (§3.11); reopening on another anchor closes without animation and reopens there. | toggle/present API, observer tokens, unavailable-tab reporting, generation guard |
+| `OpenSiteControl/SiteControlTypes.swift` | 4-case action enum; remove `faviconPNG`. | context, security, anchors, modes |
+| `OpenDesign/TooltipView.swift` | — | the move and shared presenter |
+| `sitecontrol-render/*` | Scenes draw the URL field anchor at sidebar width 228 and a page backdrop (dark sidebar + white page) so the arrow and material show; replace header probes with the §8.1 probes for size, arrow widths, rim, and action gradient, plus F23 and the `motion` pass rules; the fallback-formula check is labeled as a regression test only; render `scc-no-boosts` chrome. | offscreen renderer, Metal capture queue, receipts, bench |
+| Plan file | Drop #69's plan edits (decisions A, B, top-aligned buttons, top-leading scale); take main's. | — |
+
+### 12.3 #96 — Site Control Center Step 2 (sections, menu, keyboard picker)
+
+| Area | Change | Stays |
+|---|---|---|
+| `OpenSiteControl/SiteControlTiles.swift` → `SiteControlRows.swift` | Replace `SiteControlTileButton` (2-column 142 × 48 tiles, two-line titles) with `SiteControlRow` (32 pt disc with a **knocked-out** glyph, 14 pt Semibold title, 13 pt Regular subtitle, pitch 43, one-line truncation, no hover plate, pressed disc −8 levels). Rebuild `SiteControlBoostRow` on `SiteControlRow`: `BoostGlyph.fill` knocked out, static sparkles (top-right 1.0, others 0.35), circle toggles, row and hover chevron (#9F9EA9) open the editor; delete `SiteControlSwitch` and the edit button. `SiteControlSectionButton` becomes the label row (14 pt Semibold; accessory text 13 pt Regular #9F9EA9, no chevron). Add the "+" extension tile (corner 6, row pitch 40). Focus-ring shapes per §3.4–§3.9. | `SiteControlButton` base, `SiteControlDrawing` caches, keyboard-only focus rings |
+| `OpenSiteControl/SiteControlView.swift` | Section order Extensions, Boosts, Settings with the §3.3 gaps; Extensions shows the "+" tile without `OpenExtensionsUI`; reload row and global-off note keep their baselines (row top + 20) at 13 pt; height changes follow the §3.11 curves and choreography. | height animation of surface, mask, shadow, viewport, footer |
+| `OpenSiteControl/SiteControlController.swift` | ⋯ menu always lists Manage Boosts… and New Boost… (New Boost… disabled when not allowed); open the menu at the click point; picker fallback focuses the "+" tile (Return runs `add-extension`). | native `NSMenu` routing, cancellation handling, Command-modifier rejection, Return/Space fall-through |
+| `OpenSiteControl/SiteControlTypes.swift`, `SiteControlDataSource.swift` | `SiteSettingTile.symbol` default `gearshape.fill`. | `openAdBlockSettings`, observer tokens |
+| `sitecontrol-render/*` | New state list (§8.1); flows F3–F9 rewritten for rows; height probes 297 / 372; the knock-out probe; delete tile and two-line-title renders. | `NativeOverlayCapture` (popup readiness wait) |
+| Plan file | Drop #96's plan edits (tile wrap rule, "focus ⋯" fallback); take main's. | — |
+
+### 12.4 #103 — Boost editor Step 4 (native controls and undo)
+
+| Area | Change | Stays |
+|---|---|---|
+| `OpenBoosts/Boost.swift` | `hue` doc comment only (§4.4.2). | `BoostColorWheel`, `colorWheel`, decoding, `clamped`, `adjustment` |
+| `OpenBoosts/BoostStore.swift` | — | normalization, `saveNow`, stale temp-file cleanup |
+| `OpenDesign/ColorPad.swift` (new) | The shared pad core (§4.4.3). This is a refactor, not a file move (§4.4.3). If #86 is merged when this rework starts, extract the core from `OpenSpaceEditor/ColorPadView.swift` and make that file a thin wrapper in this PR. If #86 is not merged, build `ColorPad.swift` from #86's `ColorPadView` code (same drag and keyboard semantics), and **#86's merge must delete its drag, dot-grid, and knob code in favor of `OpenDesign/ColorPad.swift`; `space-editor-render check` on #86 covers the wrapper before merge.** Both modules name their view `ColorPadView`, so no compile error catches a second implementation; the lead checks this gate at #86's merge. | — |
+| `OpenSiteControl/BoostColorPadView.swift` (new) | Boost style, ring layer (conic stops, grey variant), guide layer, knob gradients, press growth, the two AX children (Hue, Intensity), law (§4.4.2), legacy and few-colors notes inside the plate. Replaces `BoostColorWheelView` (ring + disc + puck). | `BoostEditorSession` drag/commit/undo wiring |
+| `OpenSiteControl/BoostEditorPanel.swift` | 183 × 588 window, `.aqua` appearance, system shadow, corner 12; remove `EditorSurface`'s own shadow and the 30/24/36 padding; placement and screen choice per §4.2 via `browserWindowFrame`; open and close motion (§4.2); the §4.12 key-window rule (controls never request key; text inputs and "Move focus to floating window" do; key returns to the parent); banners grow the window; code mode grows leftward to 480 with the §4.2 motion (Step 7 fills it). | child-panel setup, non-activating behavior, rename alert plumbing |
+| `OpenSiteControl/BoostEditorViews.swift` | **Delete `BoostColorWheelView`** (it lives in this file on #103, line 102) so no wheel type survives beside the pad. Header (Done, name 13 pt Medium + 11 pt gap + chevron, Undo) replaces glyph/name/scope line/⋯/×; name menu per §4.3 with the "Apply to ▸" scope submenu (same `BoostScopeChoice` logic); color buttons 42 × 38; advanced sliders move to `BoostAdvancedPopover.swift` (order Contrast, Brightness, Original Saturation; reuse `EditorSlider`); font grid card (5 × 4, 26 pt cells) replaces the scrolling strip, viewport, and fade; Size/Case half buttons and Zap/Code rows (14 pt Medium, label inset 12, glyph inset 15) replace the four colored tiles; first-run card per §4.11 (SF Pro 22 Bold title, brush badge with a 3 pt white border, measured wave, "Make a Boost" 14 Medium, "Maybe Later" 12 Medium); delete alert text "This can't be undone."; remove dark variants and accent colors. | `EditorButton`, `EditorSlider`, `EditorNameField`, banners (re-laid for 183 pt), AX values for Size and Case |
+| `OpenSiteControl/BoostEditorSession.swift` | Shuffle picks fonts from the grid list; the default-knob drawing has no model effect. | session, owner tokens, coalescing, legacy round trip, scope choices |
+| `OpenDesign/SiteControlTokens.swift` | Rewrite `BoostEditorMetrics` and `BoostEditorColors` to Appendix A (light only). | — |
+| `OpenSettings/SettingsTypes.swift`, `docs/plans/settings-library.md` | `open.boosts.codeEditorSize` default `"480x588"`. | the three defaults in the one registry |
+| `sitecontrol-render/Editor*.swift` | Light-only states (§8.1); F10–F12, F24, F25; frame probes against the §4 AX frames; the knob-gradient probe; drop dark editor renders. | real store, matcher, planner in the fake host; bench |
+| Plan file | Drop #103's plan edits; the kept lead decisions are in main's Appendix C. | — |
+
+---
+
+## 13. Not captured yet (every value here is a guess)
+
+| Item | Status in this plan |
+|---|---|
+| Tooltips (action buttons, color buttons, font cells, "+") and the tooltip delay | Labels from SC-15 / BO-17 / BO-18; delay from the shared tooltip. |
+| ⌥-click on the Site Control button | Does not open the panel (measured); the dot Arc showed afterwards is unexplained. Open does nothing. |
+| Option held inside the panel | No change (Q8). |
+| Microphone, camera, and recording states (in-use rows, button states) | The in-use dot is Open's choice. |
+| The code editor body (Arc's was a disabled internal page), "Refresh to Run" placement, devtools toggle state, the code window's resize behavior | Native editor (D-9); placements in §4.10 are guesses. |
+| Any 2x display: arrow tip shape, corner shapes, hairlines, glyph weights | 1x fits only. |
+| macOS Light for the Site Control Center | Light material and black-based text are guesses. |
+| The panel shadow and the hover-reveal card anchor | Guesses (§3.2, §3.1). |
+| Split pane bar anchor | Guess (§3.1). |
+| Pad radius law, rim behavior, secondary knob dragging and scheme switching, invert effect, slider effect ranges | §4.4.4. |
+| Size and Case behavior (cycle vs. menu) | Cycle (guess). |
+| Rename alert look; the Delete alert's exact layout | System alert sheet (Open choice). |
+| "Click to reveal" list layout | Chips (guess). |
+| Insecure and certificate states; Clear Cache / Clear Cookies feedback | Open's rules. |
+| The "Block Ads & Trackers" row with Arc's ad blocker on, and with it off (Q13) | `unavailable` row kept. |
+| Sparkle motion on the Boost row icon and the Site Control button (period, fade curve, phase per sparkle) | Static sparkles (Q15); needs video at ≥ 30 fps with the panel open on a Boosted site. |
+| Close animation of the Site Control Center | Theme popover timing reused. |
+| Whether the editor position is remembered | Not persisted (Open choice). |
+| Cmd+Z routing while the editor is open but not key; any keyboard entry into Arc's editor | §4.12 rule (Open choice). |
+| Editor open and close, code-mode resize, the panel's own height change | Guessed curves (§3.11, §4.2). |
+| The rim at 2x (1 px vs 0.5 pt hairline; the left edge reads fainter at 1x) | 1 px white 0.20 (§3.2). |
+| The idle color of the Zap bar text (measured only with the popup open) | Grey (guess, §4.8). |
+
+---
+
+## Appendix A — Tokens (`OpenDesign/SiteControlTokens.swift`)
 
 ```swift
-public enum SiteControlMetrics {          // §3; all guess unless a section cites evidence
-    public static let width: CGFloat = 320, maxHeight: CGFloat = 640, cornerRadius: CGFloat = 16
-    public static let sidebarPanelGap: CGFloat = 13, panePanelGap: CGFloat = 11
-    public static let anchorAlignmentY: CGFloat = 24, actionButtonInsetY: CGFloat = 0
-    public static let inset: CGFloat = 14, headerHeight: CGFloat = 48, actionRowHeight: CGFloat = 44
-    public static let actionButton = CGSize(width: 44, height: 36), actionGap: CGFloat = 4, actionRadius: CGFloat = 8
-    public static let sectionHeaderHeight: CGFloat = 28, sectionBottomPadding: CGFloat = 10
-    public static let tile = CGSize(width: 142, height: 48), tileGap: CGFloat = 8, tileRadius: CGFloat = 10, tileIcon: CGFloat = 28
-    public static let boostRowHeight: CGFloat = 40   // extension item metrics belong to OpenExtensionsUI (§3.6)
-    public static let footerHeight: CGFloat = 44, reloadRowHeight: CGFloat = 32
-    public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 16, shadowOffsetY: CGFloat = 6
+public enum SiteControlMetrics {           // §3. m = measured (S2), g = guess, o = Open choice
+    public static let width: CGFloat = 236, padding: CGFloat = 10                         // m
+    public static let cornerRadius: CGFloat = 16                                           // m ≈ 16–18; lead C
+    public static let arrowHeight: CGFloat = 10, arrowSideAngle: CGFloat = 45               // m (visible tip → body top; 2 pt/row)
+    public static let arrowTipRadius: CGFloat = 7, arrowBaseWidth: CGFloat = 26             // m (fit to rows 81–90)
+    public static let arrowBaseFillet: CGFloat = 2, arrowTipBelowAnchor: CGFloat = 2        // g / m
+    public static let windowMargin: CGFloat = 8, contentAnchorInset: CGFloat = 12          // o
+    public static let actionButton = CGSize(width: 48, height: 32), actionGap: CGFloat = 8 // m
+    public static let actionRadius: CGFloat = 6, actionGlyph: CGFloat = 17                 // m (corner insets) / g (visual)
+    public static let gapAfterActions: CGFloat = 37, sectionGap: CGFloat = 43              // m
+    public static let labelBaselineAboveContent: CGFloat = 14, labelRowHeight: CGFloat = 24 // m / g
+    public static let extensionTile = CGSize(width: 48, height: 32), extensionColumns = 4  // m / g
+    public static let extensionRowPitch: CGFloat = 40, extensionIcon: CGFloat = 16, tileRadius: CGFloat = 6 // g / g / m
+    public static let rowIcon: CGFloat = 32, rowPitch: CGFloat = 43, rowTextX: CGFloat = 50 // m
+    public static let rowTitleBaseline: CGFloat = 13, rowSubtitleBaseline: CGFloat = 29   // m (±1)
+    public static let rowGlyph: CGFloat = 15, circlePressedLevels: CGFloat = -8             // g (no row hover plate)
+    public static let focusOutset: CGFloat = 2, circleFocusDiameter: CGFloat = 36          // o
+    public static let gapBeforeSeparator: CGFloat = 15, gapAfterSeparator: CGFloat = 10    // m
+    public static let footerHeight: CGFloat = 32, pillRadius: CGFloat = 8, pillPadding: CGFloat = 10 // m / g / g
+    public static let pillLockGlyph: CGFloat = 13, pillLockGap: CGFloat = 6                // m (ink 10 × 14)
+    public static let moreButton: CGFloat = 32                                             // m
+    public static let reloadRowHeight: CGFloat = 32, reloadGap: CGFloat = 11, globalOffHeight: CGFloat = 28 // o
+    public static let maxHeight: CGFloat = 640, inUseDot: CGFloat = 6                      // o; height = min(content, maxHeight, window room) (§3.1)
+    public static let sparkleOpacity = (topRight: 1.0, topLeft: 0.35, bottomRight: 0.35)   // g (resting frame, Q15)
+    public static let buttonSparkleOpacity: CGFloat = 0.45                                 // g (URL field button, Q15)
+    public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 12, shadowOffsetY: CGFloat = 4 // g; shared with the theme popover
 }
-public enum BoostEditorMetrics {          // §4
-    public static let width: CGFloat = 268, inset: CGFloat = 14, headerHeight: CGFloat = 52
-    public static let wheelArea: CGFloat = 176, ringDiameter: CGFloat = 128, ringWidth: CGFloat = 18, padRadius: CGFloat = 46, puck: CGFloat = 24
-    public static let sideButton: CGFloat = 28, sliderRow: CGFloat = 28
-    public static let fontChip = CGSize(width: 56, height: 36), toolTile: CGFloat = 54, toolGap: CGFloat = 8
-    public static let zapRow: CGFloat = 30, zapVisibleRows = 5
-    public static let codeDefault = CGSize(width: 560, height: 640), codeMinimum = CGSize(width: 420, height: 360)
-    public static let gutterWidth: CGFloat = 36, codeFontSize: CGFloat = 12, codeLineHeight: CGFloat = 16
-    public static let contentInset: CGFloat = 12   // from the web panel's top-right corner
+public enum SiteControlColors {            // macOS Dark measured (IS §20.15); Light = guess; mode = the window's (§3.2)
+    public static let fallbackTint = RGBA(hex: 0x49475A), fallbackBackdropWeight: [CGFloat] = [0.28, 0.28, 0.21]
+    public static let fallbackBlurSigma: CGFloat = 5                                       // fit + validation (§3.2)
+    public static let rim = DesignColor(light: .black(0.10), dark: .white(0.20))           // m (dark) / g (light)
+    public static let actionFillTop = DesignColor(light: .black(0.04), dark: RGBA(hex: 0x272727))    // m / g
+    public static let actionFillBottom = DesignColor(light: .black(0.08), dark: RGBA(hex: 0x161616)) // m / g
+    public static let actionRing = DesignColor(light: .black(0.12), dark: .black(0.30))    // m / g
+    public static let actionShadow = DesignColor(light: .black(0.10), dark: .black(0.20))  // fit (radius 1, y 1) / g
+    public static let actionHighlight = DesignColor(light: .white(0.6), dark: RGBA(hex: 0x575757))
+    public static let actionHighlightHover = DesignColor(light: .white(0.4), dark: RGBA(hex: 0x484848))
+    public static let glyph = DesignColor(light: .black(0.75), dark: .white(0.85))
+    public static let label = DesignColor(light: .black(0.80), dark: RGBA(hex: 0xDBDBDF))
+    public static let rowTitle = DesignColor(light: .black(0.85), dark: RGBA(hex: 0xDFDFE2))
+    public static let rowSubtitle = DesignColor(light: .black(0.50), dark: RGBA(hex: 0x9F9EA9))   // also hover accessory, chevron, notes
+    public static let circleOn = DesignColor(light: RGBA(hex: 0x2B2A3C), dark: RGBA(hex: 0xECEDFF))  // disc; glyph is a knock-out
+    public static let circleOff = DesignColor(light: .black(0.10), dark: .white(0.28))     // disc; glyph is a knock-out
+    public static let tileFill = DesignColor(light: .black(0.05), dark: .white(0.08))
+    public static let separator = DesignColor(light: .black(0.12), dark: .white(0.22))
+    public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
+    public static let moreFill = DesignColor(light: .black(0.10), dark: .black(0.28))
 }
-public enum BoostEditorColors {           // BO-22 values (facts); usage per §4 (guess)
-    public static let segmentBackground = DesignColor(light: .black(0.07), dark: .white(0.10))
-    public static let segmentSelection = DesignColor(light: .white(1), dark: .white(0.30))
-    public static let sliderTrack = DesignColor(RGBA(hex: 0x3B3746, alpha: 0.05))
-    public static let sliderTint = DesignColor(RGBA(hex: 0x017AFF))
-    public static let warning = DesignColor(RGBA(hex: 0xFF5A5F))
-    public static let puck = DesignColor(RGBA(hex: 0xFAFBFF))
-    public static let puckPad = DesignColor(light: .black(0.04), dark: .white(0.06))
-    public static let label = DesignColor(light: .white(1), dark: .black(0.80))
-    public static let zapPreview = DesignColor(RGBA(hex: 0xD9D9D9))
-    public static let interstitialForeground = DesignColor(RGBA(hex: 0x2E2740))
-    public static let interstitialFooter = DesignColor(RGBA(hex: 0xCEDBFC))
-    public static let accents: [DesignColor] = [0x300EFF, 0x55B948, 0xDD0EFF, 0xFF560E, 0xFF0E82, 0x860EFF, 0xFF0E0E, 0xF1A23C]
-        .enumerated().map { DesignColor(RGBA(hex: UInt32($0.element), [1, 7].contains($0.offset) ? .displayP3 : .sRGB)) }
+public enum BoostGlyph {                    // one token for the Boost identity (§3.4, §3.7, §4.11, §4.13); Open's own sparkles as layers
+    public static let outline = "paintbrush.pointed", fill = "paintbrush.pointed.fill"
 }
-extension Motion { public static let popoverOpen: CFTimeInterval = 0.18, popoverClose: CFTimeInterval = 0.12 }
+public enum BoostEditorMetrics {           // §4, editor-window points; AX S2 10/0030 unless noted
+    public static let window = CGSize(width: 183, height: 588), codeWindow = CGSize(width: 480, height: 588)
+    public static let cornerRadius: CGFloat = 12, topOffset: CGFloat = 160, screenMargin: CGFloat = 8   // m / m (one sample) / o
+    public static let headerHeight: CGFloat = 40, inset: CGFloat = 18
+    public static let done = CGRect(x: 0, y: 0, width: 40, height: 40), name = CGRect(x: 46, y: 8, width: 91, height: 24)
+    public static let undo = CGRect(x: 143, y: 0, width: 40, height: 40)
+    public static let ringFrame = CGRect(x: 18, y: 58, width: 147, height: 147), plate = CGRect(x: 25, y: 65, width: 133, height: 133)
+    public static let ringRadius: CGFloat = 20, plateRadius: CGFloat = 13.5, padRadius: CGFloat = 66.5  // m / m / g (theme rule)
+    public static let dotPitch: CGFloat = 4, dotSize: CGFloat = 1                                     // m
+    public static let primaryDisc: CGFloat = 30, primaryDragDisc: CGFloat = 38, knobRing: CGFloat = 2  // m
+    public static let knobGradientTop: CGFloat = -14, knobGradientBottom: CGFloat = 12              // m (levels vs the center color)
+    public static let secondaryDisc: CGFloat = 19, secondaryOffsetDegrees: CGFloat = 45               // m
+    public static let defaultKnobAngle: CGFloat = 0, defaultKnobRadius: CGFloat = 40, guideWidth: CGFloat = 2  // m
+    public static let colorButtons = [CGRect(x: 18, y: 220, width: 42, height: 38), CGRect(x: 70, y: 220, width: 43, height: 38),
+                                      CGRect(x: 123, y: 220, width: 42, height: 38)]
+    public static let buttonRadius: CGFloat = 9                                                         // g (visual)
+    public static let fontCard = CGRect(x: 18, y: 273, width: 147, height: 120), fontCardRadius: CGFloat = 11  // m / g (visual)
+    public static let fontColumns: [CGFloat] = [23, 51, 79, 106, 134], fontRows: [CGFloat] = [281, 307, 333, 359], fontCell: CGFloat = 26
+    public static let size = CGRect(x: 18, y: 408, width: 70, height: 38), textCase = CGRect(x: 96, y: 408, width: 69, height: 38)
+    public static let zap = CGRect(x: 18, y: 461, width: 147, height: 38), code = CGRect(x: 18, y: 514, width: 147, height: 38)
+    public static let rowLabelInset: CGFloat = 12, rowGlyphTrailingInset: CGFloat = 15                 // m (ink)
+    public static let nameChevronGap: CGFloat = 11, nameChevron: CGFloat = 12                          // m (ink)
+    public static let advancedWindow = CGRect(x: -34, y: 258, width: 250, height: 232), advancedSlider = CGSize(width: 186, height: 16)
+    public static let advancedLabelY: [CGFloat] = [299, 361, 423], advancedSliderY: [CGFloat] = [318, 380, 442]
+    public static let codeHeader: CGFloat = 40, codeBottomBar: CGFloat = 70, codeButton: CGFloat = 38
+    public static let back = CGRect(x: 10, y: 9, width: 60, height: 23), segment = CGSize(width: 50, height: 24)
+    public static let codeMinimum = CGSize(width: 360, height: 420), gutterWidth: CGFloat = 36   // o
+    public static let firstRunCardTop: CGFloat = 271, makeABoost = CGRect(x: 14, y: 493, width: 155, height: 38)
+    public static let maybeLater = CGRect(x: 46, y: 541, width: 91, height: 31), firstRunIcon: CGFloat = 70  // m / BO-17 asset size
+    public static let titleBaselines: [CGFloat] = [347, 370, 393], waveCrestY: CGFloat = 463          // m
+    public static let waveAmplitude: CGFloat = 1.95, wavePeriod: CGFloat = 17, waveFirstCrestX: CGFloat = 7 // m
+    public static let badgeBorder: CGFloat = 3, badgeRotationDegreesCCW: CGFloat = 12                  // m (border, direction) / g (angle)
+    public static let zapDone = CGSize(width: 59, height: 38), zapDoneRadius: CGFloat = 8, zapDoneTop: CGFloat = 10 // m
+    public static let bannerLine: CGFloat = 28, bannerTwoLines: CGFloat = 42                       // o (lead round 2)
+}
+public enum BoostEditorColors {            // light only; IS §20.15 and §20.6
+    public static let header = RGBA(hex: 0xF5F5F7), hairline = RGBA(hex: 0xE9E9EB), background = RGBA(hex: 0xFDFDFF)
+    public static let button = RGBA(hex: 0xEBEBED), buttonPressed = RGBA(hex: 0xDFDFE0), buttonOn = RGBA(hex: 0x333333)
+    public static let advancedOn = RGBA(hex: 0x474747), label = RGBA(hex: 0x3A3A3B), title = RGBA(hex: 0x252526)
+    public static let headerGlyph = RGBA(hex: 0xACACAD), chevron = RGBA(hex: 0x949495), disabledGlyph = RGBA(hex: 0xBDBDBF)
+    public static let fontGlyph = RGBA(hex: 0x999999), fontSelected = RGBA(hex: 0xD9D9D9), fontSelectedGlyph = RGBA(hex: 0x8C8C8C)
+    public static let plate = RGBA(hex: 0xFAFAFA), dot = RGBA.black(0.075), guide = RGBA.black(0.06)
+    public static let secondaryOutline = RGBA(hex: 0xC8C2CA)
+    public static let ringStops: [(degrees: CGFloat, color: UInt32)] = [(0, 0xEB4838), (30, 0xEB7636), (60, 0xF4BA49), (90, 0xD4FD58),
+        (120, 0x90FC74), (150, 0x80FCAD), (180, 0x7CF8F1), (210, 0x356FF6), (240, 0x392EF4), (270, 0x8237F5), (300, 0xDD31BF), (330, 0xDF3470), (360, 0xEB4838)]
+    public static let noColorKnobs = (primary: RGBA(hex: 0x717171), secondary: RGBA(hex: 0x333333))
+    public static let warning = RGBA(hex: 0xFF5A5F)                                   // BO-22; banners
+    public static let firstRunDim = RGBA.black(0.30), firstRunTitle = RGBA(hex: 0x3139FF), firstRunBody = RGBA(hex: 0x95939F)
+    public static let makeABoost = (top: RGBA(hex: 0x4E4FFF), bottom: RGBA(hex: 0x333AFF)), firstRunFooter = RGBA(hex: 0xCEDBFC) // m (vertical)
+    public static let maybeLater = RGBA(hex: 0x7F819E)
+    public static let zapFrame = RGBA(hex: 0x3139FF), zapBar = RGBA(hex: 0xFBFBFD), zapDone = RGBA(hex: 0xEDEEFF)
+    public static let zapBarTextPopupOpen = RGBA(hex: 0xDBDFFF)                     // m (darkest pixel, popup open)
+    public static let advancedMaterialOverWhite = RGBA(hex: 0xEDEDED)               // m (S2 10/0042, editor (91, 300)); calibration only
+}
+extension Motion {
+    public static let popoverOpen = SpringToken(response: 0.20, dampingFraction: 0.8)   // m (overshoot) / g (curve)
+    public static let popoverOpenFade: CFTimeInterval = 0.08, popoverClose: CFTimeInterval = 0.19   // g / m duration (theme popover); close curve and scale g
+    public static let knobRelease = SpringToken(response: 0.2, dampingFraction: 0.9)    // g; also the press growth
+    public static let heightGrow: CFTimeInterval = 0.20, heightShrink: CFTimeInterval = 0.25       // m (folder expand / collapse curves, IS §20.12) / g for the panel
+    public static let editorOpen: CFTimeInterval = 0.15, editorClose: CFTimeInterval = 0.12, codeModeResize: CFTimeInterval = 0.20 // g
+}
 extension Typography {
-    public static let siteControlTitle = FontToken(14, .semibold), sectionTitle = FontToken(12, .semibold)
-    public static let tileTitle = FontToken(12, .semibold), tileSubtitle = FontToken(11, .regular)
-    public static let boostRowTitle = FontToken(13, .medium), editorTitle = FontToken(14, .semibold)
+    public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold) // m (ink width, S2 09/0010)
+    public static let siteControlRowSubtitle = FontToken(13, .regular), siteControlPill = FontToken(14, .medium)  // m (ink width, S2 09/0010)
+    public static let siteControlSecondary = FontToken(13, .regular)                                             // hover accessory, notes, reload text
+    public static let editorName = FontToken(13, .medium), editorButton = FontToken(14, .medium)                 // m (ink width, S2 10/0030)
+    public static let editorSlider = FontToken(13, .regular)                                                     // visual
+    public static let firstRunTitle = FontToken(22, .bold), firstRunPrimary = FontToken(14, .medium), firstRunSecondary = FontToken(12, .medium) // m (ink width, S2 10/0018); SF Pro default design
 }
 ```
 
+Removed from the first version: the 320 width, header, tile, switch, and edit-button metrics; the
+hue-ring wheel (128 / 18 / 46 / puck 24), font strip, tool tiles, accent colors, and every dark
+editor color. Removed in review r1: `arrowBase` 28 as a construction value (derived now),
+`circleOnGlyph` (glyphs are knock-outs), `hoverPlate` (no row plate), and the flat `actionFill`.
+
 ## Appendix B — Strings (Arc label → Open text)
 
-Arc labels kept verbatim (no brand): "Settings", "More", "Boosts", "Manage", "Extensions", "Block
-Ads & Trackers", "On", "Off", "Allowed", "Blocked", "Enabled", "Disabled", "Secure", "Insecure",
-"Share", "Copy URL", "New Boost", "Capture a portion of this page", "Capture the full page",
-"Capture in Portrait Mode", "Clear Cache", "Clear Cookies", "Manage Boosts…", "New Boost…",
-"Manage Extensions…", "Add Extension…", "Add Extension", "All Site Settings…", "Pin", "Unpin",
-"My Boost", "Undo", "Rename this Boost…", "Rename this Boost", "Done", "Cancel", "Shuffle",
-"Reset all Edits", "All Boosts…", "Delete this Boost", "Delete this Boost?", "Delete",
-"Invert lightness", "Advanced color controls", "Reset to original colors", "Brightness",
-"Contrast", "Original Saturation", "Change text size", "Change text case", "Click elements on
-the page to Zap them", "Pick Selector", "Hide Selector Picker", "Refresh to Run", "Refresh this
-Page", "Show Developer Tools", "Hide Developer Tools", "your css here", "your javascript here",
-"Edit the Internet with Boosts", "Make your own!", "Nothing Boosted Yet!", "Made for".
+Arc labels kept verbatim (no brand): "Settings", "More", "Boosts", "Manage", "Extensions",
+"Block Ads & Trackers", "On", "Off", "Allowed", "Blocked", "Enabled", "Disabled", "Secure",
+"Insecure", "Share", "New Boost", "Capture a portion of this page", "Capture the full page",
+"Clear Cache", "Clear Cookies", "Manage Boosts…", "New Boost…", "Manage Extensions…",
+"Add Extension…", "Add Extension", "All Site Settings…", "Pin", "Unpin", "My Boost", "Done",
+"Undo", "Rename this Boost…", "Rename this Boost", "Cancel", "Shuffle", "Reset all Edits",
+"Delete this Boost", "Delete this Boost?", "This can't be undone.", "Delete", "All Boosts…",
+"Invert lightness", "Advanced color controls", "Reset to original colors", "Contrast",
+"Brightness", "Original Saturation", "Change text size", "Change text case", "Size", "Case", "Zap",
+"Code", "Back", "CSS", "JS", "Click elements on the page to Zap them", "Zap this",
+"Zap all related elements", "Click to reveal", "Pick Selector", "Hide Selector Picker",
+"Refresh to Run", "Refresh this Page", "Show Developer Tools", "Hide Developer Tools",
+"your css here", "your javascript here", "Edit the Internet with Boosts", "Make <host> your own!",
+"Make a Boost", "Maybe Later", "Nothing Boosted Yet!", "Made for".
 
-Rewritten in Open's words: the three ad-block tooltips (§3.4), every alert body, the notices and
-banners (§3.5, §4.1, §4.3, §4.8), the interstitial body (§4.9), the Library empty-state body
-(§4.11). Arc's JS sharing banner and "Report Boost…" are dropped.
+Rewritten in Open's words: the three ad-block tooltips (§3.8), the reload row, the Boosts-off note,
+the banners (§4.3), the neutral-page and legacy notes (§4.4.5), the Reset confirmation, "Apply to",
+the private-window tooltip, the Library empty-state body. Dropped: "Copy URL" and "Capture in
+Portrait Mode" from the action row, "Make your own!" (the 1.170 card says "Make a Boost"), Arc's JS
+sharing banner, and "Report Boost…".
 
-## Appendix — Lead decisions (2026-10-25)
+## Appendix C — Lead decisions
 
-- Approved as the Site Control Center and Boost editor plan.
-- Q1 The panel is an in-window view, not a system popover. It keeps Arc's look (no Liquid Glass), and the window stays key.
-- Q2 The Developer Mode row stays hidden until docs/plans/page-platform.md (in progress) defines Developer Mode. Then show it as that plan specifies.
-- Q3 The per-site Preview row stays hidden until Previews stores per-site state.
-- Q4 Colors use CSS filters only in v1. Add a tint later, and only if it passes a scroll-performance check.
-- Q5 The ad-block tile shows On/Off only, with no blocked count (Arc parity).
-- Q6 Boost editing is disabled in private windows.
-- Q7 After a setting change, show a "Reload" row. Never reload automatically.
-- Q8 Holding Option does nothing in v1. Revisit after capture #22.
-- Q9 Ad-block paths: `AdBlockStore`'s path is the one path. Remove the `ProfileDirectories` duplicate in the first step that touches ad-block storage, and migrate if any file exists at the old path.
-- Q10 The Zap list lives in the editor.
-- Q11 Cmd+E is decided in docs/plans/extensions-ui.md.
-- The engine needs E1–E6 go into the engine lead's queue after P2. The stopgaps in this plan ship first.
-- Captures #21 and #22 go into the user's single combined Arc capture session.
+### 2026-10-25 (approval of the first version)
+
+| Decision | Status after 2026-10-26 |
+|---|---|
+| Approved as the Site Control Center and Boost editor plan. | Kept; revised by this entry. |
+| Q1 The panel is an in-window view, not a system popover (Arc's look, window stays key). | Kept (D-3 amended: arrow, material). |
+| Q2 Developer Mode row hidden until `page-platform.md` defines Developer Mode. | Kept (Q14 notes Arc shows it). |
+| Q3 Preview row hidden until Previews stores per-site state. | Kept. |
+| Q4 Colors use CSS filters only in v1; tint later behind a scroll-performance check. | **Superseded** 2026-10-26 by the Q12 ruling: filters are the #103 interim; v1 uses an engine color remap (Step 4R). |
+| Q5 The ad-block row shows On/Off only. | Kept. |
+| Q6 Boost editing is disabled in private windows. | Kept. |
+| Q7 A "Reload" row after a setting change; never reload automatically. | Kept. |
+| Q8 Holding Option does nothing in v1. | Kept for the panel; ⌥-click on the button does not open the panel (§3.10). |
+| Q9 Ad-block paths: `AdBlockStore`'s path is the one path. | Kept. |
+| Q10 The Zap list lives in the editor. | **Superseded**: the list lives in the page bar ("Click to reveal"); the editor shows the count (D-8). |
+| Q11 Cmd+E is decided in `extensions-ui.md`. | Kept. |
+| Engine needs E1–E6 go into the engine lead's queue after P2. | Kept. |
+| Captures #21 and #22 go into the user's combined capture session. | Done (capture session 2, items 9–11). |
+
+### 2026-10-26 (recorded on the PR branches #69, #96, #103 during review)
+
+| Decision | Status |
+|---|---|
+| A (#69): no pointer; panel at the sidebar edge + 13 pt; anchor y 24 (`anchorAlignmentY`); F0137 as reference. | **Superseded** (C1): top arrow, drops from the URL field, centered on the button (§3.1). |
+| B (#69): pane anchor `y = anchorMaxY + 11`, right-aligned, no pointer. | **Superseded**: arrow, centered on the button (guess, §3.1). |
+| C (#69): corner radius 16, continuous; hover plates continuous. | Kept. |
+| Action buttons top-aligned (`actionButtonInsetY = 0`). | **Superseded**: 10 pt top padding (S2 09/0010). |
+| Open scale around the panel's top-leading corner. | **Superseded**: around the arrow tip, spring with overshoot (§3.11). |
+| Security label only for `https` / `http`; other schemes hide it and its AX element. | Kept. |
+| Host hidden from visible text in AX; the panel description exposes it once. | Kept (now the only host exposure). |
+| Token-based observers per window; Escape restores the first responder; outside clicks of every button dismiss and forward. | Kept. |
+| Extension picker fallback: focus only ⋯, Return opens the menu with "Add Extension…" highlighted. | **Superseded**: focus the "+" tile; Return runs `add-extension` (§3.6.1). |
+| Round 2: long Setting tile titles wrap to two lines. | **Superseded**: rows, one line, tail "…" (S2 09/0010). |
+| Round 2: reload and global-off baselines at row top + 20; focus rings for keyboard focus only; one continuous path for fill, edge, clip, and shadow. | Kept (the path now includes the arrow; there is no edge stroke). |
+| Round 2: "geometry and palette remain guesses until capture session 2; F0137 supplies geometry only". | **Superseded** by the measured values in §3–§4. |
+| Scope labels "<host> and subdomains" (2026-10-25 23:46); IP scope items (03:37); saved path always offered (09:26). | Kept; the scope moves into the name menu ("Apply to ▸"). |
+| Legacy filters stay until the first color edit (03:21). | Kept (note placement amended, §4.4.5). |
+| Few-colors hint "Few colors here. Try Invert lightness." on one centered line (09:32). | Kept; geometry amended (two lines inside the plate). |
+| Zap / Code tooltips "Zap isn't available yet." / "Code editing isn't available yet." (09:32). | Kept. |
+| Font strip of 56 pt chips, 6 pt gaps, scrolling in a 232 pt viewport (10:00). | **Superseded** (C6): 5 × 4 grid of 26 pt cells (§4.6). |
+| Editor round 2: shadow padding 30 / 24 / 36; body 12 pt from the web content's top-right. | **Superseded**: system shadow; placement on the window's right edge (§4.2). |
+| Editor round 2: header name and scope at x 40; header glyph alpha 0.9. | **Superseded**: Done / name ⌄ / Undo header (§4.3). |
+| Editor round 2: dark first-run colors. | **Superseded**: the editor is always light (D-4). |
+| Editor round 2: banners 14 pt insets, 7 pt padding, 11 pt Medium, 28 / 42 pt. | Kept. |
+| Editor round 2: sliders at x 124, width 130; dark track white 0.12. | **Superseded** (C9): sliders 186 × 16 in the advanced popover. |
+| Editor round 2: keyboard/AX repeats coalesce for 1 s; owner tokens; `saveNow` on close and delete; startup removes only abandoned temp files. | Kept. |
+| Text case label "Original". | **Superseded**: fixed labels "Size" and "Case"; values in AX (§4.7). |
+| Timing budgets may fail under heavy machine load in review; rerun before merge. | Kept. |
+
+### 2026-10-26 — capture session 2 supersessions (this revision)
+
+The lead instructed that the Site Control Center and Boost editor follow Arc as captured in session
+2 (items 9–11). Effective with the merge of this revision:
+
+1. Superseded, with the replacement in this plan: decision A and B (anchor, pointer, gaps), the
+   top-aligned action row, the top-leading open scale, the 320 pt width, the header, the six-button
+   action row, the opaque fill, D-11 (section order and tiles), SC-16's conditional "New Boost…",
+   the two-line tile titles, the "focus ⋯" picker fallback, the hidden Extensions section, Q10 (Zap
+   list in the editor), the 268 pt editor panel inside the content and its shadow padding, the
+   editor header and dark variants, the hue-ring wheel with a disc pad and puck, the inline advanced
+   sliders, the font strip, the four colored tool tiles, the "Original" case label, and the default
+   code window size 560 × 640.
+2. Kept: decision C, Q1–Q3, Q5–Q9 and Q11, D-1, D-2, D-5, D-6, D-9, D-10, the security-scheme rule, the
+   observer and dismissal decisions, scope labels and IP rules, legacy filters, the Zap / Code
+   tooltips, banners, coalescing, `saveNow`, and the review timing exception.
+3. Amended: D-3 (in-window view with arrow and material), D-4 (light, placement, system shadow),
+   D-7 (pad law), D-8 (Zap UI and list placement). New: D-12 (shared pad core).
+4. Questions raised by this revision: Q12–Q15, ruled on below.
+5. Migration: rework #69, #96, and #103 in place in that order (§12).
+
+### 2026-10-26 — lead rulings on PR #107 (head db3c360)
+
+| # | Ruling | Where applied |
+|---|---|---|
+| Q12 | Q4 is superseded. Evidence: S2-22 (white and dark areas tinted, images unchanged: not a page-wide filter) and `docs/re/arccore-engine.md` ("Boosts effects via `EffectsAgent`" in ArcCore: Arc recolors inside the engine). The v1 target is Arc's model: an engine-level color remap applied at paint time, with images, video, and canvas untouched, like Chromium's auto dark mode (`DarkModeFilter`). #103 ships the existing filter runtime as an interim, with no runtime change and its scope as written. A v1 step "Boost color remap (engine)" follows #103: RE study of `EffectsAgent` (separate task; findings in `docs/re/`), then an engine plan, then the fork implementation. Gates: zero added paint cost with no Boost color (measured); with one, scroll p95 and paint time on three heavy pages within the engine plan's budget. R-2 is interim only. | Non-goals, D-7, §4.4.4, §4.4.5, §10 Step 4R, R-2, §11.2 |
+| Q13 | Accepted: keep the `unavailable` ad-block row; list it for a future capture with Arc's blocker on. | §3.8, §11.2, §13 |
+| Q14 | Accepted: keep the Developer Mode row hidden (Q2). | §3.8, §11.2 |
+| Q15 | Build the sparkle animation only if it is pure Core Animation on layers (no timers, no main-thread work per frame, running only while the panel is open, stopped and removed on close) and its motion is measurable from session 2. Result: not measurable (frame pairs with 1.6–2.5 s gaps, no video of the panel), so the sparkles are static and `docs/followups.md` has an entry. | §3.7, §3.10, §13, `docs/followups.md` |
+
+### 2026-10-26 — review round 1 on PR #107 (head 7b6645a)
+
+Two reviews, both "approve after changes": design (visual fidelity) and plan (evidence, behavior,
+engineering). The lead's rule for conflicts: the design review wins on visuals, the plan review on
+behavior and engineering. Changes:
+
+| Finding | Change | Section |
+|---|---|---|
+| Design F1 | Icon-circle glyphs are knock-outs (the material shows through), also the open-state URL field button; `circleOnGlyph` removed; knock-out probe | §3.7, §3.8, §3.10, §8.1, App. A, IS §20.15 |
+| Design F2 | Type: labels and titles 14 Semibold, subtitles 13 Regular, pill 14 Medium; editor name 13 Medium; Size / Case / Zap / Code 14 Medium; Open-only text follows | §3.5–§3.9, §4.3, §4.7, App. A, IS §20.15 |
+| Design F3 | The standard popover arrow (45°, tip r 7, visible height 10, 26 + 2 pt fillets); the same arrow for the advanced popover | §3.1, §3.2, §4.5, §8.1, App. A |
+| Design F4 | Action buttons: gradient #272727 → #161616, highlight, 1 pt ring, shadow, radius 6; pressed −6 levels; tiles radius 6 | §3.4, §3.6, App. A |
+| Design F5 | 1 px rim, white 0.20, with a probe | §3.2, §8.1, App. A |
+| Design F6 | `BoostGlyph` = `paintbrush.pointed` / `.fill` + Open's sparkles; `text.viewfinder` | §3.4, §3.7, §4.11, §4.13, App. A |
+| Design F7 | Appearance from the Space's resolved mode; one popover-material token with the theme editor; Light proxy S2 20/0027 | §3.2 |
+| Design F8 | Static sparkles at resting opacities (row: 1.0 / 0.35 / 0.35; button: 0.45) | §3.7, §3.10, App. A |
+| Design F9 | Knob vertical gradients (−14 / +12 levels) | §4.4.1, §4.4.2, §8.1, App. A |
+| Design F10 | Height-change curves and choreography; editor open / close; code-mode resize; advanced-popover motion; knob press growth; editor toggles cross-fade; open anchor = visible tip | §3.11, §4.2, §4.4.1, §4.5, §4.6, §4.7, App. A |
+| Design F11 | Element method with ink boxes; 13 frames incl. the six added ones; probes for arrow, rim, gradient, knock-out, knob gradients; `motion` pass rules; S12 real-app compare | §8.1, §8.2, §8.3 |
+| Design F12 | Zap / Code label inset 12 and glyph inset 15; name + chevron group; wave 1.95 / 17 / crest x 7; badge 3 pt border, 12° counter-clockwise; title SF Pro 22 Bold; "Make a Boost" 14 Medium with the measured vertical gradient; "Maybe Later" 12 Medium; Zap bar "Done" rounded rect #EDEEFF; popup-open bar text color | §4.3, §4.7, §4.8, §4.11, App. A |
+| Design F13 | Light `rim` value | App. A |
+| Design F14 | No row hover plate (chevron #9F9EA9 only); focus-ring shapes per control; editor buttons have no hover change and a #BDBDBF disabled look; long hosts truncate in the middle; extension icon 16 pt + badge; circle pressed −8 levels; v1 left-to-right only; pill lock 13 pt with a 6 pt gap | §3.1, §3.4–§3.9, §4.5, §4.6, §4.7, §4.11 |
+| Design keep-or-change table | Applied as listed (hover accessory 13 Regular #9F9EA9; close curve marked guess; height curves refined; the rest kept) | §3, §4, App. A |
+| Plan F1 | The editor key-window rule: pointer use never makes it key; text inputs and "Move focus to floating window" do; Done, Esc, a browser click, or closing return key to the browser (evidence S2 10/0018–0079) | D-4, §4.12, §8.1 F25 |
+| Plan F2 | The advanced popover's arrow and material are now measured (S2 10/0042) and cited in IS §20.15 | §4.5, IS §20.15 |
+| Plan F3 | Step 4R's RE id is BO-23 (BO-12 stays "Editor lifecycle") | §10, §12.1 |
+| Plan F4 | Scroll budget under the open panel (S13); the material scale technique and the accepted blur swim | §3.2, §7, §8.2, R-7 |
+| Plan F5 | The fallback check is a formula regression only; the Arc-match gate uses validation probes not in the fit; probe coordinates in IS; fallback blur σ 15 → 5 (better on the validation probes) | §3.2, §8.1, §8.3, S11, IS §20.15 |
+| Plan F6 | The editor clamps to the screen that holds the browser window's right-edge midpoint; full screen and display joins in R-8 | §4.2, R-8 |
+| Plan F7 | Height = min(content, 640, window room) | §3.1, App. A |
+| Plan F8 | Extension tile row pitch 40 | §3.3, §3.6, App. A |
+| Plan F9 | Theme extra knob 27 (code; ≈ 28 measured) | §4.4.3 |
+| Plan F10 | IS §20.5: 371 → 372 | IS §20.5 |
+| Plan F11 | Delete `BoostColorWheelView` from `BoostEditorViews.swift`; the #86 merge gate for the shared pad core | §12.4 |
+| Plan F12 | SC-15 "Used in" → "§3.4 (subset; S2-3)" | §2 |
+| Plan notes | Mask the Developer Mode row in the S2 09/0010 compare; reopen on another anchor without animation then open; pad AX with two adjustable children; the popover clamps to the editor's screen; "zero" paint cost within a noise band | §3.1, §4.4.2, §4.5, §8.3, §10 |
+
+Conflicts resolved:
+
+- Arrow geometry: the plan review counted a 9-row arrow (y 82–90) with a 28 pt base; the design
+  review fits a 90° rounded arrow with its visible tip at y 81 (a partial row) and a 26 pt base plus
+  fillets. Visual, so the design review's shape is used; both agree on 2 pt of width per row.
+- Editor key window: the plan review's example rule ("a click on any editor control makes it key")
+  conflicts with the capture (Arc's editor stayed non-key while those controls were used, and Arc's
+  browser went inactive only when the editor became key). Behavior is the plan review's area, so the
+  trigger is now stated, but it follows the capture and adds the system "Move focus to floating
+  window" shortcut for keyboard entry.
