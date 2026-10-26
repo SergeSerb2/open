@@ -1110,3 +1110,48 @@ The `traffic_lights` row finds the drawn circles at an 8-level contrast (the lig
 Behaviors checked through the automation layer: Option-click on the green button zooms (`[0, 0, 2560, 1410]`) and restores; a click enters full screen; `performClose:` (the window-close checks) works at rest. The tiling menu could not be reached (above). The first run of the suite failed three window-close rows with the buttons at alpha 0, which is why the rest alpha is 0.001.
 
 Window suite on head `ea323e9` (origin/main `c768c38` merged, review rounds 1 and 2 fixed), one Release run under the shared on-screen lock, repeated on `20a7e93` after the merge of origin/main `f965b20` (49 of 49 again; `sidebarDrawn` cold 242 ms, warm 224 ms): 49 of 49 rows passed, including every window-button row (`traffic_lights`; `traffic_light_look` with the hover hue checked in a key window, margins 85–188; the hover region; `traffic_light_actions`; all four `traffic_light_stale_hover` cases), the reveal and card rows, the F0001 comparison, and the launch budgets (`sidebarDrawn` cold 233 ms, warm 227 ms). Two temporary builds, not committed, show that the rows catch the bugs they target: with the hover-state fix turned off, all three original stale cases fail as the round-1 review reported (colored at rest after the full-screen exit and the restore, fill error 114–147 levels; grey under the pointer after ⌘S twice, hue margin ≤ 0.6); with `mouseEntered` doing nothing (round 2), `traffic_light_look` fails (hover alpha stays 0.001, hue margins ≤ 1.0 in light and dark) and so does the re-hover case. Three earlier runs on `e89b49f` passed every window-button row; their only failures were launch budgets at load 12–25 (cold 283 / 301 / 257 ms, warm 213 / 295 / 253 ms against 250 ms). Earlier runs on this branch (2026-10-26, before the review fixes) also passed the window-button rows whenever they reached them; their other failures were launch budgets, an engine crash at launch, and `OEErrorWebContentClosed` in `html_fullscreen_in_native` (`docs/followups.md`). One earlier set failed `traffic_light_look` for the dark window that is not key because the check tested for the colored ring there (a shadowed variable, fixed in `1a84a2d`).
+
+### 22.1 Step 3b implementation and comparison (2026-10-26)
+
+The 33/66 pt card, static 13 Regular title, five slots, unmasked stack and palette
+fill are implemented. The shadow uses opaque black plus the single
+`MiniPlayerMetrics.shadowOpacity` of 0.21. `titleState` exposes the actual Core Text
+truncation receipt; native events retain retiring-card refusal, replacement and
+drawer-prune/undo coverage. All F1–F11 spec-review corrections are in media plan §13.
+
+| Run / Arc frame | Worst edge error (pt), target ≤1 | Worst ΔE00, target ≤2 | Worst shadow error (pp), target ≤1.5 |
+|---|---|---|---|
+| R1 / E2 | 0 | 0.56 | 0.91 |
+| R2 / E3 | 0 | 0.73 | 0.93 |
+| R3 / E6 | 2 | 0.56 | 0.91 |
+| R4 / E7 | 2 | 0.86 | 0.93 |
+
+Named misses under §13.8.6's rule: R3's back card 1 strip has a 2 pt
+right-edge difference (Arc x=212, Open x=210 in the threshold scan). Cause
+(inference): the rounded translucent strip and its background give a different
+threshold box; native MC6 verifies the exact full card frames. R4's middle title
+has a 2 pt bottom-edge difference (919 vs 921) because the different strings have
+different descenders. Its top edge matches and left edge differs by 1 pt. All
+other glyph/title edges match; no fact token was changed to hide a miss.
+
+MC9: 12 interleaved pairs against pinned main `f3c9cc5`, with the on-screen
+lock held for the entire series. Paired median delta **−0.005 ms**, 20%-trimmed
+mean **−0.085 ms** (limit +0.3 ms); PASS. Baseline/head median p95:
+2.035/1.980 ms. Three-card stack report-only: 2.22 ms p95. The required 20-pair
+A/A control passed at +0.070/+0.121 ms. The initial contended, pre-review run
+failed at +0.390/+0.402 ms; its receipt and the pre-merge runs are retained.
+
+`sidebar-render check`: **476 passed, 0 failed**. MC8 idle CPU: **0.011%** over
+2 s, no animation keys, no collapse work, one store expiry item.
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through the
+heavy-job wrapper in a detached session after merging main. The final renderer
+hash matches the renders, A/A control and MC9 receipts.
+
+All 62 committed PNGs use synthetic titles. No AX-title PNG or real video
+title was committed or pushed. Real-title comparisons and Arc/Open/diff images
+remain under `.re/`. The CLI rejects AX-title output outside `.re/`. E3's capture
+has one extra trailing row (1085 → 1084); it is omitted without moving the origin.
+Collapsed E2/E6 have no AX title, so the local runs use E3/E7 titles respectively.
+Light/themed fills, drawer and motion retain their provisional labels.
+
+[Open-only render matrix and full comparison tables](../Packages/OpenKit/MediaRenders/step3b/README.md).

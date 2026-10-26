@@ -2,31 +2,32 @@
   "title_source": "Synthetic.model only; no --media-title-from-ax",
   "generator": "render-scenes.py",
   "generator_sha256": "58bae297367dc59c8b7214da649f83b210725ec541982084dd65dcee1fcb3818",
-  "renderer_sha256": "558f7a01533827d699ffc47ec8efc5b54a3423ab087ebb70979143f805e25956",
+  "renderer_sha256": "8c75cdb0553773a367faa99c85ed71a73fcef509f3f491b94be1eea788cd061e",
+  "main_ref": "f3c9cc5a921c4b1de409db63645a38c08aa1b9a0",
   "images": [
     {
       "file": "R-rest-dark-228.png",
       "width_px": 1728,
       "height_px": 1084,
-      "sha256": "48d6ccd80c8fcfd5f9eec61d1b81a5997a0263e5bf317c9f481eb45aab5d8e75"
+      "sha256": "d462d3ff440f9d79bcb93e2363b4233edaf5a9c4783727ef99afe073fe9b9242"
     },
     {
       "file": "R-stack-dark-228.png",
       "width_px": 1728,
       "height_px": 1084,
-      "sha256": "1d6c5384978087ae8280275138a389b5e86d5c8a90de3c21c48f1aaba7df574d"
+      "sha256": "1ac42093a9da37b5be6b37e0271b69abab3fd3946ec1c0c455013d5b5ef6c44b"
     },
     {
       "file": "R-stack-expanded-dark-228.png",
       "width_px": 1728,
       "height_px": 1084,
-      "sha256": "95a61573e4459920d6fc3494613803eb21babe320760eb8b22063815ed524563"
+      "sha256": "bfdc2f0847da13231949db5ed4c2a1ba07b210584d8883e181b0e7eae8ac12b1"
     },
     {
       "file": "R-video-expanded-dark-228.png",
       "width_px": 1728,
       "height_px": 1084,
-      "sha256": "f36f55a6f2199577b153fa54facdef2d1a87d8fea19e5c936ddeae64dd4db813"
+      "sha256": "67d6ceb886636aea5c3831ff818ed0cb4fcde556271ced21e49245424a588c16"
     },
     {
       "file": "audio-expanded-dark-228.png",

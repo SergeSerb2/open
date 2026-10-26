@@ -2143,6 +2143,53 @@ Acceptance: MC1–MC15 PASS; every other `sidebar-render check` line PASS;
 R1–R4 meet the targets or name each miss; MC9 PASS; `tools/verify-all.sh`
 PASS.
 
+### 13.9 Implementation results (2026-10-26)
+
+Implemented on `feature/media-step3b-mini-player`, stacked on #109. The
+F1–F11 Muse review corrections above ship with the implementation: one shadow
+alpha source, expansion before measurement, explicit masks, the public title
+receipt, retained retiring/replacement/drawer-prune checks, and the wording fixes.
+`Core.foregroundPrimary` is the existing catalog token used for the title.
+
+| Run / Arc frame | Worst edge error (pt), target ≤1 | Worst ΔE00, target ≤2 | Worst shadow error (pp), target ≤1.5 |
+|---|---|---|---|
+| R1 / E2 | 0 | 0.56 | 0.91 |
+| R2 / E3 | 0 | 0.73 | 0.93 |
+| R3 / E6 | 2 | 0.56 | 0.91 |
+| R4 / E7 | 2 | 0.86 | 0.93 |
+
+Named misses under §13.8.6's rule: R3's back card 1 strip has a 2 pt
+right-edge difference (Arc x=212, Open x=210 in the threshold scan). Cause
+(inference): the rounded translucent strip and its background give a different
+threshold box; native MC6 verifies the exact full card frames. R4's middle title
+has a 2 pt bottom-edge difference (919 vs 921) because the different strings have
+different descenders. Its top edge matches and left edge differs by 1 pt. All
+other glyph/title edges match; no fact token was changed to hide a miss.
+
+MC9: 12 interleaved pairs against pinned main `f3c9cc5`, with the on-screen
+lock held for the entire series. Paired median delta **−0.005 ms**, 20%-trimmed
+mean **−0.085 ms** (limit +0.3 ms); PASS. Baseline/head median p95:
+2.035/1.980 ms. Three-card stack report-only: 2.22 ms p95. The required 20-pair
+A/A control passed at +0.070/+0.121 ms. The initial contended, pre-review run
+failed at +0.390/+0.402 ms; its receipt and the pre-merge runs are retained.
+
+`sidebar-render check`: **476 passed, 0 failed**. MC8 idle CPU: **0.011%** over
+2 s, no animation keys, no collapse work, one store expiry item.
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through the
+heavy-job wrapper in a detached session after merging main. The final renderer
+hash matches the renders, A/A control and MC9 receipts.
+
+All 62 committed PNGs use synthetic titles. No AX-title PNG or real video
+title was committed or pushed. Real-title comparisons and Arc/Open/diff images
+remain under `.re/`. The CLI rejects AX-title output outside `.re/`. E3's capture
+has one extra trailing row (1085 → 1084); it is omitted without moving the origin.
+Collapsed E2/E6 have no AX title, so the local runs use E3/E7 titles respectively.
+Light/themed fills, drawer and motion retain their provisional labels.
+
+Full numeric tables, render matrix, binary hashes and runtime receipts:
+[Step 3b evidence](../../Packages/OpenKit/MediaRenders/step3b/README.md).
+The §7 sRGB/plane/ink/CIEDE2000 method is implemented by `compare-media`.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).

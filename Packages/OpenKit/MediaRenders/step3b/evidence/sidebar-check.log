@@ -157,7 +157,7 @@ MC1–MC15: real composed sidebar, native events, offscreen layers (MC9 uses com
   OK   MC7 title has no animation for paused
   OK   MC7 title hover cross-fade ends
   OK   MC8 paused at rest: zero layer keys, zero collapse work, one store expiry
-  OK   MC8 paused idle CPU 0.007% (≤0.5%); no media timer/display link
+  OK   MC8 paused idle CPU 0.011% (≤0.5%); no media timer/display link
   OK   MC10 Peek dims controls with bottom bar
   OK   MC11 default dark fill
   OK   MC11 title, enabled/disabled glyph and plate roles dark
@@ -333,7 +333,7 @@ Peek badge and dim (F0090, F0101)
   OK   MS7 New Space passes the full selection; an unhandled App form preserves it
   OK   menu exposes New Folder with 3 Items
   OK   MS8 one folder insert and three moves, at the first selected slot
-  OK   MS8 inline rename starts and consumes selection (responder Optional(<NSTextView: 0x782346f700>
+  OK   MS8 inline rename starts and consumes selection (responder Optional(<NSTextView: 0x7c6c8f3700>
     Frame = {{0.00, 0.00}, {168.00, 20.00}}, Bounds = {{0.00, 0.00}, {168.00, 20.00}}
     Horizontally resizable: YES, Vertically resizable: YES
     MinSize = {168.00, 20.00}, MaxSize = {40000.00, 40000.00}
@@ -439,7 +439,7 @@ Peek badge and dim (F0090, F0101)
   OK   SM4 selection menu creates one folder and starts the real inline editor
   OK   HG3 changing the setting off suppresses real drop and reorder haptics
   OK   SM5 Delete is disabled with one Space
-  OK   SM6 10×100 Library to first layout 34.57 ms ≤ 120 ms; only 4 visible columns built
+  OK   SM6 10×100 Library to first layout 64.86 ms ≤ 120 ms; only 4 visible columns built
   OK   SM6 horizontal scroll builds newly visible pages once (added 4, reloads 4, visible (1700.0, 0.0, 900.0, 700.0))
   OK   SM6 model property changes cause no full reload
   OK   SM3 focused pager re-offsets after Space order changes without rebuilding its page

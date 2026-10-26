@@ -15,7 +15,7 @@ Step 3's historical verification receipts remain in `../step3/evidence/`.
 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 swift build --package-path Packages/OpenKit -c release -j 6
 Packages/OpenKit/.build/release/sidebar-render check
 python3 Packages/OpenKit/MediaRenders/step3b/render-scenes.py
-python3 Packages/OpenKit/MediaRenders/step3b/compare-bench.py --baseline-ref 8f3379a --out .re/step3b-mc9
+python3 Packages/OpenKit/MediaRenders/step3b/compare-bench.py --baseline-ref f3c9cc5 --out .re/step3b-mc9
 ```
 
 Start long commands in a detached session and write logs. The benchmark script
@@ -111,7 +111,7 @@ F1–F11 from the Muse review are reflected in media plan §13 and this code:
 
 ## Verification
 
-`sidebar-render check`: **476 passed, 0 failed**. MC8: **0.007% CPU** over
+`sidebar-render check`: **476 passed, 0 failed**. MC8: **0.011% CPU** over
 2 seconds, no animation keys, no pending collapse, and one store expiry item.
 The actual ellipsis/baseline hook and retiring/replacement/drawer-prune flows pass.
 The privacy-output rejection, removed-hover-flag rejection and expired-source CLI
@@ -120,18 +120,24 @@ flows all pass. The expired render reserves zero media height.
 | Scroll measurement | Pairs | Paired median Δ (ms) | 20%-trimmed mean Δ (ms) | Result |
 |---|---|---|---|---|
 | [Pre-review, contended, per-run lock](evidence/mc9-pre-review-contended.json) | 12 | +0.390 | +0.402 | FAIL retained |
-| [A/A, same final binary/args, whole-series lock](evidence/aa-control.json) | 20 | −0.070 | −0.065 | control PASS |
-| [Final MC9, main 8f3379a vs paused card, whole-series lock](evidence/mc9.json) | 12 | −0.005 | −0.029 | PASS |
+| [A/A, same final binary/args, whole-series lock](evidence/aa-control.json) | 20 | +0.070 | +0.121 | control PASS |
+| [Final MC9, main f3c9cc5 vs paused card, whole-series lock](evidence/mc9.json) | 12 | −0.005 | −0.085 | PASS |
 
-The final baseline/head median p95 values are 1.680/1.690 ms. The three-card stack
-run is report-only: 1.92 ms p95. The first run's failure is preserved; no product
-performance fix was made to get the final result. All series-lock measurements
+The final baseline/head median p95 values are 2.035/1.980 ms. The three-card stack
+run is report-only: 2.22 ms p95. The first run's failure is preserved; the media layout was not tuned to make the gate pass. All series-lock measurements
 hold the shared on-screen lock across every warmup, pair and stack run.
 
 [Sidebar check receipt](evidence/sidebar-check.log), [CLI flow receipt](evidence/cli-cases.json),
 [62-image synthetic render manifest](evidence/render-manifest.json). A/A, final MC9
 and the renders share the same head renderer SHA-256.
 
-Complete verification is pending.
+`origin/main` was merged at `f3c9cc5` (after `6778fc2`). Main's new theme/traffic-light
+work is in both the final baseline and the feature binary. The earlier
+[pre-merge passing gate](evidence/mc9-pre-merge.json) and [A/A control](evidence/aa-pre-merge.json)
+remain available. Renders and locked benchmarks were refreshed after the merge.
 
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, after the
+main merges. Run through `heavy.sh` in a detached session. The head renderer
+hash is unchanged by full verification.
 
+[Complete verification table](evidence/verify-summary.md).
