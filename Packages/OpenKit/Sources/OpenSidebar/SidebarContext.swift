@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import OpenDesign
 import OpenModel
+import OpenMedia
 
 /// Shared state for every sidebar view: the model, the window it shows, and
 /// view-only state that is not part of the model (window active, command bar
@@ -11,6 +12,12 @@ import OpenModel
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
+    /// App-wide store injected by the host; each sidebar observes its own stable window list.
+    public var media: MediaSourceStore?
+    public var displayedTabIDs: Set<ItemID> = []
+    /// Render-only forced states, analogous to forcedHover.
+    public var forcedMediaHover: SidebarMediaHover?
+    public var mediaDrawers: Set<ItemID> = []
     public let selection = SidebarSelection()
     /// Preview/banner preferences; the App uses .standard, harnesses use a suite.
     @ObservationIgnored public let previewPreferences: UserDefaults
@@ -317,4 +324,9 @@ extension Tab {
         guard let pinned = pinnedURL else { return false }
         return pinned.host() != url.host() || pinned.path() != url.path()
     }
+}
+
+
+public enum SidebarMediaHover: Equatable, Sendable {
+    case stack, card(ItemID), title(ItemID)
 }

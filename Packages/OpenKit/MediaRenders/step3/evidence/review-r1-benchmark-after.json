@@ -1,0 +1,113 @@
+{
+  "baseline_ref": "15e261e4fe06fb77149ddda446b9e4f0522490b8",
+  "baseline_binary_source_ref": "e44b40d4b1b1beda37673e7209bed958c79cbc11",
+  "package_trees_identical": true,
+  "head_ref": "827ee8c10340d7b1770d602801c030a9a021b4b8",
+  "binary_sha256": {
+    "baseline": "4cbbb812be7b23634f8e633a16b9983dd31c231a679a6b80aadc6cfd8011d4b9",
+    "head": "f7c5c4836fc8ef0c35ea982986615e917da00056439b964f08ebf1dc2f0a6596"
+  },
+  "records": [
+    {
+      "build": "baseline",
+      "pair": 1,
+      "p95_ms": 1.48,
+      "started": "2026-10-26T09:38:43.613039-07:00"
+    },
+    {
+      "build": "head",
+      "pair": 1,
+      "p95_ms": 2.58,
+      "started": "2026-10-26T09:38:44.732481-07:00"
+    },
+    {
+      "build": "head",
+      "pair": 2,
+      "p95_ms": 3.09,
+      "started": "2026-10-26T09:38:46.121180-07:00"
+    },
+    {
+      "build": "baseline",
+      "pair": 2,
+      "p95_ms": 2.78,
+      "started": "2026-10-26T09:38:47.588099-07:00"
+    },
+    {
+      "build": "baseline",
+      "pair": 3,
+      "p95_ms": 2.61,
+      "started": "2026-10-26T09:38:49.007813-07:00"
+    },
+    {
+      "build": "head",
+      "pair": 3,
+      "p95_ms": 2.52,
+      "started": "2026-10-26T09:38:50.467394-07:00"
+    },
+    {
+      "build": "head",
+      "pair": 4,
+      "p95_ms": 3.75,
+      "started": "2026-10-26T09:38:51.887000-07:00"
+    },
+    {
+      "build": "baseline",
+      "pair": 4,
+      "p95_ms": 2.44,
+      "started": "2026-10-26T09:38:53.554940-07:00"
+    },
+    {
+      "build": "baseline",
+      "pair": 5,
+      "p95_ms": 2.18,
+      "started": "2026-10-26T09:38:54.944721-07:00"
+    },
+    {
+      "build": "head",
+      "pair": 5,
+      "p95_ms": 2.44,
+      "started": "2026-10-26T09:38:56.165342-07:00"
+    },
+    {
+      "build": "head",
+      "pair": 6,
+      "p95_ms": 2.54,
+      "started": "2026-10-26T09:38:57.419260-07:00"
+    },
+    {
+      "build": "baseline",
+      "pair": 6,
+      "p95_ms": 2.65,
+      "started": "2026-10-26T09:38:59.038721-07:00"
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "runs": [
+        1.48,
+        2.78,
+        2.61,
+        2.44,
+        2.18,
+        2.65
+      ],
+      "median_p95_ms": 2.525,
+      "mean_p95_ms": 2.3566666666666665
+    },
+    "head": {
+      "runs": [
+        2.58,
+        3.09,
+        2.52,
+        3.75,
+        2.44,
+        2.54
+      ],
+      "median_p95_ms": 2.56,
+      "mean_p95_ms": 2.82
+    },
+    "median_p95_ms_delta": 0.03500000000000014,
+    "mean_p95_ms_delta": 0.4633333333333334
+  },
+  "MC9": "FAIL"
+}
