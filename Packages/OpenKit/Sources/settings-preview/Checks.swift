@@ -85,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -437,6 +437,37 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let storedCount = await countArchive(env.archives); try require(storedCount == 4, "delete not in SQLite")
                 library.requestClearArchive(); let beforeClear = await countArchive(env.archives); try require(library.confirmsClear && beforeClear == 4, "clear did not ask first")
                 await library.clearArchiveConfirmed(); let after = await countArchive(env.archives); try require(after == 0 && env.libraryActions.log.contains("clearArchive"), "clear not on disk")
+            case "library-tidy-search":
+                let space = vm.model.spaces[0]
+                let raw = "Inbox (3) - accountneedle@example.invalid - Gmail"
+                let gmail = vm.model.newTab(in: space.id, url: URL(string: "https://mail.google.com/mail/#inbox")!, title: raw)
+                let custom = vm.model.newTab(in: space.id, url: URL(string: "https://docs.google.com/document/d/example")!, title: "Raw - Google Docs")
+                vm.model.renameNode(id: custom.id, title: "My literal - Google Docs")
+                vm.model.closeTab(id: gmail.id); vm.model.closeTab(id: custom.id)
+                (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                let library = env.library
+                library.query = "accountneedle"; await library.reloadArchive()
+                try require(library.archiveRows.count == 1 && library.archiveRows[0].id == gmail.id && library.archiveRows[0].title == raw,
+                            "Gmail archive search lost text removed by tidy")
+                try require(library.archivedDisplayTitle(library.archiveRows[0]) == "Inbox", "Library did not tidy the raw Gmail search result")
+                library.query = ""; await library.reloadArchive()
+                let customRow = library.archiveRows.first { $0.id == custom.id }!
+                try require(library.archivedDisplayTitle(customRow) == "My literal - Google Docs", "Library tidied a custom title")
+                let directory = env.root.appendingPathComponent("Tidy Import")
+                try SyntheticData.writeImportFixture(to: directory)
+                let item: [String: Any] = ["sidebarItem": ["id": "tidy-import-gmail", "data": ["tab": ["savedURL": gmail.url.absoluteString, "savedTitle": raw]]],
+                                           "reason": "manual", "archivedAt": 800000000, "source": ["space": ["_0": "example-space-0"]]]
+                try JSONSerialization.data(withJSONObject: ["items": ["tidy-import-gmail", item]])
+                    .write(to: directory.appendingPathComponent("StorableArchiveItems.json"))
+                let importer = ArcImporter(arcDirectory: directory)
+                let parsed = try importer.readSidebar()
+                let imported = try importer.importAll(sidebar: parsed)
+                let store = ArchiveStore(fileURL: env.root.appendingPathComponent("tidy-import.sqlite3"))
+                let inserted = await store.importRecords(imported.archiveRecords)
+                let found = await store.search("accountneedle")
+                try require(inserted.inserted == 1 && found.count == 1 && found[0].title == raw,
+                            "imported Gmail archive did not retain the raw search title")
+                print("T2 archive Gmail raw search, tidy display, custom title, and real Arc import passed")
             case "library-folder-archive":
                 try await env.prepareLibrary()
                 let space = vm.model.spaces[0], library = env.library
