@@ -558,7 +558,7 @@
           },
           "automationPointer": BrowserWindowController.automationPointer.map { p -> Any in
             p.window == win.windowNumber ? [Double(p.location.x), Double(win.frame.height - p.location.y)] : NSNull() } ?? NSNull(),
-          "key": win.isKeyWindow, "appActive": NSApp.isActive, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
+          "key": win.isKeyWindow, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
