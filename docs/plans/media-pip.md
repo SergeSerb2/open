@@ -1274,6 +1274,15 @@ Every PR: merge `origin/main`, run `tools/verify-all.sh`, paste the
 table (AGENTS.md rule 10). One library target per PR where the step says
 so.
 
+Lead performance decision (2026-10-26 01:44 America/Vancouver, Step 2
+review): rows that look the same as before must show no scroll-p95
+regression against main. The mixed audible/muted/capturing variant draws
+new views and instead has an absolute scroll-p95 budget of 4.2 ms (half
+a 120 Hz frame). Compare baseline and head interleaved in one session,
+at least five runs each, and report both the median and mean of their
+per-run p95 values. If mixed rows exceed 4.2 ms, profile and fix the hot
+spot before Step 3; otherwise proceed after the plain-row gate passes.
+
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
 | 0 | Screenshots S1–S12 from the user (§11), through the lead. Runs in parallel; Steps 1–5 do not wait. | — | Lead files them under `.re/runtime/` (git-ignored) and adds measured values to `docs/re/interaction-states.md`. |
