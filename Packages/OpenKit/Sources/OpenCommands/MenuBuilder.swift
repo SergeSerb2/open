@@ -61,7 +61,6 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
         guard let info = menuItem.representedObject as? [String: String],
               let id = info["command"] else { return true }
         let key = enabledKeys[ObjectIdentifier(menuItem).debugDescription] ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
-        if key == EnabledKey.always { return true }
         return dispatcher?.isCommandEnabled(id, enabledKey: key) ?? true
     }
 }
@@ -123,7 +122,10 @@ public enum MenuBuilder {
             action: #selector(MenuCommandTarget.openCommandAction(_:)),
             keyEquivalent: shortcuts.first?.keyEquivalent ?? ""
         )
-        item.target = target
+        if let native = SystemCommandActions.selectors[commandID] {
+            item.action = NSSelectorFromString(native); item.target = nil
+            item.tag = SystemCommandActions.tags[commandID] ?? 0
+        } else { item.target = target }
         item.keyEquivalentModifierMask = shortcuts.first?.keyEquivalentModifierMask ?? []
         var info: [String: String] = ["command": commandID]
         if let payload { info["payload"] = payload }
@@ -226,6 +228,7 @@ public enum MenuBuilder {
 
         let font = NSMenu(title: "Font")
         add(font, ["show-fonts", "font-bold", "font-italic", "font-underline"], target: target, overrides: overrides)
+        NSFontManager.shared.setFontMenu(font)
         let format = NSMenu(title: "Format")
         format.addItem(submenuItem("Font", font))
         menu.addItem(submenuItem("Format", format))
@@ -290,7 +293,7 @@ public enum MenuBuilder {
         menu.addItem(item("new-tab", target: target, overrides: overrides))
         carriers("new-tab", target: target, overrides: overrides, into: menu)
         menu.addItem(.separator())
-        add(menu, ["pin-unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "reset-all-tabs-in-space"], target: target, overrides: overrides)
+        add(menu, ["pin-unpin-tab", "duplicate-tab", "rename-tab", "reveal-tab-in-sidebar", "reset-tab", "reset-all-tabs-in-space"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward"], target: target, overrides: overrides)
         menu.addItem(.separator())
@@ -393,5 +396,61 @@ public enum MenuBuilder {
         case "\u{F701}": return "down"
         default: return equivalent
         }
+    }
+}
+
+/// Native actions are registry metadata. They retain AppKit's nil-target
+/// validation and responder search, including Chromium's text responder.
+@MainActor
+public enum SystemCommandActions {
+    public static let selectors: [String: String] = [
+        "about-open": "orderFrontStandardAboutPanel:",
+        "quit-open": "terminate:", "hide-open": "hide:",
+        "hide-others": "hideOtherApplications:", "show-all": "unhideAllApplications:",
+        "close-window": "performClose:", "minimize-window": "performMiniaturize:",
+        "zoom-window": "performZoom:", "bring-all-to-front": "arrangeInFront:",
+        "toggle-full-screen": "toggleFullScreen:",
+        "cut": "cut:", "copy": "copy:", "paste": "paste:",
+        "paste-and-match-style": "pasteAsPlainText:", "delete": "delete:",
+        "select-all": "selectAll:", "undo": "undo:", "redo": "redo:",
+        "find": "performFindPanelAction:", "find-next": "performFindPanelAction:",
+        "find-previous": "performFindPanelAction:", "use-selection-to-find": "performFindPanelAction:",
+        "find-and-replace": "performTextFinderAction:", "jump-to-selection": "centerSelectionInVisibleArea:",
+        "show-spelling": "showGuessPanel:", "check-spelling": "checkSpelling:",
+        "check-spelling-while-typing": "toggleContinuousSpellChecking:",
+        "check-grammar": "toggleGrammarChecking:",
+        "correct-spelling-automatically": "toggleAutomaticSpellingCorrection:",
+        "show-substitutions": "orderFrontSubstitutionsPanel:",
+        "smart-copy-paste": "toggleSmartInsertDelete:", "smart-quotes": "toggleAutomaticQuoteSubstitution:",
+        "smart-dashes": "toggleAutomaticDashSubstitution:", "smart-links": "toggleAutomaticLinkDetection:",
+        "text-replacement": "toggleAutomaticTextReplacement:", "data-detectors": "toggleAutomaticDataDetection:",
+        "make-upper-case": "uppercaseWord:", "make-lower-case": "lowercaseWord:", "capitalize": "capitalizeWord:",
+        "start-speaking": "startSpeaking:", "stop-speaking": "stopSpeaking:",
+        "show-fonts": "orderFrontFontPanel:", "font-bold": "addFontTrait:",
+        "font-italic": "addFontTrait:", "font-underline": "underline:",
+        "emoji-and-symbols": "orderFrontCharacterPalette:"
+    ]
+    public static let tags = ["find": 1, "find-next": 2, "find-previous": 3,
+                              "use-selection-to-find": 7, "find-and-replace": 12, "font-bold": 2, "font-italic": 1]
+    public static func command(for shortcut: KeyboardShortcut, overrides: KeyBindingStore) -> String? {
+        CommandRegistry.active.first { selectors[$0.id] != nil && overrides.effectiveShortcuts(for: $0).contains(shortcut) }?.id
+    }
+    public static func sender(for id: String) -> NSMenuItem? {
+        guard let selector = selectors[id] else { return nil }
+        let item = NSMenuItem(title: CommandRegistry.byID[id]?.title ?? id,
+                              action: NSSelectorFromString(selector), keyEquivalent: "")
+        item.target = nil; item.tag = tags[id] ?? 0; item.identifier = .init(id)
+        return item
+    }
+    public static func isEnabled(_ id: String) -> Bool {
+        guard let item = sender(for: id), let action = item.action,
+              let target = NSApp?.target(forAction: action, to: nil, from: item) else { return false }
+        if let target = target as? NSMenuItemValidation { return target.validateMenuItem(item) }
+        if let target = target as? NSUserInterfaceValidations { return target.validateUserInterfaceItem(item) }
+        return true
+    }
+    @discardableResult public static func perform(_ id: String) -> Bool {
+        guard let item = sender(for: id), let action = item.action else { return false }
+        return NSApp?.sendAction(action, to: nil, from: item) == true
     }
 }

@@ -1,0 +1,782 @@
+{
+  "actions": {
+    "cmd_t_mode": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 42.096000000000004,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 46.606750000000034,
+        "presented": true,
+        "profile": "07734071-2538-4F06-BAED-07D38F49542A",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "0BE2AE6E-FDF7-4F82-9568-EA0E1FCBB0A5",
+        "text": ""
+      }
+    },
+    "first_open_results_budget": {
+      "milliseconds": 46.606750000000034,
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "suite": {
+      "attempts": 3,
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "openPID": 93812,
+          "uptime": 132119.34072945834
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "keyWindow": 0,
+          "openPID": 93812,
+          "uptime": 132119.34312170834
+        }
+      ],
+      "reason": "foreground lost during typed_top_today",
+      "status": "INTERRUPTED"
+    },
+    "typed_top_today": {
+      "assertion": {
+        "ok": true,
+        "tab": "12DA5F9E-1208-4DC0-A805-D81F739E9BC7"
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "openPID": 93812,
+          "uptime": 132119.34072945834
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "keyWindow": 0,
+          "openPID": 93812,
+          "uptime": 132119.34312170834
+        }
+      ],
+      "status": "INTERRUPTED"
+    }
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "action_pin-tab": {
+          "ok": true
+        },
+        "action_unpin-tab": {
+          "ok": true
+        },
+        "calculator_copy": {
+          "clipboard": "84",
+          "ok": true
+        },
+        "cmd_l_selection": {
+          "ok": true,
+          "state": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "http://127.0.0.1:54707/new",
+            "final": true,
+            "firstResultsMs": 10.302083333333258,
+            "mode": "editCurrentURL",
+            "newTabHighlighted": false,
+            "openFirstResultsMs": 10.706416666666655,
+            "presented": true,
+            "profile": "953E1D65-CCFE-4C69-92C7-DD744EB3B09F",
+            "range": [
+              0,
+              26
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "typed:url",
+                "kind": "navigate",
+                "space": "",
+                "tab": "",
+                "title": "http://127.0.0.1:54707/new",
+                "url": "http://127.0.0.1:54707/new"
+              }
+            ],
+            "selected": 0,
+            "space": "7C6A36A3-E06B-419B-9726-0A4339DE1626",
+            "text": "http://127.0.0.1:54707/new"
+          }
+        },
+        "cmd_t_mode": {
+          "ok": true,
+          "state": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 14.520541666666645,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 18.312541666666675,
+            "presented": true,
+            "profile": "953E1D65-CCFE-4C69-92C7-DD744EB3B09F",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [],
+            "selected": -1,
+            "space": "7C6A36A3-E06B-419B-9726-0A4339DE1626",
+            "text": ""
+          }
+        },
+        "command_return_background": {
+          "ok": true
+        },
+        "edit_current_tab": {
+          "ok": true,
+          "title": "Shell C /edited"
+        },
+        "escape_then_page": {
+          "assertion": {
+            "keys": [
+              "Escape"
+            ],
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 88744,
+              "openPID": 90309,
+              "uptime": 132091.00240116668
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 88744,
+              "keyWindow": 0,
+              "openPID": 90309,
+              "uptime": 132091.00848916668
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "first_open_results_budget": {
+          "milliseconds": 18.312541666666675,
+          "ok": true
+        },
+        "lazy_commandbar": {
+          "ok": true
+        },
+        "native_field_undo_preserves_model": {
+          "after": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 6.728749999999991,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 5.049708333333228,
+            "presented": true,
+            "profile": "953E1D65-CCFE-4C69-92C7-DD744EB3B09F",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "tab:3F7FE4BD-5D62-4422-A638-9BF7870D43F5",
+                "kind": "switchToTab",
+                "space": "7C6A36A3-E06B-419B-9726-0A4339DE1626",
+                "tab": "3F7FE4BD-5D62-4422-A638-9BF7870D43F5",
+                "title": "Shell C /start",
+                "url": "http://127.0.0.1:54707/start"
+              },
+              {
+                "action": "",
+                "id": "history:127.0.0.1:54707/edited",
+                "kind": "history",
+                "space": "",
+                "tab": "",
+                "title": "127.0.0.1",
+                "url": "http://127.0.0.1:54707/edited"
+              },
+              {
+                "action": "",
+                "id": "history:127.0.0.1:54707/new",
+                "kind": "history",
+                "space": "",
+                "tab": "",
+                "title": "127.0.0.1",
+                "url": "http://127.0.0.1:54707/new"
+              }
+            ],
+            "selected": 0,
+            "space": "7C6A36A3-E06B-419B-9726-0A4339DE1626",
+            "text": ""
+          },
+          "before": {
+            "created": true,
+            "editorCanUndo": true,
+            "editorText": "word",
+            "final": true,
+            "firstResultsMs": 10.719166666666524,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 5.049708333333228,
+            "presented": true,
+            "profile": "953E1D65-CCFE-4C69-92C7-DD744EB3B09F",
+            "range": [
+              4,
+              0
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "typed:search",
+                "kind": "search",
+                "space": "",
+                "tab": "",
+                "title": "word",
+                "url": "https://www.google.com/search?q=word"
+              },
+              {
+                "action": "import-from-browser",
+                "id": "action:import-from-browser",
+                "kind": "action",
+                "space": "",
+                "tab": "",
+                "title": "Import from Another Browser",
+                "url": ""
+              }
+            ],
+            "selected": 0,
+            "space": "7C6A36A3-E06B-419B-9726-0A4339DE1626",
+            "text": "word"
+          },
+          "ok": true,
+          "route": {
+            "barPresented": true,
+            "firstResponder": "CommandBarFieldEditor",
+            "keyWindow": 95037,
+            "sidebarMode": "anchored"
+          }
+        },
+        "native_font_traits": {
+          "ok": true
+        },
+        "native_menu_registration": {
+          "menus": {
+            "font": true,
+            "services": true,
+            "window": true
+          },
+          "ok": true
+        },
+        "page_copy_native_responder": {
+          "clipboard": "PAGE COPY",
+          "ok": true
+        },
+        "page_cut_native_responder": {
+          "ok": true
+        },
+        "page_paste_native_responder": {
+          "ok": true
+        },
+        "page_select_all_native_responder": {
+          "ok": true
+        },
+        "page_undo_native_responder": {
+          "ok": true
+        },
+        "system_menu_nil_targets": {
+          "ok": true,
+          "rows": [
+            {
+              "action": "hide:",
+              "enabled": true,
+              "id": "hide-open",
+              "key": "h",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Hide Open"
+            },
+            {
+              "action": "hideOtherApplications:",
+              "enabled": true,
+              "id": "hide-others",
+              "key": "h",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Hide Others"
+            },
+            {
+              "action": "unhideAllApplications:",
+              "enabled": false,
+              "id": "show-all",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Show All"
+            },
+            {
+              "action": "terminate:",
+              "enabled": true,
+              "id": "quit-open",
+              "key": "q",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Quit Open"
+            },
+            {
+              "action": "performClose:",
+              "enabled": true,
+              "id": "close-window",
+              "key": "w",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Close Window"
+            },
+            {
+              "action": "undo:",
+              "enabled": true,
+              "id": "undo",
+              "key": "z",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Undo"
+            },
+            {
+              "action": "redo:",
+              "enabled": true,
+              "id": "redo",
+              "key": "z",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Redo"
+            },
+            {
+              "action": "cut:",
+              "enabled": true,
+              "id": "cut",
+              "key": "x",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Cut"
+            },
+            {
+              "action": "copy:",
+              "enabled": true,
+              "id": "copy",
+              "key": "c",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Copy"
+            },
+            {
+              "action": "paste:",
+              "enabled": true,
+              "id": "paste",
+              "key": "v",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Paste"
+            },
+            {
+              "action": "pasteAsPlainText:",
+              "enabled": false,
+              "id": "paste-and-match-style",
+              "key": "v",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Paste and Match Style"
+            },
+            {
+              "action": "selectAll:",
+              "enabled": true,
+              "id": "select-all",
+              "key": "a",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Select All"
+            },
+            {
+              "action": "performFindPanelAction:",
+              "enabled": true,
+              "id": "find",
+              "key": "f",
+              "payload": "",
+              "tag": 1,
+              "targetNil": true,
+              "title": "Find\u2026"
+            },
+            {
+              "action": "performFindPanelAction:",
+              "enabled": true,
+              "id": "find-next",
+              "key": "g",
+              "payload": "",
+              "tag": 2,
+              "targetNil": true,
+              "title": "Find Next"
+            },
+            {
+              "action": "performFindPanelAction:",
+              "enabled": true,
+              "id": "find-previous",
+              "key": "g",
+              "payload": "",
+              "tag": 3,
+              "targetNil": true,
+              "title": "Find Previous"
+            },
+            {
+              "action": "startSpeaking:",
+              "enabled": true,
+              "id": "start-speaking",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Start Speaking"
+            },
+            {
+              "action": "stopSpeaking:",
+              "enabled": true,
+              "id": "stop-speaking",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Stop Speaking"
+            },
+            {
+              "action": "orderFrontFontPanel:",
+              "enabled": true,
+              "id": "show-fonts",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Show Fonts"
+            },
+            {
+              "action": "addFontTrait:",
+              "enabled": false,
+              "id": "font-bold",
+              "key": "b",
+              "payload": "",
+              "tag": 2,
+              "targetNil": true,
+              "title": "Bold"
+            },
+            {
+              "action": "addFontTrait:",
+              "enabled": false,
+              "id": "font-italic",
+              "key": "i",
+              "payload": "",
+              "tag": 1,
+              "targetNil": true,
+              "title": "Italic"
+            },
+            {
+              "action": "underline:",
+              "enabled": true,
+              "id": "font-underline",
+              "key": "u",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Underline"
+            },
+            {
+              "action": "orderFrontCharacterPalette:",
+              "enabled": true,
+              "id": "emoji-and-symbols",
+              "key": " ",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Emoji & Symbols"
+            },
+            {
+              "action": "toggleFullScreen:",
+              "enabled": true,
+              "id": "toggle-full-screen",
+              "key": "f",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Enter Full Screen"
+            },
+            {
+              "action": "toggleFullScreen:",
+              "enabled": true,
+              "id": "toggle-full-screen",
+              "key": "f",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Enter Full Screen"
+            },
+            {
+              "action": "performMiniaturize:",
+              "enabled": true,
+              "id": "minimize-window",
+              "key": "m",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Minimize"
+            },
+            {
+              "action": "performZoom:",
+              "enabled": true,
+              "id": "zoom-window",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Zoom"
+            },
+            {
+              "action": "arrangeInFront:",
+              "enabled": true,
+              "id": "bring-all-to-front",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Bring All to Front"
+            }
+          ]
+        },
+        "tabs_reveal_registered": {
+          "ok": true
+        },
+        "typed_top_today": {
+          "ok": true,
+          "tab": "5CA57668-BFBF-4E6F-BCC0-23C437BDB536"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "openPID": 90309,
+          "uptime": 132091.00240116668
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "keyWindow": 0,
+          "openPID": 90309,
+          "uptime": 132091.00848916668
+        }
+      ],
+      "reason": "foreground lost during escape_then_page",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 2,
+      "checks": {
+        "cmd_t_mode": {
+          "ok": true,
+          "state": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 32.31841666666662,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 36.398874999999975,
+            "presented": true,
+            "profile": "418F0758-D591-4ECB-B7A3-14C0624938D1",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [],
+            "selected": -1,
+            "space": "2C2AA3DE-5A5E-4A8F-A180-5056918E2A9E",
+            "text": ""
+          }
+        },
+        "first_open_results_budget": {
+          "milliseconds": 36.398874999999975,
+          "ok": true
+        },
+        "lazy_commandbar": {
+          "ok": true
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "openPID": 90783,
+          "uptime": 132094.303219625
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "keyWindow": 0,
+          "openPID": 90783,
+          "uptime": 132094.30998508335
+        },
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "openPID": 90783,
+          "uptime": 132098.80446883335
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "keyWindow": 0,
+          "openPID": 90783,
+          "uptime": 132098.80892654168
+        }
+      ],
+      "reason": "Assertion failed after native foreground loss; potentially typed fixture dump is retained privately.",
+      "status": "INTERRUPTED",
+      "privateRawSHA256": "87a1f67978b012d39c42a8b0b0d2dcb063a5272e35c3f4c832bdda441f46ed85"
+    },
+    {
+      "attempt": 3,
+      "checks": {
+        "cmd_t_mode": {
+          "ok": true,
+          "state": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 42.096000000000004,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 46.606750000000034,
+            "presented": true,
+            "profile": "07734071-2538-4F06-BAED-07D38F49542A",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [],
+            "selected": -1,
+            "space": "0BE2AE6E-FDF7-4F82-9568-EA0E1FCBB0A5",
+            "text": ""
+          }
+        },
+        "first_open_results_budget": {
+          "milliseconds": 46.606750000000034,
+          "ok": true
+        },
+        "lazy_commandbar": {
+          "ok": true
+        },
+        "typed_top_today": {
+          "assertion": {
+            "ok": true,
+            "tab": "12DA5F9E-1208-4DC0-A805-D81F739E9BC7"
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 88744,
+              "openPID": 93812,
+              "uptime": 132119.34072945834
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "T3 Pretty Internal (Nightly)",
+              "frontmostPID": 88744,
+              "keyWindow": 0,
+              "openPID": 93812,
+              "uptime": 132119.34312170834
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "openPID": 93812,
+          "uptime": 132119.34072945834
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "T3 Pretty Internal (Nightly)",
+          "frontmostPID": 88744,
+          "keyWindow": 0,
+          "openPID": 93812,
+          "uptime": 132119.34312170834
+        }
+      ],
+      "reason": "foreground lost during typed_top_today",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "started": "2026-10-26 12:38:50",
+  "style": "chrome"
+}

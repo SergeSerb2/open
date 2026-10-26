@@ -87,6 +87,7 @@ public extension CommandRegistry {
 
     /// Menu commands with no command-bar row (text, spelling, chrome, help detail).
     private static let suggestExcludedIDs: Set<String> = [
+        "reveal-tab-in-sidebar", // View command already emits this action ID.
         "about-open", "check-for-updates", "hide-open", "hide-others", "show-all", "quit-open",
         "close-window", "blank-window", "share-page", "capture-page", "capture-full-page", "capture-portrait",
         "undo", "redo", "cut", "copy", "paste", "paste-and-match-style", "select-all", "delete",

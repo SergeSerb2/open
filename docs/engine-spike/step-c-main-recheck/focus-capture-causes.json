@@ -1,0 +1,131 @@
+{
+  "raw_executable": {
+    "alloy": {
+      "error": "key: key focus not ready: active=false target=62924 key=0",
+      "state": {
+        "appActive": false,
+        "isKeyWindow": false,
+        "keyWindow": 0,
+        "number": 62924,
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "activationPolicy": 0,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ]
+      }
+    },
+    "chrome": {
+      "error": "key: key focus not ready: active=false target=62962 key=0",
+      "state": {
+        "appActive": false,
+        "isKeyWindow": false,
+        "keyWindow": 0,
+        "number": 62962,
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "activationPolicy": 0,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ]
+      }
+    }
+  },
+  "launchservices": {
+    "loaded": {
+      "appActive": true,
+      "isKeyWindow": true,
+      "keyWindow": 64197,
+      "number": 64197,
+      "firstResponder": "FavoritesCollectionView",
+      "engineURL": "data:text/html,%3Ctitle%3EFocus%20timeline%3C/title%3E%3Cp%20id=p%3ECOPY%20THIS%3C/p%3E%3Cinput%20id=x%20value=seed%3E"
+    },
+    "focused": {
+      "appActive": true,
+      "isKeyWindow": true,
+      "keyWindow": 64197,
+      "number": 64197,
+      "firstResponder": "RenderWidgetHostViewCocoa",
+      "engineURL": "data:text/html,%3Ctitle%3EFocus%20timeline%3C/title%3E%3Cp%20id=p%3ECOPY%20THIS%3C/p%3E%3Cinput%20id=x%20value=seed%3E"
+    },
+    "dismissed": {
+      "appActive": true,
+      "isKeyWindow": true,
+      "keyWindow": 64197,
+      "number": 64197,
+      "firstResponder": "RenderWidgetHostViewCocoa",
+      "engineURL": "data:text/html,%3Ctitle%3EFocus%20timeline%3C/title%3E%3Cp%20id=p%3ECOPY%20THIS%3C/p%3E%3Cinput%20id=x%20value=seed%3E"
+    },
+    "copy": {
+      "appActive": true,
+      "isKeyWindow": true,
+      "keyWindow": 64197,
+      "number": 64197,
+      "firstResponder": "RenderWidgetHostViewCocoa",
+      "engineURL": "data:text/html,%3Ctitle%3EFocus%20timeline%3C/title%3E%3Cp%20id=p%3ECOPY%20THIS%3C/p%3E%3Cinput%20id=x%20value=seed%3E"
+    },
+    "clipboard": "COPY THIS",
+    "selectall": {
+      "appActive": true,
+      "isKeyWindow": true,
+      "keyWindow": 64197,
+      "number": 64197,
+      "firstResponder": "RenderWidgetHostViewCocoa",
+      "engineURL": "data:text/html,%3Ctitle%3EFocus%20timeline%3C/title%3E%3Cp%20id=p%3ECOPY%20THIS%3C/p%3E%3Cinput%20id=x%20value=seed%3E"
+    }
+  },
+  "frame_constraints": {
+    "requested": [
+      40,
+      40,
+      2216,
+      1800
+    ],
+    "constrained": [
+      40,
+      0,
+      2216,
+      1410
+    ],
+    "unconstrained": [
+      40,
+      40,
+      2216,
+      1800
+    ],
+    "screen": [
+      0,
+      0,
+      2560,
+      1440
+    ]
+  },
+  "navigation_before_fix": {
+    "error": "focus: page focus not ready",
+    "state": {
+      "appActive": true,
+      "isKeyWindow": true,
+      "keyWindow": 64722,
+      "number": 64722,
+      "firstResponder": "RenderWidgetHostViewCocoa",
+      "activationPolicy": 0,
+      "screenFrame": [
+        0,
+        0,
+        2560,
+        1440
+      ]
+    },
+    "dom": {
+      "active": "BODY",
+      "focus": false,
+      "ready": "complete",
+      "selection": ""
+    }
+  },
+  "source": "Real app automation probes; synthetic pages; same Debug/fork app. Raw and LaunchServices launches are distinguished. The final repeated suites are separate receipts."
+}
