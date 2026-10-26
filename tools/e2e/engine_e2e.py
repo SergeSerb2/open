@@ -3277,6 +3277,9 @@ def commandbar_checks(factory, results, tmp, config):
         if save: press('escape', window=save['number'])
         wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
         capture = os.path.join(tmp, 'saved-command-page.mhtml')
+        # This is a separate native Save action. Re-establish its exact browser
+        # key window; the completion deliberately never re-keys a window.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
         assert wait_until(lambda: any(r['id'] == 'save-page-as' and r['enabled'] for r in app.call('menu-state')), timeout=3, step=.02), 'Save menu target did not return after sheet cancel'
         app.call('menu-perform', id='save-page-as')
         assert wait_until(lambda: app.call('save-page-state')['visible'], timeout=5, step=.02)
