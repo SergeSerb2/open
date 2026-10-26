@@ -27,6 +27,7 @@ import subprocess
 import sys
 import time
 import traceback
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
@@ -41,11 +42,12 @@ CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",)):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
         self.user_data = user_data
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
         env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
@@ -712,6 +714,7 @@ def window_checks(app_factory, results, tmp):
                 "ok": evidence["pagesBeforeEngine"] == 0 and evidence["contextsBeforeEngine"] == 0
                       and evidence["visibleWindows"] >= 1
                       and evidence["sidebarClass"] == "OpenSidebar.SidebarView"
+                      and runs["cold_fresh_profile"][-1]["kernelProcessStart"] is True
                       and runs["cold_fresh_profile"][-1]["sidebarDrawn"] <= runs["cold_fresh_profile"][-1]["engineStart"],
                 "evidence": evidence}
             # Create the second row, then return selection to the first row.
@@ -730,7 +733,8 @@ def window_checks(app_factory, results, tmp):
             runs["warm_existing_profile"].append(app.call("timing"))
             tabs = app.call("tabs")
             results["selected_only_%d" % i] = {
-                "ok": len(tabs) == 2 and len([t for t in tabs if t["loaded"]]) == 1
+                "ok": runs["warm_existing_profile"][-1]["kernelProcessStart"] is True
+                      and len(tabs) == 2 and len([t for t in tabs if t["loaded"]]) == 1
                       and next(t for t in tabs if t["loaded"])["id"] == selected["id"],
                 "tabs": [{k: t[k] for k in ("title", "loaded", "selected")} for t in tabs]}
         finally:
@@ -744,7 +748,77 @@ def window_checks(app_factory, results, tmp):
                               and medians["firstContentfulPaint"] is not None and medians["firstContentfulPaint"] <= 700,
                           "median_ms": medians, "samples": len(values)}
         print(label, medians)
+    # A never-loaded pinned row must never pass through selection while
+    # closing or unloading. The counter is cumulative, so create-then-drop
+    # cannot look like zero retained hosts.
+    app = app_factory(urls=(), fresh=True)
+    try:
+        first = new_tab(app, "data:text/html,<title>Selected</title><h1>Selected</h1>")
+        pinned = app.call("open", url="data:text/html,<title>Never loaded</title><h1>Never loaded</h1>", background=True)["id"]
+        app.call("pin", tab=pinned)
+        before = app.call("host-counts")
+        app.call("close", tab=pinned)
+        after_close = app.call("host-counts")
+        app.call("sidebar-unload", tab=pinned)
+        after_unload = app.call("host-counts")
+        results["close_unloaded_pinned"] = {"ok": before == after_close == after_unload
+            and not app.tab(pinned)["loaded"] and app.tab(first)["selected"]
+            and app.eval(first, "document.title") == "Selected",
+            "before": before, "after_close": after_close, "after_unload": after_unload}
+    finally:
+        app.quit()
+    startup_failure_checks(app_factory, results, tmp)
     results["comparison"] = {"status": "SKIP", "reason": "Step A startup only; static window comparison is Step B"}
+
+
+# ----------------------------------------------------------------------------
+# Early lifecycle failures go through the real NSApplication terminate and
+# NSAlert button paths, with own-process automation flags compiled out of
+# ordinary Release builds.
+
+
+def startup_failure_checks(factory, results, tmp):
+    app = factory(urls=(), fresh=True)
+    app_path = app.proc.args[0]
+    app.quit()
+    early_data = os.path.join(tmp, "early-quit")
+    log = os.path.join(tmp, "early-quit.log")
+    with open(log, "w") as stream:
+        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+            env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    text = open(log).read()
+    results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
+        and "engineStart" not in text and os.path.isfile(os.path.join(early_data, "State", "browser.json"))
+        and not os.path.exists(os.path.join(early_data, "State", "engine.log")), "exit": proc.returncode}
+    queued_page = Path(tmp) / "queued-navigation.html"
+    queued_page.write_text("<title>Queued</title><h1>Queued</h1>")
+    queued = factory(urls=("data:text/html,<title>Initial</title><h1>Initial</h1>",), fresh=True,
+                     extra_env={"OPEN_AUTOMATION_EARLY_NAVIGATION": queued_page.resolve().as_uri()})
+    try:
+        tab = queued.call("tabs")[0]
+        queued.call("wait", tab=tab["id"])
+        title = queued.eval(tab["id"], "document.title")
+        counts = queued.call("host-counts")
+        results["navigation_before_engine"] = {"ok": title == "Queued"
+            and queued.call("startup")["pagesBeforeEngine"] == 0 and counts["created"] == 1,
+            "title": title, "hosts": counts}
+    finally:
+        queued.quit()
+    # APFS clone of our own app, with its CEF library removed: exercise the
+    # actual library-load failure, not an injected engine success/failure.
+    bundle = os.path.dirname(os.path.dirname(os.path.dirname(app_path)))
+    failed_bundle = os.path.join(tmp, "MissingEngine.app")
+    subprocess.run(["cp", "-cR", bundle, failed_bundle], check=True)
+    shutil.rmtree(os.path.join(failed_bundle, "Contents", "Frameworks", "Chromium Embedded Framework.framework"))
+    failure_data = os.path.join(tmp, "engine-failure")
+    failure_log = os.path.join(tmp, "engine-failure.log")
+    with open(failure_log, "w") as stream:
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+            env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    text = open(failure_log).read()
+    results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
+        and "engine failure alert shown; button=Quit" in text, "exit": failed.returncode}
+    shutil.rmtree(failed_bundle)
 
 
 # ----------------------------------------------------------------------------
@@ -838,10 +912,10 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    def factory(urls=("about:blank",), fresh=False):
+    def factory(urls=("about:blank",), fresh=False, extra_env=None):
         if fresh:
             shutil.rmtree(user_data, ignore_errors=True)
-        return Open(opts.config, opts.style, user_data, extra, log, urls=urls)
+        return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     try:

@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   private(set) var windowControllers: [BrowserWindowController] = []
   let undoManager = UndoManager()
   private(set) var engineReady = false
+  private(set) var terminationRequested = false
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
     private var automation: AutomationServer?
@@ -37,6 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     frontWindowController?.showWindow(nil)
     return false
+  }
+
+  func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    terminationRequested = true
+    saveState()
+    if !engineReady { CFRunLoopStop(CFRunLoopGetMain()) }
+    return .terminateNow
   }
 
   // MARK: Model
@@ -106,11 +114,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   func drawWindowsBeforeEngine() {
     showWindowsIfNeeded()
     for controller in windowControllers {
+      controller.prepareForInitialDisplay()
       controller.window?.contentView?.layoutSubtreeIfNeeded()
       controller.window?.displayIfNeeded()
     }
     CATransaction.flush()
-    LaunchTiming.shared.mark("sidebarDrawn")
     startupEvidence = [
       "sidebarClass": windowControllers.first?.sidebarClassName ?? "",
       "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
