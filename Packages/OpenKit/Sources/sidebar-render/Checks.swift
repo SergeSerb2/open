@@ -274,8 +274,10 @@ enum Checks {
         check(NamedSpaceIcons.symbolName(for: "unknown-future-icon") == NamedSpaceIcons.fallbackSymbol,
               "unknown named icons use the neutral symbol")
 
+        MediaChecks.runRowIndicators()
         ReviewChecks.run()
         VisualFinishChecks.run()
+        CompletionChecks.run()
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil

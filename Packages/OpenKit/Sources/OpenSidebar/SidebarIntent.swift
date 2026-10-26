@@ -66,6 +66,22 @@ public enum SidebarIntent: Equatable, Sendable {
     case deleteFolder(folderID: ItemID)
     case clearToday(space: SpaceID)
 
+    // Selection actions. The App confirms deleteFolders before archiving the
+    // supplied selection (which can also contain tabs and splits on Delete).
+    case moveNodes(ids: [ItemID], to: NodeParent, index: Int?)
+    case moveNodesToSpace(ids: [ItemID], space: SpaceID)
+    case moveNodesToNewSpace(ids: [ItemID])
+    case archiveNodes(ids: [ItemID])
+    case deleteFolders(ids: [ItemID])
+    case newFolderFromSelection(ids: [ItemID])
+    case setPinned(ids: [ItemID], pinned: Bool)
+    case duplicateNodes(ids: [ItemID])
+    case copyLinks(ids: [ItemID], markdown: Bool)
+    case clearTodayKeeping(space: SpaceID, keep: Set<ItemID>)
+    case separateFromPinned(tabID: ItemID)
+    /// Model-only API; no Archive Folder menu item (lead decision Q1).
+    case archiveFolder(folderID: ItemID)
+
     // Structure (drag and drop, "Move to")
     case move(nodeID: ItemID, to: NodeParent, index: Int?)
     case moveToSpace(nodeID: ItemID, space: SpaceID)

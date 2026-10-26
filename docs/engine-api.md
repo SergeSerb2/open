@@ -71,7 +71,7 @@ OEEngine.shared.shutdown()                             // CefShutdown
 | `browsers`, `allWebContents`, `webContent(identifier:)` | Live objects (weak registry) |
 | `sampleProcessMetrics(after:)` | Chromium task manager rows: kind, memory, GPU memory, CPU |
 
-`OEEngineConfiguration`: `userDataDirectory`, `userAgentProduct`, `locale`, `defaultRuntimeStyle`, `remoteDebuggingPort`, `additionalSwitches`, `logFile`, `verboseLogging`, `keychainServiceName`, `keychainAccountName`, `useMockKeychain`.
+`OEEngineConfiguration`: `userDataDirectory`, `userAgentProduct` (leave nil: it replaces the `Chrome/<version>` token, and sites and extensions such as Bitwarden then take their Safari code path), `locale`, `defaultRuntimeStyle`, `remoteDebuggingPort`, `additionalSwitches`, `logFile`, `verboseLogging`, `keychainServiceName`, `keychainAccountName`, `useMockKeychain`.
 
 The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) §5-6 (`ProfileDirectories` in OpenStore): `userDataDirectory` = `<root>/Profiles`, and every non-default profile's context is `context(identifier: dir, directory: <root>/Profiles/<dir>/Engine)`, created when a Space of that profile is first shown. One deviation, forced by CEF: the plan sets the global `cache_path` to `<root>/Profiles/Default/Engine`, but CEF ignores child paths for the global context, so the default profile's engine data is `<root>/Profiles/Default/` itself (next to its `State/`). Mapping to the interface that plan assumed (§6.6):
 
@@ -100,27 +100,41 @@ The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) �
 
 ## OEBrowser (window tab strip)
 
-One per shell window and profile. The shell keeps it exact; with fork patch P1 it becomes the Chrome window that extensions see (docs/engine-patches.md).
+One per shell window and profile. With fork patch P1 (docs/engine-patches.md) it owns a hidden Chrome window (`CefTabStrip`: a Chrome `Browser` with a `TabStripModel` and no Views), and every Chrome style page inserted here is one of its tabs, hosted in our view. `chrome.tabs` and `chrome.windows` see these tabs in `webContents` order (pinned first), with `activeWebContent` as the active tab. Alloy pages and pages that are not live are bookkeeping only. Chrome closes a window without tabs, so the hidden window goes away with the last live tab and the next tab gets a new one (and a new `chromeWindowIdentifier`).
 
 | Member | Notes |
 |---|---|
-| `init(context:)`, `identifier`, `context`, `window`, `delegate` | |
+| `init(context:)`, `identifier`, `context`, `window`, `delegate` | `window` is the hidden window's native window: bounds and focus for `chrome.windows`, and the most recently focused window is the extensions' "current window" |
+| `chromeWindowIdentifier` | The `chrome.windows` id, or -1 while the window has no live Chrome style tab |
 | `webContents`, `insert(_:at:)`, `remove(_:)`, `move(_:to:)`, `setPinned(_:for:)`, `isPinned(_:)`, `activeWebContent` | Sidebar order: favorites, pinned, today. A page that closes leaves the strip by itself. |
-| `extensionActions` | `[OEExtensionAction]`: extension id, title, icon, badge text and color, enabled, has popup, popup URL |
+| `extensionActions` | `[OEExtensionAction]`: extension id, title, icon, badge text and color, enabled, has popup, popup URL. With P1, badge text and color, title, and enabled come from Chrome's action model for the active tab (`chrome.action.setBadgeText` and friends); the icon is still the manifest's (patch P2). |
 | `executeExtensionAction(_:)` | Like a click on the action's button. Opens the popup (a second click closes it, as in Chrome). Returns `false` for a popup-less action in stock CEF (patch P2). |
 | `extensionPopup`, `closeExtensionPopup()`, `close()` | |
 
-`OEBrowserDelegate`: `browserDidUpdateExtensionActions(_:)`, `browser(_:didOpenExtensionPopup:for:)` (host `popup.view` in a panel at the button), `browser(_:didResizeExtensionPopup:to:)` (Chrome's limits, 25×25 to 800×600), `browser(_:didCloseExtensionPopup:)` (`window.close()` in the popup, a new popup, or `closeExtensionPopup()`).
+`OEBrowserDelegate`: `browserDidUpdateExtensionActions(_:)` (also when an extension changes its badge or title, or the active tab changes), `browser(_:didOpenExtensionPopup:for:)` (host `popup.view` in a panel at the button), `browser(_:didResizeExtensionPopup:to:)` (Chrome's limits, 25×25 to 800×600), `browser(_:didCloseExtensionPopup:)` (`window.close()` in the popup, a new popup, or `closeExtensionPopup()`).
+
+Tab requests from Chromium (P1). The shell owns its tabs; Chromium's own changes arrive as requests, the shell applies them to its model, and the engine then puts Chromium's tab strip back in `webContents` order. All optional:
+
+| Method | Chromium asks for | Default without the method |
+|---|---|---|
+| `browser(_:didOpen:active:)` | A page Chromium opened in this window (`chrome.tabs.create`, an extension's welcome or options page). It is live and not shown: set its delegate, show its view, insert it; or close it. `active`: select it. | The page is closed |
+| `browser(_:requestsActivationOf:)` | `chrome.tabs.update({active: true})` | `activeWebContent` follows Chromium |
+| `browser(_:requestsMoveOf:to:)` | `chrome.tabs.move`, as an index in `webContents` order | `move(_:to:)` |
+| `browser(_:requestsPinned:for:)` | `chrome.tabs.update({pinned})` | `setPinned(_:for:)` |
+| `browser(_:requestsDiscardOf:) -> Bool` | `chrome.tabs.discard(tabId)`. Return `true` if the shell will unload the tab with its own sleep; do not close it inside the call. Chromium never discards these tabs itself. | Refused |
+| `browserRequestsClose(_:)` | `chrome.windows.remove` on this window while it has tabs. The window stays open. | Refused and logged |
+
+`chrome.tabs.remove` and `window.close()` arrive as `webContentDidRequestClose(_:)`, as before. `insert(_:at:)` refuses a page of another profile, or a hosted tab of another window: tabs stay in their window. A browser whose context cannot have a hidden Chrome window (a non-default profile without a disk profile, until the profile layout fix) hosts its `.chrome` tabs as `.alloy` pages. Extension action popups stay Alloy pages until P2; their `chrome.tabs` calls see the most recently focused window of the profile as the current window, so `query({active: true, currentWindow: true})` returns the shell's selected tab.
 
 ## OEWebContent (page)
 
 Creation and lifetime:
 
-- `OEWebContent(configuration:url:)`. `OEWebContentConfiguration(context:)` has `runtimeStyle` (`.alloy` default, `.chrome` for the stock-CEF extension experiments), `backgroundColor`, `showsChromeToolbar`.
+- `OEWebContent(configuration:url:)`. `OEWebContentConfiguration(context:)` has `runtimeStyle` (the engine's `defaultRuntimeStyle`; the shell uses `.chrome`), `backgroundColor`, `showsChromeToolbar`. A `.chrome` page that is in an `OEBrowser` when its Chromium browser is created becomes a hosted tab of that window (P1); its popups (`target=_blank`, `window.open`) join the same window. Any other `.chrome` page gets its own Chrome Views window glued over the view (the pre-P1 path). `.alloy` pages are content-layer pages that Chromium's tab APIs do not see.
 - `view` is an NSView (flipped). Put it anywhere: several per window (Split View) or a panel (popups, extension popups). Moving a live page's view to another window is expected to work (Chromium follows its view) but is not tested yet. The Chromium browser is created when `view` first enters a window, so a tab that is never shown costs nothing (the shell restores only the selected tab at launch).
 - `close()` destroys the Chromium browser; the object stays alive until Chromium confirms. A page whose last reference goes away without `close()` is closed too; its CEF view is parked so Chromium can finish.
 - A hidden view (`isHidden` or a hidden ancestor) tells Chromium the page is hidden, which throttles it.
-- `browser` (the `OEBrowser` it belongs to), `identifier` (unique per process, 0 until live), `isLive`, `isPopup`, `extensionPopupIdentifier`.
+- `browser` (the `OEBrowser` it belongs to), `identifier` (unique per process, 0 until live), `chromeTabIdentifier` (the `chrome.tabs` id of a hosted tab, else -1), `isLive`, `isPopup`, `extensionPopupIdentifier`.
 
 State (read the properties after `webContent(_:didChange:)`; the change set says what changed): `url`, `title`, `faviconURL`, `favicon`, `isLoading`, `estimatedProgress`, `canGoBack`, `canGoForward`, `isAudible`, `isMuted` (settable), `isFullscreen`, `crashState`, `isCapturingCamera`, `isCapturingMicrophone`, `statusText` (link hover), `zoomLevel` (settable). `.live` reports browser creation and destruction.
 
@@ -157,9 +171,9 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 
 | Gap | Today | Patch |
 |---|---|---|
-| `chrome.tabs`/`chrome.windows` do not see Alloy pages | Works only for Chrome-style pages, one window per page | P1 |
-| Pages that extensions open | Reloaded into a new Open tab (loses tab identity and opener) | P1 |
-| Dynamic action state, `onClicked`, real popup host | Manifest defaults; popup is a plain page | P2 |
+| `chrome.tabs`/`chrome.windows` do not see Alloy pages | Fixed by P1 for Chrome style pages (the shell's default) | P1, done |
+| Pages that extensions open | Fixed by P1: adopted as Today tabs with their identity and opener | P1, done |
+| Dynamic action state | Badge text and color, title, enabled: P1 (above). Icon (`setIcon`), `onClicked`, real popup host (`getViews({type: "popup"})`): not yet | P2 |
 | Install, uninstall, enable from our UI; our own consent prompts | Web Store install needs a Chrome-style page and shows Chrome's dialog | P3 |
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
 | Audible state for Web Audio | Media-element probe in the page | P6 |

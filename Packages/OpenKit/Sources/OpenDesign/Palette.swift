@@ -135,6 +135,7 @@ public enum SidebarRole {
     /// Selected row in dark content: measured white 0.20 → `TabCellBackgroundCurrent` dark.
     /// Light content uses the theme's `light.background` (see `SpaceThemeStyle.selectedFill`).
     public static let rowSelected = SidebarColors.tabCurrent
+    public static let rowMultiselected = SidebarColors.tabMultiselected
     public static let rowSelectedShadow = SidebarColors.tabShadowSelected
     public static let rowPressed = SidebarColors.tabPressed
     /// Pinned/Today divider line: measured black 0.15 → `SidebarSeparator`.
@@ -177,4 +178,29 @@ public enum SidebarRole {
     public static let peekBottomBarOpacity: CGFloat = 0.52
     /// Drop target line while dragging rows.
     public static let dropLine = Core.brandBlue
+}
+
+extension SidebarRole {
+    public static let miniPlayerFill = SidebarColors.itemBackground
+    public static let miniPlayerHoverFill = SidebarColors.itemHoveredBackground
+    public static let mediaControlGlyph = CommandBarColors.accessoryForeground
+    /// Provisional: use the existing insecure-lock pair until S9 (§4.1).
+    public static let recordingIndicator = CommandBarColors.lockInsecure
+}
+
+public enum PiPRole {
+    public static let glyph = DesignColor(light: .white(1), dark: .white(1))
+    public static let plate = DesignColor(light: .black(0.4), dark: .black(0.4))
+    public static let plateHover = DesignColor(light: .black(0.55), dark: .black(0.55))
+    public static let platePressed = DesignColor(light: .black(0.7), dark: .black(0.7))
+    public static let plateHighContrast = DesignColor(light: .black(0.6), dark: .black(0.6))
+    public static let hangUp = DesignColor(light: RGBA(hex: 0xF53714), dark: RGBA(hex: 0xF53714))
+    public static let scrubberTrack = DesignColor(light: .white(0.3), dark: .white(0.3))
+    public static let scrubberFill = DesignColor(light: .white(0.9), dark: .white(0.9))
+    public static let secondaryText = DesignColor(light: .white(0.85), dark: .white(0.85))
+    /// Catalog facts, both appearances, sRGB (RE design-tokens §1.8).
+    public static let documentTopBar = DesignColor(light: RGBA(hex: 0x212123), dark: RGBA(hex: 0x212123))
+    public static let documentHairline = DesignColor(light: .white(0.2), dark: .white(0.2))
+    public static let topScrim = DesignColor(light: .black(0.5), dark: .black(0.5))
+    public static let bottomScrim = DesignColor(light: .black(0.6), dark: .black(0.6))
 }

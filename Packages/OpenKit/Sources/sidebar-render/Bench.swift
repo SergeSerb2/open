@@ -2,6 +2,7 @@ import AppKit
 import OpenDesign
 import OpenModel
 import OpenSidebar
+import OpenStore
 
 /// Performance bench on a synthetic 1,000-row Space: build and first frame,
 /// scrolling, model edits through `TreeChange`, and a Space switch.
@@ -20,6 +21,14 @@ enum Bench {
         let scale = CGFloat(Double(RenderCLI.value(args, "--scale") ?? "2") ?? 2)
         let model = Synthetic.model(bulkRows: rows)
         model.rebuildIndex()
+        if RenderCLI.value(args, "--row-media") == "mixed" {
+            for (i, tab) in model.index.values.compactMap(\.tab).sorted(by: { $0.url.absoluteString < $1.url.absoluteString }).enumerated() {
+                tab.live.isAudible = i % 3 == 0
+                tab.isMuted = i % 3 == 1
+                tab.live.isCapturing = i % 3 == 2
+            }
+            print("row media fixture: audible, muted and capturing in thirds")
+        }
         guard let window = model.windows.first else { return }
         let context = SidebarContext(model: model, windowID: window.id)
         context.systemAppearance = .dark
@@ -70,6 +79,73 @@ enum Bench {
                          ms(steps[steps.count / 2]), ms(steps[Int(Double(steps.count) * 0.95)]), ms(steps.last!)))
         }
         clip.scroll(to: .zero)
+
+        if args.contains("--selection") {
+            let first = context.focusedSpace!.pinned[0].id
+            let frame = sidebar.rowFrame(nodeID: first)!
+            let point = sidebar.convert(NSPoint(x: 100, y: frame.midY), to: nil)
+            host.makeFirstResponder(outline)
+            scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+            let layouts = SidebarDiagnostics.tabRowLayouts
+            let reloads = SidebarDiagnostics.fullReloads
+            var toggles: [Double] = []
+            for _ in 0..<200 {
+                let event = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: .command,
+                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: host.windowNumber,
+                                              context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                toggles.append(time {
+                    outline.mouseDown(with: event)
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+            }
+            let p95 = toggles.sorted()[190]
+            print("MS14 selection toggle ×200 (real Cmd-click + display): p95 \(ms(p95)), row layouts \(SidebarDiagnostics.tabRowLayouts - layouts)")
+            guard p95 <= 0.001, SidebarDiagnostics.tabRowLayouts - layouts <= 2,
+                  SidebarDiagnostics.fullReloads == reloads else { throw CLIError(description: "selection performance budget exceeded") }
+            context.selection.clear()
+        }
+
+        if let count = RenderCLI.value(args, "--bulk").flatMap(Int.init), count > 0 {
+            let undo = UndoManager()
+            undo.groupsByEvent = false
+            model.undoManager = undo
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("sidebar-bulk-\(UUID())")
+            let archive = ArchiveStore(fileURL: directory.appendingPathComponent("archive.sqlite3"))
+            model.archiveSink = archive
+            defer { archive.flushQueue(); try? FileManager.default.removeItem(at: directory) }
+            let space = context.focusedSpace!
+            guard space.today.count >= count else { throw CLIError(description: "not enough Today rows for --bulk") }
+            let ids = Array(space.today.prefix(count).map(\.id))
+            let reloads = SidebarDiagnostics.fullReloads
+            var moves: [Double] = [], archives: [Double] = []
+            for _ in 0..<40 {
+                context.selection.select(ids, anchor: ids.first)
+                OffscreenRenderer.settle(scene, runLoop: 0.001)
+                let drag = SidebarDragEvent(ids: ids, window: host)
+                var accepted = false
+                moves.append(time {
+                    accepted = outline.dataSource?.outlineView?(outline, acceptDrop: drag, item: nil, childIndex: 1) == true
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+                guard accepted else { throw CLIError(description: "bulk drop refused") }
+                undo.undo(); OffscreenRenderer.settle(scene, runLoop: 0.001)
+                context.selection.select(ids, anchor: ids.first)
+                OffscreenRenderer.settle(scene, runLoop: 0.001)
+                let delete = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: host.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 51)!
+                archives.append(time {
+                    outline.keyDown(with: delete)
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+                undo.undo(); OffscreenRenderer.settle(scene, runLoop: 0.001)
+            }
+            let moveP95 = moves.sorted()[38], archiveP95 = archives.sorted()[38]
+            print("MS14 bulk \(count) ×40 (real drop/Delete + model + diff + display + SQLite sink): move p95 \(ms(moveP95)), archive p95 \(ms(archiveP95))")
+            guard moveP95 <= 0.016, archiveP95 <= 0.016, SidebarDiagnostics.fullReloads == reloads,
+                  sidebar.displayedRows == Checks.expectedRows(context: context) else { throw CLIError(description: "bulk performance or row consistency budget exceeded") }
+            model.archiveSink = nil
+            model.undoManager = nil
+        }
 
         // Model edits: each command emits a TreeChange that the page applies as a diff.
         guard let space = context.focusedSpace else { return }

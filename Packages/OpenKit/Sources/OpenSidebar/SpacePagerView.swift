@@ -88,6 +88,7 @@ final class SpacePagerView: NSView {
         guard let focused = context.focusedSpace, bounds.width > 0, swipe == nil else { return }
         let previous = shownSpaceID
         guard previous != focused.id else { return }
+        if previous != nil { context.selection.clear() }
         let target = focusedIndex
         let w = bounds.width
         let from = previous.flatMap { id in spaces.firstIndex { $0.id == id } } ?? target
@@ -171,6 +172,7 @@ final class SpacePagerView: NSView {
                 target = min(max(s.baseIndex + (moved > 0 ? 1 : -1), 0), spaces.count - 1)
             }
             swipe = nil
+            if target != s.baseIndex { context.selection.clear() }
             // The delegate changes focus synchronously; snap to whatever is focused now.
             if target != s.baseIndex { context.send(.switchSpace(spaces[target].id)) }
             let landed = focusedIndex
@@ -198,6 +200,10 @@ final class SpacePagerView: NSView {
     /// Applies a model change to every built page.
     func apply(_ change: TreeChange) {
         for p in pages.values { p.apply(change) }
+    }
+
+    func applyBulk(_ changes: [TreeChange]) {
+        for page in pages.values { page.applyBulk(changes) }
     }
 }
 

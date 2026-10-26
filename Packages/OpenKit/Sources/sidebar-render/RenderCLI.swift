@@ -27,14 +27,16 @@ enum RenderCLI {
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
+                            [--multi-select ROW,ROW…] [--option-held]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
+          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--row-media mixed]
       sidebar-render check
     """
 
@@ -106,6 +108,7 @@ enum RenderCLI {
         context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
+        context.isOptionHeld = args.contains("--option-held")
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
@@ -132,10 +135,18 @@ enum RenderCLI {
             window.selectedNodeBySpace[space.id] = id
         }
         if args.contains("--loaded") { for tab in model.index.values.compactMap(\.tab) { tab.live.hasWebContent = true } }
+        if let specs = value(args, "--multi-select") {
+            let ids = try specs.split(separator: ",").map { spec -> ItemID in
+                guard !spec.hasPrefix("favorite:"), let id = resolve(String(spec), context: context) else { throw CLIError(description: "no selectable row \(spec)") }
+                return id
+            }
+            context.selection.select(ids, anchor: ids.first)
+        }
         if let h = value(args, "--hover") {
             guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }
             context.forcedHover = t
         }
+        try MediaScene.apply(args, context: context)
         return context
     }
 
@@ -166,6 +177,17 @@ enum RenderCLI {
             host.close()
         } else {
             image = OffscreenRenderer().render(scene, scale: scale)
+        }
+        if args.contains("--crop-media") {
+            let ids = model.index.values.compactMap(\.tab).filter { $0.live.isAudible || $0.isMuted || $0.live.isCapturing }.map(\.id)
+            guard let frame = ids.compactMap({ scene.sidebar.rowFrame(nodeID: $0) }).min(by: { $0.minY < $1.minY }), frame.minY < scene.bounds.height else {
+                throw CLIError(description: "media row is outside the render canvas; increase --size")
+            }
+            let y = max(0, frame.minY - 12), height = min(frame.height + 24, scene.bounds.height - y)
+            guard let crop = image.cropping(to: CGRect(x: 0, y: y * scale, width: context.sidebarWidth * scale, height: height * scale)) else {
+                throw CLIError(description: "could not crop the actual media row")
+            }
+            image = crop
         }
         if let c = value(args, "--crop")?.split(separator: ",").compactMap({ Double($0) }), c.count == 4 {
             image = image.cropping(to: CGRect(x: c[0] * scale, y: c[1] * scale, width: c[2] * scale, height: c[3] * scale)) ?? image

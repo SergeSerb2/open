@@ -1,4 +1,5 @@
 import AppKit
+import Symbols
 import OpenDesign
 import OpenModel
 
@@ -18,8 +19,11 @@ import OpenModel
 final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
+    private var animatesSelectionChange = false
     private var keyboardRing: CAShapeLayer?
-    weak var representedItem: AnyObject?
+    weak var representedItem: AnyObject? {
+        didSet { if representedItem !== oldValue { needsDisplay = true } }
+    }
     var isKeyboardFocused = false {
         didSet {
             guard isKeyboardFocused != oldValue else { return }
@@ -50,6 +54,7 @@ final class SidebarRowView: NSTableRowView {
         super.init(frame: frame)
         identifier = Self.identifier
         wantsLayer = true
+        fill.name = "sidebar-row-fill"
         fill.cornerCurve = .continuous
         fill.opacity = 0
         layer?.addSublayer(fill)
@@ -80,7 +85,11 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
-    override func updateLayer() { updateFill(animated: false) }
+    override func updateLayer() {
+        let animated = animatesSelectionChange
+        animatesSelectionChange = false
+        updateFill(animated: animated)
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -93,6 +102,13 @@ final class SidebarRowView: NSTableRowView {
 
     func updateFill(animated: Bool) {
         let appearance = contentAppearance
+        let multiselected = tracked({
+            guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
+            return selection.rowState(for: id).isSelected
+        }) { [weak self] in
+            self?.animatesSelectionChange = true
+            self?.needsDisplay = true
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(isCurrent ? Motion.selectionFade : Motion.hoverFade)
@@ -104,6 +120,10 @@ final class SidebarRowView: NSTableRowView {
             let style = page?.style
             fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
             SelectionShadow.apply(to: fill, appearance: appearance)
+            fill.opacity = 1
+        } else if allowsHighlight && multiselected {
+            fill.backgroundColor = SidebarRole.rowMultiselected.cgColor(appearance)
+            fill.shadowOpacity = 0
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
             fill.backgroundColor = (isDropTarget ? SidebarColors.itemHoveredBackground : SidebarRole.rowHover).cgColor(appearance)
@@ -142,6 +162,8 @@ final class SidebarRowView: NSTableRowView {
         isCurrent = false
         isDropTarget = false
         isPeekSource = false
+        animatesSelectionChange = false
+        alphaValue = 1
         fillIndent = 0
     }
 }
@@ -249,7 +271,8 @@ final class TabCellView: SidebarCellView {
     let title = TextLabel()
     /// Built on first use: most rows never show them, and every extra layer-backed
     /// subview costs time when a row scrolls into view.
-    private var audio: PlateButton?
+    private var audio: RowSpeakerButton?
+    private var recording: RowRecordingView?
     private(set) var accessory: PlateButton?
     private(set) var peekBadge: PeekBadgeView?
     private var slash: CALayer?
@@ -292,10 +315,14 @@ final class TabCellView: SidebarCellView {
         return b
     }
 
-    private func makeAudio() -> PlateButton {
+    private func makeAudio() -> RowSpeakerButton {
         if let audio { return audio }
-        let b = PlateButton(glyph: .audioPlaying)
+        let b = RowSpeakerButton(glyph: .audioPlaying)
         b.accessibleTitle = { [weak self] in self?.tab?.isMuted == true ? "Unmute tab" : "Mute tab" }
+        b.tooltip = { [weak self] in
+            guard let self, let context = self.context, let space = context.focusedSpace else { return nil }
+            return Tooltip(title: self.tab?.isMuted == true ? "Unmute tab" : "Mute tab", placement: .beside, style: context.style(for: space))
+        }
         b.showsHoverPlate = false
         b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
         b.action = { [weak self] in
@@ -341,10 +368,13 @@ final class TabCellView: SidebarCellView {
         rowStateChanged()
         let m = SpaceListMetrics.self
         let x0 = indent
-        // Observation-tracked reads: audio and pinned-URL state.
-        let (audible, muted, leftPinned) = tracked({ (tab?.live.isAudible ?? false, tab?.isMuted ?? false, tab?.hasLeftPinnedURL ?? false) }) {
-            [weak self] in self?.needsLayout = true
-        }
+        // Load the weak tab once; observation is scoped to the fields this row draws.
+        let currentTab = tab
+        let (audible, muted, leftPinned, capturing) = tracked({
+            guard let currentTab else { return (false, false, false, false) }
+            let live = currentTab.live
+            return (live.isAudible, currentTab.isMuted, currentTab.hasLeftPinnedURL, live.isCapturing)
+        }) { [weak self] in self?.needsLayout = true }
         favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
         let a = m.accessorySize
         accessory?.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
@@ -377,18 +407,38 @@ final class TabCellView: SidebarCellView {
         } else {
             peekBadge?.isHidden = true
         }
-        let showAudio = audible || muted
-        audio?.isHidden = !showAudio
-        if showAudio {
-            let b = makeAudio()
-            b.isHidden = false
-            b.glyphView.glyph = muted ? .audioMuted : .audioPlaying
-            let w: CGFloat = 20
-            let titleW = min(title.textWidth, titleRight - titleX - w - 2)
-            b.frame = CGRect(x: titleX + max(titleW, 0) + 2, y: 10, width: w, height: 20)
-            titleRight = min(titleRight, b.frame.minX)
-        }
+        titleRight = layoutMediaAccessories(audible: audible, muted: muted, capturing: capturing, titleX: titleX, titleRight: titleRight)
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
+    }
+
+    /// One placement point for the recording dot; S9 may move it to the leading side.
+    /// Under pressure, reserve the speaker first and omit the recording dot (lead D9).
+    private func layoutMediaAccessories(audible: Bool, muted: Bool, capturing: Bool, titleX: CGFloat, titleRight: CGFloat) -> CGFloat {
+        let m = RowMediaMetrics.self, showAudio = audible || muted
+        if !showAudio && !capturing && audio == nil && recording == nil { return titleRight }
+        audio?.isHidden = !showAudio
+        if !showAudio { audio?.update(tabID: tab?.id, muted: muted, animate: false) }
+        let available = max(0, titleRight - titleX - m.gapAfterTitle)
+        let audioWidth = showAudio ? m.buttonSize : 0
+        let showRecording = capturing && (!showAudio || available >= audioWidth + m.recordingSlotWidth)
+        recording?.isHidden = !showRecording
+        let width = audioWidth + (showRecording ? m.recordingSlotWidth : 0)
+        guard width > 0 else { return titleRight }
+        let textWidth = min(title.textWidth, max(0, available - width))
+        var x = min(titleX + textWidth + m.gapAfterTitle, titleRight - width)
+        let right = min(titleRight, x)
+        if showRecording {
+            let view = recording ?? { let view = RowRecordingView(frame: .zero); addSubview(view); recording = view; return view }()
+            view.context = context; view.isHidden = false
+            view.frame = CGRect(x: x, y: m.y, width: m.recordingSlotWidth, height: m.buttonSize)
+            x += m.recordingSlotWidth
+        }
+        if showAudio {
+            let button = makeAudio(); button.isHidden = false; button.context = context
+            button.update(tabID: tab?.id, muted: muted)
+            button.frame = CGRect(x: x, y: m.y, width: m.buttonSize, height: m.buttonSize)
+        }
+        return right
     }
 
     func beginRename() {
@@ -639,16 +689,24 @@ final class DividerCellView: SidebarCellView {
     private let line = CALayer()
     let clearLabel = TextLabel()
     let clearArrow = GlyphView()
-    var showsClear = false { didSet { if showsClear != oldValue { needsLayout = true } } }
+    var showsClear = false {
+        didSet {
+            if showsClear != oldValue { needsLayout = true }
+            if !showsClear { lastPointerLocation = nil; TooltipController.shared.cancel(for: self) }
+        }
+    }
     private var pointerOnClear = false { didSet { if pointerOnClear != oldValue { clearLabel.needsDisplay = true; clearArrow.needsDisplay = true } } }
     private var tracking: NSTrackingArea?
+    private var lastPointerLocation: NSPoint?
+    var clearTitle: String { context?.isOptionHeld == true ? "Clear unselected" : "Clear" }
+    var clearTooltipTitle: String { context?.isOptionHeld == true ? "Clear unselected Today tabs" : "Clear Today tabs" }
 
     required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         layer?.addSublayer(line)
         clearLabel.font = Typography.clearLabel.font
-        clearLabel.text = { "Clear" }
+        clearLabel.text = { [weak self] in self?.clearTitle ?? "Clear" }
         clearLabel.baseline = SpaceListMetrics.clearLabelBaseline
         let color: @MainActor () -> NSColor = { [weak self] in
             ((self?.pointerOnClear ?? false) ? SidebarRole.dividerLabelHover : SidebarRole.dividerLabel).nsColor
@@ -668,17 +726,28 @@ final class DividerCellView: SidebarCellView {
         super.layout()
         let m = SpaceListMetrics.self
         let w = bounds.width
+        let option = tracked({ context?.isOptionHeld ?? false }) { [weak self] in self?.needsLayout = true }
+        let extra = option ? max(0, clearLabel.textWidth - 29) : 0
         clearLabel.isHidden = !showsClear
         clearArrow.isHidden = !showsClear
-        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w, dy: 0)
-        clearLabel.frame = CGRect(x: w + m.clearLabelX, y: 0, width: 29, height: bounds.height)
-        let end = showsClear ? w + m.clearLineEnd : w - m.dividerLineInset
+        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w - extra, dy: 0)
+        clearLabel.frame = CGRect(x: w + m.clearLabelX - extra, y: 0, width: 29 + extra, height: bounds.height)
+        let end = showsClear ? w + m.clearLineEnd - extra : w - m.dividerLineInset
         CATransaction.begin(); CATransaction.setDisableActions(true)
         line.frame = CGRect(x: m.dividerLineInset, y: m.dividerLineY, width: max(0, end - m.dividerLineInset), height: 1)
         CATransaction.commit()
+        if let point = lastPointerLocation { trackPointer(at: point) }
     }
 
-    private var clearRect: NSRect { NSRect(x: bounds.width + SpaceListMetrics.clearArrowFrame.minX - 2, y: 0, width: 50, height: bounds.height) }
+    private var clearRect: NSRect { clearArrow.frame.union(clearLabel.frame).insetBy(dx: -2, dy: 0) }
+
+    func trackPointer(at point: NSPoint) {
+        lastPointerLocation = point
+        pointerOnClear = showsClear && clearRect.contains(point)
+        if pointerOnClear, let page {
+            TooltipController.shared.schedule(Tooltip(title: clearTooltipTitle, keys: ["⇧", "⌘", "K"], style: page.style), for: self)
+        } else { TooltipController.shared.cancel(for: self) }
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -688,10 +757,165 @@ final class DividerCellView: SidebarCellView {
         tracking = t
     }
 
-    override func mouseMoved(with event: NSEvent) { pointerOnClear = showsClear && clearRect.contains(convert(event.locationInWindow, from: nil)) }
-    override func mouseExited(with event: NSEvent) { pointerOnClear = false }
+    override func mouseMoved(with event: NSEvent) {
+        context?.isOptionHeld = event.modifierFlags.contains(.option)
+        trackPointer(at: convert(event.locationInWindow, from: nil))
+    }
+    override func mouseExited(with event: NSEvent) {
+        lastPointerLocation = nil
+        pointerOnClear = false
+        TooltipController.shared.cancel(for: self)
+    }
     override func mouseDown(with event: NSEvent) {
         guard showsClear, clearRect.contains(convert(event.locationInWindow, from: nil)), let page else { return }
-        page.context.send(.clearToday(space: page.space.id))
+        page.context.isOptionHeld = event.modifierFlags.contains(.option)
+        if event.modifierFlags.contains(.option) {
+            var keep = Set(page.context.selection.ids)
+            if let current = page.context.selectedID(in: page.space.id) { keep.insert(current) }
+            page.context.send(.clearTodayKeeping(space: page.space.id, keep: keep))
+        } else { page.context.send(.clearToday(space: page.space.id)) }
     }
+}
+
+
+extension SidebarDiagnostics {
+    public static var mediaReduceMotionOverride: Bool?
+    public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? RowMediaAccessibility.shared.reduceMotion }
+}
+
+/// One settings read per accessibility change, not per visible row layout. No timer.
+@MainActor private final class RowMediaAccessibility {
+    static let shared = RowMediaAccessibility()
+    private(set) var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    private var observer: NSObjectProtocol?
+    private init() {
+        observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+            }
+    }
+    isolated deinit { if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) } }
+}
+
+@MainActor private final class RowSpeakerImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+@MainActor private final class RowStaticSpeakerView: NSView {
+    var glyph: Glyph = .audioPlaying { didSet { if glyph != oldValue { needsDisplay = true } } }
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay; identifier = NSUserInterfaceItemIdentifier("media.speakerGlyph") }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image = glyph.image else { return }
+        image.drawTinted(in: CGRect(x: RowMediaMetrics.glyphInsetX, y: (bounds.height - image.size.height) / 2,
+                                   width: image.size.width, height: image.size.height), color: SidebarRole.rowAccessory.nsColor)
+    }
+}
+
+/// System slash/wave replacement, anchored at the same left edge in both states (lead D1).
+@MainActor private final class RowSpeakerButton: PlateButton {
+    private var symbol: RowSpeakerImageView?
+    private var staticGlyph: RowStaticSpeakerView?
+    private var representedID: ItemID?
+    private var lastMuted: Bool?
+    private var lastReduceMotion: Bool?
+    override init(glyph: Glyph?) { super.init(glyph: glyph); glyphView.removeFromSuperview() }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        let fixed = CGRect(x: RowMediaMetrics.glyphInsetX, y: 0, width: max(0, bounds.width - RowMediaMetrics.glyphInsetX), height: bounds.height)
+        if symbol?.frame != fixed { symbol?.frame = fixed }
+        staticGlyph?.frame = bounds
+        CATransaction.commit()
+    }
+    func update(tabID: ItemID?, muted: Bool, animate: Bool = true) {
+        let reduceMotion = SidebarDiagnostics.mediaReducesMotion
+        if representedID == tabID && lastMuted == muted && lastReduceMotion == reduceMotion {
+            if !animate { removeAnimations(symbol?.layer) }
+            return
+        }
+        let glyph: Glyph = muted ? .audioMuted : .audioPlaying
+        guard let image = glyph.image else { return }
+        let changed = representedID == tabID && lastMuted != nil && lastMuted != muted
+        let needsImage = lastMuted != muted || representedID != tabID
+        if reduceMotion {
+            symbol?.removeFromSuperview(); symbol = nil
+            let view = staticGlyph ?? { let view = RowStaticSpeakerView(frame: bounds); addSubview(view); staticGlyph = view; return view }()
+            view.glyph = glyph
+        } else {
+            staticGlyph?.removeFromSuperview(); staticGlyph = nil
+            let view: RowSpeakerImageView
+            let created: Bool
+            if let symbol { view = symbol; created = false }
+            else {
+                view = RowSpeakerImageView(frame: bounds)
+                view.wantsLayer = true; view.imageScaling = .scaleNone; view.imageAlignment = .alignLeft
+                view.identifier = NSUserInterfaceItemIdentifier("media.speakerGlyph")
+                addSubview(view); symbol = view; created = true
+            }
+            view.contentTintColor = SidebarRole.rowAccessory.nsColor
+            if changed && animate && !isHiddenOrHasHiddenAncestor && (window?.isVisible == true || SidebarDiagnostics.forceAnimations) {
+                view.setSymbolImage(image, contentTransition: .replace.magic(fallback: .replace))
+                // Lead clarification, 2026-10-26: the unwrapped native call changes the
+                // symbol but starts no effect in the real offscreen harness. Use a finite
+                // cross-fade only when no native symbol-effect animation is present.
+                if !hasSymbolAnimation(view.layer) {
+                    let fade = CATransition(); fade.type = .fade; fade.duration = Motion.rowMediaFallback
+                    fade.setValue(true, forKey: "openMediaFallback")
+                    view.layer?.add(fade, forKey: "media.symbolFallback")
+                }
+            } else if needsImage || created {
+                CATransaction.begin(); CATransaction.setDisableActions(true)
+                view.image = image
+                CATransaction.commit()
+            }
+            if !animate { removeAnimations(view.layer) }
+        }
+        representedID = tabID; lastMuted = muted; lastReduceMotion = reduceMotion; needsLayout = true
+    }
+    private func hasSymbolAnimation(_ layer: CALayer?) -> Bool {
+        guard let layer else { return false }
+        if (layer.animationKeys() ?? []).contains(where: {
+            $0 != "position" && $0 != "bounds" && layer.animation(forKey: $0)?.value(forKey: "openMediaFallback") as? Bool != true
+        }) { return true }
+        return (layer.sublayers ?? []).contains { hasSymbolAnimation($0) }
+    }
+    private func removeAnimations(_ layer: CALayer?) {
+        layer?.removeAllAnimations(); layer?.sublayers?.forEach { removeAnimations($0) }
+    }
+    override func accessibilityHelp() -> String? { accessibleTitle?() }
+}
+
+/// Lazy, static recording indicator (PP-19). Its tooltip is an exact Arc string.
+@MainActor private final class RowRecordingView: NSView {
+    static let label = "This tab is using your camera or microphone"
+    weak var context: SidebarContext?
+    private var tracking: NSTrackingArea?
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        SidebarRole.recordingIndicator.nsColor.setFill()
+        let size = RowMediaMetrics.recordingDot
+        NSBezierPath(ovalIn: CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area); tracking = area
+    }
+    override func mouseEntered(with event: NSEvent) {
+        guard let context, let space = context.focusedSpace else { return }
+        TooltipController.shared.schedule(Tooltip(title: Self.label, placement: .beside, style: context.style(for: space)), for: self)
+    }
+    override func mouseExited(with event: NSEvent) { TooltipController.shared.cancel(for: self) }
+    override func accessibilityRole() -> NSAccessibility.Role? { .image }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityLabel() -> String? { Self.label }
+    override func accessibilityHelp() -> String? { Self.label }
 }

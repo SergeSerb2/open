@@ -11,6 +11,7 @@
 #include "include/cef_browser.h"
 #include "include/cef_client.h"
 #include "include/cef_request_context.h"
+#include "include/cef_tab_strip.h"
 #include "include/cef_values.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
@@ -87,6 +88,18 @@ class OEClient;
 @property(nonatomic, weak, nullable) OEBrowser* oe_tabStrip;
 /// Set for extension action popups; resize/close go to this browser.
 @property(nonatomic, weak, nullable) OEBrowser* oe_popupOwner;
+/// The OEBrowser whose hidden Chrome window hosts this page as a tab (fork
+/// patch P1); nil for Alloy and Views-window Chrome style pages.
+@property(nonatomic, weak, nullable) OEBrowser* oe_hostBrowser;
+// -[OEBrowser identifier] of oe_hostBrowser, kept after that browser is gone
+// (its -dealloc marks its pages closing).
+@property(nonatomic, readonly) NSInteger oe_hostBrowserIdentifier;
+- (void)oe_setHostBrowser:(nullable OEBrowser*)browser;
+/// A content for a tab that Chromium creates in `browser` on its own
+/// (CefTabStripHandler::OnBeforeTabCreated). It never creates its own page.
+- (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser;
+- (CefRefPtr<CefDictionaryValue>)oe_extraInfo;
+- (CefBrowserSettings)oe_browserSettings;
 @property(nonatomic, copy, nullable) NSString* oe_popupExtension;
 /// Prepares this (not yet created) content to receive a popup browser from
 /// OnBeforePopup. Fills windowInfo/client for Alloy-style hosting.
@@ -118,6 +131,15 @@ class OEClient;
 @end
 
 @interface OEBrowser ()
+/// The hidden Chrome window (fork patch P1). Created on first use when
+/// `create` is YES; nullptr before the context is ready or after -close.
+- (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create;
+/// NO once the engine refused a hidden Chrome window for this browser's
+/// context (a non-default profile without a disk profile): its Chrome style
+/// pages use Alloy instead.
+@property(nonatomic, readonly) BOOL oe_canHostTabs;
+/// Puts Chromium's tab strip in -webContents order on the next turn.
+- (void)oe_setNeedsTabStripSync;
 - (void)oe_popupDidResize:(OEWebContent*)popup size:(NSSize)size;
 - (void)oe_popupRequestedClose:(OEWebContent*)popup;
 - (void)oe_webContentClosed:(OEWebContent*)webContent;
@@ -130,6 +152,12 @@ class OEClient;
 
 @interface OEExtensionAction ()
 - (instancetype)initOEWithExtension:(OEExtension*)extension;
+/// Live action state for the window's active tab (fork patch P1's tab
+/// strip; CefTabStrip::GetExtensionAction*).
+- (void)oe_applyBadgeText:(nullable NSString*)badgeText
+               badgeColor:(nullable NSColor*)badgeColor
+                    title:(nullable NSString*)title
+                  enabled:(BOOL)enabled;
 @end
 
 @interface OEExtension ()
