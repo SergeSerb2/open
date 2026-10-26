@@ -732,8 +732,33 @@ def tabstrip_checks(app, results):
     def chrome_id(tab_id):
         return [p["chromeTabId"] for t, p in live() if t["id"] == tab_id][0]
 
+    # The probe's action popup. A tab switch closes it (Chrome's rule, #93),
+    # so `pop` names the popup, and each call reopens it when it is gone.
+    pop = "tabs-probe-popup"
+    popup_page = {"id": None}
+
+    def probe_popup():
+        state = app.call("ext-popup")
+        if popup_page["id"] is not None and state.get("open") and state["page"]["identifier"] == popup_page["id"]:
+            return popup_page["id"]
+        page = app.call("popup", extension=PROBE)["identifier"]
+        wait_until(lambda: app.eval(page, "window.currentTab !== undefined", timeout=20), timeout=20)
+        popup_page["id"] = page
+        return page
+
     def ext_eval(page, js, timeout=20):
-        return app.eval(page, js, timeout=timeout)
+        return app.eval(probe_popup() if page == pop else page, js, timeout=timeout)
+
+    op_seq = [0]
+
+    def background_op(op, **args):
+        """A tab-switching call, run by the probe's background (see
+        tabs-probe/background.js); its result from chrome.storage.session."""
+        op_seq[0] += 1
+        seq = op_seq[0]
+        ext_eval(pop, "chrome.runtime.sendMessage(%s).then(() => true)" % json.dumps(dict(op=op, seq=seq, **args)))
+        return wait_until(lambda: (lambda r: r if r and r.get("seq") == seq else None)(
+            ext_eval(pop, "chrome.storage.session.get('lastOp').then(r => r.lastOp || null)")), timeout=15)
 
     def ext_call(page, js, timeout=20):
         """Runs a promise in the extension page: {ok: value} or {error: message}."""
@@ -764,8 +789,7 @@ def tabstrip_checks(app, results):
 
     # The action popup (Alloy until P2) asks for the page under it, as
     # Bitwarden's popup does: chrome.tabs.query({active, currentWindow}).
-    pop = app.call("popup", extension=PROBE)["identifier"]
-    wait_until(lambda: ext_eval(pop, "window.currentTab !== undefined"), timeout=20)
+    probe_popup()
     selected = [t for t, _ in rows if t["id"] == first][0]
     expect_id = [p["chromeTabId"] for t, p in rows if t["id"] == first][0]
     q = ext_eval(pop, "chrome.tabs.query({active: true, currentWindow: true})"
@@ -814,8 +838,7 @@ def tabstrip_checks(app, results):
     app.call("select", tab=first)
 
     # chrome.tabs.create makes a Today tab in Open (selected: active true).
-    made = ext_eval(pop, "chrome.tabs.create({url: 'https://example.net/?from=extension', active: true})"
-                         ".then(t => ({id: t.id, windowId: t.windowId}))")
+    made = background_op("create", props={"url": "https://example.net/?from=extension", "active": True})
     def created():
         for t, p in live():
             if t["url"].startswith("https://example.net/?from=extension") and p["chromeTabId"] == made["id"]:
@@ -828,7 +851,7 @@ def tabstrip_checks(app, results):
         "note": "tabs.create ignores pinned, index and openerTabId (documented P1 gap)."}
 
     # chrome.tabs.update({active}) selects the tab in Open.
-    ext_eval(pop, "chrome.tabs.update(%d, {active: true}).then(t => t.id)" % b_id)
+    background_op("activate", tabId=b_id)
     on_b = wait_until(lambda: [t for t, _ in live() if t["id"] == b and t["visible"]], timeout=10)
     results["tabs_update_active"] = {"ok": bool(on_b)}
 
@@ -1010,7 +1033,7 @@ def tabstrip_checks(app, results):
     time.sleep(1)
     in_strip = s2_cid in strip_ids(pop)
     mirror_ok, mirror_ids = mirror_matches()
-    ext_eval(pop, "chrome.tabs.update(%d, {active: true}).then(t => t.id)" % s2_cid)
+    background_op("activate", tabId=s2_cid)
     switched = wait_until(lambda: [x for x in app.call("spaces") if x["focused"] and x["id"] == second]
                           and app.call("tab-state", tab=s2)["visible"], timeout=10)
     app.call("space", space=home)

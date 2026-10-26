@@ -34,3 +34,19 @@ chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
 chrome.runtime.onInstalled.addListener(() =>
   chrome.contextMenus.create({ id: "probe", title: "Tabs probe item", contexts: ["all"] }));
 chrome.contextMenus.onClicked.addListener((info) => record("menu", { id: info.menuItemId }));
+
+// Calls that switch tabs run here, not in the popup: a tab switch closes the
+// action popup (as in Chrome), which would end a popup-side call before its
+// result arrives. The result goes to chrome.storage.session.lastOp.
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  const done = (result) => chrome.storage.session.set({ lastOp: { seq: message.seq, ...result } });
+  if (message && message.op === "create") {
+    chrome.tabs.create(message.props).then(
+      (t) => done({ id: t.id, windowId: t.windowId }), (e) => done({ error: String(e.message || e) }));
+    reply(true);
+  } else if (message && message.op === "activate") {
+    chrome.tabs.update(message.tabId, { active: true }).then(
+      (t) => done({ id: t.id }), (e) => done({ error: String(e.message || e) }));
+    reply(true);
+  }
+});
