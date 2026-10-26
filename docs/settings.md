@@ -118,7 +118,7 @@ No unit tests, desktop automation, engine build/sync, real import, or Keychain a
 
 The layout follows [interaction-states §18](re/interaction-states.md#18-settings-window), captured Settings frames F0147–F0151 and A0495–A0507 in the session index. Those reference images were viewed only. No reference image, artwork, icon, font, sound, or binary asset was copied. All committed screenshots below use the code-built synthetic fixture. Colors and typography use `OpenDesign`, with system grouped-control defaults where there is no Settings token.
 
-Every 1x and 2x pane and sheet was inspected locally. The final inventory has 86 PNGs. Switch bounds measure about 36×17 pt with `.mini`. Native controls render in their inactive appearance in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
+Every 1x and 2x pane and sheet was inspected locally. The final inventory has 86 PNGs. Switch bounds measure about 36×17 pt with `.mini`. The renderer supplies key state to the SwiftUI button style. Native switches stay inactive in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
 
 | Pane | 1x | 2x |
 |---|---|---|

@@ -180,6 +180,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 actions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.spaces:1,ImportOutcomeKeys.tabs:1,"Archive":1,"History":1,"Skipped easels":1,"Duplicates":1])
                 flow.showImport();flow.includeHistory=true;await flow.continueImport()
                 try require(flow.reportSummary == "1 Space, 1 tab, 1 archived tab imported." && flow.reportNote == "Skipped: 1 Easel" && flow.duplicateSummary == "1 item was already in Open and was not copied again.","singular report copy regressed")
+                actions.canImportPasswordsAndCookies=false
                 var one=flow.probe!;one.spaces=1;one.sidebarItems=1;one.historyVisits=1;one.savedItems=1;flow.probe=one
                 try require(flow.welcomeStatus == "Found data to import: 1 Space, about 1 tab." && flow.found(1,singular:"visit",plural:"visits") == "Found: 1 visit" && flow.passwordsCopy.body == "Open found 1 saved item in Arc. Open didn't read or copy it.","singular found or shared Passwords copy regressed")
                 one.historyVisits=184203;one.savedItems=100001;flow.probe=one
