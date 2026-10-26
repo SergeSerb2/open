@@ -454,6 +454,13 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                             "L3 folder restore text/View destination mismatch")
                 library.actions.viewSpace(id: library.restoredSpaceID!)
                 try require(env.libraryActions.log.suffix(2) == ["restoreArchived \(folder.id)", "viewSpace \(space.id)"], "L3 View action missing")
+                vm.model.closeTab(id: folder.id)
+                (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                await library.reloadArchive()
+                try archiveDeleteTrigger(env.archives[space.profileID]!.fileURL, enabled: true)
+                await library.restore(id: folder.id)
+                try archiveDeleteTrigger(env.archives[space.profileID]!.fileURL, enabled: false)
+                try require(library.statusText.hasPrefix("Folder restored, but its Archive entry"), "folder archive-delete failure was called a Tab restore")
                 let oldTab = ArchivedTabRecord(id: ItemID(), url: URL(string: "https://example.invalid/old")!, title: "Old tab", archivedAt: Date(), reason: .folderDeleted, originalLocation: "today:\(space.id)", payloadJSON: "{}")
                 try require(oldTab.kind == .tab && library.archivedChildCount(oldTab) == 0, "L2 legacy folderDeleted tabs were relabeled as folders")
             case "library-downloads":
