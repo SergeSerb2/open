@@ -225,12 +225,22 @@
         func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
           NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
             modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
-            context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
+            context: nil, eventNumber: type == .mouseMoved ? Self.syntheticPointerTag : 0, clickCount: 1,
+            pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
         }
-        if a["action"] as? String == "move" {
+        let action = a["action"] as? String
+        if action == "move" || action == "hover" {
           // Local event monitors run on AppKit's native dequeue path. Queue
           // motion just like real input, including after a Space transition.
-          if let e = event(.mouseMoved, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { NSApp.postEvent(e, atStart: false) }
+          // From the first synthetic move on, pointer-driven window logic (the
+          // sidebar hover reveal) follows only these tagged events, so the
+          // hardware pointer of whoever uses the Mac cannot disturb a check.
+          BrowserWindowController.pointerEventFilter = { $0.eventNumber == AutomationController.syntheticPointerTag }
+          let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+          if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
+          // Tracking areas follow the hardware pointer, so `hover` also delivers
+          // enter, move, and exit to the owners of the areas under the point.
+          if action == "hover" { return hover(target, at: NSPoint(x: point[0], y: target.frame.height - point[1])) }
         } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
           // The real resize handle consumes these own-window events through
           // NSWindow.nextEvent. No system cursor or keyboard is touched.
@@ -387,20 +397,45 @@
         }
         return dismissed
       case "window-state":
+        // `id` reads another standard window without making it key.
+        let w = (a["id"] as? String).flatMap { id in app.windowControllers.first { $0.windowID.description == id } }
+          .flatMap { app.hostFactories[$0.windowID] } ?? w
         guard let controller = w.controller, let win = w.window else { throw Failure(message: "no window") }
+        // Read what the next frame shows: the window's own layout pass, the one its display
+        // runs (the traffic lights are placed at its end).
+        let passes = controller.layoutPasses
+        win.layoutIfNeeded()
         let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [Double]? in
           guard let button = win.standardWindowButton(kind) else { return nil }
           let center = controller.contentView.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
           return [center.x, center.y]
         }
         let panel = controller.container.frame
+        let reveal = controller.revealState
+        let chrome = controller.sidebar.chromeGeometry
+        let root = controller.contentView, sidebar = controller.sidebar
+        func inRoot(_ r: CGRect?) -> Any { r.map { rect(root.convert($0, from: sidebar)) } ?? NSNull() }
+        let titlebar = win.standardWindowButton(.closeButton)?.superview.map { rect(root.convert($0.bounds, from: $0)) } ?? []
         return ["id": w.windowState.id.description, "number": win.windowNumber,
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
           "sidebarClass": String(reflecting: type(of: controller.sidebar)),
           "panel": [panel.minX, panel.minY, panel.width, panel.height],
-          "trafficLights": lights, "titled": win.styleMask.contains(.titled), "hiddenTitle": win.titleVisibility == .hidden,
+          "trafficLights": lights, "layoutPasses": passes,
+          // The hardware pointer in window coordinates (top-left origin), read only, so a
+          // check can keep its window away from where someone's pointer rests.
+          "cursor": { let p = win.mouseLocationOutsideOfEventStream; return [Double(p.x), Double(win.frame.height - p.y)] }(),
+          "trafficLightFrames": controller.trafficLightFrames.map { rect($0.frame) },
+          "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
+          "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
+            "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
+            "card": rect(reveal.card)] as [String: Any],
+          "chrome": ["urlField": inRoot(chrome.urlField), "urlFieldHovered": chrome.urlFieldHovered, "favorites": inRoot(chrome.favorites),
+            "header": inRoot(chrome.header), "headerTitle": inRoot(chrome.headerTitle),
+            "headerTitleBaseline": chrome.headerTitleBaseline.map { Double(root.convert(CGPoint(x: 0, y: $0), from: sidebar).y) } ?? NSNull(),
+            "headerHovered": chrome.headerHovered] as [String: Any],
+          "titled": win.styleMask.contains(.titled), "hiddenTitle": win.titleVisibility == .hidden,
           "fullscreen": win.styleMask.contains(.fullScreen), "peekCreated": controller.hasPeekController,
           "fullscreenTransition": controller.isChangingFullScreen, "fullscreenChanges": controller.fullScreenTransitionCount,
           "pageFullscreen": controller.isPageFullscreen,
@@ -410,6 +445,15 @@
           "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
             "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
           "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
+      case "appearance":
+        // Open's own appearance only (light, dark, or nil for the system's); the
+        // system setting is untouched.
+        switch a["name"] as? String {
+        case "light": NSApp.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp.appearance = nil
+        }
+        return NSApp.effectiveAppearance.name.rawValue
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
         app.focusWindow(controller.windowID, activate: a["activate"] as? Bool == true)
@@ -442,6 +486,9 @@
       case "window-frame":
         guard let win = w.window else { throw Failure(message: "no window") }
         if let f = a["frame"] as? [Double], f.count == 4 {
+          // `unconstrained`: keep the exact frame even past the screen (capture-size
+          // comparisons on a smaller display); AppKit otherwise fits it to the screen.
+          BrowserWindowController.constrainsFramesToScreen = a["unconstrained"] as? Bool != true
           win.setFrame(NSRect(x: f[0], y: f[1], width: f[2], height: f[3]), display: true)
         }
         return NSStringFromRect(win.frame)
@@ -653,6 +700,67 @@
         "permissions": e.permissions, "hostPermissions": e.hostPermissions,
       ]
     }
+    static let syntheticPointerTag = 0x4F50
+    private var hoveredOwners: [ObjectIdentifier: NSResponder] = [:]
+
+    /// Delivers what AppKit's tracking-area machinery would for a pointer at `location`
+    /// (window base coordinates): exit to owners it left, enter to owners it reached,
+    /// and move to owners whose areas track movement.
+    @discardableResult
+    private func hover(_ window: NSWindow, at location: NSPoint) -> [String: [String]] {
+      guard let content = window.contentView else { return [:] }
+      // AppKit builds tracking areas lazily, once the hardware pointer has reached the
+      // window; ask every view for its areas first.
+      func prepare(_ view: NSView) { view.updateTrackingAreas(); view.subviews.forEach(prepare) }
+      prepare(content)
+      var inside: [ObjectIdentifier: NSResponder] = [:]
+      var moving: [ObjectIdentifier: NSResponder] = [:]
+      var owners: [ObjectIdentifier: NSResponder] = [:]
+      // The point is visible in `view` when it lies inside the view and every ancestor
+      // (scroll views and pages clip their content). Not `visibleRect`: views that do not
+      // clip to their bounds (the macOS 14+ default) report the whole window there.
+      func visible(_ view: NSView) -> Bool {
+        var v: NSView? = view
+        while let current = v, current !== content.superview {
+          if !current.bounds.contains(current.convert(location, from: nil)) { return false }
+          v = current.superview
+        }
+        return true
+      }
+      func visit(_ view: NSView) {
+        guard !view.isHidden else { return }
+        let local = view.convert(location, from: nil)
+        for area in view.trackingAreas {
+          guard let owner = area.owner as? NSResponder else { continue }
+          if area.options.contains(.mouseEnteredAndExited) { owners[ObjectIdentifier(owner)] = owner }
+          let hit = area.options.contains(.inVisibleRect) ? visible(view) : area.rect.contains(local) && visible(view)
+          guard hit else { continue }
+          if area.options.contains(.mouseEnteredAndExited) { inside[ObjectIdentifier(owner)] = owner }
+          if area.options.contains(.mouseMoved) { moving[ObjectIdentifier(owner)] = owner }
+        }
+        view.subviews.forEach(visit)
+      }
+      visit(content)
+      let time = ProcessInfo.processInfo.systemUptime
+      func enterExit(_ type: NSEvent.EventType) -> NSEvent? {
+        NSEvent.enterExitEvent(with: type, location: location, modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
+          context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)
+      }
+      let move = NSEvent.mouseEvent(with: .mouseMoved, location: location, modifierFlags: [], timestamp: time, windowNumber: window.windowNumber,
+        context: nil, eventNumber: Self.syntheticPointerTag, clickCount: 0, pressure: 0)
+      // Exit goes to every owner away from the point, not only those this command entered:
+      // the hardware pointer may have entered others (its tracking areas are real).
+      if let exit = enterExit(.mouseExited) { for (id, owner) in owners where inside[id] == nil { owner.mouseExited(with: exit) } }
+      if let enter = enterExit(.mouseEntered) { for (id, owner) in inside where hoveredOwners[id] == nil { owner.mouseEntered(with: enter) } }
+      if let move { for owner in moving.values { owner.mouseMoved(with: move) } }
+      let entered = inside.filter { hoveredOwners[$0.key] == nil }.values
+      hoveredOwners = inside
+      let name = { (o: NSResponder) in String(describing: type(of: o)) }
+      return ["inside": inside.values.map(name).sorted(), "entered": entered.map(name).sorted(), "moved": moving.values.map(name).sorted()]
+    }
+
+    private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
+
     private func colorComponents(_ color: NSColor?) -> [Int] {
       guard let color = color?.usingColorSpace(.sRGB) else { return [] }
       return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent].map { Int(($0 * 255).rounded()) }

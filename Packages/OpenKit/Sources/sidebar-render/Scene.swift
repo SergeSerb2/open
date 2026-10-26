@@ -21,6 +21,7 @@ final class RenderScene: NSView {
     let panelHost = NSView()
     let panel = WebPanelChromeLayer()
     let lights = TrafficLightsView()
+    let cardShadow = RevealCardShadowView()
     let options: Options
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
@@ -36,7 +37,7 @@ final class RenderScene: NSView {
         panelHost.layer?.addSublayer(panel)
         panel.showsEmptyState = options.emptyPanel
         addSubview(panelHost)
-        if options.revealCard { sidebar.presentation = .floatingCard }
+        if options.revealCard { sidebar.presentation = .floatingCard; addSubview(cardShadow) }
         if !options.sidebarHidden || options.revealCard { addSubview(sidebar) }
         if options.trafficLights && !(options.sidebarHidden && !options.revealCard) {
             if options.revealCard { sidebar.addSubview(lights) } else { addSubview(lights) }
@@ -56,8 +57,8 @@ final class RenderScene: NSView {
         panel.frame = PanelMetrics.frame(windowSize: bounds.size, sidebarWidth: w, sidebarHidden: hidden)
         CATransaction.commit()
         if options.revealCard {
-            let i = WindowMetrics.revealCardInset
-            sidebar.frame = CGRect(x: i, y: i, width: w, height: bounds.height - 2 * i)
+            sidebar.frame = WindowMetrics.revealCardFrame(windowSize: bounds.size, sidebarWidth: w)
+            cardShadow.frame = sidebar.frame
             lights.frame = CGRect(x: 0, y: 0, width: 80, height: 40)
         } else {
             sidebar.frame = CGRect(x: 0, y: 0, width: w, height: bounds.height)
