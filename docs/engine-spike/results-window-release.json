@@ -1,0 +1,291 @@
+{
+  "config": "Release",
+  "started": "2026-10-25 19:57:11",
+  "style": "alloy",
+  "window": {
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 202,
+        "engineStarted": 272,
+        "firstContentfulPaint": 372,
+        "main": 112,
+        "modelLoaded": 113,
+        "sidebarDrawn": 194
+      },
+      "ok": true,
+      "samples": 5
+    },
+    "comparison": {
+      "reason": "Step A startup only; static window comparison is Step B",
+      "status": "SKIP"
+    },
+    "cpu_count": 18,
+    "launch_runs": {
+      "cold_fresh_profile": [
+        {
+          "didFinishLaunching": 392,
+          "engineInitialized": 363,
+          "engineStart": 276,
+          "engineStarted": 352,
+          "firstContentfulPaint": 539,
+          "firstLoadEnd": 516,
+          "main": 156,
+          "modelLoaded": 158,
+          "sidebarDrawn": 268,
+          "windowShown": 225
+        },
+        {
+          "didFinishLaunching": 314,
+          "engineInitialized": 312,
+          "engineStart": 233,
+          "engineStarted": 306,
+          "firstContentfulPaint": 408,
+          "firstLoadEnd": 391,
+          "main": 108,
+          "modelLoaded": 109,
+          "sidebarDrawn": 224,
+          "windowShown": 181
+        },
+        {
+          "didFinishLaunching": 232,
+          "engineInitialized": 236,
+          "engineStart": 157,
+          "engineStarted": 230,
+          "firstContentfulPaint": 333,
+          "firstLoadEnd": 312,
+          "main": 68,
+          "modelLoaded": 69,
+          "sidebarDrawn": 151,
+          "windowShown": 119
+        },
+        {
+          "didFinishLaunching": 276,
+          "engineInitialized": 279,
+          "engineStart": 202,
+          "engineStarted": 272,
+          "firstContentfulPaint": 372,
+          "firstLoadEnd": 352,
+          "main": 113,
+          "modelLoaded": 114,
+          "sidebarDrawn": 193,
+          "windowShown": 162
+        },
+        {
+          "didFinishLaunching": 269,
+          "engineInitialized": 272,
+          "engineStart": 200,
+          "engineStarted": 266,
+          "firstContentfulPaint": 362,
+          "firstLoadEnd": 344,
+          "main": 112,
+          "modelLoaded": 113,
+          "sidebarDrawn": 194,
+          "windowShown": 160
+        }
+      ],
+      "warm_existing_profile": [
+        {
+          "didFinishLaunching": 324,
+          "engineInitialized": 335,
+          "engineStart": 237,
+          "engineStarted": 312,
+          "firstContentfulPaint": 430,
+          "firstLoadEnd": 411,
+          "main": 132,
+          "modelLoaded": 133,
+          "sidebarDrawn": 229,
+          "windowShown": 194
+        },
+        {
+          "didFinishLaunching": 276,
+          "engineInitialized": 280,
+          "engineStart": 203,
+          "engineStarted": 273,
+          "firstContentfulPaint": 371,
+          "firstLoadEnd": 358,
+          "main": 113,
+          "modelLoaded": 115,
+          "sidebarDrawn": 196,
+          "windowShown": 163
+        },
+        {
+          "didFinishLaunching": 310,
+          "engineInitialized": 314,
+          "engineStart": 235,
+          "engineStarted": 307,
+          "firstContentfulPaint": 405,
+          "firstLoadEnd": 386,
+          "main": 132,
+          "modelLoaded": 134,
+          "sidebarDrawn": 228,
+          "windowShown": 191
+        },
+        {
+          "didFinishLaunching": 227,
+          "engineInitialized": 234,
+          "engineStart": 150,
+          "engineStarted": 224,
+          "firstContentfulPaint": 335,
+          "firstLoadEnd": 316,
+          "main": 61,
+          "modelLoaded": 63,
+          "sidebarDrawn": 140,
+          "windowShown": 109
+        },
+        {
+          "didFinishLaunching": 269,
+          "engineInitialized": 267,
+          "engineStart": 197,
+          "engineStarted": 261,
+          "firstContentfulPaint": 348,
+          "firstLoadEnd": 335,
+          "main": 107,
+          "modelLoaded": 108,
+          "sidebarDrawn": 191,
+          "windowShown": 159
+        }
+      ]
+    },
+    "load_average": [
+      12.44287109375,
+      11.33154296875,
+      11.44775390625
+    ],
+    "selected_only_0": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_1": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_2": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_3": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_4": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 203,
+        "engineStarted": 273,
+        "firstContentfulPaint": 371,
+        "main": 113,
+        "modelLoaded": 115,
+        "sidebarDrawn": 196
+      },
+      "ok": true,
+      "samples": 5
+    },
+    "window_before_engine_0": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_1": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_2": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_3": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_4": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_png": {
+      "file": "window-startup.png",
+      "ok": true
+    }
+  }
+}

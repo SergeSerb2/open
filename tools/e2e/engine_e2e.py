@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import socket
+import statistics
 import struct
 import subprocess
 import sys
@@ -54,9 +55,15 @@ class Open:
             try:
                 self.call("ping")
                 return
-            except OSError:
+            except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
-        raise RuntimeError("Open did not start")
+            if self.proc.poll() is not None:
+                self.log.close()
+                raise RuntimeError("Open exited before automation; see %s" % log_path)
+        self.proc.kill()
+        self.proc.wait()
+        self.log.close()
+        raise RuntimeError("Open did not start; see %s" % log_path)
 
     def call(self, cmd, timeout=120, **args):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -682,6 +689,65 @@ def shell_checks(app_factory, results, tmp):
 
 
 # ----------------------------------------------------------------------------
+# Window startup checks (Step A; Step B extends this suite).
+
+
+def window_checks(app_factory, results, tmp):
+    # Local deterministic text paints without DNS, TLS, or external requests.
+    fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
+    runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
+    results["load_average"] = list(os.getloadavg())
+    results["cpu_count"] = os.cpu_count()
+    for i in range(5):
+        # Clear only this suite's own data root. Warm launches then restore a
+        # selected tab plus an unselected tab from the real saved snapshot.
+        app = app_factory(urls=(fixture,), fresh=True)
+        try:
+            tab = app.call("tabs")[0]
+            app.call("wait", tab=tab["id"])
+            wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
+            runs["cold_fresh_profile"].append(app.call("timing"))
+            evidence = app.call("startup")
+            results["window_before_engine_%d" % i] = {
+                "ok": evidence["pagesBeforeEngine"] == 0 and evidence["contextsBeforeEngine"] == 0
+                      and evidence["visibleWindows"] >= 1
+                      and evidence["sidebarClass"] == "OpenSidebar.SidebarView"
+                      and runs["cold_fresh_profile"][-1]["sidebarDrawn"] <= runs["cold_fresh_profile"][-1]["engineStart"],
+                "evidence": evidence}
+            # Create the second row, then return selection to the first row.
+            other = app.call("open", url="data:text/html,<title>Unselected</title><h1>Unselected</h1>")
+            app.call("select", tab=tab["id"])
+            app.call("save")
+            if i == 0:
+                results["window_png"] = {"ok": True, "file": shot(app, "window-startup.png", max_px=2560)}
+        finally:
+            app.quit()
+        app = app_factory(urls=())
+        try:
+            selected = next(t for t in app.call("tabs") if t["selected"])
+            app.call("wait", tab=selected["id"])
+            wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
+            runs["warm_existing_profile"].append(app.call("timing"))
+            tabs = app.call("tabs")
+            results["selected_only_%d" % i] = {
+                "ok": len(tabs) == 2 and len([t for t in tabs if t["loaded"]]) == 1
+                      and next(t for t in tabs if t["loaded"])["id"] == selected["id"],
+                "tabs": [{k: t[k] for k in ("title", "loaded", "selected")} for t in tabs]}
+        finally:
+            app.quit()
+    results["launch_runs"] = runs
+    for label, values in runs.items():
+        medians = {key: statistics.median([r[key] for r in values if key in r])
+                   if all(key in r for r in values) else None
+                   for key in ("main", "modelLoaded", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
+        results[label] = {"ok": medians["sidebarDrawn"] is not None and medians["sidebarDrawn"] <= 250
+                              and medians["firstContentfulPaint"] is not None and medians["firstContentfulPaint"] <= 700,
+                          "median_ms": medians, "samples": len(values)}
+        print(label, medians)
+    results["comparison"] = {"status": "SKIP", "reason": "Step A startup only; static window comparison is Step B"}
+
+
+# ----------------------------------------------------------------------------
 # Measurements (run with --config Release)
 
 
@@ -755,7 +821,7 @@ def main():
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure"], required=True)
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "window"], required=True)
     opts = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
@@ -772,36 +838,49 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    def factory(urls=("about:blank",)):
+    def factory(urls=("about:blank",), fresh=False):
+        if fresh:
+            shutil.rmtree(user_data, ignore_errors=True)
         return Open(opts.config, opts.style, user_data, extra, log, urls=urls)
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
-    if opts.only == "shell":
-        results["shell"] = {}
-        shell_checks(factory, results["shell"], tmp)
-    elif opts.only == "measure":
-        results["measure"] = {}
-        measure(factory, results["measure"], tmp)
-    else:
-        app = factory(urls=("https://example.com/",))
-        try:
-            results["ping"] = app.call("ping")
-            app.call("window-frame", frame=[80, 60, 1360, 860])
-            results[opts.only] = {}
-            if opts.only == "extensions":
-                extension_checks(app, opts.style, results["extensions"])
-            else:
-                feature_checks(app, opts.style, results["features"], tmp)
-        finally:
-            app.quit()
+    try:
+        if opts.only == "shell":
+            results["shell"] = {}
+            shell_checks(factory, results["shell"], tmp)
+        elif opts.only == "window":
+            results["window"] = {}
+            window_checks(factory, results["window"], tmp)
+        elif opts.only == "measure":
+            results["measure"] = {}
+            measure(factory, results["measure"], tmp)
+        else:
+            app = factory(urls=("https://example.com/",))
+            try:
+                results["ping"] = app.call("ping")
+                app.call("window-frame", frame=[80, 60, 1360, 860])
+                results[opts.only] = {}
+                if opts.only == "extensions":
+                    extension_checks(app, opts.style, results["extensions"])
+                else:
+                    feature_checks(app, opts.style, results["features"], tmp)
+            finally:
+                app.quit()
+    except Exception as error:
+        results.setdefault(opts.only, {})["suite"] = {"ok": False, "error": str(error)}
+        traceback.print_exc()
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features") else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure"):
+    for group in ("shell", "extensions", "features", "measure", "window"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
     print("wrote", os.path.join(OUT, name))
+    failures = [k for group in ("shell", "extensions", "features", "measure", "window")
+                for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
+    if failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

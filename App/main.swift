@@ -4,12 +4,12 @@ import Security
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
+let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")
 // Open restores windows from its own snapshot (OpenStore), never through
 // AppKit state restoration, which would also show a "reopen windows?" alert
 // after a crash.
 UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
-let app = OEApplication.shared as! OEApplication
 let appDelegate = AppDelegate()
 app.delegate = appDelegate
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
@@ -20,6 +20,25 @@ appDelegate.options = options
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
+// Finish AppKit launch and draw the snapshot-backed sidebar before loading
+// Chromium. The same sidebar survives engine readiness; no page exists yet.
+app.setActivationPolicy(.regular)
+app.finishLaunching()
+appDelegate.drawWindowsBeforeEngine()
+
+// CEF owns the main message loop after initialization. Give AppKit one
+// runloop turn first so the window transaction reaches the window server.
+var firstWindowTurnFinished = false
+RunLoop.main.perform {
+  MainActor.assumeIsolated {
+    firstWindowTurnFinished = true
+    CFRunLoopStop(CFRunLoopGetMain())
+  }
+}
+while !firstWindowTurnFinished { CFRunLoopRun() }
+
+// Initialize outside the temporary AppKit runloop. Chromium installs native
+// runloop observers during start; those must first run in CefRunMessageLoop.
 let configuration = OEEngineConfiguration()
 // root_cache_path = <root>/Profiles. The default profile's engine data is
 // then Profiles/Default/ (CEF's fixed name for the global context); other
@@ -37,10 +56,16 @@ configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 
 OEEngine.shared.delegate = appDelegate
 LaunchTiming.shared.mark("engineStart")
+#if OPEN_AUTOMATION
+if let data = try? JSONSerialization.data(withJSONObject: LaunchTiming.shared.report, options: [.sortedKeys]) {
+  FileHandle.standardError.write(Data("Open: pre-engine timing ".utf8) + data + Data("\n".utf8))
+}
+#endif
 do {
   try OEEngine.shared.start(configuration: configuration)
 } catch {
   FileHandle.standardError.write(Data("Open: engine failed to start: \(error)\n".utf8))
+  FileHandle.standardError.write(Data("Open: launch timing: \(LaunchTiming.shared.report)\n".utf8))
   exit(1)
 }
 LaunchTiming.shared.mark("engineStarted")

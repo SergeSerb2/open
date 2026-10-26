@@ -2,6 +2,7 @@ import AppKit
 import OpenEngine
 import OpenModel
 import OpenStore
+import QuartzCore
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -13,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   private(set) var directories: ProfileDirectories!
   private(set) var windowControllers: [BrowserWindowController] = []
   let undoManager = UndoManager()
+  private(set) var engineReady = false
+  private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
     private var automation: AutomationServer?
   #endif
@@ -69,6 +72,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
     }
     model.archiveSink = archiveSink
     model.undoManager = undoManager
+    // Launch URLs enter the snapshot-backed model before window composition.
+    // Only the final selection gets a page after engine readiness.
+    if let state = model.windows.first(where: { $0.style == .standard }),
+      let space = model.space(id: state.focusedSpaceID)
+    {
+      for url in options.initialURLs {
+        let tab = model.newTab(in: space.id, url: url, at: 0)
+        model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
+      }
+    }
     model.addObserver { [weak self] _ in self?.scheduleSave() }
     self.model = model
     self.directories = directories
@@ -88,6 +101,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
       controller.showWindow(nil)
     }
     LaunchTiming.shared.mark("windowShown")
+  }
+
+  func drawWindowsBeforeEngine() {
+    showWindowsIfNeeded()
+    for controller in windowControllers {
+      controller.window?.contentView?.layoutSubtreeIfNeeded()
+      controller.window?.displayIfNeeded()
+    }
+    CATransaction.flush()
+    LaunchTiming.shared.mark("sidebarDrawn")
+    startupEvidence = [
+      "sidebarClass": windowControllers.first?.sidebarClassName ?? "",
+      "pagesBeforeEngine": OEEngine.shared.allWebContents.count,
+      "contextsBeforeEngine": OEEngine.shared.contexts.count,
+      "visibleWindows": windowControllers.filter { $0.window?.isVisible == true }.count,
+    ]
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -118,12 +147,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
 
   func engineDidInitialize() {
     LaunchTiming.shared.mark("engineInitialized")
+    engineReady = true
     showWindowsIfNeeded()
-    if let front = windowControllers.first {
-      for url in options.initialURLs {
-        front.openNewTab(url: url, background: false)
-      }
-    }
+    for controller in windowControllers { controller.engineDidBecomeReady() }
     #if OPEN_AUTOMATION
       let socket =
         options.automationSocket

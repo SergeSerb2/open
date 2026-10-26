@@ -316,6 +316,8 @@
         return await metrics(interval: a["interval"] as? Double ?? 1)
       case "timing":
         return await timing(w)
+      case "startup":
+        return app.startupEvidence
       case "save":
         app.saveState()
         return app.snapshotStore.fileURL.path

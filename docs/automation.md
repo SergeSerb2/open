@@ -86,6 +86,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
 | `metrics` | `interval` | Chromium task manager rows and the physical footprint of every Open process |
 | `timing` | — | Launch marks in ms since process start, plus the first contentful paint of the selected tab |
+| `startup` | — | Actual sidebar class, visible window count, page count and context count recorded after the pre-engine draw |
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
@@ -103,6 +104,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 ```sh
 tools/build.sh Debug
 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+tools/e2e/engine_e2e.py --only window --config Release     # five fresh and five restored startup timings
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
