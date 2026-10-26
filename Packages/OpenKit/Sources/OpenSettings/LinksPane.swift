@@ -17,7 +17,7 @@ public struct LinksPane:View {
             SettingsRow(height:36) {SettingsSwitch("Open Little Open when I press \(hotkey) in any app",isOn:toggle(\.littleOpenHotkeyEnabled))}
             SettingsRow(height:36) {SettingsSwitch("Open Little Open when clicking on links with ⌥⌘ held",isOn:toggle(\.optionCommandClickLittleOpen))}
             SettingsRow(height:36) {SettingsSwitch("Links from other apps open in Little Open",isOn:toggle(\.externalLinksInLittleOpen))}
-            SettingsRow(height:44,divider:false) {HStack {Text("Archive Little Open windows after");Spacer();Picker("Archive Little Open windows after",selection:Binding(get:{links.littleOpenAutoArchiveAfter},set:{links.littleOpenAutoArchiveAfter=$0;root.commitLinks()})){ForEach(AutoArchiveInterval.allCases,id:\.self){Text($0.settingsTitle + ($0 == .sixHours ? " (default)":"")).tag($0)}}.labelsHidden().frame(width:155)}}
+            SettingsRow(height:44,divider:false) {HStack {Text("Archive Little Open windows after");Spacer();SettingsPopUp("Archive Little Open windows after",selection:Binding(get:{links.littleOpenAutoArchiveAfter},set:{links.littleOpenAutoArchiveAfter=$0;root.commitLinks()}),width:155,entries:AutoArchiveInterval.allCases.map{.option($0.settingsTitle + ($0 == .sixHours ? " (default)":""),$0)})}}
         }
         Rectangle().fill(Color(nsColor:SettingsTokens.divider.nsColor)).frame(height:1).padding(.vertical,10)
         Text("Peek is a way to preview a link without opening a new tab. It's perfect for quickly looking at a link from an email, news article, or tweet.").fixedSize(horizontal:false,vertical:true).padding(.bottom,4)
@@ -69,7 +69,7 @@ public struct LinkRuleSheet:View {
         Text("Link Routing").font(.title2)
         HStack {Text("Match");Spacer();SettingsPopUp("Match",selection:$draft.matchKind,width:185,entries:[.option("Host contains",.hostContains),.option("Host equals",.hostEquals),.option("URL starts with",.urlPrefix)])}
         TextField("Pattern",text:$draft.pattern)
-        if draft.matchKind == .hostContains {Text("Host contains matches any host containing “\(draft.pattern)”, including unrelated hosts.").font(.caption).foregroundStyle(.secondary)}
+        if draft.matchKind == .hostContains {Text(draft.pattern.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty ? "Enter a site to match.":"Host contains matches any host containing “\(draft.pattern)”, including unrelated hosts.").font(.caption).foregroundStyle(.secondary)}
         HStack {Text("Open in");Spacer();RouteDestinationPicker(spaces:root.links.spaces,kind:$draft.destinationKind,space:$draft.spaceID)}
         AppPicker(bundleID:$draft.sourceBundleID)
         if draft.makeRule() == nil {SettingsError(text:"Enter a valid pattern and destination.")}
