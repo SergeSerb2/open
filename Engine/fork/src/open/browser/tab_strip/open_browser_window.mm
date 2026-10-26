@@ -12,6 +12,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "cef/include/internal/cef_types_mac.h"
 #include "chrome/browser/contextual_tasks/location_bar_stub.h"
+#include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_active_state_manager/browser_active_state_manager.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
@@ -31,6 +32,7 @@
 #include "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/range/range.h"
 #include "ui/native_theme/native_theme.h"
+#include "open/browser/tab_strip/open_tab_strip.h"
 
 namespace open_engine {
 
@@ -229,6 +231,16 @@ void OpenBrowserWindow::Close() {
   // tab strip makes a new one for its next tab. Mirrors
   // BrowserWidget::OnNativeWidgetDestroyed().
   if (!browser_) {
+    return;
+  }
+  // Anything else that closes a window with tabs (chrome.windows.remove)
+  // only asks: the embedder owns the tabs. OpenTabStrip::Close and app
+  // shutdown close for real.
+  OpenTabStrip* strip = OpenTabStrip::FromBrowser(browser_);
+  if (strip && !strip->closing() && !browser_->tab_strip_model()->empty() &&
+      !browser_shutdown::HasShutdownStarted() &&
+      !browser_shutdown::IsTryingToQuit()) {
+    strip->RequestClose();
     return;
   }
   UnloadController::From(browser_)->set_force_skip_warning_user_on_close(true);

@@ -57,6 +57,8 @@ class OpenTabStrip : public CefTabStrip,
   static OpenTabStrip* FromId(int id);
   // The strip whose hidden Browser is |browser|, or nullptr.
   static OpenTabStrip* FromBrowser(const BrowserWindowInterface* browser);
+  // The strip whose hidden Browser has the tab |contents|, or nullptr.
+  static OpenTabStrip* FromContents(const content::WebContents* contents);
   // The strip id of |host| if it is a hosted tab, or 0.
   static int IdForHost(const CefBrowserHostBase* host);
   // The platform delegate for create params that carry a strip id, or
@@ -74,8 +76,16 @@ class OpenTabStrip : public CefTabStrip,
   // this strip instead of a new Browser. Returns false, and leaves
   // |contents|, if there is no Browser.
   bool AddPopupContents(std::unique_ptr<content::WebContents>& contents);
+  // chrome.tabs.discard of |contents|: asks the handler. True if the
+  // embedder will unload the tab.
+  bool RequestDiscard(content::WebContents* contents);
+  // OpenBrowserWindow::Close for a window that still has tabs and is not
+  // closing (chrome.windows.remove): asks the handler instead.
+  void RequestClose();
 
   int id() const { return id_; }
+  // True once Close() was called: the Browser may close for real.
+  bool closing() const { return closed_; }
 
   // CefTabStrip:
   bool IsValid() override;
@@ -120,6 +130,8 @@ class OpenTabStrip : public CefTabStrip,
   enum class Request { kCreated, kActivate, kMove, kPin };
 
   struct PendingTab {
+    // The tab's WebContents: only that tab takes these values.
+    raw_ptr<content::WebContents> contents;
     CefRefPtr<CefClient> client;
     CefBrowserSettings settings;
     CefRefPtr<CefDictionaryValue> extra_info;
@@ -144,6 +156,12 @@ class OpenTabStrip : public CefTabStrip,
                       base::WeakPtr<content::WebContents> contents,
                       int index,
                       bool flag);
+  void DeliverCloseRequest();
+  // A hosted tab of this strip left for another window's strip (an
+  // extension API this fork does not refuse): moves it back to |index|.
+  void PutBack(base::WeakPtr<content::WebContents> contents,
+               int index,
+               bool pinned);
 
   const int id_;
   CefRefPtr<CefRequestContextImpl> request_context_;

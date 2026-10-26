@@ -234,6 +234,11 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   return self;
 }
 
+- (void)oe_setHostBrowser:(nullable OEBrowser*)browser {
+  _oe_hostBrowser = browser;
+  _oe_hostBrowserIdentifier = browser ? browser.identifier : 0;
+}
+
 - (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser {
   OEWebContentConfiguration* config =
       [[OEWebContentConfiguration alloc] initWithContext:browser.context];
@@ -241,7 +246,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   if ((self = [self initWithConfiguration:config URL:nil])) {
     // Chromium creates the page (OnAfterCreated arrives on our client).
     _awaitingPopup = YES;
-    _oe_hostBrowser = browser;
+    [self oe_setHostBrowser:browser];
   }
   return self;
 }
@@ -376,6 +381,13 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
       [self oe_createHostedTab:url]) {
     return;
   }
+  if (_configuration.runtimeStyle == OERuntimeStyleChrome && _oe_tabStrip &&
+      _oe_tabStrip.context == self.context && !_oe_tabStrip.oe_canHostTabs) {
+    // A tab whose context gets no hidden Chrome window (CefTabStrip::Create:
+    // a non-default profile without a disk profile) stays Alloy rather than
+    // opening its own Chrome window.
+    _configuration.runtimeStyle = OERuntimeStyleAlloy;
+  }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {
     _chromeHost = OECreateChromeHostWindow(
         self, _client.get(), url, [self oe_browserSettings],
@@ -405,14 +417,14 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   if (!strip) {
     return NO;
   }
-  _oe_hostBrowser = owner;
+  [self oe_setHostBrowser:owner];
   // Synchronous: OnAfterCreated (-oe_browserCreated:) runs inside.
   CefRefPtr<CefBrowser> browser =
       strip->CreateTab(_client.get(), url, [self oe_browserSettings],
                        [self oe_extraInfo], -1,
                        [owner isPinnedWebContent:self]);
   if (!browser) {
-    _oe_hostBrowser = nil;
+    [self oe_setHostBrowser:nil];
     return NO;
   }
   [owner oe_setNeedsTabStripSync];
@@ -435,7 +447,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   if (opener.oe_hostBrowser) {
     // Hosted opener (P1): keep CEF's Chrome style window info; the engine
     // makes the popup a tab of the opener's hidden Chrome window.
-    _oe_hostBrowser = opener.oe_hostBrowser;
+    [self oe_setHostBrowser:opener.oe_hostBrowser];
     _configuration.runtimeStyle = OERuntimeStyleChrome;
     return YES;
   }

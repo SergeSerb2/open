@@ -36,37 +36,84 @@ extension BrowserWindowController {
     record("tab-request", webContent, ["request": "activate"])
   }
 
-  /// chrome.tabs.move: move the tab within its own section, next to the tab
-  /// that Chromium put it beside. A move across sections is not applied.
+  /// chrome.tabs.move: applied only when one position in the tab's own
+  /// parent (section, folder, or Favorites) puts the tab between exactly the
+  /// two strip tabs Chromium put it between. Otherwise nothing changes, and
+  /// the resync puts Chromium's strip back (folders, splits, other sections
+  /// and Spaces cannot be reached by a strip index).
   @objc(browser:requestsMoveOfWebContent:toIndex:)
   func browser(_ browser: OEBrowser, requestsMoveOf webContent: OEWebContent, to index: UInt) {
     defer { syncTabStrips() }
-    guard let id = tabID(for: webContent), let parent = model.parent(of: id),
-      let siblings = children(of: parent)?.filter({ $0.id != id })
-    else { return }
+    guard let id = tabID(for: webContent), let profile = profileID(for: browser),
+      let parent = model.parent(of: id), let node = model.node(id: id),
+      let current = children(of: parent), let from = current.firstIndex(where: { $0.id == id })
+    else {
+      record("tab-request", webContent, ["request": "move", "refused": true])
+      return
+    }
+    let siblings = current.filter { $0.id != id }
     let others = browser.webContents.filter { $0 !== webContent }
     let target = Int(index)
-    var position: Int?
-    if target < others.count, let next = tabID(for: others[target]) {
-      position = siblings.firstIndex { $0.id == next }
+    let previous = target > 0 && target - 1 < others.count ? tabID(for: others[target - 1]) : nil
+    let next = target < others.count ? tabID(for: others[target]) : nil
+    let position = (0...siblings.count).first { candidate in
+      var moved = siblings
+      moved.insert(node, at: candidate)
+      let order = stripOrder(profile: profile, replacing: parent, with: moved)
+      guard let i = order.firstIndex(of: id) else { return false }
+      return (i > 0 ? order[i - 1] : nil) == previous && (i + 1 < order.count ? order[i + 1] : nil) == next
     }
-    if position == nil, target > 0, target - 1 < others.count, let previous = tabID(for: others[target - 1]) {
-      position = siblings.firstIndex { $0.id == previous }.map { $0 + 1 }
+    guard let position else {
+      record("tab-request", webContent, ["request": "move", "refused": true])
+      return
     }
-    guard let position else { return }
-    model.moveNode(id: id, to: parent, at: position)
+    if position != from { model.moveNode(id: id, to: parent, at: position) }
     record("tab-request", webContent, ["request": "move", "position": position])
   }
 
-  /// chrome.tabs.update({pinned}): pin or unpin the tab.
+  /// chrome.tabs.update({pinned}): pin or unpin the tab. Favorites are
+  /// pinned tabs to Chromium and stay Favorites: both are no-ops for them.
   @objc(browser:requestsPinned:forWebContent:)
   func browser(_ browser: OEBrowser, requestsPinned pinned: Bool, for webContent: OEWebContent) {
     defer { syncTabStrips() }
-    guard let id = tabID(for: webContent), model.tab(id: id) != nil, model.isPinned(tabID: id) != pinned else {
+    guard let id = tabID(for: webContent), let parent = model.parent(of: id), model.tab(id: id) != nil else {
       return
     }
+    if case .favorites = parent {
+      record("tab-request", webContent, ["request": pinned ? "pin" : "unpin", "refused": true])
+      return
+    }
+    guard model.isPinned(tabID: id) != pinned else { return }
     if pinned { model.pinTab(id: id) } else { model.unpinTab(id: id) }
     record("tab-request", webContent, ["request": pinned ? "pin" : "unpin"])
+  }
+
+  /// chrome.tabs.discard: this shell unloads a tab that is not on screen,
+  /// the way it unloads pinned tabs (the new shell sleeps it with
+  /// OpenSleep). The tab stays in the sidebar and loads again when shown.
+  @objc(browser:requestsDiscardOfWebContent:)
+  func browser(_ browser: OEBrowser, requestsDiscardOf webContent: OEWebContent) -> Bool {
+    guard let id = tabID(for: webContent), model.tab(id: id) != nil,
+      !visibleTabs.contains(where: { $0.id == id })
+    else {
+      record("tab-request", webContent, ["request": "discard", "refused": true])
+      return false
+    }
+    record("tab-request", webContent, ["request": "discard"])
+    // Not inside the engine's call.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, let content = self.contents[id], content === webContent else { return }
+      self.dropContent(id: id, content: content)
+    }
+    return true
+  }
+
+  /// chrome.windows.remove on this window: refused in v1. The window and its
+  /// tabs stay; the user closes windows.
+  @objc(browserRequestsClose:)
+  func browserRequestsClose(_ browser: OEBrowser) {
+    NSLog("Open: refused chrome.windows.remove for window %ld", browser.chromeWindowIdentifier)
+    record("window-request", nil, ["request": "close", "refused": true, "window": browser.chromeWindowIdentifier])
   }
 
   /// The focused Space if it belongs to the strip's profile, else that
@@ -91,6 +138,31 @@ extension BrowserWindowController {
       }
     }
     return nil
+  }
+
+  /// The tab ids of `profile`'s strip in syncTabStrips() order (tabs with a
+  /// page only), with `parent`'s children replaced by `children`.
+  private func stripOrder(profile: ProfileID, replacing parent: NodeParent, with children: [SidebarNode]) -> [ItemID] {
+    func tabs(_ nodes: [SidebarNode], in container: NodeParent) -> [ItemID] {
+      (container == parent ? children : nodes).flatMap { node -> [ItemID] in
+        switch node {
+        case .tab(let t): return contents[t.id] == nil ? [] : [t.id]
+        case .folder(let f): return tabs(f.children, in: .folder(f.id))
+        case .split(let s): return tabs(s.panes.map { .tab($0) }, in: .splitPane(s.id))
+        }
+      }
+    }
+    var order: [ItemID] = []
+    if let favorites = model.profile(id: profile)?.favorites {
+      order += tabs(favorites.map { .tab($0) }, in: .favorites(profile))
+    }
+    for space in model.spaces where space.profileID == profile {
+      order += tabs(space.pinned, in: .spacePinned(space.id))
+    }
+    for space in model.spaces where space.profileID == profile {
+      order += tabs(space.today, in: .spaceToday(space.id))
+    }
+    return order
   }
 
   private func children(of parent: NodeParent) -> [SidebarNode]? {

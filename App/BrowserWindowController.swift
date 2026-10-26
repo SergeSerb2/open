@@ -61,7 +61,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   var dialogPolicy: String?  // "accept" | "dismiss" | "hold" | nil (show UI)
   var permissionPolicy: String?  // "grant" | "deny" | nil (show UI)
   var promptText: String?
-  var contextMenuPolicy: String?  // "record": record items and cancel
+  var contextMenuPolicy: String?  // "record": record items and cancel; "run:<command>": run it
   var fullscreenPolicy: String?  // "record": do not resize the window
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
@@ -421,7 +421,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     return content
   }
 
-  private func dropContent(id: ItemID, content: OEWebContent) {
+  func dropContent(id: ItemID, content: OEWebContent) {
     content.close()
     content.view.removeFromSuperview()
     contents[id] = nil
@@ -657,16 +657,26 @@ extension BrowserWindowController {
       return
     }
     guard let tab = selectedTab else { return }
+    closeSidebarTab(id: tab.id)
+  }
+
+  /// One close rule for Cmd-W, window.close() and chrome.tabs.remove: pinned
+  /// tabs and favorites stay in the sidebar and unload; other tabs close
+  /// (archived). Closing the selected tab selects the next row.
+  func closeSidebarTab(id: ItemID) {
+    guard let tab = model.tab(id: id) else { return }
+    let isSelected = selectedTab?.id == id
     let order = rows.compactMap(\.nodeID)
     let position = order.firstIndex(of: selectedNodeID ?? tab.id) ?? 0
-    let isFavorite = focusedProfile?.favorites.contains { $0.id == tab.id } ?? false
-    if isFavorite || model.isPinned(tabID: tab.id) {
-      // Pinned tabs and favorites stay in the sidebar; closing unloads them.
-      if let content = contents[tab.id] { dropContent(id: tab.id, content: content) }
+    var isFavorite = false
+    if case .favorites? = model.parent(of: id) { isFavorite = true }
+    if isFavorite || model.isPinned(tabID: id) {
+      if let content = contents[id] { dropContent(id: id, content: content) }
     } else {
-      model.closeTab(id: tab.id)  // archives; treeChanged closes the page
+      model.closeTab(id: id)  // archives; treeChanged closes the page
     }
-    let remaining = rows.compactMap(\.nodeID).filter { model.tab(id: $0) != nil && $0 != tab.id }
+    guard isSelected else { return }
+    let remaining = rows.compactMap(\.nodeID).filter { model.tab(id: $0) != nil && $0 != id }
     let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
     select(nodeID: next)
   }
@@ -1003,7 +1013,7 @@ extension BrowserWindowController: OEWebContentDelegate {
     if let page = auxiliaryPages.first(where: { $0.content === webContent }) {
       closeAuxiliary(page)
     } else if let id = tabID(for: webContent) {
-      model.closeTab(id: id)
+      closeSidebarTab(id: id)
     }
   }
 
@@ -1083,11 +1093,26 @@ extension BrowserWindowController: OEWebContentDelegate {
       mi.isEnabled = item.isEnabled
       ns.addItem(mi)
     }
+    func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
+      items.flatMap { item -> [[String: Any]] in
+        if item.isSeparator { return [] }
+        if !item.submenu.isEmpty { return commands(item.submenu, in: item.title) }
+        return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": submenu]]
+      }
+    }
     record(
       "contextMenu", webContent,
-      ["items": menu.items.map(\.title), "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue])
+      [
+        "items": menu.items.map(\.title), "commands": commands(menu.items),
+        "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
+      ])
     if contextMenuPolicy == "record" {
       menu.cancel()
+      return true
+    }
+    if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
+      // After the right click returns, as a picked menu item would.
+      DispatchQueue.main.async { menu.select(command: command) }
       return true
     }
     let point = menu.location

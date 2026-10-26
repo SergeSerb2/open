@@ -2,3 +2,4 @@
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
 0301-open-headless-browser-window.patch  # P1: Browser features without a BrowserView (hidden tab-strip Browsers)
 0302-open-hidden-browser-ui.patch  # P1: Chrome UI code that assumes "no BrowserView => unit test" accepts hidden tab-strip Browsers
+0303-open-hosted-tab-lifecycle.patch  # P1: hosted tabs are never discarded or moved to another window; chrome.tabs.discard asks the embedder

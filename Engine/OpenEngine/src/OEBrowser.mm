@@ -23,6 +23,9 @@
 - (void)oe_activationRequested:(CefRefPtr<CefBrowser>)browser;
 - (void)oe_moveRequested:(CefRefPtr<CefBrowser>)browser toStripIndex:(int)index;
 - (void)oe_pinRequested:(CefRefPtr<CefBrowser>)browser pinned:(BOOL)pinned;
+- (BOOL)oe_discardRequested:(CefRefPtr<CefBrowser>)browser;
+- (void)oe_closeRequested;
++ (void)oe_markPagesClosingForBrowser:(NSInteger)identifier;
 @end
 
 namespace {
@@ -68,6 +71,13 @@ class OETabStripHandler : public CefTabStripHandler {
                          bool pinned) override {
     [browser_ oe_pinRequested:browser pinned:pinned];
   }
+  bool OnTabDiscardRequested(CefRefPtr<CefTabStrip> tab_strip,
+                             CefRefPtr<CefBrowser> browser) override {
+    return [browser_ oe_discardRequested:browser];
+  }
+  void OnCloseRequested(CefRefPtr<CefTabStrip> tab_strip) override {
+    [browser_ oe_closeRequested];
+  }
   void OnExtensionActionUpdated(CefRefPtr<CefTabStrip> tab_strip,
                                 const CefString& extension_id) override {
     [browser_ oe_extensionsChanged];
@@ -91,6 +101,9 @@ class OETabStripHandler : public CefTabStripHandler {
   // Pages Chromium is creating in the strip, until OnTabCreated.
   NSMutableArray<OEWebContent*>* _chromiumTabs;
   BOOL _stripSyncScheduled;
+  // Action state is per tab: refresh it once the strip's active tab is set.
+  BOOL _actionsNeedRefresh;
+  BOOL _stripRefused;
   BOOL _closed;
 }
 
@@ -110,6 +123,7 @@ class OETabStripHandler : public CefTabStripHandler {
 
 - (void)dealloc {
   if (_strip) {
+    [OEBrowser oe_markPagesClosingForBrowser:_identifier];
     _strip->Close();
   }
 }
@@ -138,6 +152,14 @@ class OETabStripHandler : public CefTabStripHandler {
 }
 
 - (void)insertWebContent:(OEWebContent*)webContent atIndex:(NSUInteger)index {
+  // A page belongs to its context's browsers, and a hosted tab to the
+  // hidden Chrome window it lives in: neither can join another one.
+  if (webContent.context != _context ||
+      (webContent.oe_hostBrowser && webContent.oe_hostBrowser != self)) {
+    NSLog(@"OEBrowser: refused to insert a page of another %@",
+          webContent.context != _context ? @"profile" : @"window");
+    return;
+  }
   OEBrowser* old = webContent.oe_tabStrip;
   if (old && old != self) {
     [old removeWebContent:webContent];
@@ -202,11 +224,12 @@ class OETabStripHandler : public CefTabStripHandler {
     return;
   }
   _activeWebContent = activeWebContent;
-  [self oe_setNeedsTabStripSync];
   if (_strip) {
-    // Action state (badge, title) is per tab.
-    [self oe_extensionsChanged];
+    // Action state (badge, title) is per tab: oe_syncTabStrip reports it
+    // once Chromium's active tab matches.
+    _actionsNeedRefresh = YES;
   }
+  [self oe_setNeedsTabStripSync];
 }
 
 - (void)oe_webContentClosed:(OEWebContent*)webContent {
@@ -228,23 +251,42 @@ class OETabStripHandler : public CefTabStripHandler {
   }
   _closed = YES;
   if (_strip) {
+    // The hidden window closes its remaining tabs; those are not closes the
+    // pages asked for.
+    [OEBrowser oe_markPagesClosingForBrowser:_identifier];
     _strip->Close();
     _strip = nullptr;
+  }
+}
+
++ (void)oe_markPagesClosingForBrowser:(NSInteger)identifier {
+  for (OEWebContent* content in [OEEngine shared].allWebContents) {
+    if (content.oe_hostBrowserIdentifier == identifier) {
+      content.oe_client->SetClosing();
+    }
   }
 }
 
 #pragma mark Hidden Chrome window (fork patch P1)
 
 - (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create {
-  if (!_strip && create && !_closed) {
+  if (!_strip && create && !_closed && !_stripRefused) {
     _strip = CefTabStrip::Create(_context.oe_requestContext,
                                  new OETabStripHandler(self));
     if (_strip) {
       _strip->SetHostView(
           CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(_window.contentView));
+    } else {
+      // Pages wait for their context before they get here, so this is the
+      // engine refusing the context, not a context that is not ready.
+      _stripRefused = YES;
     }
   }
   return _strip;
+}
+
+- (BOOL)oe_canHostTabs {
+  return !_stripRefused;
 }
 
 - (void)oe_setNeedsTabStripSync {
@@ -282,6 +324,10 @@ class OETabStripHandler : public CefTabStripHandler {
   OEWebContent* active = _activeWebContent;
   if (active.oe_hostBrowser == self && active.oe_browser) {
     _strip->ActivateTab(active.oe_browser);
+  }
+  if (_actionsNeedRefresh) {
+    _actionsNeedRefresh = NO;
+    [self oe_extensionsChanged];
   }
 }
 
@@ -380,6 +426,23 @@ class OETabStripHandler : public CefTabStripHandler {
     }
   }
   [self oe_setNeedsTabStripSync];
+}
+
+- (BOOL)oe_discardRequested:(CefRefPtr<CefBrowser>)browser {
+  OEWebContent* content = [self oe_contentForBrowser:browser];
+  return content && [_tabs containsObject:content] &&
+         [_delegate respondsToSelector:@selector(browser:
+                                           requestsDiscardOfWebContent:)] &&
+         [_delegate browser:self requestsDiscardOfWebContent:content];
+}
+
+- (void)oe_closeRequested {
+  if ([_delegate respondsToSelector:@selector(browserRequestsClose:)]) {
+    [_delegate browserRequestsClose:self];
+  } else {
+    NSLog(@"OEBrowser %ld: refused a window close from Chromium",
+          (long)_identifier);
+  }
 }
 
 #pragma mark Extension actions

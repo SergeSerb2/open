@@ -113,6 +113,27 @@ class CefTabStripHandler : public virtual CefBaseRefCounted {
                                  bool pinned) {}
 
   ///
+  /// Chromium asks to unload |browser| (chrome.tabs.discard). The embedder's
+  /// own tab sleep decides: return true if it will unload the tab. Do not
+  /// close the tab from inside this call. Chromium never discards tabs of a
+  /// tab strip on its own (memory pressure, Memory Saver), because a discard
+  /// would replace the tab's page.
+  ///
+  /*--cef()--*/
+  virtual bool OnTabDiscardRequested(CefRefPtr<CefTabStrip> tab_strip,
+                                     CefRefPtr<CefBrowser> browser) {
+    return false;
+  }
+
+  ///
+  /// Chromium asks to close the window of |tab_strip| while it still has
+  /// tabs (chrome.windows.remove). The window stays open. To close it, the
+  /// embedder closes its tabs or calls CefTabStrip::Close.
+  ///
+  /*--cef()--*/
+  virtual void OnCloseRequested(CefRefPtr<CefTabStrip> tab_strip) {}
+
+  ///
   /// The toolbar action of |extension_id| changed for this window's tabs
   /// (chrome.action.setBadgeText, setTitle, enable, and so on). Read its state
   /// with the CefTabStrip GetExtensionAction* methods.

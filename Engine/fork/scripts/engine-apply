@@ -51,11 +51,27 @@ elif cef_status=$("$SCRIPT_DIR/engine-status" --cef-applied 2>&1); then
 else
     log "$cef_status"
     # Peel Open's Chromium layer (applied patches, reverse order) so CEF's
-    # patcher sees its own layer; the series loop below re-applies it.
+    # patcher sees its own layer. The series loop below re-applies it for
+    # --only all|chromium; the EXIT trap re-applies whatever is still peeled
+    # in every other case, including errors (--only cef, a failed patcher).
+    peeled=()
+    restore_peeled() {
+        local name
+        for name in ${peeled[@]+"${peeled[@]}"}; do
+            git -C "$SRC_DIR" apply -p1 --reverse --check "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1 && continue
+            if git -C "$SRC_DIR" apply -p1 --whitespace=nowarn "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1; then
+                log "re-applied peeled patch: chromium/$name"
+            else
+                printf 'engine-apply: could not re-apply peeled patch chromium/%s; run engine-apply --only chromium\n' "$name" >&2
+            fi
+        done
+    }
+    trap 'restore_peeled; release_lock' EXIT
     while IFS=$'\t' read -r kind series name line; do
         [[ "$kind" == active && "$series" == chromium ]] || continue
         if git -C "$SRC_DIR" apply -p1 --reverse --check "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1; then
             git -C "$SRC_DIR" apply -p1 --reverse "$FORK_DIR/patches/chromium/$name"
+            peeled=("$name" ${peeled[@]+"${peeled[@]}"})
             log "peeled for CEF's patcher: chromium/$name"
         fi
     done < <(printf '%s\n' "$plan" | tail -r)
