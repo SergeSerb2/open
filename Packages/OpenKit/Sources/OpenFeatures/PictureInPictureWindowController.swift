@@ -169,7 +169,9 @@ private struct PiPWindowGeometry {
         self.natural = natural; self.screen = screen; ratio = natural.width / natural.height
         let maxWidth = min(screen.width * PiPMetrics.maximumScreenFraction, screen.height * PiPMetrics.maximumScreenFraction * ratio)
         maximum = CGSize(width: maxWidth, height: maxWidth / ratio)
-        let standard = max(PiPMetrics.minimum.width, PiPMetrics.minimum.height * ratio)
+        let standard = ratio >= 1
+            ? max(PiPMetrics.minimum.width, PiPMetrics.minimum.height * ratio)
+            : max(PiPMetrics.minimum.height, PiPMetrics.minimum.width * ratio)
         let relaxed = PiPMetrics.minimum.height * max(1, ratio)
         let minWidth = min(maxWidth, standard <= maxWidth ? standard : relaxed)
         minimum = CGSize(width: minWidth, height: minWidth / ratio)

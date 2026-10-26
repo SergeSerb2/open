@@ -31,12 +31,45 @@ import OpenWeb
             guard let index = menu.items.firstIndex(where: { $0.title == title }) else { check(false, "PP menu item exists: \(title)"); return }
             menu.performActionForItem(at: index)
         }
+        // Must precede every in-process fixture that resizes PiP: those seed static lastFrame.
+        // The six-screen first-open matrix below uses fresh CLI processes for the same reason.
         let firstPortraitHost = FakePiPHost(); firstPortraitHost.naturalSize = CGSize(width: 900, height: 1600)
         guard let firstPortrait = PictureInPictureWindowController(host: firstPortraitHost, sourceURL: nil, settings: MediaSettings(defaults: FeatureCLI.defaults()), rules: rules, screenVisibleFrame: PiPScene.screen) else { throw CLIError(description: "first portrait failed") }
         firstPortrait.presentWindows = false; fixtures.append(firstPortrait)
         let initialPortrait = firstPortrait.window!.frame
         check(abs(initialPortrait.width - 160) <= 1 && abs(initialPortrait.height - 160 * 16 / 9) <= 1,
               "PP6 first-open portrait before any resize uses relaxed fit: \(initialPortrait)")
+        let matrixRoot = FileManager.default.temporaryDirectory.appendingPathComponent("open-pip-screens-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: matrixRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: matrixRoot) }
+        // Portrait minimum/first size stays about 160x284. Landscape fit grows above
+        // its 284x160 minimum at 1440 pt; this includes the observed 2560x1440 case.
+        let screens: [(Int, Int, [Double])] = [(1600, 900, [284, 160]), (1796, 1010, [284, 160]),
+            (1920, 1080, [284, 160]), (2560, 1440, [320, 180]), (2844, 1600, [355.5, 199.96875]), (3840, 2160, [480, 270])]
+        for (width, height, landscapeFirst) in screens {
+            for orientation in ["portrait", "landscape"] {
+                let reportURL = matrixRoot.appendingPathComponent("\(orientation)-\(height).json")
+                let process = Process(), output = Pipe()
+                process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+                process.arguments = ["pip", "--out", matrixRoot.appendingPathComponent("\(orientation)-\(height).png").path,
+                    "--screen", "\(width)x\(height)", "--natural-size", orientation == "portrait" ? "900x1600" : "1600x900",
+                    "--first-open", "--geometry-report", reportURL.path]
+                process.standardOutput = output; process.standardError = output
+                try process.run()
+                let receipt = output.fileHandleForReading.readDataToEndOfFile(); process.waitUntilExit()
+                guard process.terminationStatus == 0 else { throw CLIError(description: "PP6 native geometry CLI failed: " + String(decoding: receipt, as: UTF8.self)) }
+                let report = try JSONDecoder().decode([String: [Double]].self, from: Data(contentsOf: reportURL))
+                let first = report["firstSize"] ?? [], minimum = report["minimumSize"] ?? [], insets = report["insets"] ?? []
+                let expectedFirst = orientation == "portrait" ? [160.0, 284.0] : landscapeFirst
+                let expectedMinimum = orientation == "portrait" ? [160.0, 284.0] : [284.0, 160.0]
+                check(first.count == 2 && zip(first, expectedFirst).allSatisfy { abs($0 - $1) <= 1 },
+                      "PP6 first \(orientation) on \(width)x\(height): \(first)")
+                check(minimum.count == 2 && zip(minimum, expectedMinimum).allSatisfy { abs($0 - $1) <= 1 },
+                      "PP6 \(orientation) minimum on \(width)x\(height): \(minimum)")
+                check(insets.count == 2 && insets.allSatisfy { abs($0 - 10) < 0.01 },
+                      "PP6 \(orientation) bottom-right insets on \(width)x\(height): \(insets)")
+            }
+        }
         let (regular, host, settings) = try make()
         let (compact, _, _) = try make(CGSize(width: 284, height: 160))
         for (controller, p) in [(regular, CGFloat(10)), (compact, CGFloat(8))] {
@@ -45,18 +78,28 @@ import OpenWeb
                   overlay.control(named: "minimize")?.view.frame == CGRect(x: p + 32, y: p, width: 28, height: 28) &&
                   overlay.control(named: "settings")?.view.frame == CGRect(x: width - p - 28, y: p, width: 28, height: 28), "PP1 corner frames at width \(width)")
         }
-        check(compact.overlay.isCompact && compact.overlay.control(named: "play")?.pointSize == 22 && regular.overlay.control(named: "play")?.pointSize == 26,
-              "PP1 compact/regular play glyphs use 22/26 pt")
+        check(compact.overlay.isCompact && compact.overlay.control(named: "play")?.pointSize == 24 && regular.overlay.control(named: "play")?.pointSize == 28,
+              "PP1 compact/regular play glyphs use 24/28 pt")
+        check(["play", "back", "forward", "previous", "next"].allSatisfy { id in
+            guard let view = regular.overlay.control(named: id)?.view, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            for y in 0..<bitmap.pixelsHigh { for x in 0..<bitmap.pixelsWide {
+                if let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), c.alphaComponent > 0.01 && c.redComponent < 0.1 && c.greenComponent < 0.1 && c.blueComponent < 0.1 { return true }
+            } }
+            return false
+        }, "PP five center glyphs cache their soft black shadow")
         let (twitch, _, _) = try make(url: URL(string: "https://www.twitch.tv/channel"))
         check(twitch.overlay.control(named: "play")?.view.isHidden == true && twitch.overlay.control(named: "back")?.view.isHidden == true &&
               twitch.overlay.control(named: "forward")?.view.isHidden == true && twitch.overlay.scrubber.isHidden, "PP2 Twitch hides play, skip and scrubber")
         let (meet, _, _) = try make(url: URL(string: "https://meet.google.com/example"))
         check(meet.overlay.control(named: "close")?.view.isHidden == true && meet.overlay.control(named: "minimize")?.view.frame.origin == CGPoint(x: 10, y: 10), "PP2 Meet hides Close and moves Minimize into its slot")
-        check(regular.overlay.control(named: "back")?.pointSize == 22 && compact.overlay.control(named: "back")?.pointSize == 18 && Glyph.pipSkipBack.spec.symbol == "gobackward.15" && Glyph.pipSkipForward.spec.symbol == "goforward.15", "PP SF skip glyphs use 22 pt regular and 18 pt compact")
+        check(regular.overlay.control(named: "back")?.pointSize == 20 && compact.overlay.control(named: "back")?.pointSize == 16 && Glyph.pipSkipBack.spec.symbol == "gobackward.15" && Glyph.pipSkipForward.spec.symbol == "goforward.15", "PP SF skip glyphs use 20 pt regular and 16 pt compact")
         check(regular.overlay.control(named: "tab")?.view.frame.midY == 176 && regular.overlay.control(named: "mute")?.view.frame.midY == 176, "PP bottom controls share one center line")
         check(twitch.overlay.control(named: "previous")?.view.frame.midX == 192 - 24 && twitch.overlay.control(named: "next")?.view.frame.midX == 192 + 24 && twitch.overlay.control(named: "mute")?.view.frame.midY == 192, "PP Twitch packs tracks and removes the hidden scrubber offset")
         let (narrow, _, _) = try make(CGSize(width: 160, height: 284))
         check(narrow.overlay.control(named: "back")?.view.isHidden == true && narrow.overlay.control(named: "forward")?.view.isHidden == true, "PP skip buttons hide below 168 pt")
+        let (boundary, _, _) = try make(CGSize(width: 168, height: 299))
+        check(boundary.overlay.control(named: "back")?.view.isHidden == false && boundary.overlay.control(named: "forward")?.view.isHidden == false, "PP skip buttons remain visible at the 168 pt boundary")
         check(regular.overlay.control(named: "settings")?.title == "Options", "PP ellipsis tooltip and AX copy say Options")
         let (meeting, meetingHost, _) = try make(CGSize(width: 284, height: 160))
         meetingHost.mediaState.actions = [.toggleMicrophone, .toggleCamera, .hangUp]; meetingHost.mediaState.microphoneMuted = false; meetingHost.mediaState.cameraOn = true
@@ -104,7 +147,18 @@ import OpenWeb
         panel.sendEvent(PiPScene.event(.leftMouseDragged, in: scrubber, at: drag)); pump(regular.contentView, 0.02)
         scrubber.mouseExited(with: PiPScene.event(.mouseMoved, in: scrubber, at: drag))
         check(scrubber.barHeight == 6 && host.mediaState.playback == .paused && ["tab", "mute", "ad"].allSatisfy { id in regular.overlay.control(named: id)?.view.layer?.opacity == 0 && regular.overlay.control(named: id)?.view.layer?.animation(forKey: "pip.scrubUtility")?.duration == 0.15 }, "PP4 drag keeps the 6 pt bar and fades all utility controls in 0.15 s")
+        if let fadedMute = regular.overlay.control(named: "mute")?.view {
+            let beforeFadedClick = host.calls.count
+            let location = CGPoint(x: fadedMute.bounds.midX, y: fadedMute.bounds.midY)
+            let down = PiPScene.event(.leftMouseDown, in: fadedMute, at: location)
+            check(panel.contentView?.hitTest(down.locationInWindow) !== fadedMute, "PP mid-drag faded utility rejects hit testing")
+            // A second window-level mouse-down would replace AppKit's active drag capture.
+            // Hit testing above proves routing; exercise the guarded input handlers directly.
+            fadedMute.mouseDown(with: down); fadedMute.mouseUp(with: PiPScene.event(.leftMouseUp, in: fadedMute, at: location))
+            check(host.calls.count == beforeFadedClick && !host.mediaMuted && scrubber.isDragging, "PP click on faded Mute does nothing mid-drag")
+        }
         let precisionLabel = descendants(regular.overlay).compactMap { $0 as? NSTextField }.first { $0.stringValue == scrubber.precisionText }
+        check(precisionLabel?.layer?.opacity == 1 && precisionLabel?.layer?.animation(forKey: "pip.precision")?.duration == 0.15, "PP precision hint fades in with the utility transition")
         check(precisionLabel?.lineBreakMode == .byTruncatingTail && precisionLabel?.frame.width == regular.overlay.bounds.width - 20, "PP4 precision label truncates within the horizontal padding")
         check(scrubber.precisionText == "Seeking at 3× precision" && host.calls.contains(where: { if case .scrub(let value) = $0 { return abs(value - 42) < 0.001 }; return false }),
               "PP4 click-to-jump then 80 pt up drag scrubs at 3× precision")
@@ -129,6 +183,17 @@ import OpenWeb
         }
         host.endOfMedia = true; regular.refresh()
         check(regular.overlay.control(named: "forward")?.view.isAccessibilityEnabled() == false && regular.overlay.control(named: "forward")?.view.alphaValue == 0.4 && regular.overlay.control(named: "next")?.view.isAccessibilityEnabled() == true, "PP ended disables Skip ahead at 0.4 opacity while offered Next stays enabled")
+        if let forward = regular.overlay.control(named: "forward")?.view {
+            forward.mouseEntered(with: PiPScene.event(.mouseMoved, in: forward, at: CGPoint(x: forward.bounds.midX, y: forward.bounds.midY)))
+            pump(regular.contentView)
+            check(forward.layer?.affineTransform() == .identity && forward.layer?.animation(forKey: "pip.hover") == nil, "PP disabled Skip ahead does not grow on hover")
+            if let bitmap = forward.bitmapImageRepForCachingDisplay(in: forward.bounds) {
+                forward.cacheDisplay(in: forward.bounds, to: bitmap)
+                check((bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)?.alphaComponent ?? 1) < 0.03, "PP disabled Skip ahead draws no hover plate")
+            } else { check(false, "PP disabled hover bitmap exists") }
+            check(forward.accessibilityHelp() == "Skip ahead 15 seconds", "PP disabled Skip ahead retains its tooltip copy")
+            forward.mouseExited(with: PiPScene.event(.mouseMoved, in: forward, at: .zero))
+        }
         host.endOfMedia = false
         host.mediaState.playback = .paused; regular.refresh()
         check(!scrubber.hasDisplayLink, "PP paused playback stops the display link")
@@ -224,6 +289,14 @@ import OpenWeb
         print("NATIVE MENU document\n" + PiPScene.menuDump(document.makeMenu()) + "END NATIVE MENU")
         check(document.makeMenu().items.map(\.title) == ["Keep Window on Top", "", "Picture-in-picture on meeting.example.test:"], "PP8 native Document PiP menu has Keep on Top and host header")
         document.window?.orderBack(nil); pump(document.contentView)
+        if let options = descendants(document.topBar).first(where: { $0.accessibilityIdentifier() == "pip.document.settings" }), let window = document.window {
+            options.mouseEntered(with: PiPScene.event(.mouseMoved, in: options, at: CGPoint(x: 10, y: 10)))
+            window.sendEvent(PiPScene.event(.leftMouseDown, in: options, at: CGPoint(x: 10, y: 10)))
+            if let bitmap = options.bitmapImageRepForCachingDisplay(in: options.bounds) {
+                options.cacheDisplay(in: options.bounds, to: bitmap)
+                check(abs((bitmap.colorAt(x: bitmap.pixelsWide / 2, y: 2)?.alphaComponent ?? 0) - 0.18) < 0.03, "PP Document Options pressed plate is white 0.18")
+            } else { check(false, "PP Document pressed bitmap exists") }
+        }
         if let close = descendants(document.topBar).first(where: { $0.accessibilityIdentifier() == "pip.document.close" }), let window = document.window { click(close, window: window, label: "Document close") }
         check(documentHost.calls == [.close(false)], "PP8 Document close returns the child without pausing")
     }

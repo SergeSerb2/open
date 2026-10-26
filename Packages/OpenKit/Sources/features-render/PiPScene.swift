@@ -93,7 +93,14 @@ import OpenWeb
         let size = CGSize(width: dimensions[0], height: dimensions[1])
         let scale = CGFloat(Double(RenderCLI.value(args, "--scale") ?? "2") ?? 2)
         guard scale == 1 || scale == 2 else { throw CLIError(description: "scale must be 1 or 2") }
-        let host = FakePiPHost(); host.naturalSize = size
+        func sizeOption(_ flag: String) throws -> CGSize? {
+            guard let value = RenderCLI.value(args, flag) else { return nil }
+            let parts = value.split(separator: "x").compactMap { Double($0) }
+            guard parts.count == 2, parts.allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 8192 }) else { throw CLIError(description: "invalid " + flag) }
+            return CGSize(width: parts[0], height: parts[1])
+        }
+        let visibleScreen = CGRect(origin: screen.origin, size: try sizeOption("--screen") ?? screen.size)
+        let host = FakePiPHost(); host.naturalSize = try sizeOption("--natural-size") ?? size
         switch RenderCLI.value(args, "--state") ?? "playing" {
         case "playing": break
         case "paused": host.mediaState.playback = .paused
@@ -112,21 +119,47 @@ import OpenWeb
         let settings = MediaSettings(defaults: FeatureCLI.defaults()), rules = try PiPSiteRules.bundled()
         let root: NSView, menu: NSMenu, cleanup: () -> Void
         if args.contains("--document") {
-            guard let controller = DocumentPiPWindowController(host: host, sourceURL: url, requestedSize: CGSize(width: size.width, height: max(0, size.height - PiPMetrics.documentTopBar)), settings: settings, topBarTitle: RenderCLI.value(args, "--top-bar-title"), screenVisibleFrame: screen) else { throw CLIError(description: "cannot create Document PiP") }
+            guard let controller = DocumentPiPWindowController(host: host, sourceURL: url, requestedSize: CGSize(width: size.width, height: max(0, size.height - PiPMetrics.documentTopBar)), settings: settings, topBarTitle: RenderCLI.value(args, "--top-bar-title"), screenVisibleFrame: visibleScreen) else { throw CLIError(description: "cannot create Document PiP") }
             controller.presentWindows = false; root = controller.contentView; menu = controller.makeMenu()
             if args.contains("--document-hover-options"), let button = controller.topBar.subviews.first(where: { $0.accessibilityIdentifier() == "pip.document.settings" }) {
                 button.mouseEntered(with: event(.mouseMoved, in: button, at: CGPoint(x: button.bounds.midX, y: button.bounds.midY)))
             }
+            if args.contains("--document-pressed-options"), let button = controller.topBar.subviews.first(where: { $0.accessibilityIdentifier() == "pip.document.settings" }) {
+                button.mouseDown(with: event(.leftMouseDown, in: button, at: CGPoint(x: 10, y: 10)))
+            }
             cleanup = { controller.close() }
         } else {
-            guard let controller = PictureInPictureWindowController(host: host, sourceURL: url, settings: settings, rules: rules, screenVisibleFrame: screen) else { throw CLIError(description: "cannot create video PiP") }
-            controller.presentWindows = false; controller.resize(to: size); root = controller.contentView
+            guard let controller = PictureInPictureWindowController(host: host, sourceURL: url, settings: settings, rules: rules, screenVisibleFrame: visibleScreen) else { throw CLIError(description: "cannot create video PiP") }
+            controller.presentWindows = false
+            let firstFrame = controller.window!.frame
+            if let path = RenderCLI.value(args, "--geometry-report") {
+                // This read precedes every explicit resize in this fresh CLI process.
+                controller.resize(to: CGSize(width: 1, height: 1))
+                let minimumFrame = controller.window!.frame
+                let report: [String: [Double]] = [
+                    "screen": [visibleScreen.width, visibleScreen.height],
+                    "natural": [host.naturalSize.width, host.naturalSize.height],
+                    "firstSize": [firstFrame.width, firstFrame.height],
+                    "minimumSize": [minimumFrame.width, minimumFrame.height],
+                    "firstBottomLeft": [firstFrame.minX - visibleScreen.minX, firstFrame.minY - visibleScreen.minY],
+                    "firstTopLeft": [firstFrame.minX - visibleScreen.minX, visibleScreen.maxY - firstFrame.maxY],
+                    "insets": [visibleScreen.maxX - firstFrame.maxX, firstFrame.minY - visibleScreen.minY]
+                ]
+                try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys]).write(to: URL(fileURLWithPath: path), options: .atomic)
+            }
+            if args.contains("--first-open") {
+                if RenderCLI.value(args, "--geometry-report") != nil { controller.window!.setFrame(firstFrame, display: false) }
+            } else { controller.resize(to: size) }
+            root = controller.contentView
             OffscreenRenderer.settle(root, runLoop: 0.01)
             if let multiple = RenderCLI.value(args, "--drag-precision").flatMap(Int.init) {
                 guard (1...8).contains(multiple) else { throw CLIError(description: "precision must be 1...8") }
                 let scrubber = controller.overlay.scrubber, point = CGPoint(x: scrubber.bounds.width / 3, y: scrubber.bounds.midY)
                 scrubber.mouseDown(with: event(.leftMouseDown, in: scrubber, at: point))
                 scrubber.mouseDragged(with: event(.leftMouseDragged, in: scrubber, at: CGPoint(x: point.x + scrubber.bounds.width * 0.15, y: point.y - CGFloat(multiple - 1) * PiPMetrics.precisionStep)))
+            }
+            if args.contains("--hover-skip-ahead"), let button = controller.overlay.control(named: "forward")?.view {
+                button.mouseEntered(with: event(.mouseMoved, in: button, at: CGPoint(x: button.bounds.midX, y: button.bounds.midY)))
             }
             controller.overlay.setControlsVisible(RenderCLI.value(args, "--controls") != "hidden", animated: false)
             menu = controller.overlay.makeMenu(); cleanup = { controller.dismiss(reason: .sourceGone) }

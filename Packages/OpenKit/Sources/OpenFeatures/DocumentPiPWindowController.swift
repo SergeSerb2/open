@@ -21,7 +21,7 @@ import OpenWeb
         let maximum = CGSize(width: screen.width * PiPMetrics.maximumScreenFraction, height: screen.height * PiPMetrics.maximumScreenFraction)
         let size = CGSize(width: min(maximum.width, max(PiPMetrics.minimum.width, requestedSize.width)),
                           height: min(maximum.height, max(PiPMetrics.minimum.height, requestedSize.height + PiPMetrics.documentTopBar)))
-        let frame = CGRect(x: screen.maxX - size.width - PiPMetrics.screenInset, y: screen.minY + PiPMetrics.screenInset, width: size.width, height: size.height)
+        let frame = CGRect(x: screen.maxX - size.width - PiPMetrics.documentScreenInset, y: screen.minY + PiPMetrics.documentScreenInset, width: size.width, height: size.height)
         let panel = PiPPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel, .resizable], backing: .buffered, defer: false)
         let header = DocumentPiPTopBar(host: host, title: topBarTitle ?? sourceURL?.host ?? host.sourceTitle, menu: menuBuilder)
         topBar = header

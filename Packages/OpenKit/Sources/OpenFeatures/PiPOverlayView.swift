@@ -11,7 +11,7 @@ import OpenWeb
     private let host: any WebPictureInPictureHost
     private let builder: PiPMenuBuilder
     private let hiddenBySite: Set<String>
-    private let controls = PiPControlsContainer(), precisionLabel = NSTextField(labelWithString: "")
+    private let controls = PiPControlsContainer(), precisionLabel = PiPPrecisionLabel(labelWithString: "")
     private let dim = CALayer(), topScrim = CAGradientLayer(), bottomScrim = CAGradientLayer()
     private var buttons: [String: PiPControlButton] = [:]
     private var tracking: NSTrackingArea?, hideWork: DispatchWorkItem?
@@ -45,10 +45,10 @@ import OpenWeb
         add("microphone", .mediaMicrophone, "Toggle Microphone") { [weak self] in self?.host.toggleMicrophone(); self?.refresh() }
         add("camera", .mediaCamera, "Toggle Camera") { [weak self] in self?.host.toggleCamera(); self?.refresh() }
         add("hangup", .pipHangUp, "Hang Up") { [weak self] in self?.host.hangUp() }
-        for id in ["play", "back", "forward", "previous", "next"] { buttons[id]?.showsPlate = false }
+        for id in ["play", "back", "forward", "previous", "next"] { buttons[id]?.showsPlate = false; buttons[id]?.hasGlyphShadow = true }
         controls.addSubview(scrubber); controls.addSubview(precisionLabel)
         precisionLabel.font = Typography.pipPrecision.font; precisionLabel.textColor = PiPRole.secondaryText.nsColor
-        precisionLabel.alignment = .center; precisionLabel.isHidden = true
+        precisionLabel.alignment = .center; precisionLabel.wantsLayer = true; precisionLabel.layer?.opacity = 0
         precisionLabel.lineBreakMode = .byTruncatingTail; precisionLabel.maximumNumberOfLines = 1
         precisionLabel.cell?.wraps = false
         scrubber.onDragChanged = { [weak self] _ in self?.showControls(); self?.updateUtilityVisibility(); self?.updatePrecision(); self?.updatePlayGlyph() }
@@ -163,7 +163,19 @@ import OpenWeb
         buttons["play"]?.glyph = host.mediaState.playback == .playing ? .pipPause : .pipPlay
         buttons["play"]?.label = host.mediaState.playback == .playing ? "Pause" : "Play"
     }
-    private func updatePrecision() { precisionLabel.isHidden = !scrubber.isDragging; precisionLabel.stringValue = scrubber.precisionText }
+    private func updatePrecision() {
+        precisionLabel.stringValue = scrubber.precisionText
+        let target: Float = scrubber.isDragging ? 1 : 0
+        guard let layer = precisionLabel.layer, layer.opacity != target else { return }
+        let old = layer.presentation()?.opacity ?? layer.opacity
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.opacity = target
+        if window?.isVisible == true {
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = old; fade.toValue = target
+            fade.duration = Motion.pipFade; layer.add(fade, forKey: "pip.precision")
+        }
+        CATransaction.commit()
+    }
     public func setControlsVisible(_ visible: Bool, animated: Bool = true) {
         controlsVisible = visible; scrubber.controlsAreVisible = visible
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -223,9 +235,15 @@ import OpenWeb
     var glyphSize: CGFloat? { didSet { if glyphSize != oldValue { needsDisplay = true } } }
     var label: String { didSet { if label != oldValue { needsDisplay = true } } }
     var action: (() -> Void)?, onActivity: (() -> Void)?, onKeyboardFocus: ((Bool) -> Void)?, onAccessibilityFocus: ((Bool) -> Void)?
-    var showsPlate = true, growsOnHover = true, documentStyle = false
+    var showsPlate = true, growsOnHover = true, documentStyle = false, hasGlyphShadow = false
     var isSuppressed = false
-    var isEnabled = true { didSet { alphaValue = isEnabled ? 1 : PiPMetrics.disabledControlOpacity; needsDisplay = true } }
+    var isEnabled = true { didSet {
+        alphaValue = isEnabled ? 1 : PiPMetrics.disabledControlOpacity; needsDisplay = true
+        if !isEnabled {
+            pressed = false; layer?.removeAnimation(forKey: "pip.hover")
+            CATransaction.begin(); CATransaction.setDisableActions(true); layer?.setAffineTransform(.identity); CATransaction.commit()
+        }
+    } }
     private var hovered = false, pressed = false
     private var tracking: NSTrackingArea?
     var pillWidth: CGFloat { ceil((label as NSString).size(withAttributes: [.font: Typography.pipPill.font]).width) + 2 * PiPMetrics.pillPadding }
@@ -241,16 +259,18 @@ import OpenWeb
     override func setAccessibilityFocused(_ focused: Bool) { super.setAccessibilityFocused(focused); onAccessibilityFocus?(focused) }
     override func draw(_ dirtyRect: NSRect) {
         let fill = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? PiPRole.plateHighContrast : (pressed ? PiPRole.platePressed : (hovered ? PiPRole.plateHover : PiPRole.plate))
-        (documentStyle ? PiPRole.documentButtonHover : (glyph == .pipHangUp ? PiPRole.hangUp : fill)).nsColor.setFill()
+        (documentStyle ? (pressed ? PiPRole.documentButtonPressed : PiPRole.documentButtonHover) : (glyph == .pipHangUp ? PiPRole.hangUp : fill)).nsColor.setFill()
         let radius = documentStyle ? PiPMetrics.documentButtonRadius : (glyph == nil ? bounds.height / 2 : min(bounds.width, bounds.height) / 2)
-        if showsPlate || hovered || pressed { NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill() }
+        if isEnabled && (showsPlate || hovered || pressed) { NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill() }
         if let glyph, var image = glyph.image {
             if let size = glyphSize, let replacement = NSImage(systemSymbolName: glyph.spec.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: glyph.spec.weight)) { image = replacement }
             let rect = CGRect(x: (bounds.width - image.size.width) / 2, y: (bounds.height - image.size.height) / 2, width: image.size.width, height: image.size.height)
             guard let cg = NSGraphicsContext.current?.cgContext else { return }
-            cg.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
+            cg.saveGState()
+            if hasGlyphShadow { cg.setShadow(offset: .zero, blur: PiPMetrics.centerGlyphShadowRadius, color: PiPRole.centerGlyphShadow.cgColor(.dark)) }
+            cg.beginTransparencyLayer(in: rect.insetBy(dx: -PiPMetrics.centerGlyphShadowRadius * 2, dy: -PiPMetrics.centerGlyphShadowRadius * 2), auxiliaryInfo: nil)
             image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-            cg.setBlendMode(.sourceIn); cg.setFillColor((documentStyle && !hovered ? PiPRole.secondaryText : PiPRole.glyph).cgColor(.dark)); cg.fill(rect); cg.endTransparencyLayer()
+            cg.setBlendMode(.sourceIn); cg.setFillColor((documentStyle && !hovered ? PiPRole.secondaryText : PiPRole.glyph).cgColor(.dark)); cg.fill(rect); cg.endTransparencyLayer(); cg.restoreGState()
         } else {
             let attrs: [NSAttributedString.Key: Any] = [.font: Typography.pipPill.font, .foregroundColor: PiPRole.glyph.nsColor]
             let size = (label as NSString).size(withAttributes: attrs)
@@ -268,7 +288,7 @@ import OpenWeb
         var tooltip = Tooltip(title: label, placement: .above, style: style, showDelay: MiniPlayerMetrics.tooltipDelay)
         tooltip.fill = PiPRole.platePressed.resolved(.dark); tooltip.text = PiPRole.glyph.resolved(.dark)
         TooltipController.shared.schedule(tooltip, for: self)
-        if growsOnHover && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if isEnabled && growsOnHover && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             let grow = CABasicAnimation(keyPath: "transform.scale"); grow.fromValue = 1; grow.toValue = PiPMetrics.hoverScale; grow.duration = Motion.pipFade
             layer?.setAffineTransform(CGAffineTransform(scaleX: PiPMetrics.hoverScale, y: PiPMetrics.hoverScale)); layer?.add(grow, forKey: "pip.hover")
         }
@@ -285,3 +305,9 @@ import OpenWeb
 }
 
 @MainActor private final class PiPControlsContainer: NSView { override var isFlipped: Bool { true } }
+
+/// The fading seek hint never intercepts the utility controls under its band.
+@MainActor private final class PiPPrecisionLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func isAccessibilityElement() -> Bool { (layer?.opacity ?? 0) > 0 }
+}

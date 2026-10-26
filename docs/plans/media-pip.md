@@ -460,24 +460,37 @@ in the Step 6 PR.
 | Window | `NSPanel`, style `[.borderless, .nonactivatingPanel, .resizable]`, `isFloatingPanel = true`, `hidesOnDeactivate = false`, `isMovableByWindowBackground = true`, `hasShadow = true`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`. Content view layer: corner radius `PiPMetrics.cornerRadius` 12 (guess), masks to bounds. |
 | Level | `.floating` when "Keep Window on Top" is on (default, key `open.pip.keepOnTop`), else `.normal`. `toggleAlwaysOnTop` exists in Arc (PP-8); the default is a guess. |
 | Content | The engine's `videoView` fills the window. The overlay (§4.4.3) sits above it. |
-| Initial size | Chromium's rule (Arc's is unknown): fit the video's natural aspect inside a box of `visibleFrame.width / 5` × `visibleFrame.height / 5` of the screen that holds the source window, then clamp to the minimum and maximum below (`chrome/browser/ui/views/overlay/video_overlay_window_views.cc:463-505`). Our e2e run got 384×216 from it. |
-| Initial position | Bottom-right of that screen's `visibleFrame`, inset 16 pt (guess). Later opens in the same app run reuse the last frame's origin and LONG side, clamped to the current video's limits. Not persisted. |
-| Resize | `contentAspectRatio` = natural size; minimum 284×160 (Chromium `kMinWindowSize`, same file `:109`), maximum 50 % of `visibleFrame` in each dimension (guess). A natural-size change (`didChangePiPVideoResolution`) keeps the width and updates the height. |
+| Initial size | Fit the video's natural aspect inside `visibleFrame.width / 8` × `visibleFrame.height / 8` on the source window's screen, then clamp to the orientation-aware minimum and 50% maximum. The /8 factor fits capture session 2 item 13 exactly at 2560×1440; it is a guess elsewhere (lead decision, 2026-10-26 11:25). This replaces the earlier Chromium /5 rule. |
+| Initial position | Bottom-right of that screen's `visibleFrame`, inset 10 pt from the right and bottom (capture session 2 item 13). Later opens in the same app run reuse the last frame's origin and LONG side, clamped to the current video's limits. Not persisted. |
+| Resize | `contentAspectRatio` = natural size; minimum box 284×160 for landscape, rotated to 160×284 for portrait, with the natural aspect preserved. Square remains 284×284. Landscape minimum comes from Chromium `kMinWindowSize` (`video_overlay_window_views.cc:109`); portrait rotation is Open lead design. Maximum is 50% of `visibleFrame` in each dimension (guess). A natural-size change (`didChangePiPVideoResolution`) keeps the width and updates the height. |
 | Size class | Compact below 300 pt wide, regular otherwise (guess; Arc has `PIPSizeClassKey`). |
 
-Lead size decision (2026-10-26 02:47 America/Vancouver): keep the 50%
-maximum, preserve the video's aspect ratio, and never reject a valid video
-because its size limits conflict. When 284×160 cannot fit, relax the minimum:
-the shorter side is at least 160 pt and the longer side follows the aspect
-ratio. A 9:16 video on a screen with 900 pt visible height can use about
-253×450 pt (height capped at 50%). Widths below PiPMetrics.compactWidth use
-compact controls. PP6 covers 9:16 and 1:1 video on a 900 pt screen.
+Lead size decision (2026-10-26 02:47 America/Vancouver), amended by the
+11:04 and 11:25 lead decisions: preserve aspect and the 50% maximum, and
+never reject a valid video because size limits conflict. Use an orientation-aware
+minimum box: 284×160 for landscape, 160×284 for portrait. Fit the natural aspect
+so both minimum dimensions hold when possible; if the cap cannot contain that
+box, relax the minimum so the 50% cap wins. Square remains 284×284. A 9:16 video
+can shrink to about 160×284 on every screen in PP6's six-height matrix. Its
+maximum on a 900 pt visible height is still about 253×450. AppKit can round
+native frames by one point. Compact controls apply below PiPMetrics.compactWidth.
 
-Lead review decision (2026-10-26 09:23 America/Vancouver): the first open
-clamps the /5 fit with the geometry limits, `min(maximum.width,
-max(minimum.width, fit))`, giving about 160×284 for 9:16. Later opens reuse
-the last LONG side, preserving aspect and applying those same limits.
-PP6 reads the first portrait frame before any explicit resize.
+The 09:23 first-open clamp remains, but the 11:25 decision replaces its /5
+fit with /8 for both orientations. On 2560×1440, 16:9 opens at 320×180. On
+1920×1080, the 240×135 fit clamps up to the 284×160 minimum box. For 9:16,
+the /8 fit stays below the rotated minimum through PP6's heights 900, 1010,
+1080, 1440, 1600 and 2160. Later opens still reuse the last LONG side and
+origin, clamped to the current video's limits and screen. Nothing persists.
+
+Evidence: lead-provided measurements for capture session 2 item 13,
+`.re/runtime/sessions/20261026-103015-13-auto-pip`: a 16:9 YouTube video
+opened at 320×180 on a 2560×1440 screen, top-origin screen position
+(2230,1250), exactly 10 pt from the right and bottom. The /8 factor is a fit
+to this one data point, exact there and a guess elsewhere. The raw frames
+remain local. PP6 uses fresh CLI processes to read first frames before any
+resize, then minimum frames, for both orientations on all six heights; it
+also checks the 10 pt bottom-right insets. This avoids static lastFrame
+from an earlier fixture contaminating first-open evidence.
 
 #### 4.4.3 Overlay controls (`PiPOverlayView`)
 
@@ -491,8 +504,8 @@ All glyphs white; plates black. Values are guesses except where marked
 | Close | 28×28 circle (code) at `[p, p]`, `p` = 8 compact / 10 regular (code); SF `xmark` 12 pt Semibold; plate black 0.4, hover 0.55 with scale 1.08 (`GrowOnHover`) | Unless the site rule hides Close (Meet, PP-11). Tooltip "Close" (code). |
 | Minimize | 28×28 at `[p + 32, p]`; SF `minus` 13 pt Bold | Always (Arc `minimizeEnabled`, default on). Tooltip "Minimize" (code). |
 | Settings | 28×28 at `[w − p − 28, p]`; SF `ellipsis` 13 pt Bold; tooltip/AX label "Options"; click opens the menu (§4.4.5) under the button | Always |
-| Play/Pause | 48×48 centered; SF `play.fill`/`pause.fill` 26 pt (regular) or 22 pt (compact) | Unless `disablePlayButton` |
-| Skip back / ahead 15 s | 40×40 at center ∓ 72 (regular) or ∓ 56 (compact); SF `gobackward.15` / `goforward.15`, 22 pt Regular / 18 pt compact | Unless `disableSkipButton`, the duration is not finite (live), or the width is below 168 pt. Skip ahead is disabled at end-of-media, opacity 0.4 (Open guess from design r1). Tooltips "Skip back 15 seconds" / "Skip ahead 15 seconds" (Arc). |
+| Play/Pause | 48×48 centered; SF `play.fill`/`pause.fill` 28 pt (regular) or 24 pt (compact) | Unless `disablePlayButton` |
+| Skip back / ahead 15 s | 40×40 at center ∓ 72 (regular) or ∓ 56 (compact); SF `gobackward.15` / `goforward.15`, 20 pt Regular / 16 pt compact | Unless `disableSkipButton`, the duration is not finite (live), or the width is below 168 pt. Skip ahead is disabled at end-of-media, opacity 0.4 (Open guess from design r1); disabled Skip ahead has no hover plate or grow, while its tooltip remains. Tooltips "Skip back 15 seconds" / "Skip ahead 15 seconds" (Arc). |
 | Previous / Next track | 32×32 at center ∓ 120, SF `backward.end.fill`/`forward.end.fill` 16 pt | Regular size only, when the session offers them |
 | Back to Tab | Pill, height 24, horizontal padding 10, text "Back to Tab" 12 Semibold white, plate black 0.4 / hover 0.55 / pressed 0.7, at bottom-left on the shared bottom-row center line below | Always (Arc `BackToTabButton`, `PIPPillActionButtonStyle`) |
 | Mute | 28×28 at the trailing edge on the shared bottom-row center line below, SF `speaker.wave.2.fill` / `speaker.slash.fill` 13 pt | Always (Arc `toggleMute`) |
@@ -503,6 +516,9 @@ All glyphs white; plates black. Values are guesses except where marked
 Review r1 Open design (2026-10-26 09:23; guesses pending capture session 2):
 play, skip and track controls have no plate at rest; hover/pressed plates remain.
 A full-window black 0.25 dim appears with controls, in addition to the edge scrims.
+Review r2 (lead, 2026-10-26 11:04): only the five center glyphs have a soft
+black 0.35 shadow, radius 2 pt, zero offset, painted in their cached bitmap.
+This remains a guess until a capture of the controls exists.
 When Close is hidden, Minimize takes `[p, p]`. If Play is hidden, pack the
 visible track buttons with a 16 pt gap (two track centers at ±24 pt).
 
@@ -539,7 +555,7 @@ checks click-to-jump followed by a precision drag.
   (up is negative). Time change = `dx / barWidth · duration / m`.
 - While dragging, fade Back to Tab, Mute and Skip Ad out in 0.15 s, restore
   them in 0.15 s on release, and disable their hit testing during the drag.
-- Label 11 pt Medium white 0.85, truncated to `w − 2p`, centered 8 pt above the bar while
+- Label 11 pt Medium white 0.85, fading in/out over the same 0.15 s as the utility controls, truncated to `w − 2p`, centered 8 pt above the bar while
   dragging: "Drag upwards to seek precisely" when `m < 2`, else
   "Seeking at m× precision" (Arc strings, PP-7).
 - The video pauses during the drag and resumes if it was playing
@@ -700,7 +716,7 @@ Chromium's).
 |---|---|
 | Trigger | The page calls `documentPictureInPicture.requestWindow()`; the engine reports disposition `newPictureInPicture` with the requested size (EM-7). |
 | Window | `NSPanel` like §4.4.2, not aspect-locked, min 284×160, level from "Keep Window on Top". Content size = requested size + top bar. Position: bottom-right, 16 pt inset. |
-| Top bar | Height 28 (guess), fill `PiPRole.documentTopBar` (`#212123`, both appearances, design-tokens §1.8), 1 px hairline `PiPRole.documentHairline` (white 0.20) at the bottom. Left: the opener's favicon 16 pt at x 10. Then the opener's host, 12 Medium white 0.85. Right: settings `ellipsis` (menu: "Keep Window on Top", separator, "Picture-in-picture on <host>:" header) and close `xmark`, 20×20 each, 6 pt apart, 8 pt from the edge. Glyphs white 0.85 at rest / 1 on hover; hover plate white 0.12, radius 5 (Open review-r1 design). Ellipsis tooltip/AX label "Options". |
+| Top bar | Height 28 (guess), fill `PiPRole.documentTopBar` (`#212123`, both appearances, design-tokens §1.8), 1 px hairline `PiPRole.documentHairline` (white 0.20) at the bottom. Left: the opener's favicon 16 pt at x 10. Then the opener's host, 12 Medium white 0.85. Right: settings `ellipsis` (menu: "Keep Window on Top", separator, "Picture-in-picture on <host>:" header) and close `xmark`, 20×20 each, 6 pt apart, 8 pt from the edge. Glyphs white 0.85 at rest / 1 on hover; hover plate white 0.12 / pressed white 0.18, radius 5 (Open review-r1 design). Ellipsis tooltip/AX label "Options". |
 | Drag | The top bar drags the window (Arc `DocumentPIPGestureMode.acceptOverTopBar`). |
 | Close | Closes the child page; Chromium returns elements to the opener. |
 
@@ -1227,7 +1243,9 @@ tokens.
 ```text
 features-render pip --out FILE.png [--size 384x216] [--scale 1|2] [--state playing|paused|ended]
                     [--controls visible|hidden] [--meeting] [--site twitch|meet|youtube|none]
-                    [--drag-precision N] [--menu] [--document --top-bar-title TEXT] [--document-hover-options]
+                    [--drag-precision N] [--menu] [--document --top-bar-title TEXT] [--document-hover-options] [--document-pressed-options]
+                    [--screen WIDTHxHEIGHT --natural-size WIDTHxHEIGHT --first-open --geometry-report FILE.json]
+                    [--hover-skip-ahead]
 ```
 
 The fake video view paints a gradient with the size written in it.
@@ -1246,7 +1264,7 @@ and the PR attaches the native menu text for design review.
 | PP3 | Controls fade in on a synthesized pointer move and out 2.0 s later; stay while the menu is open. |
 | PP4 | Scrubber: a drag up 80 pt shows "Seeking at 3× precision"; a flat drag shows "Drag upwards to seek precisely"; the fake host gets `scrubTo` during and `seekTo` at the end, and play resumes. |
 | PP5 | Menu items and order equal §4.4.5 for a URL with a host, and items 1, 2, 4 only for one without; incognito "Turn off" does not write `UserDefaults`. |
-| PP6 | Resize keeps the aspect ratio and the 50% screen maximum. Use the 284×160 minimum when it fits; otherwise use the relaxed short-side minimum from the lead decision in §4.4.2. Check 9:16 and 1:1 on a 900 pt screen, and compact controls below 300 pt. |
+| PP6 | Preserve aspect and the 50% maximum; use the orientation-aware minimum in §4.4.2. Fresh-process first-open and minimum checks cover landscape and portrait at heights 900/1010/1080/1440/1600/2160, plus 10 pt bottom-right placement. Check the observed 320×180 on 2560×1440, the clamped minimum on 1920×1080, square on a 900 pt screen, later long-side reuse, and compact controls below 300 pt. |
 | PP7 | Back to Tab, Close, Minimize send the right host calls (`closePausingVideo:` YES only for Close). |
 | PP8 | Document PiP: top bar 28 pt, colors from §4.6, menu has "Keep Window on Top" and the header. |
 
