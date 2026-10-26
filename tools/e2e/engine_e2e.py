@@ -2613,7 +2613,7 @@ def actions_checks(app, results):
     api = {}
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
-        api["key"] = app.call("activate")["key"]
+        api["key"] = bool(wait_until(lambda: app.call("activate")["key"], timeout=5))
         popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
                           ".then(() => { setTimeout(() => window.close(), 50); return true; })")
 
@@ -2640,7 +2640,7 @@ def actions_checks(app, results):
     state = open_popup(ACTION_PROBE)
     if state:
         popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
-        refusal["key"] = app.call("activate")["key"]
+        refusal["key"] = bool(wait_until(lambda: app.call("activate")["key"], timeout=5))
         popup_eval(state, "chrome.runtime.sendMessage('open-popup-now').then(() => true)")
         refusal["result"] = wait_until(lambda: popup_eval(state, "chrome.storage.session.get('openPopup')"
                                                                  ".then(r => r.openPopup)"), timeout=6)
@@ -2781,6 +2781,8 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     state = open_popup(ACTION_PROBE)
     if state:
         keep["idle"] = app.call("ext-popup").get("staysOpenOnBlur")
+        # DevTools' Page domain answers the dialog below.
+        app.call("devtools", tab=state["page"]["identifier"], method="Page.enable")
         popup_eval(state, "setTimeout(() => alert('hold'), 10); true")
         keep["alert"] = bool(holds(True))
         # Answer Chrome's dialog the way DevTools does (it is Chrome's
@@ -2846,8 +2848,10 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
         back = wait_until(lambda: (lambda x: x if x and x["live"] else None)(action(ACTION_PROBE)), timeout=20)
         r["back"] = bool(back)
         r["pinned"] = bool(back and back["pinned"])
-        installed = [e for e in app.call("extensions")["installed"] if e["id"] == ACTION_PROBE]
-        r["version"] = installed[0]["version"] if installed else None
+        def version():
+            installed = [e for e in app.call("extensions")["installed"] if e["id"] == ACTION_PROBE]
+            return installed[0]["version"] if installed else None
+        r["version"] = wait_until(lambda: (lambda v: v if v == (bump or v) else None)(version()), timeout=10) or version()
         again = open_popup(ACTION_PROBE)
         r["popup_after"] = bool(again)
         close_popup()
