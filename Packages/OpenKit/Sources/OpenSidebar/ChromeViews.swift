@@ -30,19 +30,26 @@ final class ToolbarView: NSView {
         setup(back, .back) { Tooltip(title: "Go back", keys: ["⌘", "["], style: style()) }
         setup(forward, .forward) { Tooltip(title: "Go forward", keys: ["⌘", "]"], style: style()) }
         setup(reload, .reload) { [unowned context] in
-            Tooltip(title: context.currentTab?.live.isLoading == true ? "Stop loading" : "Reload this page", keys: ["⌘", "R"], style: style())
+            Tooltip(title: context.pageIsLoading ? "Stop loading" : "Reload this page", keys: ["⌘", "R"], style: style())
         }
         toggle.action = { [unowned context] in context.send(.toggleSidebar) }
         back.action = { [unowned context] in context.send(.goBack) }
         forward.action = { [unowned context] in context.send(.goForward) }
         reload.action = { [unowned context] in
-            context.send(context.currentTab?.live.isLoading == true ? .stopLoading : .reload)
+            context.send(context.pageIsLoading ? .stopLoading : .reload)
         }
         // Arc reports all four as disabled with no page (AX); the toggle's glyph is
         // drawn like the others. guess: the toggle is always enabled in Open.
-        back.isEnabled = { [unowned context] in context.currentTab?.live.canGoBack ?? false }
-        forward.isEnabled = { [unowned context] in context.currentTab?.live.canGoForward ?? false }
-        reload.isEnabled = { [unowned context] in context.currentTab != nil }
+        back.isEnabled = { [unowned context] in context.pageCanGoBack }
+        forward.isEnabled = { [unowned context] in context.pageCanGoForward }
+        reload.isEnabled = { [unowned context] in context.hasPage }
+        // Under a Peek's dim, Arc draws back, forward, and reload in the enabled tone even
+        // when they are disabled (F0090: all four `#444452`–`#464654`; F0108 without the dim: disabled tone).
+        for b in [back, forward, reload] {
+            b.glyphTint = { [unowned context] enabled in
+                (enabled || context.peekSourceNodeID != nil ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
+            }
+        }
         toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }
     }
 
@@ -56,8 +63,12 @@ final class ToolbarView: NSView {
         back.frame = CGRect(origin: CGPoint(x: ChromeMetrics.backX(sidebarWidth: w), y: y), size: s)
         forward.frame = CGRect(origin: CGPoint(x: ChromeMetrics.forwardX(sidebarWidth: w), y: y), size: s)
         reload.frame = CGRect(origin: CGPoint(x: ChromeMetrics.reloadX(sidebarWidth: w), y: y), size: s)
-        let loading = tracked({ context.currentTab?.live.isLoading == true }) { [weak self] in self?.needsLayout = true }
+        let loading = tracked({ context.pageIsLoading }) { [weak self] in self?.needsLayout = true }
         reload.glyphView.glyph = loading ? .stopLoading : .reload
+        // A selected split moves back, forward, and reload into each pane's bar: the
+        // sidebar toolbar keeps only the toggle (F0081, F0082: AX and pixels).
+        let split = tracked({ context.isSplitSelected }) { [weak self] in self?.needsLayout = true }
+        for b in [back, forward, reload] { b.isHidden = split }
     }
 }
 
@@ -86,9 +97,9 @@ final class URLFieldView: NSView {
         label.font = Typography.urlField.font
         label.baseline = URLFieldMetrics.textBaselineOffset
         label.inset = SpaceListMetrics.textInset
-        label.text = { [unowned context] in context.currentTab?.displayHost ?? "Search or Enter URL…" }
+        label.text = { [unowned context] in context.pageHost ?? "Search or Enter URL…" }
         label.color = { [unowned context] in
-            (context.currentTab == nil ? SidebarRole.placeholder : SidebarRole.urlText).nsColor
+            (context.hasPage ? SidebarRole.urlText : SidebarRole.placeholder).nsColor
         }
         for b in [copyLink, siteControls] {
             b.context = context
@@ -130,7 +141,7 @@ final class URLFieldView: NSView {
         fill.frame = bounds
         fill.cornerRadius = URLFieldMetrics.cornerRadius
         CATransaction.commit()
-        let hasPage = tracked({ context.currentTab != nil }) { [weak self] in self?.needsLayout = true }
+        let hasPage = tracked({ context.hasPage }) { [weak self] in self?.needsLayout = true }
         label.font = (hasPage ? Typography.urlHost : Typography.urlField).font
         let showAccessories = hasPage && tracked({ showsButtons }) { [weak self] in self?.needsLayout = true }
         let ox = URLFieldMetrics.insetX, oy = URLFieldMetrics.y
@@ -162,4 +173,5 @@ final class URLFieldView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { context.send(.openCommandBar(.urlField)) }
     }
     override func accessibilityPerformPress() -> Bool { context.send(.openCommandBar(.urlField)); return true }
+    var displayedText: String { label.text() }
 }

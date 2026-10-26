@@ -22,6 +22,36 @@ public final class SidebarContext {
     public var forcedHover: SidebarHoverTarget?
     /// The pointer is over the sidebar (or a hover is forced).
     var pointerInSidebar = false
+    /// Open Peeks by source tab. The source row shows the Peek page's favicon in a
+    /// plate at its right end, also while another tab is selected (F0090, F0101).
+    /// Transient: the window controller sets it; the model never stores it.
+    /// Each tab has its own observable state, so a change reaches only that row:
+    /// a badge on or off lays the row out again, a new URL or favicon only redraws it.
+    public var peekBadges: [ItemID: SidebarPeekBadge] {
+        get { peekBadgeStates.compactMapValues(\.badge) }
+        set {
+            for id in Set(peekBadgeStates.keys).union(newValue.keys) {
+                let state = peekBadgeState(for: id), badge = newValue[id]
+                if state.badge != badge { state.badge = badge }
+                if state.isShown != (badge != nil) { state.isShown = badge != nil }
+            }
+        }
+    }
+    @ObservationIgnored private var peekBadgeStates: [ItemID: SidebarPeekBadgeState] = [:]
+    /// The badge state a row observes (made on first use and kept, so a row that
+    /// observes it before a Peek opens still hears about it).
+    func peekBadgeState(for id: ItemID) -> SidebarPeekBadgeState {
+        if let state = peekBadgeStates[id] { return state }
+        let state = SidebarPeekBadgeState(); peekBadgeStates[id] = state; return state
+    }
+    /// The Peek on screen. Its source row draws a lighter fill, and the URL field
+    /// and toolbar follow the Peek page (F0090: Peek host, Peek history).
+    public var shownPeek: SidebarShownPeek? {
+        didSet { if shownPeek?.sourceNodeID != peekSourceNodeID { peekSourceNodeID = shownPeek?.sourceNodeID } }
+    }
+    /// The shown Peek's source row alone: row fills and the chrome dim observe this,
+    /// so the Peek's URL or loading changes do not reach every row.
+    public private(set) var peekSourceNodeID: ItemID?
 
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
@@ -53,6 +83,19 @@ public final class SidebarContext {
         }
     }
 
+    /// The focused Space's selection is a split.
+    var isSplitSelected: Bool {
+        guard let space = focusedSpace, let id = selectedID(in: space.id) else { return false }
+        return model.node(id: id)?.split != nil
+    }
+
+    /// The page the toolbar and URL field describe: the Peek on screen, else the current tab.
+    var hasPage: Bool { shownPeek != nil || currentTab != nil }
+    var pageHost: String? { shownPeek?.displayHost ?? currentTab?.displayHost }
+    var pageCanGoBack: Bool { shownPeek?.canGoBack ?? currentTab?.live.canGoBack ?? false }
+    var pageCanGoForward: Bool { shownPeek?.canGoForward ?? currentTab?.live.canGoForward ?? false }
+    var pageIsLoading: Bool { shownPeek?.isLoading ?? currentTab?.live.isLoading ?? false }
+
     /// Favorites shown in this window: the focused Space's profile.
     public var favoritesProfile: Profile? {
         guard let space = focusedSpace else { return model.profiles.first }
@@ -76,6 +119,47 @@ public final class SidebarContext {
     func send(_ intent: SidebarIntent) -> Bool {
         guard let sidebar, let delegate = sidebar.delegate else { return false }
         return delegate.sidebar(sidebar, didRequest: intent)
+    }
+}
+
+/// The page a source row's Peek badge shows.
+public struct SidebarPeekBadge: Equatable, Sendable {
+    public var url: URL
+    public var faviconPNG: Data?
+    public init(url: URL, faviconPNG: Data? = nil) { self.url = url; self.faviconPNG = faviconPNG }
+}
+
+/// One tab's Peek badge, observed by that tab's row only.
+@MainActor
+@Observable
+final class SidebarPeekBadgeState {
+    /// Read during row layout: the badge takes the close button's slot.
+    var isShown = false
+    /// Read while the badge draws: the Peek page's favicon and host.
+    var badge: SidebarPeekBadge?
+}
+
+/// The Peek on screen, as the sidebar shows it.
+public struct SidebarShownPeek: Equatable, Sendable {
+    /// The source row: the source tab, or the split that holds it.
+    public var sourceNodeID: ItemID
+    public var url: URL
+    public var canGoBack: Bool
+    public var canGoForward: Bool
+    public var isLoading: Bool
+    public init(sourceNodeID: ItemID, url: URL, canGoBack: Bool = false, canGoForward: Bool = false, isLoading: Bool = false) {
+        self.sourceNodeID = sourceNodeID; self.url = url
+        self.canGoBack = canGoBack; self.canGoForward = canGoForward; self.isLoading = isLoading
+    }
+    var displayHost: String { URL.displayHost(url) }
+}
+
+extension URL {
+    /// Host shown in the URL field and used for fallback icons.
+    static func displayHost(_ url: URL) -> String {
+        var host = url.host() ?? url.absoluteString
+        if host.hasPrefix("www.") { host.removeFirst(4) }
+        return host
     }
 }
 
@@ -113,11 +197,7 @@ enum StyleCache {
 
 extension Tab {
     /// Host shown in the URL field and used for fallback icons.
-    var displayHost: String {
-        var host = url.host() ?? url.absoluteString
-        if host.hasPrefix("www.") { host.removeFirst(4) }
-        return host
-    }
+    var displayHost: String { URL.displayHost(url) }
 
     /// A pinned tab that navigated away from its pinned URL shows a "/" mark.
     var hasLeftPinnedURL: Bool {
