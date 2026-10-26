@@ -93,7 +93,7 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
     public func focusURL() { window?.makeFirstResponder(urlField); urlField.selectText(nil) }
     @objc private func submit() {
         let input = urlField.stringValue
-        let engine = SearchEngines.engine(id: coordinator?.model.profile(id: session.profileID)?.settings.searchEngineID)
+        let engine = SearchEngines.resolve(profile: coordinator?.model.profile(id: session.profileID))
         if let url = InputClassifier().classify(input).url ?? engine.searchURL(for: input) { container.host(for: session.tab.id)?.load(url) }
     }
     private func press(_ i: Int) {

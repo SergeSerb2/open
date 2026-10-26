@@ -28,18 +28,27 @@ public struct ProfileDTO: Codable, Sendable {
 public struct ProfileSettingsDTO: Codable, Sendable {
     public var autoArchiveAfter: String
     public var littleOpenAutoArchiveAfter: String
+    public var searchSuggestEnabled: Bool
+    public var downloadDirectory: String
+    public var askWhereToSaveEachFile: Bool
+    public var customSearchEngines: [SearchEngine]
     public var searchEngineID: String
     public var sleepMode: String?
 
-    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String, sleepMode: String? = nil) {
+    public init(autoArchiveAfter: String, littleOpenAutoArchiveAfter: String, searchEngineID: String, sleepMode: String? = nil, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = []) {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
+        self.searchSuggestEnabled = searchSuggestEnabled
+        self.downloadDirectory = downloadDirectory
+        self.askWhereToSaveEachFile = askWhereToSaveEachFile
+        self.customSearchEngines = customSearchEngines
         self.searchEngineID = searchEngineID
         self.sleepMode = sleepMode
     }
 
     private enum CodingKeys: String, CodingKey {
         case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode
+        case searchSuggestEnabled, downloadDirectory, askWhereToSaveEachFile, customSearchEngines
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
 
@@ -49,7 +58,11 @@ public struct ProfileSettingsDTO: Codable, Sendable {
         littleOpenAutoArchiveAfter = try container.decodeIfPresent(String.self, forKey: .littleOpenAutoArchiveAfter)
             ?? container.decodeIfPresent(String.self, forKey: .littleArcAutoArchiveAfter)
             ?? AutoArchiveInterval.sixHours.rawValue
-        searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
+        searchEngineID = try container.decodeIfPresent(String.self, forKey: .searchEngineID) ?? "google"
+        searchSuggestEnabled = try container.decodeIfPresent(Bool.self, forKey: .searchSuggestEnabled) ?? true
+        downloadDirectory = try container.decodeIfPresent(String.self, forKey: .downloadDirectory) ?? "~/Downloads"
+        askWhereToSaveEachFile = try container.decodeIfPresent(Bool.self, forKey: .askWhereToSaveEachFile) ?? false
+        customSearchEngines = try container.decodeIfPresent([SearchEngine].self, forKey: .customSearchEngines) ?? []
         sleepMode = try container.decodeIfPresent(String.self, forKey: .sleepMode)
     }
 
@@ -58,6 +71,10 @@ public struct ProfileSettingsDTO: Codable, Sendable {
         try container.encode(autoArchiveAfter, forKey: .autoArchiveAfter)
         try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
         try container.encode(searchEngineID, forKey: .searchEngineID)
+        try container.encode(searchSuggestEnabled, forKey: .searchSuggestEnabled)
+        try container.encode(downloadDirectory, forKey: .downloadDirectory)
+        try container.encode(askWhereToSaveEachFile, forKey: .askWhereToSaveEachFile)
+        try container.encode(customSearchEngines, forKey: .customSearchEngines)
         try container.encodeIfPresent(sleepMode, forKey: .sleepMode)
     }
 }
@@ -292,14 +309,14 @@ public enum SnapshotMapper {
     static func profileDTO(_ p: Profile) -> ProfileDTO {
         ProfileDTO(id: p.id.rawValue.uuidString, name: p.name, icon: iconDTO(p.icon),
                    favorites: p.favorites.map { .tab(tabDTO($0)) },
-                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue),
+                   settings: ProfileSettingsDTO(autoArchiveAfter: p.settings.autoArchiveAfter.rawValue, littleOpenAutoArchiveAfter: p.settings.littleOpenAutoArchiveAfter.rawValue, searchEngineID: p.settings.searchEngineID, sleepMode: p.settings.sleepMode.rawValue, searchSuggestEnabled: p.settings.searchSuggestEnabled, downloadDirectory: p.settings.downloadDirectory, askWhereToSaveEachFile: p.settings.askWhereToSaveEachFile, customSearchEngines: p.settings.customSearchEngines),
                    dataDirectoryName: p.dataDirectoryName)
     }
 
     static func profile(from dto: ProfileDTO) -> Profile {
         Profile(id: ProfileID(uuidString: dto.id), name: dto.name, icon: icon(from: dto.icon),
                 favorites: dto.favorites.compactMap { if case .tab(let t) = $0 { return tab(from: t) }; return nil },
-                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced),
+                settings: ProfileSettings(autoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.autoArchiveAfter) ?? .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval(rawValue: dto.settings.littleOpenAutoArchiveAfter) ?? .sixHours, searchEngineID: dto.settings.searchEngineID, sleepMode: dto.settings.sleepMode.flatMap(SleepMode.init(rawValue:)) ?? .balanced, searchSuggestEnabled: dto.settings.searchSuggestEnabled, downloadDirectory: dto.settings.downloadDirectory, askWhereToSaveEachFile: dto.settings.askWhereToSaveEachFile, customSearchEngines: dto.settings.customSearchEngines),
                 dataDirectoryName: dto.dataDirectoryName)
     }
 

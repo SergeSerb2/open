@@ -165,7 +165,7 @@ public enum CommandRegistry {
         CommandDefinition(id: "stop-loading", title: "Stop Loading", menuPath: ["View"],
                           defaultShortcuts: [.cmd(".")], enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "zoom-in", title: "Zoom In", menuPath: ["View"],
-                          defaultShortcuts: [.cmd("+"), .cmd("=")], enabledKey: EnabledKey.currentTab),
+                          defaultShortcuts: [.cmd("+"), .cmd("=")], isCustomizable: true, enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "zoom-out", title: "Zoom Out", menuPath: ["View"],
                           defaultShortcuts: [.cmd("-"), .cmdShift("-")], enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "zoom-actual-size", title: "Zoom to Actual Size", menuPath: ["View"],
