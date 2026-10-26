@@ -995,7 +995,7 @@ index 1f2142d095b58..02794f16d735e 100644
 +[dependencies.rmp]
 +version = "=0.8.11"
 diff --git a/third_party/rust/chromium_crates_io/gnrt_config.toml b/third_party/rust/chromium_crates_io/gnrt_config.toml
-index 1a7fbb295e26a..900d4016ba447 100644
+index 1a7fbb295e26a..51d3f3bb341a3 100644
 --- a/third_party/rust/chromium_crates_io/gnrt_config.toml
 +++ b/third_party/rust/chromium_crates_io/gnrt_config.toml
 @@ -113,6 +113,12 @@ removed_librs_template = "removed_lib.rs.hbs"
@@ -1037,7 +1037,19 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.image]
  extra_input_roots = ['../README.md']
  extra_kv = { allow_unsafe = true }
-@@ -656,6 +674,9 @@ allow_unsafe = true
+@@ -562,7 +580,10 @@ extra_kv = { allow_unsafe = false }
+ [crate.indexmap.extra_kv]
+ allow_unsafe = true
+ 
+-[crate.itertools]
++[crate."itertools@v0_10"]  # Open: adblock 0.8.11; no unsafe code (review 97-3)
++extra_kv = { allow_unsafe = false }
++
++[crate."itertools@v0_14"]
+ extra_kv = { allow_unsafe = true }
+ 
+ [crate.itoa.extra_kv]
+@@ -656,6 +677,9 @@ allow_unsafe = true
  [crate.mach2]
  extra_kv = { allow_unsafe = false }
  
@@ -1047,7 +1059,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.memchr.extra_kv]
  allow_unsafe = true
  
-@@ -739,6 +760,12 @@ extra_kv = { allow_unsafe = true }
+@@ -739,6 +763,12 @@ extra_kv = { allow_unsafe = true }
  [crate.parking_lot_core]
  extra_kv = { allow_unsafe = true }
  
@@ -1060,7 +1072,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.png.extra_kv]
  allow_unsafe = false
  # Web tests (aka WPT tests, also formerly known as Layout Tests) require fast
-@@ -771,6 +798,12 @@ group = 'test'
+@@ -771,6 +801,12 @@ group = 'test'
  extra_kv = { allow_unsafe = false }
  group = 'test'
  
@@ -1073,7 +1085,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.pxfm]
  extra_kv = { allow_unsafe = true }
  
-@@ -796,7 +829,10 @@ extra_kv = { allow_unsafe = true }
+@@ -796,7 +832,10 @@ extra_kv = { allow_unsafe = true }
  extra_kv = { allow_unsafe = false }
  
  [crate.regex]
@@ -1085,7 +1097,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  allow_first_party_usage = false
  extra_kv = { allow_unsafe = true }
  
-@@ -812,6 +848,12 @@ allow_unsafe = false
+@@ -812,6 +851,12 @@ allow_unsafe = false
  [crate.resb.extra_kv]
  allow_unsafe = true
  
@@ -1098,7 +1110,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.rustc-demangle.extra_kv]
  allow_unsafe = false
  
-@@ -838,6 +880,9 @@ extra_kv = { allow_unsafe = true }
+@@ -838,6 +883,9 @@ extra_kv = { allow_unsafe = true }
  [crate.scopeguard]
  extra_kv = { allow_unsafe = true }
  
@@ -1108,7 +1120,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.serde]
  build_script_outputs = [ "private.rs" ]
  extra_kv = { allow_unsafe = false }
-@@ -975,7 +1020,10 @@ allow_unsafe = false
+@@ -975,7 +1023,10 @@ allow_unsafe = false
  [crate.termcolor.extra_kv]
  allow_unsafe = false
  
@@ -1120,7 +1132,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  build_script_outputs = [ "private.rs" ]
  extra_kv = { allow_unsafe = false }
  
-@@ -989,6 +1037,9 @@ extra_kv = { allow_unsafe = true }
+@@ -989,6 +1040,9 @@ extra_kv = { allow_unsafe = true }
  [crate.tinystr.extra_kv]
  allow_unsafe = true
  
@@ -1130,7 +1142,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.toktrie.extra_kv]
  allow_unsafe = true
  
-@@ -1025,9 +1076,15 @@ extra_input_roots = ["../README.md"]
+@@ -1025,9 +1079,15 @@ extra_input_roots = ["../README.md"]
  allow_first_party_usage = false
  extra_kv = { allow_unsafe = true }
  
@@ -1146,7 +1158,7 @@ index 1a7fbb295e26a..900d4016ba447 100644
  [crate.unicode-width.extra_kv]
  allow_unsafe = false
  
-@@ -1039,6 +1096,9 @@ extra_kv = { allow_unsafe = false }
+@@ -1039,6 +1099,9 @@ extra_kv = { allow_unsafe = false }
  allow_first_party_usage = false
  extra_kv = { allow_unsafe = true }
  
@@ -1158,28 +1170,35 @@ index 1a7fbb295e26a..900d4016ba447 100644
  
 diff --git a/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0001-Use-regex-without-perf-features.patch b/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0001-Use-regex-without-perf-features.patch
 new file mode 100644
-index 0000000000000..d580c9aa30d35
+index 0000000000000..d9db75f67f4bc
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/patches/adblock-v0_8/0001-Use-regex-without-perf-features.patch
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,31 @@
 +From: Open engine <noreply@open.invalid>
-+Subject: [PATCH] Use regex without its perf features
++Subject: [PATCH] Use regex without perf-literal (no aho-corasick)
 +
-+Open builds regex with default-features = false and only std + unicode, so
-+aho-corasick's SIMD (unsafe) code stays out of the build (lead decision
-+2026-10-26, docs/engine-patches.md "Security review").
++Open builds regex with default-features = false: std, unicode, and the
++regex-automata engines (perf-dfa, perf-onepass, perf-backtrack, perf-cache,
++perf-inline), but not perf-literal, so aho-corasick's SIMD (unsafe) code
++stays out of the build (lead decisions 2026-10-26, review 97-1;
++docs/engine-patches.md "Security review").
 +
 +---
 +diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml
 +index 064da8ae0db1f..f44cd1e95bb83 100644
 +--- a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml
 ++++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml
-+@@ -94,6 +94,11 @@ version = "2.1"
++@@ -94,6 +94,16 @@ version = "2.1"
 + 
 + [dependencies.regex]
 + version = "1.5"
 ++default-features = false
 ++features = [
+++    "perf-backtrack",
+++    "perf-cache",
+++    "perf-dfa",
+++    "perf-inline",
+++    "perf-onepass",
 ++    "std",
 ++    "unicode",
 ++]
@@ -1188,15 +1207,15 @@ index 0000000000000..d580c9aa30d35
 + version = "0.15"
 diff --git a/third_party/rust/chromium_crates_io/patches/libafl-v0_15/0001-Use-regex-without-perf-features.patch b/third_party/rust/chromium_crates_io/patches/libafl-v0_15/0001-Use-regex-without-perf-features.patch
 new file mode 100644
-index 0000000000000..061fabd290fb7
+index 0000000000000..97a2f4d0e1af0
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/patches/libafl-v0_15/0001-Use-regex-without-perf-features.patch
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,29 @@
 +From: Open engine <noreply@open.invalid>
-+Subject: [PATCH] Use regex without its perf features
++Subject: [PATCH] Use regex without perf-literal (no aho-corasick)
 +
 +Cargo unifies regex's features across the tree; this keeps libafl from
-+turning the perf features back on for adblock (Open, docs/engine-patches.md
++turning perf-literal (aho-corasick) back on for adblock (Open, docs/engine-patches.md
 +"Security review").
 +
 +---
@@ -1204,12 +1223,17 @@ index 0000000000000..061fabd290fb7
 +index 598ae578339df..73ece5b3fc971 100644
 +--- a/third_party/rust/chromium_crates_io/vendor/libafl-v0_15/Cargo.toml
 ++++ b/third_party/rust/chromium_crates_io/vendor/libafl-v0_15/Cargo.toml
-+@@ -370,6 +370,11 @@ default-features = false
++@@ -370,6 +370,16 @@ default-features = false
 + [dependencies.regex]
 + version = "1.12.2"
 + optional = true
 ++default-features = false
 ++features = [
+++    "perf-backtrack",
+++    "perf-cache",
+++    "perf-dfa",
+++    "perf-inline",
+++    "perf-onepass",
 ++    "std",
 ++    "unicode",
 ++]
@@ -3297,10 +3321,10 @@ index 0000000000000..01208312e31d9
 +]
 diff --git a/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml
 new file mode 100644
-index 0000000000000..f44cd1e95bb83
+index 0000000000000..0735a5dc30601
 --- /dev/null
 +++ b/third_party/rust/chromium_crates_io/vendor/adblock-v0_8/Cargo.toml
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,180 @@
 +# THIS FILE IS AUTOMATICALLY GENERATED BY CARGO
 +#
 +# When uploading crates to the registry Cargo will automatically
@@ -3399,6 +3423,11 @@ index 0000000000000..f44cd1e95bb83
 +version = "1.5"
 +default-features = false
 +features = [
++    "perf-backtrack",
++    "perf-cache",
++    "perf-dfa",
++    "perf-inline",
++    "perf-onepass",
 +    "std",
 +    "unicode",
 +]
@@ -114312,15 +114341,20 @@ index 0000000000000..75157d34f3aae
 +    zip_eq(&a, &b).count();
 +}
 diff --git a/third_party/rust/chromium_crates_io/vendor/libafl-v0_15/Cargo.toml b/third_party/rust/chromium_crates_io/vendor/libafl-v0_15/Cargo.toml
-index 598ae578339df..73ece5b3fc971 100644
+index 598ae578339df..ac3b7b7aeda89 100644
 --- a/third_party/rust/chromium_crates_io/vendor/libafl-v0_15/Cargo.toml
 +++ b/third_party/rust/chromium_crates_io/vendor/libafl-v0_15/Cargo.toml
-@@ -370,6 +370,11 @@ default-features = false
+@@ -370,6 +370,16 @@ default-features = false
  [dependencies.regex]
  version = "1.12.2"
  optional = true
 +default-features = false
 +features = [
++    "perf-backtrack",
++    "perf-cache",
++    "perf-dfa",
++    "perf-inline",
++    "perf-onepass",
 +    "std",
 +    "unicode",
 +]
@@ -319153,7 +319187,7 @@ index 0000000000000..77e2aefcad249
 +Description: Back end adapter for idna
 diff --git a/third_party/rust/itertools/v0_10/BUILD.gn b/third_party/rust/itertools/v0_10/BUILD.gn
 new file mode 100644
-index 0000000000000..d9e0423d96038
+index 0000000000000..1a6fd04edcb95
 --- /dev/null
 +++ b/third_party/rust/itertools/v0_10/BUILD.gn
 @@ -0,0 +1,120 @@
@@ -319233,7 +319267,7 @@ index 0000000000000..d9e0423d96038
 +  cargo_pkg_repository = "https://github.com/rust-itertools/itertools"
 +  cargo_pkg_version = "0.10.5"
 +
-+  allow_unsafe = true
++  allow_unsafe = false
 +
 +  deps = [ "//third_party/rust/either/v1:lib" ]
 +  features = [
@@ -319760,10 +319794,10 @@ index 0000000000000..047454e5376ce
 +
 +Description: Common types for the public suffix implementation crates
 diff --git a/third_party/rust/regex/v1/BUILD.gn b/third_party/rust/regex/v1/BUILD.gn
-index c96c5a5bb7f3d..85265c9ab53a0 100644
+index c96c5a5bb7f3d..ed00fffec4d86 100644
 --- a/third_party/rust/regex/v1/BUILD.gn
 +++ b/third_party/rust/regex/v1/BUILD.gn
-@@ -42,20 +42,10 @@ cargo_crate("lib") {
+@@ -42,19 +42,14 @@ cargo_crate("lib") {
    allow_unsafe = true
  
    deps = [
@@ -319775,16 +319809,15 @@ index c96c5a5bb7f3d..85265c9ab53a0 100644
    features = [
 -    "default",
 -    "perf",
--    "perf-backtrack",
--    "perf-cache",
--    "perf-dfa",
--    "perf-inline",
+     "perf-backtrack",
+     "perf-cache",
+     "perf-dfa",
+     "perf-inline",
 -    "perf-literal",
--    "perf-onepass",
+     "perf-onepass",
      "std",
      "unicode",
-     "unicode-age",
-@@ -71,7 +61,6 @@ cargo_crate("lib") {
+@@ -71,7 +66,6 @@ cargo_crate("lib") {
    # //third_party/rust/chromium_crates_io/Cargo.toml to use
    # it from first-party code.
    visibility = [ "//third_party/rust/*" ]
@@ -319808,10 +319841,10 @@ index 063e48a9e7197..eeb677b7b9b8e 100644
  Description: An implementation of regular expressions for Rust. This implementation uses
  finite automata and guarantees linear time matching on all inputs.
 diff --git a/third_party/rust/regex_automata/v0_4/BUILD.gn b/third_party/rust/regex_automata/v0_4/BUILD.gn
-index cfd399c1b4442..a1376676cff04 100644
+index cfd399c1b4442..d8bb13cbe11aa 100644
 --- a/third_party/rust/regex_automata/v0_4/BUILD.gn
 +++ b/third_party/rust/regex_automata/v0_4/BUILD.gn
-@@ -101,24 +101,13 @@ cargo_crate("lib") {
+@@ -101,11 +101,7 @@ cargo_crate("lib") {
  
    allow_unsafe = true
  
@@ -319823,14 +319856,11 @@ index cfd399c1b4442..a1376676cff04 100644
 +  deps = [ "//third_party/rust/regex_syntax/v0_8:lib" ]
    features = [
      "alloc",
--    "dfa-onepass",
-     "dfa-search",
--    "hybrid",
-     "meta",
--    "nfa-backtrack",
+     "dfa-onepass",
+@@ -116,9 +112,6 @@ cargo_crate("lib") {
      "nfa-pikevm",
      "nfa-thompson",
--    "perf-inline",
+     "perf-inline",
 -    "perf-literal",
 -    "perf-literal-multisubstring",
 -    "perf-literal-substring",
