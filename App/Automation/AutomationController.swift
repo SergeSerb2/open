@@ -105,7 +105,12 @@
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return activationEvents
-      case "deactivate": NSApp.deactivate(); return true
+      case "yield-activation":
+        guard let pid = a["pid"] as? Int32, pid != getpid(),
+          let target = NSRunningApplication(processIdentifier: pid),
+          target.executableURL?.resolvingSymlinksInPath() == Bundle.main.executableURL?.resolvingSymlinksInPath()
+        else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
+        NSApp.yieldActivation(to: target); return true
       case "native-focus-state":
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,

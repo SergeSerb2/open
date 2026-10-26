@@ -103,6 +103,7 @@ class Open:
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
             raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
+        self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
         self.executable = app
@@ -234,6 +235,19 @@ class Open:
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
+
+    def foreground_peer(self):
+        """Foreground a second, owned Open instance without touching other apps."""
+        data = self.user_data + "-b"
+        shutil.rmtree(data, ignore_errors=True)
+        peer = Open(self.config, self.style, data, ["--use-mock-keychain"], data + ".log", urls=())
+        try:
+            self.call("yield-activation", pid=peer.pid)
+            peer.call("window-focus", id=peer.call("window-state")["id"], activate=True)
+            return peer
+        except Exception:
+            peer.quit()
+            raise
 
     def page(self, tab_id):
         return self.tab(tab_id).get("page", {})
@@ -1648,16 +1662,19 @@ def window_flow_checks(factory, results, tmp):
                                   "selected": selected, "revealed_again_s": again and again["elapsed"], "left_s": left and left["elapsed"]}
         # Yield only our own app. Tagged pointer handling must still work while
         # another process is foreground; no input is sent to that process.
-        app.call("deactivate")
-        inactive = state_when(app, lambda st: not st["appActive"])
-        app.call("mouse", action="move", x=600, y=300)
-        app.call("mouse", action="move", x=3, y=300)
-        background_reveal = wait_card(app, True)
-        app.call("mouse", action="move", x=600, y=300)
-        background_hide = wait_card(app, False)
-        results["background_tagged_pointer"] = {"ok": bool(inactive) and bool(background_reveal) and bool(background_hide)
-            and not background_reveal["state"]["appActive"], "inactive": bool(inactive),
-            "revealed": bool(background_reveal), "hidden": bool(background_hide)}
+        peer = app.foreground_peer()
+        try:
+            inactive = state_when(app, lambda st: not st["appActive"])
+            app.call("mouse", action="move", x=600, y=300)
+            app.call("mouse", action="move", x=3, y=300)
+            background_reveal = wait_card(app, True)
+            app.call("mouse", action="move", x=600, y=300)
+            background_hide = wait_card(app, False)
+            results["background_tagged_pointer"] = {"ok": bool(inactive) and bool(background_reveal) and bool(background_hide)
+                and not background_reveal["state"]["appActive"], "inactive": bool(inactive),
+                "revealed": bool(background_reveal), "hidden": bool(background_hide)}
+        finally:
+            peer.quit()
         app.call("key", key="s", modifiers=["cmd"], route="app")
         results["toggle_sidebar"] = {"ok": bool(sidebar_anchored(app))}
         app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
