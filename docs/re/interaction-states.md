@@ -211,7 +211,7 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 |---|---|---|
 | Cmd+T, empty | Placeholder "Search or Enter URL…", magnifier icon, info button. Suggestions: open tabs with "Switch to Tab →". The sidebar "New Tab" row shows the selected style. | F0063 |
 | Cmd+L | The current URL fills the field and is selected. Leading icon = the page favicon. Row 1 = the current page. No "New Tab" highlight. | F0049 |
-| Typing | Leading icon = globe. Inline completion (typed "<host minus last letter>", field shows the full host). Trailing hint "Search <default engine> [Tab] or [Space]" with keycaps. Rows: URL matches ("host — host"), a search row (magnifier), history, and open tabs with "Switch to Tab". | F0040 |
+| Typing | Leading icon = globe. No inline completion in this frame: the AX value lags the image by one key (corrected 2026-10-25, `commandbar-completion.md` CC-8). Inline completion shows in F0043 and F0062: the completed part is selected (CC-1…CC-5). Trailing hint "Search <default engine> [Tab] or [Space]" with keycaps. Rows: URL matches ("host — host"), a search row (magnifier), history, and open tabs with "Switch to Tab". | F0040 |
 | Return (Cmd+T) | A new Today tab appears right under "New Tab" and is selected. | F0041–F0042 |
 | New window (Cmd+N) | Opens with the command bar already open | F0098, F0157 AX |
 | Open/close animation | AX shows a shrunken field (width 2) and table (98x52) mid-animation. guess: scale from the center with a fade. | F0060, F0064 |
