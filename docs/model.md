@@ -741,3 +741,21 @@ at 0.450 s / -6.000 dBFS and 1.100 s / -8.000 dBFS; SE2 proves absent and false
 preferences neither load nor play. The Settings CLI verifies defaults, disk writes,
 and reload through the existing store. `features-render` and sound regeneration now
 run in verify-all. No audio playback, unit tests, App edits, or desktop input.
+
+## Sidebar completion M5 (2026-10-26)
+
+LibrarySection.spaces is the first Library row. It hosts the native view supplied
+by `SettingsActions.makeSpaceManagerView() -> NSView?`, through a source-compatible
+optional SettingsActions injection in LibraryViewModel. The view is created only
+on first entry, retained across section switches, and constrained to fill the host.
+OpenSettings imports no OpenSidebar code and adds no library target. A nil factory
+result shows the Library empty state. Spaces has no unrelated archive/search toolbar.
+The selected section persists in the existing UserDefaults registry.
+
+`settings-preview check --only library-spaces` passes L1 through the actual Library
+view and the injected labeled native stand-in. It verifies lazy creation, render,
+reuse, section persistence, and a nil factory. The empty-state check uses the native
+headline AX label, as existing offscreen Library checks do; SwiftUI's combined
+message label is not exposed in a never-ordered window. The normal render command
+also includes Library Spaces at 1x and 2x. App presentation and the concrete sidebar
+SpaceManagerView remain their separate lane steps. No unit tests or desktop input.

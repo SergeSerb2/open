@@ -145,7 +145,7 @@ except where a section says Save.
 | `open.advanced.tabSleepMode` | String (`automatic`/`conservative`/`aggressive`/`never`) | `automatic` | Advanced; sleep policy (section 5.5) |
 | `open.appIcon.selectedID` | String (`openDefault`/`openDark`/`openLight`/`openMono`/`openColor`/`openRetro`) | `openDefault` | App Icon; `NSApp.applicationIconImage` / alternate icon |
 | `open.import.lastArcDir` | String (path) | none | Import wizard (path only; never commit) |
-| `open.library.lastSection` | String (`archive`/`downloads`/`captures`/`media`/`history`) | `archive` | Library restore |
+| `open.library.lastSection` | String (`spaces`/`archive`/`downloads`/`captures`/`media`/`history`) | `archive` | Library restore |
 
 Register app defaults once at launch with
 `UserDefaults.standard.register(defaults:)` using this table. Reads

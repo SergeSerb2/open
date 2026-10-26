@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OpenModel
 import OpenCommands
 
@@ -55,6 +56,11 @@ public struct ImportOutcome: Sendable {
     func openHelp(topic: String)
     func copyText(_ text: String)
     func openLibrary()
+    /// The Library hosts this native view; OpenSettings has no sidebar dependency.
+    func makeSpaceManagerView() -> NSView?
 }
 
-public extension SettingsActions { var canImportPasswordsAndCookies: Bool { false } }
+public extension SettingsActions {
+    var canImportPasswordsAndCookies: Bool { false }
+    func makeSpaceManagerView() -> NSView? { nil }
+}

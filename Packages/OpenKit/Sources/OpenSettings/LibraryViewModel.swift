@@ -43,6 +43,9 @@ import OpenStore
     public let defaults: UserDefaults
     public let model: BrowserModel
     public let actions: any LibraryActions
+    @ObservationIgnored private let settingsActions: (any SettingsActions)?
+    /// Built only on first entry, then retained across Library section switches.
+    @ObservationIgnored public private(set) lazy var spaceManagerView: NSView? = settingsActions?.makeSpaceManagerView()
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
     public private(set) var archives: [ProfileID: ArchiveStore]
@@ -54,7 +57,9 @@ import OpenStore
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
     public init(model: BrowserModel, defaults: UserDefaults, actions: any LibraryActions, downloads: any DownloadsProvider, captures: any CapturesProvider,
-                archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore], snapshot: SnapshotStore, faviconStore: FaviconStore? = nil) {
+                archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore], snapshot: SnapshotStore, faviconStore: FaviconStore? = nil, settingsActions: (any SettingsActions)? = nil) {
+        SettingsDefaults.register(in: defaults)
+        self.settingsActions = settingsActions
         self.model = model; self.defaults = defaults; self.actions = actions; self.downloads = downloads; self.captures = captures
         self.archives = archives; self.histories = histories; self.snapshot = snapshot; self.faviconStore = faviconStore
         section = LibrarySection(rawValue: defaults.string(forKey: "open.library.lastSection") ?? "") ?? .archive

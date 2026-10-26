@@ -37,6 +37,21 @@ import CryptoKit
     func openHelp(topic: String) { record("openHelp \(topic)") }
     func copyText(_ text: String) { record("copyText") }
     func openLibrary() { record("openLibrary") }
+    var spaceManagerAvailable = true
+    private(set) var spaceManagerMakeCount = 0
+    func makeSpaceManagerView() -> NSView? {
+        spaceManagerMakeCount += 1
+        record("makeSpaceManagerView")
+        guard spaceManagerAvailable else { return nil }
+        let view = NSView()
+        let label = NSTextField(labelWithString: "Space Manager preview")
+        label.setAccessibilityElement(true); label.setAccessibilityRole(.staticText)
+        label.setAccessibilityLabel("Space Manager preview")
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([label.centerXAnchor.constraint(equalTo: view.centerXAnchor), label.centerYAnchor.constraint(equalTo: view.centerYAnchor)])
+        return view
+    }
 }
 
 @discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, to url: URL) async throws -> [String] {
