@@ -478,8 +478,9 @@ public final class BrowserModel {
     }
 
     /// One archive entry per tab under `node`, each with the tab's direct parent.
-    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date()) -> [ArchiveEntry] {
-        let owning = owner(of: parent)
+    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date(),
+                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil) -> [ArchiveEntry] {
+        let owning = ownership ?? owner(of: parent)
         var entries: [ArchiveEntry] = []
         func collect(_ node: SidebarNode, _ parent: NodeParent) {
             switch node {
@@ -1103,6 +1104,7 @@ public final class BrowserModel {
             (groups[parent] ?? []).sorted { (positions[parent]?[$0] ?? 0) > (positions[parent]?[$1] ?? 0) }
         }
         let now = Date()
+        let ownership = Dictionary(uniqueKeysWithValues: parents.map { ($0, owner(of: $0)) })
         var entries: [ArchiveEntry] = []
         var folders: [ArchiveFolderEntry] = []
         var reverts: [Revert] = []
@@ -1110,7 +1112,7 @@ public final class BrowserModel {
             guard let node = index[id], let originalParent = sources[id] else { continue }
             // Preserve the original location before a pane collapse, but publish
             // archive records only after this node actually leaves the tree.
-            let nodeEntries = node.folder == nil ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now) : []
+            let nodeEntries = node.folder == nil ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now, ownership: ownership[originalParent]) : []
             let folder = node.folder.map { folderEntry($0, parent: originalParent, archivedAt: now) }
             let revert: Revert?
             if case .splitPane(let splitID)? = parentByID[id], let split = index[splitID]?.split,
