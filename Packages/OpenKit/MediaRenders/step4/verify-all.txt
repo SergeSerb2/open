@@ -1,0 +1,25 @@
+Verified source commit: d13fdcdb5cb25aa7baa75b78003cf006dc71cd71
+Merged origin/main: b5f303470f20b75e90b7aa8a69e280b41c59738b
+Command: tools/verify-all.sh
+
+
+NAME                   RESULT SECONDS
+build                  PASS   77
+commands-demo          PASS   1
+roundtrip              PASS   1
+suggest-check          PASS   14
+commands-dump          PASS   0
+route                  PASS   2
+favicons               PASS   2
+media-demo             PASS   0
+sleep-demo             PASS   1
+adblock-perf           PASS   0
+adblock-catalog        PASS   0
+profiles               PASS   3
+settings-preview       PASS   85
+sidebar-render         PASS   43
+commandbar-render      PASS   17
+features-render        PASS   25
+boosts                 PASS   3
+
+Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-114756.1ihcV3/

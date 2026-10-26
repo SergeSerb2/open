@@ -22,6 +22,7 @@ enum FeatureCLI {
     static func run(_ args: [String]) async throws {
         guard let cmd = args.first else { throw CLIError(description: RenderCLI.usage) }
         if cmd == "check" { try await FeatureChecks.run(); return }
+        if cmd == "pip" { try PiPScene.run(args); return }
         if cmd == "compare" { try FeatureCompare.run(args); return }
         let sizeParts = (RenderCLI.value(args, "--size") ?? (cmd == "little" ? "720x540" : "2216x1394")).split(separator: "x").compactMap { Double($0) }
         guard sizeParts.count == 2, sizeParts.allSatisfy({ $0 > 0 && $0 <= 8192 }) else { throw CLIError(description: "invalid size") }
