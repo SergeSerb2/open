@@ -966,13 +966,13 @@ public final class BrowserModel {
     private func copyNode(_ node: SidebarNode) -> SidebarNode {
         func copyTab(_ tab: Tab) -> Tab {
             Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
-                customIcon: tab.customIcon, isMuted: tab.isMuted)
+                customIcon: tab.customIcon, iconOverride: tab.iconOverride, isMuted: tab.isMuted)
         }
         switch node {
         case .tab(let tab): return .tab(copyTab(tab))
         case .folder(let folder):
             return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded, customIcon: folder.customIcon,
-                                  children: folder.children.map { copyNode($0) }))
+                                  iconOverride: folder.iconOverride, children: folder.children.map { copyNode($0) }))
         case .split(let split):
             let panes = split.panes.map(copyTab)
             let focus = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
