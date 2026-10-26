@@ -3,10 +3,10 @@ import OpenModel
 import Observation
 
 public enum LibrarySection: String, CaseIterable, Sendable {
-    case archive, downloads, captures, media, history
+    case spaces, archive, downloads, captures, media, history
     public var title: String { rawValue.capitalized }
     public var symbol: String { switch self {
-    case .archive: "archivebox"; case .downloads: "arrow.down.circle"; case .captures: "camera"
+    case .spaces: "rectangle.split.3x1"; case .archive: "archivebox"; case .downloads: "arrow.down.circle"; case .captures: "camera"
     case .media: "photo.on.rectangle"; case .history: "clock"
     } }
 }

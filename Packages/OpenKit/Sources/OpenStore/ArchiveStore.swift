@@ -106,7 +106,7 @@ public final class ArchiveStore: ArchiveSink {
 
     private func rows(_ entries: [ArchiveEntry]) -> [ArchiveRow] {
         entries.map { entry in
-            ArchiveRow(id: entry.tab.id.rawValue.uuidString, url: entry.tab.url.absoluteString, title: entry.tab.displayTitle,
+            ArchiveRow(id: entry.tab.id.rawValue.uuidString, url: entry.tab.url.absoluteString, title: entry.tab.customTitle ?? entry.tab.title,
                        spaceID: entry.spaceID?.rawValue.uuidString, profileID: entry.profileID?.rawValue.uuidString,
                        archivedAt: entry.archivedAt.timeIntervalSince1970, reason: entry.reason.rawValue,
                        originalLocation: entry.originalLocation, kind: .tab, payload: .tab(SnapshotMapper.tabDTO(entry.tab)))

@@ -336,6 +336,7 @@ enum FeatureChecks {
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
         try await visualFinish { check($0, $1) }
         try await reviewRound1 { check($0, $1) }
+        try SoundChecks.run { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }
