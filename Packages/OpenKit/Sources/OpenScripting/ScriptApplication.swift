@@ -16,9 +16,15 @@ extension NSApplication {
         }
     }
 
-    // §6.7: A14 must check Apple-event get/count interception in Step 6.
-    // Swift-side KVC intentionally returns an empty collection.
-    @objc public dynamic var appleScriptTabs: [ScriptTab] { [] }
+    // Swift KVC returns []; Apple-event reads fail. NSCreateCommand also reads this
+    // collection during insertion, so creation must remain exempt from the read guard.
+    @objc public dynamic var appleScriptTabs: [ScriptTab] {
+        if let command = NSScriptCommand.current(), !(command is NSCreateCommand) {
+            command.fail(ScriptError.writeOnly, "Application tabs are write-only. Use tabs of a window or space.")
+        }
+        return []
+    }
+    @objc public func countOfAppleScriptTabs() -> Int { appleScriptTabs.count }
 
     @objc public func countOfAppleScriptWindows() -> Int { appleScriptWindows.count }
     @objc public func objectInAppleScriptWindowsAtIndex(_ index: Int) -> ScriptWindow? {
@@ -35,7 +41,10 @@ extension NSApplication {
         _ = ScriptCreation.makeLittleTab(properties: tab.creationProperties)
     }
     @objc(insertInAppleScriptWindows:atIndex:) public func insertInAppleScriptWindows(_ window: ScriptWindow, at index: Int) {
-        ScriptFailure.report(ScriptError.useMakeAndClose, "Use make new window and close window.")
+        _ = ScriptCreation.makeWindow(properties: window.creationProperties)
+    }
+    @objc public func insertInAppleScriptWindows(_ window: ScriptWindow) {
+        _ = ScriptCreation.makeWindow(properties: window.creationProperties)
     }
     @objc(removeFromAppleScriptWindowsAtIndex:) public func removeFromAppleScriptWindows(at index: Int) {
         ScriptFailure.report(ScriptError.useMakeAndClose, "Use make new window and close window.")

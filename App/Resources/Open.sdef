@@ -9,7 +9,7 @@
   <suite name="Standard Suite" code="core" description="Common classes and commands for all applications.">
 
     <command name="make" code="corecrel" description="Make a new object.">
-      <cocoa class="NSCreateCommand"/>
+      <cocoa class="ScriptMakeCommand"/>
       <access-group identifier="*"/>
       <parameter name="new" code="kocl" description="The class of the new object." type="type">
         <cocoa key="ObjectClass"/>
@@ -21,7 +21,7 @@
     </command>
 
     <command name="count" code="corecnte" description="Return the number of elements of a particular class within an object.">
-      <cocoa class="NSCountCommand"/>
+      <cocoa class="ScriptCountCommand"/>
       <access-group identifier="*"/>
       <direct-parameter description="the object whose elements are to be counted" type="specifier"/>
       <parameter name="each" code="kocl" description="The class of objects to be counted." type="type" optional="yes">

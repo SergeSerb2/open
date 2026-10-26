@@ -3,15 +3,21 @@ import Foundation
 import OpenModel
 
 /// Space KVC tabs flatten Pinned then Today. Specifiers use the key/first window as their container;
-/// without a window they fall back to a name specifier, as required by plan §5.4.
+/// without a window they retain the last valid specifier, or return nil.
 @MainActor
 @objc(ScriptSpace)
 public final class ScriptSpace: NSObject {
     public let spaceID: SpaceID
     var space: Space? { ScriptHost.shared.model?.space(id: spaceID) }
     private var lastSpecifier: NSScriptObjectSpecifier?
-    private let initialTitle: String
-    init(space: Space) { spaceID = space.id; initialTitle = space.title; super.init() }
+    private var isCreationPlaceholder = false
+    private var pendingTitle = ""
+    init(space: Space) { spaceID = space.id; super.init() }
+    public override init() {
+        spaceID = SpaceID()
+        isCreationPlaceholder = true
+        super.init()
+    }
 
     @discardableResult
     func liveSpace() -> Space? {
@@ -20,7 +26,13 @@ public final class ScriptSpace: NSObject {
         return space
     }
     @objc public dynamic var id: String { _ = liveSpace(); return spaceID.rawValue.uuidString }
-    @objc public dynamic var title: String { liveSpace()?.title ?? "" }
+    @objc public dynamic var title: String {
+        get { isCreationPlaceholder ? pendingTitle : liveSpace()?.title ?? "" }
+        set {
+            if isCreationPlaceholder { pendingTitle = newValue; return }
+            ScriptFailure.report(ScriptError.invalidValue, "title is read-only.")
+        }
+    }
     @objc public dynamic var appleScriptTabs: [ScriptTab] {
         guard let space = liveSpace() else { return [] }
         return (ScriptRead.flatten(space.pinned) + ScriptRead.flatten(space.today)).map { ScriptHost.shared.tabWrapper(for: $0) }
@@ -42,6 +54,7 @@ public final class ScriptSpace: NSObject {
     }
     // Foundation declares this override nonisolated. Apple-event evaluation is main-thread only.
     public override var objectSpecifier: NSScriptObjectSpecifier? {
+        guard ScriptThread.isMainThread else { return nil }
         // Keep the non-Sendable Foundation value within this synchronous call.
         nonisolated(unsafe) var result: NSScriptObjectSpecifier?
         MainActor.assumeIsolated { result = makeObjectSpecifier() }
@@ -49,6 +62,7 @@ public final class ScriptSpace: NSObject {
     }
 
     private func makeObjectSpecifier() -> NSScriptObjectSpecifier? {
+        guard !isCreationPlaceholder else { return nil }
         if space == nil, let lastSpecifier { return lastSpecifier }
         guard let cls = NSScriptClassDescription(for: ScriptWindow.self) else { return lastSpecifier }
         let specifier: NSScriptObjectSpecifier
@@ -56,8 +70,8 @@ public final class ScriptSpace: NSObject {
             specifier = NSUniqueIDSpecifier(containerClassDescription: cls, containerSpecifier: container,
                                             key: "appleScriptSpaces", uniqueID: spaceID.rawValue.uuidString)
         } else {
-            specifier = NSNameSpecifier(containerClassDescription: cls, containerSpecifier: nil,
-                                        key: "appleScriptSpaces", name: space?.title ?? initialTitle)
+            // Application has no spaces key. Never manufacture an unresolvable container.
+            return lastSpecifier
         }
         lastSpecifier = specifier
         return specifier

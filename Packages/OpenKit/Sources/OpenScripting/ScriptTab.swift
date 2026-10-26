@@ -11,6 +11,8 @@ public final class ScriptTab: NSObject {
     var tab: Tab? { ScriptHost.shared.model?.tab(id: tabID) }
     private var lastSpecifier: NSScriptObjectSpecifier?
     private var isCreationPlaceholder = false
+    private var pendingTitle = ""
+    private var pendingLocation = "unpinned"
     var pendingURL: String?
     var creationProperties: [String: Any] { pendingURL.map { ["URL": $0] } ?? [:] }
     init(tab: Tab) { tabID = tab.id; super.init() }
@@ -27,7 +29,14 @@ public final class ScriptTab: NSObject {
         return tab
     }
     @objc public dynamic var id: String { _ = liveTab(); return tabID.rawValue.uuidString }
-    @objc public dynamic var title: String { liveTab()?.displayTitle ?? "" }
+    @objc public dynamic var title: String {
+        get { isCreationPlaceholder ? pendingTitle : liveTab()?.displayTitle ?? "" }
+        set {
+            // Cocoa applies creation properties before insertion. The page owns the real title.
+            if isCreationPlaceholder { pendingTitle = newValue; return }
+            ScriptFailure.report(ScriptError.invalidValue, "title is read-only.")
+        }
+    }
     @objc public dynamic var URL: String {
         get {
             if isCreationPlaceholder { return pendingURL ?? "about:blank" }
@@ -46,6 +55,7 @@ public final class ScriptTab: NSObject {
     @objc public dynamic var loading: Bool { liveTab()?.live.isLoading ?? false }
     @objc public dynamic var location: String {
         get {
+            if isCreationPlaceholder { return pendingLocation }
             guard liveTab() != nil, let model = ScriptHost.shared.model else { return "unpinned" }
             switch ScriptRead.section(of: tabID, model: model) {
             case .favorites?: return "topApp"
@@ -54,6 +64,7 @@ public final class ScriptTab: NSObject {
             }
         }
         set {
+            if isCreationPlaceholder { pendingLocation = newValue; return }
             guard liveTab() != nil, let model = ScriptHost.shared.model else { return }
             guard ["topApp", "pinned", "unpinned"].contains(newValue) else {
                 ScriptFailure.report(ScriptError.invalidValue, "\"\(newValue)\" is not a location. Use topApp, pinned, or unpinned.")
@@ -63,8 +74,11 @@ public final class ScriptTab: NSObject {
             guard newValue != current else { return }
             if newValue == "topApp" {
                 guard case .splitPane? = model.parent(of: tabID) else {
-                    if let spaceID = ScriptRead.spaceID(of: tabID, model: model), let space = model.space(id: spaceID) {
-                        model.addFavorite(tabID: tabID, to: space.profileID, at: nil)
+                    guard let spaceID = ScriptRead.spaceID(of: tabID, model: model),
+                          let space = model.space(id: spaceID),
+                          model.addFavorite(tabID: tabID, to: space.profileID, at: nil) else {
+                        ScriptFailure.report(ScriptError.invalidMove, "The tab cannot move to favorites.")
+                        return
                     }
                     return
                 }
@@ -89,6 +103,7 @@ public final class ScriptTab: NSObject {
     }
     // Foundation declares this override nonisolated. Apple-event evaluation is main-thread only.
     public override var objectSpecifier: NSScriptObjectSpecifier? {
+        guard ScriptThread.isMainThread else { return nil }
         // Keep the non-Sendable Foundation value within this synchronous call.
         nonisolated(unsafe) var result: NSScriptObjectSpecifier?
         MainActor.assumeIsolated { result = makeObjectSpecifier() }

@@ -3,7 +3,7 @@ import Foundation
 import OpenModel
 
 // Verbs use the named object, never CommandDispatcher. The wrapper responds-to selectors
-// live here; system NSCreateCommand / NSCountCommand remain in the dictionary (§6.7).
+// live here; make/count subclasses close the system-command gaps described in §6.7.
 @MainActor
 enum ScriptTarget {
     private static func resolve<T>(_ command: NSScriptCommand, receiver: T?) -> T? {
@@ -79,7 +79,7 @@ enum ScriptCreation {
             model.focusSpace(windowID: window.id, spaceID: spaceID)
             model.selectNode(windowID: window.id, spaceID: spaceID, nodeID: tab.id)
         }
-        return ScriptHost.shared.tabWrapper(for: tab)
+        return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
     static func makeTab(inWindow windowID: WindowID, atIndex index: Int?, properties: [String: Any]) -> ScriptTab? {
@@ -89,7 +89,7 @@ enum ScriptCreation {
         guard let url = parsedURL(properties["URL"] as? String ?? "about:blank") else { return nil }
         let tab = model.newTab(in: state.focusedSpaceID, url: url, at: nil)
         model.selectNode(windowID: state.id, spaceID: state.focusedSpaceID, nodeID: tab.id)
-        return ScriptHost.shared.tabWrapper(for: tab)
+        return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
     static func makeLittleTab(properties: [String: Any]) -> ScriptTab? {
@@ -99,7 +99,7 @@ enum ScriptCreation {
             ScriptFailure.report(ScriptError.littleUnavailable, "Little windows are not available yet.")
             return nil
         }
-        return ScriptHost.shared.tabWrapper(for: tab)
+        return record(ScriptHost.shared.tabWrapper(for: tab))
     }
 
     static func makeWindow(properties: [String: Any]) -> ScriptWindow? {
@@ -112,17 +112,134 @@ enum ScriptCreation {
             return nil
         }
         ScriptHost.shared.windowModes[id] = incognito ? "incognito" : "normal"
-        return ScriptHost.shared.windowWrapper(for: state)
+        return record(ScriptHost.shared.windowWrapper(for: state))
     }
 
     static func makeSpace() {
         ScriptFailure.report(ScriptError.makeSpaceUnsupported, "Making a new space is not supported. Create a Space in the sidebar.")
     }
 
-    // §6.7 / Step 6: A9 decides whether ScriptMakeCommand must replace NSCreateCommand
-    // to return the real wrapper's objectSpecifier after insertion replaces the blank object.
-    // A14 decides whether ScriptCountCommand must replace NSCountCommand for application tabs.
-    // Do not add either command class before running those real Apple-event checks.
+    private static func record<T: NSObject>(_ object: T) -> T {
+        (NSScriptCommand.current() as? ScriptMakeCommand)?.createdObject = object
+        return object
+    }
+}
+
+/// Keep Cocoa's property decoding and insertion-location handling, but return the
+/// model object created by the insertion accessor, never its temporary placeholder.
+@MainActor
+@objc(ScriptMakeCommand)
+public final class ScriptMakeCommand: NSCreateCommand {
+    fileprivate var createdObject: NSObject?
+
+    public override func performDefaultImplementation() -> Any? {
+        guard ScriptThread.isMainThread else { return nil }
+        nonisolated(unsafe) let command = self
+        nonisolated(unsafe) var result: Any?
+        MainActor.assumeIsolated { result = command.makeObject() }
+        return result
+    }
+
+    private func makeObject() -> Any? {
+        createdObject = nil
+        // There is deliberately no application.spaces relationship in the dictionary.
+        if createClassDescription == NSScriptClassDescription(for: ScriptSpace.self) {
+            ScriptCreation.makeSpace()
+            return nil
+        }
+        // The locked sdef omits the built-in "at" parameter. Cocoa keeps its
+        // descriptor in the Apple event but drops it from arguments. Restore it
+        // for NSCreateCommand without changing the dictionary's terms or codes.
+        if arguments?["Location"] == nil,
+           let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x696e7368) {
+            guard let location = insertionLocation(from: descriptor) else { return nil }
+            var restored = arguments ?? [:]
+            restored["Location"] = location
+            arguments = restored
+        }
+        _ = super.performDefaultImplementation()
+        guard scriptErrorNumber == 0 else { return nil }
+        guard let specifier = createdObject?.objectSpecifier else {
+            return fail(ScriptError.objectNotFound, "The created object has no scripting specifier.")
+        }
+        return specifier
+    }
+
+    private func insertionLocation(from descriptor: NSAppleEventDescriptor) -> NSPositionalSpecifier? {
+        // "at <container>" is an object specifier; relative/beginning/end forms
+        // are insertion-location records containing kobj and kpos.
+        let reference = descriptor.forKeyword(0x6b6f626a)
+        let object = reference ?? descriptor
+        guard let specifier = NSScriptObjectSpecifier(descriptor: object) else { return nil }
+        let position: NSPositionalSpecifier.InsertionPosition
+        switch descriptor.forKeyword(0x6b706f73)?.enumCodeValue {
+        case 0x62656620: position = .before
+        case 0x61667465: position = .after
+        case 0x62676e67: position = .beginning
+        default: position = .end
+        }
+        return NSPositionalSpecifier(position: position, objectSpecifier: specifier)
+    }
+}
+
+/// The implicit core/getd command checks dictionary access before calling a
+/// getter. Override its default implementation to supply Open's 1004 for application tabs.
+/// Registration reuses the existing system command; Open.sdef stays unchanged.
+@MainActor
+@objc(ScriptGetCommand)
+public final class ScriptGetCommand: NSGetCommand {
+    static func install() {
+        let registry = NSScriptSuiteRegistry.shared()
+        guard let original = registry.commandDescription(withAppleEventClass: 0x636f7265, andAppleEventCode: 0x67657464),
+              let description = NSScriptCommandDescription(suiteName: original.suiteName, commandName: original.commandName,
+                  dictionary: ["AppleEventClassCode": "core", "AppleEventCode": "getd", "CommandClass": "ScriptGetCommand",
+                               "ResultAppleEventCode": "****", "Type": "NSObject"]) else { return }
+        registry.register(description)
+    }
+
+    public override func performDefaultImplementation() -> Any? {
+        guard ScriptThread.isMainThread else { return nil }
+        nonisolated(unsafe) let command = self
+        nonisolated(unsafe) var result: Any?
+        MainActor.assumeIsolated { result = command.getObjects() }
+        return result
+    }
+
+    private func getObjects() -> Any? {
+        // Cocoa also omits get's implicit direct parameter for a custom command
+        // class. Restore its object specifier before NSGetCommand evaluates it.
+        if directParameter == nil, let descriptor = appleEvent?.paramDescriptor(forKeyword: 0x2d2d2d2d) {
+            directParameter = NSScriptObjectSpecifier(descriptor: descriptor)
+        }
+        var specifier = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        while let current = specifier {
+            if current.key == "appleScriptTabs", current.container == nil {
+                return fail(ScriptError.writeOnly, "Application tabs are write-only. Use tabs of a window or space.")
+            }
+            specifier = current.container
+        }
+        return super.performDefaultImplementation()
+    }
+}
+
+@MainActor
+@objc(ScriptCountCommand)
+public final class ScriptCountCommand: NSCountCommand {
+    public override func performDefaultImplementation() -> Any? {
+        guard ScriptThread.isMainThread else { return nil }
+        nonisolated(unsafe) let command = self
+        nonisolated(unsafe) var result: Any?
+        MainActor.assumeIsolated { result = command.countObjects() }
+        return result
+    }
+
+    private func countObjects() -> Any? {
+        let specifier = directParameter as? NSScriptObjectSpecifier ?? receiversSpecifier
+        if specifier?.key == "appleScriptTabs", specifier?.container == nil {
+            return fail(ScriptError.writeOnly, "Application tabs are write-only. Use tabs of a window or space.")
+        }
+        return super.performDefaultImplementation()
+    }
 }
 
 extension ScriptTab {

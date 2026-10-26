@@ -55,12 +55,23 @@ JavaScript string forms, and objects/arrays to JSON. Exceptions map to 1013 with
 first line limited to 300 characters; timeout maps to 1014. Missing engine maps to 1006.
 
 Application tabs are write-only for Apple events. Direct Swift KVC returns `[]`.
-The dictionary retains system `NSCreateCommand` and `NSCountCommand`. Per §6.7,
-Step 6 must run A9 and A14 before deciding whether to add custom make/count classes.
-The command file leaves the explicit hooks. Real-event result specifiers, application-tab
-get/count error 1004, window/Space creation dispatch, and dictionary loading remain
-unverified until that pass. The scratch insertion check verifies creation helpers and
-KVC insertion, not a complete `make` Apple event.
+`ScriptMakeCommand` and `ScriptCountCommand` replace the system command classes per
+§6.7 after the review confirmed their gaps. Make retains Cocoa's placeholder/property
+and insertion flow, records the real model wrapper produced by `ScriptCreation`, and
+returns that wrapper's specifier. It restores the implicit `at` descriptor from the
+Apple event because the locked dictionary omits that parameter. Space creation fails
+with 1009 before Cocoa tries to find an application-level Space relationship.
+
+Cocoa rejects a write-only `get` before calling its getter and normally returns -1723.
+`ScriptHost` registers `ScriptGetCommand` for the existing implicit `core/getd` command
+to return 1004 instead. It restores Cocoa's omitted implicit direct parameter before
+checking the specifier and delegates all other reads to `NSGetCommand`. No `get` term
+or code was added to the dictionary. The application getter also guards command reads,
+while allowing the system creation path to inspect the empty collection.
+
+The scratch NSApplication probe now verifies these Apple-event paths with the actual
+Open.sdef. Production App wiring, window lifecycle, and live engine acceptance remain
+with Steps 5–7.
 
 ## App hooks (H1–H4)
 
@@ -195,14 +206,72 @@ nice -n 10 xcrun swiftc -parse-as-library -swift-version 6 \
 The paths above reflect this Mac's SwiftPM build layout. Probe source and outputs
 remain in `/tmp/script-check/`; they are not installed as a product or test target.
 
+## PR #19 review verification (2026-10-25, America/Vancouver)
+
+The same Step 3–4 probe was rebuilt and rerun against the updated release libraries.
+It finished with `STEP 3 PASS` and `STEP 4 PASS`. The additional throwaway probe at
+`/tmp/script-check/ReviewProbe.swift` uses a real `NSApplication` in
+`/tmp/script-check/ReviewProbe.app`, the current `Open.sdef`, real `BrowserModel`
+instances, Cocoa KVC insertion, and in-process `NSAppleScript`. Its window-creation
+hook adds a real model window; it does not create or show an `NSWindow`. Activation
+is prohibited. No desktop input, Arc launch, engine substitute, or unit tests were used.
+This verifies the scripting core through Cocoa, not the production App or live pages.
+
+| Finding | Fix | Probe result |
+|---|---|---|
+| 1. Window/Space creation cannot instantiate wrappers | Public blank placeholder initializers; window insertion calls `ScriptCreation.makeWindow`; Space insertion and make call `makeSpace` | PASS: NSAppleScript make-window returns a real model window ID; unavailable incognito = 1010; make-space at window/application = 1009. Direct Cocoa KVC insertion also returns 1010/1009. |
+| 2. Make-tab returns a phantom ID | `ScriptMakeCommand` returns the real wrapper's specifier after insertion and restores the implicit `at` location | PASS: held new-tab reference returns `https://example.com/`; window creation returns the live ID. Space/window targets, end-of-tabs insertion, and nested window tell context pass; real new tab is selected. |
+| 3. Application-tab get/count silently return empty | `ScriptCountCommand`, application getter guard, and `ScriptGetCommand` for the existing implicit get command | PASS: NSAppleScript get/count application tabs both return 1004; window/Space reads and counts still succeed; direct Swift KVC returns `[]`. |
+| 4. Creation title fails; setters read the absent placeholder tab | Placeholder title stores its value for creation only; URL/location and window setters guard placeholders | PASS: make with URL/title succeeds, initial title is ignored. KVC URL/title/location setters cause no missing-object error; real tab appends to Today with location `unpinned`. |
+| 5. Favorite move ignores model refusal | Check `addFavorite` and report 1003 on false or no valid target | PASS: a real model with an absent destination profile refuses the move; KVC and NSAppleScript return 1003 and retain the original parent. Existing split-pane refusal still passes. |
+| 6. Favorite ID stops resolving after focus changes | Window unique-ID lookup searches favorites in every model profile | PASS: held favorite specifier resolves after switching profile focus; both windows and lowercase UUID lookup resolve it; NSAppleScript reads its URL. Enumeration still follows the active profile. |
+| 7. No-window Space fallback cannot resolve | Remove the application-level name fallback; keep the last valid window-container specifier or return nil | PASS: removing every window retains the prior specifier; a live Space with no prior window container returns nil. No application-level Space key was added. |
+| 8. Off-main specifier access can trap | Check the main thread before entering the actor boundary; return nil and emit a debug-only diagnostic off main | PASS: a real background thread requests window/Space/tab specifiers and gets nil without a trap. The permitted release build omits the debug-only log. |
+
+The new probe also verifies default `about:blank`, invalid creation URL (1001),
+normal window hook unavailable (1012), and Little Open unavailable (1011).
+An out-of-range Space index is rejected by Cocoa with -1719 before an insertion
+accessor runs; direct invalid KVC indices retain their existing 1000 behavior.
+The probe exits 0 with `REVIEW PROBE PASS`. macOS emits
+`sandbox_extension_issue_file_to_process failed … (Operation not permitted)` while
+AppleScript loads the scratch bundle's terminology; compilation, execution, and all
+assertions still pass. Initial exploratory probes exposed the missing implicit make
+location and get parameter; both were fixed before the final passing run.
+
+The final package build uses only the required release command, in its own process
+session, and reports no warnings or errors. No OpenModel/OpenCommands source, package
+manifest, engine source/build, or production App wiring changed. XML validation passes.
+A parsed comparison against the prior dictionary confirms that only make/count's
+`cocoa class` values changed (`ScriptMakeCommand`, `ScriptCountCommand`); all terms,
+codes, access modes, properties, and relationships are identical.
+
+Review probe compile/run (after the release build, from `Packages/OpenKit`):
+
+```sh
+nice -n 10 xcrun swiftc -parse-as-library -swift-version 6 \
+  -strict-concurrency=complete -O -target arm64-apple-macos26.0 \
+  -I .build/out/Products/Release -L .build/out/Products/Release \
+  -lOpenScripting -lOpenModel /tmp/script-check/ReviewProbe.swift \
+  -o /tmp/script-check/ReviewProbe.app/Contents/MacOS/review-probe
+/tmp/script-check/ReviewProbe.app/Contents/MacOS/review-probe
+```
+
+Probe sources and final output remain outside the repo in `/tmp/script-check/`:
+`Probe.swift`, `review-step4-output.txt`, `ReviewProbe.swift`,
+`review-events-output.txt`, `review-events-stderr.txt`, and `review-build.log`.
+The scratch bundle's Info.plist supplies `NSAppleScriptEnabled=true` and
+`OSAScriptingDefinition=Open.sdef`; its Resources directory contains the current
+Open dictionary. It was executed directly; no LaunchServices registration was changed.
+
 ## Plan adaptations and limits
 
 - The lead's naming decision replaces the stale product name in §3's application-tab description with “Little Open”. Terms and codes are unchanged.
-- Foundation's SDK declares `NSObject.objectSpecifier` nonisolated and explicitly marks `NSScriptObjectSpecifier` non-Sendable. Swift rejects a main-actor override. Space/tab overrides therefore use a synchronous `MainActor.assumeIsolated` boundary and a local `nonisolated(unsafe)` result variable. This asserts the main-thread Cocoa call contract without making wrappers or specifiers Sendable. It is a narrow exception to §10's boundary guidance, required to build without warnings.
+- Foundation's SDK declares `NSObject.objectSpecifier` and command overrides nonisolated and explicitly marks scripting types non-Sendable. Swift rejects a main-actor override. Each specifier override first checks `Thread.isMainThread`, returns nil off main, and logs only in debug. Only a checked main-thread call enters the synchronous `MainActor.assumeIsolated` boundary with a local `nonisolated(unsafe)` result. Command overrides use the same checked boundary and a local command reference; no wrapper or Foundation scripting object gains Sendable conformance.
 - Indexed KVC getters return optional wrappers so invalid indices can return nil and error 1000 without a crash. Explicit Objective-C insertion/removal names follow `NSScriptKeyValueCoding.h` (`insertIn<Key>:atIndex:` and `removeFrom<Key>AtIndex:`); the Swift names stay as specified. The final probe calls Cocoa `insertValue`/`removeValue`, not only the Swift methods.
 - `removeFavorite` inserts at the start of Today. A second `moveNode(..., at: nil)` enforces the plan's end-of-destination rule for `topApp → unpinned` without editing OpenModel.
 - Direct pin/unpin of a split pane remains refused by OpenModel; the plan gives no pane-separation sequence or dedicated error text for that case. No OpenModel source was changed.
-- Q1–Q3 use the lead-approved defaults. Only index 1 is supported for window ordering. Little Open may return 1011; incognito creation may return 1010. System make/count integration remains for Step 6 as required.
+- Q1–Q3 use the lead-approved defaults. Only index 1 is supported for window ordering. Little Open may return 1011; incognito creation may return 1010. The review required §6.7's custom make/count classes now; the Cocoa probe also required interception of the existing implicit get command. Production App acceptance remains separate.
+- The review supersedes §5.4's proposed no-window name fallback: the application has no Space relationship, so a Space now returns its last valid specifier or nil. A retained specifier can still refer to a closed window; no alternate application-level container is fabricated.
 
 During development, compiler failures exposed the Foundation isolation restrictions
 above and were fixed before the clean builds. The first session-launch attempt called

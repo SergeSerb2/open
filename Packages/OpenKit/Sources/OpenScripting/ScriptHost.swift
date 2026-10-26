@@ -6,7 +6,7 @@ import OpenModel
 @MainActor
 public final class ScriptHost {
     public static let shared = ScriptHost()
-    private init() {}
+    private init() { ScriptGetCommand.install() }
 
     public var modelProvider: (() -> BrowserModel?)?
     public var engineBridge: (any ScriptEngineBridge)?

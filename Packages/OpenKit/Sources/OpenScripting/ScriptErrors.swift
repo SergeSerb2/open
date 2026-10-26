@@ -48,3 +48,16 @@ enum ScriptFailure {
         report(ScriptError.objectNotFound, "The \(noun) \(id) does not exist.")
     }
 }
+
+/// NSObject's specifier override is nonisolated. Check before entering the actor boundary.
+enum ScriptThread {
+    static var isMainThread: Bool {
+        guard Thread.isMainThread else {
+            #if DEBUG
+            FileHandle.standardError.write(Data("OpenScripting: off-main scripting call ignored\n".utf8))
+            #endif
+            return false
+        }
+        return true
+    }
+}
