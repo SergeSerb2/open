@@ -1906,15 +1906,15 @@ def dimmed_look(png, scale, centers, mode, ring=True):
         bg = [sum(px((cx + 11.5) * scale, (cy + dy) * scale)[k] for dy in (-2, 0, 2)) / 3 for k in range(3)]
         expected = [bg[k] * (1 - fill_a) + tok[k] * fill_a for k in range(3)]
         fill_err = max(abs(core[k] - expected[k]) for k in range(3))
-        ring = px((cx - 6.5) * scale, cy * scale)
+        edge = px((cx - 6.5) * scale, cy * scale)
         ring_expected = [bg[k] * (1 - ring_a) + RING_COLORS[mode][index][k] * ring_a for k in range(3)]
-        ring_err = max(abs(ring[k] - ring_expected[k]) for k in range(3))
-        plain_err = max(abs(ring[k] - bg[k]) for k in range(3))
+        ring_err = max(abs(edge[k] - ring_expected[k]) for k in range(3))
+        plain_err = max(abs(edge[k] - bg[k]) for k in range(3))
         ring_ok = mode == "light" or (ring_err <= 12 if ring else plain_err < ring_err)
         good = fill_err <= 5 and ring_ok
         ok = ok and good
         rows.append({"center": [cx, cy], "core": [round(v) for v in core], "expected": [round(v) for v in expected],
-                     "fill_error": round(fill_err, 1), "ring": list(ring), "ring_expected": [round(v) for v in ring_expected],
+                     "fill_error": round(fill_err, 1), "ring": list(edge), "ring_expected": [round(v) for v in ring_expected],
                      "ring_error": round(ring_err, 1), "plain_error": round(plain_err, 1), "ring_expected_shown": ring, "ok": good})
     return ok, rows
 
