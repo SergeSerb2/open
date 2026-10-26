@@ -33,6 +33,9 @@ enum Bench {
         guard let window = model.windows.first else { return }
         let context = SidebarContext(model: model, windowID: window.id)
         context.systemAppearance = .dark
+        if args.contains("--media-card") {
+            try MediaScene.apply(["--media", "today:0=paused"], context: context)
+        }
         let delegate = RecordingDelegate()
         var options = RenderScene.Options()
         options.size = CGSize(width: 1280, height: 900)
@@ -45,6 +48,10 @@ enum Bench {
             host = OffscreenRenderer.host(scene, scale: scale)
         }
         let sidebar = scene.sidebar
+        if args.contains("--media-card") {
+            guard sidebar.mediaControls.cards.count == 1 else { throw CLIError(description: "media bench requires one real card") }
+            print("media fixture: one paused card, container \(sidebar.mediaControls.requiredHeight) pt")
+        }
         print("Space rows (outline rows incl. spacer/New Tab): \(sidebar.visibleRowCount), model nodes: \(model.index.count)")
         print("build + first layout + first display (\(Int(scale))x): \(ms(build))")
 
