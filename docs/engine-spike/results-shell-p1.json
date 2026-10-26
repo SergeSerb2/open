@@ -6,7 +6,7 @@
       "spaces": [
         {
           "focused": true,
-          "id": "45F4D9EE-7838-45B3-B584-9250C4651381",
+          "id": "B15EB8EC-D6B4-41A0-A68F-807665CE3D03",
           "pinned": 0,
           "title": "Space",
           "today": 0
@@ -62,15 +62,15 @@
       "strip": [
         [
           0,
-          "55331FA9-A705-4B7C-BD10-5BFA51F92FE4"
+          "3607CCEF-0C81-4281-938A-E195E725ECB8"
         ],
         [
           1,
-          "56503F85-DDC0-48D1-AC3E-29A35D370031"
+          "F2A04230-C1F3-487E-9845-ED59F07B5BC2"
         ],
         [
           2,
-          "8511B0A2-5569-4442-889F-0D7551C3BE3D"
+          "270F1BEC-D76C-4BE1-9D45-F948D4FC1CDE"
         ]
       ]
     },
@@ -80,6 +80,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 21:37:36",
+  "started": "2026-10-25 21:46:25",
   "style": "chrome"
 }

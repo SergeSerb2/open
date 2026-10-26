@@ -3,11 +3,11 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 83546,
+    "pid": 36981,
     "root": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome/Profiles"
   },
-  "started": "2026-10-25 21:37:19",
+  "started": "2026-10-25 21:46:09",
   "style": "chrome",
   "tabstrip": {
     "badge_text": {
@@ -54,66 +54,66 @@
         [
           "today",
           "https://www.iana.org/help/example-domains",
-          1519278531,
-          1519278527
+          1015668413,
+          1015668409
         ],
         [
           "today",
           "https://example.org/",
-          1519278530,
-          1519278527
+          1015668412,
+          1015668409
         ],
         [
           "today",
           "https://bitwarden.com/browser-start/",
-          1519278529,
-          1519278527
+          1015668411,
+          1015668409
         ],
         [
           "today",
           "https://example.com/",
-          1519278528,
-          1519278527
+          1015668410,
+          1015668409
         ]
       ]
     },
     "on_activated": {
       "events": [
         {
-          "tabId": 1519278530,
-          "time": 1792989452681,
+          "tabId": 1015668412,
+          "time": 1792989981743,
           "type": "activated",
-          "windowId": 1519278527
+          "windowId": 1015668409
         },
         {
-          "tabId": 1519278530,
-          "time": 1792989454162,
+          "tabId": 1015668412,
+          "time": 1792989983208,
           "type": "activated",
-          "windowId": 1519278527
+          "windowId": 1015668409
         }
       ],
-      "expected_tab": 1519278530,
+      "expected_tab": 1015668412,
       "ok": true
     },
     "query_active_current_window": {
-      "expected_tab": 1519278529,
+      "expected_tab": 1015668411,
       "ok": true,
       "result": [
         {
-          "id": 1519278529,
+          "id": 1015668411,
           "url": "https://bitwarden.com/browser-start/",
-          "windowId": 1519278527
+          "windowId": 1015668409
         }
       ]
     },
     "tabs_create": {
       "extension_result": {
-        "id": 1519278533,
-        "windowId": 1519278527
+        "id": 1015668415,
+        "windowId": 1015668409
       },
       "ok": true,
       "sidebar_tab": {
-        "id": "62B30BF3-B25B-4E61-9F17-AC50BCD11E5E",
+        "id": "B5CD09C5-BB4E-422D-8BF8-0CA73F792DE3",
         "section": "today",
         "url": "https://example.net/?from=extension",
         "visible": true
@@ -122,18 +122,18 @@
     "tabs_move": {
       "ok": true,
       "today_after": [
-        "B72050C6-147E-4C80-AABC-2844C3CEE08A",
-        "62B30BF3-B25B-4E61-9F17-AC50BCD11E5E",
-        "4A20994F-6693-462D-A328-B0C5FE683C22",
-        "BDE542A0-14BD-460B-8D53-9CF7238F1F89",
-        "4B03D14B-7687-43E3-9A2C-5EB3BC68FBA4"
+        "1D8863F0-B9FE-4DE6-B5AF-3550146C9A7A",
+        "B5CD09C5-BB4E-422D-8BF8-0CA73F792DE3",
+        "F717C58E-B7C2-4C9E-9066-88E47C082291",
+        "203A2278-22E5-4E40-BD96-3FEC80B4635D",
+        "E7BD071C-C173-4691-B58B-409DFBF2EF55"
       ],
       "today_before": [
-        "62B30BF3-B25B-4E61-9F17-AC50BCD11E5E",
-        "4A20994F-6693-462D-A328-B0C5FE683C22",
-        "BDE542A0-14BD-460B-8D53-9CF7238F1F89",
-        "4B03D14B-7687-43E3-9A2C-5EB3BC68FBA4",
-        "B72050C6-147E-4C80-AABC-2844C3CEE08A"
+        "B5CD09C5-BB4E-422D-8BF8-0CA73F792DE3",
+        "F717C58E-B7C2-4C9E-9066-88E47C082291",
+        "203A2278-22E5-4E40-BD96-3FEC80B4635D",
+        "E7BD071C-C173-4691-B58B-409DFBF2EF55",
+        "1D8863F0-B9FE-4DE6-B5AF-3550146C9A7A"
       ]
     },
     "tabs_remove": {
@@ -150,51 +150,51 @@
       "ok": true,
       "sidebar": [
         [
-          "4A20994F-6693-462D-A328-B0C5FE683C22",
-          1519278531
+          "F717C58E-B7C2-4C9E-9066-88E47C082291",
+          1015668413
         ],
         [
-          "BDE542A0-14BD-460B-8D53-9CF7238F1F89",
-          1519278530
+          "203A2278-22E5-4E40-BD96-3FEC80B4635D",
+          1015668412
         ],
         [
-          "4B03D14B-7687-43E3-9A2C-5EB3BC68FBA4",
-          1519278529
+          "E7BD071C-C173-4691-B58B-409DFBF2EF55",
+          1015668411
         ],
         [
-          "B72050C6-147E-4C80-AABC-2844C3CEE08A",
-          1519278528
+          "1D8863F0-B9FE-4DE6-B5AF-3550146C9A7A",
+          1015668410
         ]
       ],
       "windows": [
         {
           "focused": false,
-          "id": 1519278527,
+          "id": 1015668409,
           "tabs": [
             {
               "active": false,
-              "id": 1519278531,
+              "id": 1015668413,
               "index": 0,
               "pinned": false,
               "url": "https://www.iana.org/help/example-domains"
             },
             {
               "active": false,
-              "id": 1519278530,
+              "id": 1015668412,
               "index": 1,
               "pinned": false,
               "url": "https://example.org/"
             },
             {
               "active": true,
-              "id": 1519278529,
+              "id": 1015668411,
               "index": 2,
               "pinned": false,
               "url": "https://bitwarden.com/browser-start/"
             },
             {
               "active": false,
-              "id": 1519278528,
+              "id": 1015668410,
               "index": 3,
               "pinned": false,
               "url": "https://example.com/"
