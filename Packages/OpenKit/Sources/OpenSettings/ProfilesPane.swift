@@ -144,7 +144,7 @@ public struct ProfilesPane: View {
                         Divider()
                         ForEach(model.dataModel.rows) { row in
                             Button { model.select(row.id) } label: {
-                                HStack(spacing:4) { Text(row.name).lineLimit(1);Spacer(minLength:2);Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size:11)).foregroundStyle(.secondary) }
+                                HStack(spacing:4) { Text(row.name).lineLimit(1);Spacer(minLength:2);Text("\(row.spaceCount.formatted()) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size:11)).foregroundStyle(.secondary) }
                                     .padding(.horizontal,26).frame(height:31).background {if row.id == model.root.selectedProfileID {RoundedRectangle(cornerRadius:6).fill(Color(nsColor:SettingsTokens.selectedProfile.nsColor)).padding(.horizontal,16)}}
                             }.buttonStyle(.plain)
                         }
@@ -217,20 +217,20 @@ public struct ProfileNameSheet:View {
             ForEach(model.root.model.spaces,id:\.id) { space in Toggle(model.root.model.displayTitle(for:space),isOn:Binding(get:{model.assignedSpaces.contains(space.id)},set:{if $0 {model.assignedSpaces.insert(space.id)} else {model.assignedSpaces.remove(space.id)}})) }
         }
         SettingsError(text:model.errorText);Spacer()
-        HStack { Button("Cancel") { model.showsCreate=false;model.showsRename=false }.keyboardShortcut(.cancelAction);Spacer();Button(create ? "Create Profile" : "Save") { if create {_=model.create(name:model.nameDraft,spaces:model.assignedSpaces)} else {model.rename(to:model.nameDraft)} }.keyboardShortcut(.defaultAction) }
+        HStack { Button("Cancel") { model.showsCreate=false;model.showsRename=false }.keyboardShortcut(.cancelAction);Spacer();Button(create ? "Create Profile" : "Save") { if create {_=model.create(name:model.nameDraft,spaces:model.assignedSpaces)} else {model.rename(to:model.nameDraft)} }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
     }.padding(24).frame(width:440,height:create ? 330:180) }
 }
 public struct ArchiveScopeSheet:View {
     @Bindable var model:ProfilesViewModel
     public init(model:ProfilesViewModel) { self.model=model }
     public var body:some View { VStack(spacing:14) {Text("Apply to all Profiles or only “\(model.archiveScopeProfileName)”?").font(.headline); Text(model.pendingArchive == .never ? "Open will never auto-archive your tabs." : "Open will now archive your tabs after \(model.pendingArchive?.settingsTitle ?? "").")
-        HStack { Button("Cancel") { model.cancelArchive() }.keyboardShortcut(.cancelAction);Button("All Profiles") { model.applyArchive(all:true) };Button("This Profile Only") { model.applyArchive(all:false) }.keyboardShortcut(.defaultAction) }
+        HStack { Button("Cancel") { model.cancelArchive() }.keyboardShortcut(.cancelAction);Button("All Profiles") { model.applyArchive(all:true) };Button("This Profile Only") { model.applyArchive(all:false) }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
     }.padding(24).frame(width:500,height:160) }
 }
 public struct SuggestNoticeSheet:View {
     @Bindable var model:ProfilesViewModel
     public init(model:ProfilesViewModel) { self.model=model }
-    public var body:some View { VStack(spacing:24) { Text("We talk to your search engine to help us suggest results.");Button("Got it") { model.dismissSuggestNotice() }.keyboardShortcut(.defaultAction) }.padding(32).frame(width:400,height:180) }
+    public var body:some View { VStack(spacing:24) { Text("We talk to your search engine to help us suggest results.");Button("Got it") { model.dismissSuggestNotice() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }.padding(32).frame(width:400,height:180) }
 }
 public struct ClearBrowsingDataSheet:View {
     @Bindable var model:ProfilesViewModel

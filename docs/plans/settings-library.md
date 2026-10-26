@@ -140,6 +140,14 @@ except where a section says Save.
 | `open.appIcon.selectedID` | String (`openDefault`/`openDark`/`openLight`/`openMono`/`openColor`/`openRetro`) | `openDefault` | App Icon; `NSApp.applicationIconImage` / alternate icon |
 | `open.import.lastArcDir` | String (path) | none | Import wizard (path only; never commit) |
 | `open.library.lastSection` | String (`archive`/`downloads`/`captures`/`media`/`history`) | `archive` | Library restore |
+| `open.translate.enabled` | Bool | `true` | Page translation offer (`docs/plans/page-platform.md` §4.7); no Settings row |
+| `open.translate.neverTranslateHosts` | [String] (lowercase hosts) | `[]` | "Never Translate This Site"; cleared by "Reset Translated-site Prompts" (page-platform §4.7.7) |
+| `open.capture.dragToCaptureEnabled` | Bool | `true` | Cmd+Shift drag to capture (page-platform §4.6.2); no Settings row |
+| `open.capture.shortcutHintLastShown` | Double (Unix time) | `0` | Capture shortcut hint toast cadence (page-platform §4.6.7) |
+| `open.capture.portraitBackground` | String (`theme`/`white`/`black`) | `theme` | Portrait capture background (page-platform §4.6.4, guess) |
+| `open.web.colorScheme` | String (`automatic`/`light`/`dark`) | `automatic` | View ▸ Appearance for websites (page-platform §4.8) |
+| `open.developer.allowJavaScriptFromAppleEvents` | Bool | `false` | View ▸ Developer ▸ Allow JavaScript from Apple Events; gates AppleScript `execute` (page-platform §4.10.2) |
+| `open.developer.modeHosts` | [String] (lowercase hosts) | `[]` | Per-site Developer Mode (page-platform §4.10.3) |
 
 Register app defaults once at launch with
 `UserDefaults.standard.register(defaults:)` using this table. Reads
@@ -162,10 +170,20 @@ atomic write; flush on quit). Edit = mutate the live `Profile`, then
 | `ProfileSettings.downloadDirectory` | String (path) | `~/Downloads` | NEW. Add with `decodeIfPresent` fallback to the Downloads folder. Empty string means "system Downloads". |
 | `ProfileSettings.askWhereToSaveEachFile` | Bool | `false` | NEW. Add with `decodeIfPresent ?? false`. |
 | `ProfileSettings.customSearchEngines` | `[SearchEngine]` | `[]` | NEW. Add with `decodeIfPresent ?? []`. `SearchEngine` is already `Codable` (`OpenSuggest`). |
+| `ProfileSettings.keepAliveSites` | `[String]`, entries `host[/path]` | `[]` | OpenSleep freeze + discard exemption. Decode missing keys as `[]`; encode always, like the other array fields. |
 
 Keep `schemaVersion` at 1. New fields must decode old snapshots
 without failure and encode always. Follow the legacy-key pattern
 already in `ProfileSettings` (new key first, legacy key, default).
+
+Keep-alive additions use `BrowserModel.updateProfileSettings(id:settings:)`
+and the existing snapshot save path, per D-5. Host suffixes include
+subdomains. A final `.*` allows any TLD, including multiple labels; the
+optional path is a case-sensitive prefix. Invalid rules are ignored for
+matching but retained in storage unchanged. Built-in rules always remain
+active. No Settings UI ships with this field. The Site Control Center
+plan will add a per-site "Keep this site awake" toggle that edits the
+current profile's array. See [sleep.md](../sleep.md).
 
 Profile create/rename/delete and Space assignment follow
 `docs/re/features-core.md` section 5: names must be unique ("A Profile

@@ -12,18 +12,56 @@ enum Flows {
         checks.append(Check(name: "F1 anchor presents", pass: c.isPresented))
         stage.click(CGPoint(x: 201, y: 64))
         checks.append(Check(name: "F1 second anchor click closes and is consumed", pass: !c.isPresented && stage.root.hits == 0 && s.calls.isEmpty))
+        let savedResponder = stage.window.firstResponder
         c.toggle(anchor: .urlField, tabID: s.tabID, animated: false)
         var reason: SiteControlDismissReason?
         c.onDismiss = { reason = $0 }
         stage.key(code: 53, characters: "\u{1b}")
-        checks.append(Check(name: "F2 Escape closes and restores focus", pass: !c.isPresented && reason == .escape))
+        checks.append(Check(name: "F2 Escape closes and restores focus", pass: !c.isPresented && reason == .escape && savedResponder != nil && stage.window.firstResponder === savedResponder))
         c.toggle(anchor: .urlField, tabID: s.tabID, animated: false)
         stage.click(CGPoint(x: 800, y: 600))
         checks.append(Check(name: "F2 outside click closes and reaches page", pass: !c.isPresented && reason == .outside && stage.root.hits == 1))
+        let target = SiteControlButton(id: "harness.page-target", label: "Page action", symbol: "link", pointSize: 18)
+        target.frame = CGRect(x: 780, y: 580, width: 44, height: 36)
+        var forwardedActions = 0; target.invoke = { forwardedActions += 1 }
+        stage.root.addSubview(target, positioned: .below, relativeTo: c.view)
+        c.present(anchor: .urlField, tabID: s.tabID, animated: false)
+        stage.click(CGPoint(x: 800, y: 600))
+        checks.append(Check(name: "outside click reaches a real native target/action exactly once", pass: !c.isPresented && forwardedActions == 1))
+        target.removeFromSuperview()
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         let dump = accessibilityDump(c.view.panel)
-        checks.append(Check(name: "F21 panel, host, six actions and footer are labelled", pass:
-            ["Site Control Center", "news.example.com", "Share", "Copy URL", "New Boost", "Capture a portion of this page", "Capture the full page", "Capture in Portrait Mode", "Connection: Secure", "More"].allSatisfy(dump.contains)))
+        let pairs = [("AXPopover", "Site Control Center"), ("AXStaticText", "news.example.com"),
+                     ("AXButton", "Share"), ("AXButton", "Copy URL"), ("AXButton", "New Boost"),
+                     ("AXButton", "Capture a portion of this page"), ("AXButton", "Capture the full page"),
+                     ("AXButton", "Capture in Portrait Mode"), ("AXStaticText", "Connection: Secure"), ("AXMenuButton", "More")]
+        checks.append(Check(name: "F21 native AX role and label pairs, host description, favicon hidden", pass:
+            pairs.allSatisfy { dump.contains($0.0 + " label=" + $0.1 + "\n") } &&
+            c.view.panel.accessibilityLabel() == "news.example.com" && c.view.panel.accessibilityHelp() == nil && !dump.contains("AXImage")))
+        checks.append(Check(name: "Step 2 More is enabled", pass: c.view.panel.controls.last?.isEnabled == true))
+        s.value?.commandsEnabled = [:]; s.changed()
+        checks.append(Check(name: "missing capture capability disables all three actions", pass:
+            c.view.panel.controls.filter { $0.controlID.hasPrefix("action.capture") }.allSatisfy { !$0.isEnabled }))
+        let second = Stage(source: s)
+        s.value?.context.displayHost = "updated.example.com"; s.changed()
+        checks.append(Check(name: "two windows observe a shared source independently", pass:
+            s.observers.count == 2 && c.view.panel.snapshot?.context.displayHost == "updated.example.com" && second.controller.view.panel.snapshot?.context.displayHost == "updated.example.com"))
+        var transient: Stage? = Stage(source: s)
+        checks.append(Check(name: "third window registers its own observer", pass: transient?.controller.isPresented == true && s.observers.count == 3))
+        transient = nil
+        checks.append(Check(name: "window teardown removes only its own observer", pass: s.observers.count == 2))
+        let missingGeometry = Stage(open: false)
+        missingGeometry.controller.geometry = nil
+        var geometryErrors = 0
+        missingGeometry.controller.onUnavailable = { _ in geometryErrors += 1 }
+        missingGeometry.controller.present(anchor: .urlField, tabID: missingGeometry.source.tabID, animated: false)
+        missingGeometry.controller.present(anchor: .urlField, tabID: missingGeometry.source.tabID, animated: false)
+        checks.append(Check(name: "F22 missing geometry stays closed and logs once", pass: !missingGeometry.controller.isPresented && geometryErrors == 1))
+        let lostGeometry = Stage()
+        var lostErrors = 0
+        lostGeometry.controller.onUnavailable = { _ in lostErrors += 1 }
+        lostGeometry.controller.geometry = nil; lostGeometry.controller.layout(); lostGeometry.controller.layout()
+        checks.append(Check(name: "F22 geometry lost while open closes and logs once", pass: !lostGeometry.controller.isPresented && lostErrors == 1))
         c.dismiss(reason: .action, animated: false)
         s.value = nil
         var errors = 0
@@ -62,7 +100,7 @@ enum Flows {
 
         let unavailable = Stage(state: "scc-adblock-unavailable")
         unavailable.tap("contentBlocking")
-        check("F5 unavailable blocker opens Settings without mutation", unavailable.source.calls == ["settings"] && !unavailable.controller.view.panel.showsReload)
+        check("F5 unavailable blocker opens Settings without mutation", unavailable.source.calls == ["settings:advanced:adblock"] && !unavailable.controller.view.panel.showsReload)
 
         c.present(anchor: .urlField, tabID: s.tabID, animated: false); s.calls = []
         stage.tap("boost.\(ids[0]).switch")
@@ -81,7 +119,7 @@ enum Flows {
         check("F9 interim menu hides Clear Cache and section Boost items", titles(basic) == ["Clear Cookies", "—", "Manage Extensions…", "Add Extension…", "—", "All Site Settings…"])
         let noBoosts = Stage(state: "scc-no-boosts")
         check("F9 no-Boost menu has Manage and New", titles(noBoosts) == ["Clear Cookies", "—", "Manage Boosts…", "New Boost…", "—", "Manage Extensions…", "Add Extension…", "—", "All Site Settings…"])
-        noBoosts.source.value?.capabilities.insert(.clearCache); noBoosts.source.onChange?(noBoosts.source.tabID)
+        noBoosts.source.value?.capabilities.insert(.clearCache); noBoosts.source.changed()
         check("F9 E2 capability exposes Clear Cache", titles(noBoosts).prefix(2) == ["Clear Cache", "Clear Cookies"])
         noBoosts.menu("Clear Cache"); noBoosts.menu("Clear Cookies")
         check("F9 clear items call distinct kinds and show Reload", noBoosts.source.calls == ["clear:2", "clear:1"] && noBoosts.controller.view.panel.showsReload)
@@ -105,22 +143,25 @@ enum Flows {
         basic.controller.present(anchor: .contentTopLeading, tabID: basic.source.tabID, mode: .extensionPicker, animated: false)
         check("extension picker falls back to Add Extension in More", basic.controller.mode == .standard && basic.controller.preferredMenuItemTitle == "Add Extension…" && basic.focusedID == "more" && !basic.controller.view.panel.extensionsSectionVisible)
         let ax = accessibilityDump(Stage().controller.view.panel)
-        check("F21 all section, tile, row and action labels and roles", ["AXHeading Settings", "AXButton Settings, More", "AXCheckBox Block Ads & Trackers", "AXCheckBox Camera", "AXCheckBox Notifications", "AXGroup Calm news, Enabled", "AXCheckBox Enable Calm news", "AXButton Edit Calm news", "AXMenuButton More"].allSatisfy(ax.contains))
-        let live = Stage(); live.source.value?.context.displayHost = "Updated host"; live.source.onChange?(live.source.tabID)
+        check("F21 all section, tile, row and action labels and roles", ["AXHeading label=Settings", "AXButton label=Settings, More", "AXCheckBox label=Block Ads & Trackers", "AXCheckBox label=Camera", "AXCheckBox label=Notifications", "AXGroup label=Calm news, Enabled", "AXCheckBox label=Enable Calm news", "AXButton label=Edit Calm news", "AXMenuButton label=More"].allSatisfy(ax.contains))
+        let live = Stage(); live.source.value?.context.displayHost = "Updated host"; live.source.changed()
         check("live source updates the open panel", live.controller.isPresented && accessibilityDump(live.controller.view.panel).contains("Updated host"))
-        live.source.value = nil; live.source.onChange?(live.source.tabID)
+        live.source.value = nil; live.source.changed()
         check("closed anchor tab dismisses on source notification", !live.controller.isPresented)
         let shortcut = Stage(); shortcut.key(code: 8, characters: "c", modifiers: [.command, .shift])
         check("Command shortcut dismisses and returns to normal routing", !shortcut.controller.isPresented && shortcut.source.calls.isEmpty)
         return result
     }
-    static func accessibilityDump(_ view: any NSAccessibilityProtocol, indent: String = "") -> String {
-        let role = view.accessibilityRole()?.rawValue ?? "view"
-        let label = view.accessibilityLabel() ?? (view as? NSTextField)?.stringValue ?? (view.accessibilityValue() as? String) ?? ""
-        let help = view.accessibilityHelp() ?? ""
-        let value = view.accessibilityValue().map { " value=\($0)" } ?? ""
-        let description = view.accessibilityValueDescription().map { " description=\($0)" } ?? ""
-        let children = (view.accessibilityChildren() ?? []).compactMap { $0 as? any NSAccessibilityProtocol }
-        return (indent + role + " " + label + " " + help + value + description).trimmingCharacters(in: .newlines) + "\n" + children.map { accessibilityDump($0, indent: indent + "  ") }.joined()
+    /// Traverse the actual AppKit AX children (including cells), not NSView.subviews.
+    static func accessibilityDump(_ node: any NSAccessibilityProtocol, indent: String = "") -> String {
+        let role = node.accessibilityRole()?.rawValue ?? "AXUnknown"
+        let candidates = role == "AXPopover" ? [node.accessibilityTitle(), node.accessibilityLabel()] : [node.accessibilityLabel(), node.accessibilityTitle(), node.accessibilityValue() as? String]
+        let label = candidates.compactMap { $0 }.first { !$0.isEmpty } ?? ""
+        var line = indent + role + " label=" + label + "\n"
+        if let title = node.accessibilityTitle(), !title.isEmpty, let description = node.accessibilityLabel() {
+            line += indent + "  description=" + description + "\n"
+        }
+        return line + (node.accessibilityChildren() ?? []).compactMap { $0 as? any NSAccessibilityProtocol }
+            .map { accessibilityDump($0, indent: indent + "  ") }.joined()
     }
 }

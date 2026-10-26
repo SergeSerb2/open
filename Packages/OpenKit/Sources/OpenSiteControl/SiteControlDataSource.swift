@@ -4,7 +4,9 @@ import OpenBoosts
 
 @MainActor public protocol SiteControlDataSource: AnyObject {
     func snapshot(for tabID: ItemID) -> SiteControlSnapshot?
-    var onChange: (@MainActor (ItemID) -> Void)? { get set }
+    /// Each registration is independent. Remove its token when the window closes.
+    func observeChanges(_ observer: @escaping @MainActor (ItemID) -> Void) -> SiteControlObservationToken
+    func removeChangeObserver(_ token: SiteControlObservationToken)
 }
 
 @MainActor public protocol SiteControlActions: AnyObject {
@@ -18,6 +20,7 @@ import OpenBoosts
     func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID)
     func openURLInNewTab(_ url: URL, tabID: ItemID)
     func reload(tabID: ItemID)
+    func openAdBlockSettings(tabID: ItemID)
 }
 
 @MainActor public protocol BoostEditorHost: AnyObject {
@@ -29,7 +32,9 @@ import OpenBoosts
     func exitZap(tabID: ItemID)
     func removeZapFromSession(_ selector: String, tabID: ItemID)
     func requestZapCounts(tabID: ItemID)
-    var onPickerEvent: (@MainActor (ItemID, BoostPickerEvent) -> Void)? { get set }
+    /// Fan out validated picker events to every registered editor session.
+    func observePickerEvents(_ observer: @escaping @MainActor (ItemID, BoostPickerEvent) -> Void) -> SiteControlObservationToken
+    func removePickerObserver(_ token: SiteControlObservationToken)
     func setDevToolsVisible(_ visible: Bool, tabID: ItemID)
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?

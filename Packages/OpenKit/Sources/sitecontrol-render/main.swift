@@ -1,5 +1,6 @@
 import AppKit
 import OpenDesign
+import CryptoKit
 
 MainActor.assumeIsolated {
     _ = NSApplication.shared
@@ -16,7 +17,7 @@ enum CLI {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
     static func run(_ args: [String]) throws {
-        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|check [--state scc-basic] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
+        guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|check|bench|screens|motion [--state scc-basic] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
         let state = value(args, "--state") ?? "scc-basic"
         guard names.contains(state) else { throw CLIError(description: "unknown state \(state)") }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 0)
@@ -33,7 +34,7 @@ enum CLI {
         case "ax":
             let stage = Stage(state: state, scale: scale, appearance: appearance)
             _ = stage.render(scale: scale)
-            print(Flows.accessibilityDump(stage.controller.view.panel))
+            print(Flows.accessibilityDump(stage.controller.view.panel), terminator: "")
         case "flows": report(Flows.run())
         case "check":
             var checks = Flows.run()
@@ -50,8 +51,10 @@ enum CLI {
                     let color = pixel(image, x: x, y: y)
                     if zip(color.prefix(3), a.prefix(3)).contains(where: { abs(Int($0) - Int($1)) > 40 }) { ink += 1 }
                 } }
+                checks.append(Flows.Check(name: "complete opaque capture \(state) \(appearance.rawValue) \(Int(scale))x", pass: fullyOpaque(image)))
                 checks.append(Flows.Check(name: "render \(state) \(appearance.rawValue) \(Int(scale))x (fill and glyph ink)", pass: image.width == Int(1000 * scale) && image.height == Int(760 * scale) && a != b && a.count == 4 && ink > 4))
             } } }
+            checks.append(contentsOf: try receipts())
             checks += Bench.run()
             report(checks)
         case "bench": report(Bench.run())
@@ -87,6 +90,51 @@ enum CLI {
             print("wrote \(names.count * 4) renders to \(out)")
         default: throw CLIError(description: "unknown command \(command)")
         }
+    }
+    static func luminance(_ pixel: [UInt8]) -> Int { pixel.prefix(3).map(Int.init).reduce(0, +) }
+    static func stablePixels(_ first: Data, _ next: Data) -> Bool {
+        guard first.count == next.count else { return false }
+        // Native symbol redraws can round antialiased edge channels by 2/255.
+        // Permit that quantization; opacity remains exact in fullyOpaque.
+        return first.withUnsafeBytes { (a: UnsafeRawBufferPointer) in
+            next.withUnsafeBytes { (b: UnsafeRawBufferPointer) in
+                for i in 0..<a.count { if abs(Int(a[i]) - Int(b[i])) > 2 { return false } }
+                return true
+            }
+        }
+    }
+    static func fullyOpaque(_ image: CGImage) -> Bool {
+        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return false }
+        for y in 0..<image.height { for x in 0..<image.width {
+            if bytes[y * image.bytesPerRow + x * 4 + 3] != 255 { return false }
+        } }
+        return true
+    }
+    static func hasInk(_ image: CGImage, rect: CGRect, scale: CGFloat, fill: [UInt8]) -> Bool {
+        var ink = 0
+        for y in Int(rect.minY*scale)..<Int(rect.maxY*scale) {
+            for x in Int(rect.minX*scale)..<Int(rect.maxX*scale) {
+                if abs(luminance(pixel(image, x: x, y: y)) - luminance(fill)) > 45 { ink += 1 }
+            }
+        }
+        return ink > Int(8 * scale * scale)
+    }
+    static func receipts() throws -> [Flows.Check] {
+        var root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        while !FileManager.default.fileExists(atPath: root.appendingPathComponent("AGENTS.md").path) && root.path != "/" { root.deleteLastPathComponent() }
+        let directory = root.appendingPathComponent("docs/sitecontrol/step-1")
+        let lines = try String(contentsOf: directory.appendingPathComponent("SHA256SUMS"), encoding: .utf8).split(separator: "\n")
+        let required = Set(["scc-basic-light@1x.png", "scc-basic-light@2x.png", "scc-basic-dark@1x.png", "scc-basic-dark@2x.png"])
+        var found = Set<String>(), checks: [Flows.Check] = []
+        for line in lines {
+            let parts = line.split(whereSeparator: \.isWhitespace)
+            guard parts.count == 2, required.contains(String(parts[1])) else { throw CLIError(description: "invalid render SHA256SUMS entry") }
+            let name = String(parts[1]); found.insert(name)
+            let hash = SHA256.hash(data: try Data(contentsOf: directory.appendingPathComponent(name))).map { String(format: "%02x", $0) }.joined()
+            checks.append(Flows.Check(name: "committed SHA256 " + name, pass: hash == parts[0]))
+        }
+        checks.append(Flows.Check(name: "four committed render receipts", pass: found == required && lines.count == required.count))
+        return checks
     }
     static func pixel(_ image: CGImage, x: Int, y: Int) -> [UInt8] {
         guard let data = image.dataProvider?.data, let p = CFDataGetBytePtr(data) else { return [] }

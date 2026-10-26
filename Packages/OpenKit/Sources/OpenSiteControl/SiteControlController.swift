@@ -19,7 +19,8 @@ public final class SiteControlController: NSObject {
     private let source: SiteControlDataSource
     private let actions: SiteControlActions
     private weak var previousResponder: NSResponder?
-    private var unavailableTab: ItemID?
+    private var unavailableTabs: Set<ItemID> = []
+    private var changeObserver: SiteControlObservationToken?
     private var presentationGeneration = 0
 
     public init(source: SiteControlDataSource, actions: SiteControlActions) {
@@ -33,7 +34,7 @@ public final class SiteControlController: NSObject {
         view.panel.onToggle = { [weak self] tile in
             guard let self, let tabID = self.tabID else { return }
             if tile.state == .unavailable {
-                self.actions.perform(command: "settings", tabID: tabID, anchor: nil)
+                self.actions.openAdBlockSettings(tabID: tabID)
             } else {
                 self.actions.toggle(tile, tabID: tabID); self.view.panel.showsReload = true
                 self.refreshView(animated: true)
@@ -62,27 +63,18 @@ public final class SiteControlController: NSObject {
             guard let self, let tabID = self.tabID else { return }
             self.actions.showSecurityDetails(tabID: tabID)
         }
-        source.onChange = { [weak self] changed in
+        changeObserver = source.observeChanges { [weak self] changed in
             guard let self, self.isPresented, self.tabID == changed else { return }
             self.refreshView(animated: true)
         }
     }
+    isolated deinit { if let changeObserver { source.removeChangeObserver(changeObserver) } }
     public func toggle(anchor: SiteControlAnchor, tabID: ItemID, animated: Bool = true) {
         if isPresented && self.anchor == anchor && self.tabID == tabID { dismiss(reason: .anchor, animated: animated) }
         else { present(anchor: anchor, tabID: tabID, mode: .standard, animated: animated) }
     }
     public func present(anchor: SiteControlAnchor, tabID: ItemID, mode: SiteControlPresentationMode = .standard, animated: Bool = true) {
-        guard let snapshot = source.snapshot(for: tabID) else {
-            if isPresented { dismiss(reason: .sourceUnavailable, animated: false) }
-            if unavailableTab != tabID {
-                unavailableTab = tabID
-                FileHandle.standardError.write(Data("SiteControl: no snapshot for tab \(tabID)\n".utf8))
-                onUnavailable?(tabID)
-            }
-            return
-        }
-        guard geometry?(anchor) != nil else { return }
-        unavailableTab = nil
+        guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if !isPresented { previousResponder = view.window?.firstResponder }
         self.anchor = anchor; self.tabID = tabID
         self.mode = mode == .extensionPicker && !view.panel.extensionsSectionVisible ? .standard : mode
@@ -91,12 +83,14 @@ public final class SiteControlController: NSObject {
         isPresented = true; view.isHidden = false; view.isActive = true
         view.panel.showsReload = false
         view.panel.apply(snapshot); configureKeys(); layout()
+        guard isPresented else { return }
         view.window?.makeFirstResponder(view)
         if preferredMenuItemTitle != nil { view.panel.focus(view.panel.more) }
         animateOpen(animated)
     }
     public func layout() {
-        guard let anchor, let g = geometry?(anchor) else { return }
+        guard let anchor, let tabID else { return }
+        guard let g = geometry?(anchor) else { reportUnavailable(tabID); return }
         view.anchorFrame = g.anchor
         let m = SiteControlMetrics.self
         let h = min(view.panel.preferredHeight, m.maxHeight, max(0, view.bounds.height - 2 * m.windowMargin))
@@ -104,34 +98,35 @@ public final class SiteControlController: NSObject {
         let point: CGPoint
         switch anchor {
         case .urlField:
-            point = CGPoint(x: g.sidebarMaxX + m.anchorGap + m.arrowHeight,
+            point = CGPoint(x: g.sidebarMaxX + m.sidebarPanelGap,
                             y: min(max(g.anchor.midY - m.anchorAlignmentY, m.windowMargin), max(m.windowMargin, view.bounds.height - h - m.windowMargin)))
-            view.arrowTip = CGPoint(x: point.x - m.arrowHeight, y: g.anchor.midY); view.arrowPointsUp = false
         case .paneBar:
             point = CGPoint(x: min(max(g.anchor.maxX + m.windowMargin - w, m.windowMargin), max(m.windowMargin, view.bounds.width - w - m.windowMargin)),
-                            y: min(g.anchor.maxY + m.anchorGap + m.arrowHeight, max(m.windowMargin, view.bounds.height - h - m.windowMargin)))
-            view.arrowTip = CGPoint(x: min(max(g.anchor.midX, point.x + m.cornerRadius + m.arrowBase / 2), point.x + w - m.cornerRadius - m.arrowBase / 2), y: point.y - m.arrowHeight)
-            view.arrowPointsUp = true
+                            y: min(g.anchor.maxY + m.panePanelGap, max(m.windowMargin, view.bounds.height - h - m.windowMargin)))
         case .contentTopLeading:
             point = CGPoint(x: g.content.minX + m.contentAnchorInset, y: g.content.minY + m.contentAnchorInset)
-            view.arrowTip = nil
         }
         view.panel.frame = CGRect(origin: point, size: CGSize(width: w, height: h))
-        view.panel.updateArrow(tip: view.arrowTip, pointsUp: view.arrowPointsUp)
-        view.panel.needsLayout = true; view.layoutSubtreeIfNeeded()
+        view.panel.needsLayout = true; view.needsLayout = true; view.layoutSubtreeIfNeeded()
         view.needsDisplay = true
+    }
+    private func reportUnavailable(_ tabID: ItemID) {
+        if isPresented { dismiss(reason: .sourceUnavailable, animated: false) }
+        guard unavailableTabs.insert(tabID).inserted else { return }
+        FileHandle.standardError.write(Data("SiteControl: snapshot or geometry unavailable for tab \(tabID)\n".utf8))
+        onUnavailable?(tabID)
     }
     public func dismiss(reason: SiteControlDismissReason, animated: Bool = true) {
         guard isPresented else { return }
         isPresented = false
-        SiteControlTooltip.shared.hide()
+        view.panel.controls.forEach { TooltipController.shared.cancel(for: $0) }
         presentationGeneration += 1
         let generation = presentationGeneration
         view.isActive = false
         view.window?.makeFirstResponder(previousResponder)
         animateClose(animated) { [weak self] in
             guard let self, self.presentationGeneration == generation, !self.isPresented else { return }
-            self.view.isHidden = true; self.view.panel.layer?.removeAllAnimations()
+            self.view.isHidden = true; self.view.presentationLayers.forEach { $0.removeAllAnimations() }
         }
         onDismiss?(reason)
     }
@@ -173,10 +168,11 @@ public final class SiteControlController: NSObject {
     private func configureKeys() { view.panel.configureKeys { [weak self] in self?.handleKey($0) ?? false } }
     private func refreshView(animated: Bool) {
         guard let tabID else { return }
-        guard let snapshot = source.snapshot(for: tabID) else { dismiss(reason: .sourceUnavailable); return }
+        guard let snapshot = source.snapshot(for: tabID) else { reportUnavailable(tabID); return }
         let focusedID = (view.window?.firstResponder as? NSView)?.identifier?.rawValue
         let oldHeight = view.panel.frame.height
         view.panel.apply(snapshot); configureKeys(); layout()
+        guard isPresented else { return }
         if let focusedID, let button = view.panel.control(id: focusedID), button.isEnabled { view.panel.focus(button) }
         if animated, oldHeight != view.panel.frame.height, let layer = view.panel.layer {
             let animation = CABasicAnimation(keyPath: "bounds.size.height")
@@ -240,34 +236,41 @@ public final class SiteControlController: NSObject {
         if let command = commands[id] { actions.perform(command: command, tabID: tabID, anchor: rect) }
     }
     private func animateOpen(_ animated: Bool) {
-        guard let layer = view.panel.layer else { return }
-        layer.removeAllAnimations(); layer.opacity = 1; layer.transform = CATransform3DIdentity
-        guard animated else { return }
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
-        fade.duration = Motion.popoverOpen; fade.timingFunction = Motion.easeOut; layer.add(fade, forKey: "open.opacity")
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let scale = CABasicAnimation(keyPath: "transform"); scale.fromValue = NSValue(caTransform3D: transform(scale: SiteControlMetrics.openScale)); scale.toValue = NSValue(caTransform3D: CATransform3DIdentity)
-            scale.duration = Motion.popoverOpen; scale.timingFunction = Motion.easeOut; layer.add(scale, forKey: "open.scale")
+        for layer in view.presentationLayers {
+            layer.removeAllAnimations(); layer.opacity = 1; layer.transform = CATransform3DIdentity
+            guard animated else { continue }
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
+            fade.duration = Motion.popoverOpen; fade.timingFunction = Motion.easeOut; layer.add(fade, forKey: "open.opacity")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let scale = CABasicAnimation(keyPath: "transform")
+                scale.fromValue = NSValue(caTransform3D: transform(scale: SiteControlMetrics.openScale, layer: layer))
+                scale.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+                scale.duration = Motion.popoverOpen; scale.timingFunction = Motion.easeOut; layer.add(scale, forKey: "open.scale")
+            }
         }
     }
-    private func transform(scale: CGFloat) -> CATransform3D {
-        let tip = view.arrowTip.map { CGPoint(x: $0.x - view.panel.frame.minX, y: $0.y - view.panel.frame.minY) } ?? CGPoint(x: view.panel.bounds.midX, y: view.panel.bounds.midY)
-        var t = CATransform3DMakeTranslation(tip.x, tip.y, 0)
-        t = CATransform3DScale(t, scale, scale, 1)
-        return CATransform3DTranslate(t, -tip.x, -tip.y, 0)
+    private func transform(scale: CGFloat, layer: CALayer) -> CATransform3D {
+        // Compensate for the layer's anchor so the top-leading corner stays fixed.
+        let anchor = CGPoint(x: layer.anchorPoint.x * layer.bounds.width, y: layer.anchorPoint.y * layer.bounds.height)
+        var transform = CATransform3DMakeTranslation(-anchor.x, -anchor.y, 0)
+        transform = CATransform3DScale(transform, scale, scale, 1)
+        return CATransform3DTranslate(transform, anchor.x, anchor.y, 0)
     }
     private func animateClose(_ animated: Bool, completion: @escaping @MainActor () -> Void) {
-        guard animated, let layer = view.panel.layer else { completion(); return }
-        layer.removeAllAnimations()
+        guard animated else { completion(); return }
         CATransaction.begin(); CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
-        fade.duration = Motion.popoverClose; fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
-        layer.opacity = 0; layer.add(fade, forKey: "close.opacity")
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let scale = CABasicAnimation(keyPath: "transform"); scale.fromValue = NSValue(caTransform3D: CATransform3DIdentity)
-            scale.toValue = NSValue(caTransform3D: transform(scale: SiteControlMetrics.closeScale))
-            scale.duration = Motion.popoverClose; scale.timingFunction = CAMediaTimingFunction(name: .easeIn)
-            layer.transform = transform(scale: SiteControlMetrics.closeScale); layer.add(scale, forKey: "close.scale")
+        for layer in view.presentationLayers {
+            layer.removeAllAnimations()
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 1; fade.toValue = 0
+            fade.duration = Motion.popoverClose; fade.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            layer.opacity = 0; layer.add(fade, forKey: "close.opacity")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let scale = CABasicAnimation(keyPath: "transform"); scale.fromValue = NSValue(caTransform3D: CATransform3DIdentity)
+                let target = transform(scale: SiteControlMetrics.closeScale, layer: layer)
+                scale.toValue = NSValue(caTransform3D: target)
+                scale.duration = Motion.popoverClose; scale.timingFunction = CAMediaTimingFunction(name: .easeIn)
+                layer.transform = target; layer.add(scale, forKey: "close.scale")
+            }
         }
         CATransaction.commit()
     }

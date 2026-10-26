@@ -1,6 +1,20 @@
 import AppKit
 import OpenModel
 
+public struct WebContentLiveState: Sendable {
+    public var isLoading: Bool
+    public var progress: Double
+    public var canGoBack: Bool
+    public var canGoForward: Bool
+    public var isAudible: Bool
+    public var isCrashed: Bool
+    public init(isLoading: Bool = false, progress: Double = 0, canGoBack: Bool = false,
+                canGoForward: Bool = false, isAudible: Bool = false, isCrashed: Bool = false) {
+        self.isLoading = isLoading; self.progress = progress; self.canGoBack = canGoBack
+        self.canGoForward = canGoForward; self.isAudible = isAudible; self.isCrashed = isCrashed
+    }
+}
+
 @MainActor
 public protocol WebContentHost: AnyObject {
     var view: NSView { get }
@@ -30,9 +44,23 @@ public protocol WebContentHost: AnyObject {
     /// Called when `pageBackgroundColor` changes, also after the URL callback for the
     /// same navigation (the color can arrive late).
     var onPageBackgroundChange: ((NSColor?) -> Void)? { get set }
+    var liveState: WebContentLiveState { get }
+    var onLiveStateChange: ((WebContentLiveState) -> Void)? { get set }
+}
+
+public extension WebContentHost {
+    var liveState: WebContentLiveState { WebContentLiveState(isLoading: isLoading, canGoBack: canGoBack, canGoForward: canGoForward) }
 }
 
 @MainActor
 public protocol WebContentHostFactory: AnyObject {
-    func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost
+    /// Nil refuses creation while the engine or profile is unavailable.
+    func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)?
+    /// Called before binding an existing host under a promoted model tab ID.
+    func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool
+    func remainingLiveState(for tabID: ItemID) -> WebContentLiveState?
+}
+public extension WebContentHostFactory {
+    func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool { true }
+    func remainingLiveState(for tabID: ItemID) -> WebContentLiveState? { nil }
 }

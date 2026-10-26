@@ -7,7 +7,6 @@ import OpenSiteControl
 enum Bench {
     static func cpu() -> Double { Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)) / 1e6 }
     static func run() -> [Flows.Check] {
-        pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)
         let stage = Stage(state: "scc-many", scale: 2)
         stage.controller.dismiss(reason: .action, animated: false)
         var wall: [Double] = [], cpuSamples: [Double] = []
@@ -23,7 +22,11 @@ enum Bench {
             controller.geometry = stage.controller.geometry
             stage.root.addSubview(controller.view)
             let afterAttach = cpu()
-            controller.present(anchor: .urlField, tabID: stage.source.tabID, animated: false)
+            stage.anchorButton.invoke = { [weak controller, weak source = stage.source] in
+                guard let source else { return }
+                controller?.present(anchor: .urlField, tabID: source.tabID, animated: false)
+            }
+            stage.click(CGPoint(x: 201, y: 64))
             let afterPresent = cpu()
             controller.view.layoutSubtreeIfNeeded()
             stage.window.displayIfNeeded(); CATransaction.flush()
@@ -34,7 +37,7 @@ enum Bench {
             }
         }
         func p95(_ values: [Double]) -> Double { values.sorted()[Int(ceil(Double(values.count) * 0.95)) - 1] }
-        print(String(format: "Panel first draw: main-thread CPU p95 %.3f ms; wall p95 %.3f ms; 20 Boosts, 12 tiles, 30 supplied extensions (section hidden), 2x", p95(cpuSamples), p95(wall)))
+        print(String(format: "Panel first draw: main-thread CPU p95 %.3f ms; wall p95 %.3f ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x", p95(cpuSamples), p95(wall)))
         print("CPU samples ms: " + cpuSamples.map { String(format: "%.3f", $0) }.joined(separator: ", "))
         print("Wall samples ms: " + wall.map { String(format: "%.3f", $0) }.joined(separator: ", "))
         print("CPU parts mean (init/attach/present/display): " + (0..<4).map { column in String(format: "%.3f", parts.map { $0[column] }.reduce(0, +) / Double(parts.count)) }.joined(separator: ", "))

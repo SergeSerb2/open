@@ -17,20 +17,36 @@ public class SiteControlButton: NSView {
     public override var toolTip: String? { get { hoverText } set { hoverText = newValue } }
     public var isEnabled = true { didSet { setAccessibilityEnabled(isEnabled); needsDisplay = true } }
     private var isHighlighted = false
-    private let glyphLayer = CALayer()
-    private let captionLayer = CALayer()
-    private let buttonFocus = CAShapeLayer()
+    private lazy var glyphLayer = CALayer()
+    private lazy var captionLayer = CALayer()
+    private lazy var buttonFocus = CAShapeLayer()
     private let pointSize: CGFloat
+    private let weight: NSFont.Weight
+    public var tooltipKeys: [String] = []
     private var hovered = false
+    private var cachedGlyphName: String?
+    private var cachedGlyphColor: NSColor?
+    private var cachedGlyph: (image: CGImage, size: CGSize)?
+    func glyphRaster(_ name: String, color: NSColor) -> (image: CGImage, size: CGSize)? {
+        if cachedGlyphName != name || cachedGlyphColor != color {
+            cachedGlyphName = name; cachedGlyphColor = color
+            cachedGlyph = SiteControlDrawing.raster(name, size: pointSize, color: color, weight: weight)
+        }
+        return cachedGlyph
+    }
+    var drawsStandardButton: Bool { true }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { isEnabled }
-    public init(id: String, label: String, symbol: String, pointSize: CGFloat) {
-        self.controlID = id; self.symbol = symbol; self.pointSize = pointSize
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    public init(id: String, label: String, symbol: String, pointSize: CGFloat, weight: NSFont.Weight = .regular) {
+        self.controlID = id; self.symbol = symbol; self.pointSize = pointSize; self.weight = weight
         super.init(frame: .zero)
         focusRingType = .none; wantsLayer = true
-        glyphLayer.contentsGravity = .resizeAspect
-        for child in [glyphLayer, captionLayer, buttonFocus] { child.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull(), "path": NSNull(), "strokeColor": NSNull()]; layer?.addSublayer(child) }
-        buttonFocus.fillColor = nil; buttonFocus.lineWidth = SiteControlMetrics.focusWidth
+        if drawsStandardButton {
+            glyphLayer.contentsGravity = .resizeAspect
+            for child in [glyphLayer, captionLayer, buttonFocus] { child.actions = ["position": NSNull(), "bounds": NSNull(), "contents": NSNull(), "path": NSNull(), "strokeColor": NSNull()]; layer?.addSublayer(child) }
+            buttonFocus.fillColor = nil; buttonFocus.lineWidth = SiteControlMetrics.focusWidth
+        }
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label); identifier = NSUserInterfaceItemIdentifier(id); toolTip = label
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -38,7 +54,7 @@ public class SiteControlButton: NSView {
     public override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; performClick(nil); return true }
     public override func mouseDown(with event: NSEvent) {
         guard isEnabled else { return }; window?.makeFirstResponder(self)
-        isHighlighted = true; needsDisplay = true
+        hideTooltip(); isHighlighted = true; needsDisplay = true
     }
     public override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
     public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
@@ -61,8 +77,11 @@ public class SiteControlButton: NSView {
     }
     public override func mouseEntered(with event: NSEvent) { hovered = true; fadeHover(); showTooltip() }
     public override func mouseExited(with event: NSEvent) { hovered = false; fadeHover(); hideTooltip() }
-    func showTooltip() { SiteControlTooltip.shared.schedule(toolTip, for: self) }
-    func hideTooltip() { SiteControlTooltip.shared.hide(for: self) }
+    func showTooltip() {
+        guard let toolTip else { return }
+        TooltipController.shared.schedule(Tooltip(title: toolTip, keys: tooltipKeys, style: .defaultTheme(system: contentAppearance)), for: self)
+    }
+    func hideTooltip() { TooltipController.shared.cancel(for: self) }
     public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { hideTooltip() } }
     func fadeHover() {
         wantsLayer = true
@@ -72,12 +91,13 @@ public class SiteControlButton: NSView {
     public override var wantsUpdateLayer: Bool { true }
     public override func updateLayer() {
         let m = SiteControlMetrics.self
-        let color = tint.resolved(contentAppearance).nsColor.withAlphaComponent(isEnabled || statusOnly ? 1 : m.disabledAlpha)
+        let resolved = tint.resolved(contentAppearance).nsColor
+        let color = resolved.withAlphaComponent(resolved.alphaComponent * (isEnabled || statusOnly ? 1 : m.disabledAlpha))
         let fill = hovered && isEnabled ? (isHighlighted ? SidebarColors.itemHoveredBackground : SidebarColors.itemBackground).cgColor(contentAppearance) : NSColor.clear.cgColor
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        layer?.backgroundColor = fill; layer?.cornerRadius = m.actionRadius
+        layer?.backgroundColor = fill; layer?.cornerRadius = m.actionRadius; layer?.cornerCurve = .continuous
         var captionX: CGFloat = 0
-        if let raster = SiteControlDrawing.raster(symbol, size: pointSize, color: color) {
+        if let raster = glyphRaster(symbol, color: color) {
             glyphLayer.contents = raster.image
             let x = title.isEmpty ? (bounds.width - raster.size.width) / 2 : m.securityPadding
             glyphLayer.frame = CGRect(x: x, y: (bounds.height - raster.size.height) / 2, width: raster.size.width, height: raster.size.height)
@@ -97,7 +117,7 @@ public class SiteControlButton: NSView {
 
 @MainActor
 enum SiteControlDrawing {
-    private struct SymbolKey: Hashable { let name: String; let size: CGFloat; let color: NSColor }
+    private struct SymbolKey: Hashable { let name: String; let size: CGFloat; let color: NSColor; let weight: CGFloat }
     private static var symbols: [SymbolKey: NSImage] = [:]
     private static var pixels: [SymbolKey: CGImage] = [:]
     private struct TextKey: Hashable { let text: String; let width: CGFloat; let font: NSFont; let color: NSColor }
@@ -140,14 +160,13 @@ enum SiteControlDrawing {
         if tileLabels.count >= 32 { tileLabels.removeAll(keepingCapacity: true) }
         tileLabels[key] = image; return image
     }
-    static func symbol(_ name: String, size: CGFloat, color: NSColor) -> NSImage? {
+    static func symbol(_ name: String, size: CGFloat, color: NSColor, weight: NSFont.Weight = .regular) -> NSImage? {
         guard !name.isEmpty else { return nil }
         let resolved = color.usingColorSpace(.sRGB) ?? color
-        let key = SymbolKey(name: name, size: size, color: resolved)
+        let key = SymbolKey(name: name, size: size, color: resolved, weight: weight.rawValue)
         if let cached = symbols[key] { return cached }
         guard let source = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: size, weight: .medium))?
-            .withSymbolConfiguration(.init(paletteColors: [resolved])) else { return nil }
+            .withSymbolConfiguration(.init(pointSize: size, weight: weight)) else { return nil }
         // NSImage's symbol representation resolves/rasterizes again for every new
         // backing context. Cache our rendered system glyph as a 2x bitmap instead.
         let points = source.size
@@ -157,15 +176,19 @@ enum SiteControlDrawing {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
         source.draw(in: CGRect(origin: .zero, size: points), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
+        context.setBlendMode(.sourceIn); context.setFillColor(resolved.cgColor)
+        context.fill(CGRect(origin: .zero, size: points))
         NSGraphicsContext.restoreGraphicsState()
         guard let pixels = context.makeImage() else { return nil }
         let image = NSImage(cgImage: pixels, size: points)
+        if symbols.count >= 256 { symbols.removeAll(keepingCapacity: true); self.pixels.removeAll(keepingCapacity: true) }
         self.pixels[key] = pixels
         symbols[key] = image; return image
     }
-    static func raster(_ name: String, size: CGFloat, color: NSColor) -> (image: CGImage, size: CGSize)? {
-        let key = SymbolKey(name: name, size: size, color: color.usingColorSpace(.sRGB) ?? color)
-        guard let image = symbol(name, size: size, color: color), let pixels = pixels[key] else { return nil }
+    static func raster(_ name: String, size: CGFloat, color: NSColor, weight: NSFont.Weight = .regular) -> (image: CGImage, size: CGSize)? {
+        let key = SymbolKey(name: name, size: size, color: color.usingColorSpace(.sRGB) ?? color, weight: weight.rawValue)
+        if let pixels = pixels[key], let image = symbols[key] { return (pixels, image.size) }
+        guard let image = symbol(name, size: size, color: color, weight: weight), let pixels = pixels[key] else { return nil }
         return (pixels, image.size)
     }
     static func bitmap(_ image: CGImage, in rect: CGRect) {
@@ -212,6 +235,7 @@ enum SiteControlDrawing {
 
 @MainActor
 final class SiteControlTileButton: SiteControlButton {
+    override var drawsStandardButton: Bool { false }
     private(set) var tile: SiteSettingTile
     private let circle = CALayer()
     private let icon = CALayer()
@@ -233,6 +257,7 @@ final class SiteControlTileButton: SiteControlButton {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     func apply(_ tile: SiteSettingTile, animated: Bool) {
         self.tile = tile
+        setAccessibilityLabel(tile.title)
         setAccessibilityRole(tile.state == .unavailable ? .button : .checkBox)
         setAccessibilityValue(tile.state == .on ? 1 : 0)
         setAccessibilityValueDescription(tile.subtitle)
@@ -240,7 +265,7 @@ final class SiteControlTileButton: SiteControlButton {
         CATransaction.begin(); CATransaction.setAnimationDuration(animated ? Motion.selectionFade : 0)
         CATransaction.setDisableActions(!animated)
         circle.backgroundColor = (tile.state == .on ? Core.brandBlue : GrayScale.a(4)).cgColor(contentAppearance)
-        let raster = SiteControlDrawing.raster(tile.symbol, size: SiteControlMetrics.tileGlyph, color: tile.state == .on ? .white : Core.foregroundSecondary.resolved(contentAppearance).nsColor)
+        let raster = glyphRaster(tile.symbol, color: tile.state == .on ? .white : Core.foregroundSecondary.resolved(contentAppearance).nsColor)
         icon.contents = raster?.image
         labels.contents = SiteControlDrawing.labels(for: tile, appearance: contentAppearance)
         CATransaction.commit(); needsDisplay = true
@@ -262,7 +287,7 @@ final class SiteControlTileButton: SiteControlButton {
             animation.duration = Motion.hoverFade; layer?.add(animation, forKey: "hover.background")
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        layer?.backgroundColor = fill; layer?.cornerRadius = m.tileRadius
+        layer?.backgroundColor = fill; layer?.cornerRadius = m.tileRadius; layer?.cornerCurve = .continuous
         focusRing.path = CGPath(roundedRect: bounds.insetBy(dx: m.focusWidth / 2, dy: m.focusWidth / 2), cornerWidth: m.tileRadius + m.focusOutset, cornerHeight: m.tileRadius + m.focusOutset, transform: nil)
         focusRing.strokeColor = window?.firstResponder === self ? Core.focusRing.cgColor(contentAppearance) : nil
         CATransaction.commit()
@@ -271,6 +296,7 @@ final class SiteControlTileButton: SiteControlButton {
 
 @MainActor
 final class SiteControlSectionButton: SiteControlButton {
+    override var drawsStandardButton: Bool { false }
     let caption: String
     let accessory: String
     private let heading: NSTextField
@@ -319,6 +345,7 @@ final class SiteControlSectionButton: SiteControlButton {
 
 @MainActor
 final class SiteControlSwitch: SiteControlButton {
+    override var drawsStandardButton: Bool { false }
     private let knob = CALayer()
     override var wantsUpdateLayer: Bool { false }
     var isOn = false { didSet { setAccessibilityValue(isOn ? 1 : 0); updateKnob(animated: oldValue != isOn) } }

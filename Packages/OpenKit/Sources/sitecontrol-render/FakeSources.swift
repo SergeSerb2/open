@@ -10,10 +10,16 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
     let profileID = ProfileID()
     var value: SiteControlSnapshot?
     var calls: [String] = []
-    var onChange: (@MainActor (ItemID) -> Void)?
+    var observers: [SiteControlObservationToken: @MainActor (ItemID) -> Void] = [:]
+    func observeChanges(_ observer: @escaping @MainActor (ItemID) -> Void) -> SiteControlObservationToken {
+        let token = SiteControlObservationToken(); observers[token] = observer; return token
+    }
+    func removeChangeObserver(_ token: SiteControlObservationToken) { observers.removeValue(forKey: token) }
+    func changed() { for observer in Array(observers.values) { observer(tabID) } }
     init() {
         value = SiteControlSnapshot(context: SiteControlContext(tabID: tabID, profileID: profileID,
-            url: URL(string: "https://news.example.com/")!, displayHost: "news.example.com", security: .secure))
+            url: URL(string: "https://news.example.com/")!, displayHost: "news.example.com", security: .secure),
+            commandsEnabled: ["capture-page": true, "capture-full-page": true, "capture-portrait": true])
     }
     func configure(_ state: String) {
         value?.tiles = [
@@ -22,7 +28,6 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
             SiteSettingTile(id: "permission.notifications", kind: .permission(.notifications), title: "Notifications", subtitle: "Blocked", state: .off, symbol: "bell.fill")]
         value?.boosts = [Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000001"), name: "Calm news", siteMatch: SiteMatch(domain: "example.com")),
                          Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000002"), name: "Larger type", siteMatch: SiteMatch(domain: "news.example.com"), isEnabled: false)]
-        value?.extensions = (0..<3).map { ExtensionActionInfo(extensionID: "fixture.\($0)", title: "Extension \($0 + 1)", iconPNG: nil, badgeText: nil, isEnabled: true, hasPopup: true) }
         switch state {
         case "scc-insecure": value?.context.url = URL(string: "http://news.example.com/")!; value?.context.security = .insecure
         case "scc-adblock-excluded": value?.tiles[0].state = .off; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off for this site."
@@ -37,7 +42,6 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
             value?.tiles = [blocking] + SitePermission.allCases.prefix(11).enumerated().map { i, kind in
                 SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: "checkmark") }
             value?.boosts = (0..<20).map { Boost(id: BoostID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0 + 1)), name: "Boost \($0 + 1)", siteMatch: SiteMatch(domain: "example.com")) }
-            value?.extensions = (0..<30).map { ExtensionActionInfo(extensionID: "many.\($0)", title: "Extension \($0)", iconPNG: nil, badgeText: nil, isEnabled: true, hasPopup: false) }
         default: break
         }
     }
@@ -49,12 +53,12 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
             value?.tiles[index].state = on ? .on : .off
             value?.tiles[index].subtitle = tile.kind == .contentBlocking ? (on ? "On" : "Off") : (on ? "Allowed" : "Blocked")
         }
-        onChange?(tabID)
+        changed()
     }
     func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
         calls.append("boost:\(id):\(enabled)")
         if let index = value?.boosts.firstIndex(where: { $0.id == id }) { value?.boosts[index].isEnabled = enabled }
-        onChange?(tabID)
+        changed()
     }
     func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode) { calls.append("editor:\(boostID?.description ?? "new")") }
     func perform(command: String, tabID: ItemID, anchor: NSRect?) { calls.append(command) }
@@ -64,4 +68,5 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
     func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID) { calls.append("clear:\(kinds.rawValue)") }
     func openURLInNewTab(_ url: URL, tabID: ItemID) { calls.append("url:" + url.absoluteString) }
     func reload(tabID: ItemID) { calls.append("reload") }
+    func openAdBlockSettings(tabID: ItemID) { calls.append("settings:advanced:adblock") }
 }

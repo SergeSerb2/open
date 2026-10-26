@@ -21,6 +21,18 @@ public final class SleepController {
     private let visibility: any SleepVisibilityProviding
     private let chromiumTag: String
     private let now: () -> Date
+    private final class ProfileRules {
+        var sites: [String] = []
+        var rules = KeepAliveRules.builtIn
+        func current(_ current: [String]) -> KeepAliveRules {
+            if current != sites {
+                sites = current
+                rules = current.isEmpty ? .builtIn : KeepAliveRules(userSites: current)
+            }
+            return rules
+        }
+    }
+    private var profileRules: [ProfileID: ProfileRules] = [:]
     private var loop: Task<Void, Never>?
     private var pressureSource: (any DispatchSourceMemoryPressure)?
     private var shown: Set<ItemID> = []
@@ -45,6 +57,9 @@ public final class SleepController {
         var unload: Bool?
         var retryAfter: Date?
         var retryDelay: TimeInterval?
+        var keepAliveURL: URL?
+        var keepAliveRules: KeepAliveRules?
+        var keepAlive = false
     }
     private var states: [ItemID: State] = [:]
     private func state(_ id: ItemID) -> State {
@@ -235,7 +250,17 @@ public final class SleepController {
     }
 
     private func policies() -> [NodeParent: SleepPolicy] {
-        let profiles = Dictionary(uniqueKeysWithValues: model.profiles.map { ($0.id, SleepPolicy(mode: $0.settings.sleepMode)) })
+        // Read settings every pass, independently of treeRevision, just as for
+        // sleepMode. Model edits take effect on the next tick without a restart.
+        let profiles = Dictionary(uniqueKeysWithValues: model.profiles.map { profile in
+            let cache: ProfileRules
+            if let existing = profileRules[profile.id] { cache = existing }
+            else {
+                cache = ProfileRules(); profileRules[profile.id] = cache
+            }
+            return (profile.id, SleepPolicy(mode: profile.settings.sleepMode,
+                                           keepAliveRules: cache.current(profile.settings.keepAliveSites)))
+        })
         var result: [NodeParent: SleepPolicy] = [:]
         for (id, policy) in profiles { result[.favorites(id)] = policy }
         for space in model.spaces {
@@ -271,7 +296,15 @@ public final class SleepController {
         return policy.blockingReason(tab: tab, visible: visible, now: date,
             lastAudibleAt: state.lastAudibleAt, lastCommitAt: state.lastCommitAt,
             downloading: downloading.contains(tab.id), hasUnloadHandlers: state.unload ?? true,
-            forDiscard: discard)
+            forDiscard: discard, keepAlive: isKeepAlive(tab, state: state, policy: policy))
+    }
+
+    private func isKeepAlive(_ tab: Tab, state: State, policy: SleepPolicy) -> Bool {
+        if state.keepAliveURL != tab.url || state.keepAliveRules !== policy.keepAliveRules {
+            state.keepAliveURL = tab.url; state.keepAliveRules = policy.keepAliveRules
+            state.keepAlive = policy.keepAliveRules.matches(tab.url)
+        }
+        return state.keepAlive
     }
 
     public func tick() async { await runPass(pressure: nil) }
@@ -332,7 +365,7 @@ public final class SleepController {
                           policy.blockingReason(tab: tab, visible: visible, now: date,
                             lastAudibleAt: state.lastAudibleAt, lastCommitAt: state.lastCommitAt,
                             downloading: downloading.contains(tab.id), hasUnloadHandlers: state.unload ?? true,
-                            forDiscard: action == .discard) == nil else { continue }
+                            forDiscard: action == .discard, keepAlive: isKeepAlive(tab, state: state, policy: policy)) == nil else { continue }
                     actions.append((tab, policy, action))
                 }
             }
@@ -402,9 +435,15 @@ public final class SleepController {
               gate(tab, policy: policy, visible: visibleTabIDs(), at: now(), discard: true) == nil else { return }
         let discarded = await engine.discard(tabID: id)
         guard model.tab(id: id) === tab, liveContent.contains(id) else { return }
-        guard !visibleTabIDs().contains(id) else {
-            if discarded { engine.setVisible(tabID: id, visible: true) }
-            tab.live.sleepPhase = .live; tabUserInteracted(id); return
+        let visibleNow = visibleTabIDs().contains(id)
+        if visibleNow || isKeepAlive(tab, state: state, policy: policy) {
+            // A background navigation can reach a keep-alive site while discard
+            // awaits the engine. Recover its content without claiming visibility.
+            if discarded {
+                engine.setVisible(tabID: id, visible: true)
+                if !visibleNow { engine.setVisible(tabID: id, visible: false) }
+            }
+            tab.live.sleepPhase = .live; state.sleptAt = nil; tabUserInteracted(id); return
         }
         guard discarded, engine.wasDiscarded(tabID: id) else { failedDiscard(id); return }
         tab.live.sleepPhase = .sleeping; state.sleptAt = now(); tab.live.isLoading = false

@@ -15,7 +15,7 @@ public final class PaneSlotView: NSView {
         self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
         layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
         layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
-        clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.masksToBounds = true; addSubview(clip)
+        clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.cornerCurve = .continuous; clip.layer?.masksToBounds = true; addSubview(clip)
         focusRing.zPosition = 10; focusRing.fillColor = nil; focusRing.lineWidth = SplitMetrics.ringWidth; layer?.addSublayer(focusRing)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -31,10 +31,14 @@ public final class PaneSlotView: NSView {
             paneChrome?.fallbackColor = style.lightPalette?.background.nsColor ?? .white
             paneChrome?.update()
         } else { paneChrome?.removeFromSuperview(); paneChrome = nil }
-        contentHostView?.removeFromSuperview(); placeholderView?.removeFromSuperview(); placeholderView = nil
         if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen {
-            contentHostView = host.view; clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome)
+            if contentHostView !== host.view { contentHostView?.removeFromSuperview() }
+            placeholderView?.removeFromSuperview(); placeholderView = nil
+            contentHostView = host.view; host.view.isHidden = false
+            if host.view.superview !== clip { clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome) }
         } else {
+            contentHostView?.isHidden = true; contentHostView?.removeFromSuperview()
+            placeholderView?.removeFromSuperview()
             contentHostView = nil; let placeholder = PlaceholderContentView(tab: tab, style: style)
             placeholderView = placeholder; clip.addSubview(placeholder, positioned: .below, relativeTo: paneChrome)
         }
@@ -107,7 +111,7 @@ public final class WebContentContainer: NSView {
         if let currentProfile, currentProfile != profileID { closeAll() }
         self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
         let old = ids, previousFocus = focused
-        for id in old where !tabIDs.contains(id) { cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
+        for id in old where !tabIDs.contains(id) { cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
         for slot in slots where !tabIDs.contains(slot.tabID) { slot.removeFromSuperview() }
         let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
         slots = tabIDs.map { id in byID[id] ?? PaneSlotView(tabID: id) }
@@ -117,16 +121,18 @@ public final class WebContentContainer: NSView {
         hiddenLRU.removeAll { tabIDs.contains($0) }
         ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
         if previousFocus != focusedTabID { cache[focusedTabID]?.focus() }
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.showGeneration == generation else { return }
-            for id in tabIDs where id != focusedTabID { self.ensureHost(id) }
-            self.updateSlots()
+        if tabIDs.count > 1 {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.showGeneration == generation else { return }
+                for id in tabIDs where id != focusedTabID { self.ensureHost(id) }
+                self.updateSlots()
+            }
         }
     }
     private func ensureHost(_ id: ItemID) {
         guard cache[id] == nil, let tab = tabProvider(id), let profile = currentProfile,
               tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen else { return }
-        let host = factory.makeHost(tabID: id, profileID: profile, url: nil)
+        guard let host = factory.makeHost(tabID: id, profileID: profile, url: nil) else { return }
         bind(host, as: id); host.load(tab.url)
     }
     private func bind(_ host: any WebContentHost, as id: ItemID) {
@@ -153,10 +159,21 @@ public final class WebContentContainer: NSView {
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
             self.slots.first { $0.tabID == id }?.paneChrome?.update()
         }
+        host.onLiveStateChange = { [weak self, weak host] state in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            self.applyLiveState(state, for: id); self.metadataChanged(id)
+        }
         host.shouldNavigate = { [weak self, weak host] url, flags in
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return false }
             return self.onLinkClicked?(id, url, flags) ?? true
         }
+        applyLiveState(host.liveState, for: id)
+    }
+    private func applyLiveState(_ state: WebContentLiveState, for id: ItemID) {
+        guard let live = tabProvider(id)?.live else { return }
+        live.hasWebContent = true; live.isLoading = state.isLoading; live.progress = state.progress
+        live.canGoBack = state.canGoBack; live.canGoForward = state.canGoForward
+        live.isAudible = state.isAudible; live.isCrashed = state.isCrashed
     }
     private func metadataChanged(_ id: ItemID) {
         if let tab = tabProvider(id), let host = cache[id] {
@@ -174,14 +191,50 @@ public final class WebContentContainer: NSView {
         }
     }
     public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }
+    public func clearSelection() {
+        showGeneration += 1
+        for id in ids {
+            cache[id]?.view.isHidden = true; cache[id]?.view.removeFromSuperview()
+            hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id)
+        }
+        for slot in slots { slot.removeFromSuperview() }
+        slots.removeAll(); ids.removeAll(); focused = nil
+        for divider in dividers { divider.removeFromSuperview() }; dividers.removeAll()
+        trimCache()
+    }
     public func host(for tabID: ItemID) -> (any WebContentHost)? { cache[tabID] }
     public func takeHost(for id: ItemID) -> (any WebContentHost)? {
         generations[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
     }
     public func adopt(_ host: any WebContentHost, for id: ItemID) {
-        cache[id]?.close(); bind(host, as: id); refreshPlaceholders()
+        guard factory.adoptHost(host, as: id) else { host.close(); return }
+        if cache[id] !== host { cache[id]?.close(); bind(host, as: id) }
+        if !ids.contains(id) {
+            host.view.isHidden = true
+            hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id)
+        }
+        refreshPlaceholders(); trimCache()
     }
-    public func closeHost(for id: ItemID) { tabProvider(id)?.live.hasWebContent = false; generations[id] = nil; cache.removeValue(forKey: id)?.close(); hiddenLRU.removeAll { $0 == id } }
+    public func closeHost(for id: ItemID) {
+        generations[id] = nil
+        let host = cache.removeValue(forKey: id)
+        hiddenLRU.removeAll { $0 == id }
+        host?.close()
+        if host != nil {
+            if let remaining = factory.remainingLiveState(for: id) {
+                applyLiveState(remaining, for: id); tabProvider(id)?.live.sleepPhase = .live
+            } else { resetLiveState(for: id) }
+        }
+    }
+    /// Profile teardown also invalidates metadata that belongs to the old profile.
+    public func resetLiveState(for id: ItemID, includingFavicon: Bool = false) {
+        guard let live = tabProvider(id)?.live else { return }
+        live.hasWebContent = false; live.sleepPhase = .placeholder
+        live.isLoading = false; live.progress = 0; live.isAudible = false; live.isCrashed = false
+        live.canGoBack = false; live.canGoForward = false; live.isCapturing = false
+        live.devToolsOpen = false; live.lastFormInteractionAt = nil
+        if includingFavicon { live.faviconPNG = nil }
+    }
     public func closeAll() { for id in Array(cache.keys) { closeHost(for: id) } }
     private func trimCache() { while hiddenLRU.count > Self.maxCachedHiddenHosts { closeHost(for: hiddenLRU[0]) } }
     public func focus(tabID: ItemID) {

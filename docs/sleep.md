@@ -8,7 +8,7 @@ wiring remain outside this change. The CEF patch series has no active
 patches; main now supplies its comment header.
 
 `TabLiveState` holds runtime sleep phase, capture/PiP, DevTools, and form
-protection. Only the per-profile `sleepMode` is added to the JSON snapshot.
+protection. Per-profile `sleepMode` and `keepAliveSites` live in the JSON snapshot.
 Schema version remains 1; `TabDTO` is unchanged. Old profile settings without
 a sleep mode load as balanced. Quiet pinned tabs and favorites sleep like
 other tabs. Pin state alone does not protect them.
@@ -79,6 +79,69 @@ visibility transitions immediately. Sampling alone is forbidden. The
 contract is also on the `SleepEngine` protocol in source. S0 CLI checks
 exercise these callbacks; live engine delivery remains an S6 gate.
 
+## Keep-alive sites
+
+The `keepAlive` never-sleep gate blocks **freeze and discard**, including
+debug sleep and memory-pressure discard. The built-in table is
+`OpenSleep/Resources/keep-alive-sites.json`. It uses Open's own host
+suffix and optional path-prefix format, with no copied regex strings.
+`x.com` is an Open addition next to Twitter.
+
+Evidence read-only: `/Applications/Arc.app/Contents/Resources/ARC_WebContentBehaviorConfigurationClient.bundle/Contents/Resources/web_content_behavior.json`,
+key `keepaliveAllowList` (21 patterns). The translated scopes are:
+
+| Host suffix | Path prefix, if required |
+|---|---|
+| `twitter.*`, `x.com` | — |
+| `app.slack.*` | `/client` |
+| `mail.google.*` | `/mail` |
+| `calendar.google.*` | `/calendar` |
+| `notion.so`, `app.notion.com` | — |
+| `dropbox.*`, `aws.amazon.*`, `open.spotify.*` | — |
+| `linear.app`, `instagram.*`, `messenger.*`, `facebook.*`, `web.whatsapp.*`, `sentry.io` | — |
+| `figma.*` | `/file/` |
+| `docs.google.*` | `/document`, `/presentation`, `/spreadsheets` (three rules) |
+| `outlook.live.*` | `/mail`, `/calendar` (two rules) |
+
+Only the hosts with variable TLDs in that evidence use `*`. It consumes
+one or more trailing labels, so `mail.google.co.uk/mail` matches.
+Fixed suffixes such as `notion.so`, `app.notion.com`, `linear.app`, and
+`sentry.io` do not gain a TLD wildcard. Suffix matching includes subdomains
+on DNS label boundaries. This covers Arc's optional `www` prefixes and
+Notion's `www`, `dev`, and `stg` prefixes; Open's suffix format also accepts
+other subdomains. Paths are case-sensitive literal prefixes, including
+Figma's trailing slash. Only HTTP and HTTPS URLs match. Gmail outside
+`/mail` remains sleepable. Ports, query strings, and fragments do not
+change the host/path match.
+
+**Guess:** the evidence does not prove whether Arc's keep-alive list
+blocks only discard or also freeze. Open exempts both because frozen
+pages miss notifications and socket keepalives ([memory-design §4.2](memory-design.md#42-freezing-background-tabs)).
+The same evidence file's `tabSuspensionBlocklist` contains only
+`www`/`dev`/`stg.notion.so` and `app.notion.com`, all covered by this gate.
+
+User additions use `ProfileSettings.keepAliveSites`, an array of
+`host[/path]` strings, default `[]`, in the browser snapshot. Missing keys
+decode as `[]`; values encode unchanged, including empty arrays, like the
+other array fields. `BrowserModel.updateProfileSettings(id:settings:)`
+edits the list through the existing model and snapshot save path.
+The registry is in [settings-library §2](plans/settings-library.md#2-persistence-registry-every-key-no-others-without-a-plan-change)
+under per-profile scope, per D-5. User rules extend the built-in list;
+invalid entries are ignored for matching. There is no Settings UI in this change.
+The Site Control Center plan will add "Keep this site awake" per site.
+
+The shipped table compiles once. Each profile's user rules compile only
+when its model array changes. As for `sleepMode`, every controller pass
+reads current profile settings independently of the tree revision; a
+settings edit refreshes policy on the next tick without a restart.
+Each tab caches its match by current URL
+and compiled rule identity. URL changes invalidate that match on the next
+gate evaluation, including checks after history saves. Adapters must set
+`Tab.url` before `tabDidCommit`; normal hide and commit grace times then
+apply after navigation away. A navigation to a keep-alive URL during an
+awaited engine discard recovers live content and keeps a hidden tab hidden.
+No regex runs in a policy evaluation.
+
 ## CLI verification
 
 All checks below ran on 2026-10-25 (America/Vancouver), on the release CLI.
@@ -110,9 +173,12 @@ that temporary store on exit. It does not save over its input snapshot.
 
 | Check | Observed result |
 |---|---|
-| `sleep-demo` | 105 checks passed, 0 failed; exit 0 |
+| `sleep-demo` | 148 checks passed, 0 failed; exit 0 (105 existing checks plus 43 keep-alive checks) |
 | Timing | Freeze at 30 s; discard at 900/300/120 s; off freezes without timed discard; destroy at 24 h after discard |
-| Never-sleep gates | Visible, audible, loading, capturing, PiP, DevTools, and downloading block freeze and debug discard |
+| Never-sleep gates | Visible, keepAlive, audible, loading, capturing, PiP, DevTools, and downloading block freeze and debug discard |
+| Keep-alive scope | All 21 translated service rules plus x.com stay live for 48 simulated hours; Gmail outside `/mail`, excluded paths, fixed-TLD mismatches, and unrelated hosts sleep normally. Subdomains and multiple-label TLDs pass. |
+| Keep-alive user rules and navigation | Snapshot-stored user rule stays live; path and profile isolation hold. Model edits invalidate the cache without a restart or tree change; a live tab remains awake for another 48 h. Leaving Gmail freezes at hide+30 s and discards at +300 s. Navigation to Gmail during async discard recovers hidden live content. |
+| `openkit roundtrip` keep-alive compatibility | The full-suite runner round-trips a snapshot with `keepAliveSites`, preserving strings unchanged. A snapshot without the key loads with `[]` and saves at schema 1. The CLI prints a keep-alive counts row. |
 | Grace periods | Audio protected for 60 s after stop; loading for 10 s after completion; form proxy for 300 s |
 | Discard-only gates | Unload/form allow freeze and block discard; refreshed unload state permits later discard |
 | Ownership | Per-profile modes apply to nested pinned tabs and favorites; selected split panes and other windows stay protected |
@@ -203,6 +269,14 @@ compute cost across each pass. Wall-time p50/p95/max still print as information;
 they include scheduling delays and async commit waits. SQLite queue CPU and
 native engine costs are outside this CPU gate. The wall-time results below
 are the earlier PR #29 observations, before this clock change.
+
+The keep-alive snapshot-storage update passed the same 5,000-tab/200-pass benchmark:
+thread CPU p50 **0.273 ms**, p95 **0.548 ms**, max **0.796 ms**;
+wall time p50 **0.283 ms**, p95 **0.698 ms**, max **3.238 ms**.
+The release build had zero warnings/errors. Raw full-suite logs are at
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261025-235039.Ck8CR4`.
+Native engine sleep and web notification delivery were not exercised by
+this library change; the real CLI uses the simulated engine boundary.
 
 The workload has 4 profiles, 12 Spaces, 8 windows (5 visible, 2 minimized,
 1 occluded), nested folders, favorites, selected splits, Peek, Little Open,

@@ -37,8 +37,9 @@ public protocol SleepHistoryStoring: AnyObject {
 ///
 /// HARD S6 ADAPTER REQUIREMENT: deliver tabDidCommit and tabAudioChanged for
 /// EVERY tab commit/audio event, including background tabs and short events
-/// between ticks. Sampling alone is forbidden. Update capture/PiP/download,
-/// loading, DevTools, and form state on EVERY corresponding engine event.
+/// between ticks. Set Tab.url to the current URL before tabDidCommit so the
+/// keep-alive gate follows navigation. Sampling alone is forbidden. Update
+/// capture/PiP/download, loading, DevTools, and form state on EVERY engine event.
 /// Feed PiP and all auxiliary surfaces into SleepVisibilityProviding, and call
 /// visibility hooks on window/surface changes. Report user interaction through
 /// tabUserInteracted, and unload-handler changes through tabUnloadHandlersChanged.
@@ -66,17 +67,19 @@ public struct SleepVisibilitySnapshot: Sendable {
     public var littleOpen: Set<ItemID>
     public var splitPanes: Set<ItemID>
     public var pictureInPicture: Set<ItemID>
+    public var mediaControls: Set<ItemID>
 
     public init(windows: [WindowID: WindowState], peek: Set<ItemID> = [],
                 littleOpen: Set<ItemID> = [], splitPanes: Set<ItemID> = [],
-                pictureInPicture: Set<ItemID> = []) {
+                pictureInPicture: Set<ItemID> = [], mediaControls: Set<ItemID> = []) {
         self.windows = windows; self.peek = peek; self.littleOpen = littleOpen
         self.splitPanes = splitPanes; self.pictureInPicture = pictureInPicture
+        self.mediaControls = mediaControls
     }
 
     @MainActor
     public func visibleTabIDs(in model: BrowserModel) -> Set<ItemID> {
-        var ids = peek.union(littleOpen).union(splitPanes).union(pictureInPicture)
+        var ids = peek.union(littleOpen).union(splitPanes).union(pictureInPicture).union(mediaControls)
         for window in model.windows where windows[window.id] == .visible {
             guard let id = window.selectedNodeBySpace[window.focusedSpaceID],
                   let node = model.index[id] else { continue }
