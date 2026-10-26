@@ -1,0 +1,304 @@
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/Controls.swift b/Packages/OpenKit/Sources/OpenSidebar/Controls.swift
+index 4966a20..9a2c9d1 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/Controls.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/Controls.swift
+@@ -37,6 +37,7 @@ final class TextLabel: NSView {
+     }
+ 
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.TextLabel")
+         let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
+         guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
+         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+@@ -80,6 +81,7 @@ final class GlyphView: NSView {
+     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+ 
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.GlyphView")
+         let (img, color) = tracked({ (glyph?.image ?? image(), tint()) }) { [weak self] in self?.needsDisplay = true }
+         guard let img else { return }
+         let size = img.size
+@@ -130,6 +132,7 @@ final class FaviconView: NSView {
+     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+ 
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.FaviconView")
+         guard let tab else { return }
+         let (icon, png, host, tint) = tracked({ (tab.customIcon, tab.live.faviconPNG, tab.displayHost, fallbackTint()) }) { [weak self] in
+             self?.needsDisplay = true
+@@ -264,6 +267,7 @@ class PlateButton: NSView {
+     }
+ 
+     override func layout() {
++        SidebarDiagnostics.bump("PlateButton.layout")
+         super.layout()
+         glyphView.frame = bounds
+         CATransaction.begin()
+@@ -274,6 +278,7 @@ class PlateButton: NSView {
+     }
+ 
+     override func updateLayer() {
++        SidebarDiagnostics.bump("PlateButton.updateLayer")
+         let (enabled, hovered, active) = tracked({ (isEnabled(), isHovered, context?.isWindowActive ?? true) }) { [weak self] in self?.needsDisplay = true }
+         let dim = dimsWhenInactive && !active
+         glyphView.tint = { [glyphTint, inactiveTint] in dim ? inactiveTint.nsColor : glyphTint(enabled) }
+@@ -291,6 +296,7 @@ class PlateButton: NSView {
+     }
+ 
+     override func updateTrackingAreas() {
++        SidebarDiagnostics.bump("PlateButton.updateTrackingAreas")
+         super.updateTrackingAreas()
+         if let tracking { removeTrackingArea(tracking) }
+         let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/MarqueeLabel.swift b/Packages/OpenKit/Sources/OpenSidebar/MarqueeLabel.swift
+index d066453..711ec0f 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/MarqueeLabel.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/MarqueeLabel.swift
+@@ -42,6 +42,7 @@ import QuartzCore
+         refreshAnimation()
+     }
+     public override func layout() {
++        SidebarDiagnostics.bump("Marquee.layout")
+         super.layout()
+         let font = Typography.miniPlayerTitle.font
+         measuredWidth = ceil((text as NSString).size(withAttributes: [.font: font]).width)
+@@ -61,6 +62,7 @@ import QuartzCore
+         return visible && !NSApp.isHidden && isExposed && !isHiddenOrHasHiddenAncestor && isPlaying && !isTitleHovered && isOverflowing && !SidebarDiagnostics.mediaReducesMotion
+     }
+     public func refreshAnimation() {
++        SidebarDiagnostics.bump("Marquee.refresh")
+         let run = canRun
+         CATransaction.begin(); CATransaction.setDisableActions(true)
+         second.isHidden = !run
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/MediaControlsView.swift b/Packages/OpenKit/Sources/OpenSidebar/MediaControlsView.swift
+index 8ef97e3..381bc09 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/MediaControlsView.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/MediaControlsView.swift
+@@ -98,6 +98,7 @@ import OpenModel
+         needsLayout = true
+     }
+     public override func layout() {
++        SidebarDiagnostics.bump("MediaControls.layout")
+         super.layout()
+         let current = cards, m = MiniPlayerMetrics.self
+         var expandedY = m.verticalInset
+@@ -128,6 +129,7 @@ import OpenModel
+         }
+     }
+     public override func updateTrackingAreas() {
++        SidebarDiagnostics.bump("MediaControls.updateTrackingAreas")
+         super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }
+         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+         addTrackingArea(area); tracking = area
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/MiniPlayerCardView.swift b/Packages/OpenKit/Sources/OpenSidebar/MiniPlayerCardView.swift
+index 749c2cb..efd7d0c 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/MiniPlayerCardView.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/MiniPlayerCardView.swift
+@@ -102,6 +102,7 @@ import Symbols
+         buttons[id] = button; addSubview(button)
+     }
+     private func sync() {
++        SidebarDiagnostics.bump("Card.sync")
+         let recording = source.kind == .recording
+         buttons["previous"]?.isHidden = recording || !source.actions.contains(.previousTrack)
+         buttons["next"]?.isHidden = recording || !source.actions.contains(.nextTrack)
+@@ -141,6 +142,7 @@ import Symbols
+         needsLayout = true
+     }
+     public override func layout() {
++        SidebarDiagnostics.bump("Card.layout")
+         super.layout()
+         let m = MiniPlayerMetrics.self, w = bounds.width, hovered = isCardHovered
+         CATransaction.begin(); CATransaction.setDisableActions(true)
+@@ -179,6 +181,7 @@ import Symbols
+         CATransaction.commit()
+     }
+     public override func updateTrackingAreas() {
++        SidebarDiagnostics.bump("Card.updateTrackingAreas")
+         super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }
+         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect], owner: self)
+         addTrackingArea(area); tracking = area
+@@ -258,6 +261,7 @@ import Symbols
+     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+     override var isFlipped: Bool { true }
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.MediaVolumeSlider")
+         let track = CGRect(x: 0, y: MiniPlayerMetrics.drawerTrackY, width: bounds.width, height: MiniPlayerMetrics.drawerTrackHeight)
+         SidebarColors.separator.nsColor.setFill(); NSBezierPath(roundedRect: track, xRadius: MiniPlayerMetrics.drawerTrackRadius, yRadius: MiniPlayerMetrics.drawerTrackRadius).fill()
+         let knob = MiniPlayerMetrics.drawerKnob
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/SidebarRows.swift b/Packages/OpenKit/Sources/OpenSidebar/SidebarRows.swift
+index 5b8336d..5cab44b 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/SidebarRows.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/SidebarRows.swift
+@@ -451,6 +451,7 @@ final class PeekBadgeView: NSView {
+     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+ 
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.PeekBadgeView")
+         guard let badge = tracked({ state?.badge }, invalidate: { [weak self] in self?.needsDisplay = true }) else { return }
+         SidebarDiagnostics.peekBadgeDraws += 1
+         let r = SpaceListMetrics.peekBadgeCornerRadius
+@@ -530,6 +531,7 @@ final class FolderIconView: NSView {
+     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+ 
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.FolderIconView")
+         guard let folder else { return }
+         let open = tracked({ folder.isExpanded }) { [weak self] in self?.needsDisplay = true }
+         let accent = cell?.page.map { $0.style.accentColor($0.contentAppearanceForSpace).nsColor } ?? Core.brandBlue.nsColor
+@@ -756,6 +758,7 @@ extension SidebarDiagnostics {
+     override var isFlipped: Bool { true }
+     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.RowStaticSpeakerView")
+         guard let image = glyph.image else { return }
+         image.drawTinted(in: CGRect(x: RowMediaMetrics.glyphInsetX, y: (bounds.height - image.size.height) / 2,
+                                    width: image.size.width, height: image.size.height), color: SidebarRole.rowAccessory.nsColor)
+@@ -846,6 +849,7 @@ extension SidebarDiagnostics {
+     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+     override var isFlipped: Bool { true }
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.RowRecordingView")
+         SidebarRole.recordingIndicator.nsColor.setFill()
+         let size = RowMediaMetrics.recordingDot
+         NSBezierPath(ovalIn: CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)).fill()
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/SidebarView.swift b/Packages/OpenKit/Sources/OpenSidebar/SidebarView.swift
+index 2f52420..6706900 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/SidebarView.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/SidebarView.swift
+@@ -84,6 +84,7 @@ public final class SidebarView: NSView {
+     }
+ 
+     public override func layout() {
++        SidebarDiagnostics.bump("SidebarView.layout")
+         super.layout()
+         let w = bounds.width, h = bounds.height
+         if presentation == .floatingCard { cardBackground?.frame = bounds }
+@@ -96,7 +97,7 @@ public final class SidebarView: NSView {
+         let mediaHeight = mediaControls.requiredHeight
+         let oldPager = pager.frame, oldMedia = mediaControls.frame
+         CATransaction.begin(); CATransaction.setDisableActions(true)
+-        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, bottom - mediaHeight - favTop - favH))
++        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, bottom - (SidebarDiagnostics.perfNoShrink ? 0 : mediaHeight) - favTop - favH))
+         mediaControls.frame = CGRect(x: 0, y: bottom - mediaHeight, width: w, height: mediaHeight)
+         CATransaction.commit()
+         if oldMedia.height != mediaHeight && oldPager != .zero && animatesMediaChanges {
+@@ -122,6 +123,7 @@ public final class SidebarView: NSView {
+     }
+ 
+     public override func updateTrackingAreas() {
++        SidebarDiagnostics.bump("SidebarView.updateTrackingAreas")
+         super.updateTrackingAreas()
+         if let pointerTracking { removeTrackingArea(pointerTracking) }
+         let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+@@ -243,6 +245,9 @@ public protocol SidebarDelegate: AnyObject {
+ /// Counters for checks and benches.
+ @MainActor
+ public enum SidebarDiagnostics {
++    nonisolated(unsafe) public static var perfNoShrink = false
++    nonisolated(unsafe) public static var counters: [String: Int] = [:]
++    public static func bump(_ k: String) { counters[k, default: 0] += 1 }
+     /// `reloadData` calls on any tab list. One per page build; model changes add none.
+     public internal(set) static var fullReloads = 0
+     /// Tab row layout passes and Peek badge draws (a badge change must not lay out every row).
+diff --git a/Packages/OpenKit/Sources/OpenSidebar/SpacePageView.swift b/Packages/OpenKit/Sources/OpenSidebar/SpacePageView.swift
+index 1a0b9c8..ed3fb56 100644
+--- a/Packages/OpenKit/Sources/OpenSidebar/SpacePageView.swift
++++ b/Packages/OpenKit/Sources/OpenSidebar/SpacePageView.swift
+@@ -790,6 +790,7 @@ final class SpaceIconView: NSView {
+     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+ 
+     override func draw(_ dirtyRect: NSRect) {
++        SidebarDiagnostics.bump("draw.SpaceIconView")
+         guard let space else { return }
+         let icon = tracked({ space.icon }) { [weak self] in self?.needsDisplay = true }
+         switch icon {
+diff --git a/Packages/OpenKit/Sources/sidebar-render/Bench.swift b/Packages/OpenKit/Sources/sidebar-render/Bench.swift
+index 452a671..78f1ce7 100644
+--- a/Packages/OpenKit/Sources/sidebar-render/Bench.swift
++++ b/Packages/OpenKit/Sources/sidebar-render/Bench.swift
+@@ -1,4 +1,5 @@
+ import AppKit
++import Darwin
+ import OpenDesign
+ import OpenModel
+ import OpenSidebar
+@@ -50,6 +51,13 @@ enum Bench {
+             guard sidebar.mediaControls.cards.count == 1 else { throw CLIError(description: "media bench requires one real card") }
+             print("media fixture: one paused card, container \(sidebar.mediaControls.requiredHeight) pt")
+         }
++        switch ProcessInfo.processInfo.environment["PERF_MEDIA"] {
++        case "hide": sidebar.mediaControls.isHidden = true
++        case "remove": sidebar.mediaControls.removeFromSuperview()
++        case "noshrink": SidebarDiagnostics.perfNoShrink = true; sidebar.needsLayout = true
++        default: break
++        }
++        if ProcessInfo.processInfo.environment["PERF_MEDIA"] != nil { OffscreenRenderer.settle(scene); print("perf variant: \(ProcessInfo.processInfo.environment["PERF_MEDIA"]!), pager height \(sidebar.focusedOutline?.enclosingScrollView?.frame.height ?? -1)") }
+         print("Space rows (outline rows incl. spacer/New Tab): \(sidebar.visibleRowCount), model nodes: \(model.index.count)")
+         print("build + first layout + first display (\(Int(scale))x): \(ms(build))")
+ 
+@@ -69,22 +77,57 @@ enum Bench {
+             while yy < maxY { yy += 120; clip.scroll(to: NSPoint(x: 0, y: yy)); scene.layoutSubtreeIfNeeded(); host.displayIfNeeded() }
+             clip.scroll(to: .zero)
+         }
++        func usage() -> (UInt64, UInt64) {
++            var info = rusage_info_v4()
++            _ = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0) } }
++            return (info.ri_instructions, info.ri_cycles)
++        }
++        let usage0 = usage()
++        var phases: [[Double]] = Array(repeating: [], count: 5)
++        if ProcessInfo.processInfo.environment["BENCH_SPIN"] != nil {
++            host.orderBack(nil); for _ in 0..<5 { RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.02)) }
++            scene.layoutSubtreeIfNeeded(); host.displayIfNeeded(); CATransaction.flush()
++            print("spin variant: window visible \(host.isVisible), occlusion visible \(host.occlusionState.contains(.visible))")
++            SidebarDiagnostics.counters = [:]
++        }
++        var cpuSteps: [Double] = [], waitSteps: [Double] = []
++        SidebarDiagnostics.counters = [:]
++        let repeats = Int(ProcessInfo.processInfo.environment["BENCH_MEASURE_REPEAT"] ?? "1") ?? 1
++        for r in 0..<max(1, repeats) {
++        if r > 0 { y = 0; clip.scroll(to: .zero); outline.enclosingScrollView?.reflectScrolledClipView(clip); scene.layoutSubtreeIfNeeded(); host.displayIfNeeded(); CATransaction.flush() }
+         while y < maxY {
+             y = min(maxY, y + 120)
+-            steps.append(time {
+-                clip.scroll(to: NSPoint(x: 0, y: y))
+-                outline.enclosingScrollView?.reflectScrolledClipView(clip)
+-                scene.layoutSubtreeIfNeeded()
+-                host.displayIfNeeded()
+-                CATransaction.flush()
+-            })
++            let cpu0 = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
++            var t0 = CACurrentMediaTime(), start = t0
++            func lap(_ i: Int) { let t1 = CACurrentMediaTime(); phases[i].append(t1 - t0); t0 = t1 }
++            clip.scroll(to: NSPoint(x: 0, y: y)); lap(0)
++            outline.enclosingScrollView?.reflectScrolledClipView(clip); lap(1)
++            scene.layoutSubtreeIfNeeded(); lap(2)
++            host.displayIfNeeded(); lap(3)
++            CATransaction.flush(); lap(4)
++            if ProcessInfo.processInfo.environment["BENCH_SPIN"] != nil { RunLoop.main.run(mode: .default, before: Date()); CATransaction.flush() }
++            steps.append(CACurrentMediaTime() - start)
++            cpuSteps.append(Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - cpu0) / 1e9)
++            waitSteps.append(steps.last! - cpuSteps.last!)
++        }
++        }
++        let usage1 = usage()
++        print(String(format: "scroll work: %.0f instructions/step, %.0f cycles/step over %d steps", Double(usage1.0 - usage0.0) / Double(steps.count), Double(usage1.1 - usage0.1) / Double(steps.count), steps.count))
++        for (label, a) in [("main-thread cpu", cpuSteps), ("off-cpu wait", waitSteps)] {
++            let s = a.sorted(); print(String(format: "%@: median %.3f ms, p95 %.3f ms, mean %.3f ms", label, s[s.count / 2] * 1000, s[Int(Double(s.count) * 0.95)] * 1000, s.reduce(0, +) / Double(s.count) * 1000))
++        }
++        let names = ["scroll", "reflect", "layout", "display", "flush"]
++        for (i, a) in phases.enumerated() {
++            let s = a.sorted(); print(String(format: "phase %@: median %.3f ms, p95 %.3f ms, mean %.3f ms", names[i], s[s.count / 2] * 1000, s[Int(Double(s.count) * 0.95)] * 1000, s.reduce(0, +) / Double(s.count) * 1000))
+         }
++        print("counters during scroll: \(SidebarDiagnostics.counters.sorted { $0.key < $1.key })")
+         steps.sort()
+         if !steps.isEmpty {
+             print(String(format: "scroll %d steps of 120 pt: median %@, p95 %@, max %@ (120 Hz budget 8.33 ms)", steps.count,
+                          ms(steps[steps.count / 2]), ms(steps[Int(Double(steps.count) * 0.95)]), ms(steps.last!)))
+         }
+         clip.scroll(to: .zero)
++        if ProcessInfo.processInfo.environment["BENCH_SCROLL_ONLY"] != nil { return }
+ 
+         // Model edits: each command emits a TreeChange that the page applies as a diff.
+         guard let space = context.focusedSpace else { return }

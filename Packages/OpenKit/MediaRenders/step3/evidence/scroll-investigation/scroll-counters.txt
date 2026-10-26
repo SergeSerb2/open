@@ -1,0 +1,20 @@
+### bench --rows 1000  (as MC9 runs it: no run-loop turn)
+scroll work: 15610449 instructions/step, 8188724 cycles/step over 337 steps
+counters during scroll: [(key: "draw.FaviconView", value: 1277), (key: "draw.FolderIconView", value: 37), (key: "draw.GlyphView", value: 1), (key: "draw.TextLabel", value: 1212)]
+scroll 337 steps of 120 pt: median 2.05 ms, p95 3.91 ms, max 5.98 ms (120 Hz budget 8.33 ms)
+### bench --rows 1000 --media-card (as MC9 runs it: no run-loop turn)
+media fixture: one paused card, container 76.0 pt
+scroll work: 15358270 instructions/step, 8183664 cycles/step over 338 steps
+counters during scroll: [(key: "draw.FaviconView", value: 1277), (key: "draw.FolderIconView", value: 38), (key: "draw.GlyphView", value: 1), (key: "draw.TextLabel", value: 1212)]
+scroll 338 steps of 120 pt: median 2.07 ms, p95 3.94 ms, max 6.34 ms (120 Hz budget 8.33 ms)
+### bench --rows 1000  (BENCH_SPIN=1: window ordered in, run loop turned after every step)
+spin variant: window visible true, occlusion visible false
+scroll work: 16077870 instructions/step, 7263641 cycles/step over 337 steps
+counters during scroll: [(key: "draw.FaviconView", value: 1277), (key: "draw.FolderIconView", value: 37), (key: "draw.GlyphView", value: 1), (key: "draw.TextLabel", value: 1212)]
+scroll 337 steps of 120 pt: median 1.60 ms, p95 3.52 ms, max 4.62 ms (120 Hz budget 8.33 ms)
+### bench --rows 1000 --media-card (BENCH_SPIN=1: window ordered in, run loop turned after every step)
+media fixture: one paused card, container 76.0 pt
+spin variant: window visible true, occlusion visible false
+scroll work: 15807613 instructions/step, 7409039 cycles/step over 338 steps
+counters during scroll: [(key: "draw.FaviconView", value: 1277), (key: "draw.FolderIconView", value: 38), (key: "draw.GlyphView", value: 1), (key: "draw.TextLabel", value: 1212)]
+scroll 338 steps of 120 pt: median 1.68 ms, p95 3.48 ms, max 4.25 ms (120 Hz budget 8.33 ms)

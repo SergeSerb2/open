@@ -5,6 +5,7 @@ import OpenDesign
 /// an optional second line, and keycaps (docs/re/interaction-states.md §5).
 public struct Tooltip: Equatable {
     public enum Placement: Equatable { case below, above, beside }
+    public var showDelay: TimeInterval
     public var title: String
     public var subtitle: String?
     public var keys: [String]
@@ -13,7 +14,8 @@ public struct Tooltip: Equatable {
     public var text: RGBA
     public var keycap: RGBA
 
-    public init(title: String, subtitle: String? = nil, keys: [String] = [], placement: Placement = .below, style: SpaceThemeStyle) {
+    public init(title: String, subtitle: String? = nil, keys: [String] = [], placement: Placement = .below, style: SpaceThemeStyle, showDelay: TimeInterval = TooltipMetrics.showDelay) {
+        self.showDelay = showDelay
         self.title = title; self.subtitle = subtitle; self.keys = keys; self.placement = placement
         fill = style.tooltipFill; text = style.tooltipText; keycap = style.tooltipKeycap
     }
@@ -100,7 +102,8 @@ public final class TooltipController {
     public private(set) var showCount = 0
     public var visibleOrPendingTooltip: Tooltip? { scheduledTooltip }
     /// Read-back for the real tooltip harness flow.
-    public var visibleTooltip: Tooltip? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first?.tooltip : nil }
+    public var visibleTooltipView: TooltipView? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first : nil }
+    public var visibleTooltip: Tooltip? { visibleTooltipView?.tooltip }
 
     func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
         if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }
@@ -116,7 +119,7 @@ public final class TooltipController {
             }
         }
         pending = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + TooltipMetrics.showDelay, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + tooltip.showDelay, execute: work)
     }
 
     func cancel(for view: NSView?) {
