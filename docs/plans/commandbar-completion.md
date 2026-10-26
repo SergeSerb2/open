@@ -32,7 +32,7 @@ Finish Arc's command bar and window chrome in Open:
 7. Cmd+Shift+D toggles a 32 pt toolbar on the key window. The menu item reads "Show Toolbar" or "Hide Toolbar". The page gets 32 pt shorter. The state survives relaunch. The sidebar hides its URL field and its back, forward, and reload buttons while the toolbar shows.
 8. Performance: the command bar shows first results ≤ 50 ms after Cmd+T in the real app; keystroke → rows drawn p95 ≤ 8 ms in `commandbar-render bench`; inline completion adds ≤ 0.3 ms p95 and no extra panel layout pass; the first snapshot stays < 5 ms p95 with 5,000 tabs (500 of them in splits).
 9. `tools/verify-all.sh` passes at every step. The App e2e checks in §5.3 pass after Step 9.
-10. The (i) button and Cmd+I show the inline footer (§4.8) and never open a window. "Dismiss" hides it and sets `open.general.searchSuggestNoticeDismissed`. `commandbar-render compare` against S2 18/0044 is within the targets of criterion 2.
+10. The (i) button and Cmd+I show the inline footer (§4.8) and never open a window. Nothing else shows the footer. "Dismiss" hides it and sets `open.general.searchSuggestNoticeDismissed`. `commandbar-render compare` against S2 18/0044 is within the targets of criterion 2.
 11. Cmd+T and Esc show and remove the whole panel between two frames: no scale, no fade, no animation key on any bar layer (CC-44).
 
 ## Non-goals
@@ -60,7 +60,7 @@ Finish Arc's command bar and window chrome in Open:
 | D11 | No toolbar animation. Showing or hiding it resizes the page once. | Performance: a per-frame page resize costs Chromium a relayout per frame. Arc's motion is not captured. |
 | D12 | The command bar has no open or close animation. Present and dismiss change the panel in one frame. The `Motion.commandBarOpen*` and `Motion.commandBarClose*` tokens and their Core Animation code are deleted (§4.9). | CC-44: in the video the bar appears or goes between two frames ≤ 38 ms apart, 4 of 4 times (V 9.70, 10.88, 13.02, 14.20 s). |
 | D13 | No hold-Command hints. Open builds no badge view, no flags monitor, and no hints setting. Only the numbering model stays (§4.4). | CC-39: no hints after 2–4 s (S2 18/0001–0003). With CC-23 (flag default off) this is Arc's shipping behavior. |
-| D14 | The (i) button shows the search-suggestion privacy notice as a footer inside the bar (§4.8). It is the same notice as Settings "Code 4" and uses the same key, `open.general.searchSuggestNoticeDismissed`. | CC-42 (S2 18/0044); features-core §4.5 rule 13 (same text). |
+| D14 | The (i) button shows the search-suggestion privacy notice as a footer inside the bar (§4.8). It opens **only** on (i) or Cmd+I, never by itself. It is the same notice as Settings "Code 4" and uses the same key, `open.general.searchSuggestNoticeDismissed`. | CC-42 (S2 18/0044); features-core §4.5 rule 13 (same text); lead ruling 2026-10-26 (no capture shows it unasked) |
 
 ## 1. What Arc does (summary)
 
@@ -513,14 +513,14 @@ Behavior:
 | Event | Result | Mark |
 |---|---|---|
 | Click (i), or Cmd+I while the field has focus | Show the footer (no animation, like the panel, D12). Cmd+I again hides it. | (i) measured; Cmd+I Open rule (it already maps to (i)) |
-| Bar opens while the profile's `searchSuggestEnabled` is true and `open.general.searchSuggestNoticeDismissed` is false | Show the footer at once. Remote suggestions stay off until "Dismiss" (the existing Settings gate `prepareForRemoteSuggestions`, `docs/settings.md`) | guess: rule 13 says the notice comes "before first use"; session 2 never showed it unasked because Arc had stored an earlier dismissal |
+| The bar opens (any mode, any notice state) | No footer. The footer opens only on (i) or Cmd+I. The existing Settings gate is unchanged: remote suggestions stay off while `open.general.searchSuggestNoticeDismissed` is false (`prepareForRemoteSuggestions`, `docs/settings.md`) | lead ruling 2026-10-26: no capture shows the footer unasked; §9 item 9 asks for one |
 | "Dismiss" | Hide the footer, set `open.general.searchSuggestNoticeDismissed = true` (the Settings "Code 4" key; no new key), and re-run the current query so remote rows can arrive | text measured; key reuse Open rule |
 | "Search Settings…" | New intent `.openSearchSettings(profileID:)`: the App closes the bar and opens Settings ▸ Profiles at the search engine section for the bar's Profile | target not captured; Open choice (Open keeps search engines in Profiles) |
 | "here" | `.open(CommandBarText.privacyURL, .newTab, [])`; the URL is Open's privacy page, owned by `docs/plans/release.md` (until it exists the link is hidden, not dead) | Open choice |
 | Esc | Closes the bar (one press, as today); the footer goes with it | existing rule |
 | Typing, Up, Down, Return | Unchanged; the footer stays until "Dismiss", Cmd+I, or close | guess |
 
-API: `CommandBarIntent.showHelp` is removed (the bar handles (i) itself). New intent `.openSearchSettings(profileID: ProfileID)`. `CommandBarRequest` gains `showsPrivacyNotice: Bool` (the App passes `searchSuggestEnabled && !noticeDismissed`) and the controller reports `didDismissPrivacyNotice` through the delegate so the App writes the key. AX: the footer is a group "Search suggestions privacy" with two static texts, a link "here", and the two buttons.
+API: `CommandBarIntent.showHelp` is removed (the bar handles (i) itself). New intent `.openSearchSettings(profileID: ProfileID)`. The controller reports `didDismissPrivacyNotice` through the delegate so the App writes the key. `CommandBarRequest` gets no notice field: the bar never opens the footer by itself. AX: the footer is a group "Search suggestions privacy" with two static texts, a link "here", and the two buttons.
 
 ### 4.9 Open and close: no animation (CC-44, D12)
 
@@ -575,7 +575,7 @@ Delete `Motion.commandBarOpen`, `commandBarOpenScale`, `commandBarClose`, and `c
 | 86 | AX: field value = whole text; selected text range = completion |
 | 87 | Present and dismiss: the panel is fully drawn at alpha 1 in the first frame after `present` and gone in the first frame after `dismiss`; no layer of the bar has an animation key (CC-44) |
 | 88 | Click (i): footer shows, (i) hides, field width +42; the list's visible area ends at the band top; Cmd+I hides the footer again; no window opens (CC-42) |
-| 89 | Footer "Dismiss": footer hides, the delegate gets `didDismissPrivacyNotice`, the current query re-runs; with `showsPrivacyNotice = true` in the request the footer shows on `present` |
+| 89 | Footer "Dismiss": footer hides, the delegate gets `didDismissPrivacyNotice`, the current query re-runs. `present` in every mode shows no footer, also while the notice was never dismissed |
 | 90 | Footer "Search Settings…" sends `.openSearchSettings(profileID)`; "here" sends `.open(privacyURL, .newTab, [])`, or is hidden while `privacyURL` is nil |
 | 91 | `wikipedia` + Tab: chip frame `[54, 20, 81, 24]` ± 0.5, fill `siteSearchChip`, no icon, field x 146, placeholder "Search…"; typing `bird` selects a row with the chip fill; Backspace on empty restores `wikipedia` (CC-41) |
 
@@ -631,7 +631,7 @@ Checks (extend the `commandbar` suite; add `toolbar` and `numbering` suites):
 | `commandbar` | Type `actions`, Tab, `side`, Return: the sidebar hides (`windows`) |
 | `commandbar` | First results ≤ 50 ms after Cmd+T (existing check, rerun with completion on) |
 | `toolbar` | Cmd+Shift+D: `windows.toolbar` true; `eval window.innerHeight` shrinks by 32; `snapshot` vs the `features-render` scene within targets; View menu title reads "Hide Toolbar"; relaunch keeps it; a Little Open window refuses the command |
-| `commandbar` | Fresh data dir (notice not dismissed, suggestions on): Cmd+T → `commandbar.footer` true; `commandbar-press control=dismiss` → footer false and `defaults key=open.general.searchSuggestNoticeDismissed` true; Cmd+T again → footer false; `commandbar-press control=info` → footer true; `windows` count unchanged (no window opened) |
+| `commandbar` | Fresh data dir (notice not dismissed, suggestions on): Cmd+T → `commandbar.footer` false (never unasked); `commandbar-press control=info` → footer true; `commandbar-press control=dismiss` → footer false and `defaults key=open.general.searchSuggestNoticeDismissed` true; Cmd+T, `key i modifiers command` → footer true; `windows` count unchanged (no window opened) |
 | `commandbar` | `commandbar-press control=searchSettings` → bar closed, `windows` lists Settings on the Profiles pane |
 | `commandbar` | Cmd+T then `snapshot` in the same runloop turn after the key: the panel is fully drawn (no partial alpha, compare with a later `snapshot`, max channel difference ≤ 2) |
 | `numbering` | `flags command down`, wait 2 s, `snapshot` equals a snapshot taken before the press (no badges); `key 2 modifiers command`: item 2 of `goToItemTargets` is selected (`tabs`) |
@@ -657,7 +657,7 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
-| 0 | Capture fixes in the bar: delete the open/close animation (§4.9); the (i) privacy footer, `.openSearchSettings`, `showsPrivacyNotice`, `didDismissPrivacyNotice`, removal of `.showHelp` (§4.8) | `OpenCommandBar/PrivacyFooterView.swift` (new), `CommandBarView.swift`, `CommandBarController.swift`, `CommandBarTypes.swift`, `InputRowView.swift`, `ResultsView.swift`; `OpenDesign/CommandBarTokens.swift`; `commandbar-render` scenes `privacy-footer*`, flows 87–90; `docs/commandbar.md` §2, §4, §5, §11 | `commandbar-render check` all pass (old flows 31–34 and 45–51 updated for the footer instead of `.showHelp`); S2 18/0044 compare within targets; the eight §8 comparisons unchanged |
+| 0 | Capture fixes in the bar: delete the open/close animation (§4.9); the (i) privacy footer, `.openSearchSettings`, `didDismissPrivacyNotice`, removal of `.showHelp` (§4.8) | `OpenCommandBar/PrivacyFooterView.swift` (new), `CommandBarView.swift`, `CommandBarController.swift`, `CommandBarTypes.swift`, `InputRowView.swift`, `ResultsView.swift`; `OpenDesign/CommandBarTokens.swift`; `commandbar-render` scenes `privacy-footer*`, flows 87–90; `docs/commandbar.md` §2, §4, §5, §11 | `commandbar-render check` all pass (old flows 31–34 and 45–51 updated for the footer instead of `.showHelp`); S2 18/0044 compare within targets; the eight §8 comparisons unchanged |
 | 1 | Engine completion: `allowsInlineCompletion`, `InlineCompletion`, rule T3a, current tab in Cmd+T, history carry-over; `openkit suggest --completion` | `OpenSuggest/InlineCompletion.swift` (new), `SuggestTypes.swift`, `Ranking.swift`, `Providers.swift`, `SuggestEngine.swift`; `openkit` suggest commands; `docs/suggest.md` | `suggest-check` 1–40 and 44 (completion half) pass; first snapshot p95 within 10 % of today |
 | 2 | Bar completion UI: `CompletionSession`, editor hooks, §4.1.4–4.1.8 | `OpenCommandBar/CompletionSession.swift` (new), `CommandBarController.swift`, `InputRowView.swift`; `commandbar-render` scenes, flows 69–80 and 86, `bench --completion`; `docs/commandbar.md` | `commandbar-render check` all pass; F0043, F0062, F0061 compare within targets; old §8 numbers unchanged; bench gates |
 | 3 | Engine split rows (§4.2.1) | `OpenSuggest/TabIndex.swift`, `Providers.swift`, `Ranking.swift`, `SuggestTypes.swift`; synthetic world with splits; `docs/suggest.md` (close Q1) | `suggest-check` 41 and 44 pass |
@@ -666,7 +666,7 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 | 6 | Essential Keyboard Shortcuts window, Shortcuts callout fix (no hints toggle, D13) | `OpenSettings/EssentialShortcutsWindow.swift` (new), `ShortcutsPane.swift`, `SettingsTypes.swift`; `settings-preview` scenes; `docs/settings.md`, `docs/plans/settings-library.md` row | `settings-preview check` passes with the new scenes |
 | 7 | Numbering only (§4.4; no badges, D13) | `OpenModel/GoToItemNumbering.swift` (new); `openkit commands-demo` checks N1–N7; `sidebar-render` Command-press check | N1–N7 PASS; the `sidebar-render` Command-press check passes; scroll bench unchanged |
 | 8 | Toolbar library (§4.6) + menu title hook | `OpenModel/Containers.swift`, `BrowserModel.swift`; `OpenStore/SnapshotDTOs.swift`; `OpenFeatures/PaneChromeView.swift`, `WebContentContainer.swift`, `BrowserWindowController.swift`; `OpenSidebar/ChromeViews.swift`, `SidebarView.swift`, `SidebarMenus.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift`; `OpenCommands/MenuBuilder.swift`; harness scenes | `features-render`, `sidebar-render`, `commands-dump`, `roundtrip` (old snapshots decode) pass |
-| 9 | App wiring: `.switchToTab` for panes, scopes, `.openSearchSettings`, `showsPrivacyNotice` and the dismissal key, `toggle-toolbar`, `keyboard-shortcuts-edu`, `search-actions`, `search-tabs`, `menuTitle`, the full-URL setting, go-to-tab via `goToItemTargets`; automation additions | `App/CommandBar/AppCommandBarDelegate.swift`, the App `CommandDispatcher` extension, `App/AppDelegate.swift` (EDU window), `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py` | e2e `commandbar`, `toolbar`, `numbering`, `measure` checks in §5.3 pass; `--only shell` and `window` still pass |
+| 9 | App wiring: `.switchToTab` for panes, scopes, `.openSearchSettings`, the dismissal key, `toggle-toolbar`, `keyboard-shortcuts-edu`, `search-actions`, `search-tabs`, `menuTitle`, the full-URL setting, go-to-tab via `goToItemTargets`; automation additions | `App/CommandBar/AppCommandBarDelegate.swift`, the App `CommandDispatcher` extension, `App/AppDelegate.swift` (EDU window), `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py` | e2e `commandbar`, `toolbar`, `numbering`, `measure` checks in §5.3 pass; `--only shell` and `window` still pass |
 | 10 | Docs and status | `docs/status.md` (gaps 22–26 → done), `docs/commandbar.md` §10 gaps 2–4 closed | review only |
 
 ## 7. Risks
@@ -678,7 +678,7 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 | AppKit's selection rect for a partial range differs from Arc's (like the 2 pt Cmd+L difference) | Measure in Step 2; if > 1 pt, record it in `docs/commandbar.md` §8.3 and do not hand-draw the selection |
 | Rule T3a changes Return for URL-like text | Only with a strong tab or history row, and only until Backspace; `suggest-check` 35–36 pin the table in §4.1.3 |
 | Go-to-tab numbering differs from what app-shell Step C builds | D7: Step 9 switches the key handler to `goToItemTargets`; the e2e `numbering` check presses Cmd+2 against `goToItemTargets` |
-| The auto-shown footer keeps remote suggestions off until the user dismisses it | It is the existing Settings gate (Code 4); the footer only makes it visible in the bar. Flow 89 and the e2e `commandbar` check prove that "Dismiss" turns suggestions on at once |
+| Remote suggestions stay off until the user dismisses the notice, and the bar never shows it by itself | Existing Settings gate (Code 4): Settings ▸ Profiles presents the notice on first appearance, and the (i) footer reaches it from the bar. Flow 89 and the e2e `commandbar` check prove that "Dismiss" turns suggestions on at once. §9 item 9 asks whether Arc shows it unasked |
 | Hiding the sidebar URL field with the toolbar is wrong for Arc | One token (`showsURLFieldWithToolbar = false`); §9 item 1 asks for the capture |
 
 ## 8. Open questions (each has a default; build the default)
@@ -698,7 +698,7 @@ One PR per step. Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste 
 | Q11 | Remove the Shortcuts pane `basics` filter (CC-30)? | Yes. The settings-library plan owner confirms in the Step 6 PR. |
 | Q12 | Offer the current tab as "Switch to Tab" in Cmd+T? | Yes (`docs/suggest.md` "Input"; F0063, F0043). |
 | Q13 | When does Arc offer "or Space" for a whole host (F0040 yes, F0061 no)? | Keep Open's current rule (exact name, host, or keyword) when no completion shows. |
-| Q14 | Does the footer show unasked before the first remote suggestion? Session 2 could not show it (Arc had stored an earlier dismissal). | Yes, once, while `open.general.searchSuggestNoticeDismissed` is false (§4.8; features-core §4.5 rule 13). |
+| Q14 | Does the footer show unasked before the first remote suggestion? Session 2 could not show it (Arc had stored an earlier dismissal). | **Decided 2026-10-26 (lead ruling): no.** The footer opens only on (i) or Cmd+I; nothing in the capture shows it unasked. §9 item 9 is the capture request. |
 | Q15 | Is the Site Search chip color per site? One sample (Wikipedia, `#FFA000`). | One token for every site and for the Actions and Tabs chips. One more capture with another site settles it. |
 
 ## 9. Screenshots needed from the user
@@ -711,6 +711,7 @@ Agents must not launch or drive Arc (AGENTS.md rules 4–5). These need the user
 4. Help ▸ Essential Keyboard Shortcuts (the window).
 5. Command bar: type 4 letters of a host you have open, then press Right arrow once, and (after retyping) Left arrow once, one frame after each key. Backspace is done (CC-40).
 8. Site Search on a second site (for example YouTube): the chip color (Q15).
+9. On an Arc install where the search-suggestion notice was never dismissed (for example a fresh macOS user account; do not reset the user's own Arc preferences): open the command bar and type a few letters. Does the privacy footer appear without a click (Q14)?
 6. A command bar list that shows a three-pane split and a vertical split.
 7. Command bar: type a full host (for example a site you have not opened today) and stop; then type the same host again after visiting it (the "or Space" difference, Q13).
 
@@ -738,5 +739,6 @@ These supersede the entries above where they conflict. Evidence: `docs/re/comman
 
 - Q1 superseded: holding Command shows **no** hints, as Arc does (CC-39, S2 18/0001–0003). Open builds no badges, no flags monitor, and no hints setting; `show-shortcuts-overlay` stays registered and disabled. The Cmd+1…9 numbering (`goToItemTargets`) stays.
 - Q9 superseded: the (i) button and Cmd+I show Arc's inline privacy footer in the bar ("We talk to your search engine…", "Search Settings…", "Dismiss"), not the Essential Keyboard Shortcuts window (CC-42, S2 18/0044). "Dismiss" writes the existing `open.general.searchSuggestNoticeDismissed` key.
+- Q14 (lead ruling): the footer opens **only** on (i) or Cmd+I. It never shows by itself; no capture shows that. Capture request §9 item 9.
 - New (D12): the command bar has **no** open or close animation (CC-44, V 9.70–14.20 s). The open spring and close fade are deleted. This replaces the provisional motion in `docs/commandbar.md` §5.
 - Inline completion and the Site Search chip follow the capture: completed part selected, Backspace removes only it (CC-40); the chip is an orange text-only capsule with the placeholder "Search…" and an orange scoped selection (CC-41). Right and Left arrow rules stay guesses until a frame isolates them.

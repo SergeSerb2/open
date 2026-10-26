@@ -279,7 +279,9 @@ pinned URL; the others as today.
 | `HintToastMetrics` (OpenFeatures, new file `OpenDesign/HintToastTokens.swift`) | §3.12 | measured |
 | `Motion.previewIn` 0.15 s, `Motion.previewOut` 0.10 s, `Motion.hintIn` 0.20 s, `Motion.hintOut` 0.25 s, `Motion.hintLifetime` 5.5 s, `Motion.bannerIn` 0.22 s | | guess (lifetime measured ≈ 5–6 s) |
 | `Motion.spaceSwitch` spring response **0.20 s**, critically damped (was 0.30; used by §3.2 switcher items and the pager) | | measured (V 35.05, 43.63 s; `docs/plans/app-shell.md` §3.3). The #104 follow-up changes the token |
-| `Motion.sidebarToggle` spring response 0.10 s, damping 0.95; `Motion.sidebarShowDelay` 0.29 s (used by §3.16 and Cmd+S) | | measured (V 16.26–32.41 s; app-shell §3.3, Q11) |
+| `Motion.sidebarToggle` spring response 0.10 s, damping 0.95 (used by §3.16 and Cmd+S); no show delay | | measured (V 16.26–32.41 s; app-shell §3.3). Arc's ≈ 0.29 s delay before the show is not copied (app-shell Q11, Open decision) |
+| `WindowMetrics.sidebarDragHidePoint` 82 (pointer x for the hide while pressed, §3.16) | | **guess** inside the measured 65–85 band (S2 06/0035; notes 10:12:34) |
+| `HoverPreviewMetrics.armDelay` 0.5 s (fixed; replaces the `open.general.previewsDelaySeconds` setting, §3.6) | | lead ruling 2026-10-26; Arc has no delay setting (S2 02/0050); Arc's exact delay is not captured |
 | `Motion.folderExpand` 0.20 s ease-out; `Motion.folderCollapse` 0.25 s (default curve) (§3.17 and every folder toggle) | | measured (V 46.49–55.04 s; `docs/design.md` §2.4 keeps 0.22 s until #104 edits it) |
 | `CompactToolbarMetrics`: button 28 × 28 at y 9, pitch 28, last button's right edge at `W − 6`; compact below `S` 219 | | buttons measured (S2 06/0025–0029); the 219 pt switch is a guess inside the measured 207–228 band (§3.16) |
 | `CustomIcon.folderPeek`: Open's closed-folder vector plus three dots; `SidebarRole.folderPeekDots` = the Space accent mixed 45 % with white | | our own drawing; dot color fitted (`#202AFF` → `#8287FE`, S2 08/0090) |
@@ -493,7 +495,10 @@ tile (already on screen), and any row while a drag, rename, menu, or Space
 swipe is active.
 
 **Arm and show.** `HoverPreviewTracker` (OpenSidebar) arms when the pointer
-rests on a target for `open.general.previewsDelaySeconds` (default 0.5 s).
+rests on a target for a fixed 0.5 s (`HoverPreviewMetrics.armDelay`). There is
+no delay setting, as in Arc (lead ruling 2026-10-26; the
+`open.general.previewsDelaySeconds` key and its pop-up are removed by Step
+S5b).
 Pointer moves inside the same target do not restart the timer. After a
 preview has shown, moving to another target swaps at once for 1.0 s after
 the last preview hid (Arc `lastCommittedHover`; **guess**). While a preview is
@@ -532,8 +537,10 @@ highlight, Return opens it. The card follows the Space's content appearance.
 **Persistence.** None. The Previews sheet has two sources, "Folders" and
 "Pinned tabs and Favorites" (Q3, lead decision 2026-10-26: an Open product
 choice). Arc's sheet has seven sources (S2 02/0050); the live-data ones are
-post-v1 (Non-goals). The folder card's look and delay are still not captured:
-synthetic pointer events did not open it in session 2 (notes 10:23:34).
+post-v1 (Non-goals). Open has no preview delay setting: the delay is fixed
+at 0.5 s, and Arc's sheet has none (lead ruling 2026-10-26, Step S5b). The
+folder card's look and Arc's exact delay are still not captured: synthetic
+pointer events did not open it in session 2 (notes 10:23:34).
 
 **Verification.** `sidebar-render check` HP1–HP6 (tracker timing and gates,
 folder card layout); `features-render check` HP7–HP10 (host reuse with
@@ -808,8 +815,9 @@ PR #104 follow-up). This section keeps the parts lane A1 owns and the checks.
   live slide below 228; session 1's A0422 slide is the hide motion, not a
   proportional preview).
 - Past the minimum: with the pointer left of 164 the width stays 164. When
-  the pointer passes x < 82 (half the minimum; **guess** inside the measured
-  65–85 band) while the button is still down, the sidebar hides with the
+  the pointer passes x < `WindowMetrics.sidebarDragHidePoint` (82, half the
+  minimum; **guess** inside the measured 65–85 band) while the button is still
+  down, the sidebar hides with the
   Cmd+S hide motion (`Motion.sidebarToggle`). Back at x ≥ 82 before release,
   it shows again at 164 (**guess**). No model write per tick.
 - Release while hidden: `sidebarMode = .hidden`, the stored width stays the
@@ -1201,6 +1209,7 @@ File ownership (no file is edited by both lanes):
 | A1 | A | OpenFeatures intents: alerts, toasts, Clear toast, Expand/Reset/Space Manager commands, `HintToastView` (first hide by any path, §3.12), the `.sidebarHiddenByGesture` trigger, the compact toolbar (§3.16; edits `OpenSidebar/ChromeViews.swift`, allowed because lane S is finished); add `features-render` to `verify-all.sh`. The width range, drag-hide, double-click, and motion are the PR #104 follow-up (app-shell §3.3); GH1–GH5 run against that code | app-shell Step B (PR #52) merged; S2; the #104 follow-up for GH1–GH5 | DA1–DA5, HT1–HT3, GH1–GH5, CT1–CT3 PASS; hint and compact-toolbar compares within §5.5 targets |
 | A2 | A | `HoverPreviewController` (host reuse), host `rebind` / `rekey`, separate flow, banner trigger from the sweep, unread triggers | A1, S3, S5 | HP7–HP10, SP5–SP6 PASS |
 | A3 | A | App: menu and command handlers (§2.5) once app-shell Step C lands, Library Spaces wiring, automation commands (§4.4), e2e suite | A2, M5, app-shell Step C | E1–E19 PASS on the real app; `tools/verify-all.sh` all PASS |
+| S5b | S + M | Previews delay removal (lead ruling 2026-10-26): delete the "Delay" pop-up from the Previews sheet (`OpenSettings/GeneralPane.swift`), drop `open.general.previewsDelaySeconds` from `SettingsTypes.swift` defaults and the `settings-library.md` §2.1 registry (a stored value is ignored, not migrated), make `OpenSidebar/HoverPreviewTracker.swift` use `HoverPreviewMetrics.armDelay` 0.5 s instead of reading the key, and stop setting the key in `sidebar-render/PreviewChecks.swift`. One implementer edits both lanes' files (lanes M and S are finished) | S5 (#102) | `settings-preview check` PASS with the sheet showing only the master switch and the two sources; `settings-preview dump-keys` lists no `previewsDelaySeconds` default; HP1 still PASS (0.5 s ± 50 ms) |
 | S6 | S + M | Folder peek (§3.17): `Folder.peekedChildID`, `FolderExpansion`, `setFolderExpansion`, peek clearing in node commands, `FolderDTO` field, import of `expandedItems`, `.setFolderExpansion` intent, outline child-list edits, `CustomIcon.folderPeek` and `folderPeekDots`, the Pinned folder "—" hover button, `Motion.folderExpand` / `folderCollapse`. One implementer edits both lanes' files: lanes M and S are finished (M1–M5, S1–S5 merged), so no file is shared with running work | S3 (#95) | FP1–FP11 PASS; folder-peek compare within §5.5 targets; the 13 baseline states unchanged; `roundtrip` PASS; E20 once A3 lands |
 | C | S | Calibration after the §8.2 capture session: replace guessed values with measured ones, each citing its frame | captures | each changed value meets ≤ 1 pt / ΔE00 ≤ 2 on its capture |
 
@@ -1220,7 +1229,7 @@ same file. Each lane records its results in its own doc (`docs/model.md`,
 |---|---|---|
 | Q1 | Folder menu: Arc shows "Delete" (flag off, captured) or "Archive Folder" in the same slot (flag on, code). | Show both: "Archive Folder" above "Delete". Both v1 features stay one click away; the captured items keep their order. |
 | Q2 | Pinned and Favorite previews: Arc shows site-specific glance views (mail, calendar, recent pages). | Ship the live page preview through the tab's own host (D-6). Glance views need site APIs and are not v1. |
-| Q3 | The Settings Previews sheet has "Show previews when hovering links" and a delay, which do not exist in Arc. Arc's sheet lists sources ("Show Arc Previews:"). | **Decided 2026-10-26 (lead):** Open v1 keeps two switches, "Folders" and "Pinned tabs and Favorites" (keys `open.general.previewsFolders`, `open.general.previewsPages`, default true), as an Open product choice. Arc's sheet has seven sources (S2 02/0050): Arc Folders, Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion, and Figma, and Notion Calendar. All but Arc Folders are live-data integrations that v1 does not include; they are post-v1. The sheet's other parts are in `docs/plans/settings-library.md` §5.1.1. |
+| Q3 | The Settings Previews sheet has "Show previews when hovering links" and a delay, which do not exist in Arc. Arc's sheet lists sources ("Show Arc Previews:"). | **Decided 2026-10-26 (lead):** Open v1 keeps two switches, "Folders" and "Pinned tabs and Favorites" (keys `open.general.previewsFolders`, `open.general.previewsPages`, default true), as an Open product choice. Arc's sheet has seven sources (S2 02/0050): Arc Folders, Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion, and Figma, and Notion Calendar. All but Arc Folders are live-data integrations that v1 does not include; they are post-v1. The preview delay setting is removed to match Arc; the delay is fixed at 0.5 s (lead ruling 2026-10-26, Step S5b). The sheet's other parts are in `docs/plans/settings-library.md` §5.1.1. |
 | Q4 | Space Manager: Library section or its own window. | Library section (SC §2 evidence). |
 | Q5 | Drag to reorder in the bottom switcher (Arc's flag is Windows-only). | Ship it; the task asks for it and it does not conflict with any Arc behavior. |
 | Q6 | Which events play the generic sound; default of the sound switch (Arc's key polarity means on). | Keep the switch off and no `.event` caller until a capture session (§8.2 C9) names the events; then turn the default on. |
@@ -1230,7 +1239,7 @@ same file. Each lane records its results in its own doc (`docs/model.md`,
 | Q10 | Modifier for Separate From Pinned Tab. | ⌥, until C7. |
 | Q11 | Unread triggers. | Background-created tabs, plus "Move to" into a Space the window does not show. |
 | Q12 | Banner threshold text. | Insert the Profile's threshold ("12 hours" by default, which is Arc's text). |
-| Q13 | Hint after a Cmd+S hide. | **Superseded 2026-10-26 (C17):** the hint shows once, on the first hide by any path, Cmd+S included (session 1 A0438; §3.12). |
+| Q13 | Hint after a Cmd+S hide. | **Superseded 2026-10-26 (lead ruling, C17 in `docs/re/capture-session-2-results.md`):** the hint shows once, on the first hide by any path, Cmd+S included (§3.12). Evidence: session 1 hid the sidebar with Cmd+S and showed the hint (`.re/runtime/sessions/index-20261024.json` state `sidebar-hidden-and-hover-reveal`: "Cmd+S: … hint toast"; hide animation A0436–A0438, hint visible A0438–A0446, gone A0447; `docs/re/interaction-states.md` §13 "Hint toast"). Session 2 hid it by the toolbar button (notes 10:10:15), Cmd+S (10:10:26), and View ▸ Hide Sidebar (10:10:36) with no hint on any path (S2 04/0001–0096, `.re/runtime/sessions/20261026-101007-04-hide-hint/`; notes 10:11:20 "no first-hide hint on any path … likely already shown once on this install"). Reading: a once-only hint that session 1 used up (guess). |
 | Q14 | Key for "Clear unselected". | ⌥, until C8. |
 | Q15 | Alert title for several folders. | "Are you sure?" (Arc's own fallback string). |
 | Q16 | "Archive Tabs Below / Above". | Defer until C8 shows how Arc reaches them. |
@@ -1272,6 +1281,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 | S4 | | |
 | M5 | | |
 | S5 | | |
+| S5b | | |
 | S6 | | |
 | A1 | | |
 | A2 | | |
@@ -1304,7 +1314,9 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 These supersede the entries above where they conflict. Evidence: `docs/re/interaction-states.md` §20.1, §20.4, §20.12, §20.13; `docs/re/capture-session-2-results.md` C5, C16, C17, §2.2.
 
 - Sidebar width (A lane): minimum **164**, maximum **500**. Dragging past the minimum hides the sidebar while the button is still down; Cmd+S then restores the width from before the drag; a double-click on the edge resets the width to 228. The window parts follow `docs/plans/app-shell.md` §3.3 and are built by the PR #104 owner; A1 keeps the hint trigger and the compact toolbar. The old "slide below 228, hide below 180" rule is superseded.
-- Motion: Space switch spring 0.20 s (not 0.30); Cmd+S hide and show ≈ 0.1 s each, the show starting ≈ 0.29 s after the key; the hover-reveal card slides in in ≈ 0.14 s with a 3 pt overshoot and is translucent (spec: app-shell §3.3).
-- Q13 superseded: the first-hide hint shows once, on the first hide by any path (C17, guess from session 1's A0438).
+- Motion: Space switch spring 0.20 s (not 0.30); Cmd+S hide and show ≈ 0.1 s each, and the show starts with the key (Open decision, app-shell Q11: Arc's ≈ 0.29 s delay is latency and is not copied); the hover-reveal card slides in in ≈ 0.14 s with a 3 pt overshoot and is translucent (spec: app-shell §3.3).
+- The drag-hide point is pointer x < 82, the named token `WindowMetrics.sidebarDragHidePoint`, a guess inside the measured 65–85 band.
+- Q13 superseded: the first-hide hint shows once, on the first hide by any path (C17). Evidence: session 1 index state `sidebar-hidden-and-hover-reveal` (Cmd+S hide, hint A0438–A0446); session 2 S2 04/0001–0096 with notes 10:10:15, 10:10:26, 10:10:36 (three paths) and 10:11:20 (no hint on any path).
 - New Step S6: a collapsed folder keeps its last active child visible, the folder glyph shows three dots, and the state round-trips as Arc's `expandedItems` `peeked` (§3.17).
 - Q3: Open v1 keeps two Previews switches, "Folders" and "Pinned tabs and Favorites", as an Open product choice. Arc's other sources (Google Calendar, Google Mail, Outlook Calendar, Outlook Mail, Recent pages on Linear, Notion, and Figma, Notion Calendar) are Arc's live-data integrations and are post-v1.
+- Previews delay: Open's delay setting is removed to match Arc (no delay control in Arc's sheet, S2 02/0050). The hover delay is fixed at 0.5 s (`HoverPreviewMetrics.armDelay`). Step S5b.
