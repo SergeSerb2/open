@@ -2478,3 +2478,48 @@ contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.
   - Script redirect gives a `data:application/javascript;base64,…` URL; image redirect is blocked.
   - nytimes.com gets 443 hide selectors; `.ad--300x250` gets a generic selector.
   - Bad URLs, a garbage or truncated DAT, and broken resources JSON all degrade without a panic.
+
+### Step 2, engine review r1 (2026-10-26)
+
+The shim now has the surface the revised plan's §5.5 asks for (PR #105), so
+Steps 4 and 5 need no bridge change. Evidence: the Step 3 self-test in
+cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
+
+- **98-1, 98-2 (cosmetics).** No CSS text is built in Rust.
+  `OpenCosmeticResources` is sanitized vectors: `hide_selectors`,
+  `style_rules` (`selector`, `declarations`), `remove_selectors`,
+  `remove_attrs`, `remove_classes`, `scriptlets`, `exceptions`,
+  `generichide`, `dropped_procedural`, `dropped_unsafe`. Selector rules
+  (§8.3): no `{ } ; < @` or `/*` outside quoted strings, no newline at all,
+  balanced brackets and quotes (`\` escapes), no procedural operator, at most
+  2,048 bytes, a 256 KiB payload cap. **Refinement of §8.3 rule 1:** those
+  characters count only outside quotes, because real list selectors quote
+  `;` in attribute values (`div[id^="st"][style^="z-index: 999999999;"]`, in
+  the generic set every page gets) and a CSS string can only end early at a
+  newline. `:style()` declarations with `url(`, `image(`, `image-set(`,
+  `cross-fade(`, `element(`, `attr(`, `expression(`, `\`, `/*`, braces, `@`,
+  `<` or quotes are dropped; the others get `!important`. `hide_selectors` is
+  in the crate's order (sorting about 450 selectors cost some 30 µs per
+  document); it is sorted only when the payload cap applies. The other vectors
+  are sorted.
+- **Cost.** One cosmetic query on nytimes.com: 56 µs in-tree (budget 100 µs;
+  the crate's own query is about 33 µs of it). The review's injection lines
+  give no CSS; gamedev.net keeps 431 plain selectors and drops one
+  `:has-text()` selector.
+- **98-3.** `open_adblock_deserialize` returns false for a DAT of 4 bytes or
+  less before calling the crate. README and `lib.rs` now say what is true:
+  `Result`-returning crate calls can still panic; known cases are guarded;
+  the rest needs the fuzz follow-up.
+- **98-4 (part).** `open_adblock_deserialize(engine, dat, resources_json)`
+  applies resources after a load. `open_adblock_build_report` returns
+  `lossless`, `lossy_kinds` (`removeparam`, `remove`, `remove-attr`,
+  `remove-class`, from a conservative scan of the list texts),
+  `resources_loaded` and `resources_error`.
+- **98-6.** `OpenRequestType`, a shared enum, replaces the request type
+  string.
+- **§5.5 rows for Step 4.** `open_adblock_engine_format()`
+  (`adblock=0.8.11;shim=2;features=…;regex=…;dat=v0`; bump `SHIM_VERSION`
+  on any semantic change); the 8 KiB match cap with `truncated` (a capped URL
+  is never rewritten); `redirect_data_url` for every request type.
+- **Not done here:** 98-5's per-rule failure counts (the crate does not
+  report them); 98-7 is recorded in the revised plan (D-12).
