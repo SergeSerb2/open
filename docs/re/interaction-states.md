@@ -286,6 +286,23 @@ Opened from the Space menu, "Edit Theme Color…" (F0136 → F0137).
 | Open animation | Window 253x354 (66%) one frame before full size: scale-up | A0465 → A0466 |
 | Result on disk | Space 4 gained `background.single._0.style.color._0.blendedSingleColor` with `noiseFactor` 0.45 and `contentOverBackgroundAppearance: "dark"` (see `data-model.md`) | session1 `StorableSidebar.json` |
 
+Added 2026-10-25 from the same frames (sRGB-converted pixels; content coordinates are relative to the content frame origin `[513, 48]`) and from code constants (`llvm-objdump` on `.re/bin/Arc-arm64`):
+
+| Part | Measured / decoded | Evidence |
+|---|---|---|
+| Arrow | None visible. The panel's left edge sits on the sidebar's trailing edge (x 500 = `sidebarWidth`), top 35 pt below the window top. | F0137 crop |
+| Pad plate | Content `(8, 8, 340, 340)`. White ≈ 0.04 over the popover fill. Small corner radius (≈ 3 pt, visual). Dot grid: pitch ≈ 4.25 pt, dots ≈ 1 pt, white ≈ 0.2. | F0137 rows y 150 / x 560 |
+| Mode buttons | Content `(122, 32)`, `(162, 32)`, `(202, 32)`, 32×32, pitch 40, centered. Selected plate: white ≈ 0.10, radius ≈ 8. Unselected glyphs: white ≈ 0.5. Order: Automatic (sparkles), Light (sun), Dark (moon). Tooltips "Automatic Appearance", "Light Appearance", "Dark Appearance". Icons are looping Lottie files in Arc (`automatic.json`, `sun.json`, `moon.json`). | F0137 AX + pixels; small-string literals at `0x1017b4d60`, `0x1017b4f8c` |
+| Knob | 44 pt outer diameter, 5 pt white ring, 34 pt color disc that shows the knob color exactly (`#916500` vs stored `#926400`). | F0137 row through the knob center |
+| Pad mapping | Knob center = pad center + unit position × 170 pt. Angle = P3 HSL hue, y down. See `design-tokens.md` §6.5. | F0137: offset (32.5, 31.5), 44.1° |
+| Remove / Add | Content `(142, 300)` and `(182, 300)`, 32×32, glyphs `minus` / `plus`. Tooltips "Remove color" / "Add color". | AX; literals at `0x1017b7c6c`, `0x1017b7f78` |
+| Preset strip | Previous / next buttons content `(9, 364)` and `(315, 364)`, 32×32. Swatches 24×24 at content y 368, gap 5.5 (pitch 29.5). One page = 9 swatches = 260 pt. Pages step by 265.5 pt. 5 pages, 45 swatches: Brand 1–9, Brand 1–9 again, Pastel 1–9, Drab 1–9, Greyscale 1–9. The previous button is disabled on page 1. Swatch rim ≈ 0.9 × the fill color (1 pt). | AX frames; constants 24, 5.5, 260, −265.5 at `0x1017bbdbc…0x1017bbf40` |
+| Intensity slider | Track `(18, 424, 224, 56)` hit area; drawn capsule 224 × 16 pt, white ≈ 0.08. Sine wave stroke ≈ 4.5 pt, wavelength ≈ 37.5 pt, amplitude ≈ 13.75 pt; bright left of the thumb, dim right of it. Thumb: white capsule 24 × 56 pt. Travel 200 pt; thumb center at 0.8075 of travel for the stored 0.8. Tooltip/label "Intensity". | F0137 zoom; literal at `0x1017c5878` |
+| Noise dial | Hit areas content `(258, 412, 84, 36)` (button "Cycle noise texture") and `(258, 456, 84, 36)` (slider). Ring of 20 dot slots at an 18° pitch, radius ≈ 32.5 pt, dots ≈ 4.5 pt. Tick: white capsule ≈ 7.5 × 15.5 pt on the ring at angle `noiseFactor × 360°` clockwise from 12 o'clock (0.45 → ≈ 162°; measured ≈ 164°). Dots before the tick are lit. Center disc 40 pt: outline only at noise 0; otherwise it shows the selected texture. Label "Noise". | F0137 / F0138 zoom; constant 18 at `0x1017c2de4` |
+| Popover fill | Gray system material: `#797979` over a white page in macOS Dark. | F0137 |
+
+The capture shows only one color and the Automatic mode. Not captured: 2 or 3 knobs, a forced mode, page 2 of the presets, a hovered swatch, and the light system appearance.
+
 ## 15. Context menus
 
 All are native `NSMenu` (AX `AXMenu`, items with action `performWithSender:`). Item height 24 pt. Separator height 11 pt. AX also lists one untitled 24 pt item at the end of each menu (guess: a hidden item). AX did not record key equivalents. No shortcuts were visible in the captured menu images. Names in angle brackets are placeholders.

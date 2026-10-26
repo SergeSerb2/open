@@ -599,6 +599,8 @@ Brand set (`p3` unless noted):
 | ColorPickerBrand4 | #F25E6B/1.00 srgb | ColorPickerBrand9 | #666786/1.00 |
 | ColorPickerBrand5 | #FF3C19/1.00 ext. linear | — | — |
 
+Correction (2026-10-25): the `#FF3C19` value of `ColorPickerBrand5` is in linear light. Encoded as sRGB it is `#FF8558`. Evidence: the editor swatch for Brand5 measures `#FF8558` in F0137 (sRGB-converted capture), and Space 1 stores `baseColors[0]` = `#FF8558` (`runtime-observations.md` §3.3). Use `#FF8558` (sRGB) as the token value.
+
 Drab set (`p3`):
 
 | Token | Value | Token | Value |
@@ -656,6 +658,63 @@ The exact rule (when the sidebar flips from dark text to light text) needs run-t
 Safe start for Open (guess, test it): compute the gradient mean luminance. Use dark text above 0.5 and light text below 0.5. Tune on device.
 
 Fallback art (fact): `fallback-gradient-1` to `fallback-gradient-8` images exist in the catalogs. Use them when a Space has no custom theme (guess).
+
+Update 2026-10-25: §6.5 replaces the "safe start" guess above with the decoded rule.
+
+### 6.5 Theme math (decoded 2026-10-25)
+
+Sources: the arm64 slice `.re/bin/Arc-arm64`, read with `llvm-objdump -d` at the addresses below, plus a read-only Ghidra run on the shared project (`-readOnly -noanalysis`). Swift type and field names come from the `__swift5_types` / `__swift5_fieldmd` reflection records (our own parser, output in `.re/theme/fields.txt`). Every formula below was checked against the 4 stored themes in a read-only copy of `StorableSidebar.json` (session1) with a small Python model (`.re/theme/tools/model.py`, `model_p3.py`). The values are facts unless marked.
+
+**Color space.** All theme color math runs in Display P3. Components are clamped to 0…1 in P3 before the math. Results are stored as extended sRGB, which is why stored values contain negative components. Evidence: the HSL helper (`0x1009a5a3c`) converts with `colorUsingColorSpace:` before it reads components. The P3 model reproduces all 16 stored primary-palette values (4 Spaces × 4 roles) with 0/255 error; the same model in sRGB leaves errors up to 15/255.
+
+**HSL.** Standard RGB↔HSL (`0x1009a5a3c` reads, `0x1009a7d88` writes; constants 1/3, 1/6, 2/3, 6). Lighten and darken (`0x1009a5fa8`, `0x1009a60ac`) add or subtract a step from HSL lightness and clamp to 0…1. Hue rotation (`0x1009a5cd8`): `h' = fract(h + degrees/360)`.
+
+**Luminance.** WCAG 2.0 relative luminance on the P3 components: linearize with the 0.03928 knee (`c/12.92` below it, `((c+0.055)/1.055)^2.4` above), then `0.2126 R + 0.7152 G + 0.0722 B` (`0x1009a7768`; constants 0.03928, 12.92, 0.055, 1.055, 2.4, 0.0722). Contrast is `(Lhi + 0.05)/(Llo + 0.05)` (`0x10094f2ec`).
+
+**Band clamp.** `raise(c, to: t)` steps HSL lightness up by 0.01 until luminance ≥ t (`0x1009a7ba4`). `lower(c, to: t)` steps down by 0.01 until luminance ≤ t (`0x1009a7c38`).
+
+**Primary palette** (`0x100d80500`, input: the key color). Each role clamps the key color's luminance into a band:
+
+| Role | Band (luminance) |
+|---|---|
+| `tintedLight` | 0.85…0.95 |
+| `midTone` | 0.30…0.50 |
+| `shaded` | 0…0.50 |
+| `shadedDark` | 0…0.10 |
+
+**Semantic palette** (`0x100d80aac`, called by `themeSemanticColorPalette(primaryPalette:)`). Each role is `shadedDark` (or `tintedLight`) at a fixed alpha, composited source-over on white or black. All 24 values match the 4 stored themes within 0.003.
+
+| Role | light | dark |
+|---|---|---|
+| `backgroundExtra` | sD @0.01 over white | sD @0.15 over black |
+| `background` | sD @0.10 over white | sD @0.30 over black |
+| `hover` | sD @0.20 over white | sD @0.35 over white @0.20 (result alpha 0.48) |
+| `focus` | sD @0.50 over white | sD @0.65 over white @0.45 (result alpha 0.8075) |
+| `subtitle` | sD @0.40 over white | tL @0.50 over black |
+| `title` | sD @0.30 over black | sD @0.15 over white |
+
+sD = `shadedDark`, tL = `tintedLight`. The other 6 roles are aliases of the primary palette (see `runtime-observations.md` §3.3).
+
+**Harmony colors** (`0x100d807dc`, inputs: key color, count n, wheel). Pure HSL hue rotations; saturation and lightness stay the same.
+
+| n | `analogous` | `complimentary` |
+|---|---|---|
+| 1 | key | key |
+| 2 | key, +40° | key, +180° |
+| 3 | key, +40°, −40° | key, +150°, +210° |
+| ≥ 4 | key + k·360°/n | same |
+
+Check: the 3 stored gradient Spaces all use `analogous`. In P3 HSL their colors are exactly key, +40.0°, −40.0° with equal S and L.
+
+**Background layout.** One color → `blendedSingleColor`. Three colors → `blendedGradient` with `baseColors = [c0, c1]` and `overlayColors = [clear, c2]` (all 3 stored gradient Spaces). Two colors → `blendedGradient` with `baseColors = [c0, c1]`; the overlay content was not decoded (guess: empty). Builder: `0x1017a8b54`.
+
+**Content appearance** (`0x100d722c0` → `0x10094f040`). Inputs: a background color from the palette, the two text colors (one per appearance), and a bias `b`. Result: dark content when `contrast(bg, darkAppearanceText) + b ≥ contrast(bg, lightAppearanceText)`; light otherwise; "unknown" when there is no color. The editor passes `b = +21` when Dark is forced and `b = −21` when Light is forced (WCAG contrast spans 1…21, so a forced mode always wins). Automatic passes the remote flag `sidebar-dark-mode-bias` (`0x1017a8844`; constants ±21.0). With `bg` = the key color (or `shaded`) and the `title` roles as text, the 4 stored themes agree for any bias in [−0.78, 1.60). With `bg` = `midTone` no bias fits, so `midTone` is not the reference. guess: `bg` = the key color, `b` = 0.
+
+**Pad mapping** (`0x1017a6f28` color → knob, `0x1017a7248` knob → color). The pad is a disc in unit coordinates, y down. Angle (clockwise from 3 o'clock) = HSL hue. Radius `r = 0.99 · clamp((L − Lmin)/(Lmax − Lmin), 0, 1)`, so the center is the darkest color and the rim the lightest. Saturation comes from the editor state (default 0.8; when a color is loaded, its own HSL saturation, floor 0.01). Lightness range per appearance mode (`0x1017a80f0`): Automatic 0.01…0.97, Light 0.575…0.97, Dark 0.01…0.425. Forcing a mode keeps the knob's relative radius and remaps its lightness into the new range (`0x1017aa86c`; spans 0.395 and 0.415). Capture check: F0137 knob offset (32, 31) pt from the pad center at 44.1°, and the stored color's P3 hue is 44.1°.
+
+**Other ranges.** A helper builds a lightness range of ±0.25 around a color's lightness, clamped to 0.01…0.97 (`0x1017a9414`; guess: used when a preset is chosen).
+
+**Enums** (reflection records). `WindowTheme.Background.Style.ColorType`: `basicColor`, `blendedSingleColor`, `blendedGradient`. `TranslucencyStyle`: `light`, `dark`, `auto`. `Overlay` (the texture): `grain`, `sand`, `denim`, `tweed`. `BlendedGradientConfiguration.Wheel`: `complimentary`, `analogous`. `WindowTheme` also has an optional `windowAppearance`. Editor state (`SpaceStyleEditor.State`): `primaryColor`, `numberOfColors`, `noiseFactor`, `overlay`, `intensityFactor`, `wheel`, `saturation`, `lightnessRange`, `currentPresetPage`, `darkModeBiasSetting` (`value(Double)` or `forceAppearance`), `undoStack`, `isGestureInProgress`. Noise gestures: `slider`, `rotation`, `dialClick`, `scrollWheel`, `drag`.
 
 ## 7. Layout metrics
 
@@ -721,10 +780,10 @@ The user will sign in to Arc later. Measure these items then. Each item blocks a
 5. Chrome font family, size, and weight per element (sidebar, tab, command bar, menus). Blocks all type tokens.
 6. Spring numbers (`response`, `dampingFraction`) and ease durations per animation. Blocks motion tokens. A decompiled read can also give these numbers.
 7. Sound triggers: which event plays `capture.wav` and `event.m4a`. Blocks the sound map.
-8. Space contrast rule: the lightness point where sidebar text flips. Test light, mid, and dark Spaces in both system modes.
+8. Space contrast rule: the lightness point where sidebar text flips. Test light, mid, and dark Spaces in both system modes. Decoded 2026-10-25 (§6.5): a WCAG contrast comparison with a bias. Still open: the remote default of `sidebar-dark-mode-bias`.
 9. Which icon path each button uses: SF Symbol, custom asset, or icon font. Blocks the icon map. No `sidebar.left` string exists, so check the sidebar toggle by hand.
 10. Grain blend: how `grain-1` to `grain-4` and `grain-no-blend` differ, and the default `noiseFactor`.
-11. Default Space gradient stops for a new Space (two colors, angle, stop positions). The catalog gives single picks only.
+11. Default Space gradient stops for a new Space (two colors, angle, stop positions). The catalog gives single picks only. Partly decoded 2026-10-25 (§6.5): extra colors are HSL hue rotations of the key color. Still open: which theme a brand-new Space starts with.
 12. Dark `GrayA1` (opaque black). Confirm the UI never paints it, or find its real use.
 
 ## Raw files (local only, in `.re/design/`)

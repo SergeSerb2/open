@@ -379,6 +379,57 @@ verification with two Spaces and nested folders.
     (`WindowData+SpaceStyleEditor.swift`, `undoUpdateSpaceTheme`). (**Guess**
     cross-window sync — verify with two windows.)
 
+Added 2026-10-25 (evidence: Swift reflection records and `llvm-objdump` on the
+arm64 slice; full math in `design-tokens.md` §6.5, measured editor layout in
+`interaction-states.md` §14):
+
+12. Theme editor model. The editor keeps one key color, a color count (0–3),
+    a harmony wheel (`analogous` or `complimentary`), a noise amount and
+    texture (`grain`, `sand`, `denim`, `tweed`), an intensity, and an
+    appearance mode (Automatic, Light, Dark). Extra colors are HSL hue
+    rotations of the key color. Actions (`SpaceStyleEditor.Action`):
+    drag the knob, finish dragging, choose a preset, add color, remove
+    color, delete all colors, change noise (slider, rotation, dial click,
+    scroll wheel, drag), tap the noise knob (cycle texture), change
+    intensity, force an appearance, page the presets, end a gesture, and
+    Escape. The editor has its own `undoStack` and sends `registerUndo` to
+    the window. The window's undo name is "Update Theme" (small-string
+    literal at `0x102a109fc`).
+13. Empty state. With no color, the pad shows "Tap to pick a color for this
+    space" (`0x1017a7fb4`). A tap places the first knob. Removing the last
+    color clears the Space theme (`didDeleteAllColors`).
+14. Space creation (`SpaceCreation` module). State: `title`, `selectedProfile`,
+    `customInfo` (icon), an embedded theme editor state, and a phase
+    (`editing`, `animating`, `complete`). Copy: "Create a Space", "Separate
+    your tabs for life, work, projects, and more.", "Space name"
+    (placeholder), "Choose a Theme", "Profile", "You can use a Profile to give
+    this Space its own logins, history, and browsing data.", "New Profile…"
+    (menu item), "Create Space", "Cancel", "Remove icon". Views: a header with
+    fanned emoji cards (rotations ±16° and ±20°), a name field with an icon
+    button, a theme card, a profile card with a pop-up menu, and a submit
+    button that sits inline or is anchored to the bottom. The layout changes at
+    width breakpoints of 190 and 227 pt (`0x1025a3d4c`, `0x1025a3db0`). A color
+    "splash" (blur and opacity) plays on create. Options carry an insertion
+    index (`after(Space)` or `absolute`) and optional pinned/unpinned items
+    (used by "Move to ▸ New Space…"). Undo name "New Space". guess (strong):
+    the form is a page in the sidebar column; the width breakpoints match
+    sidebar widths.
+15. Icon picker (`CustomInfoPicker` module) is shared by Spaces, tabs, and
+    folders. Two icon sets: `tabAndSpacePicker` and `folderPicker`. Two pages:
+    `emoji` and `icon`. Emoji page: "Search" field, category buttons
+    (`smileysAndPeople`-style groups through `symbols` and `flags`), an
+    `NSCollectionView` grid (items 28×28 pt, item gap 5, line gap 2, side
+    insets 10; `0x102253c88…0x102253cc0`), skin-tone popover. Icon page: a grid
+    of 28 pt buttons with 17 pt glyphs and a hover background. A remove option
+    when an icon is set. Undo names "Customize Space" and "Customize Tab"
+    (`0x1029d1a30`, `0x1029e617c`).
+16. Rename. The Spaces menu item shows a dialog with "Rename" and "Cancel"
+    buttons (`0x1029d4e44`, `0x1029d4ee0`; strings "Button that updates the
+    Space name", "Cancel updating Space name"). The context menu item is
+    "Rename Space…" (`interaction-states.md` §15); what it opens was not
+    captured. guess: the context menu edits inline in the header, and the
+    dialog serves the menu bar item when the sidebar is hidden.
+
 ### 2.4 Switching
 
 12. Switch by: clicking a Space in the switcher, Spaces ▸ "Next Space" /

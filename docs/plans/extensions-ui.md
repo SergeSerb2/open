@@ -29,8 +29,8 @@ Read first, in this order:
    (Extensions menu).
 6. `docs/plans/app-shell.md` §2, §4.3, §4.9, §4.12, §4.13 and
    `docs/plans/m4-split-peek-littleopen.md` §3.5 (pane top bar).
-7. `docs/plans/site-control-boost-editor.md` (written in parallel; it
-   owns the Site Control Center popover and reuses §3.9 of this plan).
+7. `docs/plans/site-control-boost-editor.md` (merged in #61; it owns
+   the Site Control Center popover and reuses §3.9 of this plan).
 8. `docs/status.md` §3.3 gap 37 (extension shortcuts in Settings ▸
    Shortcuts; extension omnibox keywords in the command bar), covered by
    §3.14 and §6.3; `docs/suggest.md` (providers, Site Search scope) and
@@ -116,7 +116,7 @@ Ship Arc's extension UI on Open's own views:
 - System `NSMenu` for every menu (`features-advanced.md` AM-1 allows it).
 - AppKit for every view in this plan. No SwiftUI.
 
-## 1. Current state (merged tree `dc62e65`, P1 branch `a03d2a5`; re-verify before you edit)
+## 1. Current state (merged tree `d1720e3`, P1 branch `a03d2a5`; re-verify before you edit)
 
 | Area | What exists | File |
 |---|---|---|
@@ -464,7 +464,7 @@ The Site Control Center popover, its section headers, its footer menu,
 and its order of sections belong to `docs/plans/site-control-boost-editor.md`.
 This plan defines the two views that plan reuses for SC-4.
 
-Coordination (2026-10-25, agreed with that plan's author): `OpenExtensionsUI`
+Coordination (2026-10-25, agreed with that plan's author; it is on main as #61 and uses these names in its §3.6, §3.6.1, and E4): `OpenExtensionsUI`
 owns the section body, the items, pin order, and the intents. The SCC
 plan owns the section header ("Extensions", hover "Manage" →
 `manage-extensions`), section order, the panel, the footer menu, and the
