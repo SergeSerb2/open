@@ -192,8 +192,9 @@ extension EngineWebContentHostFactory {
         } catch { AppDelegate.commandLog("Could not save page: \(error)") }
       }
     }
-    panel.beginSheetModal(for: window) { [weak self] response in
-      self?.pendingSaveChoice?(response == .OK ? panel.url : nil)
+    panel.beginSheetModal(for: window) { [weak self, weak panel] response in
+      guard let self, let panel, self.pendingSavePanel === panel else { return }
+      self.pendingSaveChoice?(response == .OK ? panel.url : nil)
     }
   }
 }
