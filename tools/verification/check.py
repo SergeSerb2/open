@@ -9,6 +9,7 @@ import runpy
 import select
 import shutil
 import signal
+import sqlite3
 import struct
 import subprocess
 import sys
@@ -259,6 +260,37 @@ def adblock_catalog(cli, root):
     print("catalog 46/46; categories 3/2/5/35/1; defaults verified")
 
 
+def archive_migration(cli):
+    for boundary in ("alter", "version"):
+        root = Path("archive-migration-" + boundary).resolve()
+        file = root / "Profiles/Default/State/archive.sqlite3"
+        file.parent.mkdir(parents=True)
+        with sqlite3.connect(file) as db:
+            db.executescript("""
+                CREATE TABLE archived_tabs(id TEXT PRIMARY KEY,url TEXT NOT NULL,title TEXT NOT NULL,
+                  space_id TEXT,profile_id TEXT,archived_at REAL NOT NULL,reason TEXT NOT NULL,
+                  original_location TEXT NOT NULL,payload TEXT NOT NULL);
+                INSERT INTO archived_tabs VALUES('00000000-0000-0000-0000-000000000001',
+                  'https://example.invalid/legacy','Legacy tab',NULL,NULL,1,'folderDeleted','today:legacy','{}');
+            """)
+            original = db.execute("SELECT * FROM archived_tabs").fetchall()
+        environment = dict(os.environ, OPENKIT_DEBUG_ARCHIVE_MIGRATION_CRASH=boundary)
+        run(cli, "archive-list", str(root), expected=86, env=environment)
+        with sqlite3.connect(file) as db:
+            require("kind" not in [row[1] for row in db.execute("PRAGMA table_info(archived_tabs)")], "crash published partial kind column")
+            require(db.execute("PRAGMA user_version").fetchone()[0] == 0, "crash published schema version")
+            require(db.execute("SELECT * FROM archived_tabs").fetchall() == original, "crash changed old rows")
+            require(db.execute("PRAGMA quick_check").fetchone()[0] == "ok", "crashed archive is corrupt")
+        for _ in range(2):
+            text = run(cli, "archive-list", str(root))
+            matches(r"archive rows total=1 showing=1", text)
+            matches(r"kind=tab reason=folderDeleted", text)
+        with sqlite3.connect(file) as db:
+            require(db.execute("PRAGMA user_version").fetchone()[0] == 1, "migration version not committed")
+            require(db.execute("SELECT kind FROM archived_tabs").fetchall() == [("tab",)], "legacy row kind changed")
+        print("FA6 crash recovery and repeated migration passed: " + boundary)
+
+
 def profiles(cli):
     directory = str(Path("data").resolve())
     def command(*args, expected=0):
@@ -358,6 +390,7 @@ def main():
         text = run(cli, name, str(directory))
         matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", text)
         shutil.copytree(directory, seed, dirs_exist_ok=True)
+        archive_migration(cli)
     elif name == "roundtrip":
         data = seed_snapshot(cli, seed)
         shutil.copytree(seed, "data")
@@ -392,6 +425,8 @@ def main():
         route(cli, root, seed)
     elif name == "favicons":
         favicons(cli, seed)
+    elif name == "media-demo":
+        all_passed(run(cli, name))
     elif name == "sleep-demo":
         text = run(cli, name, str(Path("data").resolve()))
         all_passed(text)
@@ -410,14 +445,24 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) >= 86, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 214, "missing settings/library/appearance/detail/sheet/state renders")
+        states = ("welcome welcome-inactive welcome-counting welcome-nodata welcome-saveerror "
+                  "import import-arcrunning import-counting import-nodata import-parsehint "
+                  "import-parsehint-running import-partial import-capability-on secrets secrets-on "
+                  "progress progress-history-landed report report-worst report-saveerror failed "
+                  "default-browser default-declined default-error default-already "
+                  "welcome-singular import-singular secrets-singular report-singular "
+                  "welcome-large import-large secrets-large").split()
+        required = {f"first-run-{state}{appearance}@{scale}x.png"
+                    for state in states for appearance in ("", "-light") for scale in (1, 2)}
+        require(required <= {p.name for p in pngs}, "missing permanent first-run review state")
         for png in pngs:
             data = png.read_bytes()
             scale = 2 if "@2x" in png.name else 1
             sheets = {"previews": (480, 320), "search-engines": (520, 420), "clear-data": (460, 360),
                       "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
-            expected = (960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650)))
+            expected = (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))

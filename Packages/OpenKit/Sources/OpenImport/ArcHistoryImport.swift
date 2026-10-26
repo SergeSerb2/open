@@ -33,6 +33,11 @@ public enum ArcHistoryImportError: Error {
     case schemaVersionMismatch(Int)
 }
 
+/// Internal copy audit used by the synthetic CLI cancellation flow. Never logs source data.
+enum ArcCopyAudit {
+    @TaskLocal static var observer:(@Sendable (URL,Int)->Void)?
+}
+
 /// Recovery is allowed only on our private copy, never on the source connection.
 /// Shared by the history and secret readers. Errors deliberately contain no SQL or row data.
 final class ArcSQLiteCopy {
@@ -40,6 +45,7 @@ final class ArcSQLiteCopy {
     private let directory: URL
 
     init(fileURL: URL) throws {
+        try Task.checkCancellation()
         let fm = FileManager.default
         guard fm.fileExists(atPath: fileURL.path) else { throw ArcHistoryImportError.missingHistoryFile }
         directory = fm.temporaryDirectory.appendingPathComponent("open-history-import-" + UUID().uuidString)
@@ -73,6 +79,7 @@ final class ArcSQLiteCopy {
                     }
                     return
                 } catch {
+                    if error is CancellationError || Task.isCancelled {throw CancellationError()}
                     if let connection { sqlite3_close(connection) }
                     connection = nil
                     for item in try fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
@@ -150,7 +157,7 @@ public struct ArcHistoryReader: Sendable {
     /// The array-returning overload above remains available to existing callers.
     public func readBatches(batchSize: Int = 5000, consume: ([ArcHistoryVisitRecord]) async -> Void) async throws -> ArcHistoryReadReport {
         let cursor = try ArcHistoryCursor(historyFileURL: historyFileURL, batchSize: batchSize)
-        while let batch = try cursor.next() { await consume(batch) }
+        while let batch = try cursor.next() { try Task.checkCancellation(); await consume(batch) }
         return cursor.report
     }
 }
@@ -233,7 +240,9 @@ func copyPrivateSQLiteFile(from source: String, to destination: String) throws {
     var buffer = [UInt8](repeating: 0, count: 256 * 1024)
     defer { zeroSecretBytes(&buffer) }
     try buffer.withUnsafeMutableBytes { bytes in
+        var copied=0
         while true {
+            try Task.checkCancellation()
             let count = Darwin.read(input, bytes.baseAddress!, bytes.count)
             if count < 0 && errno == EINTR { continue }
             guard count >= 0 else { throw ArcHistoryImportError.copyFailed }
@@ -245,6 +254,8 @@ func copyPrivateSQLiteFile(from source: String, to destination: String) throws {
                 guard written > 0 else { throw ArcHistoryImportError.copyFailed }
                 offset += written
             }
+            copied += count
+            ArcCopyAudit.observer?(URL(fileURLWithPath:destination).deletingLastPathComponent(),copied)
         }
     }
 }

@@ -108,6 +108,6 @@ public struct AdBlockSettingsSheet:View {
             HStack {TextField("example.com",text:$model.hostDraft).disabled(model.busy || !model.isReady);Button("Add"){model.setExcluded(model.hostDraft,excluded:true)}.disabled(model.hostDraft.isEmpty || model.busy || !model.isReady)}
         }.frame(maxWidth:.infinity,alignment:.leading) }
         if model.busy || !model.isReady {ProgressView()};SettingsError(text:model.errorText);if let error=model.lastError {SettingsError(text:error)}
-        HStack {Button("Copy Debug Info"){model.copyDebug()};Button("Reset List Choices"){Task {await model.reset()}}.disabled(model.busy || !model.isReady);Spacer();Button("Done",action:onDone).keyboardShortcut(.defaultAction)}
+        HStack {Button("Copy Debug Info"){model.copyDebug()};Button("Reset List Choices"){Task {await model.reset()}}.disabled(model.busy || !model.isReady);Spacer();Button("Done",action:onDone).keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))}
     }.padding(24).frame(width:600,height:560).task(id:model.profileID) {await model.openSelectedProfile()} }
 }

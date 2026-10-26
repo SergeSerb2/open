@@ -50,6 +50,7 @@ import OpenStore
     public let faviconStore: FaviconStore?
     private let snapshot: SnapshotStore
     private var archiveOwners: [ItemID: ProfileID] = [:]
+    @ObservationIgnored private var archivedChildCounts: [ItemID: Int] = [:]
     private var activeArchiveLoad = UUID()
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
@@ -76,7 +77,7 @@ import OpenStore
         await reload()
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
-    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
+    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
         defer { if request == generation && load == activeArchiveLoad { archiveLoading = false } }
@@ -87,7 +88,10 @@ import OpenStore
             candidates += page.map { (profile, $0) }
         }
         let page = Array(candidates.sorted { a, b in a.1.archivedAt == b.1.archivedAt ? a.1.id.description < b.1.id.description : a.1.archivedAt > b.1.archivedAt }.prefix(100))
-        for (profile, row) in page { cursors[profile, default: 0] += 1; archiveOwners[row.id] = profile }
+        for (profile, row) in page {
+            cursors[profile, default: 0] += 1; archiveOwners[row.id] = profile
+            if row.kind == .folder { archivedChildCounts[row.id] = Self.countArchivedChildren(row) }
+        }
         archiveRows += page.map(\.1); archiveHasMore = page.count == 100; archiveLoading=false
         if let faviconStore { for (_, row) in page { let icon = await faviconStore.icon(for: row.url)?.png32; guard generation == request, !Task.isCancelled else { return }
             if favicons[row.id] != icon { faviconImages[row.id]=icon.flatMap{NSImage(data:$0)} }
@@ -97,20 +101,27 @@ import OpenStore
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
         guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }
         if let spaceID { record.spaceID = spaceID; record.originalLocation = "today:\(spaceID)" }
-        let tab: Tab
+        let restoredID: ItemID
         do {
-            tab = try model.restoreArchivedTab(record, saving: { try snapshot.saveNow(model: model) })
+            if record.kind == .folder {
+                guard let folder = try model.restoreArchivedFolder(record, saving: { try snapshot.saveNow(model: model) }) else {
+                    statusText = "This archived folder cannot be restored."; return
+                }
+                restoredID = folder.id
+            } else {
+                restoredID = try model.restoreArchivedTab(record, saving: { try snapshot.saveNow(model: model) }).id
+            }
         } catch {
             statusText = "Saving failed. The Archive entry was kept. Try Restore again."
             await reloadArchive(); return
         }
-        guard model.tab(id: id) != nil else { statusText = "Choose a Space before restoring this tab."; return }
+        guard model.node(id: id) != nil else { statusText = "Choose a Space before restoring this tab."; return }
         do { try await store.delete(id: id) }
-        catch { statusText = "Tab restored, but its Archive entry could not be removed. \(error.localizedDescription)"; await reloadArchive(); return }
+        catch { statusText = "\(record.kind == .folder ? "Folder" : "Tab") restored, but its Archive entry could not be removed. \(error.localizedDescription)"; await reloadArchive(); return }
         actions.restoreArchived(id: id)
-        restoredSpaceID = owningSpace(of: tab.id) ?? spaceID ?? record.spaceID
+        restoredSpaceID = owningSpace(of: restoredID) ?? spaceID ?? record.spaceID
         let title = restoredSpaceID.flatMap { model.space(id: $0) }.map { model.displayTitle(for: $0) } ?? "Today"
-        statusText = "Restored to \(title)."; await reloadArchive()
+        statusText = record.kind == .folder ? "Folder restored to \(title). Click to view." : "Restored to \(title)."; await reloadArchive()
     }
     private func owningSpace(of id: ItemID) -> SpaceID? {
         var cursor = id, seen: Set<ItemID> = []
@@ -123,9 +134,19 @@ import OpenStore
         }
         return nil
     }
-    public func archivedChildCount(_ row: ArchivedTabRecord) -> Int {
-        guard let data = row.payloadJSON.data(using: .utf8), let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return 1 }
-        return (payload["children"] as? [Any])?.count ?? 1
+    public func archivedChildCount(_ row: ArchivedTabRecord) -> Int { archivedChildCounts[row.id] ?? 0 }
+
+    private static func countArchivedChildren(_ row: ArchivedTabRecord) -> Int {
+        guard row.kind == .folder, let data = row.payloadJSON.data(using: .utf8),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return 0 }
+        func count(_ node: [String: Any]) -> Int {
+            if let tab = node["tab"] as? [String: Any], tab["_0"] != nil { return 1 }
+            if let split = node["split"] as? [String: Any], let value = split["_0"] as? [String: Any] { return (value["panes"] as? [Any])?.count ?? 0 }
+            if let folder = node["folder"] as? [String: Any], let value = folder["_0"] as? [String: Any] { return children(value) }
+            return 0
+        }
+        func children(_ folder: [String: Any]) -> Int { (folder["children"] as? [[String: Any]] ?? []).reduce(0) { $0 + count($1) } }
+        return children(payload)
     }
     public func requestDeleteArchive(_ ids: [ItemID]) { pendingArchiveDeletes = ids }
     public private(set) var archiveResults: [ProfileID: String] = [:]
@@ -137,7 +158,7 @@ import OpenStore
             do {
                 try await store.delete(ids: ownedIDs)
                 for id in ownedIDs { actions.deleteArchived(id: id) }
-                archiveResults[owner] = "Deleted \(ownedIDs.count)."
+                archiveResults[owner] = "Deleted \(ownedIDs.count.formatted())."
             } catch { archiveResults[owner] = "Failed: \(error.localizedDescription)" }
         }
         let missing=ids.contains{archiveOwners[$0] == nil}

@@ -3,3 +3,5 @@ _cef_execute_process
 _cef_initialize
 _cef_shutdown
 _cef_version_info
+# Open fork API (P1, cef/include/cef_tab_strip.h)
+_cef_tab_strip_create

@@ -1132,6 +1132,11 @@ purpose.
    Advanced option "Show full URL when Toolbar is enabled"). Default:
    **Guess** hidden. The URL lives at the top of the sidebar (§8.4), not in
    a toolbar.
+   Update 2026-10-25: the toolbar is the 32 pt content top bar that Split
+   View panes also use (remote setting `toolbar-display-height`, built-in
+   default 32). It is per window, the menu title switches between "Show
+   Toolbar" and "Hide Toolbar", and the URL pill menu offers "Show as
+   Toolbar". See `commandbar-completion.md` §6 (CC-32…CC-38).
 7. The title bar is hidden/merged: window chrome is the sidebar header +
    traffic lights over the Space theme background (`WindowFrameBackgroundView`,
    `WindowStandardButtons`, `ToolbarTitle` exists but the toolbar-less look

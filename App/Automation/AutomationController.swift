@@ -129,6 +129,23 @@
         let space = model.createSpace(title: a["title"] as? String ?? name, profileID: profile.id)
         w.focus(space: space)
         return space.id.description
+      case "favorite":
+        // Moves a tab to its profile's Favorites.
+        let tab = try modelTab(a, w)
+        guard let profile = w.focusedSpace?.profileID,
+          app.model.moveNode(id: tab.id, to: .favorites(profile), at: nil)
+        else { throw Failure(message: "cannot make a favorite") }
+        return describe(tab, in: w)
+      case "folder":
+        // A folder in the focused Space's Today (or pinned) section with
+        // the given tabs, in order.
+        guard let space = w.focusedSpace else { throw Failure(message: "no space") }
+        let ids = try (a["tabs"] as? [String] ?? []).map { try modelTab(["tab": $0], w).id }
+        let section: NodeParent = a["section"] as? String == "pinned" ? .spacePinned(space.id) : .spaceToday(space.id)
+        guard let folder = app.model.createFolder(in: section, title: a["title"] as? String ?? "Folder", withNodes: ids)
+        else { throw Failure(message: "folder not created") }
+        if let at = a["at"] as? Int { app.model.moveNode(id: folder.id, to: section, at: at) }
+        return folder.id.description
       case "space":
         guard let s = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == s })
         else { throw Failure(message: "unknown space") }
@@ -301,6 +318,38 @@
       // Windows and pixels (Open's own windows only).
       case "windows":
         return NSApp.windows.map(describe)
+      case "panel-close":
+        // The close button of the panel that shows page `page` (performClose).
+        guard let n = a["page"] as? Int, let aux = w.auxiliaryPages.first(where: { $0.content.identifier == n })
+        else { throw Failure(message: "no panel for page") }
+        aux.panel.performClose(nil)
+        return true
+      case "dismiss":
+        // Ends what a Chromium command opened: modal panels (Print), sheets
+        // (Save As), and windows that are not Open's (DevTools, Chrome
+        // windows). Open's browser windows and panels stay.
+        var dismissed: [String] = []
+        if let modal = NSApp.modalWindow {
+          dismissed.append("modal:" + String(describing: type(of: modal)))
+          NSApp.abortModal()
+        }
+        let ours = Set(app.windowControllers.compactMap { $0.window.map(ObjectIdentifier.init) })
+        for win in NSApp.windows {
+          if let sheet = win.attachedSheet {
+            dismissed.append("sheet:" + String(describing: type(of: sheet)))
+            win.endSheet(sheet, returnCode: .cancel)
+          }
+          // Chromium's own windows (DevTools, Chrome windows, Picture in
+          // Picture) are Views windows.
+          let foreign = !ours.contains(ObjectIdentifier(win)) && !(win is NSPanel) && win.isVisible
+            && win.className.contains("NativeWidget")
+          if foreign {
+            dismissed.append("window:" + win.className)
+            win.performClose(nil)
+            if win.isVisible { win.close() }
+          }
+        }
+        return dismissed
       case "window-state":
         // `id` reads another standard window without making it key.
         let w = (a["id"] as? String).flatMap { id in app.windowControllers.first { $0.windowID.description == id } }
@@ -566,6 +615,9 @@
         "browser": c.browser?.identifier ?? 0,
         "browserIndex": c.browser?.webContents.firstIndex(of: c) ?? -1,
         "browserPinned": c.browser?.isPinned(c) ?? false,
+        // chrome.tabs / chrome.windows ids (fork patch P1); -1 if none.
+        "chromeTabId": c.chromeTabIdentifier,
+        "chromeWindowId": c.browser?.chromeWindowIdentifier ?? -1,
         "extension": c.extensionPopupIdentifier ?? "",
         "hostTab": w.tabID(for: c)?.description ?? "",
         "pageBackground": colorComponents(pageColor),

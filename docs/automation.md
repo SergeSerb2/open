@@ -89,13 +89,16 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `window-fullscreen` | — | Native full-screen toggle; wait for completed transition count before testing the result |
 | `sidebar-move` | `tab`, `section` or `folder`, `index` | Production SidebarDelegate move intent; model and engine strip share the resulting order |
 | `folder-create` / `folder-toggle` | `title` / `folder` | Create fixture folder through the model; production sidebar expand/collapse intent |
+| `folder` | `tabs`, `section` (`today`/`pinned`), `title`, `at` | Folder in the focused Space holding `tabs` in order, moved to index `at` |
+| `favorite` | `tab` | Move a tab to its profile's Favorites |
+| `dismiss` | — | End what a Chromium command opened: a modal panel (Print), sheets (Save As), Chromium's own Views windows (DevTools, Chrome windows). Returns what it closed |
 | `sidebar-clear` | — | Production sidebar Clear Today intent |
 | `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus, keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus) or run one command (`run:<id>`, after the right click returns), keep the window size on page fullscreen |
 | `dialog` | `accept`, `text` | Complete a held dialog |
-| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup` |
+| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
@@ -128,11 +131,12 @@ tools/e2e/engine_e2e.py --only peek                        # promotion identity,
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
+tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
 OPEN_AUTOMATION=1 tools/build.sh Release
 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
