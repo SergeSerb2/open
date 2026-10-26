@@ -481,6 +481,68 @@ Worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because 
 
 Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone, up to three times; then the outputs matched. The bottom-band glitch got more frequent under machine load.
 
+## 16. Space editor theme engine (Step 2)
+
+`ThemeColorMath` implements the decoded P3 HSL, luminance bands, harmony,
+pad mapping, and appearance rule (`re/design-tokens.md` §6.5). Primary roles
+convert to extended sRGB before semantic source-over composition. Evidence:
+`space-editor-render math --arc-json <read-only StorableSidebar.json copy>`
+reproduces all four stored primary and semantic palettes with maximum
+component error 0.000000. The committed documented #FF8558 fixture has
+primary error 0.001567 and semantic error 0.002172, within 1/255 and 0.003.
+The fixture's table values are clamped, rounded sRGB hex
+(`re/runtime-observations.md` §3.3); the private-input check compares full
+extended components and prints counts and maximum errors only.
+
+`SpaceThemeStyle` resolves stored editor inputs first, then the unchanged
+Arc JSON parser, mapped stops, and default theme. `SpaceStyle.seed(from:)`
+only initializes editor state; it does not write the model. The 45 presets
+retain each source color space. Page 2 uses three analogous colors, as the
+lead specified. Unknown math versions remain stored and use the default
+render until their derivation is implemented; they are never reinterpreted
+as version 1. The sidebar style cache holds 256 entries and removes the
+oldest half when full.
+
+`ThemeTexture` keeps the existing grain bytes and draws Open's own sand,
+denim, and tweed. Tiles are shared by texture, noise bucket of 0.05, and
+scale. The lead's 2026-10-25 23:58:10 America/Vancouver message adds a base
+alpha of `max(0, grainMean - patternMean)` beneath non-grain patterns. Marks
+composite over that base; their own peak remains `noiseFactor × 0.1`.
+The approach is Open design and needs Step 9 calibration. Non-grain tiles
+use 16-bit grayscale plus alpha (four bytes per pixel), so the shared cache
+does not need large RGBA float tiles and low-noise bases retain precision.
+
+Editor styles use `ThemeField.layerAlpha(intensity:) = 0.8 × intensity`.
+The §4.5 fallback is active for imported themes and mapped stops: their
+opacity remains 0.64 until calibration. The F0069 comparison uses the same
+19-element selection as the existing result (9 pinned rows; row titles and
+New Tab skipped because those states differ in the saved snapshot).
+
+| F0069 | Worst position | Worst ΔE00 | Background mean ΔE00 | Panel mean ΔE00 |
+|---|---|---|---|---|
+| Step 1 head `2eedbfc`, opacity 0.64 | 1.0 pt | 2.38 | 1.39 | 1.59 |
+| Provisional opacity 0.80 on the imported intensity-1 theme | 1.0 pt | 2.93 | 1.62 | 2.51 |
+| Step 2, imported fallback 0.64 | 1.0 pt | 2.38 | 1.39 | 1.59 |
+
+The final F0069 PNG and comparison table are byte-identical to the Step 1
+baseline. Thirteen sidebar scene PNGs and `sidebar-render check` output
+(125 passed, 0 failed) are also byte-identical before and after Step 2.
+Private captures and comparison images stay in `.re/`; none are committed.
+
+The new offscreen harness reuses Open's own window composition, comparison
+method, and synchronized CARenderer path. At Step 2 it implements:
+
+```text
+space-editor-render math [--arc-json FILE]
+space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
+space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec window --out DIR
+space-editor-render check
+```
+
+`check` covers M1–M4, M5 texture means at noise 0.25/0.5/1 and scales 1/2,
+sand peak contrast, cache sharing, and P1 DTO/icon persistence plus three
+frozen pre-Step-1 window PNGs. `tools/verify-all.sh` runs it as `space-editor`.
+Editor, form, picker, and live-window acceptance belong to later steps.
 
 ## 16. Window chrome polish (2026-10-26)
 
@@ -898,3 +960,40 @@ The preview keeps neutral white/#212222 fill pending C4. The source NSWindow is
 captured weakly at show time, so resignation still dismisses after the owner
 view is gone. A real-time timer check advances the main run loop in 5 ms slices
 for at most 0.6 s and requires the 0.5 s deadline within ±50 ms.
+
+## 22. Media tokens (review r1, 2026-10-26)
+
+No Arc capture yet shows these surfaces. **Code** means a value decoded from
+Arc's types; **fact** means a measured existing sidebar token; **guess** means
+Open's provisional design pending capture session 2. The full specification
+and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
+[features-advanced.md](re/features-advanced.md) §8 (PP-1…PP-22).
+
+| Surface / token | Value | Status |
+|---|---|---|
+| Mini-player card | Insets 8/4, height 68, corner 10; title 13 Medium | Insets/corner reuse sidebar facts; height/font/fill guess |
+| Mini-player controls | 24×24, radius 6; foreground black .50 / white .66 | Code PP-16 / design-tokens §1.8; placement guess |
+| Media tooltip | Above, delay .45 s | Code PP-6; title wording PP-16 |
+| Volume drawer | +28 pt; track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | Guess; inset correction from design r1 |
+| Collapsed stack | Offset 5, width inset 6, opacity 1−.3i; back-card top edge .5 pt separator | Guess; top edge added by design r1, confirm S6 |
+| Expanded stack | Gap 6; collapse delay .3 s; spring response .3/damping 1 | Guess, PP-14 names states |
+| Marquee | Fade 4 left/8 right; delay 3 s; speed 30 pt/s; gap 32 | Left fade code PP-17; remainder guess |
+| PiP window | Corner 12, minimum 284×160 landscape / 160×284 portrait, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
+| PiP corners | Buttons 28×28, padding 8 compact / 10 regular | Code PP-6 |
+| PiP scrubber | Bar 4/6 pt, hit 20; precision step 40 pt, cap 8× | Hit height code PP-7; other geometry/math Open design |
+| Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
+
+Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.
+
+Media review-r1 PiP refinements (Open design; no Arc capture yet): SF skip glyphs
+20/16 pt, hidden below 168 pt; no center plate at rest; whole-window black .25
+dim while controls show (guess). Bottom controls share one center line, with a
+zero offset when the scrubber is hidden. Scrubbing fades utility controls in .15 s
+and keeps a 6 pt bar. Document header glyphs white .85, hover plate white .12 (pressed .18),
+radius 5. First open clamps the /8 fit; reuse keeps the long side. Video PiP uses a 10 pt bottom-right inset. The /8 factor fits capture session 2 item 13 at 2560×1440 and remains a guess elsewhere.
+See plan §4.4 for the lead's exact limits and click-only seek refinement.
+
+PiP review-r2 updates: Play/Pause 28 pt regular / 24 pt compact; Skip 20/16 pt.
+The five center glyphs alone have a cached black .35 shadow, radius 2, offset 0
+(guess until a controls capture). Disabled Skip ahead keeps its tooltip but has
+no plate or growth. The precision hint fades in/out in .15 s with the utilities.

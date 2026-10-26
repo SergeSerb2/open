@@ -275,6 +275,7 @@ enum Checks {
               "unknown named icons use the neutral symbol")
 
         MediaChecks.runRowIndicators()
+        MediaChecks.runMiniPlayers()
         ReviewChecks.run()
         VisualFinishChecks.run()
         CompletionChecks.run()
