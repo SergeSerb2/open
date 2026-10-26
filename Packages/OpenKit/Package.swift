@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "OpenImport", targets: ["OpenImport"]),
         .library(name: "OpenSuggest", targets: ["OpenSuggest"]),
         .library(name: "OpenCommands", targets: ["OpenCommands"]),
+        .library(name: "OpenScripting", targets: ["OpenScripting"]),
         .executable(name: "openkit", targets: ["openkit"]),
         .executable(name: "commands-dump", targets: ["commands-dump"]),
     ],
@@ -19,6 +20,7 @@ let package = Package(
         .target(name: "OpenImport", dependencies: ["OpenModel"]),
         .target(name: "OpenSuggest", dependencies: ["OpenModel", "OpenStore"], resources: [.copy("Resources/public_suffix_list.dat")]),
         .target(name: "OpenCommands", dependencies: ["OpenModel", "OpenSuggest"], resources: [.copy("Resources/expected-menu.json")], linkerSettings: [.linkedFramework("Carbon")]),
+        .target(name: "OpenScripting", dependencies: ["OpenModel", "OpenCommands"]),
         .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest"]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
     ]
