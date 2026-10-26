@@ -199,14 +199,24 @@ type IconType =
   | { emoji: number; emoji_v2: string }  // emoji = Unicode scalar (e.g. 128188 = 💼), emoji_v2 = the string
   | { icon: string };                    // named icon, e.g. { icon: "planet" }
 
-interface WindowTheme { // key presence confirmed (disk); inner palette shape sampled once
-  semanticColorPalette: { appearanceBased: { light: ColorSet; /* dark inferred */ } };
-  primaryColorPalette: unknown;
-  background: unknown;
+interface WindowTheme { // full shape: runtime-observations.md §3.3
+  semanticColorPalette: { appearanceBased: { light: ColorSet; dark: ColorSet } };
+  primaryColorPalette: { tintedLight; midTone; shaded; shadedDark };  // each a Color
+  background: { single: { _0: { style; contentOverBackgroundAppearance?: "light" | "dark"; isVibrant: boolean } } };
+  windowAppearance?: "light" | "dark";  // confirmed (binary) as an optional field; not seen on disk
 }
-// ColorSet keys observed: minContrastColor, foregroundPrimary/Secondary/Tertiary,
-// hover, focus, title, cutoutColor, backgroundExtra — each { red, green, blue, alpha, colorSpace: "extendedSRGB" }
+// ColorSet: 12 keys (background, backgroundExtra, title, subtitle, hover, focus,
+// foregroundPrimary/Secondary/Tertiary, minContrastColor, maxContrastColor, cutoutColor),
+// each { red, green, blue, alpha, colorSpace: "extendedSRGB" }
 ```
+
+Background style cases, confirmed (binary) from the Swift reflection records (`__swift5_fieldmd`, 2026-10-25):
+
+- `color._0` is one of `basicColor { color, translucencyStyle? }`, `blendedSingleColor { color, translucencyStyle?, modifiers }`, `blendedGradient { baseColors, overlayColors, translucencyStyle?, modifiers, wheel }`. `basicColor` was not seen on disk.
+- `translucencyStyle`: `light`, `dark`, `auto`. Only `light` was seen on disk.
+- `modifiers`: `{ noiseFactor, intensityFactor, overlay }`. `overlay` is the grain texture: `grain`, `sand`, `denim`, `tweed`. Only `grain` was seen on disk.
+- `wheel`: `{ analogous: {} }` or `{ complimentary: {} }` (Arc's spelling). Only `analogous` was seen on disk.
+- How the editor derives the colors and palettes: `design-tokens.md` §6.5.
 
 Container id lists need care. One Space here reads:
 
