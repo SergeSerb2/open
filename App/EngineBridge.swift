@@ -6,7 +6,7 @@ import OpenWeb
 // adapters make the engine classes usable through the OpenWeb protocols.
 
 extension OEWebContent: @retroactive WebContent {
-  public var faviconPNG: Data? { favicon.flatMap(BrowserWindowController.pngData) }
+  public var faviconPNG: Data? { favicon.flatMap(EngineWebContentHostFactory.pngData) }
   public var isCrashed: Bool { crashState != .none }
   public func snapshotPNG() async throws -> Data { try await takeSnapshot() }
 }
@@ -114,7 +114,7 @@ final class EngineExtensionHost: ExtensionHost {
     browser.extensionActions.map {
       ExtensionActionInfo(
         extensionID: $0.extensionIdentifier, title: $0.title,
-        iconPNG: $0.icon.flatMap(BrowserWindowController.pngData), badgeText: $0.badgeText,
+        iconPNG: $0.icon.flatMap(EngineWebContentHostFactory.pngData), badgeText: $0.badgeText,
         isEnabled: $0.isEnabled, hasPopup: $0.hasPopup)
     }
   }

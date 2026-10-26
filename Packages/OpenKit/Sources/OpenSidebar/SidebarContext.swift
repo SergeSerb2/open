@@ -39,7 +39,9 @@ public final class SidebarContext {
         return model.space(id: w.focusedSpaceID) ?? model.spaces.first
     }
 
-    public var sidebarWidth: CGFloat { CGFloat(window?.sidebarWidth ?? Double(WindowMetrics.defaultSidebarWidth)) }
+    /// Live resize presentation. The host commits to the model on drag end.
+    public var sidebarWidthOverride: CGFloat?
+    public var sidebarWidth: CGFloat { sidebarWidthOverride ?? CGFloat(window?.sidebarWidth ?? Double(WindowMetrics.defaultSidebarWidth)) }
 
     public func selectedID(in space: SpaceID) -> ItemID? { window?.selectedNodeBySpace[space] }
 

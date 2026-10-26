@@ -1,0 +1,356 @@
+{
+  "config": "Release",
+  "started": "2026-10-25 20:27:18",
+  "style": "alloy",
+  "window": {
+    "close_unloaded_pinned": {
+      "after_close": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "after_unload": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "before": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 220,
+        "engineStarted": 294,
+        "firstContentfulPaint": 426,
+        "main": 122,
+        "modelLoaded": 123,
+        "sidebarDrawn": 220
+      },
+      "ok": true,
+      "samples": 5
+    },
+    "comparison": {
+      "reason": "Step A startup only; static window comparison is Step B",
+      "status": "SKIP"
+    },
+    "cpu_count": 18,
+    "engine_failure_alert": {
+      "exit": 1,
+      "ok": true
+    },
+    "launch_runs": {
+      "cold_fresh_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 1709,
+          "engineInitialized": 1705,
+          "engineStart": 220,
+          "engineStarted": 1702,
+          "firstContentfulPaint": 1837,
+          "firstLoadEnd": 1817,
+          "firstPaintClockUncertaintyMs": 0.08,
+          "kernelProcessStart": true,
+          "main": 116,
+          "modelLoaded": 118,
+          "sidebarDrawn": 220,
+          "windowShown": 171
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 301,
+          "engineInitialized": 296,
+          "engineStart": 225,
+          "engineStarted": 294,
+          "firstContentfulPaint": 420,
+          "firstLoadEnd": 404,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 132,
+          "modelLoaded": 133,
+          "sidebarDrawn": 224,
+          "windowShown": 180
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 321,
+          "engineInitialized": 315,
+          "engineStart": 229,
+          "engineStarted": 312,
+          "firstContentfulPaint": 434,
+          "firstLoadEnd": 413,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 122,
+          "modelLoaded": 123,
+          "sidebarDrawn": 228,
+          "windowShown": 176
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 297,
+          "engineInitialized": 294,
+          "engineStart": 219,
+          "engineStarted": 291,
+          "firstContentfulPaint": 424,
+          "firstLoadEnd": 404,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 123,
+          "modelLoaded": 125,
+          "sidebarDrawn": 218,
+          "windowShown": 175
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 321,
+          "engineInitialized": 294,
+          "engineStart": 217,
+          "engineStarted": 292,
+          "firstContentfulPaint": 426,
+          "firstLoadEnd": 401,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 118,
+          "modelLoaded": 120,
+          "sidebarDrawn": 217,
+          "windowShown": 170
+        }
+      ],
+      "warm_existing_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 323,
+          "engineInitialized": 320,
+          "engineStart": 244,
+          "engineStarted": 315,
+          "firstContentfulPaint": 423,
+          "firstLoadEnd": 406,
+          "firstPaintClockUncertaintyMs": 0.07,
+          "kernelProcessStart": true,
+          "main": 143,
+          "modelLoaded": 145,
+          "sidebarDrawn": 243,
+          "windowShown": 192
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 322,
+          "engineInitialized": 318,
+          "engineStart": 245,
+          "engineStarted": 316,
+          "firstContentfulPaint": 449,
+          "firstLoadEnd": 429,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 140,
+          "modelLoaded": 142,
+          "sidebarDrawn": 244,
+          "windowShown": 195
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 276,
+          "engineInitialized": 272,
+          "engineStart": 196,
+          "engineStarted": 268,
+          "firstContentfulPaint": 407,
+          "firstLoadEnd": 386,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 84,
+          "modelLoaded": 85,
+          "sidebarDrawn": 195,
+          "windowShown": 147
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 315,
+          "engineInitialized": 311,
+          "engineStart": 233,
+          "engineStarted": 308,
+          "firstContentfulPaint": 474,
+          "firstLoadEnd": 455,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 132,
+          "modelLoaded": 134,
+          "sidebarDrawn": 232,
+          "windowShown": 183
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 271,
+          "engineInitialized": 267,
+          "engineStart": 194,
+          "engineStarted": 265,
+          "firstContentfulPaint": 397,
+          "firstLoadEnd": 381,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 88,
+          "modelLoaded": 89,
+          "sidebarDrawn": 193,
+          "windowShown": 144
+        }
+      ]
+    },
+    "load_average": [
+      7.05419921875,
+      8.0234375,
+      8.630859375
+    ],
+    "navigation_before_engine": {
+      "hosts": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true,
+      "title": "Queued"
+    },
+    "quit_before_engine": {
+      "exit": 0,
+      "ok": true
+    },
+    "selected_only_0": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_1": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_2": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_3": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_4": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 233,
+        "engineStarted": 308,
+        "firstContentfulPaint": 423,
+        "main": 132,
+        "modelLoaded": 134,
+        "sidebarDrawn": 232
+      },
+      "ok": true,
+      "samples": 5
+    },
+    "window_before_engine_0": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_1": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_2": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_3": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_4": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_png": {
+      "file": "window-startup.png",
+      "ok": true
+    }
+  }
+}

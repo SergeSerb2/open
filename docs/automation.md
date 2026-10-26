@@ -66,7 +66,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
 | `type` | `tab`, `text` | Insert text in the focused page field |
 | `key` | `key`, `modifiers`, `route` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `text` sends plain characters to the first responder. |
-| `mouse` | `window`, `x`, `y` | Left click in one of Open's own windows (for Chromium's own dialogs) |
+| `mouse` | `window`, `x`, `y`; `action=move`; or `from` / `to` point pairs | Own-window click, queued hover motion, or native resize drag; system cursor stays unchanged |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
@@ -75,6 +75,16 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
+| `shell-windows` | — | Standard controller IDs and native window numbers |
+| `window-state` | — | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count |
+| `window-focus` | `id`, `activate` | Make that own window key; optional own-app activation |
+| `window-close` | — | Native close for the current standard window; model tabs stay |
+| `window-reopen` | — | Real application reopen handler, including after the last window closes |
+| `window-fullscreen` | — | Native full-screen toggle; wait for completed transition count before testing the result |
+| `sidebar-move` | `tab`, `section` or `folder`, `index` | Production SidebarDelegate move intent; model and engine strip share the resulting order |
+| `folder-create` / `folder-toggle` | `title` / `folder` | Create fixture folder through the model; production sidebar expand/collapse intent |
+| `sidebar-clear` | — | Production sidebar Clear Today intent |
+| `archive` | — | Recent real archive rows for the focused profile |
 | `window-frame` | `frame` `[x, y, w, h]` | Move/resize the main window |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
 | `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus, keep the window size on page fullscreen |
@@ -106,7 +116,8 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 ```sh
 tools/build.sh Debug
 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
-tools/e2e/engine_e2e.py --only window --config Release     # five fresh and five restored startup timings
+tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
@@ -122,3 +133,10 @@ during the first-frame wait; `OPEN_AUTOMATION_EARLY_NAVIGATION=<URL>` submits
 Open's address action before readiness; `OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE=1`
 clicks Open's own Quit alert button after a real engine-load failure. They send
 no input to the system or other applications.
+
+The window and sidebar suites compare the live app against F0001 when the
+capture-time snapshot and capture exist in the main checkout's `.re/`.
+`OPEN_ARC_CAPTURE_ROOT` can name that `.re` directory explicitly. With no
+captures, only the comparison is reported SKIP; functional flows still run.
+Private screenshots and snapshot data stay in `.re/app-shell-comparison-*`.
+Only the per-element measurement tables are written to `docs/engine-spike/`.

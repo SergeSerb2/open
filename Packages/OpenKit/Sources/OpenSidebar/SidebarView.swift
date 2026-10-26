@@ -71,6 +71,7 @@ public final class SidebarView: NSView {
     }
 
     public override var isFlipped: Bool { true }
+    public override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {

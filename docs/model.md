@@ -56,6 +56,13 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 
 State changes only through named commands on `BrowserModel`:
 `newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `setPinnedSectionCollapsed(spaceID:collapsed:)`, `setMuted(tabID:muted:)`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
+Window commands: `createWindow(focusedSpaceID:)`, `closeWindow(windowID:)`,
+`setSidebarWidth(windowID:width:)`, and `setSidebarMode(windowID:mode:)`.
+They register property/window undo steps and emit no `TreeChange`: windows are
+not sidebar structure. Creation refuses an unknown Space. Width refuses
+non-finite input and clamps to 228–500. The App supplies window lifecycle and
+snapshot scheduling; the model has no AppKit or engine dependency.
+
 Query: `isPinned(tabID:)`. `newTab` without an explicit index inserts at the top of Today. Collapse and mute are property-only undo steps. Same-value or missing-target commands register no undo and send no event.
 
 Untitled Spaces store `title == nil`; schema-1 snapshots accept both missing/null and existing string titles. `displayTitle(for:)` uses “Space N” for the current 1-based position when the title is nil or empty. `SpaceIcon.named` retains the imported identifier across snapshot save/load. [NamedSpaceIcons.swift](../Packages/OpenKit/Sources/OpenModel/NamedSpaceIcons.swift) supplies the checked SF Symbol mapping and neutral fallback. Older builds cannot decode the new named-icon enum case.
