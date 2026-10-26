@@ -1,7 +1,7 @@
 import Foundation
 import ImageIO
 import OpenModel
-import OpenStore
+@_spi(FaviconDiagnostics) import OpenStore
 import UniformTypeIdentifiers
 
 private let faviconUsage = """
@@ -22,11 +22,12 @@ func runFavicons(args: [String]) async throws {
 }
 
 private func faviconCommand(_ args: [String]) async throws {
-    guard let command = args.first, ["fetch", "get", "stats", "bench"].contains(command) else { faviconUsageExit() }
+    guard let command = args.first, ["fetch", "get", "stats", "bench", "ingest"].contains(command) else { faviconUsageExit() }
     var options: [String: String] = [:], positional: [String] = [], index = 1
     let allowed: Set<String>
     switch command {
-    case "fetch": allowed = ["--snapshot", "--db", "--limit"]
+    case "fetch": allowed = ["--snapshot", "--db", "--limit", "--treat-as-public", "--diagnostic-concurrent"]
+    case "ingest": allowed = ["--db", "--file", "--page-specific"]
     case "get": allowed = ["--db", "--out", "--size"]
     default: allowed = ["--db"]
     }
@@ -42,7 +43,12 @@ private func faviconCommand(_ args: [String]) async throws {
             index += 1
         }
     }
-    guard let dbPath = options["--db"], positional.count == (command == "get" ? 1 : 0) else { faviconUsageExit() }
+    guard let dbPath = options["--db"], positional.count == (["get", "ingest"].contains(command) ? 1 : 0) else { faviconUsageExit() }
+    #if !DEBUG
+    if command == "ingest" || options["--treat-as-public"] != nil || options["--diagnostic-concurrent"] != nil {
+        guard ProcessInfo.processInfo.environment["OPENKIT_FAVICON_DEBUG"] == "1" else { faviconUsageExit() }
+    }
+    #endif
     let store = try FaviconStore(databaseURL: URL(fileURLWithPath: dbPath))
     switch command {
     case "fetch":
@@ -64,12 +70,42 @@ private func faviconCommand(_ args: [String]) async throws {
         configuration.urlCache = nil
         let session = URLSession(configuration: configuration)
         defer { session.invalidateAndCancel() }
-        let report = await FaviconFetcher(store: store, session: session).prefetch(urls)
+        let fetcher = FaviconFetcher(store: store, session: session)
+        // Hidden development diagnostics. The public-host override only applies to
+        // the page origin; cross-origin destinations retain the real address policy.
+        if let host = options["--treat-as-public"] {
+            guard !host.isEmpty else { faviconUsageExit() }
+            try await fetcher.treatAsPublic(host: host)
+        }
+        let report: FetchReport
+        if let value = options["--diagnostic-concurrent"] {
+            guard let count = Int(value), (2...16).contains(count), let first = urls.first else { faviconUsageExit() }
+            async let one = fetcher.fetchOne(first)
+            let reports = await withTaskGroup(of: FetchReport.self, returning: [FetchReport].self) { group in
+                for _ in 0..<count { group.addTask { await fetcher.prefetch(urls) } }
+                var reports: [FetchReport] = []
+                for await report in group { reports.append(report) }
+                return reports
+            }
+            guard reports.count == count, reports.allSatisfy({ $0.requested == reports[0].requested && $0.fetched + $0.alreadyCached == $0.requested }),
+                  await one else { throw FaviconStoreError.database }
+            print("concurrentPrefetches=\(count) fetchOne=ok")
+            report = reports[0]
+        } else {
+            report = await fetcher.prefetch(urls)
+        }
         print(String(format: "requested=%d alreadyCached=%d fetched=%d missing=%d failed=%d durationMs=%.3f",
                      report.requested, report.alreadyCached, report.fetched, report.missing, report.failed, report.durationMs))
         for result in report.origins {
             print(String(format: "origin-%d  %@  %.3f ms", result.index, result.status.rawValue, result.durationMs))
         }
+    case "ingest":
+        // Hidden CLI route through the engine-facing ingest API, for real codec fixtures.
+        guard let page = URL(string: positional[0]), let path = options["--file"],
+              ["true", "false"].contains(options["--page-specific"] ?? "false") else { faviconUsageExit() }
+        let bytes = try Data(contentsOf: URL(fileURLWithPath: path), options: .mappedIfSafe)
+        try await store.ingest(imageData: bytes, iconURL: nil, for: page, pageSpecific: options["--page-specific"] == "true")
+        print("ingested=1")
     case "get":
         guard let page = URL(string: positional[0]), let output = options["--out"],
               ["32", "64"].contains(options["--size"] ?? "32") else { faviconUsageExit() }

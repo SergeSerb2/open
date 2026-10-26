@@ -78,7 +78,7 @@ private final class FaviconStatements: @unchecked Sendable {
             return stmt
         }
         lookup = try prepare("SELECT png32,png64,icon_url FROM favicons WHERE origin=? AND page_key IN (?, '') AND status=0 AND png32 IS NOT NULL ORDER BY length(page_key) DESC LIMIT 1")
-        freshness = try prepare("SELECT status FROM favicons WHERE origin=? AND page_key IN (?, '') AND expires_at>? ORDER BY length(page_key) DESC LIMIT 1")
+        freshness = try prepare("SELECT status FROM favicons WHERE origin=? AND page_key='' AND expires_at>?")
         upsert = try prepare("""
             INSERT INTO favicons(origin,page_key,icon_url,png32,png64,fetched_at,expires_at,status)
             VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(origin,page_key) DO UPDATE SET
@@ -116,6 +116,7 @@ public actor FaviconStore {
 
     public func ingest(imageData: Data, iconURL: URL?, for pageURL: URL, pageSpecific: Bool) throws {
         guard let origin = FaviconOrigin.key(pageURL) else { throw FaviconStoreError.invalidURL }
+        guard imageData.count <= 512 * 1024 else { throw FaviconStoreError.invalidImage }
         let pngs = try autoreleasepool { () throws -> (Data, Data) in
             let image = try Self.decode(imageData)
             return (try Self.png(image, size: 32), try Self.png(image, size: 64))
@@ -129,6 +130,7 @@ public actor FaviconStore {
         try? write(origin: origin, pageKey: "", status: 1, lifetime: 86400)
     }
 
+    /// Prefetch freshness is origin-only; page-specific images do not cover other pages.
     public func needsFetch(_ pageURL: URL, now: Date = .now) -> Bool {
         cachedStatus(for: pageURL, now: now) == nil
     }
@@ -164,8 +166,7 @@ public actor FaviconStore {
         let stmt = statements.freshness
         defer { reset(stmt) }
         statements.db.bindText(stmt, 1, origin)
-        statements.db.bindText(stmt, 2, FaviconOrigin.pageKey(pageURL))
-        statements.db.bindDouble(stmt, 3, now.timeIntervalSince1970)
+        statements.db.bindDouble(stmt, 2, now.timeIntervalSince1970)
         return sqlite3_step(stmt) == SQLITE_ROW ? Int(statements.db.columnInt(stmt, 0)) : nil
     }
 
@@ -221,6 +222,13 @@ public actor FaviconStore {
                     if distance < best { best = distance; index = candidate }
                 }
             }
+            // Read the selected frame's dimensions before asking ImageIO to decode it.
+            guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any],
+                  let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+                  let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+                  (1...4096).contains(width.doubleValue), (1...4096).contains(height.doubleValue) else {
+                throw FaviconStoreError.invalidImage
+            }
             let options: [CFString: Any] = [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                           kCGImageSourceCreateThumbnailWithTransform: true,
                                           kCGImageSourceThumbnailMaxPixelSize: 64]
@@ -229,6 +237,9 @@ public actor FaviconStore {
         // AppKit's SVG decoder is optional. Its objects stay local to this actor call.
         if let text = String(data: data.prefix(4096), encoding: .utf8), text.range(of: "<svg", options: .caseInsensitive) != nil,
            let image = NSImage(data: data) {
+            guard image.size.width.isFinite, image.size.height.isFinite,
+                  (0...4096).contains(image.size.width), (0...4096).contains(image.size.height),
+                  image.size.width > 0, image.size.height > 0 else { throw FaviconStoreError.invalidImage }
             var rect = CGRect(x: 0, y: 0, width: 64, height: 64)
             if let cgImage = image.cgImage(forProposedRect: &rect, context: nil, hints: nil) { return cgImage }
         }
