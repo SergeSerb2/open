@@ -1,0 +1,114 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+  },
+  "peek": {
+    "close_promoted_releases_host": {
+      "after": {
+        "created": 2,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "expand_rebinds_host": {
+      "after": {
+        "created": 2,
+        "engineContents": 2,
+        "retained": 2
+      },
+      "before": {
+        "created": 2,
+        "engineContents": 2,
+        "retained": 2
+      },
+      "ok": true,
+      "strip": [
+        {
+          "active": "904DD77B-D8DF-450C-9FCC-EB427FB74C7F",
+          "activeIsMember": true,
+          "contents": [
+            1,
+            2
+          ],
+          "context": "Default",
+          "profile": "8DE55252-39F1-498F-9BDB-84A050A1CCAE",
+          "tabs": [
+            "832D0651-7CED-4C8C-AE13-0D815A7B4A38",
+            "904DD77B-D8DF-450C-9FCC-EB427FB74C7F"
+          ]
+        }
+      ]
+    },
+    "page_background_after_load": {
+      "host": {
+        "audible": false,
+        "browser": 1,
+        "browserIndex": 1,
+        "browserPinned": false,
+        "canGoBack": true,
+        "context": "Default",
+        "crash": 0,
+        "extension": "",
+        "favicon": false,
+        "fullscreen": false,
+        "hidden": false,
+        "hostTab": "D2CBC97A-1C75-40ED-B205-EBE7572DAC54",
+        "identifier": 1,
+        "kind": "tab",
+        "live": true,
+        "loading": false,
+        "muted": false,
+        "pageBackground": [
+          30,
+          80,
+          120,
+          255
+        ],
+        "popup": false,
+        "style": "alloy",
+        "title": "Page color 2",
+        "url": "data:text/html,%3Ctitle%3EPage%20color%202%3C/title%3E%3Cbody%20style=%22background:rgb(30,80,120)%22%3E%3Ch1%3EPage%20color%202%3C/h1%3E",
+        "zoom": 0
+      },
+      "ok": true,
+      "pane_color": [
+        30,
+        80,
+        120,
+        255
+      ]
+    },
+    "peek_active_stays_model_tab": {
+      "ok": true,
+      "strip": [
+        {
+          "active": "832D0651-7CED-4C8C-AE13-0D815A7B4A38",
+          "activeIsMember": true,
+          "contents": [
+            1
+          ],
+          "context": "Default",
+          "profile": "8DE55252-39F1-498F-9BDB-84A050A1CCAE",
+          "tabs": [
+            "832D0651-7CED-4C8C-AE13-0D815A7B4A38"
+          ]
+        }
+      ]
+    },
+    "peek_png": {
+      "file": "peek-window.png",
+      "ok": true
+    },
+    "window_png": {
+      "file": "peek-promoted-window.png",
+      "ok": true
+    }
+  },
+  "started": "2026-10-25 23:29:00",
+  "style": "alloy"
+}

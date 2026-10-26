@@ -23,7 +23,7 @@ enum FeatureChecks {
         model.selectNode(windowID: window.id, spaceID: space.id, nodeID: first.id)
         let store = SnapshotStore(root: temp), archive = ArchiveStore(fileURL: temp.appendingPathComponent("State/archive.sqlite3"))
         model.archiveSink = archive
-        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults, snapshotStore: store)
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, size: CGSize(width: 2216, height: 1394), defaults: defaults, snapshotStore: store)
         defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
         func settle() { OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
         settle()
@@ -252,7 +252,7 @@ enum FeatureChecks {
         c.peekController.openInSplitTop(); settle()
         check(c.splitController.split?.panes.count == 2 && !c.peekController.isOpen && c.container.host(for: c.context.currentTab!.id) === splitPeek, "P3 lead Q4 Split promotes same host beside source")
         let littleModel = FeatureCLI.synthetic(); littleModel.windows = []
-        let little = LittleOpenCoordinator(model: littleModel, archiveSink: archive) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil) as! FakeWebContentHost }
+        let little = LittleOpenCoordinator(model: littleModel, archiveSink: archive) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil)! as! FakeWebContentHost }
         little.presentWindows = false; little.defaults = defaults
         defer { little.closeAll() }
         little.open(url: URL(string: "https://example.com/path#one")!, profileHint: nil)
