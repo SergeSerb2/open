@@ -278,8 +278,16 @@
           "Input.insertText", parameters: ["text": a["text"] as? String ?? ""])
         return true
       case "focus":
-        try content(a, w).focusPage()
-        return true
+        let page = try content(a, w)
+        page.focusPage()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
+          let responder = page.view.window?.firstResponder as? NSView
+          let nativeFocus = responder.map { $0 === page.view || $0.isDescendant(of: page.view) } == true
+          if nativeFocus, try await page.evaluateJavaScript("document.hasFocus()") as? Bool == true { return true }
+          try await Task.sleep(for: .milliseconds(10))
+        }
+        throw Failure(message: "page focus not ready")
       case "mouse":
         let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
         guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
@@ -432,6 +440,11 @@
         func inRoot(_ r: CGRect?) -> Any { r.map { rect(root.convert($0, from: sidebar)) } ?? NSNull() }
         let titlebar = win.standardWindowButton(.closeButton)?.superview.map { rect(root.convert($0.bounds, from: $0)) } ?? []
         return ["id": w.windowState.id.description, "number": win.windowNumber,
+          "appActive": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
+          "isKeyWindow": win.isKeyWindow, "visible": win.isVisible,
+          "firstResponder": win.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+          "activationPolicy": NSApp.activationPolicy().rawValue,
+          "screenFrame": win.screen.map { rect($0.frame) } ?? [],
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
@@ -857,8 +870,18 @@
 
     private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window else { throw Failure(message: "no window") }
+      // Activation is asynchronous. Never inject into an inactive app after a
+      // fixed grace period: its production router correctly declines the key.
+      // Make the requested window key again once activation has completed.
       target.makeKeyAndOrderFront(nil); NSApp.activate()
-      for _ in 0..<20 { if NSApp.isActive && target.isKeyWindow { break }; try? await Task.sleep(for: .milliseconds(10)) }
+      let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+      while !NSApp.isActive || !target.isKeyWindow {
+        guard ContinuousClock.now < deadline else {
+          throw Failure(message: "key focus not ready: active=\(NSApp.isActive) target=\(target.windowNumber) key=\(NSApp.keyWindow?.windowNumber ?? 0)")
+        }
+        if NSApp.isActive { target.makeKeyAndOrderFront(nil) }
+        try await Task.sleep(for: .milliseconds(10))
+      }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).

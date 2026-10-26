@@ -41,6 +41,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private lazy var mirror = TabStripMirror(owner: self)
   private var observerID: UUID?
   private(set) var commandBarSession: AppCommandBarSession?
+  private var commandBarNavigationFocus: Set<ItemID> = []
   func showCommandBar(_ mode: CommandBarMode) {
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
@@ -197,6 +198,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    commandBarNavigationFocus.remove(host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
     mirror.sync()
@@ -474,13 +476,27 @@ extension EngineWebContentHostFactory {
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     if current, selectedContent != nil || selectedTab != nil {
+      if let id = selectedTab?.id { commandBarNavigationFocus.insert(id) }
       if !app.engineReady, let tab = selectedTab {
         queuedNavigations[tab.id] = url; tab.url = url; app.scheduleSave()
       } else { selectedContent?.load(url); selectedContent?.focusPage() }
-    } else if let tab = openNewTab(url: url, background: background), background {
-      _ = ensureContent(for: tab)
+    } else if let tab = openNewTab(url: url, background: background) {
+      if background { _ = ensureContent(for: tab) }
+      else { commandBarNavigationFocus.insert(tab.id) }
     }
     if let profile = focusedProfile { app.stores.recordTyped(url: url, title: url.host() ?? url.absoluteString, profileID: profile.id) }
+  }
+  private func finishCommandBarNavigation(_ page: OEWebContent) {
+    guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }
+    DispatchQueue.main.async { [weak self, weak page] in
+      guard let self, let page, self.selectedContent === page,
+            self.window?.isKeyWindow == true, self.commandBarSession?.isPresented != true else { return }
+      // The bar had focused the old document before navigating. A hosted
+      // Chrome tab can reuse its native responder while replacing its renderer;
+      // give the committed page a real blur/focus transition after strip sync.
+      self.window?.makeFirstResponder(nil)
+      page.focusPage()
+    }
   }
   func selectTabForCommand(_ id: ItemID, spaceID: SpaceID? = nil) {
     guard let tab = model.tab(id: id) else { return }
@@ -846,12 +862,14 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool { controller?.handleKeyDown(event, unconsumed: true) == true }
 
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
+    finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
     if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd") }
     record("load", webContent, ["status": status, "url": webContent.url?.absoluteString ?? ""])
   }
 
   func webContent(_ webContent: OEWebContent, didFailLoadWithError error: any Error) {
+    finishCommandBarNavigation(webContent)
     record("loadError", webContent, ["error": error.localizedDescription])
   }
 

@@ -191,3 +191,26 @@ embedded/vendor Mach-O UUIDs. Release socket runs require
 keeps the socket off. The first-open command-bar budget includes construction
 and service work; the fixture waits for the normal post-paint prewarm before
 opening the bar. The repeat-open timing is reported separately.
+
+
+### Foreground GUI launch and readiness (Step C main merge)
+
+Normal e2e sessions launch the exact built `.app` through LaunchServices
+(`open -n -W`), with a fresh suite data root. The socket `ping` supplies the actual
+app PID; the harness retains the launch waiter and closes only that app. Direct
+executable launches remain only in the intentional early-quit/missing-engine
+checks. A raw executable can have a visible window but no foreground activation
+grant on macOS 26. `NSApp.activate()` is a request, not a synchronous grant.
+
+Key injection requires the real application and requested window to become
+active/key; it fails before sending events if readiness times out. `focus` waits
+for both the page's native responder and `document.hasFocus()`. `window-state`
+reports those native flags and screen bounds. Tests poll the resulting UI state
+instead of treating the key response as proof that the UI has finished changing.
+
+`--only actions` runs the complete Step C command-bar/native-menu/action flow,
+including page Copy/Paste/Undo/Select All, model undo, lazy duplication, and real
+Settings/Library. `--only commandbar` remains available with the same checks.
+Use `--style chrome` to exercise production P1 tab hosting. Screenshot comparisons
+request the existing `window-frame unconstrained=true` mode and wait for the exact
+reference size; their dimensions and ≤1 pt/ΔE00≤2 assertions stay unchanged.

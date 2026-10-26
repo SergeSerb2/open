@@ -18,12 +18,14 @@ Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 """
 import argparse
 import base64
+import ctypes
 import json
 import math
 import glob
 import re
 import os
 import shutil
+import signal
 import socket
 import statistics
 import struct
@@ -50,16 +52,29 @@ class Open:
         self.user_data = user_data
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+        self.executable = app
+        self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        self.pid = None
         env = dict(os.environ, OPEN_USER_DATA=user_data)
         env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
-        self.proc = subprocess.Popen(args, env=env, stdout=self.log, stderr=subprocess.STDOUT)
+        # A raw executable launch can have a visible window but no foreground
+        # activation entitlement. Launch the actual bundle through LaunchServices,
+        # just as a user does. -W tracks this new instance through app exit.
+        self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
+        launch = ["/usr/bin/open", "-n", "-W", self.bundle,
+                  "--stdout", self.launch_log_path, "--stderr", self.launch_log_path]
+        for key, value in env.items():
+            if key.startswith("OPEN_") or key in (extra_env or {}):
+                launch += ["--env", key + "=" + value]
+        launch += ["--args"] + args[1:]
+        self.proc = subprocess.Popen(launch, stdout=self.log, stderr=subprocess.STDOUT)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
-                self.call("ping")
+                self.pid = self.call("ping")["pid"]
                 return
             except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
@@ -72,6 +87,11 @@ class Open:
         raise RuntimeError("Open did not start; see %s" % log_path)
 
     def call(self, cmd, timeout=120, **args):
+        if cmd in ("key", "focus") and self.pid and not self.call("window-state").get("appActive", False):
+            # `NSApp.activate()` is a request, not a grant. Renew the explicit
+            # LaunchServices foreground request if another app took focus.
+            # This targets only this suite's absolute Open.app bundle path.
+            subprocess.run(["/usr/bin/open", "-a", self.bundle], check=True, timeout=10)
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(self.sock)
@@ -107,7 +127,17 @@ class Open:
         try:
             self.proc.wait(15)
         except subprocess.TimeoutExpired:
+            # Killing the `open -W` waiter does not kill its app. Confirm the
+            # recorded PID still belongs to this exact binary before cleanup.
+            if self.pid:
+                path = ctypes.create_string_buffer(4096)
+                libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+                if libproc.proc_pidpath(self.pid, path, len(path)) > 0 and os.path.realpath(os.fsdecode(path.value)) == os.path.realpath(self.executable):
+                    os.kill(self.pid, signal.SIGKILL)
             self.proc.kill()
+            self.proc.wait()
+        if os.path.exists(self.launch_log_path):
+            self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
         self.log.close()
 
     def tab(self, tab_id):
@@ -635,12 +665,16 @@ def shell_checks(app_factory, results, tmp):
         time.sleep(0.3)
         n0 = len(app.call("tabs"))
         route = {}
-        route["cmd_l_window"] = app.call("key", key="l", modifiers=["cmd"], route="window")["firstResponder"]
+        app.call("key", key="l", modifiers=["cmd"], route="window")
+        ready = state_when(app, lambda st: st["firstResponder"] in ("NSTextView", "CommandBarFieldEditor"))
+        route["cmd_l_window"] = ready["firstResponder"] if ready else app.call("window-state")["firstResponder"]
         app.call("key", key="escape")
         time.sleep(.3)
         app.call("focus", tab=c)
         time.sleep(0.2)
-        route["cmd_t_app"] = app.call("key", key="t", modifiers=["cmd"])["firstResponder"]
+        app.call("key", key="t", modifiers=["cmd"])
+        ready = state_when(app, lambda st: st["firstResponder"] in ("NSTextView", "CommandBarFieldEditor"))
+        route["cmd_t_app"] = ready["firstResponder"] if ready else app.call("window-state")["firstResponder"]
         app.call("key", text="example.net\r")
         time.sleep(2)
         tabs = app.call("tabs")
@@ -2320,7 +2354,7 @@ def static_window_comparison(factory, results, tmp, suite):
 
 def startup_failure_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
-    app_path = app.proc.args[0]
+    app_path = app.executable
     app.quit()
     unconfirmed = factory(urls=("data:text/html,<title>Unconfirmed frame</title><h1>Unconfirmed frame</h1>",), fresh=True,
                           extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1"})
@@ -2651,7 +2685,7 @@ def commandbar_checks(factory, results, tmp, config):
         custom = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == custom_url), None), step=.1)
         results['custom_search_engine_navigation'] = {'ok': bool(custom), 'expectedURL': custom_url}
         app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
-        app.call('focus', tab=target); time.sleep(.2)
+        app.call('select', tab=target); app.call('wait', tab=target); app.call('focus', tab=target)
         press('s', modifiers=['cmd','shift'])
         save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
         results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
