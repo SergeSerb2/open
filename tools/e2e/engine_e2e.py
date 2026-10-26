@@ -756,9 +756,10 @@ def tabstrip_checks(app, results):
             try:
                 return app.eval(probe_popup(), js, timeout=timeout)
             except RuntimeError as error:
-                # OEErrorWebContentClosed: the popup was closing (a tab switch
-                # just happened); reopen it and try again.
-                if "error 4." not in str(error) or attempt == 2:
+                # The popup was closing (a tab switch just happened): the page
+                # is closed (OEErrorWebContentClosed) or already gone. Reopen
+                # it and try again.
+                if not ("error 4." in str(error) or "no page for" in str(error)) or attempt == 2:
                     raise
                 popup_page["id"] = None
 
@@ -769,7 +770,9 @@ def tabstrip_checks(app, results):
         tabs-probe/background.js); its result from chrome.storage.session."""
         op_seq[0] += 1
         seq = op_seq[0]
-        ext_eval(pop, "chrome.runtime.sendMessage(%s).then(() => true)" % json.dumps(dict(op=op, seq=seq, **args)))
+        # Fire and forget: the switch closes the popup, so do not wait for the
+        # reply. The background ignores a repeated seq (a retried send).
+        ext_eval(pop, "chrome.runtime.sendMessage(%s); true" % json.dumps(dict(op=op, seq=seq, **args)))
         return wait_until(lambda: (lambda r: r if r and r.get("seq") == seq else None)(
             ext_eval(pop, "chrome.storage.session.get('lastOp').then(r => r.lastOp || null)")), timeout=15)
 
