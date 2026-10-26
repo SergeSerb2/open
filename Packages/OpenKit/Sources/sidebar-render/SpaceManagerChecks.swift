@@ -63,6 +63,17 @@ enum SpaceManagerChecks {
             } else { NSApp.postEvent(mouse(.leftMouseUp, dx: deltas.last ?? 0), atStart: false) }
             grip.mouseDown(with: mouse(.leftMouseDown, dx: 0)); pump()
         }
+        manager.layer?.backgroundColor = NSColor.white.cgColor
+        SidebarDiagnostics.spaceReorderFrame = {
+            OffscreenRenderer.settle(manager)
+            let image = OffscreenRenderer().snapshot(manager, scale: 2)
+            let bytes = CFDataGetBytePtr(image.dataProvider!.data!)!
+            func red(_ x: Int, _ y: Int) -> UInt8 { bytes[y * 2 * image.bytesPerRow + x * 2 * 4] }
+            check(red(150, 10) < 250 && red(34, 330) < 250, "SM3 native mid-drag fill grows to centered 1.02 bounds, with its content and rim")
+            check(red(150, 694) < 254 && red(150, 698) > red(150, 694), "SM3 native mid-drag shadow draws and fades below the lifted column")
+        }
+        drag(controls, deltas: [20], cancel: true)
+        SidebarDiagnostics.spaceReorderFrame = nil
         let reloads = SidebarDiagnostics.fullReloads
         let alignment = SidebarDiagnostics.haptics["alignment", default: 0]
         drag(controls, deltas: [360])
