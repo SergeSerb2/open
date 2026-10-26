@@ -26,7 +26,9 @@ public struct SearchEnginesSheet:View {
             Spacer();Text(engine.id.hasPrefix("custom-") || model.profile?.settings.customSearchEngines.contains(where:{$0.id == engine.id}) == true ? engine.keywords.joined(separator:", "):"Built-in").font(.system(size:11)).foregroundStyle(.secondary)
         }.tag(engine.id)}}.listStyle(.plain).frame(minHeight:120).overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:SettingsTokens.border.nsColor)))
         if editing {
-            TextField("Name",text:$name);TextField("Keyword (no spaces)",text:$keyword);TextField("Search URL containing %s",text:$template)
+            HStack {Text("Name").frame(width:60,alignment:.leading);TextField("Name",text:$name)}
+            HStack {Text("Keyword").frame(width:60,alignment:.leading);TextField("Keyword (no spaces)",text:$keyword)}
+            HStack {Text("URL").frame(width:60,alignment:.leading);TextField("Search URL containing %s",text:$template)}
             if !valid {Text("Enter a name, keyword, and URL containing %s.").font(.caption).foregroundStyle(.red)}
         }
         SettingsError(text:model.errorText)
