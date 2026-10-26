@@ -201,12 +201,12 @@ private final class SidebarUnreadDot {
         guard shown != self.shown else { return }
         self.shown = shown
         let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if reduced { layer.removeAnimation(forKey: "unread-in") }
+        if reduced { layer.removeAnimation(forKey: "unread-in"); layer.removeAnimation(forKey: "unread-out") }
         if shown && !reduced {
             let spring = Motion.unreadAppear.animation(keyPath: "transform.scale")
             spring.fromValue = 0; spring.toValue = 1
             layer.add(spring, forKey: "unread-in")
-        } else if !shown {
+        } else if !shown && !reduced {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 1; fade.toValue = 0; fade.duration = Motion.unreadClearFade
             layer.add(fade, forKey: "unread-out")
@@ -217,7 +217,7 @@ private final class SidebarUnreadDot {
 @MainActor
 private enum SidebarResetImages {
     private static let reset = make("arrow.uturn.backward")
-    private static let separate = make("arrow.up.forward.square")
+    private static let separate = make("arrow.up.forward")
     static func image(separate: Bool) -> NSImage? { separate ? self.separate : reset }
     private static func make(_ name: String) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
@@ -345,7 +345,7 @@ final class TabCellView: SidebarCellView {
     private var faviconHovered = false
     private var resetShown = false
     private var resetSeparate = false
-    weak var tab: Tab? { didSet { bind() } }
+    weak var tab: Tab? { didSet { if tab !== oldValue { faviconHovered = false }; bind() } }
 
     required init(frame: NSRect) {
         super.init(frame: frame)
@@ -355,6 +355,10 @@ final class TabCellView: SidebarCellView {
         title.inset = SpaceListMetrics.textInset
         title.trailingInset = SpaceListMetrics.textTrailingInset
         addSubview(favicon); addSubview(title)
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse(); faviconHovered = false; tab = nil
     }
 
     private func bind() {
@@ -474,6 +478,7 @@ final class TabCellView: SidebarCellView {
     }
 
     override func rowStateChanged() {
+        if rowView?.isHovered != true, faviconHovered { faviconHovered = false; needsLayout = true }
         let unload = tracked({ showsUnload }) { [weak self] in self?.needsLayout = true }
         let visible = showsAccessory
         guard visible || accessory != nil else { return }

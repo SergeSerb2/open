@@ -196,6 +196,37 @@ extension CompletionChecks {
         pump()
         let frame = sidebar.rowFrame(nodeID: unread.id)!
         check(sidebar.unreadDotFrame(nodeID: unread.id) == CGRect(x: 199, y: frame.minY + 17, width: 6, height: 6), "UB1 unread dot is 6 pt at (W − 26, y + 20)")
+        let originalTheme = space.theme, originalAppearance = context.systemAppearance
+        for appearance in [ContentAppearance.light, .dark] {
+            space.theme = appearance == .light ? originalTheme : SpaceTheme()
+            context.systemAppearance = appearance; pump()
+            let dot = sidebar.unreadDotFrame(nodeID: unread.id)!
+            let image = OffscreenRenderer().snapshot(scene, scale: 1)
+            let bytes = CFDataGetBytePtr(image.dataProvider!.data!)!
+            func luminance(_ p: CGPoint) -> Double {
+                let i = Int(p.y) * image.bytesPerRow + Int(p.x) * 4
+                let rgb = (0..<3).map { c -> Double in let x = Double(bytes[i+c])/255; return x <= 0.04045 ? x/12.92 : pow((x+0.055)/1.055,2.4) }
+                return rgb[0]*0.2126 + rgb[1]*0.7152 + rgb[2]*0.0722
+            }
+            let center = scene.convert(CGPoint(x: dot.midX, y: dot.midY), from: sidebar)
+            let ink = luminance(center), base = luminance(CGPoint(x: center.x-8,y: center.y))
+            let ratio = (max(ink,base)+0.05)/(min(ink,base)+0.05)
+            check(ratio >= 3, "UB1 \(appearance) actual unread dot contrast \(String(format: "%.2f",ratio)):1 ≥ 3:1 (guess pending C5)")
+        }
+        space.theme = originalTheme; context.systemAppearance = originalAppearance; pump()
+        let snapshotRoot = FileManager.default.temporaryDirectory.appendingPathComponent("unread-relaunch-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: snapshotRoot) }
+        do {
+            let store = SnapshotStore(root: snapshotRoot)
+            try store.saveNow(model: model)
+            let restored = try store.load()!
+            let restoredContext = SidebarContext(model: restored, windowID: state.id)
+            let restoredDelegate = RecordingDelegate()
+            let restoredScene = RenderScene(context: restoredContext, options: options, delegate: restoredDelegate)
+            let restoredHost = OffscreenRenderer.host(restoredScene, scale: 1)
+            check(restored.tab(id: unread.id)?.isUnread == true && restoredScene.sidebar.unreadDotFrame(nodeID: unread.id) == sidebar.unreadDotFrame(nodeID: unread.id), "UB1 unread dot survives real SnapshotStore save/load and rebuilt sidebar")
+            restoredHost.contentView = nil; restoredHost.close()
+        } catch { check(false, "UB1 unread relaunch through SnapshotStore: \(error)") }
         context.forcedHover = .row(unread.id); pump()
         check(sidebar.unreadDotFrame(nodeID: unread.id) == nil && sidebar.tabAction(tabID: unread.id) != nil, "UB2 hover gives the dot slot to the close button")
         context.forcedHover = nil
@@ -224,7 +255,7 @@ extension CompletionChecks {
                                        windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
         outline.enclosingScrollView!.superview!.mouseMoved(with: hover); pump()
         let reset = sidebar.resetAction(tabID: pinned.id)
-        check(reset.map { sidebar.convert($0.bounds, from: $0) == CGRect(x: 15, y: pinnedFrame.minY + 9, width: 22, height: 22) } == true &&
+        check(reset.map { sidebar.convert($0.bounds, from: $0) == CGRect(x: 16, y: pinnedFrame.minY + 10, width: 20, height: 20) } == true &&
               TooltipController.shared.visibleOrPendingTooltip?.title == "Back to Pinned URL", "SP1 favicon hover shows reset plate and tooltip")
         func glyphPixels() -> [UInt8] {
             guard let reset = sidebar.resetAction(tabID: pinned.id) else { return [] }
@@ -249,11 +280,10 @@ extension CompletionChecks {
 
         let tidy = model.newTab(in: space.id, url: URL(string: "https://mail.google.com/mail/u/0/#search")!, title: "Inbox (3) - reader@example.invalid - Gmail")
         pump()
-        let tidyRow = sidebar.displayedRows.firstIndex(of: tidy.id.description)!
-        check(outline.rowView(atRow: tidyRow, makeIfNecessary: true)?.accessibilityLabel() == "Inbox (3)", "TT1 the real Gmail row uses its tidy display title")
+        check(sidebar.drawnTitle(tabID: tidy.id) == "Inbox (3)", "TT1 the real Gmail row uses its tidy display title")
         let titleLayouts = SidebarDiagnostics.tabRowLayouts
         tidy.title = "Sent (4) - reader@example.invalid - Gmail"; pump()
-        check(outline.rowView(atRow: tidyRow, makeIfNecessary: true)?.accessibilityLabel() == "Sent (4)" && SidebarDiagnostics.tabRowLayouts == titleLayouts,
+        check(sidebar.drawnTitle(tabID: tidy.id) == "Sent (4)" && SidebarDiagnostics.tabRowLayouts == titleLayouts,
               "TT2 title change updates its row title without laying out any tab row")
 
         let deep = model.createFolder(in: .folder(folder.id), title: "Never opened")!

@@ -691,12 +691,15 @@ The title reserves 6 pt before it; hover and Peek take priority. A collapsed
 folder summarizes unread tabs at any depth, including split panes. Expansion
 returns the badge to the visible child. Geometry and accent choice are guesses
 from sidebar-completion §2.7 and [SC §9](re/sidebar-completion.md#9-unread-badge).
+Design R1 keeps the geometry but uses shadedDark in light Spaces and a lighter
+accent in dark Spaces (at least 3:1 in the real light/dark row checks; guess
+pending C5). Folder glyph colors remain unchanged.
 The spring uses response 0.2 / damping 0.8; clear fades for 0.12 s. Reduce Motion
-suppresses the spring. Theme changes update the accent of an existing dot.
+suppresses both. Theme changes update the accent of an existing dot.
 
-A navigated pinned row swaps its favicon for a 22 pt reset plate on favicon
+A navigated pinned row swaps its favicon for a 20 pt reset plate on favicon
 hover. Its 11 pt Semibold SF Symbol is `arrow.uturn.backward`; Option changes it
-to `arrow.up.forward.square` and "Separate From Pinned Tab" (lead Q10). Normal
+to `arrow.up.forward` and "Separate From Pinned Tab" (lead Q10). Normal
 activation sends reset through the model. Separate stays App-owned for live host
 handoff. The glyph swap fades over 0.08 s. Ordinary pinned rows have no plate.
 

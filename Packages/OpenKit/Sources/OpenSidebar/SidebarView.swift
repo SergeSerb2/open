@@ -373,6 +373,8 @@ extension SidebarView {
         return convert(dot.frame, from: cell)
     }
 
+    public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
+
     public func resetAction(tabID: ItemID) -> NSView? {
         guard let cell = cell(nodeID: tabID) as? TabCellView, let button = cell.resetButton, !button.isHidden else { return nil }
         return button

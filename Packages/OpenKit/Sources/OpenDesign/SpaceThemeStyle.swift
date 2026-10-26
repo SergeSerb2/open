@@ -46,13 +46,16 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     public var darkPalette: SemanticPalette?
     /// `primaryColorPalette.shaded`: the theme's strong accent. Nil for the default theme.
     public var accent: RGBA?
+    public var shadedDarkAccent: RGBA?
+    public var tintedLightAccent: RGBA?
 
     public init(fill: Fill, noiseFactor: Double = 0, intensityFactor: Double = 0.8, translucency: Translucency = .light,
                 contentAppearance: ContentAppearance? = .light, isVibrant: Bool = true,
-                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil) {
+                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil, shadedDarkAccent: RGBA? = nil, tintedLightAccent: RGBA? = nil) {
         self.fill = fill; self.noiseFactor = noiseFactor; self.intensityFactor = intensityFactor
         self.translucency = translucency; self.contentAppearance = contentAppearance; self.isVibrant = isVibrant
         self.lightPalette = lightPalette; self.darkPalette = darkPalette; self.accent = accent
+        self.shadedDarkAccent = shadedDarkAccent; self.tintedLightAccent = tintedLightAccent
     }
 
     /// Content appearance after applying the system fallback.
@@ -88,6 +91,15 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     /// the default dark Space (F0079) → `BrandBlue`. Themes: guess `shaded`.
     public func accentColor(_ appearance: ContentAppearance) -> RGBA {
         accent ?? Core.brandBlue.resolved(appearance)
+    }
+
+    /// Guess pending C5/C6: stronger accent for small marks and links.
+    /// Folder glyphs retain their separately measured accent role.
+    public func contrastAccent(_ appearance: ContentAppearance) -> RGBA {
+        if appearance == .light { return shadedDarkAccent ?? titleColor(.light).withAlpha(1) }
+        if let tintedLightAccent { return tintedLightAccent }
+        let c = accentColor(.dark)
+        return RGBA(c.red * 0.55 + 0.45, c.green * 0.55 + 0.45, c.blue * 0.55 + 0.45)
     }
 
     /// Tooltip capsule fill: the theme's `light.title`, opaque (exact match, F0021–F0033).
@@ -177,7 +189,9 @@ public struct SpaceThemeStyle: Sendable, Hashable {
                   translucency: translucency,
                   contentAppearance: appearance ?? .light,
                   isVibrant: single["isVibrant"] as? Bool ?? true,
-                  lightPalette: palette("light"), darkPalette: palette("dark"), accent: shaded)
+                  lightPalette: palette("light"), darkPalette: palette("dark"), accent: shaded,
+                  shadedDarkAccent: (primary?["shadedDark"] as? [String: Any]).flatMap(RGBA.init(arcColor:)),
+                  tintedLightAccent: (primary?["tintedLight"] as? [String: Any]).flatMap(RGBA.init(arcColor:)))
     }
 }
 
