@@ -37,8 +37,9 @@ public protocol SleepHistoryStoring: AnyObject {
 ///
 /// HARD S6 ADAPTER REQUIREMENT: deliver tabDidCommit and tabAudioChanged for
 /// EVERY tab commit/audio event, including background tabs and short events
-/// between ticks. Sampling alone is forbidden. Update capture/PiP/download,
-/// loading, DevTools, and form state on EVERY corresponding engine event.
+/// between ticks. Set Tab.url to the current URL before tabDidCommit so the
+/// keep-alive gate follows navigation. Sampling alone is forbidden. Update
+/// capture/PiP/download, loading, DevTools, and form state on EVERY engine event.
 /// Feed PiP and all auxiliary surfaces into SleepVisibilityProviding, and call
 /// visibility hooks on window/surface changes. Report user interaction through
 /// tabUserInteracted, and unload-handler changes through tabUnloadHandlersChanged.
