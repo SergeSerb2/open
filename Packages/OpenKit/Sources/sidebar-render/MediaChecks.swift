@@ -108,7 +108,7 @@ import OpenWeb
         let staticMutedLeft = inkLeft(button)
         Checks.check(staticLeft != nil && staticMutedLeft != nil && (staticLeft ?? 0) >= RowMediaMetrics.glyphInsetX && abs((staticLeft ?? -100) - (staticMutedLeft ?? 100)) <= 0.5, "RI static glyph shares the left anchor in both states (\(String(describing: staticLeft)), \(String(describing: staticMutedLeft))); same button \(speaker() === button), hidden \(button.isHidden), size \(button.bounds.size)")
         runNarrowRecording()
-        Checks.check(PiPMetrics.compactPlayGlyph == 22, "RI compact PiP play/pause token is 22 pt")
+        Checks.check(PiPMetrics.compactPlayGlyph == 24, "RI compact PiP play/pause token is 24 pt")
     }
     static func runNarrowRecording() {
         let model = Synthetic.model(); model.rebuildIndex()

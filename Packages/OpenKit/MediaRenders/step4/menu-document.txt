@@ -1,0 +1,3 @@
+[0] title="Keep Window on Top" separator=false state=on enabled=true key="" modifiers=0x100000
+[1] title="" separator=true state=off enabled=false key="" modifiers=0x100000
+[2] title="Picture-in-picture on meeting.example.test:" separator=false state=off enabled=false key="" modifiers=0x100000
