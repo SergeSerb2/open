@@ -9,16 +9,16 @@ swift build --package-path Packages/OpenKit -c release -j 6
 Packages/OpenKit/.build/release/sidebar-render check
 Packages/OpenKit/.build/release/sidebar-render bench --rows 1000 --media-card
 python3 Packages/OpenKit/MediaRenders/step3/render-scenes.py
-python3 Packages/OpenKit/MediaRenders/step3/compare-bench.py --baseline-ref eceb6834ab7972f14b305ddb0c19e53b8294ec52 --out /tmp/open-mini-comparison
+python3 Packages/OpenKit/MediaRenders/step3/compare-bench.py --baseline-ref e44b40d4b1b1beda37673e7209bed958c79cbc11 --out /tmp/open-mini-comparison
 ```
 
 The check command passes 200/200, including MC1–MC8 and MC10. MC9 runs through
 the real 1,000-row benchmark: six interleaved pairs, with alternate pair order,
 main without a card and head with one real paused card. Main median/mean p95
-are 1.300/1.300 ms; head median/mean are 1.340/1.363 ms. Deltas +0.040/+0.063 ms
+are 2.130/1.982 ms; head median/mean are 1.975/1.875 ms. Deltas -0.155/-0.107 ms
 meet the 0.3 ms limit. The receipt records all runs and binary hashes.
 
-The paused-card process measured 0.074% CPU over a 2 s idle sample; the complete
+The paused-card process measured 0.116% CPU over a 2 s idle sample; the complete
 window had no CA animations, the stack had no collapse item, and the store held
 one actual paused-dismiss work item. The media views create no Timer or display link.
 

@@ -129,7 +129,7 @@ MC1–MC10: composed sidebar, fake media hosts, native events and idle layers
   OK   MC7 hidden sidebar stops the marquee
   OK   MC7 ordered-out window stops the marquee
   OK   MC8 idle paused window has no CA animations and only the one store dismiss item
-  OK   MC8 idle paused CLI CPU 0.074% (budget 0.5%); no media Timer or display link
+  OK   MC8 idle paused CLI CPU 0.116% (budget 0.5%); no media Timer or display link
   OK   MC10 mini controls dim with the bottom bar in Peek
   OK   MC10 closing Peek restores opacity
   OK   MC5 native hit test: picture in picture
