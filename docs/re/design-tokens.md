@@ -397,6 +397,26 @@ Notes:
 - `SFSymbolEmojiLookupTable.json` in `ARCFoundation_ARCFoundationBase` maps SF names to emoji. It does not prove UI use. Ignore it for the icon list.
 - Icon fonts exist as a second icon path. See Section 3.3.
 
+### Named Space icons
+
+Evidence: `strings -a .re/bin/Arc-arm64`, the contiguous `CustomIcon`
+raw-value names between `AllCases`, `emoji`, `icon`, `symbol` and `emojiInt`
+(the same group includes `planet`, `colorPallete`, and `fileTrayFull`). The
+sidebar schema stores these under `customInfo.iconType.icon`; see
+[data-model.md](data-model.md#26-spaces). These are identifiers, not SF Symbol names.
+
+Open preserves them as `SpaceIcon.named`. The complete recreated mapping table
+is [NamedSpaceIcons.swift](../../Packages/OpenKit/Sources/OpenModel/NamedSpaceIcons.swift).
+The map uses SF Symbols; brand and unmatched pictograms use generic equivalents.
+Unknown identifiers retain their value, draw `circle.dotted`, and increment the
+import report's unknown count. `sidebar-render check` calls
+`NSImage(systemSymbolName:accessibilityDescription:)` for every mapped symbol
+and the neutral fallback on macOS 26.
+
+Live sidebar counts on 2026-10-25: `planet=1`, unknown named icons `0`.
+Evidence: `openkit import-arc --arc-dir <temporary JSON copy> --out <temporary root>`,
+`namedSpaceIcon planet count=1`. No Space titles, URLs, or profile data are included here.
+
 ## 3. Fonts
 
 ### 3.1 Where the fonts live

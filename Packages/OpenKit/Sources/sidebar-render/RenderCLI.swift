@@ -131,7 +131,7 @@ enum RenderCLI {
             guard let id = resolve(sel, context: context), let space = context.focusedSpace else { throw CLIError(description: "no row \(sel)") }
             window.selectedNodeBySpace[space.id] = id
         }
-        if args.contains("--loaded") { context.isTabLoaded = { _ in true } }
+        if args.contains("--loaded") { for tab in model.index.values.compactMap(\.tab) { tab.live.hasWebContent = true } }
         if let h = value(args, "--hover") {
             guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }
             context.forcedHover = t

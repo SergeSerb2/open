@@ -31,7 +31,7 @@ func printTree(model: BrowserModel, showTitles: Bool) {
         for tab in profile.favorites { tabLine(tab, indent: "  fav ") }
     }
     for space in model.spaces {
-        print("space \(space.id.rawValue.uuidString.prefix(8)) \(showTitles ? space.title : "•••") profile=\(space.profileID.rawValue.uuidString.prefix(8)) pinnedCollapsed=\(space.isPinnedCollapsed)")
+        print("space \(space.id.rawValue.uuidString.prefix(8)) \(showTitles ? model.displayTitle(for: space) : "•••") profile=\(space.profileID.rawValue.uuidString.prefix(8)) pinnedCollapsed=\(space.isPinnedCollapsed)")
         print("  pinned:")
         nodeLines(space.pinned, indent: "    ")
         print("  today:")
@@ -45,18 +45,20 @@ func runImportArc(args: [String]) async throws {
     var arcDir: URL?
     var outDir: URL?
     var showTitles = false
+    var countsOnly = false
     var idx = 0
     while idx < args.count {
         switch args[idx] {
         case "--arc-dir": idx += 1; arcDir = URL(fileURLWithPath: args[idx])
         case "--out": idx += 1; outDir = URL(fileURLWithPath: args[idx])
         case "--show-titles": showTitles = true
+        case "--counts-only": countsOnly = true
         default: break
         }
         idx += 1
     }
     guard let outDir else {
-        FileHandle.standardError.write(Data("usage: openkit import-arc [--arc-dir PATH] --out DIR [--show-titles]\n".utf8))
+        FileHandle.standardError.write(Data("usage: openkit import-arc [--arc-dir PATH] --out DIR [--show-titles|--counts-only]\n".utf8))
         exit(2)
     }
     let store = SnapshotStore(root: outDir)
@@ -84,18 +86,24 @@ func runImportArc(args: [String]) async throws {
     for profile in model.profiles { archiveTotalStored += await archiveSink.store(for: profile.id).count() }
     print("import report:")
     print("  profiles=\(report.profiles) profilesGuessed=\(report.profilesGuessed) chromiumDirsFound=\(report.chromiumDirsFound) chromiumDirsMissing=\(report.chromiumDirsMissing)")
-    for profile in model.profiles {
+    for profile in model.profiles where !countsOnly {
         print("  profile dir=\(profile.dataDirectoryName) spaces=\(model.spaces(using: profile.id).count) favorites=\(profile.favorites.count)")
     }
     print("  totalItems=\(report.totalItems) accounted=\(report.accounted) spaces=\(report.spaces)")
     print("  pinnedTabs=\(report.pinnedTabs) todayTabs=\(report.todayTabs) favorites=\(report.favorites)")
     print("  folders=\(report.folders) splits=\(report.splits) routingRules=\(report.routingRules)")
-    print("  skipped easels=\(report.skippedEasels) notes=\(report.skippedNotes) welcome=\(report.skippedWelcome) unknown=\(report.skippedUnknown)")
+    print("  skipped easels=\(report.skippedEasels) notes=\(report.skippedNotes) unknown=\(report.skippedUnknown)")
+    print("  welcome imported=\(report.importedWelcome) skipped=0 untitledSpaces=\(report.untitledSpaces)")
+    print("  namedSpaceIcons mapped=\(report.namedSpaceIcons.values.reduce(0, +)) unknown=\(report.unknownNamedSpaceIcons) fallback=\(NamedSpaceIcons.fallbackSymbol)")
+    for name in report.namedSpaceIcons.keys.sorted() {
+        print("  namedSpaceIcon \(name) count=\(report.namedSpaceIcons[name]!) symbol=\(NamedSpaceIcons.symbolName(for: name))")
+    }
     print("  orphans=\(report.orphans) skippedRoutingRules=\(report.skippedRoutingRules)")
     print("  archive: \(report.archiveStatus)")
     if report.archiveFilePresent {
         print("  archive filePresent=true total=\(report.archiveTotal) imported=\(report.archiveImported) storedNew=\(report.archiveStoredNew) storedDuplicates=\(report.archiveStoredDuplicates) storedTotal=\(archiveTotalStored)")
         print("  archive skipped easels=\(report.archiveSkippedEasels) notes=\(report.archiveSkippedNotes) welcome=\(report.archiveSkippedWelcome) unknownKind=\(report.archiveSkippedUnknownKind) unknownReason=\(report.archiveSkippedUnknownReason) unknownSource=\(report.archiveSkippedUnknownSource) malformed=\(report.archiveSkippedMalformed) duplicatesInFile=\(report.archiveDuplicatesInFile) alreadyLive=\(report.archiveAlreadyLive)")
+        print("  archive welcome imported=\(report.archiveImportedWelcome)")
         let archiveCheck = report.archiveAccounted == report.archiveTotal ? "OK" : "MISMATCH"
         print("  archive check accounted=\(report.archiveAccounted) total=\(report.archiveTotal) \(archiveCheck)")
     } else {
@@ -111,14 +119,14 @@ func runImportArc(args: [String]) async throws {
     let sidebarCheck = report.accountedTotal == report.totalItems ? "OK" : "MISMATCH"
     print("  accounted check: \(sidebarCheck)")
     if report.accountedTotal != report.totalItems {
-        printTree(model: model, showTitles: showTitles)
+        if !countsOnly { printTree(model: model, showTitles: showTitles) }
         exit(1)
     }
     if report.archiveFilePresent && report.archiveAccounted != report.archiveTotal {
-        printTree(model: model, showTitles: showTitles)
+        if !countsOnly { printTree(model: model, showTitles: showTitles) }
         exit(1)
     }
-    printTree(model: model, showTitles: showTitles)
+    if !countsOnly { printTree(model: model, showTitles: showTitles) }
 }
 
 @MainActor
@@ -147,9 +155,11 @@ func runArchiveList(args: [String]) async {
         exit(2)
     }
     let root = URL(fileURLWithPath: dirArg)
+    let snapshot = SnapshotStore(root: root)
+    defer { withExtendedLifetime(snapshot) {} }
     let model: BrowserModel
     do {
-        model = try SnapshotStore(root: root).load() ?? BrowserModel()
+        model = try snapshot.load() ?? BrowserModel()
         _ = try prepareProfiles(model, root: root)
     } catch { profileCLIError("cannot prepare data root: \(error)") }
     let selected: Profile?
@@ -218,7 +228,8 @@ func runBench() async throws {
         let model = BrowserModel(profiles: [profile], spaces: spaces, windows: [window])
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-\(UUID().uuidString)")
         let store = SnapshotStore(root: tmp)
-        try OpenDataRoot.prepare(root: tmp, model: model)
+        let dataRoot = try OpenDataRoot.prepare(root: tmp, model: model)
+        defer { withExtendedLifetime(dataRoot) {} }
         let dto = SnapshotMapper.dto(from: model)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         var t0 = Date(); let data = try! encoder.encode(dto); let encodeMs = Date().timeIntervalSince(t0) * 1000
@@ -236,7 +247,8 @@ func runBench() async throws {
     print("bench: history (100k URLs, 1000 searches)")
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-hist-\(UUID().uuidString)")
     let directories = ProfileDirectories(root: tmp)
-    try await OpenDataRoot.prepare(root: tmp)
+    let dataRoot = try await OpenDataRoot.prepare(root: tmp)
+    defer { withExtendedLifetime(dataRoot) {} }
     try directories.ensureProfileDirectories(dataDirectoryName: "Default")
     let history = HistoryStore(fileURL: directories.historyFileURL(dataDirectoryName: "Default"))
     var items: [(url: URL, title: String, time: Date)] = []

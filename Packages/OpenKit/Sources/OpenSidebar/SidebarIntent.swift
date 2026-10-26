@@ -37,7 +37,7 @@ public enum SidebarIntent: Equatable, Sendable {
     // Row actions
     case close(nodeID: ItemID)
     /// "Close and keep pinned": drop the web content, keep the pinned entry.
-    case unload(tabID: ItemID)
+    case unloadTab(ItemID)
     case toggleMute(tabID: ItemID)
     case resetToPinnedURL(tabID: ItemID)
     case replacePinnedURL(tabID: ItemID)
