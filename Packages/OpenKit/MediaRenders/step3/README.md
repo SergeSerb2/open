@@ -17,6 +17,10 @@ the real 1,000-row benchmark: six interleaved pairs, with alternate pair order,
 main without a card and head with one real paused card. Main median/mean p95
 are 2.130/1.982 ms; head median/mean are 1.975/1.875 ms. Deltas -0.155/-0.107 ms
 meet the 0.3 ms limit. The receipt records all runs and binary hashes.
+A later 12-pair investigation found no per-frame cost from a paused card: the card
+run executes fewer instructions per scroll step, an A/A control exceeds the gate on
+this machine, and a rerun under the on-screen lock measures +0.01 ms
+([scroll investigation](evidence/scroll-investigation/README.md)).
 
 The paused-card process measured 0.116% CPU over a 2 s idle sample; the complete
 window had no CA animations, the stack had no collapse item, and the store held
