@@ -715,6 +715,7 @@ def window_checks(app_factory, results, tmp):
                       and evidence["visibleWindows"] >= 1
                       and evidence["sidebarClass"] == "OpenSidebar.SidebarView"
                       and runs["cold_fresh_profile"][-1]["kernelProcessStart"] is True
+                      and runs["cold_fresh_profile"][-1]["firstFrameConfirmed"] is True
                       and runs["cold_fresh_profile"][-1]["sidebarDrawn"] <= runs["cold_fresh_profile"][-1]["engineStart"],
                 "evidence": evidence}
             # Create the second row, then return selection to the first row.
@@ -781,6 +782,19 @@ def startup_failure_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     app_path = app.proc.args[0]
     app.quit()
+    unconfirmed = factory(urls=("data:text/html,<title>Unconfirmed frame</title><h1>Unconfirmed frame</h1>",), fresh=True,
+                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1"})
+    try:
+        tab = unconfirmed.call("tabs")[0]
+        unconfirmed.call("wait", tab=tab["id"])
+        timing = unconfirmed.call("timing")
+        results["first_frame_timeout_continues"] = {"ok": timing["firstFrameConfirmed"] is False
+            and "sidebarDrawn" not in timing and timing["firstFrameWaitTimedOut"] >= 3000
+            and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
+            and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
+            "timing": timing, "hosts": unconfirmed.call("host-counts")}
+    finally:
+        unconfirmed.quit()
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
