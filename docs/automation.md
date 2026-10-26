@@ -155,3 +155,34 @@ kernel timestamp in all ten benchmark launches. Debug timing rows print named
 SKIP results with a Release-only reason. Sidebar `space_switch_wrapper` proves
 the live page and wrapper context; `durable_profile_storage` remains BLOCKED on
 the CEF `root_cache_path` follow-up in docs/followups.md.
+
+### App shell commands and Settings (Step C)
+
+`--only commandbar` drives the real command bar field editor with `key`
+(`route=app` and `route=window`), a loopback HTTP page that prevents default key
+handling, native menus, and the real Settings and Library presenters. It covers
+background opens, Pin/Unpin actions, profile isolation, custom search engines,
+key overrides, tab/folder/split duplication, Archive restore, and relaunch.
+It uses the app's existing snapshot writer. No unit or mocked engine checks
+stand in for these flows.
+
+Additional socket commands:
+
+| Command | Purpose |
+|---|---|
+| `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Does not create the bar. |
+| `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
+| `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
+| `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
+| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
+| `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
+| `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
+| `hotkey-state` | Read Carbon registration, attempts, and any nonfatal registration error. Does not send a global key. |
+| `save-page-state` | Read the real Save panel request and pending state. |
+
+Reports identify the engine source from the vendor source stamp and the matching
+embedded/vendor Mach-O UUIDs. Release socket runs require
+`OPEN_AUTOMATION=1 nice -n 10 tools/build.sh Release`. A normal Release build
+keeps the socket off. The first-open command-bar budget includes construction
+and service work; the fixture waits for the normal post-paint prewarm before
+opening the bar. The repeat-open timing is reported separately.
