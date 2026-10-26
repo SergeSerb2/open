@@ -81,12 +81,12 @@ func runCommandsDemo(args: [String]) async throws {
         let space = Space(title: "Demo Space", profileID: profile.id)
         model = BrowserModel(profiles: [profile], spaces: [space], windows: [BrowserWindowState(focusedSpaceID: space.id)])
     }
+    _ = try prepareProfiles(model, root: root)
     guard let space = model.spaces.first, let profile = model.profile(id: space.profileID) else { print("no space"); exit(1) }
     let sid = space.id
     let pid = profile.id
     model.windows.first?.focusedSpaceID = sid
 
-    _ = try prepareProfiles(model, root: root)
     let composite = profileArchiveSink(model: model, directories: ProfileDirectories(root: root))
     let archive = composite.store(for: pid)
     let sink = CountingSink(store: composite)

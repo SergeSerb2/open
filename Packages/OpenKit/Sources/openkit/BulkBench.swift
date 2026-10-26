@@ -143,9 +143,10 @@ func runBulkBench() async {
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bench-archive-\(UUID().uuidString)")
     let directories = ProfileDirectories(root: tmp)
     try! directories.ensureProfileDirectories(dataDirectoryName: "Default")
-    let store = ArchiveStore(fileURL: directories.archiveFileURL(dataDirectoryName: "Default"))
     let stored = makeExpiryBenchModel()
-    stored.archiveSink = store
+    let sink = profileArchiveSink(model: stored, directories: directories)
+    let store = sink.store(for: stored.defaultProfile?.id)
+    stored.archiveSink = sink
     var storedArchived = 0
     let mainTime = clock.measure { storedArchived = stored.archiveExpiredTabs(now: Date()) }
     let writeTime = clock.measure { store.flushQueue() }
