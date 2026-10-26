@@ -745,7 +745,7 @@ Measure each item in Arc with the user signed in. Record light and dark, and hov
 - Folder row height and indent step. Pinned tab row height if it differs.
 - Corner radii: tab row, favorites tile, command bar, popover, web view clip.
 - Web view inset on each side and the gap between sidebar and web view (the rounded web content look).
-- Traffic light position: x and y from the window corner, and button gap. Note the custom `WindowControlButton` type.
+- Traffic light position: x and y from the window corner, and button gap. Note the custom `WindowControlButton` type. Measured 2026-10-26: 16 pt buttons at x 12 / 35 / 58, y 16 (gap 23), circles centered at x 20 / 43 / 66, y 24 (`interaction-states.md` §0, §13).
 - Top bar height. Space switcher size and gap. Plus button size.
 - Command bar width, top offset, row height, and corner radius.
 
@@ -776,7 +776,7 @@ The user will sign in to Arc later. Measure these items then. Each item blocks a
 1. Sidebar widths (default, min, max) and tab row heights. Blocks all layout tokens.
 2. Favorites tile size and gaps. Blocks the favorites grid.
 3. Corner radii and web view insets. Blocks the rounded web content look.
-4. Traffic light offsets. Blocks the title bar.
+4. Traffic light offsets. Blocks the title bar. Resolved 2026-10-26 from AX frames and pixels (`interaction-states.md` §0).
 5. Chrome font family, size, and weight per element (sidebar, tab, command bar, menus). Blocks all type tokens.
 6. Spring numbers (`response`, `dampingFraction`) and ease durations per animation. Blocks motion tokens. A decompiled read can also give these numbers.
 7. Sound triggers: which event plays `capture.wav` and `event.m4a`. Blocks the sound map.

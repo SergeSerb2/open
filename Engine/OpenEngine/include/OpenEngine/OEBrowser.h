@@ -33,17 +33,61 @@ NS_SWIFT_UI_ACTOR
 - (void)browser:(OEBrowser*)browser
     didCloseExtensionPopup:(OEWebContent*)popup
     NS_SWIFT_NAME(browser(_:didCloseExtensionPopup:));
+
+#pragma mark Tab requests from Chromium (fork patch P1)
+// Chromium changes a window's tabs on its own for chrome.tabs and similar
+// APIs. The shell owns the tabs: each change arrives here as a request, the
+// shell applies it to its model, and the engine then puts Chromium's tab
+// strip back in the shell's order (insert/move/setPinned/activeWebContent).
+// Closes arrive as -[OEWebContentDelegate webContentDidRequestClose:].
+
+/// Chromium opened a page in this window (chrome.tabs.create, an extension's
+/// welcome or options page). The page is live but not shown: adopt it as a
+/// tab (set its delegate, show its view, insert it), or close it. `active`:
+/// Chromium asked for it to become the selected tab. Without this method
+/// the engine closes the page.
+- (void)browser:(OEBrowser*)browser
+    didOpenWebContent:(OEWebContent*)webContent
+               active:(BOOL)active
+    NS_SWIFT_NAME(browser(_:didOpen:active:));
+/// chrome.tabs.update({active: true}) and similar: select `webContent`.
+- (void)browser:(OEBrowser*)browser
+    requestsActivationOfWebContent:(OEWebContent*)webContent
+    NS_SWIFT_NAME(browser(_:requestsActivationOf:));
+/// chrome.tabs.move: move `webContent` to `index` in -webContents order.
+- (void)browser:(OEBrowser*)browser
+    requestsMoveOfWebContent:(OEWebContent*)webContent
+                     toIndex:(NSUInteger)index
+    NS_SWIFT_NAME(browser(_:requestsMoveOf:to:));
+/// chrome.tabs.update({pinned}): pin or unpin `webContent`.
+- (void)browser:(OEBrowser*)browser
+    requestsPinned:(BOOL)pinned
+     forWebContent:(OEWebContent*)webContent
+    NS_SWIFT_NAME(browser(_:requestsPinned:for:));
+/// chrome.tabs.discard: return YES if the shell will unload `webContent`
+/// with its own tab sleep. Do not close it inside this call. Chromium
+/// never discards these tabs itself (memory pressure, Memory Saver). Without
+/// this method the request is refused.
+- (BOOL)browser:(OEBrowser*)browser
+    requestsDiscardOfWebContent:(OEWebContent*)webContent
+    NS_SWIFT_NAME(browser(_:requestsDiscardOf:));
+/// chrome.windows.remove on this window while it has tabs. The window stays
+/// open; the shell decides. Without this method the request is refused.
+- (void)browserRequestsClose:(OEBrowser*)browser
+    NS_SWIFT_NAME(browserRequestsClose(_:));
 @end
 
-/// One shell window's tab strip (ADK "Browser"): the ordered web contents of
-/// a window, which one is active, and the window's extension actions.
+/// One shell window's tab strip (ADK "Browser") for one profile: the ordered
+/// web contents of a window, which one is active, and the window's
+/// extension actions.
 ///
-/// This is the object Chromium's extension system will see as a window:
-/// with fork patch P1 (docs/engine-patches.md) every OEBrowser is mirrored
-/// into a hidden Chrome Browser + TabStripModel, so chrome.tabs and
-/// chrome.windows see Open's tabs. In stock CEF it is bookkeeping only, but
-/// the shell already keeps it exact (insert, remove, move, activate, pin)
-/// so the patch needs no shell change.
+/// This is the object Chromium's extension system sees as a window: with
+/// fork patch P1 (docs/engine-patches.md) each OEBrowser owns a hidden
+/// Chrome Browser + TabStripModel (CefTabStrip), and Chrome style web
+/// contents inserted here are its tabs, hosted in our views. chrome.tabs and
+/// chrome.windows see them in -webContents order (pinned first), with
+/// activeWebContent as the active tab. Contents of other styles, and pages
+/// that are not live, are bookkeeping only.
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEBrowser : NSObject
 
@@ -51,8 +95,12 @@ OE_EXPORT @interface OEBrowser : NSObject
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
-/// Unique per process (chrome.windows window id with patch P1).
+/// Unique per process.
 @property(nonatomic, readonly) NSInteger identifier;
+/// The chrome.windows id of this window's hidden Chrome window, or -1 while
+/// it has no live Chrome style tab (Chrome closes a window without tabs; the
+/// next tab gets a new window and id).
+@property(nonatomic, readonly) NSInteger chromeWindowIdentifier;
 @property(nonatomic, readonly) OEBrowserContext* context;
 @property(nonatomic, weak, nullable) id<OEBrowserDelegate> delegate;
 /// The shell window, for focus and bounds (chrome.windows.get/update).

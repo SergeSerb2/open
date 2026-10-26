@@ -11,6 +11,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     case spaceMore, audioPlaying, audioMuted
     case library, bottomPlus
     case globe
+    case mediaPlay, mediaPause, mediaPrevious, mediaNext, mediaPiP, mediaClose, mediaVolume, mediaVolumeMuted
+    case mediaMicrophone, mediaMicrophoneMuted, mediaCamera, mediaCameraOff, mediaVolumeLow, mediaVolumeHigh
+    case pipClose, pipMinimize, pipSettings, pipPlay, pipPause, pipPrevious, pipNext, pipMute, pipUnmute, pipHangUp
+    case pipSkipBack, pipSkipForward
 
     public struct Spec: Sendable {
         public var symbol: String
@@ -44,6 +48,32 @@ public enum Glyph: String, CaseIterable, Sendable {
         case .audioMuted: Spec(symbol: "speaker.slash.fill", pointSize: 11, weight: .regular, arcInk: nil, note: "row audio indicator")
         case .library: Spec(symbol: "archivebox.fill", pointSize: 15, weight: .regular, arcInk: CGSize(width: 14, height: 16), note: "bottom-bar Home / Library; drawn by CustomIcon.library, the symbol is a fallback")
         case .bottomPlus: Spec(symbol: "plus", pointSize: 17, weight: .medium, arcInk: CGSize(width: 14, height: 14), note: "bottom-bar plus")
+        case .mediaPlay: Spec(symbol: "play.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaPause: Spec(symbol: "pause.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaPrevious: Spec(symbol: "backward.end.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaNext: Spec(symbol: "forward.end.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaPiP: Spec(symbol: "pip", pointSize: 12, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaClose: Spec(symbol: "xmark", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaVolume: Spec(symbol: "speaker.wave.2.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaVolumeMuted: Spec(symbol: "speaker.slash.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaMicrophone: Spec(symbol: "mic.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaMicrophoneMuted: Spec(symbol: "mic.slash.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaCamera: Spec(symbol: "video.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaCameraOff: Spec(symbol: "video.slash.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaVolumeLow: Spec(symbol: "speaker.wave.1.fill", pointSize: 12, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .mediaVolumeHigh: Spec(symbol: "speaker.wave.3.fill", pointSize: 12, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipClose: Spec(symbol: "xmark", pointSize: 12, weight: .semibold, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipMinimize: Spec(symbol: "minus", pointSize: 13, weight: .bold, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipSettings: Spec(symbol: "ellipsis", pointSize: 13, weight: .bold, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipPlay: Spec(symbol: "play.fill", pointSize: 26, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipPause: Spec(symbol: "pause.fill", pointSize: 26, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipPrevious: Spec(symbol: "backward.end.fill", pointSize: 16, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipNext: Spec(symbol: "forward.end.fill", pointSize: 16, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipMute: Spec(symbol: "speaker.slash.fill", pointSize: 13, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipUnmute: Spec(symbol: "speaker.wave.2.fill", pointSize: 13, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipHangUp: Spec(symbol: "phone.down.fill", pointSize: 14, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipSkipBack: Spec(symbol: "gobackward.15", pointSize: 24, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
+        case .pipSkipForward: Spec(symbol: "goforward.15", pointSize: 24, weight: .regular, arcInk: nil, note: "media plan §4; PP-6/PP-16")
         case .globe: Spec(symbol: "globe", pointSize: 14, weight: .regular, arcInk: nil, note: "favicon fallback")
         }
     }
@@ -51,6 +81,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     /// Template image. Tint it with `NSImage.drawTinted` or a layer mask.
     @MainActor public var image: NSImage? {
         if self == .library { return CustomIcon.template(size: 16, cacheKey: "library") { CustomIcon.library(in: $0, color: .black) } }
+        if self == .pipSkipBack || self == .pipSkipForward {
+            let forward = self == .pipSkipForward
+            return CustomIcon.template(size: PiPMetrics.skipGlyph, cacheKey: rawValue) { CustomIcon.skip15(forward: forward, in: $0) }
+        }
         return GlyphCache.image(self)
     }
 }
@@ -169,5 +203,24 @@ public enum CustomIcon {
         NSBezierPath(ovalIn: CGRect(x: x + 2.5, y: y + 0.5, width: 3.5, height: 3.5)).fill()
         NSBezierPath(roundedRect: CGRect(x: x + 7.5, y: y, width: 3.5, height: 4.5), xRadius: 0.8, yRadius: 0.8).fill()
         color.withAlphaComponent(0.0).setFill()
+    }
+}
+
+
+extension CustomIcon {
+    /// Own vector skip glyph: circular arrow and system-font numeral. No reference assets (PP-6).
+    @MainActor public static func skip15(forward: Bool, in r: CGRect) {
+        let center = CGPoint(x: r.midX, y: r.midY + 1), radius = r.width * 0.4
+        let path = NSBezierPath()
+        path.appendArc(withCenter: center, radius: radius, startAngle: forward ? 225 : -45, endAngle: forward ? -45 : 225, clockwise: !forward)
+        path.lineWidth = 1.7; path.lineCapStyle = .round; NSColor.black.setStroke(); path.stroke()
+        let arrow = NSBezierPath()
+        let x = r.midX + (forward ? 1 : -1) * radius * 0.7, y = r.midY - radius * 0.7 + 1
+        arrow.move(to: CGPoint(x: x - (forward ? 4 : -4), y: y - 1))
+        arrow.line(to: CGPoint(x: x, y: y))
+        arrow.line(to: CGPoint(x: x, y: y + 4))
+        arrow.lineWidth = 1.7; arrow.stroke()
+        let text = NSAttributedString(string: "15", attributes: [.font: NSFont.systemFont(ofSize: 9, weight: .semibold), .foregroundColor: NSColor.black])
+        let size = text.size(); text.draw(at: CGPoint(x: r.midX - size.width / 2, y: r.midY - size.height / 2 + 1))
     }
 }

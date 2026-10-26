@@ -12,13 +12,13 @@ public struct ArchiveSection: View {
             else {
                 List(selection: $model.selectedIDs) {
                     ForEach(model.archiveRows) { row in
-                        let childCount = row.reason == .folderDeleted ? model.archivedChildCount(row) : 0
+                        let childCount = row.kind == .folder ? model.archivedChildCount(row) : 0
                         ArchiveHoverRow { HStack(spacing: 12) {
                             if let image = model.faviconImages[row.id] { Image(nsImage: image).resizable().frame(width: 20, height: 20) }
-                            else { Image(systemName: row.reason == .folderDeleted ? "folder" : "globe").frame(width: 20) }
+                            else { Image(systemName: row.kind == .folder ? "folder" : "globe").frame(width: 20) }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(row.title).lineLimit(1)
-                                Text(row.reason == .folderDeleted ? "Folder · \(childCount.formatted()) \(childCount == 1 ? "tab" : "tabs")" : "\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
+                                Text(row.kind == .folder ? "Folder · \(childCount.formatted()) \(childCount == 1 ? "tab" : "tabs")" : "\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
                             }; Spacer()
                             Text(row.archivedAt.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
                             Button("Restore") { Task { await model.restore(id: row.id) } }.modifier(ArchiveHoverAction())

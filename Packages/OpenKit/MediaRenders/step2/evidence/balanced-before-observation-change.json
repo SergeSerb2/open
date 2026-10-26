@@ -1,0 +1,210 @@
+{
+  "baseline": "origin/main 005e065afa77bf188ab6fd820e6d0b0db8b8ae03\nOnly Bench.swift receives the same deterministic row-media fixture instrumentation as head.\n",
+  "bench_source_sha256": "cc7cfaf5fc53fa6c5948a3acc671e6da83d5f097919a0934d08837a8e23b6498",
+  "binary_sha256": {
+    "baseline": "0b4e07184a0a3badb704f95c9624f144f762369e7e071b71f4a040310a9663a7",
+    "head": "3dac0c8b0373e463caaf88404fcd9798402a91ab556fce9bc8a7b8f99518f49a"
+  },
+  "records": [
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 2.99
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 2.59
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 1.71
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 1.99
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 2.08
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 1.97
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 2.44
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 2.14
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 2.51
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 3.18
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 6,
+      "p95_ms": 3.82
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 6,
+      "p95_ms": 3.09
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 3.1
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 3.03
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 3.66
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 2.58
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 3.44
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 3.67
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 2.68
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 2.65
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 4.1
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 3.45
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 6,
+      "p95_ms": 3.83
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 6,
+      "p95_ms": 4.02
+    }
+  ],
+  "summary": {
+    "plain": {
+      "baseline": {
+        "runs": [
+          2.99,
+          1.99,
+          2.08,
+          2.14,
+          2.51,
+          3.09
+        ],
+        "median_p95_ms": 2.325,
+        "mean_p95_ms": 2.466666666666667
+      },
+      "head": {
+        "runs": [
+          2.59,
+          1.71,
+          1.97,
+          2.44,
+          3.18,
+          3.82
+        ],
+        "median_p95_ms": 2.5149999999999997,
+        "mean_p95_ms": 2.618333333333333
+      },
+      "mean_delta_ms": 0.1516666666666664
+    },
+    "mixed": {
+      "baseline": {
+        "runs": [
+          3.1,
+          2.58,
+          3.44,
+          2.65,
+          4.1,
+          4.02
+        ],
+        "median_p95_ms": 3.27,
+        "mean_p95_ms": 3.315
+      },
+      "head": {
+        "runs": [
+          3.03,
+          3.66,
+          3.67,
+          2.68,
+          3.45,
+          3.83
+        ],
+        "median_p95_ms": 3.555,
+        "mean_p95_ms": 3.3866666666666667
+      },
+      "mean_delta_ms": 0.07166666666666677
+    }
+  }
+}
