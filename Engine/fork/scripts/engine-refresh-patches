@@ -1,0 +1,91 @@
+#!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+usage() {
+    cat <<'EOF'
+engine-refresh-patches [--dry-run] [--series chromium|cef|rust]...
+Config: each series has a sibling manifest.
+No arguments: show help. Use --all to refresh all series.
+Engine/fork/scripts/engine-refresh-patches --all
+EOF
+}
+[[ $# -gt 0 ]] || { usage; exit 0; }
+dry=0 selected=
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --all) selected=' chromium cef rust '; shift ;;
+        --dry-run) dry=1; shift ;;
+        --series)
+            [[ $# -ge 2 ]] || die '--series needs a value'
+            case "$2" in chromium|cef|rust) selected+=" $2 " ;; *) die "invalid series: $2" ;; esac
+            shift 2 ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+selected=${selected:-' chromium cef rust '}
+plan=$("$SCRIPT_DIR/engine-status" --refresh-plan) || die 'invalid series or manifest'
+if [[ $dry == 0 ]]; then
+    require_no_build_running
+    acquire_lock refresh
+fi
+rust_staged=0
+unstage_rust_paths() {
+    if [[ $rust_staged == 1 ]]; then
+        ${git_cmd[@]+"${git_cmd[@]}"} reset --quiet HEAD -- ${paths[@]+"${paths[@]}"}
+        rust_staged=0
+    fi
+}
+cleanup_refresh() {
+    local rc=$?
+    unstage_rust_paths || rc=1
+    release_lock
+    return "$rc"
+}
+[[ $dry == 1 ]] || trap cleanup_refresh EXIT
+count=0
+while IFS=$'\t' read -r kind series name path_text; do
+    [[ "$kind" == active && "$selected" == *" $series "* ]] || continue
+    # Manifest paths cannot contain whitespace; engine-status validates them.
+    IFS=' ' read -r -a paths <<< "$path_text"
+    git_cmd=(git -C "$SRC_DIR")
+    prefixes=(--src-prefix=a/ --dst-prefix=b/)
+    if [[ "$series" == cef ]]; then
+        git_cmd=(git -C "$SRC_DIR/cef")
+        prefixes=(--src-prefix=a/cef/ --dst-prefix=b/cef/)
+        for ((i=0; i<${#paths[@]}; i++)); do paths[i]=${paths[i]#cef/}; done
+    fi
+    if [[ "$series" != rust ]]; then
+        while IFS= read -r -d '' untracked; do
+            [[ "$series" != cef ]] || untracked="cef/$untracked"
+            [[ -f "$FORK_DIR/src/$untracked" ]] || die "untracked file $untracked is not in the overlay; copy it to Engine/fork/src/$untracked (new files are overlay, §3.2)"
+        done < <(${git_cmd[@]+"${git_cmd[@]}"} ls-files --others --exclude-standard -z -- ${paths[@]+"${paths[@]}"})
+    fi
+    patch="$FORK_DIR/patches/$series/$name"
+    if [[ $dry == 1 ]]; then
+        log "dry-run: would write $patch.tmp -> $patch (paths: $path_text)"
+        [[ "$series" != rust ]] || log "dry-run: would git add -f -- $path_text before staged capture"
+    else
+        if [[ "$series" == rust ]]; then
+            # Also clean the index if add/diff fails or the patch is empty.
+            rust_staged=1
+            ${git_cmd[@]+"${git_cmd[@]}"} add -f -- ${paths[@]+"${paths[@]}"}
+            ${git_cmd[@]+"${git_cmd[@]}"} diff --cached --no-color --binary ${prefixes[@]+"${prefixes[@]}"} -- ${paths[@]+"${paths[@]}"} > "$patch.tmp"
+        else
+            ${git_cmd[@]+"${git_cmd[@]}"} diff HEAD --no-color --binary ${prefixes[@]+"${prefixes[@]}"} -- ${paths[@]+"${paths[@]}"} > "$patch.tmp"
+        fi
+        if [[ ! -s "$patch.tmp" ]]; then
+            rm "$patch.tmp"
+            die "patch $name is now empty; remove its series line and the file, or restore the change"
+        fi
+        mv "$patch.tmp" "$patch"
+        unstage_rust_paths
+        log "refreshed: $series/$name"
+    fi
+    count=$((count + 1))
+done <<< "$plan"
+[[ $count -gt 0 ]] || log 'no patches to refresh'

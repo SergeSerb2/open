@@ -1,0 +1,17 @@
+# Open release args. Appended to dev.args.gn by engine-build.
+is_official_build=true
+is_debug=false
+is_component_build=false
+dcheck_always_on=false
+symbol_level=1
+blink_symbol_level=0
+v8_symbol_level=0
+treat_warnings_as_errors=false
+target_cpu="arm64"
+proprietary_codecs=true
+ffmpeg_branding="Chrome"
+# Lead decision: Widevine is out of v1; it needs a Google license.
+enable_widevine=false
+chrome_pgo_phase=2
+use_thin_lto=true
+thin_lto_enable_optimizations=true

@@ -1381,3 +1381,33 @@ diff.
 - Vendor-patch size gate: accept ~20 MB.
 - Widevine: out of v1 (needs a Google license).
 - Phasing: Steps 1–6 now (repo only; READ ONLY access to ~/Developer/open-engine). Steps 7–11 wait for the lead, after the stock build finishes.
+
+## Implementation deviation notes — Phase A (2026-10-25)
+
+These decisions were confirmed by the lead during implementation:
+
+- Keep `gn/dev.args.gn` byte-identical to the running build, including
+  `enable_widevine=true`. Disable Widevine in `gn/release.args.gn` with a
+  comment pointing to the lead decision. The local dev adapter ships nothing.
+- Use `--minimal-distrib-only` in §6.6 instead of `--minimal-distrib`.
+  Read-only inspection of the live `automate-git.py` distrib-types block
+  shows the latter creates both standard and minimal outputs. Minimal-only
+  meets the one-directory discovery contract and contains the app's inputs.
+- Gate `engine-distrib --config release` before any build or packaging.
+  The live `cef/tools/make_distrib.py` builds its input path from `Release`
+  plus `_GN_arm64`; it has no official-output override. Exit nonzero with:
+  `release packaging not wired yet: CEF's make_distrib expects out/Release_GN_arm64; see docs/plans/fork-infra.md Step 10`.
+  Resolve this at Step 10; do not package dev output as release.
+
+Operator details that reconcile earlier instructions:
+
+- §6.1 requires no-argument help, but the cheat sheet uses bare modifying
+  commands. Use `--all` for apply/refresh and `--run` for bootstrap/distrib/
+  fetch. Build, status, and rebase keep their specified defaults.
+- CEF is a separate Git repository. CEF hook patch headers retain `cef/`
+  paths relative to src; apply uses the CEF repo with `-p2`, and refresh uses
+  `a/cef/` and `b/cef/` prefixes. This lets mandatory three-way apply use the
+  correct index and blob objects.
+- The requested `docs/engine-fork.md` operator guide is added alongside the
+  Phase A file inventory. These deviation notes are also an authorized
+  exception to §3.3's original file boundary.

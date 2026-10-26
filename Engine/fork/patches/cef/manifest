@@ -1,0 +1,4 @@
+# Patch refresh paths, relative to Chromium src/.
+# One block per active series entry:
+# <file>.patch
+# paths: <space-separated pathspecs>
