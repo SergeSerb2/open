@@ -6,72 +6,72 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
   },
-  "started": "2026-10-26 09:53:27",
+  "started": "2026-10-26 09:58:04",
   "style": "alloy",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+          "active": "288691EC-8EF8-4287-9A9F-BC68E0396AD6",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
+          "profile": "258FB739-B6D9-4CFA-BAEA-E5995CAD9767",
           "tabs": [
-            "05A44995-733A-4B1A-8AC1-B574EBC230BC",
-            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
+            "288691EC-8EF8-4287-9A9F-BC68E0396AD6",
+            "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+          "active": "288691EC-8EF8-4287-9A9F-BC68E0396AD6",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
+          "profile": "258FB739-B6D9-4CFA-BAEA-E5995CAD9767",
           "tabs": [
-            "05A44995-733A-4B1A-8AC1-B574EBC230BC",
-            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
+            "288691EC-8EF8-4287-9A9F-BC68E0396AD6",
+            "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+          "active": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
+          "profile": "258FB739-B6D9-4CFA-BAEA-E5995CAD9767",
           "tabs": [
-            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
-            "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+            "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858",
+            "5344DBC1-AD69-45CA-B27B-4845612E99DC"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
+          "active": "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
+          "profile": "258FB739-B6D9-4CFA-BAEA-E5995CAD9767",
           "tabs": [
-            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
-            "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+            "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858",
+            "5344DBC1-AD69-45CA-B27B-4845612E99DC"
           ]
         }
       ]
@@ -80,71 +80,20 @@
       "ok": true
     },
     "card_edges_1x": {
-      "corner_symmetry_max": 9,
+      "corner_symmetry_max": 0.083,
       "corners": {
         "bottom_left": {
-          "antialiased_rows": 0,
-          "corner_alpha": 0,
+          "antialiased_rows": 11,
+          "corner_alpha": -0.015,
           "edge_by_row": [
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            0.0,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-          ],
-          "max_error_px": 0.81,
-          "monotonic": true,
-          "reference": [
-            8.57,
-            6.19,
-            4.67,
-            3.53,
-            2.63,
-            1.91,
-            1.33,
-            0.88,
-            0.52,
-            0.26,
-            0.09,
-            0.01,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "rows": 1
-        },
-        "bottom_right": {
-          "antialiased_rows": 3,
-          "corner_alpha": -0.003,
-          "edge_by_row": [
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
+            8.24,
+            5.98,
+            4.45,
+            3.32,
+            2.45,
+            1.83,
+            1.2,
+            0.82,
             0.0,
             0.0,
             0.0,
@@ -182,34 +131,85 @@
             0.0,
             0.0
           ],
-          "rows": 12
+          "rows": 20
+        },
+        "bottom_right": {
+          "antialiased_rows": 11,
+          "corner_alpha": -0.016,
+          "edge_by_row": [
+            8.2,
+            5.98,
+            4.4,
+            3.31,
+            2.43,
+            1.75,
+            1.12,
+            0.74,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "max_error_px": 0.5,
+          "monotonic": true,
+          "reference": [
+            8.57,
+            6.19,
+            4.67,
+            3.53,
+            2.63,
+            1.91,
+            1.33,
+            0.88,
+            0.52,
+            0.26,
+            0.09,
+            0.01,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rows": 20
         },
         "top_left": {
-          "antialiased_rows": 0,
-          "corner_alpha": 0,
+          "antialiased_rows": 11,
+          "corner_alpha": -0.015,
           "edge_by_row": [
-            null,
-            null,
-            null,
-            null,
-            null,
+            8.2,
+            5.98,
+            4.45,
+            3.3,
+            2.46,
+            1.8,
+            1.18,
+            0.82,
             0.0,
             0.0,
-            null,
             0.0,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
           ],
-          "max_error_px": 1.6,
+          "max_error_px": 0.5,
           "monotonic": true,
           "reference": [
             8.57,
@@ -233,21 +233,21 @@
             0.0,
             0.0
           ],
-          "rows": 3
+          "rows": 20
         },
         "top_right": {
-          "antialiased_rows": 5,
-          "corner_alpha": 0.0,
+          "antialiased_rows": 11,
+          "corner_alpha": -0.01,
           "edge_by_row": [
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
+            8.16,
+            5.95,
+            4.42,
+            3.31,
+            2.44,
+            1.76,
+            1.12,
+            0.73,
+            0.0,
             0.0,
             0.0,
             0.0,
@@ -260,7 +260,7 @@
             0.0,
             0.0
           ],
-          "max_error_px": 0.26,
+          "max_error_px": 0.5,
           "monotonic": true,
           "reference": [
             8.57,
@@ -284,21 +284,21 @@
             0.0,
             0.0
           ],
-          "rows": 11
+          "rows": 20
         }
       },
-      "low_contrast": true,
-      "ok": false,
+      "low_contrast": false,
+      "ok": true,
       "right_shadow_profile": [
-        0.949,
-        0.965,
-        0.978,
-        0.985,
-        0.989,
-        0.994,
-        1.0,
+        0.922,
+        0.941,
+        0.955,
+        0.969,
+        0.977,
+        0.986,
+        0.992,
+        0.992,
         0.996,
-        1.0,
         1.0,
         1.0,
         1.0
@@ -321,34 +321,34 @@
           "stroke_ok": true
         },
         "left": {
-          "contrast": 3.7,
+          "contrast": 111.1,
           "expected": [
             104,
             102,
             115
           ],
-          "shadow_1px": 1.497,
+          "shadow_1px": 0.921,
           "stroke": [
-            41,
-            36,
-            55
+            106,
+            101,
+            115
           ],
-          "stroke_ok": false
+          "stroke_ok": true
         },
         "right": {
-          "contrast": 26.6,
+          "contrast": 250.8,
           "expected": [
             112,
             101,
             115
           ],
-          "shadow_1px": 0.949,
+          "shadow_1px": 0.922,
           "stroke": [
-            238,
-            240,
-            239
+            112,
+            102,
+            115
           ],
-          "stroke_ok": false
+          "stroke_ok": true
         },
         "top": {
           "contrast": 110.5,
@@ -1602,7 +1602,7 @@
           },
           "low_contrast": false,
           "ok": true,
-          "renders": 4,
+          "renders": 5,
           "right_shadow_profile": [
             0.918,
             0.937,
@@ -2620,7 +2620,7 @@
           },
           "low_contrast": false,
           "ok": true,
-          "renders": 4,
+          "renders": 6,
           "right_shadow_profile": [
             0.918,
             0.937,
@@ -2700,20 +2700,20 @@
           }
         },
         "space 2 (window, 1x)": {
-          "corner_symmetry_max": 0.311,
+          "corner_symmetry_max": 0.701,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.037,
+              "corner_alpha": -0.038,
               "edge_by_row": [
-                8.14,
-                6.06,
-                4.39,
-                3.29,
-                2.4,
-                1.79,
-                1.23,
-                0.76,
+                8.02,
+                5.92,
+                4.29,
+                3.21,
+                2.31,
+                1.69,
+                1.14,
+                0.67,
                 0.0,
                 0.0,
                 0.0,
@@ -2754,17 +2754,17 @@
               "rows": 20
             },
             "bottom_right": {
-              "antialiased_rows": 12,
-              "corner_alpha": -0.073,
+              "antialiased_rows": 11,
+              "corner_alpha": -0.072,
               "edge_by_row": [
-                8.11,
-                6.04,
-                4.36,
-                3.29,
-                2.37,
-                1.76,
-                1.35,
-                0.73,
+                8.19,
+                6.15,
+                4.44,
+                3.36,
+                2.47,
+                1.88,
+                1.5,
+                0.86,
                 0.0,
                 0.0,
                 0.0,
@@ -2806,16 +2806,16 @@
             },
             "top_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.065,
+              "corner_alpha": -0.069,
               "edge_by_row": [
-                8.14,
-                6.05,
-                4.36,
-                3.26,
-                2.37,
-                1.77,
-                1.29,
-                0.78,
+                8.05,
+                5.82,
+                4.26,
+                3.2,
+                2.27,
+                1.61,
+                1.16,
+                0.64,
                 0.0,
                 0.0,
                 0.0,
@@ -2857,16 +2857,16 @@
             },
             "top_right": {
               "antialiased_rows": 12,
-              "corner_alpha": -0.091,
+              "corner_alpha": -0.095,
               "edge_by_row": [
-                8.03,
-                6.21,
-                4.44,
-                3.24,
-                2.39,
-                1.86,
-                1.58,
-                0.81,
+                8.07,
+                6.1,
+                4.47,
+                3.28,
+                2.5,
+                1.95,
+                1.93,
+                0.89,
                 0.0,
                 0.0,
                 0.0,
@@ -2880,7 +2880,7 @@
                 0.0,
                 0.0
               ],
-              "max_error_px": 0.5,
+              "max_error_px": 0.53,
               "monotonic": true,
               "reference": [
                 8.57,
@@ -2914,7 +2914,7 @@
             0.944,
             0.957,
             0.968,
-            0.975,
+            0.978,
             0.984,
             0.985,
             0.994,
@@ -2941,22 +2941,22 @@
               "stroke_ok": true
             },
             "left": {
-              "contrast": 66.0,
+              "contrast": 62.5,
               "expected": [
                 167,
                 193,
                 228
               ],
-              "shadow_1px": 0.924,
+              "shadow_1px": 0.92,
               "stroke": [
-                170,
-                193,
-                229
+                166,
+                192,
+                228
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 41.0,
+              "contrast": 41.4,
               "expected": [
                 170,
                 184,
@@ -2964,16 +2964,16 @@
               ],
               "shadow_1px": 0.926,
               "stroke": [
-                171,
+                172,
                 183,
-                240
+                239
               ],
               "stroke_ok": true
             },
             "top": {
               "contrast": 68.9,
               "expected": [
-                170,
+                171,
                 191,
                 234
               ],
@@ -3013,12 +3013,12 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 271,
-        "engineStarted": 368,
-        "firstContentfulPaint": 538,
-        "main": 142,
-        "modelLoaded": 143,
-        "sidebarDrawn": 269
+        "engineStart": 278,
+        "engineStarted": 379,
+        "firstContentfulPaint": 567,
+        "main": 149,
+        "modelLoaded": 151,
+        "sidebarDrawn": 277
       },
       "ok": false,
       "samples": 5
@@ -3202,19 +3202,19 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3345,
-        "engineInitialized": 3340,
-        "engineStart": 3258,
-        "engineStarted": 3335,
-        "firstContentfulPaint": 3474,
+        "didFinishLaunching": 3396,
+        "engineInitialized": 3390,
+        "engineStart": 3292,
+        "engineStarted": 3388,
+        "firstContentfulPaint": 3565,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3257,
-        "firstLoadEnd": 3461,
-        "firstPaintClockUncertaintyMs": 0.29,
+        "firstFrameWaitTimedOut": 3291,
+        "firstLoadEnd": 3522,
+        "firstPaintClockUncertaintyMs": 0.39,
         "kernelProcessStart": true,
-        "main": 149,
-        "modelLoaded": 151,
-        "windowShown": 215
+        "main": 137,
+        "modelLoaded": 172,
+        "windowShown": 247
       }
     },
     "frame_save_debounced": {
@@ -3245,19 +3245,19 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.522,
+      "dismissed_on_selection_s": 0.536,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.636
+      "revealed_s": 0.611
     },
     "hide_reveal": {
-      "dismissed_s": 0.53,
+      "dismissed_s": 0.535,
       "hidden": "hidden",
-      "left_s": 0.7,
+      "left_s": 0.693,
       "ok": true,
       "panel_x": 10,
       "revealed_again_s": 0.614,
-      "revealed_s": 0.622,
+      "revealed_s": 0.603,
       "selected": true
     },
     "html_fullscreen_from_window": {
@@ -3319,8 +3319,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2199,
-          412
+          2255,
+          98
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3334,16 +3334,16 @@
         "fullscreenChanges": 4,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "id": "5FA7493B-F57F-4024-8D54-5B18DFC08904",
         "key": true,
-        "layoutPasses": 473,
+        "layoutPasses": 567,
         "miniaturized": false,
-        "number": 68362,
+        "number": 70254,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+            "tab": "5344DBC1-AD69-45CA-B27B-4845612E99DC"
           }
         ],
         "panel": [
@@ -3360,7 +3360,7 @@
             0,
             0
           ],
-          "dwell": 0.15376270833075978,
+          "dwell": 0.15376666666998062,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3369,15 +3369,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "shownPages": [
-          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+          "5344DBC1-AD69-45CA-B27B-4845612E99DC"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9",
         "titlebar": [
           0,
           0,
@@ -3531,8 +3531,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2499,
-          1052
+          2555,
+          738
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3546,16 +3546,16 @@
         "fullscreenChanges": 3,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "id": "5FA7493B-F57F-4024-8D54-5B18DFC08904",
         "key": true,
-        "layoutPasses": 448,
+        "layoutPasses": 540,
         "miniaturized": false,
-        "number": 68362,
+        "number": 70254,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+            "tab": "5344DBC1-AD69-45CA-B27B-4845612E99DC"
           }
         ],
         "panel": [
@@ -3572,7 +3572,7 @@
             0,
             0
           ],
-          "dwell": 0.15376270833075978,
+          "dwell": 0.15376666666998062,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3581,15 +3581,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "shownPages": [
-          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+          "5344DBC1-AD69-45CA-B27B-4845612E99DC"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9",
         "titlebar": [
           0,
           0,
@@ -3744,8 +3744,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2499,
-          1052
+          2555,
+          738
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3759,16 +3759,16 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "id": "5FA7493B-F57F-4024-8D54-5B18DFC08904",
         "key": true,
-        "layoutPasses": 170,
+        "layoutPasses": 296,
         "miniaturized": false,
-        "number": 68362,
+        "number": 70254,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+            "tab": "5344DBC1-AD69-45CA-B27B-4845612E99DC"
           }
         ],
         "panel": [
@@ -3785,7 +3785,7 @@
             0,
             0
           ],
-          "dwell": 0.15376270833075978,
+          "dwell": 0.15376666666998062,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3794,15 +3794,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "shownPages": [
-          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+          "5344DBC1-AD69-45CA-B27B-4845612E99DC"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9",
         "titlebar": [
           0,
           0,
@@ -3956,8 +3956,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2499,
-          1052
+          2555,
+          738
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3971,16 +3971,16 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "id": "5FA7493B-F57F-4024-8D54-5B18DFC08904",
         "key": true,
-        "layoutPasses": 164,
+        "layoutPasses": 290,
         "miniaturized": false,
-        "number": 68362,
+        "number": 70254,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+            "tab": "5344DBC1-AD69-45CA-B27B-4845612E99DC"
           }
         ],
         "panel": [
@@ -3997,7 +3997,7 @@
             0,
             0
           ],
-          "dwell": 0.15376270833075978,
+          "dwell": 0.15376666666998062,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -4006,15 +4006,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "shownPages": [
-          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
+          "5344DBC1-AD69-45CA-B27B-4845612E99DC"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9",
         "titlebar": [
           0,
           0,
@@ -4126,11 +4126,11 @@
           1000,
           700
         ],
-        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9"
       },
       "ok": true,
       "restored": {
@@ -4140,11 +4140,11 @@
           1000,
           700
         ],
-        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9"
       }
     },
     "last_window_reopen": {
@@ -4156,11 +4156,11 @@
           1000,
           700
         ],
-        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -4171,183 +4171,183 @@
           1000,
           700
         ],
-        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
-        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+        "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
+        "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+        "space": "78A39834-7120-4144-9A01-539B4EDFA6F9"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 368,
-          "engineInitialized": 365,
-          "engineStart": 263,
-          "engineStarted": 363,
-          "firstContentfulPaint": 534,
+          "didFinishLaunching": 335,
+          "engineInitialized": 333,
+          "engineStart": 216,
+          "engineStarted": 330,
+          "firstContentfulPaint": 506,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 519,
-          "firstPaintClockUncertaintyMs": 0.26,
+          "firstLoadEnd": 491,
+          "firstPaintClockUncertaintyMs": 0.32,
           "kernelProcessStart": true,
-          "main": 142,
-          "modelLoaded": 143,
-          "sidebarDrawn": 261,
-          "windowShown": 204
+          "main": 100,
+          "modelLoaded": 101,
+          "sidebarDrawn": 215,
+          "windowShown": 166
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 456,
-          "engineInitialized": 451,
-          "engineStart": 335,
-          "engineStarted": 446,
-          "firstContentfulPaint": 639,
+          "didFinishLaunching": 406,
+          "engineInitialized": 401,
+          "engineStart": 301,
+          "engineStarted": 398,
+          "firstContentfulPaint": 573,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 620,
-          "firstPaintClockUncertaintyMs": 0.11,
+          "firstLoadEnd": 555,
+          "firstPaintClockUncertaintyMs": 0.15,
           "kernelProcessStart": true,
-          "main": 165,
-          "modelLoaded": 167,
-          "sidebarDrawn": 334,
-          "windowShown": 271
+          "main": 160,
+          "modelLoaded": 161,
+          "sidebarDrawn": 300,
+          "windowShown": 239
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 392,
-          "engineInitialized": 386,
-          "engineStart": 271,
-          "engineStarted": 381,
-          "firstContentfulPaint": 559,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 541,
-          "firstPaintClockUncertaintyMs": 0.16,
-          "kernelProcessStart": true,
-          "main": 120,
-          "modelLoaded": 122,
-          "sidebarDrawn": 269,
-          "windowShown": 206
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 375,
-          "engineInitialized": 372,
-          "engineStart": 271,
+          "didFinishLaunching": 382,
+          "engineInitialized": 377,
+          "engineStart": 275,
           "engineStarted": 368,
-          "firstContentfulPaint": 538,
+          "firstContentfulPaint": 546,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 525,
-          "firstPaintClockUncertaintyMs": 0.22,
+          "firstLoadEnd": 532,
+          "firstPaintClockUncertaintyMs": 0.17,
           "kernelProcessStart": true,
-          "main": 147,
-          "modelLoaded": 149,
-          "sidebarDrawn": 270,
-          "windowShown": 212
+          "main": 148,
+          "modelLoaded": 150,
+          "sidebarDrawn": 274,
+          "windowShown": 220
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 366,
-          "engineInitialized": 362,
-          "engineStart": 260,
-          "engineStarted": 358,
-          "firstContentfulPaint": 530,
+          "didFinishLaunching": 386,
+          "engineInitialized": 383,
+          "engineStart": 278,
+          "engineStarted": 379,
+          "firstContentfulPaint": 567,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 511,
-          "firstPaintClockUncertaintyMs": 0.23,
+          "firstLoadEnd": 546,
+          "firstPaintClockUncertaintyMs": 0.12,
           "kernelProcessStart": true,
-          "main": 133,
-          "modelLoaded": 135,
-          "sidebarDrawn": 259,
-          "windowShown": 215
+          "main": 149,
+          "modelLoaded": 151,
+          "sidebarDrawn": 277,
+          "windowShown": 232
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 420,
+          "engineInitialized": 416,
+          "engineStart": 312,
+          "engineStarted": 413,
+          "firstContentfulPaint": 580,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 564,
+          "firstPaintClockUncertaintyMs": 0.28,
+          "kernelProcessStart": true,
+          "main": 160,
+          "modelLoaded": 161,
+          "sidebarDrawn": 311,
+          "windowShown": 262
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 463,
-          "engineInitialized": 458,
-          "engineStart": 346,
-          "engineStarted": 454,
-          "firstContentfulPaint": 645,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 632,
-          "firstPaintClockUncertaintyMs": 0.17,
-          "kernelProcessStart": true,
-          "main": 178,
-          "modelLoaded": 180,
-          "sidebarDrawn": 345,
-          "windowShown": 282
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 413,
-          "engineInitialized": 407,
-          "engineStart": 292,
-          "engineStarted": 404,
-          "firstContentfulPaint": 567,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 546,
-          "firstPaintClockUncertaintyMs": 0.21,
-          "kernelProcessStart": true,
-          "main": 152,
-          "modelLoaded": 153,
-          "sidebarDrawn": 291,
-          "windowShown": 239
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 430,
-          "engineInitialized": 424,
-          "engineStart": 315,
-          "engineStarted": 421,
-          "firstContentfulPaint": 585,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 568,
-          "firstPaintClockUncertaintyMs": 0.13,
-          "kernelProcessStart": true,
-          "main": 154,
-          "modelLoaded": 156,
-          "sidebarDrawn": 314,
-          "windowShown": 256
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 384,
-          "engineInitialized": 377,
-          "engineStart": 262,
-          "engineStarted": 369,
-          "firstContentfulPaint": 546,
+          "didFinishLaunching": 389,
+          "engineInitialized": 383,
+          "engineStart": 273,
+          "engineStarted": 380,
+          "firstContentfulPaint": 548,
           "firstFrameConfirmed": true,
           "firstLoadEnd": 535,
-          "firstPaintClockUncertaintyMs": 0.39,
+          "firstPaintClockUncertaintyMs": 0.17,
           "kernelProcessStart": true,
-          "main": 151,
-          "modelLoaded": 153,
-          "sidebarDrawn": 262,
-          "windowShown": 216
+          "main": 152,
+          "modelLoaded": 154,
+          "sidebarDrawn": 272,
+          "windowShown": 230
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 329,
-          "engineInitialized": 324,
-          "engineStart": 210,
-          "engineStarted": 321,
-          "firstContentfulPaint": 502,
+          "didFinishLaunching": 342,
+          "engineInitialized": 334,
+          "engineStart": 229,
+          "engineStarted": 330,
+          "firstContentfulPaint": 503,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 488,
-          "firstPaintClockUncertaintyMs": 0.25,
+          "firstLoadEnd": 487,
+          "firstPaintClockUncertaintyMs": 0.23,
           "kernelProcessStart": true,
-          "main": 92,
-          "modelLoaded": 94,
-          "sidebarDrawn": 209,
-          "windowShown": 168
+          "main": 89,
+          "modelLoaded": 91,
+          "sidebarDrawn": 228,
+          "windowShown": 179
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 335,
+          "engineInitialized": 330,
+          "engineStart": 219,
+          "engineStarted": 326,
+          "firstContentfulPaint": 500,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 486,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 98,
+          "modelLoaded": 100,
+          "sidebarDrawn": 218,
+          "windowShown": 178
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 375,
+          "engineInitialized": 371,
+          "engineStart": 266,
+          "engineStarted": 368,
+          "firstContentfulPaint": 554,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 539,
+          "firstPaintClockUncertaintyMs": 0.19,
+          "kernelProcessStart": true,
+          "main": 149,
+          "modelLoaded": 151,
+          "sidebarDrawn": 264,
+          "windowShown": 211
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 353,
+          "engineInitialized": 342,
+          "engineStart": 230,
+          "engineStarted": 338,
+          "firstContentfulPaint": 554,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 537,
+          "firstPaintClockUncertaintyMs": 0.13,
+          "kernelProcessStart": true,
+          "main": 83,
+          "modelLoaded": 85,
+          "sidebarDrawn": 229,
+          "windowShown": 172
         }
       ]
     },
     "load_average": [
-      12.08447265625,
-      12.048828125,
-      11.50341796875
+      12.279296875,
+      11.931640625,
+      11.54736328125
     ],
     "multiple_window_png": {
       "file": "window-multiple.png",
@@ -4357,12 +4357,12 @@
       "ok": true,
       "windows": [
         {
-          "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
-          "number": 68361
+          "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
+          "number": 70253
         },
         {
-          "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
-          "number": 68362
+          "id": "5FA7493B-F57F-4024-8D54-5B18DFC08904",
+          "number": 70254
         }
       ]
     },
@@ -4426,8 +4426,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2399,
-          512
+          2455,
+          198
         ],
         "engineSelected": 0,
         "engineURL": "",
@@ -4441,11 +4441,11 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
         "key": false,
         "layoutPasses": 8,
         "miniaturized": false,
-        "number": 68361,
+        "number": 70253,
         "pageFullscreen": false,
         "paneBackgrounds": [],
         "panel": [
@@ -4477,7 +4477,7 @@
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228",
+        "space": "5A9998E7-22C4-4F08-BC77-9925109EC9C5",
         "titlebar": [
           0,
           0,
@@ -4647,8 +4647,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2419,
-          372
+          2475,
+          58
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -4662,16 +4662,16 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "id": "6083691D-92D1-4565-A782-15BE6C6BC2DE",
         "key": false,
-        "layoutPasses": 145,
+        "layoutPasses": 133,
         "miniaturized": false,
-        "number": 68361,
+        "number": 70253,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
+            "tab": "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858"
           }
         ],
         "panel": [
@@ -4697,15 +4697,15 @@
           "zone": ""
         },
         "revealed": false,
-        "selected": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
+        "selected": "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858",
         "shownPages": [
-          "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
+          "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 300,
-        "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228",
+        "space": "5A9998E7-22C4-4F08-BC77-9925109EC9C5",
         "titlebar": [
           0,
           0,
@@ -4811,7 +4811,7 @@
         228,
         790
       ],
-      "dwell_s": 0.152,
+      "dwell_s": 0.153,
       "edge_walk": [
         [
           2,
@@ -4919,7 +4919,7 @@
           2
         ]
       ],
-      "exit_to_idle_s": 0.001,
+      "exit_to_idle_s": 0.16,
       "held": {
         "card": [
           5,
@@ -4927,7 +4927,7 @@
           228,
           790
         ],
-        "dwell": 0.15202712500467896,
+        "dwell": 0.1528400416718796,
         "hides": 2,
         "offset": 0,
         "phase": "shown",
@@ -4950,10 +4950,10 @@
           29.0
         ]
       ],
-      "ok": false,
+      "ok": true,
       "pass_by_without_reveal": true,
-      "settled_s": 0.613,
-      "slide_out_s": 0.469
+      "settled_s": 0.602,
+      "slide_out_s": 0.523
     },
     "selected_only_0": {
       "ok": true,
@@ -5893,14 +5893,14 @@
     },
     "warm_existing_profile": {
       "median_ms": {
-        "engineStart": 292,
-        "engineStarted": 404,
-        "firstContentfulPaint": 567,
-        "main": 152,
-        "modelLoaded": 153,
-        "sidebarDrawn": 291
+        "engineStart": 230,
+        "engineStarted": 338,
+        "firstContentfulPaint": 548,
+        "main": 98,
+        "modelLoaded": 100,
+        "sidebarDrawn": 229
       },
-      "ok": false,
+      "ok": true,
       "samples": 5
     },
     "window_before_engine_0": {
@@ -5957,7 +5957,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
+        "id": "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858",
         "loaded": true,
         "loading": false,
         "page": {
@@ -5974,7 +5974,7 @@
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
+          "hostTab": "BB1E52F5-ACF2-4E76-BD58-B7357AD7E858",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -5992,12 +5992,12 @@
           "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
           "zoom": 0
         },
-        "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
+        "profile": "258FB739-B6D9-4CFA-BAEA-E5995CAD9767",
         "progress": 1,
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228",
+        "space": "5A9998E7-22C4-4F08-BC77-9925109EC9C5",
         "title": "Window A",
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
         "visible": false
@@ -6005,56 +6005,56 @@
     },
     "window_persistence": {
       "expected": {
-        "8C7C2451-1AFD-4B4A-9216-DA3EB612890A": {
+        "5FA7493B-F57F-4024-8D54-5B18DFC08904": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+          "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+          "space": "78A39834-7120-4144-9A01-539B4EDFA6F9"
         },
-        "EE2CC786-7ED5-41D9-A4B0-09085C549F67": {
+        "6083691D-92D1-4565-A782-15BE6C6BC2DE": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+          "selected": "288691EC-8EF8-4287-9A9F-BC68E0396AD6",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228"
+          "space": "5A9998E7-22C4-4F08-BC77-9925109EC9C5"
         }
       },
       "ok": true,
       "restored": {
-        "8C7C2451-1AFD-4B4A-9216-DA3EB612890A": {
+        "5FA7493B-F57F-4024-8D54-5B18DFC08904": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
+          "selected": "5344DBC1-AD69-45CA-B27B-4845612E99DC",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+          "space": "78A39834-7120-4144-9A01-539B4EDFA6F9"
         },
-        "EE2CC786-7ED5-41D9-A4B0-09085C549F67": {
+        "6083691D-92D1-4565-A782-15BE6C6BC2DE": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+          "selected": "288691EC-8EF8-4287-9A9F-BC68E0396AD6",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228"
+          "space": "5A9998E7-22C4-4F08-BC77-9925109EC9C5"
         }
       }
     },
