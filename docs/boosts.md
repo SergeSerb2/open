@@ -71,7 +71,7 @@ claimed. Functional assertions below are Eval results, not substitutes for visua
 | A11 | PARTIAL | Unique article pick replaced by 3-match selector; all 3 hidden. Related-preview visual UNVERIFIED: capture service failure. |
 | S-A1 | PASS | New view-B marker present, replacement banner hidden without re-apply. |
 | S-A2 | PASS | Removed stylesheet restored; banner hidden by next tool Eval, no extra wait needed. |
-| S-A3 | PASS | `/Harness/blog/post`, cleared state, banner `block`. |
+| S-A3 | PASS | `/Harness/blog/post`, cleared state, banner `block`; direct route reload loads both real runtimes. |
 | S1 | PASS | Open-root promo `none`. |
 | S2 | PASS | Newly attached open-root promo `none`. |
 | S3 | PASS | Pre-apply closed-root promo `block` (known limit); late closed-root promo `none`; created-after flag true. |
@@ -109,6 +109,8 @@ The final resource bundle and served source hashes match: applier
 
 - Added `exclude: ["Harness"]` in the minimal Package.swift target declaration to
   keep non-resource fixture files out of SwiftPM's source inventory and bundle.
+  Harness pages set a `/Harness/` base URL so real runtime resources still load
+  when the SPA fallback serves a nested route on a full reload.
 - Used `URL.path(percentEncoded: true)`. Plain Foundation `.path` decodes escapes,
   contrary to §5.3's assumption. Preserved bracketed/bare IPv6 domains instead of
   stripping them at their first colon; IP matching stays exact.
