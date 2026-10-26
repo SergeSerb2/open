@@ -155,11 +155,14 @@
         host.refreshPageBackground(); return true
       case "async-engine-state":
         return ["captures": w.saveCaptureTasks.count, "background": w.hosts.values.filter(\.hasBackgroundTask).count]
-      case "save-page-configure":
-        guard let panel = w.pendingSavePanel, let path = a["path"] as? String else { throw Failure(message: "no Save sheet") }
-        let url = URL(fileURLWithPath: path)
-        panel.directoryURL = url.deletingLastPathComponent(); panel.nameFieldStringValue = url.lastPathComponent
-        return ["number": panel.windowNumber, "path": panel.url?.path ?? ""]
+      case "save-page-choose":
+        guard let panel = w.pendingSavePanel, let choice = w.pendingSaveChoice,
+              let path = a["path"] as? String else { throw Failure(message: "no Save sheet") }
+        // Complete the owned presenter's choice through the socket, like our
+        // dialog/permission replies. The actual engine capture is unchanged.
+        w.pendingSaveChoice = nil
+        panel.sheetParent?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil)
+        choice(URL(fileURLWithPath: path)); return true
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
       case "suggest-remote":
         guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }

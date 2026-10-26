@@ -44,6 +44,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var commandBarNavigationFocus: Set<ItemID> = []
   private(set) var isClosing = false
   var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
+  var pendingSaveChoice: ((URL?) -> Void)?
   private var findSelectionTask: Task<Void, Never>?
   var hasFindSelectionTask: Bool { findSelectionTask != nil }
   var pendingRenameAlert: NSAlert?
@@ -382,6 +383,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
     findSelectionTask?.cancel(); findSelectionTask = nil
+    pendingSaveChoice = nil
     if let panel = pendingSavePanel { window?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil) }
     pendingSavePanel = nil
     if let sheet = pendingRenameAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }

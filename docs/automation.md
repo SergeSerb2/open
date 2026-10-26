@@ -303,8 +303,10 @@ native handoff event, then start a new background-state observation interval.
 showCommandBar entry to first snapshot applied. They exclude preceding key
 routing, socket transport and frame presentation.
 
-`save-page-configure(path:)` sets the path on Open's pending native Save sheet;
-the runner confirms it with the native Return key.
+`save-page-choose(path:)` replies to Open's pending Save presenter through the
+socket and runs its same capture completion. The native sheet is shown and closed;
+the remote system Save button is not driven. The actual engine capture and file
+write run unchanged.
 `background-read` starts the selected live host's real background-color read.
 `async-engine-state` reports owned pending capture and background tasks. With
 `OPEN_AUTOMATION_SHUTDOWN_TRACE=1`, the own-profile State/shutdown-order.json

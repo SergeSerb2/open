@@ -165,8 +165,8 @@ extension EngineWebContentHostFactory {
     let wasActive = NSApp.isActive, wasKey = window.isKeyWindow
     savePageRequestCount += 1
     let panel = NSSavePanel(); pendingSavePanel = panel; panel.nameFieldStringValue = "Page.mhtml"
-    panel.beginSheetModal(for: window) { [weak self, weak page] response in
-      self?.pendingSavePanel = nil
+    pendingSaveChoice = { [weak self, weak page] url in
+      self?.pendingSavePanel = nil; self?.pendingSaveChoice = nil
       if wasActive && wasKey {
         DispatchQueue.main.async { [weak self, weak page] in
           if let page { self?.restorePageFocusIfUnclaimed(page) }
@@ -174,7 +174,7 @@ extension EngineWebContentHostFactory {
       }
       self?.app.scheduleMenuRebuild()
       guard let self, !self.isClosing, !self.app.terminationRequested,
-            self.app.engineReady, response == .OK, let url = panel.url, let page else { return }
+            self.app.engineReady, let url, let page else { return }
       let id = UUID()
       self.saveCaptureTasks[id] = Task { @MainActor [weak self, weak page] in
         guard let self else { return }
@@ -191,6 +191,9 @@ extension EngineWebContentHostFactory {
           try Data(body.utf8).write(to: url, options: .atomic)
         } catch { AppDelegate.commandLog("Could not save page: \(error)") }
       }
+    }
+    panel.beginSheetModal(for: window) { [weak self] response in
+      self?.pendingSaveChoice?(response == .OK ? panel.url : nil)
     }
   }
 }
