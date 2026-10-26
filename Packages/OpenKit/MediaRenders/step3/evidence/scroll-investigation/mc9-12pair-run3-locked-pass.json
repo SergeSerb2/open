@@ -1,0 +1,189 @@
+{
+  "baseline_ref": "15e261e4fe06fb77149ddda446b9e4f0522490b8",
+  "lock": "/tmp/open-onscreen-e2e.lock",
+  "binary_sha256": {
+    "baseline": "fb9ffa392feb6344fc6cf97c0c5fec8c629e3392762d9a4bb3d86d74a9c94342",
+    "head": "01c09b933f451a0bfe6b4f99e1c33d81a4345921ba86549dff4969ebd9e670de"
+  },
+  "records": [
+    {
+      "build": "baseline",
+      "pair": 1,
+      "p95_ms": 1.31
+    },
+    {
+      "build": "head",
+      "pair": 1,
+      "p95_ms": 1.6
+    },
+    {
+      "build": "head",
+      "pair": 2,
+      "p95_ms": 1.31
+    },
+    {
+      "build": "baseline",
+      "pair": 2,
+      "p95_ms": 1.71
+    },
+    {
+      "build": "baseline",
+      "pair": 3,
+      "p95_ms": 1.32
+    },
+    {
+      "build": "head",
+      "pair": 3,
+      "p95_ms": 1.33
+    },
+    {
+      "build": "head",
+      "pair": 4,
+      "p95_ms": 1.34
+    },
+    {
+      "build": "baseline",
+      "pair": 4,
+      "p95_ms": 1.29
+    },
+    {
+      "build": "baseline",
+      "pair": 5,
+      "p95_ms": 1.58
+    },
+    {
+      "build": "head",
+      "pair": 5,
+      "p95_ms": 1.33
+    },
+    {
+      "build": "head",
+      "pair": 6,
+      "p95_ms": 1.39
+    },
+    {
+      "build": "baseline",
+      "pair": 6,
+      "p95_ms": 1.75
+    },
+    {
+      "build": "baseline",
+      "pair": 7,
+      "p95_ms": 1.37
+    },
+    {
+      "build": "head",
+      "pair": 7,
+      "p95_ms": 1.25
+    },
+    {
+      "build": "head",
+      "pair": 8,
+      "p95_ms": 1.3
+    },
+    {
+      "build": "baseline",
+      "pair": 8,
+      "p95_ms": 1.29
+    },
+    {
+      "build": "baseline",
+      "pair": 9,
+      "p95_ms": 1.27
+    },
+    {
+      "build": "head",
+      "pair": 9,
+      "p95_ms": 1.56
+    },
+    {
+      "build": "head",
+      "pair": 10,
+      "p95_ms": 1.43
+    },
+    {
+      "build": "baseline",
+      "pair": 10,
+      "p95_ms": 1.47
+    },
+    {
+      "build": "baseline",
+      "pair": 11,
+      "p95_ms": 1.31
+    },
+    {
+      "build": "head",
+      "pair": 11,
+      "p95_ms": 1.37
+    },
+    {
+      "build": "head",
+      "pair": 12,
+      "p95_ms": 1.75
+    },
+    {
+      "build": "baseline",
+      "pair": 12,
+      "p95_ms": 1.41
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "runs": [
+        1.31,
+        1.71,
+        1.32,
+        1.29,
+        1.58,
+        1.75,
+        1.37,
+        1.29,
+        1.27,
+        1.47,
+        1.31,
+        1.41
+      ],
+      "median_p95_ms": 1.3450000000000002,
+      "mean_p95_ms": 1.4233333333333333
+    },
+    "head": {
+      "runs": [
+        1.6,
+        1.31,
+        1.33,
+        1.34,
+        1.33,
+        1.39,
+        1.25,
+        1.3,
+        1.56,
+        1.43,
+        1.37,
+        1.75
+      ],
+      "median_p95_ms": 1.355,
+      "mean_p95_ms": 1.4133333333333333
+    },
+    "median_p95_ms_delta": 0.009999999999999787,
+    "mean_p95_ms_delta": -0.010000000000000009,
+    "paired_deltas": [
+      0.29000000000000004,
+      -0.3999999999999999,
+      0.010000000000000009,
+      0.050000000000000044,
+      -0.25,
+      -0.3600000000000001,
+      -0.1200000000000001,
+      0.010000000000000009,
+      0.29000000000000004,
+      -0.040000000000000036,
+      0.06000000000000005,
+      0.3400000000000001
+    ],
+    "paired_median_delta": 0.010000000000000009,
+    "paired_trimmed20_mean_delta": 0.0012500000000000011,
+    "original_gate": "PASS",
+    "paired_gate": "PASS"
+  },
+  "MC9": "PASS"
+}

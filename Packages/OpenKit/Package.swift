@@ -50,7 +50,7 @@ let package = Package(
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
         .target(name: "OpenDesign", dependencies: ["OpenModel"]),
         .target(name: "OpenSidebar", dependencies: ["OpenMedia", "OpenModel", "OpenDesign"]),
-        .executableTarget(name: "sidebar-render", dependencies: ["OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
+        .executableTarget(name: "sidebar-render", dependencies: ["OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]
