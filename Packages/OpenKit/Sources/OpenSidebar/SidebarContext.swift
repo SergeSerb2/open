@@ -11,6 +11,32 @@ import OpenModel
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
+    public let selection = SidebarSelection()
+    /// Preview/banner preferences; the App uses .standard, harnesses use a suite.
+    @ObservationIgnored public let previewPreferences: UserDefaults
+    @ObservationIgnored private var hoverPreviewStorage: HoverPreviewTracker?
+    var existingHoverPreviews: HoverPreviewTracker? { hoverPreviewStorage }
+    @ObservationIgnored var previewSuppressions: Set<HoverPreviewTracker.Suppression> = []
+    var previewsEnabled: Bool { previewPreferences.object(forKey: "open.general.previewsEnabled") == nil || previewPreferences.bool(forKey: "open.general.previewsEnabled") }
+    var canStartHoverPreview: Bool { previewsEnabled && previewSuppressions.isEmpty }
+    func suppressPreviews(_ reason: HoverPreviewTracker.Suppression, _ value: Bool) {
+        if value { previewSuppressions.insert(reason) } else { previewSuppressions.remove(reason) }
+        existingHoverPreviews?.setSuppressed(reason, value)
+    }
+    public var hoverPreviews: HoverPreviewTracker {
+        if let hoverPreviewStorage { return hoverPreviewStorage }
+        let tracker = HoverPreviewTracker(context: self); hoverPreviewStorage = tracker; return tracker
+    }
+    /// Set only after a real auto-archive sweep. Never persisted in the snapshot.
+    public var autoArchiveBannerRequested = false
+    public let haptics = SidebarHaptics()
+    @ObservationIgnored weak var manager: SpaceManagerView?
+    var managerSpaceID: SpaceID?
+    /// Live Option state, also forced by the offscreen renderer. One window
+    /// monitor updates this even while web content is first responder.
+    public var isOptionHeld = false
+    /// Render-only hover of a navigated pinned row's favicon slot.
+    public var forcedFaviconHoverID: ItemID?
     /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
@@ -53,18 +79,28 @@ public final class SidebarContext {
     /// so the Peek's URL or loading changes do not reach every row.
     public private(set) var peekSourceNodeID: ItemID?
 
+    /// Theme integration supplies iconOverride here until the model exposes that field.
+    /// Shared folder rendering resolves this before Folder.customIcon.
+    public var folderIconOverrideProvider: (@MainActor (Folder) -> String?)?
+
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?
 
-    public init(model: BrowserModel, windowID: WindowID) {
+    public init(model: BrowserModel, windowID: WindowID, previewPreferences: UserDefaults = .standard) {
         self.model = model
         self.windowID = windowID
+        self.previewPreferences = previewPreferences
+        selection.onChange = { [weak self] in
+            guard let outline = self?.sidebar?.focusedOutline else { return }
+            NSAccessibility.post(element: outline, notification: .selectedRowsChanged)
+        }
     }
 
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
 
     public var focusedSpace: Space? {
+        if let managerSpaceID { return model.space(id: managerSpaceID) ?? model.spaces.first }
         guard let w = window else { return model.spaces.first }
         return model.space(id: w.focusedSpaceID) ?? model.spaces.first
     }
@@ -119,8 +155,83 @@ public final class SidebarContext {
 
     @discardableResult
     func send(_ intent: SidebarIntent) -> Bool {
-        guard let sidebar, let delegate = sidebar.delegate else { return false }
-        return delegate.sidebar(sidebar, didRequest: intent)
+        switch intent {
+        case .hoverPreview: break
+        default: existingHoverPreviews?.dismiss()
+        }
+        switch intent {
+        case .select, .selectFavorite: selection.clear()
+        default: break
+        }
+        guard manager != nil || sidebar?.delegate != nil else { return false }
+        let consumes: Bool
+        switch intent {
+        case .moveNodes, .moveNodesToSpace, .moveNodesToNewSpace, .archiveNodes, .newFolderFromSelection: consumes = true
+        default: consumes = false
+        }
+        let previousIDs = consumes ? selection.ids : []
+        let previousAnchor = consumes ? selection.anchor : nil
+        // Consumed selections need not be pruned after every node in a bulk
+        // command. A refused delegate restores the unchanged view state.
+        if consumes {
+            selection.clear()
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
+        }
+        let batches: Bool
+        switch intent {
+        case .moveNodes, .moveNodesToSpace, .archiveNodes, .newFolderFromSelection,
+             .setPinned, .duplicateNodes, .duplicate, .exportSpaceIntoFolder: batches = true
+        default: batches = false
+        }
+        if batches { sidebar?.beginModelUpdates(); manager?.beginModelUpdates() }
+        let accepted: Bool
+        if let manager { accepted = manager.send(intent) }
+        else if let sidebar, let delegate = sidebar.delegate { accepted = delegate.sidebar(sidebar, didRequest: intent) }
+        else { accepted = false }
+        if batches { sidebar?.endModelUpdates(); manager?.endModelUpdates() }
+        if consumes, !accepted {
+            selection.select(previousIDs, anchor: previousAnchor)
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
+        } else if accepted, case .archiveNodes = intent {
+            let outline = sidebar?.pager.currentPage?.outline ?? focusedSpace.flatMap { manager?.outline(spaceID: $0.id) }
+            let visible = Set((0..<(outline?.numberOfRows ?? 0)).compactMap { itemID(of: outline?.item(atRow: $0)) })
+            let kept = previousIDs.filter { visible.contains($0) && model.node(id: $0) != nil }
+            selection.select(kept, anchor: previousAnchor.flatMap { kept.contains($0) ? $0 : nil } ?? kept.first)
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
+        }
+        return accepted
+    }
+
+    /// Existing command IDs only. The App command registry can use this same
+    /// path as the focused outline; an empty selection falls through to the App.
+    @discardableResult
+    public func performSelectionCommand(_ commandID: String) -> Bool {
+        let ids = selection.ids
+        guard !ids.isEmpty else { return false }
+        switch commandID {
+        case "pin-unpin-tab":
+            let pinnable = ids.filter { model.node(id: $0)?.folder == nil }
+            guard !pinnable.isEmpty else { return false }
+            return send(.setPinned(ids: ids, pinned: !pinnable.allSatisfy { model.isPinned(tabID: $0) }))
+        case "duplicate-tab": return send(.duplicateNodes(ids: ids))
+        case "new-folder": return send(.newFolderFromSelection(ids: ids))
+        default: return false
+        }
+    }
+
+    @discardableResult
+    func deleteSelection() -> Bool {
+        let ids = selection.ids
+        guard !ids.isEmpty else { return false }
+        if ids.contains(where: { model.node(id: $0)?.folder != nil }) {
+            // The App confirms once, archives all IDs in one command, and clears
+            // the selection only on confirmation. Cancel preserves the selection.
+            return send(.deleteFolders(ids: ids))
+        }
+        return send(.archiveNodes(ids: ids))
     }
 }
 

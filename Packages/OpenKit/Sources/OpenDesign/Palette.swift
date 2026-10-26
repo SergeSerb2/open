@@ -126,6 +126,8 @@ public enum MenuColors {
 /// docs/re/interaction-states.md §3–§6). One place to change a role.
 /// Theme-driven roles (tab title, selected fill, tooltip) live on `SpaceThemeStyle`.
 public enum SidebarRole {
+    /// Guess pending C5: use the high-contrast Space accent (design review R1).
+    public static func unreadDot(style: SpaceThemeStyle, appearance: ContentAppearance) -> RGBA { style.contrastAccent(appearance) }
     /// Space title. Light: black 0.45 → `SidebarForegroundDarker` (fitted on F0001;
     /// 0.48 / `GrayA10` gave ΔE 1.8). Dark: white 0.55, fitted on the default dark Space (F0079).
     public static let spaceTitle = DesignColor(light: SidebarColors.foregroundDarker.light, dark: .white(0.55))
@@ -159,6 +161,7 @@ public enum SidebarRole {
     /// Selected row in dark content: measured white 0.20 → `TabCellBackgroundCurrent` dark.
     /// Light content uses the theme's `light.background` (see `SpaceThemeStyle.selectedFill`).
     public static let rowSelected = SidebarColors.tabCurrent
+    public static let rowMultiselected = SidebarColors.tabMultiselected
     public static let rowSelectedShadow = SidebarColors.tabShadowSelected
     public static let rowPressed = SidebarColors.tabPressed
     /// Pinned/Today divider line: measured black 0.15 → `SidebarSeparator`.
@@ -226,4 +229,9 @@ public enum PiPRole {
     public static let documentHairline = DesignColor(light: .white(0.2), dark: .white(0.2))
     public static let topScrim = DesignColor(light: .black(0.5), dark: .black(0.5))
     public static let bottomScrim = DesignColor(light: .black(0.6), dark: .black(0.6))
+}
+
+/// PreviewBackgroundColor, SC §7: measured catalog values, no copied assets.
+public enum PreviewColors {
+    public static let background = DesignColor(light: RGBA(hex: 0xFFFFFF), dark: RGBA(hex: 0x212222))
 }
