@@ -162,6 +162,7 @@ final class SidebarRowView: NSTableRowView {
         isDropTarget = false
         isPeekSource = false
         animatesSelectionChange = false
+        alphaValue = 1
         fillIndent = 0
     }
 }
@@ -659,16 +660,24 @@ final class DividerCellView: SidebarCellView {
     private let line = CALayer()
     let clearLabel = TextLabel()
     let clearArrow = GlyphView()
-    var showsClear = false { didSet { if showsClear != oldValue { needsLayout = true } } }
+    var showsClear = false {
+        didSet {
+            if showsClear != oldValue { needsLayout = true }
+            if !showsClear { lastPointerLocation = nil; TooltipController.shared.cancel(for: self) }
+        }
+    }
     private var pointerOnClear = false { didSet { if pointerOnClear != oldValue { clearLabel.needsDisplay = true; clearArrow.needsDisplay = true } } }
     private var tracking: NSTrackingArea?
+    private var lastPointerLocation: NSPoint?
+    var clearTitle: String { context?.isOptionHeld == true ? "Clear unselected" : "Clear" }
+    var clearTooltipTitle: String { context?.isOptionHeld == true ? "Clear unselected Today tabs" : "Clear Today tabs" }
 
     required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         layer?.addSublayer(line)
         clearLabel.font = Typography.clearLabel.font
-        clearLabel.text = { "Clear" }
+        clearLabel.text = { [weak self] in self?.clearTitle ?? "Clear" }
         clearLabel.baseline = SpaceListMetrics.clearLabelBaseline
         let color: @MainActor () -> NSColor = { [weak self] in
             ((self?.pointerOnClear ?? false) ? SidebarRole.dividerLabelHover : SidebarRole.dividerLabel).nsColor
@@ -688,17 +697,28 @@ final class DividerCellView: SidebarCellView {
         super.layout()
         let m = SpaceListMetrics.self
         let w = bounds.width
+        let option = tracked({ context?.isOptionHeld ?? false }) { [weak self] in self?.needsLayout = true }
+        let extra = option ? max(0, clearLabel.textWidth - 29) : 0
         clearLabel.isHidden = !showsClear
         clearArrow.isHidden = !showsClear
-        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w, dy: 0)
-        clearLabel.frame = CGRect(x: w + m.clearLabelX, y: 0, width: 29, height: bounds.height)
-        let end = showsClear ? w + m.clearLineEnd : w - m.dividerLineInset
+        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w - extra, dy: 0)
+        clearLabel.frame = CGRect(x: w + m.clearLabelX - extra, y: 0, width: 29 + extra, height: bounds.height)
+        let end = showsClear ? w + m.clearLineEnd - extra : w - m.dividerLineInset
         CATransaction.begin(); CATransaction.setDisableActions(true)
         line.frame = CGRect(x: m.dividerLineInset, y: m.dividerLineY, width: max(0, end - m.dividerLineInset), height: 1)
         CATransaction.commit()
+        if let point = lastPointerLocation { trackPointer(at: point) }
     }
 
-    private var clearRect: NSRect { NSRect(x: bounds.width + SpaceListMetrics.clearArrowFrame.minX - 2, y: 0, width: 50, height: bounds.height) }
+    private var clearRect: NSRect { clearArrow.frame.union(clearLabel.frame).insetBy(dx: -2, dy: 0) }
+
+    func trackPointer(at point: NSPoint) {
+        lastPointerLocation = point
+        pointerOnClear = showsClear && clearRect.contains(point)
+        if pointerOnClear, let page {
+            TooltipController.shared.schedule(Tooltip(title: clearTooltipTitle, keys: ["⇧", "⌘", "K"], style: page.style), for: self)
+        } else { TooltipController.shared.cancel(for: self) }
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -708,10 +728,22 @@ final class DividerCellView: SidebarCellView {
         tracking = t
     }
 
-    override func mouseMoved(with event: NSEvent) { pointerOnClear = showsClear && clearRect.contains(convert(event.locationInWindow, from: nil)) }
-    override func mouseExited(with event: NSEvent) { pointerOnClear = false }
+    override func mouseMoved(with event: NSEvent) {
+        context?.isOptionHeld = event.modifierFlags.contains(.option)
+        trackPointer(at: convert(event.locationInWindow, from: nil))
+    }
+    override func mouseExited(with event: NSEvent) {
+        lastPointerLocation = nil
+        pointerOnClear = false
+        TooltipController.shared.cancel(for: self)
+    }
     override func mouseDown(with event: NSEvent) {
         guard showsClear, clearRect.contains(convert(event.locationInWindow, from: nil)), let page else { return }
-        page.context.send(.clearToday(space: page.space.id))
+        page.context.isOptionHeld = event.modifierFlags.contains(.option)
+        if event.modifierFlags.contains(.option) {
+            var keep = Set(page.context.selection.ids)
+            if let current = page.context.selectedID(in: page.space.id) { keep.insert(current) }
+            page.context.send(.clearTodayKeeping(space: page.space.id, keep: keep))
+        } else { page.context.send(.clearToday(space: page.space.id)) }
     }
 }

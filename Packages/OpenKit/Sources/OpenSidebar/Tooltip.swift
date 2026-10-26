@@ -98,6 +98,7 @@ public final class TooltipController {
     private var scheduledTooltip: Tooltip?
     public private(set) var scheduleCount = 0
     public private(set) var showCount = 0
+    public var visibleOrPendingTooltip: Tooltip? { scheduledTooltip }
 
     func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
         if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }

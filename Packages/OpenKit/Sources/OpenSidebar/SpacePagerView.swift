@@ -201,6 +201,10 @@ final class SpacePagerView: NSView {
     func apply(_ change: TreeChange) {
         for p in pages.values { p.apply(change) }
     }
+
+    func applyBulk(_ changes: [TreeChange]) {
+        for page in pages.values { page.applyBulk(changes) }
+    }
 }
 
 /// The strip holding the pages. Flipped, layer-backed.

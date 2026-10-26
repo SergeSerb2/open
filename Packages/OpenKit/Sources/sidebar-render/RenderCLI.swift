@@ -27,7 +27,7 @@ enum RenderCLI {
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
-                            [--multi-select ROW,ROW…]
+                            [--multi-select ROW,ROW…] [--option-held]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
@@ -35,7 +35,7 @@ enum RenderCLI {
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N]
+      sidebar-render bench [--rows N] [--selection] [--bulk N]
       sidebar-render check
     """
 
@@ -107,6 +107,7 @@ enum RenderCLI {
         context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
+        context.isOptionHeld = args.contains("--option-held")
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
         // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
         if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }

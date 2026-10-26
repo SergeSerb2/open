@@ -52,6 +52,40 @@ struct SidebarMenus {
         return parent
     }
 
+    private func moveTo(_ ids: [ItemID]) -> NSMenuItem {
+        let parent = NSMenuItem(title: "Move to", action: nil, keyEquivalent: "")
+        let current = Set(ids.compactMap { context.model.parent(of: $0).flatMap(spaceID(of:)) })
+        var items = context.model.spaces.map { space in
+            item(context.title(of: space), enabled: current != Set([space.id]), .moveNodesToSpace(ids: ids, space: space.id))
+        }
+        items.append(.separator())
+        items.append(item("New Space…", .moveNodesToNewSpace(ids: ids)))
+        parent.submenu = menu(items)
+        return parent
+    }
+
+    /// Selection menu; folders use Delete only (lead decision Q1).
+    func selection(_ ids: [ItemID]) -> NSMenu {
+        let folders = ids.filter { context.model.node(id: $0)?.folder != nil }
+        let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
+        var items: [NSMenuItem] = [
+            item("Copy Links", .copyLinks(ids: ids, markdown: false)),
+            item("Copy Links as Markdown", .copyLinks(ids: ids, markdown: true)),
+            .separator(),
+            item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)),
+            moveTo(ids),
+            .separator(),
+        ]
+        if folders.isEmpty {
+            let unpin = ids.allSatisfy { context.model.isPinned(tabID: $0) }
+            items.append(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))
+        }
+        items += [item("Duplicate", .duplicateNodes(ids: ids)), .separator(),
+                  item("Archive Items", enabled: !tabs.isEmpty, .archiveNodes(ids: tabs))]
+        if !folders.isEmpty { items.append(item("Delete", .deleteFolders(ids: folders))) }
+        return menu(items)
+    }
+
     private func spaceID(of parent: NodeParent) -> SpaceID? {
         switch parent {
         case .spacePinned(let s), .spaceToday(let s): return s
@@ -67,14 +101,23 @@ struct SidebarMenus {
 
     /// Today (unpinned) tab (F0115).
     func todayTab(_ tab: Tab) -> NSMenu {
-        menu([
+        var items: [NSMenuItem] = [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
             .separator(),
             item("Open in Split View", .openInSplitView(tabID: tab.id)),
             moveTo(tab.id),
             .separator(),
             item("Archive Item", .close(nodeID: tab.id)),
-        ])
+        ]
+        if let space = context.model.parent(of: tab.id).flatMap(spaceID(of:)) {
+            var keep = Set(context.selection.ids)
+            keep.insert(tab.id)
+            let alternate = item("Archive Other Tabs", .clearTodayKeeping(space: space, keep: keep))
+            alternate.isAlternate = true
+            alternate.keyEquivalentModifierMask = .option
+            items.append(alternate)
+        }
+        return menu(items)
     }
 
     /// Pinned tab, at the top level or in a folder (F0116).
@@ -171,7 +214,7 @@ struct SidebarMenus {
             item("Share Folder…", .share(nodeID: folder.id)),
             .separator(),
             item("New Nested Folder…", .newNestedFolder(parentFolderID: folder.id)),
-            item("Turn \"\(folder.title)\" into Space", .turnFolderIntoSpace(folderID: folder.id)),
+            item("Turn “\(folder.title)” into Space", .turnFolderIntoSpace(folderID: folder.id)),
             item("Copy All Links", .copyAllLinks(folderID: folder.id, markdown: false)),
             item("Copy All Links as Markdown", .copyAllLinks(folderID: folder.id, markdown: true)),
             .separator(),
@@ -197,7 +240,7 @@ struct SidebarMenus {
         profiles.append(item("New Profile…", .newProfile(space: space.id)))
         profile.submenu = menu(profiles)
 
-        let export = NSMenuItem(title: "Export \"\(context.title(of: space))\" into Folder", action: nil, keyEquivalent: "")
+        let export = NSMenuItem(title: "Export “\(context.title(of: space))” into Folder", action: nil, keyEquivalent: "")
         export.submenu = menu(context.model.spaces.map { other in
             item(context.title(of: other), enabled: other.id != space.id, .exportSpaceIntoFolder(space: space.id, destination: other.id))
         })
