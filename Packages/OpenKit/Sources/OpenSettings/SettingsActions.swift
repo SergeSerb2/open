@@ -18,6 +18,7 @@ public struct ImportPlan: Sendable {
     public private(set) var secretsConsented = false
     public init(directory: URL) { self.directory = directory }
     /// Only the explicit consent button should call this method.
+    public mutating func skipSecrets() { secretsRequested = false; secretsConsented = false }
     public mutating func consentToSecrets() { secretsRequested = true; secretsConsented = true }
 }
 public struct ImportOutcome: Sendable {
@@ -39,6 +40,7 @@ public struct ImportOutcome: Sendable {
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage)
     func openPreviewsSettings()
     func keyBindingsDidChange(store: KeyBindingStore)
+    /// Phase 2 uses countOnly, even after consent, until the engine secret writer exists.
     func runImport(plan: ImportPlan) async -> ImportOutcome
     func setAdBlockEnabled(_ on: Bool, profileID: ProfileID)
     func setEnabledBlockLists(_ ids: [String], profileID: ProfileID)

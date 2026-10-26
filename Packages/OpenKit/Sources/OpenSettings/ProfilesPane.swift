@@ -88,12 +88,16 @@ import OpenSuggest
         clearStatus = await root.actions.clearBrowsingData(profileID: id, kinds: clearKinds, range: clearRange) ?? "Done"
         clearing = false
     }
-    @discardableResult public func saveEngine(id: String? = nil, name: String, keyword: String, template: String) -> Bool {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, !keyword.isEmpty, !keyword.contains(where: \.isWhitespace), template.contains("%s"),
+    public func engineIssue(name: String, keyword: String, template: String) -> String? {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !keyword.isEmpty, !keyword.contains(where: \.isWhitespace), template.contains("%s"),
               let url = URL(string: template.replacingOccurrences(of: "%s", with: "example")), ["http", "https"].contains(url.scheme), url.host() != nil else {
-            errorText = "Enter a name, a keyword without spaces, and a search URL containing %s."; return false
+            return "Enter a name, a keyword without spaces, and a search URL containing %s."
         }
+        return nil
+    }
+    @discardableResult public func saveEngine(id: String? = nil, name: String, keyword: String, template: String) -> Bool {
+        if let issue = engineIssue(name: name, keyword: keyword, template: template) { errorText = issue; return false }
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let engine = SearchEngine(id: id ?? "custom-\(UUID().uuidString.lowercased())", name: name, keywords: [keyword], searchURLTemplate: template, suggestURLTemplate: nil)
         guard !SearchEngines.all.contains(where: { $0.id == engine.id }) else { errorText = "Built-in engines cannot be replaced."; return false }
         update { settings in if let index = settings.customSearchEngines.firstIndex(where: { $0.id == engine.id }) { settings.customSearchEngines[index] = engine } else { settings.customSearchEngines.append(engine) } }
@@ -109,24 +113,24 @@ public struct ProfilesPane: View {
     public init(model: ProfilesViewModel) { self.model = model }
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Profiles keep your data separate across Spaces — like history, logins, cookies, and extensions. You can use any Profile across one or more Spaces.")
-            Button("Learn more.") { model.root.actions.openHelp(topic: "profiles") }.buttonStyle(.link)
+            Text("Profiles keep your data separate across Spaces — like history, logins, cookies, and extensions. You can use any Profile across one or more Spaces. [Learn more.](open-help://profiles)")
+                .environment(\.openURL, OpenURLAction { _ in model.root.actions.openHelp(topic: "profiles"); return .handled })
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("Your Profiles").font(.caption).foregroundStyle(.secondary)
                     ForEach(model.dataModel.rows) { row in
-                        Button { model.select(row.id) } label: { VStack(alignment: .leading, spacing: 4) { Text(row.name); Text("\(row.spaceCount) Spaces").font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding(8).background(row.id == model.root.selectedProfileID ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6)) }.buttonStyle(.plain)
+                        Button { model.select(row.id) } label: { VStack(alignment: .leading, spacing: 4) { Text(row.name); Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding(8).background(row.id == model.root.selectedProfileID ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6)) }.buttonStyle(.plain)
                     }
                     Spacer(minLength: 100)
                     HStack { Button { model.nameDraft = ""; model.assignedSpaces = []; model.showsCreate = true } label: { Image(systemName: "plus") }.help("Create Profile")
                         Button { model.confirmsDelete = true } label: { Image(systemName: "minus") }.disabled(!model.canDelete).help("Delete Profile")
                         Button { model.nameDraft = model.profile?.name ?? ""; model.showsRename = true } label: { Image(systemName: "pencil") }.help("Rename Profile")
                     }
-                    Button("Delete unused Profiles") { model.confirmsUnused = true }.disabled(model.unusedIDs.isEmpty).font(.caption)
+                    Button { model.confirmsUnused = true } label: { Text("Delete unused Profiles").font(.caption).lineLimit(2).fixedSize(horizontal: false, vertical: true) }.buttonStyle(.plain).disabled(model.unusedIDs.isEmpty)
                 }.padding(10).frame(width: 145).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
                 VStack(spacing: 16) {
                     SettingsGroup("") {
-                        Picker("Search engine", selection: $model.searchEngineID) { ForEach(model.engines) { Text($0.name).tag($0.id) } }
+                        HStack { Text("Search engine"); Spacer(); Picker("Search engine", selection: $model.searchEngineID) { ForEach(model.engines) { Text($0.name).tag($0.id) } }.labelsHidden().fixedSize() }
                         HStack { Text("Manage search"); Spacer(); Button("Search Settings…") { model.root.showsSearchEngines = true } }
                         SettingsSwitch("Include search engine suggestions", isOn: $model.suggestions)
                     }

@@ -9,7 +9,7 @@ public struct SearchEnginesSheet: View {
     @State private var template = ""
     @State private var editing = false
     public init(model: ProfilesViewModel) { self.model = model }
-    private var valid: Bool { !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !keyword.isEmpty && !keyword.contains(where: \.isWhitespace) && template.contains("%s") }
+    private var valid: Bool { model.engineIssue(name: name, keyword: keyword, template: template) == nil }
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Search Engines").font(.title2)

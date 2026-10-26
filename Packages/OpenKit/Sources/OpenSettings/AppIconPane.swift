@@ -35,8 +35,8 @@ struct OriginalOpenIcon: View {
         ZStack {
             RoundedRectangle(cornerRadius: 18).fill(LinearGradient(colors: [Color(nsColor: Core.brandBlue.nsColor).opacity(index == 2 ? 0.25 : 1), Color(nsColor: Core.foregroundPrimary.nsColor)], startPoint: .topLeading, endPoint: .bottomTrailing))
             if index == 4 { Circle().fill(Color(nsColor: Core.focusRing.nsColor)).offset(x: 18, y: -15) }
-            RoundedRectangle(cornerRadius: 22).trim(from: 0.08, to: 0.88).stroke(.white, style: StrokeStyle(lineWidth: 6, lineCap: .round)).frame(width: 36, height: 50).rotationEffect(.degrees(Double(index) * 12))
-            if index == 5 { ForEach(0..<3) { i in Rectangle().fill(.white.opacity(0.35)).frame(height: 1).offset(y: CGFloat(i) * 14 - 14) } }
-        }.saturation(index == 3 ? 0 : 1)
+            RoundedRectangle(cornerRadius: 22).trim(from: 0.08, to: 0.88).stroke(Color(nsColor: Core.backgroundPrimary.light.nsColor), style: StrokeStyle(lineWidth: 6, lineCap: .round)).frame(width: 36, height: 50).rotationEffect(.degrees(Double(index) * 12))
+            if index == 5 { ForEach(0..<3) { i in Rectangle().fill(Color(nsColor: Core.backgroundPrimary.light.nsColor).opacity(0.35)).frame(height: 1).offset(y: CGFloat(i) * 14 - 14) } }
+        }.saturation(index == 3 ? 0 : 1).clipShape(RoundedRectangle(cornerRadius: 18))
     }
 }

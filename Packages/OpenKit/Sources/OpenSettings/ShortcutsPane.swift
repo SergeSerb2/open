@@ -73,7 +73,7 @@ public struct ShortcutsPane: View {
         List {
             Section("Default Shortcuts") { ForEach(model.commands.filter { model.store.bindings[$0.id] == nil }) { row($0) } }
             Section("Custom Shortcuts") { ForEach(model.commands.filter { model.store.bindings[$0.id] != nil }) { row($0) } }
-        }.frame(height: 270)
+        }.frame(height: 185)
         ForEach(model.conflicts.filter(\.isKnownArcDuplicate), id: \.self) { Text("Known shared shortcut: \($0.commandIDs.compactMap { CommandRegistry.byID[$0]?.title }.joined(separator: " / "))").font(.caption).foregroundStyle(.secondary) }
         HStack { Button("Reset All Shortcuts") { model.resetAll(confirmed: false) }; Spacer(); Text(model.statusText).font(.caption).foregroundStyle(.secondary) }
             .confirmationDialog("Reset all shortcuts to their defaults?", isPresented: $model.confirmsReset) { Button("Reset All Shortcuts", role: .destructive) { model.resetAll(confirmed: true) } }

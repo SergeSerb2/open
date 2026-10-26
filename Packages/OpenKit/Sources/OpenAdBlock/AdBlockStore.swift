@@ -195,15 +195,17 @@ public final class AdBlockStore {
 
     /// Reset the UI choices through the same verified list-generation path.
     public func resetListChoices(profile: ProfileID) async throws {
-        guard states[profile] != nil else { throw AdBlockError("profile is not open") }
-        for id in enabledListIDs(for: profile) where !catalog.defaultIDs.contains(id) {
-            try await setListEnabled(id, false, profile: profile)
+        guard let state = states[profile] else { throw AdBlockError("profile is not open") }
+        try begin(profile); defer { busy.remove(profile) }
+        do {
+            states[profile] = try await repository.resetChoices(directory: profileDirectory(profile), state: state, catalog: catalog)
+            onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
+        } catch {
+            var failed = state
+            failed.lastError = (error as? AdBlockError)?.description ?? "list reset failed"
+            try await repository.save(failed, directory: profileDirectory(profile)); states[profile] = failed
+            throw error
         }
-        for id in catalog.defaultIDs { try await setListEnabled(id, true, profile: profile) }
-        guard var state = states[profile] else { return }
-        state.lastError = nil
-        try await repository.save(state, directory: profileDirectory(profile))
-        states[profile] = state
     }
 
     /// One reload after a changed batch. No reload for 304. A failed batch retains all old lists.

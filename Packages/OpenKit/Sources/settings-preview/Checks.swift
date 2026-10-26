@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OpenSettings
 import OpenModel
 import OpenStore
@@ -15,6 +16,12 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
     let actions: PreviewActions
     let settings: SettingsViewModel
     let library: LibraryViewModel
+    let libraryActions: PreviewLibraryActions
+    let downloadFeed: PreviewDownloads
+    let captures: FileCapturesProvider
+    let archives: [ProfileID: ArchiveStore]
+    let histories: [ProfileID: HistoryStore]
+    let faviconStore: FaviconStore
     init() throws {
         root = FileManager.default.temporaryDirectory.appendingPathComponent("open-settings-\(UUID().uuidString)")
         suite = "open.settings.preview.\(UUID().uuidString)"
@@ -22,13 +29,31 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         actions = PreviewActions()
         try FileManager.default.createDirectory(at: root.appendingPathComponent("State"), withIntermediateDirectories: true)
         settings = SettingsViewModel(model: SyntheticData.model(), actions: actions, defaults: defaults, root: root)
-        library = LibraryViewModel(defaults: defaults)
+        downloadFeed = PreviewDownloads(try SyntheticData.downloads(root: root, profiles: settings.model.profiles))
+        captures = try FileCapturesProvider(root: root)
+        libraryActions = PreviewLibraryActions(model: settings.model, downloads: downloadFeed, captures: captures, snapshot: settings.snapshot)
+        let directories = ProfileDirectories(root: root)
+        archives = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, ArchiveStore(fileURL: directories.archiveFileURL(for: $0))) })
+        histories = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, HistoryStore(fileURL: directories.historyFileURL(for: $0))) })
+        faviconStore = try FaviconStore(databaseURL: root.appendingPathComponent("State/favicons.sqlite3"))
+        library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore)
+        let settings = self.settings
+        settings.model.archiveSink = ProfileArchiveSink(directories: directories, directoryNameFor: { [weak model = settings.model] id in id.flatMap { model?.profile(id: $0)?.dataDirectoryName } ?? "Default" })
         try SyntheticData.seedSettings(root: root, model: settings.model)
         try settings.flush()
+        actions.importHandler = { [weak settings] plan in guard let settings else { return ImportOutcome(errorText: "Settings closed.") }; return await applySyntheticImport(plan, settings: settings) }
         try Data("synthetic-settings-v1".utf8).write(to: root.appendingPathComponent("State/settings-preview.marker"))
     }
+    func prepareLibrary() async throws {
+        try await SyntheticData.seedLibrary(root: root, model: settings.model, archives: archives, histories: histories)
+        try captures.reload()
+        if let item = captures.captures.first { try await faviconStore.ingest(imageData: Data(contentsOf: captures.directory.appendingPathComponent(item.fileName)), iconURL: URL(string: "https://example.com/favicon.ico"), for: URL(string: "https://example.com/")!, pageSpecific: false) }
+        await library.reloadArchive(); await library.reloadHistory()
+        for item in captures.captures { await library.loadThumbnail(item) }
+    }
     func prepareAdBlock() async throws {
-        let store = try AdBlockStore(root: root)
+        var policy = AdBlockDownloadPolicy(); policy.attempts = 1; policy.requestTimeout = 2; policy.resourceTimeout = 3
+        let store = try AdBlockStore(root: root, policy: policy)
         for profile in settings.model.profiles { try await store.openProfile(profile.id, scheduleUpdates: false) }
         settings.attach(adBlockStore: store)
     }
@@ -54,7 +79,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -66,12 +91,14 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()
                 try require(disk["open.general.warnBeforeQuitting"] as? Bool == false && disk["open.general.automaticallyUpdate"] as? Bool == false, "toggles not on disk: \(disk)")
+                let dumped = try dumpKeys(root: env.root)
+                try require(dumped.contains("default open.general.warnBeforeQuitting = false") && dumped.contains("default open.general.automaticallyUpdate = false"), "dump-keys did not show persisted false values")
                 let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: env.suite)!, root: env.root, snapshot: vm.snapshot)
                 try require(!reloaded.general.warn && !reloaded.general.updates && env.actions.log.isEmpty, "relaunch/action mismatch")
             case "default-browser":
                 env.actions.defaultError = "Default browser request failed."
                 vm.general.setDefault()
-                try require(vm.general.errorText == env.actions.defaultError && !vm.general.isDefault, "missing inline default error")
+                try require(vm.general.errorText == "Default browser request failed." && !vm.general.isDefault, "missing inline default error")
                 try require(env.actions.log == ["setAsDefaultBrowser"], "default action missing")
                 _ = try env.diskModel()
             case "profile-search":
@@ -181,6 +208,78 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let disk = try env.diskDefaults()
                 try require(disk["open.advanced.allowWindowDraggingFromWebTop"] as? Bool == true && disk["open.advanced.tabSleepMode"] as? String == "aggressive", "advanced persistence")
                 try require(env.actions.log == ["setTabSleepMode aggressive"], "sleep action missing")
+            case "import-counts":
+                let source = env.root.appendingPathComponent("Example Import")
+                try SyntheticData.writeImportFixture(to: source)
+                let wizard = ImportWizardViewModel(root: vm, directory: source)
+                await wizard.refreshCounts()
+                try require(wizard.canContinue && wizard.counts["Spaces"] == 2 && wizard.counts["Pinned and Today tabs"] == 3 && wizard.counts["Skipped easels"] == 1 && wizard.counts["Passwords and cookies"] == 2, "fixture counts differ: \(wizard.counts)")
+                wizard.review(); await wizard.beginImport()
+                try require(wizard.outcome?.errorText == nil && wizard.outcome?.counts["Imported Spaces"] == 2 && env.actions.keychainReadCount == 0, "import/action consent")
+                var disk = try env.diskModel(); let itemCount = disk.index.count, spaceCount = disk.spaces.count
+                let repeatWizard = ImportWizardViewModel(root: vm, directory: source); await repeatWizard.refreshCounts(); repeatWizard.review(); await repeatWizard.beginImport()
+                disk = try env.diskModel(); try require(disk.index.count == itemCount && disk.spaces.count == spaceCount && repeatWizard.outcome?.counts["Imported items"] == 0, "re-import added rows")
+                let consent = ImportWizardViewModel(root: vm, directory: source); await consent.refreshCounts(); consent.plan.secretsRequested = true; consent.review()
+                let calls = env.actions.log.count; await consent.beginImport()
+                try require(consent.step == .consent && !consent.plan.secretsConsented && env.actions.log.count == calls, "consent did not gate import")
+                consent.finish(); try require(env.actions.keychainReadCount == 0 && env.actions.log.count == calls, "cancel consent touched Keychain")
+                let allowed = ImportWizardViewModel(root: vm, directory: source); await allowed.refreshCounts(); allowed.plan.secretsRequested = true; allowed.review(); await allowed.beginImport(); await allowed.allowAndImportSecrets()
+                try require(allowed.plan.secretsConsented && allowed.outcome?.counts["Secret copies"] == 0 && env.actions.keychainReadCount == 0, "consented Phase 2 read secrets")
+                let failed = ImportWizardViewModel(root: vm, directory: source); await failed.refreshCounts(); failed.review()
+                let before = try Data(contentsOf: vm.snapshot.fileURL)
+                try Data("{}".utf8).write(to: source.appendingPathComponent("StorableSidebar.json"))
+                await failed.beginImport()
+                try require(failed.outcome?.errorText != nil && (try Data(contentsOf: vm.snapshot.fileURL)) == before, "failure changed old snapshot")
+            case "library-archive":
+                try await env.prepareLibrary(); let library = env.library
+                library.query = "Example"; library.archiveSpaceFilter = vm.model.spaces[0].id; await library.reloadArchive()
+                try require(library.archiveRows.count == 2 && !library.favicons.isEmpty, "search/Space filter or favicon store")
+                let restored = library.archiveRows[0].id; await library.restore(id: restored)
+                let disk = try env.diskModel()
+                try require(disk.spaces.contains { $0.today.contains { $0.id == restored } } && env.libraryActions.log.contains("restoreArchived \(restored)"), "restore did not reach Today on disk")
+                try require(vm.model.undoManager?.canUndo == true, "restore did not register Undo")
+                vm.model.undoManager?.undo(); (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                try require(vm.model.tab(id: restored) == nil, "Undo did not return tab to Archive")
+                vm.model.undoManager?.redo(); (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                try require(vm.model.tab(id: restored) != nil, "Redo did not restore tab")
+                _ = try env.diskModel()
+                library.query = ""; library.archiveSpaceFilter = nil; await library.reloadArchive()
+                let removed = library.archiveRows[0].id; library.requestDeleteArchive([removed]); try require(library.pendingArchiveDeletes == [removed], "delete confirmation missing")
+                await library.deleteArchiveConfirmed(); try require(!library.archiveRows.contains { $0.id == removed }, "delete stayed in archive")
+                let storedCount = await countArchive(env.archives); try require(storedCount == 4, "delete not in SQLite")
+                library.requestClearArchive(); let beforeClear = await countArchive(env.archives); try require(library.confirmsClear && beforeClear == 4, "clear did not ask first")
+                await library.clearArchiveConfirmed(); let after = await countArchive(env.archives); try require(after == 0 && env.libraryActions.log.contains("clearArchive"), "clear not on disk")
+            case "library-downloads":
+                try await env.prepareLibrary(); let library = env.library
+                let active = env.downloadFeed.downloads.first { $0.state == .inProgress }!, failed = env.downloadFeed.downloads.first { $0.state == .failed }!, done = env.downloadFeed.downloads.first { $0.state == .completed }!
+                try require(active.progress == 0.4 && library.fileAvailable(done), "progress or completed file on disk")
+                library.retryDownload(failed); library.revealDownload(done)
+                try require(env.libraryActions.log == ["retryDownload download-failed", "revealDownload download-done"], "download action IDs")
+                try FileManager.default.removeItem(atPath: done.filePath!); library.revealDownload(done)
+                try require(library.statusText == "File moved or deleted." && env.libraryActions.log.count == 2, "moved-file guard")
+                _ = try env.diskModel()
+            case "library-captures-history":
+                try await env.prepareLibrary(); let library = env.library
+                library.section = .captures; try require(library.captureItems.count == 3 && library.thumbnails.count == 3, "capture grid/thumbs")
+                let item = library.captureItems[0], output = env.root.appendingPathComponent("Example Saved.png")
+                library.saveCapture(item, to: output); try require(FileManager.default.fileExists(atPath: output.path), "Save As did not write")
+                library.pendingCaptureDelete = item.id; library.deleteCaptureConfirmed()
+                let reloaded = try FileCapturesProvider(root: env.root)
+                try require(reloaded.captures.count == 2 && !FileManager.default.fileExists(atPath: env.captures.directory.appendingPathComponent(item.fileName).path), "capture index/file deletion")
+                library.section = .history; library.query = "Example"; await library.reloadHistory()
+                try require(library.historyRows.count == 3, "profile history isolation")
+                library.actions.openHistoryItem(url: library.historyRows[0].url)
+                let disk = try env.diskModel(); try require(disk.spaces.contains { !$0.today.isEmpty } && env.libraryActions.log.contains("openHistoryItem"), "history open action")
+            case "empty-states":
+                try await env.prepareLibrary(); env.downloadFeed.downloads = []
+                for store in env.archives.values { try await store.deleteAll() }
+                for item in env.captures.captures { try env.captures.remove(id: item.id) }
+                for (section, title) in [(LibrarySection.archive, "No archived tabs"), (.downloads, "No downloads"), (.captures, "No captures")] {
+                    env.library.section = section; await env.library.reload()
+                    let labels = try render(LibraryContent(viewModel: env.library), size: CGSize(width: 960, height: 640), scale: 1, dark: false, to: env.root.appendingPathComponent("empty-\(section.rawValue).png"))
+                    try require(labels.contains(title), "empty label missing from hosted accessibility tree: \(title) — \(labels)")
+                }
+                let emptyCount = await countArchive(env.archives); try require(emptyCount == 0 && (try FileCapturesProvider(root: env.root)).captures.isEmpty, "empty stores not on disk")
             case "app-icon":
                 vm.appIcon.select(.openColor)
                 let disk = try env.diskDefaults()
@@ -189,9 +288,9 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
             default: break
             }
             passed += 1; print("PASS \(name)")
-        } catch { print("FAIL \(name): \(error)"); throw error }
+        } catch { print("FAIL \(name): \(error)"); print("SUMMARY \(passed) checks passed, 1 failed"); throw error }
     }
-    print("SUMMARY \(passed) passed, 0 failed")
+    print("SUMMARY \(passed) checks passed, 0 failed")
 }
 
 /// A real loopback HTTP server feeds synthetic filter text through URLSession and generation IO.
@@ -220,4 +319,8 @@ server.serve_forever()
         setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", "http://127.0.0.1:\(port)", 1)
     }
     func stop() { if process.isRunning { process.terminate(); process.waitUntilExit() }; if let previous { setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", previous, 1) } else { unsetenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT") } }
+}
+
+@MainActor func countArchive(_ stores: [ProfileID: ArchiveStore]) async -> Int {
+    var result = 0; for store in stores.values { result += await store.count() }; return result
 }

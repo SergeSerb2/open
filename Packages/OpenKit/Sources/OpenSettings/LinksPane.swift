@@ -57,6 +57,7 @@ public struct LinksPane: View {
             ForEach(issues(for: LinksSettingsModel.defaultDestinationIssueID), id: \.self) { Text($0.message).foregroundStyle(.red) }
             if links.issues().contains(where: \.isError) { SettingsError(text: "Fix the route errors to save. Your last saved routes are unchanged.") }
         }
+        .id("links-rules")
         SettingsGroup("Test a Link") {
             TextField("URL or host", text: $links.testURLString)
             TextField("From app bundle ID (optional)", text: $links.testSourceBundleID)
@@ -65,12 +66,16 @@ public struct LinksPane: View {
             if tested && !links.testInputIsValid { SettingsError(text: "Enter a valid URL.") }
             if let decision = links.testDecision { Text(RoutingDecisionFormatter.report(decision, spaces: root.routingSpaces)).font(.system(.caption, design: .monospaced)).textSelection(.enabled).fixedSize(horizontal: false, vertical: true) }
         }
+        .id("links-test")
         .onChange(of: focusedField) { old, _ in if old != nil { root.commitLinks() } }
     }
     private var hotkey: String { (root.shortcutsStore.effectiveShortcuts(for: CommandRegistry.byID["little-open-global"]!).first?.symbolDisplay) ?? "the shortcut" }
     private func issues(for id: RuleID) -> [RuleIssue] { links.issues().filter { $0.ruleID == id } }
     private func toggle(_ key: ReferenceWritableKeyPath<LinksSettingsModel, Bool>) -> Binding<Bool> { Binding(get: { links[keyPath: key] }, set: { links[keyPath: key] = $0; root.commitLinks() }) }
-    private func draftBinding<T>(_ id: RuleID, _ key: WritableKeyPath<RuleDraft, T>) -> Binding<T> { Binding(get: { links.drafts.first(where: { $0.id == id })![keyPath: key] }, set: { value in if let i = links.drafts.firstIndex(where: { $0.id == id }) { links.drafts[i][keyPath: key] = value; root.commitLinks() } }) }
+    private func draftBinding<T>(_ id: RuleID, _ key: WritableKeyPath<RuleDraft, T>) -> Binding<T> {
+        let fallback = links.drafts.first(where: { $0.id == id })![keyPath: key]
+        return Binding(get: { links.drafts.first(where: { $0.id == id })?[keyPath: key] ?? fallback }, set: { value in if let i = links.drafts.firstIndex(where: { $0.id == id }) { links.drafts[i][keyPath: key] = value; root.commitLinks() } })
+    }
     private func textBinding(_ id: RuleID, _ key: WritableKeyPath<RuleDraft, String>) -> Binding<String> { Binding(get: { links.drafts.first(where: { $0.id == id })?[keyPath: key] ?? "" }, set: { value in if let i = links.drafts.firstIndex(where: { $0.id == id }) { links.drafts[i][keyPath: key] = value } }) }
     private func destination(kind: Binding<RuleDraft.DestinationKind>, space: Binding<SpaceID?>) -> some View {
         HStack {
