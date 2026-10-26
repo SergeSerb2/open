@@ -423,7 +423,7 @@ final class TabCellView: SidebarCellView {
     func beginRename() {
         guard let tab else { return }
         let id = tab.id
-        beginEditing(text: tab.displayTitle, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
+        beginEditing(text: tab.customTitle ?? tab.title, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
                      font: title.font) { [weak self] value in self?.context?.send(.rename(nodeID: id, title: value)) }
     }
 }
@@ -531,8 +531,15 @@ final class FolderIconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let folder else { return }
-        let open = tracked({ folder.isExpanded }) { [weak self] in self?.needsDisplay = true }
+        let (open, override, legacy) = tracked({ (folder.isExpanded, folder.iconOverride, folder.customIcon) }) { [weak self] in self?.needsDisplay = true }
         let accent = cell?.page.map { $0.style.accentColor($0.contentAppearanceForSpace).nsColor } ?? Core.brandBlue.nsColor
+        if let icon = override ?? NodeIconRenderer.legacy(legacy) {
+            let size = SpaceListMetrics.faviconInk
+            let ink = backingAlignedRect(CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2,
+                                               width: size, height: size), options: .alignAllEdgesNearest)
+            NodeIconRenderer.draw(icon, in: ink, tint: accent)
+            return
+        }
         CustomIcon.folder(open: open, in: bounds.insetBy(dx: 1.5, dy: 2.5), color: accent)
     }
 }

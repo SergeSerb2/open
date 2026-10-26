@@ -92,6 +92,59 @@ def save_snapshot(data, directory="fixture"):
     return str(path.parent.parent.resolve())
 
 
+def legacy_space_fixture(cli, root):
+    fixture = root / "Packages/OpenKit/Fixtures/space-schema1"
+    original = (fixture / "State/browser.json").read_bytes()
+    expected = json.loads(original)
+    # main's later keep-alive setting is additive and defaults to an empty list.
+    # Every original semantic field must remain equal; no other addition is allowed.
+    for profile in expected["profiles"]:
+        profile["settings"].setdefault("keepAliveSites", [])
+    directory = Path("legacy-space").resolve()
+    shutil.copytree(fixture, directory)
+    matches(r"^roundtrip OK$", run(cli, "roundtrip", str(directory)))
+    require(json.loads((directory / "State/browser.json").read_text()) == expected,
+            "legacy Space fixture semantic fields changed (only main's default keepAliveSites=[] may be added)")
+    renderer = str(root / "Packages/OpenKit/.build/release/sidebar-render")
+    for space in range(3):
+        output = Path(f"legacy-space-{space}.png").resolve()
+        run(renderer, "render", "--snapshot", str(directory), "--space", str(space),
+            "--size", "900x700", "--scale", "1", "--out", str(output))
+        require(output.read_bytes() == (fixture / f"window-{space}.png").read_bytes(),
+                f"legacy Space {space} PNG differs from the committed pre-Step-1 baseline")
+    require((fixture / "State/browser.json").read_bytes() == original, "legacy fixture source was modified")
+    print("P1 legacy DTO roundtrip byte comparison PASS; original semantic fields unchanged; 3/3 baseline PNGs byte-identical")
+
+
+def space_icon_import(cli):
+    icons = [{"emoji_v2": "🧭"}, {"emoji": 128188}, {"icon": "planet"},
+             {"emoji_v2": ""}, {"icon": "future-unknown-icon"}]
+    items = []
+    ids = [f"icon-tab-{i}" for i in range(len(icons))]
+    for ident, icon in zip(ids, icons):
+        items.extend([ident, {"id": ident, "parentID": "pinned-container", "childrenIds": [], "createdAt": 0,
+                              "data": {"tab": {"savedURL": "https://example.com/", "savedTitle": "Synthetic icon tab",
+                                               "customInfo": {"iconType": icon}}}}])
+    items.extend(["pinned-container", {"id": "pinned-container", "childrenIds": ids, "data": {"itemContainer": {}}}])
+    source = {"version": 1, "sidebar": {"containers": [{"global": {}}, {"items": items,
+              "spaces": ["icon-space", {"id": "icon-space", "title": "Synthetic icons", "profile": {"default": True},
+                         "containerIDs": ["pinned", "pinned-container"], "customInfo": {}}], "topAppsContainerIDs": []}]}}
+    directory = Path("icon-source").resolve()
+    directory.mkdir()
+    (directory / "StorableSidebar.json").write_text(json.dumps(source))
+    output = Path("icon-import").resolve()
+    result = run(cli, "import-arc", "--arc-dir", str(directory), "--out", str(output), "--counts-only")
+    matches(r"namedSpaceIcons mapped=1 unknown=1 fallback=circle.dotted", result)
+    data = json.loads((output / "State/browser.json").read_text())
+    tabs = [node["tab"]["_0"] for node in data["spaces"][0]["pinned"]]
+    expected = [{"emoji": {"_0": "🧭"}}, {"emoji": {"_0": "💼"}}, {"named": {"_0": "planet"}},
+                None, {"named": {"_0": "future-unknown-icon"}}]
+    require([tab.get("iconOverride") for tab in tabs] == expected and all("customIcon" not in tab for tab in tabs),
+            "tab import did not retain typed icons, omit empty emoji, or preserve unknown named icon")
+    matches(r"^roundtrip OK$", run(cli, "roundtrip", str(output)))
+    print("tab icon import PASS: empty emoji omitted, typed icons retained, known/unknown named counters checked")
+
+
 def route(cli, root, seed):
     for name in ("route-check.sh", "verify-routing.sh", "verify-route.sh"):
         runner = root / "tools" / name
@@ -391,6 +444,9 @@ def main():
         matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", text)
         shutil.copytree(directory, seed, dirs_exist_ok=True)
         archive_migration(cli)
+    elif name == "space-legacy":
+        legacy_space_fixture(cli, root)
+        space_icon_import(cli)
     elif name == "roundtrip":
         data = seed_snapshot(cli, seed)
         shutil.copytree(seed, "data")
@@ -445,7 +501,8 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 214, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 216, "missing settings/library/appearance/detail/sheet/state renders")
+        require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
         states = ("welcome welcome-inactive welcome-counting welcome-nodata welcome-saveerror "
                   "import import-arcrunning import-counting import-nodata import-parsehint "
                   "import-parsehint-running import-partial import-capability-on secrets secrets-on "
@@ -464,6 +521,11 @@ def main():
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
             expected = (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
+    elif name == "features-render":
+        run("python3", str(root / "tools/generate-sounds.py"), "--check")
+        text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
+        matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
+        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
     elif name == "boosts":
