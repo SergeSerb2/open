@@ -154,6 +154,8 @@ public final class AdBlockStore {
         states[profile]?.enabledBlockLists ?? catalog.defaultIDs
     }
 
+    public func listReceipt(_ id: String, profile: ProfileID) -> AdBlockListReceipt? { states[profile]?.lists[id] }
+
     public func excludedDomains(for profile: ProfileID) -> [String] { exclusions[profile, default: []].sorted() }
 
     public func siteSnapshot(for profile: ProfileID) -> AdBlockSiteSnapshot {
@@ -179,10 +181,33 @@ public final class AdBlockStore {
         if state.enabledBlockLists.contains(id) == on { return }
         try begin(profile)
         defer { busy.remove(profile) }
-        let (next, results) = try await repository.setEnabled(id, on: on, directory: profileDirectory(profile), state: state, catalog: catalog)
-        states[profile] = next
-        lastUpdateResults[profile] = results
-        onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
+        do {
+            let (next, results) = try await repository.setEnabled(id, on: on, directory: profileDirectory(profile), state: state, catalog: catalog)
+            states[profile] = next
+            lastUpdateResults[profile] = results
+            onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
+        } catch {
+            var failed = state
+            failed.lastError = (error as? AdBlockError)?.description ?? "list update failed"
+            try await repository.save(failed, directory: profileDirectory(profile))
+            states[profile] = failed
+            throw error
+        }
+    }
+
+    /// Reset the UI choices through the same verified list-generation path.
+    public func resetListChoices(profile: ProfileID) async throws {
+        guard let state = states[profile] else { throw AdBlockError("profile is not open") }
+        try begin(profile); defer { busy.remove(profile) }
+        do {
+            states[profile] = try await repository.resetChoices(directory: profileDirectory(profile), state: state, catalog: catalog)
+            onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
+        } catch {
+            var failed = state
+            failed.lastError = (error as? AdBlockError)?.description ?? "list reset failed"
+            try await repository.save(failed, directory: profileDirectory(profile)); states[profile] = failed
+            throw error
+        }
     }
 
     /// One reload after a changed batch. No reload for 304. A failed batch retains all old lists.

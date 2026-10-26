@@ -5,7 +5,7 @@
 #   tools/build.sh Release         # Release
 #   OPEN_AUTOMATION=1 tools/build.sh Release        # Release + automation socket
 #   OPEN_KEEP_LOCALES="en" tools/build.sh Release   # ship only these CEF locales
-#   CEF_SOURCE=fork tools/build.sh Release          # use our fork's CEF build
+#   CEF_SOURCE=cdn tools/build.sh Release           # stock CEF instead of our fork (comparisons)
 #
 # Output: build/<Config>/Open.app. Builds run at low priority with at most
 # $OPEN_BUILD_JOBS (default 6) parallel jobs, so the machine stays responsive.

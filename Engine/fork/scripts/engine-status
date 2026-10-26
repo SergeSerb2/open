@@ -145,18 +145,33 @@ def main():
             differences.append(f"{key}: expected {pins[key]}, actual {actual}")
     add("FAIL" if differences else "PASS", "S-1 Pins", "; ".join(differences) or "Chromium, CEF, depot_tools and tag match VERSIONS")
 
-    # CEF patcher has no dry-run option. Inspect its declarative config without executing it.
+    # CEF patcher has no dry-run option. Read its declarative config without
+    # executing it, then run the patcher's own read-only "already applied"
+    # test per patch (cef/tools/git_util.py git_apply_patch_file:
+    # git apply -p0 --ignore-whitespace --reverse --check in the patch dir).
     try:
         cfg = src / "cef/patch/patch.cfg"
         tree = ast.parse(cfg.read_text())
         patches = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
                        and any(isinstance(t, ast.Name) and t.id == "patches" for t in n.targets))
-        missing = [p["name"] for p in patches if not (cfg.parent / "patches" / (p["name"] + ".patch")).is_file()]
-        dirty = run("git", "-C", str(src), "diff", "--stat").stdout.strip()
-        if missing or not dirty:
-            add("FAIL", "S-2 CEF patches", f"missing patch files: {missing}; src diff --stat nonempty: {bool(dirty)}")
+        missing, unapplied, skipped = [], [], 0
+        for patch in patches:
+            path = cfg.parent / "patches" / (patch["name"] + ".patch")
+            target = src / patch.get("path", "")
+            if not path.is_file():
+                missing.append(patch["name"])
+            elif ("condition" in patch and patch["condition"] not in os.environ) or not target.is_dir():
+                skipped += 1  # The patcher skips these too.
+            else:
+                check = subprocess.run(["git", "apply", "-p0", "--ignore-whitespace", "--reverse", "--check"],
+                                       cwd=target, input=path.read_bytes(), stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, check=False)
+                if b"error:" in check.stderr or check.returncode:
+                    unapplied.append(patch["name"])
+        if missing or unapplied:
+            add("FAIL", "S-2 CEF patches", f"missing patch files: {missing}; not applied: {unapplied}")
         else:
-            add("WARN", "S-2 CEF patches", f"fallback: src diff --stat is nonempty; all {len(patches)} patch.cfg files exist; not full patch proof")
+            add("PASS", "S-2 CEF patches", f"{len(patches) - skipped} of {len(patches)} patch.cfg patches applied (reverse check); {skipped} skipped by condition or missing directory")
     except (OSError, ValueError, SyntaxError, StopIteration) as error:
         add("FAIL", "S-2 CEF patches", str(error))
 
@@ -207,8 +222,9 @@ def main():
             if candidates:
                 found_distrib, binary = True, candidates[0]
     missing = []
-    if not (out / "cefsimple").exists():
-        missing.append(f"not built yet: {out / 'cefsimple'}")
+    # On macOS the cefsimple target produces cefsimple.app.
+    if not (out / "cefsimple.app/Contents/MacOS/cefsimple").is_file():
+        missing.append(f"not built yet: {out / 'cefsimple.app'}")
     if not found_distrib:
         missing.append(f"no framework directory in distrib recorded by {distrib}")
     add("WARN" if missing else "PASS", "S-6 Build outputs", "; ".join(missing) or "cefsimple and distrib framework exist")

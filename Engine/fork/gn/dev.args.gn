@@ -3,6 +3,7 @@ blink_symbol_level=0
 chrome_pgo_phase=0
 clang_use_chrome_plugins=false
 dcheck_always_on=false
+disable_fieldtrial_testing_config=true
 enable_background_mode=false
 enable_cdm_host_verification=true
 enable_cdm_storage_id=true

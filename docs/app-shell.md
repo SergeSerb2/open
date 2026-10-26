@@ -2,6 +2,9 @@
 
 ## Step A — window before engine
 
+The original evidence below used **CDN CEF**. Current fork evidence is recorded
+in the fork refresh table at the end of this document.
+
 The real `OpenSidebar.SidebarView` draws from the snapshot before Chromium
 starts. The theme field is prepared before display. After the window transaction
 is flushed, a display-link callback must report a screen refresh later than
@@ -65,8 +68,8 @@ The original pre-presentation, wall-clock numbers are superseded by this table;
 is historical evidence only.
 
 Current raw samples, host counters, and lifecycle results:
-[results-window-step-a-release.json](engine-spike/results-window-step-a-release.json).
-Open's own window: [window-startup-step-a.png](engine-spike/window-startup-step-a.png).
+[results-window-release.json](engine-spike/results-window-step-a-cdn-release.json).
+Open's own window: [window-startup.png](engine-spike/window-startup.png).
 
 Merged `origin/main` through M4 visual finish `39fb0ed` before final builds,
 startup/shell checks and repository verification.
@@ -108,6 +111,57 @@ real-sidebar requirement over the old “still the M1 window” plan table wordi
 No unit tests, Arc launch, desktop input, other-app screenshots, copied Arc
 assets, or committed personal browser data were used. Test apps close after each
 run. Engine changes are limited to the approved client null guard.
+
+## Step B — real window
+
+In progress on top of Step A. Review fixes will be carried forward.
+
+
+## Step A fork refresh — 2026-10-25
+
+Merged `origin/main` through `c95be65` (including fork #46, Settings #51, and Settings polish #56).
+Both Debug and Release builds passed with the default **fork** distribution.
+The Release socket build uses `OPEN_AUTOMATION=1`. The embedded and vendor
+Mach-O UUIDs match `4C4C44FE-5555-3144-A175-7398C5A1D4B4`; each new JSON records
+that proof and the fork source stamp. No engine build or source sync was run.
+
+| Suite / engine | Result | Evidence |
+|---|---|---|
+| Release window / fork | 16 functional PASS; 2 sidebar timing FAIL (16/18) | [JSON](engine-spike/results-window-step-a-fork-release.json) |
+| Debug shell / fork | 6/6 PASS | [JSON](engine-spike/results-shell-step-a-fork-debug.json) |
+| Release shell / fork | 6/6 PASS | [JSON](engine-spike/results-shell-step-a-fork-release.json) |
+
+| Release median, 5 samples each / fork | Sidebar drawn (≤250 ms) | First paint (≤700 ms) |
+|---|---:|---:|
+| Cold, fresh profile | 252 — FAIL | 502 — PASS |
+| Warm, existing profile | 252 — FAIL | 460 — PASS |
+
+The sidebar misses by 2 ms are kept as failures. Host load was [11.0986328125, 9.64599609375, 11.220703125]
+on 18 CPUs; these are not controlled idle measurements. The forced
+no-display-link launch still waits for the real three-second timeout, reports
+`firstFrameConfirmed=false`, starts the engine, and loads the requested page.
+Quit during that wait still saves and exits without starting the engine.
+
+Rule 10: full verification after merging `c95be65`; 15 PASS, no SKIP.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 19 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 12 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 48 |
+| sidebar-render | PASS | 18 |
+| commandbar-render | PASS | 14 |
+| boosts | PASS | 2 |
+
 
 ## Step B — real window
 
@@ -194,18 +248,21 @@ Today, folders and split panes flattened). Each window/profile strip contains
 its own loaded subset. Space focus does not change that order. Peek hosts stay
 outside the strip until promotion.
 
+The initial Step B review evidence below used **CDN CEF**. The current fork
+refresh is recorded separately below.
+
 ### End-to-end evidence
 
 | Suite / build | Result | Evidence |
 |---|---|---|
-| Release `--only window` | 38 functional PASS; 2 sidebar timing FAIL (38/40) | [Raw results](engine-spike/results-window-release.json) |
-| Release `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-release.json) |
-| Release `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-release.json) |
-| Release `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-release.json) |
-| Debug `--only window` | 38/38 PASS; 2 named Release-only SKIPs | [Raw results](engine-spike/results-window-debug.json) |
-| Debug `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-debug.json) |
-| Debug `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-debug.json) |
-| Debug `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-debug.json) |
+| Release `--only window` | 38 functional PASS; 2 sidebar timing FAIL (38/40) | [Raw results](engine-spike/results-window-step-b-cdn-release.json) |
+| Release `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-step-b-cdn-release.json) |
+| Release `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-step-b-cdn-release.json) |
+| Release `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-step-b-cdn-release.json) |
+| Debug `--only window` | 38/38 PASS; 2 named Release-only SKIPs | [Raw results](engine-spike/results-window-step-b-cdn-debug.json) |
+| Debug `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-step-b-cdn-debug.json) |
+| Debug `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-step-b-cdn-debug.json) |
+| Debug `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-step-b-cdn-debug.json) |
 | Debug / Release builds | PASS; no Swift warnings | `nice -n 10 tools/build.sh Debug/Release` |
 | sidebar-render / features-render | 125/125 and 147/147 PASS | Real library executables |
 | tools/verify-all.sh | 14 PASS; no SKIP | Summary below |

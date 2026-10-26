@@ -1333,6 +1333,20 @@ def measure(app_factory, results, tmp):
     results["ok"] = True
 
 
+def engine_provenance(config):
+    def uuid(path):
+        result = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
+        match = re.search(r'UUID: ([0-9A-F-]+)', result.stdout)
+        return match.group(1) if match else ''
+    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    embedded = uuid(os.path.join(ROOT, 'build', config, 'Open.app/Contents/Frameworks', framework))
+    vendor = uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    stamp_file = Path(ROOT, 'Vendor/cef/.open-source')
+    stamp = stamp_file.read_text().strip() if stamp_file.exists() else ''
+    return {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed',
+            'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
@@ -1364,6 +1378,7 @@ def main():
         return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    results["engine"] = engine_provenance(opts.config)
     try:
         if opts.only == "shell":
             results["shell"] = {}

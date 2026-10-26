@@ -623,6 +623,21 @@ public final class BrowserModel {
         return tab
     }
 
+    /// Stages a restore around the caller's durable snapshot commit. Failure rolls back the
+    /// live insertion and publishes neither archive deletion nor an Undo action.
+    @discardableResult
+    public func restoreArchivedTab(_ record: ArchivedTabRecord, saving: () throws -> Void) throws -> Tab {
+        if let existing = tab(id: record.id) { return existing }
+        let tab = Self.tab(from: record)
+        tab.lastActiveAt = Date()
+        guard let destination = restoreDestination(for: record),
+              let revert = place(restored: tab, from: record, into: destination, discardArchive: false) else { return tab }
+        do { try saving() }
+        catch { _ = detach(tab.id); throw error }
+        registerUndo(revert, reapply: { $0.place(restored: tab, from: record, into: destination) ?? Self.noRevert })
+        return tab
+    }
+
     private func restoreDestination(for record: ArchivedTabRecord) -> NodeParent? {
         let original = NodeParent(archiveLocation: record.originalLocation)
         if let original, parentExists(original) {
@@ -643,7 +658,7 @@ public final class BrowserModel {
         return targetSpace(forProfile: record.profileID).map { .spaceToday($0) }
     }
 
-    private func place(restored tab: Tab, from record: ArchivedTabRecord, into parent: NodeParent) -> Revert? {
+    private func place(restored tab: Tab, from record: ArchivedTabRecord, into parent: NodeParent, discardArchive: Bool = true) -> Revert? {
         let priorPinnedURL = tab.pinnedURL
         if keepsPinnedURL(section(of: parent)) {
             if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
@@ -656,7 +671,7 @@ public final class BrowserModel {
             tab.pinnedURL = priorPinnedURL
             return nil
         }
-        archiveSink?.discardArchived(ids: [tab.id])
+        if discardArchive { archiveSink?.discardArchived(ids: [tab.id]) }
         return { model in
             guard model.detach(tab.id) != nil else { return false }
             tab.pinnedURL = priorPinnedURL
