@@ -28,6 +28,8 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `features-advanced.md` | Split View, Peek, Little Arc, Boosts, Zap, Site Control Center, ad blocking, PiP, AppleScript |
 | `runtime-observations.md` | Live data from the signed-in Arc: files, preferences, measured layout |
 | `interaction-states.md` | States captured during a user-driven session: hover/selected fills, command bar, Space switch, Split View, Peek, menus, sidebar hide/resize, settings |
+| `commandbar-completion.md` | Command bar inline autocomplete, Split View rows, scoped searches, hold-Command hints, Essential Keyboard Shortcuts window, optional toolbar |
 | `arccore-engine.md` | ArcCore API surface, Chromium changes, extension UI hosting |
 | `page-platform.md` | Toasts, Copy URL as Quote, zoom and pinch, page swipe, web notifications, Capture, translation, website appearance, clear-and-refresh, Developer menu and Developer Mode, Troubleshooting, Cast |
+| `passwords-autofill.md` | Password, card, and address prompts; fill dropdown; Manage pages; Keychain key; passkeys; Arc's importer |
 | `sidebar-completion.md` | Delete alerts copy, Space Manager, multi-select, Clear variants, pinned reset, folder archive, hover previews, tidy-title schema, unread dot, banner, first-hide hint (measured), haptics, sounds, gesture hide |
