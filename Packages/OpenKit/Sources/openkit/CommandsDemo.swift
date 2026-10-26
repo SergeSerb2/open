@@ -507,6 +507,7 @@ func runCommandsDemo(args: [String]) async throws {
           "live web content is absent after snapshot reload")
     space.title = savedTitle; space.icon = savedIcon
     try snapshots.saveNow(model: model)
+    try await runSidebarCommandsDemo(root: root.appendingPathComponent("SidebarCommands"), check: check)
     composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")
     if failed > 0 { exit(1) }

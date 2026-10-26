@@ -3,6 +3,8 @@
   import OpenEngine
   import OpenModel
   import OpenWeb
+  import OpenFeatures
+  import OpenSidebar
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -20,9 +22,9 @@
       self.app = app
     }
 
-    var window: BrowserWindowController {
+    var window: EngineWebContentHostFactory {
       get throws {
-        guard let w = app.frontWindowController else { throw Failure(message: "no window") }
+        guard let controller = app.frontWindowController, let w = app.hostFactories[controller.windowID] else { throw Failure(message: "no window") }
         return w
       }
     }
@@ -52,7 +54,7 @@
     // MARK: Dispatch
 
     private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
-      let w = try window
+      // App lifecycle commands remain available after the final window closes.
       switch cmd {
       case "ping":
         return [
@@ -60,13 +62,53 @@
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
           "root": app.directories.root.path,
         ]
+      case "shell-windows":
+        return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
+      case "window-reopen":
+        _ = app.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+        return true
+      case "save":
+        app.saveState()
+        return app.snapshotStore.fileURL.path
+      case "quit":
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
+        return true
+      default: break
+      }
+      let w = try window
+      switch cmd {
 
       // Model-level tabs (the sidebar).
       case "tabs":
-        return w.rows.compactMap { row -> [String: Any]? in
-          if case .tab(let tab, _) = row { return describe(tab, in: w) }
-          return nil
-        }
+        return w.orderedTabs.map { describe($0, in: w) }
+      case "tab-state":
+        return describe(try modelTab(a, w), in: w)
+      case "tab-strip":
+        return w.tabStripState()
+      case "frame-save-counters":
+        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount,
+          "dirty": app.snapshotStore.isDirty, "treeChanges": w.treeChangeCount, "mirrorSyncs": w.mirrorSyncCount] as [String: Any]
+      case "space-profile":
+        guard let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) else { throw Failure(message: "unknown Space") }
+        let name = a["profile"] as? String ?? "Default"
+        guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
+        try app.directories.ensureProfileDirectories(for: profile)
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
+      case "peek-open":
+        let source = try modelTab(a, w)
+        guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
+        controller.peekController.open(url: url, sourceTabID: source.id); return true
+      case "peek-expand":
+        w.controller?.peekController.expandTop(); return true
+      case "peek-close":
+        w.controller?.peekController.dismissAll(); return true
+      case "peek-state":
+        guard let controller = w.controller, controller.hasPeekController else { return ["shown": false, "stack": []] as [String: Any] }
+        let peek = controller.peekController
+        return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
+          ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
+           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0] as [String: Any]
+        }] as [String: Any]
       case "spaces":
         return app.model.spaces.map { space in
           [
@@ -90,7 +132,7 @@
       case "space":
         guard let s = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == s })
         else { throw Failure(message: "unknown space") }
-        w.focus(space: space)
+        guard w.controller?.sidebar(w.controller!.sidebar, didRequest: .switchSpace(space.id)) == true else { throw Failure(message: "Space switch refused") }
         return true
       case "open":
         let url = try url(a, "url")
@@ -100,7 +142,7 @@
         return describe(tab, in: w)
       case "select":
         let tab = try modelTab(a, w)
-        w.select(nodeID: tab.id)
+        guard let space = w.focusedSpace, w.controller?.sidebar(w.controller!.sidebar, didRequest: .select(nodeID: tab.id, space: space.id)) == true else { throw Failure(message: "selection refused") }
         return describe(tab, in: w)
       case "close":
         // A page identifier closes that page (popup panel, extension popup,
@@ -110,13 +152,15 @@
           w.close(page: page)
           return true
         }
-        if a["tab"] != nil || a["index"] != nil { w.select(nodeID: try modelTab(a, w).id) }
-        w.closeTab(nil)
+        if a["tab"] != nil || a["index"] != nil {
+          let tab = try modelTab(a, w)
+          guard w.controller?.sidebar(w.controller!.sidebar, didRequest: .close(nodeID: tab.id)) == true else { throw Failure(message: "close refused") }
+        } else { w.closeTab(nil) }
         return true
       case "pin":
         let tab = try modelTab(a, w)
-        w.select(nodeID: tab.id)
-        w.togglePin(nil)
+        let intent: SidebarIntent = app.model.isPinned(tabID: tab.id) ? .unpin(tabID: tab.id) : .pin(tabID: tab.id)
+        guard w.controller?.sidebar(w.controller!.sidebar, didRequest: intent) == true else { throw Failure(message: "pin refused") }
         return describe(tab, in: w)
       case "split":
         w.addSplitView(nil)
@@ -159,20 +203,27 @@
         try content(a, w).focusPage()
         return true
       case "mouse":
-        // Clicks at (x, y) points from the top-left of one of OUR windows
-        // (for example Chromium's own install dialog) by sending NSEvents to
-        // that window. The system cursor does not move.
-        let number = a["window"] as? Int ?? 0
-        guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else {
-          throw Failure(message: "no window \(number)")
+        let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
+        guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
+        func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
+          NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
+            modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
+            context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
         }
-        let p = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-          if let e = NSEvent.mouseEvent(
-            with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-            windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
-          {
-            target.sendEvent(e)
+        if a["action"] as? String == "move" {
+          // Local event monitors run on AppKit's native dequeue path. Queue
+          // motion just like real input, including after a Space transition.
+          if let e = event(.mouseMoved, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { NSApp.postEvent(e, atStart: false) }
+        } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
+          // The real resize handle consumes these own-window events through
+          // NSWindow.nextEvent. No system cursor or keyboard is touched.
+          for type in [NSEvent.EventType.leftMouseDragged, .leftMouseUp] {
+            if let e = event(type, end) { NSApp.postEvent(e, atStart: false) }
+          }
+          if let e = event(.leftMouseDown, start) { target.sendEvent(e) }
+        } else {
+          for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let e = event(type, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { target.sendEvent(e) }
           }
         }
         return true
@@ -240,6 +291,59 @@
       // Windows and pixels (Open's own windows only).
       case "windows":
         return NSApp.windows.map(describe)
+      case "window-state":
+        guard let controller = w.controller, let win = w.window else { throw Failure(message: "no window") }
+        let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [Double]? in
+          guard let button = win.standardWindowButton(kind) else { return nil }
+          let center = controller.contentView.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
+          return [center.x, center.y]
+        }
+        let panel = controller.container.frame
+        return ["id": w.windowState.id.description, "number": win.windowNumber,
+          "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
+          "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
+          "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
+          "sidebarClass": String(reflecting: type(of: controller.sidebar)),
+          "panel": [panel.minX, panel.minY, panel.width, panel.height],
+          "trafficLights": lights, "titled": win.styleMask.contains(.titled), "hiddenTitle": win.titleVisibility == .hidden,
+          "fullscreen": win.styleMask.contains(.fullScreen), "peekCreated": controller.hasPeekController,
+          "fullscreenTransition": controller.isChangingFullScreen, "fullscreenChanges": controller.fullScreenTransitionCount,
+          "pageFullscreen": controller.isPageFullscreen,
+          "selected": w.selectedTab?.id.description ?? "", "space": w.windowState.focusedSpaceID.description,
+          "engineURL": w.selectedContent?.url?.absoluteString ?? "",
+          "engineSelected": w.selectedContent?.browser?.activeWebContent?.identifier ?? 0,
+          "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
+            "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
+          "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
+      case "window-focus":
+        guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
+        app.focusWindow(controller.windowID, activate: a["activate"] as? Bool == true)
+        return true
+      case "window-close":
+        w.window?.performClose(nil); return true
+      case "window-fullscreen":
+        w.window?.toggleFullScreen(nil); return true
+      case "sidebar-move":
+        let tab = try modelTab(a, w)
+        let parent: NodeParent
+        if let folder = a["folder"] as? String, let uuid = UUID(uuidString: folder) { parent = .folder(ItemID(rawValue: uuid)) }
+        else if a["section"] as? String == "pinned", let space = w.focusedSpace { parent = .spacePinned(space.id) }
+        else if let space = w.focusedSpace { parent = .spaceToday(space.id) }
+        else { throw Failure(message: "no Space") }
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .move(nodeID: tab.id, to: parent, index: a["index"] as? Int)) == true
+      case "folder-create":
+        guard let space = w.focusedSpace, let folder = app.model.createFolder(in: .spacePinned(space.id), title: a["title"] as? String ?? "Folder") else { throw Failure(message: "cannot create folder") }
+        return folder.id.description
+      case "folder-toggle":
+        guard let raw = a["folder"] as? String, let uuid = UUID(uuidString: raw), let folder = app.model.node(id: ItemID(rawValue: uuid))?.folder else { throw Failure(message: "unknown folder") }
+        let accepted = w.controller?.sidebar(w.controller!.sidebar, didRequest: .setExpanded(folderID: folder.id, expanded: !folder.isExpanded)) == true
+        return ["accepted": accepted, "expanded": folder.isExpanded]
+      case "sidebar-clear":
+        guard let space = w.focusedSpace else { throw Failure(message: "no Space") }
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .clearToday(space: space.id)) == true
+      case "archive":
+        let records = await app.archiveSink.store(for: w.focusedProfile?.id).recent(limit: 100)
+        return records.map { ["id": $0.id.description, "title": $0.title] }
       case "window-frame":
         guard let win = w.window else { throw Failure(message: "no window") }
         if let f = a["frame"] as? [Double], f.count == 4 {
@@ -316,12 +420,16 @@
         return await metrics(interval: a["interval"] as? Double ?? 1)
       case "timing":
         return await timing(w)
-      case "save":
-        app.saveState()
-        return app.snapshotStore.fileURL.path
-      case "quit":
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
-        return true
+      case "startup":
+        var evidence = app.startupEvidence
+        if let probe = w.earlyHostRequestsRefused { evidence["earlyHostRequestsRefused"] = probe }
+        return evidence
+      case "host-counts":
+        return ["created": app.hostFactories.values.reduce(0) { $0 + $1.contentCreationCount },
+                "retained": app.hostFactories.values.reduce(0) { $0 + $1.contents.count },
+                "engineContents": OEEngine.shared.allWebContents.count]
+      case "sidebar-unload":
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .unloadTab(try modelTab(a, w).id)) == true
       default:
         throw Failure(message: "unknown command \(cmd)")
       }
@@ -329,7 +437,7 @@
 
     // MARK: Arguments
 
-    private func modelTab(_ a: [String: Any], _ w: BrowserWindowController) throws -> Tab {
+    private func modelTab(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Tab {
       if let s = a["tab"] as? String {
         guard let uuid = UUID(uuidString: s), let tab = app.model.tab(id: ItemID(rawValue: uuid)) else {
           throw Failure(message: "no tab \(s)")
@@ -347,9 +455,10 @@
 
     /// `tab`: a tab UUID, a page identifier (number), "popup", or omitted
     /// for the selected tab.
-    private func content(_ a: [String: Any], _ w: BrowserWindowController) throws -> OEWebContent {
+    private func content(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> OEWebContent {
       if let n = a["index"] as? Int {
-        return w.ensureContent(for: try modelTab(["index": n], w))
+        guard let page = w.ensureContent(for: try modelTab(["index": n], w)) else { throw Failure(message: "engine or profile is not ready") }
+        return page
       }
       guard let page = w.content(forAutomationHandle: a["tab"]) else {
         throw Failure(message: "no page for \(a["tab"] ?? "selected tab")")
@@ -357,7 +466,7 @@
       return page
     }
 
-    private func focusedBrowser(_ w: BrowserWindowController) throws -> OEBrowser {
+    private func focusedBrowser(_ w: EngineWebContentHostFactory) throws -> OEBrowser {
       guard let b = w.focusedBrowser else { throw Failure(message: "no browser") }
       return b
     }
@@ -369,7 +478,7 @@
 
     // MARK: Descriptions
 
-    private func describe(_ tab: Tab, in w: BrowserWindowController) -> [String: Any] {
+    private func describe(_ tab: Tab, in w: EngineWebContentHostFactory) -> [String: Any] {
       let section: String
       if w.focusedProfile?.favorites.contains(where: { $0.id == tab.id }) == true {
         section = "favorites"
@@ -382,7 +491,10 @@
         "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section,
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
-        "favicon": tab.live.faviconPNG != nil, "loaded": w.contents[tab.id] != nil,
+        "favicon": tab.live.faviconPNG != nil, "sleepPhase": String(describing: tab.live.sleepPhase),
+        "progress": tab.live.progress, "canGoBack": tab.live.canGoBack, "canGoForward": tab.live.canGoForward,
+        "profile": w.profile(for: tab.id)?.id.description ?? "", "space": w.space(for: tab.id)?.id.description ?? "",
+        "hasWebContent": tab.live.hasWebContent, "loaded": w.contents[tab.id] != nil,
       ]
       if let c = w.contents[tab.id] {
         d["page"] = describe(c, in: w)
@@ -390,7 +502,7 @@
       return d
     }
 
-    private func describe(_ c: OEWebContent, in w: BrowserWindowController) -> [String: Any] {
+    private func describe(_ c: OEWebContent, in w: EngineWebContentHostFactory) -> [String: Any] {
       var kind = "unowned"
       if w.tabID(for: c) != nil {
         kind = "tab"
@@ -399,6 +511,7 @@
       } else if w.auxiliaryPages.contains(where: { $0.content === c }) {
         kind = "popup"
       }
+      let pageColor = w.hosts.values.first { $0.content === c }?.pageBackgroundColor
       return [
         "identifier": c.identifier, "kind": kind, "live": c.isLive, "url": c.url?.absoluteString ?? "",
         "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
@@ -407,7 +520,10 @@
         "zoom": c.zoomLevel, "popup": c.isPopup, "hidden": c.view.isHiddenOrHasHiddenAncestor,
         "browser": c.browser?.identifier ?? 0,
         "browserIndex": c.browser?.webContents.firstIndex(of: c) ?? -1,
+        "browserPinned": c.browser?.isPinned(c) ?? false,
         "extension": c.extensionPopupIdentifier ?? "",
+        "hostTab": w.tabID(for: c)?.description ?? "",
+        "pageBackground": colorComponents(pageColor),
       ]
     }
 
@@ -418,6 +534,10 @@
         "icon": e.icon.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "",
         "permissions": e.permissions, "hostPermissions": e.hostPermissions,
       ]
+    }
+    private func colorComponents(_ color: NSColor?) -> [Int] {
+      guard let color = color?.usingColorSpace(.sRGB) else { return [] }
+      return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent].map { Int(($0 * 255).rounded()) }
     }
 
     private func describe(_ w: NSWindow) -> [String: Any] {
@@ -483,7 +603,7 @@
     /// sends it straight to the window's first responder (the page view when
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
-    private func sendKey(_ a: [String: Any], _ w: BrowserWindowController) throws -> Any {
+    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Any {
       guard let target = w.window else { throw Failure(message: "no window") }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
@@ -503,7 +623,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
-        "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
+        "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
@@ -533,7 +653,7 @@
       return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
     }
 
-    private func snapshot(_ a: [String: Any], _ w: BrowserWindowController) async throws -> Any {
+    private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
       let path = a["path"] as? String ?? NSTemporaryDirectory() + "open-snapshot.png"
       let url = URL(fileURLWithPath: path)
       if a["tab"] != nil || a["page"] as? Bool == true {
@@ -567,18 +687,26 @@
       ]
     }
 
-    private func timing(_ w: BrowserWindowController) async -> [String: Any] {
+    private func timing(_ w: EngineWebContentHostFactory) async -> [String: Any] {
       var out: [String: Any] = LaunchTiming.shared.report
+      out["clock"] = "mach_continuous_time; kernel ri_proc_start_abstime"
+      out["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
       if let page = w.selectedContent {
-        let js =
-          "(() => { const p = performance.getEntriesByName('first-contentful-paint')[0]; return p ? performance.timeOrigin + p.startTime : null; })()"
-        if let fcpEpochMs = try? await page.evaluateJavaScript(js) as? Double {
-          let start = LaunchTiming.shared.processStart.timeIntervalSince1970 * 1000
-          out["firstContentfulPaint"] = (fcpEpochMs - start).rounded()
+        // Both page values use the renderer's monotonic Performance clock.
+        // Map that clock to process uptime at the CDP round-trip midpoint.
+        let before = LaunchTiming.shared.elapsedMilliseconds
+        let js = "(() => { const p = performance.getEntriesByName('first-contentful-paint')[0]; return p ? {now:performance.now(), paint:p.startTime} : null; })()"
+        if let values = try? await page.evaluateJavaScript(js) as? [String: Double],
+          let now = values["now"], let paint = values["paint"]
+        {
+          let after = LaunchTiming.shared.elapsedMilliseconds
+          out["firstContentfulPaint"] = ((before + after) / 2 + paint - now).rounded()
+          out["firstPaintClockUncertaintyMs"] = ((after - before) / 2 * 100).rounded() / 100
         }
       }
       return out
     }
+
   }
 
   /// Counts blocked requests. Touched from Chromium's network thread.

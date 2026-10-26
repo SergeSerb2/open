@@ -359,9 +359,27 @@ def main():
         matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", text)
         shutil.copytree(directory, seed, dirs_exist_ok=True)
     elif name == "roundtrip":
-        seed_snapshot(cli, seed)
+        data = seed_snapshot(cli, seed)
         shutil.copytree(seed, "data")
         matches(r"^roundtrip OK$", run(cli, name, str(Path("data").resolve())))
+        require(data["profiles"], "roundtrip fixture has no profiles")
+        for profile in data["profiles"]:
+            profile["settings"].pop("keepAliveSites", None)
+        old_directory = save_snapshot(data, "without-keep-alive")
+        matches(r"^roundtrip keepAliveSites OK: profiles=\d+ sites=0$", run(cli, name, old_directory))
+        old_saved = json.loads((Path(old_directory) / "State/browser.json").read_text())
+        require(all(p["settings"]["keepAliveSites"] == [] for p in old_saved["profiles"]),
+                "old snapshot did not default keepAliveSites to []")
+        print("roundtrip keepAliveSites: old snapshot without key decodes as [] OK")
+        for index, profile in enumerate(data["profiles"]):
+            profile["settings"]["keepAliveSites"] = [f"notify-{index}.example.invalid/inbox", "WWW.Custom.invalid/Chat"]
+        new_directory = save_snapshot(data, "with-keep-alive")
+        matches(r"^roundtrip OK$", run(cli, name, new_directory))
+        new_saved = json.loads((Path(new_directory) / "State/browser.json").read_text())
+        expected = {p["id"]: p["settings"]["keepAliveSites"] for p in data["profiles"]}
+        require({p["id"]: p["settings"]["keepAliveSites"] for p in new_saved["profiles"]} == expected,
+                "snapshot changed per-profile keepAliveSites values")
+        print("roundtrip keepAliveSites: snapshot values preserved per profile OK")
     elif name == "suggest-check":
         all_passed(run(cli, name))
     elif name == "commands-dump":
@@ -374,6 +392,8 @@ def main():
         route(cli, root, seed)
     elif name == "favicons":
         favicons(cli, seed)
+    elif name == "media-demo":
+        all_passed(run(cli, name))
     elif name == "sleep-demo":
         text = run(cli, name, str(Path("data").resolve()))
         all_passed(text)

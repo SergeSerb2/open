@@ -363,7 +363,7 @@ class OEDefaultClient : public CefClient,
       _configuration.keychainAccountName.UTF8String;
   // Enables Chrome policy lookup under our bundle id (managed preferences).
   CefString(&settings.chrome_policy_id) =
-      NSBundle.mainBundle.bundleIdentifier.UTF8String ?: "app.open.browser";
+      NSBundle.mainBundle.bundleIdentifier.UTF8String ?: "io.github.sergeserb2.open";
 
   NSArray<NSString*>* switches = _configuration.additionalSwitches;
   if (_configuration.useMockKeychain &&
@@ -416,7 +416,9 @@ class OEDefaultClient : public CefClient,
   for (OEWebContent* webContent in self.allWebContents) {
     [webContent close];
   }
-  _defaultClient->CloseAll();
+  if (_defaultClient) {
+    _defaultClient->CloseAll();
+  }
   [self oe_quitIfDone];
   // Do not hang the user's quit if a renderer never answers.
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC),

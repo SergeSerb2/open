@@ -28,6 +28,8 @@ public struct WebContentChange: OptionSet, Sendable, Hashable {
     public static let mediaCapture = WebContentChange(rawValue: 1 << 10)
     public static let statusText = WebContentChange(rawValue: 1 << 11)
     public static let live = WebContentChange(rawValue: 1 << 12)
+    public static let media = WebContentChange(rawValue: 1 << 13)
+    public static let pictureInPicture = WebContentChange(rawValue: 1 << 14)
 }
 
 /// One page. Split View, Peek, Little Arc, Boosts, and Zap work through this.
@@ -173,4 +175,61 @@ public protocol ExtensionHost: AnyObject {
     /// Like a click on the action's button. Returns false when it cannot run.
     @discardableResult
     func executeAction(extensionID: String) -> Bool
+}
+
+// MARK: - Media (engine-free values; media/PiP plan §7.1)
+
+public struct WebMediaActions: OptionSet, Sendable, Hashable {
+    public let rawValue: UInt
+    public init(rawValue: UInt) { self.rawValue = rawValue }
+    public static let play = Self(rawValue: 1 << 0)
+    public static let pause = Self(rawValue: 1 << 1)
+    public static let previousTrack = Self(rawValue: 1 << 2)
+    public static let nextTrack = Self(rawValue: 1 << 3)
+    public static let seekBackward = Self(rawValue: 1 << 4)
+    public static let seekForward = Self(rawValue: 1 << 5)
+    public static let seekTo = Self(rawValue: 1 << 6)
+    public static let skipAd = Self(rawValue: 1 << 7)
+    public static let stop = Self(rawValue: 1 << 8)
+    public static let enterPictureInPicture = Self(rawValue: 1 << 9)
+    public static let exitPictureInPicture = Self(rawValue: 1 << 10)
+    public static let enterAutoPictureInPicture = Self(rawValue: 1 << 11)
+    public static let toggleMicrophone = Self(rawValue: 1 << 12)
+    public static let toggleCamera = Self(rawValue: 1 << 13)
+    public static let hangUp = Self(rawValue: 1 << 14)
+    public static let previousSlide = Self(rawValue: 1 << 15)
+    public static let nextSlide = Self(rawValue: 1 << 16)
+}
+
+public struct WebMediaState: Sendable, Equatable {
+    public enum Playback: Sendable { case none, paused, playing }
+    public var playback: Playback
+    public var isControllable: Bool
+    public var hasVideo: Bool
+    public var largestVideoArea: Double
+    public var actions: WebMediaActions
+    public var isPictureInPicture: Bool
+    public var microphoneMuted: Bool?
+    public var cameraOn: Bool?
+    public var volume: Double?
+    public var duration: Double?
+    public init(playback: Playback = .none, isControllable: Bool = false, hasVideo: Bool = false,
+                largestVideoArea: Double = 0, actions: WebMediaActions = [], isPictureInPicture: Bool = false,
+                microphoneMuted: Bool? = nil, cameraOn: Bool? = nil, volume: Double? = nil, duration: Double? = nil) {
+        self.playback = playback; self.isControllable = isControllable; self.hasVideo = hasVideo
+        self.largestVideoArea = largestVideoArea; self.actions = actions; self.isPictureInPicture = isPictureInPicture
+        self.microphoneMuted = microphoneMuted; self.cameraOn = cameraOn; self.volume = volume; self.duration = duration
+    }
+}
+
+public enum WebMediaAction: Sendable, Equatable {
+    case play, pause, previousTrack, nextTrack, seek(to: Double), skipAd, toggleMicrophone, toggleCamera, hangUp
+}
+
+@MainActor public protocol WebMediaHost: AnyObject {
+    var mediaState: WebMediaState { get }
+    func perform(_ action: WebMediaAction)
+    func setVolume(_ volume: Double)
+    func requestPictureInPicture() async -> Bool
+    func exitPictureInPicture(pausing: Bool)
 }
