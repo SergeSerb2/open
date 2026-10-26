@@ -445,7 +445,8 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 214, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 216, "missing settings/library/appearance/detail/sheet/state renders")
+        require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
         states = ("welcome welcome-inactive welcome-counting welcome-nodata welcome-saveerror "
                   "import import-arcrunning import-counting import-nodata import-parsehint "
                   "import-parsehint-running import-partial import-capability-on secrets secrets-on "

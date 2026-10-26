@@ -791,3 +791,8 @@ headline AX label, as existing offscreen Library checks do; SwiftUI's combined
 message label is not exposed in a never-ordered window. The normal render command
 also includes Library Spaces at 1x and 2x. App presentation and the concrete sidebar
 SpaceManagerView remain their separate lane steps. No unit tests or desktop input.
+
+M5's first integrated full run passed all 35 Settings checks but retained a FAIL
+in the render inventory gate: the first-run merge fixed its count at 214, while
+Library Spaces adds two images. The verifier now requires exactly 216 and explicitly
+requires both Library Spaces scales. The prior FAIL receipt remains in the run logs.
