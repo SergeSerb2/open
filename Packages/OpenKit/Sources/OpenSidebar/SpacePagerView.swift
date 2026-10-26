@@ -26,6 +26,7 @@ final class SpacePagerView: NSView {
         var startOffset: CGFloat
         var neighbor: Int?
         var lastDeltas: [CGFloat] = []
+        var pastThreshold = false
     }
 
     init(context: SidebarContext, menus: SidebarMenus) {
@@ -87,7 +88,16 @@ final class SpacePagerView: NSView {
     func showFocused(animated: Bool) {
         guard let focused = context.focusedSpace, bounds.width > 0, swipe == nil else { return }
         let previous = shownSpaceID
-        guard previous != focused.id else { return }
+        guard previous != focused.id else {
+            // Space order can change while focus stays on the same Space.
+            // Keep the cached page objects and re-offset the strip immediately.
+            layoutPages()
+            strip.layer?.removeAnimation(forKey: "slide")
+            animating = false
+            offset = CGFloat(focusedIndex) * bounds.width
+            placeStrip(); finishSlide()
+            return
+        }
         if previous != nil { context.selection.clear() }
         let target = focusedIndex
         let w = bounds.width
@@ -154,6 +164,10 @@ final class SpacePagerView: NSView {
             let lo = max(0, CGFloat(s.baseIndex - 1) * w), hi = min(CGFloat(spaces.count - 1) * w, base + w)
             if next < lo { next = lo - rubber(lo - next, w) } else if next > hi { next = hi + rubber(next - hi, w) }
             offset = next
+            let past = abs(offset - base) / w > 0.5
+            let direction = offset > base ? 1 : -1
+            if past, !s.pastThreshold, spaces.indices.contains(s.baseIndex + direction) { context.haptics.perform(.levelChange) }
+            s.pastThreshold = past
             placeStrip()
             let dir = offset >= base ? 1 : -1
             let n = s.baseIndex + dir

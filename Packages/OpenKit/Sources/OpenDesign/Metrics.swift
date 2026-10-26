@@ -306,3 +306,12 @@ public enum TooltipMetrics {
     /// guess: hover delay before a tooltip shows.
     public static let showDelay: Double = 0.6
 }
+
+/// Space Manager Library columns. All values are guesses from completion §3.2.
+public enum SpaceManagerMetrics {
+    public static let inset: CGFloat = 16
+    public static let gap: CGFloat = 12
+    public static let columnWidth: CGFloat = 244
+    public static let headerHeight: CGFloat = 44
+    public static let pitch = columnWidth + gap
+}

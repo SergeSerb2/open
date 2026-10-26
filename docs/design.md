@@ -711,3 +711,51 @@ This branch is based on unreviewed M3 PR #78, branch `t3/sidebar-tidy-titles`, a
 `7e16e6195c0aef187a50edf7f95f4f5c61149890`. The M3 merge kept its tidy-title
 CLI check, stronger B4 removal-order check, and model documentation alongside the
 merged M2 archive flow; lane S adds no model implementation changes.
+
+## 20. Sidebar completion S4 (2026-10-26)
+
+`SpaceManagerView` is an injectable Library page from OpenSidebar. It takes a
+dedicated `SidebarContext` and an optional `onIntent` closure. The App supplies
+its normal intent routing for navigation and confirmations; the default uses
+`ModelSidebarActions` for the offscreen harness. Library registration and host
+wiring remain M5/A-lane work. No Settings dependency or new target was added.
+
+Columns are 244 pt wide, with 16 pt insets and 12 pt gaps. Their 44 pt
+`SpaceControlsView` headers draw the existing Space icon, 13 pt Semibold title,
+a Profile chip only with two or more Profiles, and a More menu. The menu has
+Turn into Folder destinations and Delete (disabled for the last Space). The
+body uses the same `SpacePageView` rows, selection, menus, inline rename, and
+production pasteboard/drop paths, without Favorites or a duplicate Space header.
+These geometry and lift values remain guesses from completion §3.2.
+
+A native grabber tracking loop moves the column horizontally. Crossing another
+column's midpoint changes its slot with the Space-switch spring and one
+alignment haptic per crossed slot. Release commits one `moveSpace` intent; Esc
+cancels. The card lifts with scale 1.02 and a black 0.25 / radius 8 / y +4 shadow.
+The pager now repositions cached pages when Space order changes with no focus
+change. Per lead Q5, the bottom switcher has **no reorder gesture**. SW1–SW4 are
+intentionally skipped; existing Space-icon tab drops remain checked by MS12.
+HG4 checks the two-slot reorder in the Manager instead.
+
+Column shells and headers exist in model order. Row pages and theme backgrounds
+build when a column first enters the horizontal viewport and stay cached. The
+real 10-Space × 100-row harness verifies the ≤120 ms initial build budget, lazy
+scroll-in, and no full reloads of existing pages. Initial page setup fills the
+root cache and installs its delegate before the native data source, whose setter
+performs the initial reload; the old redundant empty/explicit pair is gone.
+Model edits still send per-node events and the Manager batches view updates
+through the same transaction path as the sidebar.
+
+`SidebarHaptics` reads `open.advanced.hapticOnTabReorder` at use (default true)
+and calls the system performer. Outline, folder, Favorites, and Space-icon node
+drops use generic feedback on success; distinct insertion destinations use
+alignment. Space swipes emit levelChange once when crossing the half-width
+commit threshold. Diagnostic counts record the actual performer calls. No timer
+was added. The release harness drives native grabber events, Escape, undo,
+cross-column production drop callbacks, preference changes, and real swipe
+events for SM1–SM6 and HG1–HG4. Haptic feel needs human review.
+
+`sidebar-render space-manager --out FILE.png [--profiles 2]` renders the real
+Library view with neutral synthetic data. `--snapshot` uses an existing snapshot
+read-only; `--columns N --rows N --scroll-x X` exercises lazy columns. All
+evidence stays outside the repository. No unit tests or App source changes.

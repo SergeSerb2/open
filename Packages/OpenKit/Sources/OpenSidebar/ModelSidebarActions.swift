@@ -38,6 +38,7 @@ public struct ModelSidebarActions {
                   let index = siblings(in: parent).firstIndex(where: { $0.id == first }),
                   let folder = model.createFolder(in: parent, at: index, withNodes: ids) else { return false }
             context.sidebar?.renameInsertedNode(folder.id)
+            context.manager?.renameInsertedNode(folder.id)
             return true
         case .setPinned(let ids, let pinned):
             return model.setPinned(ids: ids, pinned: pinned) > 0
