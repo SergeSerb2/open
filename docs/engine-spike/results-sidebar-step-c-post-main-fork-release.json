@@ -1,0 +1,177 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "embeddedUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001051"
+  },
+  "sidebar": {
+    "background_space_window_open": {
+      "child": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": true,
+        "id": "BCA4E3E0-AF99-4221-AA1C-CFF664391569",
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 3,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "context": "Profile-0D82CC4A",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "BCA4E3E0-AF99-4221-AA1C-CFF664391569",
+          "identifier": 12,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [],
+          "popup": true,
+          "style": "alloy",
+          "title": "Background child",
+          "url": "about:blank",
+          "zoom": 0
+        },
+        "profile": "12306FA5-F713-41EE-8D66-DCA8BB59C574",
+        "progress": 1,
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "DF683120-D694-425D-8594-B0DD274340B1",
+        "title": "Background child",
+        "url": "about:blank",
+        "visible": true
+      },
+      "ok": true
+    },
+    "clear_today": {
+      "ok": true
+    },
+    "close_pinned_unloads": {
+      "ok": true
+    },
+    "close_today_archives": {
+      "ok": true
+    },
+    "drag_reorder_intent": {
+      "ok": true
+    },
+    "durable_profile_storage": {
+      "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof.",
+      "status": "BLOCKED"
+    },
+    "empty": {
+      "ok": true
+    },
+    "evicted_live_state_stays_unloaded": {
+      "ok": true,
+      "samples": [
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        }
+      ]
+    },
+    "folder_toggle": {
+      "ok": true
+    },
+    "hidden_cache_lru": {
+      "ok": true,
+      "retained_before_wake": 9
+    },
+    "new_tab_lazy": {
+      "ok": true
+    },
+    "pin_unpin": {
+      "ok": true
+    },
+    "profile_change_tears_down": {
+      "inactive_tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": false,
+        "id": "D85BA514-B543-4D19-9FE3-AC1F58C63830",
+        "loaded": false,
+        "loading": false,
+        "profile": "12306FA5-F713-41EE-8D66-DCA8BB59C574",
+        "progress": 0,
+        "section": "today",
+        "selected": false,
+        "sleepPhase": "placeholder",
+        "space": "DF683120-D694-425D-8594-B0DD274340B1",
+        "title": "Profile background",
+        "url": "data:text/html,%3Ctitle%3EProfile%20background%3C/title%3E%3Ch1%3EProfile%20background%3C/h1%3E",
+        "visible": false
+      },
+      "ok": true
+    },
+    "refused_move": {
+      "ok": true
+    },
+    "select": {
+      "ok": true
+    },
+    "space_switch_wrapper": {
+      "ok": true
+    },
+    "suite": {
+      "error": "capture-size window refused: [40, 0, 2216, 1050]",
+      "ok": false
+    },
+    "wake_pinned": {
+      "ok": true
+    },
+    "window_png": {
+      "file": "sidebar-window.png",
+      "ok": true
+    }
+  },
+  "started": "2026-10-26 01:02:18",
+  "style": "alloy"
+}

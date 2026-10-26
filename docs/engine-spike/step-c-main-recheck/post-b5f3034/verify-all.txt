@@ -1,0 +1,20 @@
+NAME                   RESULT SECONDS
+build                  PASS   91
+commands-demo          PASS   2
+roundtrip              PASS   0
+suggest-check          PASS   14
+commands-dump          PASS   0
+route                  PASS   3
+favicons               PASS   1
+media-demo             PASS   1
+sleep-demo             PASS   1
+adblock-perf           PASS   0
+adblock-catalog        PASS   0
+profiles               PASS   3
+settings-preview       PASS   85
+sidebar-render         PASS   22
+commandbar-render      PASS   19
+features-render        PASS   10
+boosts                 PASS   3
+
+Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-115811.0EecXd/
