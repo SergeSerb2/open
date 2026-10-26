@@ -39,3 +39,5 @@ Small items found during review and verification. Each line: area — issue — 
   the symbol/string evidence and confirm the tooltip text/case with S9.
 
 - Offscreen text anti-aliasing is nondeterministic between builds (row-title color metrics only); investigate font smoothing in the shared Renderer.
+
+- Engine (startup allocator) — Release shell persistence relaunch aborted before automation on fork UUID `4C4C4432-5555-3144-A144-B678285BC5F4`: `allocator_shim_apple.cc(61)`, "No zone found", with CoreFoundation/RunningBoardServices frames. Observed in the Step C three-run matrix (harness `6e9d1a4`, app build `4a6fe77`); later passing runs do not clear this FAIL. [Observed stack](engine-spike/step-c-main-recheck/engine-startup-crash.txt) and [provenance](engine-spike/step-c-main-recheck/engine-startup-crash.json). Why the pointer lacked a zone remains unconfirmed. Owner: engine lead; no engine source or distribution change in Step C. — 2026-10-26.

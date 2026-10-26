@@ -974,3 +974,101 @@ and command-bar timing misses with their original revisions. These did not recur
 in the final matrix; their historical underlying causes are not declared fixed.
 The final Open command-bar, Settings and Library screenshots were inspected.
 No new Arc comparison is claimed for those three windows.
+
+
+## Step C final merged verification — 2026-10-26
+
+## Step C review update: main merge, focus and capture checks
+
+Main is merged through `8f3379a`. #53's factory/delegate structure and strip order,
+#90's window geometry and reveal behavior, both Package.swift sides and every
+verify-all row are retained. No rebase or force-push. TabStripMirror,
+ExtensionTabRequests and the factory's OEBrowserDelegate section match main.
+The sole additional reveal hook applies only after the existing tagged automation
+pointer filter is installed; its default nil preserves ordinary deactivation behavior.
+
+| Reported failure | Root cause and evidence | Change |
+|---|---|---|
+| Native key focus (`keyWindow=0`) | A raw executable can show a window without a foreground grant. Same-app raw-vs-LaunchServices controls are retained in `focus-capture-causes.json`. Activation is asynchronous and can be refused or lost to another app. | Launch the exact bundle through LaunchServices; activate only its verified PID; wait for the actual requested key window before native input. A lost grant is INTERRUPTED, not PASS. |
+| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if that page is still selected, its window is key and the bar is closed. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
+| Comparison capture size | AppKit constrained a 1394 pt request to 1050 on a 1080 pt display. A controlled larger request likewise clipped under ordinary constraints and stayed exact with the existing capture hook. | Keep #90's unconstrained automation frame mode and poll the exact reference dimensions. No comparison tolerance changes. |
+| Hover and card-pixel checks | Synthetic moves previously advanced before native dequeue, and real activation traces then confirmed repeated didResignActive notifications during dwell/hold/capture. The production card intentionally dismisses on resignation. The lead confirmed concurrent user/agent foreground use. | Acknowledge each tagged native motion and reveal-tracker delivery. Tagged pointer sessions ignore unrelated activation changes; normal sessions still dismiss. A real-app check yields only Open and verifies reveal/dismiss while inactive. Pixel/native-focus steps retain interruption evidence and bounded retries. |
+| Direct deactivation control failed | NSApp.deactivate did not complete a foreground handoff or emit a resignation in the controlled run; native key-window readiness then timed out. This was a control-method failure, not evidence of a page/menu defect. | Replace it with a second owned Open process, exact-executable validation and AppKit cooperative activation. Native resignation itself is sufficient interruption evidence; app metadata can update later. Retain the failed control receipts. |
+| Save fixture focus | The fixture tried to focus an old background tab after selecting a newer custom-search tab. | Select and load the target before focusing it. |
+| Persistence relaunch / launcher exit | macOS open -W reported Unable to block on application (GetProcessPID). The harness treated that waiter exit as app exit before obtaining a socket PID. App exit itself was not established. | Wait for the real socket/PID within the existing 60-second deadline. The real first-frame timeout fixture also runs open without -W and requires a live page after its launcher exits. Original failed receipts remain. |
+| Cross-worktree/process interference | Shared suite data roots and launcher-only cleanup could leave an old app running or collide with another worktree. | Private worktree data roots, actual socket PID/executable validation, and app-PID cleanup. Signal handling finishes the current child before stopping. |
+
+Native-focus steps record the readiness-grant uptime and the actual frontmost app
+name/PID. Foreground loss before an assertion marks the attempt INTERRUPTED even
+if its assertion succeeded. Up to three fresh workflow attempts avoid replaying a
+destructive key against partially changed state. Each original assertion is kept;
+only a complete uninterrupted retry can contribute accepted passes. Exhaustion
+exits 2. Ordinary assertion failures exit 1. The native fault-injection receipt
+checks this policy against two owned real app instances, not an isolated model or mock.
+
+The lead cannot reserve the foreground. Remaining interrupted workflows therefore
+stay pending the lead's exclusive focus-dependent verification before merge.
+All timing misses, ordinary failures, interrupted attempts, named Debug timing
+SKIPs and durable profile-storage BLOCKED rows remain explicit in the linked
+summary and raw receipts. Step I must remeasure launch budgets on an idle machine.
+
+
+All final on-screen invocations hold `/tmp/open-onscreen-e2e.lock` through
+`/usr/bin/lockf`, one suite at a time. Builds and offscreen checks do not hold it.
+Pre-lock foreground interruptions remain in their own phase; they do not enter
+the final accepted matrix.
+
+Both app builds and the full verifier use the heavy-job slot wrapper.
+The on-screen suite lock is separate and covers one invocation at a time.
+The earlier 342800c/a962f39 matrix and its unresolved native readiness failure
+remain in post-a962f39. The new native error reports the same active/key predicate
+values that refused input, plus key-window identity and foreground metadata;
+readiness conditions, the five-second deadline and acceptance checks are unchanged.
+
+The final Release shell repetition 1 failed before automation on persistence
+relaunch with a CEF allocator fatal at allocator_shim_apple.cc:61. CoreFoundation
+and RunningBoardServices appear in the preserved stack. Why the pointer lacked
+a malloc zone remains unconfirmed; the engine lead owns the follow-up. This is
+a genuine FAIL, not an interruption or a timing load exception. No Engine source
+or distribution changes are part of Step C.
+
+### Final results
+
+Harness source `6e9d1a4`, main merged through `8f3379a`. Both app binaries were
+built at `4a6fe77` through heavy.sh; every tracked App, Engine, OpenKit and build
+input is identical at the harness revision. Full verify-all ran fresh at
+`6e9d1a4`: **19 PASS, no SKIP**; sidebar-render **429/429**, features-render
+**258/258**. All runtime tables use the default fork, UUID
+`4C4C4432-5555-3144-A144-B678285BC5F4`, distribution stamp suffix `1793036548`.
+
+| Suite | Debug runs 1 / 2 / 3 | Release runs 1 / 2 / 3 |
+|---|---|---|
+| window | 46/46 each | 46 PASS + 2 launch-budget FAIL each |
+| sidebar | 18/18 each | 18/18 each |
+| shell | 6/6 each | 5 PASS + startup FAIL / 6/6 / 6/6 |
+| features | 19/19 each | 19/19 each |
+| actions | 45/45 each | 45/45 each |
+
+All 30 invocations finished. **Zero final foreground interruptions**. The
+expected negative-control interruptions are separate. Debug window timing SKIPs
+and sidebar durable-profile-storage BLOCKED rows remain explicit. All twelve
+live static comparisons passed at **≤1 pt / worst ΔE00 1.61**. First/repeat
+command-bar results pass 50 ms in all six actions runs.
+
+All six Release sidebar launch medians exceed 250 ms under load; first paint
+passes 700 ms in all six. Load averages at the three starts were 46.03, 10.75
+and 13.08. These remain recorded load exceptions and require Step I idle
+measurement. They are not passes.
+
+Release shell repetition 1 has a confirmed engine allocator startup crash before
+automation on persistence relaunch. Its original FAIL, stack and follow-up remain.
+The earlier native key-readiness failure has an unconfirmed cause after 80
+additional real-app diagnostic cycles; the current six actions runs pass, and the
+lead's exclusive focus acceptance remains pending. No check, time budget or
+comparison tolerance was relaxed.
+
+[Full three-run, timing, comparison and 19-row verifier tables](engine-spike/step-c-main-recheck/final-summary.md).
+[Engine startup stack](engine-spike/step-c-main-recheck/engine-startup-crash.txt).
+The final command-bar, Settings and Library screenshots were inspected and
+contain only Open's synthetic fixtures. No new Arc comparison is claimed for
+those three windows. No unit tests or desktop input.

@@ -220,7 +220,13 @@ opening the bar. The repeat-open timing is reported separately.
 
 Normal e2e sessions launch the exact built `.app` through LaunchServices
 (`open -n -W`), with a fresh suite data root. The socket `ping` supplies the actual
-app PID; the harness retains the launch waiter and closes only that app. Direct
+app PID; the harness retains the launch waiter and closes only that app.
+The LaunchServices waiter can end before app readiness, including with an
+`open -W` GetProcessPID error. The harness keeps its existing 60-second deadline
+for the real socket/PID handshake. The window suite verifies this with a real
+`open -n` launch without `-W` during the three-second first-frame-timeout fixture:
+the launcher ends, then the engine starts and the page must load.
+Direct
 executable launches remain only in the intentional early-quit/missing-engine
 checks. A raw executable can have a visible window but no foreground activation
 grant on macOS 26. `NSApp.activate()` is a request, not a synchronous grant.
