@@ -1060,7 +1060,7 @@ on both pages; the same editor in macOS Light.
 
 | Step | Date | Result |
 |---|---|---|
-| 1 | 2026-10-25 | Implemented; commands-demo 149/149, roundtrip PASS, sidebar-render 125/125 and its output unchanged. Frozen synthetic schema-1 PNG byte-identical before/after (SHA-256 `4a275632fc96d590060566c3cf47aadd5dacf31ec81b111d4f43ac192808d7a9`). Full verify-all: 16 PASS, no SKIP. PR pending. |
+| 1 | 2026-10-26 | PR #68, review round 1 fixes: commands-demo 163/163; roundtrip PASS; sidebar-render 125/125. Automated `space-legacy` gate: all original snapshot semantic fields unchanged (only main's additive `keepAliveSites: []` default is added), encoded DTO roundtrip byte-identical, all 3 committed pre-change PNGs byte-identical. Metal readback synchronization fixed; 24/24 repeated renders match the unchanged baselines. Full verify-all after merging `origin/main` at `bfef13c`: 17 PASS, no SKIP. |
 | 2 | | |
 | 3 | | |
 | 4 | | |
