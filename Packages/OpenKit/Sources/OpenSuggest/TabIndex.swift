@@ -202,7 +202,7 @@ final class TabIndexer {
         }
         for space in model.spaces {
             let ordinal = profileOrdinal(space.profileID)
-            let title = space.title
+            let title = model.displayTitle(for: space)
             let folded = TextMatching.fold(title)
             next.spaces.append(TabIndex.SpaceSummary(id: space.id, title: title, profileOrdinal: ordinal,
                                                      foldedTitle: folded, foldedFocusTitle: Array("focus on ".utf8) + folded))

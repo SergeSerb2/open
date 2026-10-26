@@ -65,11 +65,12 @@ public struct ProfileSettingsDTO: Codable, Sendable {
 public enum SpaceIconDTO: Codable, Sendable {
     case emoji(String)
     case symbol(String)
+    case named(String)
 }
 
 public struct SpaceDTO: Codable, Sendable {
     public var id: String
-    public var title: String
+    public var title: String?
     public var icon: SpaceIconDTO?
     public var theme: SpaceTheme
     public var profileID: String
@@ -274,6 +275,7 @@ public enum SnapshotMapper {
         switch icon {
         case .emoji(let s): return .emoji(s)
         case .symbol(let s): return .symbol(s)
+        case .named(let s): return .named(s)
         case nil: return nil
         }
     }
@@ -282,6 +284,7 @@ public enum SnapshotMapper {
         switch dto {
         case .emoji(let s): return .emoji(s)
         case .symbol(let s): return .symbol(s)
+        case .named(let s): return .named(s)
         case nil: return nil
         }
     }

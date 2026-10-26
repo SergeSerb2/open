@@ -45,4 +45,5 @@ public struct SpaceTheme: Codable, Hashable, Sendable {
 public enum SpaceIcon: Codable, Hashable, Sendable {
     case emoji(String)
     case symbol(String)
+    case named(String)
 }

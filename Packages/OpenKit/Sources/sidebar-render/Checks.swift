@@ -64,7 +64,7 @@ enum Checks {
         print("structure (model → TreeChange → outline diff)")
         rowsMatch("first build")
         // Arc puts a new Today tab at the top, right under "New Tab" (F0041).
-        let t = model.newTab(in: space.id, url: URL(string: "https://new.example.com")!, title: "Fresh", at: 0)
+        let t = model.newTab(in: space.id, url: URL(string: "https://new.example.com")!, title: "Fresh")
         pump(); rowsMatch("newTab at the top of Today")
         check(sidebar.displayedRows.firstIndex(of: "newTab").map { sidebar.displayedRows[$0 + 1] } == t.id.description, "new tab sits right under New Tab")
         model.pinTab(id: t.id)
@@ -189,6 +189,90 @@ enum Checks {
         sidebar.simulateSwipe([scroll(1, dx: 3), scroll(2, dx: 5), scroll(2, dx: 4), scroll(4, dx: 0)])
         pump()
         check(context.focusedSpace === model.spaces[2], "a short swipe snaps back")
+
+        print("model followups: live web content, undo, titles, and named icons")
+        model.focusSpace(windowID: window.id, spaceID: space.id)
+        OffscreenRenderer.settle(scene, runLoop: 0.8)
+        let pinned = space.pinned.compactMap(\.tab).first!
+        let plain = space.today.compactMap(\.tab).first!
+        let favorite = profile.favorites.first!
+        func hover(_ tab: Tab, favorite: Bool = false) {
+            context.forcedHover = favorite ? .favorite(tab.id) : .row(tab.id)
+            pump()
+        }
+        func clickAction(_ tab: Tab) {
+            delegate.log.removeAll()
+            if let button = sidebar.tabAction(tabID: tab.id)?.view {
+                click(scene.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button))
+            }
+        }
+        hover(pinned)
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "unloaded pinned tab shows × on hover")
+        pinned.live.hasWebContent = true
+        pump()
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowUnload, "loaded pinned tab changes to − while hovered")
+        clickAction(pinned)
+        check(delegate.log == [.unloadTab(pinned.id)] && model.tab(id: pinned.id) === pinned,
+              "pinned − click sends unloadTab and keeps the entry")
+        pinned.live.hasWebContent = false
+        pump()
+        check(sidebar.tabAction(tabID: pinned.id)?.glyph == .rowClose, "pinned tab returns to × when web content goes away")
+        clickAction(pinned)
+        check(delegate.log == [.close(nodeID: pinned.id)] && model.tab(id: pinned.id) == nil, "pinned × click closes the entry")
+        undo.undo(); pump()
+        plain.live.hasWebContent = true
+        hover(plain)
+        check(sidebar.tabAction(tabID: plain.id)?.glyph == .rowClose, "Today tab shows × even with live web content")
+        hover(favorite, favorite: true)
+        check(sidebar.tabAction(tabID: favorite.id)?.glyph == .rowClose, "unloaded Favorite shows × on hover")
+        favorite.live.hasWebContent = true
+        pump()
+        check(sidebar.tabAction(tabID: favorite.id)?.glyph == .rowUnload, "loaded Favorite changes to − while hovered")
+        clickAction(favorite)
+        check(delegate.log == [.unloadTab(favorite.id)] && model.tab(id: favorite.id) === favorite,
+              "Favorite − click sends unloadTab and keeps the entry")
+        favorite.live.hasWebContent = false
+        pump()
+        check(sidebar.tabAction(tabID: favorite.id)?.glyph == .rowClose, "Favorite returns to × when web content goes away")
+        clickAction(favorite)
+        check(delegate.log == [.close(nodeID: favorite.id)] && model.tab(id: favorite.id) == nil, "Favorite × click closes the entry")
+        undo.undo(); pump()
+        context.forcedHover = .header
+        pump()
+        func button(_ label: String, in view: NSView) -> NSView? {
+            if view.accessibilityLabel() == label { return view }
+            for child in view.subviews { if let found = button(label, in: child) { return found } }
+            return nil
+        }
+        if let collapse = button("Collapse Pinned", in: sidebar) {
+            click(scene.convert(NSPoint(x: collapse.bounds.midX, y: collapse.bounds.midY), from: collapse))
+        }
+        check(space.isPinnedCollapsed, "header click uses the collapse command")
+        undo.undo(); pump(); rowsMatch("undo of header collapse")
+        undo.redo(); pump(); check(space.isPinnedCollapsed, "redo of header collapse")
+        undo.undo(); pump()
+        check(ModelSidebarActions(context: context).perform(.toggleMute(tabID: pinned.id)) && pinned.isMuted,
+              "sidebar mute intent uses the model command")
+        undo.undo(); check(!pinned.isMuted, "sidebar mute undo")
+        undo.redo(); check(pinned.isMuted, "sidebar mute redo")
+        space.title = nil
+        pump()
+        check(sidebar.displayedSpaceTitle == "Space 1" && sidebar.spaceSwitcher(spaceID: space.id)?.accessibilityLabel() == "Space 1",
+              "nil title displays Space 1 in the header and switcher")
+        model.moveSpace(id: space.id, to: 1)
+        pump()
+        check(sidebar.displayedSpaceTitle == "Space 2" && sidebar.spaceSwitcher(spaceID: space.id)?.accessibilityLabel() == "Space 2" && space.title == nil,
+              "untitled Space follows its 1-based position after reorder")
+        model.updateSpace(id: space.id, title: "Renamed")
+        pump()
+        check(sidebar.displayedSpaceTitle == "Renamed" && sidebar.spaceSwitcher(spaceID: space.id)?.accessibilityLabel() == "Renamed",
+              "an explicit Space title appears unchanged")
+        let missing = Set(NamedSpaceIcons.symbols.values).union([NamedSpaceIcons.fallbackSymbol]).filter {
+            NSImage(systemSymbolName: $0, accessibilityDescription: nil) == nil
+        }
+        check(missing.isEmpty, "all \(NamedSpaceIcons.symbols.count) named-icon mappings and the neutral fallback exist on macOS: missing=\(missing.sorted())")
+        check(NamedSpaceIcons.symbolName(for: "unknown-future-icon") == NamedSpaceIcons.fallbackSymbol,
+              "unknown named icons use the neutral symbol")
 
         ReviewChecks.run()
 

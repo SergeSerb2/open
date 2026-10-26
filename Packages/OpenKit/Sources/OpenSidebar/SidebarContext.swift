@@ -23,9 +23,6 @@ public final class SidebarContext {
     /// The pointer is over the sidebar (or a hover is forced).
     var pointerInSidebar = false
 
-    /// Whether a tab has live web content. A loaded pinned tab shows "−" (close
-    /// and keep pinned) instead of "×". Supplied by the App (engine state).
-    @ObservationIgnored public var isTabLoaded: @MainActor (Tab) -> Bool = { _ in false }
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?
@@ -72,9 +69,7 @@ public final class SidebarContext {
 
     /// Display title of a Space: untitled Spaces read "Space N" (1-based position).
     public func title(of space: Space) -> String {
-        if !space.title.isEmpty { return space.title }
-        let index = (model.spaces.firstIndex { $0.id == space.id } ?? 0) + 1
-        return "Space \(index)"
+        model.displayTitle(for: space)
     }
 
     @discardableResult

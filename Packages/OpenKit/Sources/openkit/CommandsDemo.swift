@@ -129,6 +129,36 @@ func runCommandsDemo(args: [String]) async throws {
     let one = model.newTab(in: sid, url: url("one"), title: "One")
     check(events.count == 1 && describe(events[0]).hasPrefix("insert(today"), "newTab emits one insert: \(events.map(describe))")
     let two = model.newTab(in: sid, url: url("two"), title: "Two")
+    check(space.today.first?.id == two.id && space.today.dropFirst().first?.id == one.id,
+          "newTab without an index inserts at Today top")
+    undo.undo()
+    check(model.tab(id: two.id) == nil && space.today.first?.id == one.id, "undo removes the new top tab")
+    undo.redo()
+    check(space.today.first?.id == two.id && model.tab(id: two.id) === two, "redo restores the same tab at Today top")
+    let explicit = model.newTab(in: sid, url: url("explicit"), at: 1)
+    check(space.today[1].id == explicit.id, "newTab still honors an explicit index")
+    undo.undo()
+
+    step("collapse and mute are undoable property changes")
+    let wasCollapsed = space.isPinnedCollapsed
+    model.setPinnedSectionCollapsed(spaceID: sid, collapsed: !wasCollapsed)
+    check(space.isPinnedCollapsed != wasCollapsed && events.isEmpty, "collapse changes the property without TreeChange")
+    model.setPinnedSectionCollapsed(spaceID: sid, collapsed: !wasCollapsed)
+    model.setPinnedSectionCollapsed(spaceID: SpaceID(), collapsed: true)
+    undo.undo()
+    check(space.isPinnedCollapsed == wasCollapsed && events.isEmpty, "collapse undo; same-value and missing-Space commands add no undo")
+    undo.redo()
+    check(space.isPinnedCollapsed != wasCollapsed && events.isEmpty, "collapse redo without TreeChange")
+    undo.undo()
+    model.setMuted(tabID: two.id, muted: true)
+    check(two.isMuted && events.isEmpty, "mute changes the property without TreeChange")
+    model.setMuted(tabID: two.id, muted: true)
+    model.setMuted(tabID: ItemID(), muted: true)
+    undo.undo()
+    check(!two.isMuted && events.isEmpty, "mute undo; same-value and missing-tab commands add no undo")
+    undo.redo()
+    check(two.isMuted && events.isEmpty, "mute redo without TreeChange")
+    undo.undo()
     model.pinTab(id: one.id)
     check(model.isPinned(tabID: one.id) && one.pinnedURL == one.url, "pinTab moves One to Pinned and sets pinnedURL")
     guard let folder = model.createFolder(in: .spaceToday(sid), title: "Demo Folder", withNodes: [two.id]) else { print("createFolder failed"); exit(1) }
@@ -461,6 +491,18 @@ func runCommandsDemo(args: [String]) async throws {
     undo.redo()
     check(indexMatchesRebuild(model), "Profile section index equals a full rebuild")
 
+    step("optional Space titles, named icons, and runtime-only web content")
+    let savedTitle = space.title, savedIcon = space.icon
+    space.title = nil
+    space.icon = .named("planet")
+    one.live.hasWebContent = true
+    try snapshots.saveNow(model: model)
+    let reloaded = try snapshots.load()
+    check(reloaded?.space(id: sid)?.title == nil && reloaded?.space(id: sid)?.icon == .named("planet"),
+          "untitled Space and named icon survive the real snapshot store")
+    check(reloaded?.tab(id: one.id)?.live.hasWebContent == false,
+          "live web content is absent after snapshot reload")
+    space.title = savedTitle; space.icon = savedIcon
     try snapshots.saveNow(model: model)
     composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")

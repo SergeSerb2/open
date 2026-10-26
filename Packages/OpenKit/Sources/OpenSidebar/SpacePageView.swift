@@ -665,6 +665,7 @@ final class SpaceHeaderView: NSView {
     weak var page: SpacePageView?
     private let fill = CALayer()
     private let title = TextLabel()
+    var displayedTitle: String { title.text() }
     private let icon = SpaceIconView()
     let chevron = PlateButton(glyph: .disclosureDown)
     let more = PlateButton(glyph: .spaceMore)
@@ -796,6 +797,8 @@ final class SpaceIconView: NSView {
             } else {
                 EmojiRenderer.draw(e, fontSize: emojiSize, in: bounds.offsetBy(dx: 0, dy: emojiNudgeY))
             }
+        case .named(let name)?:
+            drawSymbol(NamedSpaceIcons.symbolName(for: name))
         case .symbol(let name)? where NSImage(systemSymbolName: name, accessibilityDescription: nil) == nil:
             // Arc's own named icons (for example "planet" on the default Space) have no SF Symbol.
             CustomIcon.planet(in: NSRect(x: bounds.midX - emojiSize / 2, y: bounds.midY - emojiSize / 2, width: emojiSize, height: emojiSize),
@@ -813,6 +816,15 @@ final class SpaceIconView: NSView {
                               color: SidebarRole.spaceTitle.nsColor)
         }
     }
+
+    private func drawSymbol(_ name: String) {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: emojiSize * 0.8, weight: .medium)) else { return }
+        let size = image.size
+        image.drawTinted(in: NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
+                                   width: size.width, height: size.height), color: SidebarRole.spaceTitle.nsColor)
+    }
+
 }
 
 /// Model ID of an outline item, if it is a model object.

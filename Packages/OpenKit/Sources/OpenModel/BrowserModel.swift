@@ -499,12 +499,33 @@ public final class BrowserModel {
     public func newTab(in spaceID: SpaceID, url: URL, title: String = "", at position: Int? = nil) -> Tab {
         let tab = Tab(url: url, title: title)
         let parent = NodeParent.spaceToday(spaceID)
-        guard let i = attach(.tab(tab), to: parent, at: position) else { return tab }
+        guard let i = attach(.tab(tab), to: parent, at: position ?? 0) else { return tab }
         let revert: Revert = { $0.detach(tab.id) != nil }
         registerUndo(revert, reapply: { model in
             model.attach(.tab(tab), to: parent, at: i) != nil ? revert : Self.noRevert
         })
         return tab
+    }
+
+    /// Untitled Spaces use their current 1-based position, without storing a title.
+    public func displayTitle(for space: Space) -> String {
+        if let title = space.title, !title.isEmpty { return title }
+        return "Space \((spaces.firstIndex { $0.id == space.id } ?? 0) + 1)"
+    }
+
+    /// Property-only changes: Observation updates readers; no TreeChange is emitted.
+    public func setPinnedSectionCollapsed(spaceID: SpaceID, collapsed: Bool) {
+        guard let space = space(id: spaceID), space.isPinnedCollapsed != collapsed else { return }
+        let old = space.isPinnedCollapsed
+        space.isPinnedCollapsed = collapsed
+        registerChange(undo: { space.isPinnedCollapsed = old }, redo: { space.isPinnedCollapsed = collapsed })
+    }
+
+    public func setMuted(tabID: ItemID, muted: Bool) {
+        guard let tab = tab(id: tabID), tab.isMuted != muted else { return }
+        let old = tab.isMuted
+        tab.isMuted = muted
+        registerChange(undo: { tab.isMuted = old }, redo: { tab.isMuted = muted })
     }
 
     /// Closes (archives) a node. A folder archives every tab inside it. A split pane leaves

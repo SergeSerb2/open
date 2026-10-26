@@ -274,7 +274,7 @@ final class TabCellView: SidebarCellView {
         b.plateColor = { _ in SidebarRole.rowPressed }
         b.action = { [weak self] in
             guard let self, let tab = self.tab else { return }
-            self.context?.send(self.showsUnload ? .unload(tabID: tab.id) : .close(nodeID: tab.id))
+            self.context?.send(self.showsUnload ? .unloadTab(tab.id) : .close(nodeID: tab.id))
         }
         addSubview(b)
         accessory = b
@@ -304,8 +304,8 @@ final class TabCellView: SidebarCellView {
     /// A loaded pinned tab shows "−" (close and keep pinned), measured on a
     /// selected pinned row (F0014). Today tabs show "×".
     private var showsUnload: Bool {
-        guard let tab, let context, isPinned else { return false }
-        return context.isTabLoaded(tab)
+        guard let tab, isPinned else { return false }
+        return tab.live.hasWebContent
     }
 
     /// The close or unload button follows the pointer, not the selection: a
@@ -313,10 +313,11 @@ final class TabCellView: SidebarCellView {
     private var showsAccessory: Bool { rowView?.isHovered ?? false }
 
     override func rowStateChanged() {
+        let unload = tracked({ showsUnload }) { [weak self] in self?.needsLayout = true }
         let visible = showsAccessory
         guard visible || accessory != nil else { return }
         let b = makeAccessory()
-        b.glyphView.glyph = showsUnload ? .rowUnload : .rowClose
+        b.glyphView.glyph = unload ? .rowUnload : .rowClose
         if b.isHidden == visible {
             b.isHidden = !visible
             needsLayout = true
@@ -325,6 +326,7 @@ final class TabCellView: SidebarCellView {
 
     override func layout() {
         super.layout()
+        rowStateChanged()
         let m = SpaceListMetrics.self
         let x0 = indent
         // Observation-tracked reads: audio and pinned-URL state.

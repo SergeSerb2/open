@@ -34,8 +34,7 @@ public struct ModelSidebarActions {
         case .setExpanded(let id, let expanded):
             model.setExpanded(folderID: id, expanded: expanded)
         case .setPinnedCollapsed(let space, let collapsed):
-            // Model gap: no command for this flag yet (no undo, no save trigger).
-            model.space(id: space)?.isPinnedCollapsed = collapsed
+            model.setPinnedSectionCollapsed(spaceID: space, collapsed: collapsed)
         case .pin(let id):
             model.pinTab(id: id)
         case .unpin(let id):
@@ -74,8 +73,8 @@ public struct ModelSidebarActions {
         case .replacePinnedURL(let id):
             model.replacePinnedURL(id: id)
         case .toggleMute(let id):
-            // Model gap: no command for mute yet (no undo).
-            model.tab(id: id)?.isMuted.toggle()
+            guard let tab = model.tab(id: id) else { return false }
+            model.setMuted(tabID: id, muted: !tab.isMuted)
         case .deleteSpace(let id):
             model.deleteSpace(id: id)
         case .moveSpace(let id, let index):

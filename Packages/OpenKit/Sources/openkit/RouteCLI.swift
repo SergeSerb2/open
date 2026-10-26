@@ -62,7 +62,7 @@ func runRoute(args: [String]) throws {
         FileHandle.standardError.write(Data("error: no snapshot at \(directory)\n".utf8))
         exit(1)
     }
-    let spaces = model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: $0.title, profileID: $0.profileID) }
+    let spaces = model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }
     // Stored model order is not AppKit z-order. This CLI explicitly uses stored
     // standard-window order as its frontmost approximation, shown in the report.
     let windows = model.windows.filter { $0.style == .standard } + model.windows.filter { $0.style != .standard }
