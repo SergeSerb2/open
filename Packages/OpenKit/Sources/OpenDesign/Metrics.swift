@@ -127,8 +127,13 @@ public enum SpaceListMetrics {
     public static let rowFillInsetX: CGFloat = 8
     public static let rowFillInsetTop: CGFloat = 2
     public static let rowFillHeight: CGFloat = 36
-    /// Fitted by the comparison loop (docs/design.md).
-    public static let rowFillCornerRadius: CGFloat = 10
+    /// Continuous, radius 12. Measured 2026-10-26 against Core Animation renders and
+    /// per-row edge profiles of selected rows: capture session 2 (14b/0014 coverage
+    /// RMS 0.046, 03/0001 0.024, 16/0004 0.045; 11 gives 0.070–0.075 and 10 gives
+    /// 0.127–0.128) and session 1 (F0015, F0066, F0084: 0.024–0.029). Both sessions
+    /// agree; the old 10 came from the comparison loop, which does not isolate
+    /// corner pixels. See docs/re/interaction-states.md §3.
+    public static let rowFillCornerRadius: CGFloat = 12
     public static let faviconX: CGFloat = 17
     public static let faviconY: CGFloat = 11
     public static let faviconSize: CGFloat = 18

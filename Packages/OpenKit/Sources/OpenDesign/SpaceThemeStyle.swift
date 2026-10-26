@@ -127,8 +127,13 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     }
 
     /// Tooltip capsule fill: the theme's `light.title`, opaque (exact match, F0021–F0033).
-    /// Without a theme: guess, a neutral near-black.
-    public var tooltipFill: RGBA { lightPalette?.title.withAlpha(1) ?? RGBA(hex: 0x1C1B22) }
+    /// Without a theme (the default theme): `#0A0D4F`, its `light.title` equivalent,
+    /// measured exact after display-profile → sRGB conversion in capture session 2
+    /// (default dark theme: S2 14b/0024, 03/0010, 03/0014, 19/0025; the same capsule
+    /// color as the link status bubble, S2 04/0021). No default-theme tooltip was
+    /// captured in macOS Light (S2 item 20 has no tooltip window), so applying the
+    /// same value there follows the `light.title` role. guess for that case.
+    public var tooltipFill: RGBA { lightPalette?.title.withAlpha(1) ?? RGBA(hex: 0x0A0D4F) }
     /// Tooltip text: light and tinted. guess: the theme's `light.background`.
     public var tooltipText: RGBA { lightPalette?.background.withAlpha(1) ?? RGBA(hex: 0xF4F4F6) }
     /// Keycap plate inside a tooltip. guess: tooltip text at 18 %.

@@ -136,8 +136,8 @@ enum CompletionChecks {
             let after = pixel(OffscreenRenderer().snapshot(scene, scale: 1), at: sample)
             let delta = ColorMath.deltaE2000(after, expected)
             check(delta <= 0.5, "MS6 \(appearance) multi-fill pixel ΔE00 \(String(format: "%.3f", delta)) ≤ 0.5")
-            check(fill.frame == CGRect(x: 8, y: 2, width: 212, height: 36) && fill.cornerRadius == 10 && fill.shadowOpacity == 0,
-                  "MS6 \(appearance) multi-fill uses row geometry, radius 10, no shadow")
+            check(fill.frame == CGRect(x: 8, y: 2, width: 212, height: 36) && fill.cornerRadius == 12 && fill.shadowOpacity == 0,
+                  "MS6 \(appearance) multi-fill uses row geometry, radius 12, no shadow")
             let currentFill = rowFill(pinned)!
             check(currentFill.backgroundColor == (context.style(for: space).selectedFill(appearance)).cgColor &&
                   currentFill.shadowOpacity == Float(SidebarRole.rowSelectedShadow.resolved(appearance).alpha),
