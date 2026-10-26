@@ -2,6 +2,8 @@ import AppKit
 import OpenEngine
 import OpenModel
 import OpenStore
+import OpenSidebar
+import OpenDesign
 
 /// A page that is not a sidebar tab: a sized window.open() popup (Arc opens
 /// these in a small window).
@@ -48,6 +50,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
 
   private(set) var rows: [Row] = []
   private(set) var contents: [ItemID: OEWebContent] = [:]
+  private(set) var contentCreationCount = 0
   private var tabIDByContent: [ObjectIdentifier: ItemID] = [:]
   private var browsers: [ProfileID: OEBrowser] = [:]
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
@@ -69,13 +72,11 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   private(set) var pendingDialogs: [OEJavaScriptDialog] = []
 
   // Views
-  private let sidebar: NSVisualEffectView = {
-    let v = NSVisualEffectView()
-    v.material = .sidebar
-    v.blendingMode = .behindWindow
-    v.state = .followsWindowActiveState
-    return v
-  }()
+  private lazy var sidebarContext = SidebarContext(model: model, windowID: windowState.id)
+  private lazy var sidebar = SidebarView(context: sidebarContext)
+  private let themeBackground = ThemeBackgroundView(frame: .zero)
+  private var queuedNavigations: [ItemID: URL] = [:]
+  var sidebarClassName: String { String(reflecting: type(of: sidebar)) }
   private let spacePopup = NSPopUpButton(frame: .zero, pullsDown: false)
   private let addressField = NSTextField()
   private let extensionBar = NSStackView()
@@ -85,7 +86,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   private let findField = NSSearchField()
   private let statusLabel = NSTextField(labelWithString: "")
 
-  static let sidebarWidth: CGFloat = 260
+  static let sidebarWidth: CGFloat = 228
 
   init(app: AppDelegate, windowState: BrowserWindowState) {
     self.app = app
@@ -177,6 +178,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   /// default profile, else Profiles/<dir>/Engine (docs/plans/profiles.md §6.2).
   /// Created on first use, so profiles nobody shows cost nothing.
   func context(for profileID: ProfileID) -> OEBrowserContext {
+    precondition(app.engineReady)
     guard let profile = model.profile(id: profileID) ?? model.defaultProfile,
       profile.id != model.defaultProfile?.id
     else { return OEEngine.shared.defaultContext }
@@ -195,7 +197,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     return browser
   }
 
-  var focusedBrowser: OEBrowser? { focusedSpace.map { engineBrowser(for: $0.profileID) } }
+  var focusedBrowser: OEBrowser? { app.engineReady ? focusedSpace.map { engineBrowser(for: $0.profileID) } : nil }
 
   func tabID(for content: OEWebContent) -> ItemID? { tabIDByContent[ObjectIdentifier(content)] }
 
@@ -211,7 +213,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     guard let root = window?.contentView else { return }
     root.wantsLayer = true
 
+    root.addSubview(themeBackground)
     root.addSubview(sidebar)
+    sidebar.delegate = self
+    sidebar.themeBackground = themeBackground
     contentContainer.wantsLayer = true
     contentContainer.layer?.cornerRadius = 6
     contentContainer.layer?.masksToBounds = true
@@ -220,7 +225,6 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     spacePopup.target = self
     spacePopup.action = #selector(spaceChosen(_:))
     spacePopup.controlSize = .small
-    sidebar.addSubview(spacePopup)
 
     addressField.placeholderString = "Search or enter URL"
     addressField.delegate = self
@@ -228,12 +232,14 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     addressField.action = #selector(addressEntered(_:))
     addressField.lineBreakMode = .byTruncatingTail
     addressField.cell?.usesSingleLineMode = true
-    sidebar.addSubview(addressField)
+    // Temporary URL editor until Step C adopts OpenCommandBar. It is built
+    // only into the visible hierarchy when the user requests address entry.
+    addressField.isHidden = true
+    root.addSubview(addressField)
 
     extensionBar.orientation = .horizontal
     extensionBar.spacing = 4
     extensionBar.alignment = .centerY
-    sidebar.addSubview(extensionBar)
 
     let column = NSTableColumn(identifier: .init("tab"))
     column.resizingMask = .autoresizingMask
@@ -248,12 +254,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     scrollView.documentView = tableView
     scrollView.hasVerticalScroller = true
     scrollView.drawsBackground = false
-    sidebar.addSubview(scrollView)
 
     statusLabel.font = .systemFont(ofSize: 10)
     statusLabel.textColor = .secondaryLabelColor
     statusLabel.lineBreakMode = .byTruncatingMiddle
-    sidebar.addSubview(statusLabel)
 
     findField.placeholderString = "Find in page"
     findField.target = self
@@ -269,6 +273,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   private func layoutViews() {
     guard let root = window?.contentView else { return }
     let b = root.bounds
+    themeBackground.frame = b
     let sw = sidebarVisible && !isPageFullscreen ? Self.sidebarWidth : 0
     sidebar.isHidden = sw == 0
     sidebar.frame = NSRect(x: 0, y: 0, width: sw, height: b.height)
@@ -288,6 +293,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
 
   /// Places the visible pages; hides the rest (hidden pages are throttled).
   private func layoutContent() {
+    guard app.engineReady else { return }
     let visible = visibleTabs
     let visibleIDs = Set(visible.map(\.id))
     for (id, content) in contents where !visibleIDs.contains(id) {
@@ -390,16 +396,20 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   /// The page of `tab`, created (and loading) on first use.
   @discardableResult
   func ensureContent(for tab: Tab) -> OEWebContent {
+    precondition(app.engineReady)
     if let c = contents[tab.id] { return c }
     let content = makeContent(for: tab, url: tab.url)
     return content
   }
 
   private func makeContent(for tab: Tab, url: URL?) -> OEWebContent {
+    precondition(app.engineReady)
     let profileID = focusedSpace?.profileID ?? model.profiles.first?.id ?? ProfileID()
     let config = OEWebContentConfiguration(context: context(for: profileID))
     config.runtimeStyle = app.options.defaultStyle
+    if tab.url.scheme == "chrome" { config.runtimeStyle = .chrome }
     config.showsChromeToolbar = app.options.chromeToolbar
+    contentCreationCount += 1
     let content = OEWebContent(configuration: config, url: url)
     content.delegate = self
     content.isMuted = tab.isMuted
@@ -407,6 +417,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     content.view.frame = contentContainer.bounds
     contentContainer.addSubview(content.view)
     contents[tab.id] = content
+    tab.live.hasWebContent = true
     tabIDByContent[ObjectIdentifier(content)] = tab.id
     syncTabStrips()
     return content
@@ -421,6 +432,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   }
 
   private func resetLiveState(_ tab: Tab) {
+    tab.live.hasWebContent = false
     tab.live.isLoading = false
     tab.live.progress = 0
     tab.live.isAudible = false
@@ -430,6 +442,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   /// Keeps every OEBrowser's tab strip in sidebar order (the input of fork
   /// patch P1).
   private func syncTabStrips() {
+    guard app.engineReady else { return }
     guard let space = focusedSpace else { return }
     let browser = engineBrowser(for: space.profileID)
     let favorites = Set(focusedProfile?.favorites.map(\.id) ?? [])
@@ -447,7 +460,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   func showSelection(focus: Bool = true) {
     layoutContent()
     syncRowSelection()
-    focusedBrowser?.activeWebContent = selectedContent
+    if app.engineReady { focusedBrowser?.activeWebContent = selectedContent }
     updateChrome()
     if focus { selectedContent?.focusPage() }
   }
@@ -459,6 +472,32 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     showSelection(focus: focus)
     app.scheduleSave()
   }
+
+  func engineDidBecomeReady() {
+    // The URL lives in the model, so only the selected queued navigation
+    // creates a host. Background requests remain lazy.
+    for (id, url) in queuedNavigations { model.tab(id: id)?.url = url }
+    queuedNavigations.removeAll()
+    showSelection(focus: false)
+  }
+
+  func prepareForInitialDisplay() {
+    window?.contentView?.layoutSubtreeIfNeeded()
+    themeBackground.prepareForSnapshot()
+  }
+
+  #if OPEN_AUTOMATION
+  func sidebarCloseForAutomation(_ id: ItemID, unload: Bool) -> Bool {
+    sidebar(sidebar, didRequest: unload ? .unloadTab(id) : .close(nodeID: id))
+  }
+  func sidebarPinForAutomation(_ id: ItemID) -> Bool {
+    sidebar(sidebar, didRequest: model.isPinned(tabID: id) ? .unpin(tabID: id) : .pin(tabID: id))
+  }
+  func navigateBeforeEngineForAutomation(_ input: String) {
+    addressField.stringValue = input
+    addressEntered(addressField)
+  }
+  #endif
 
   private func updateChrome() {
     let tab = selectedTab
@@ -476,8 +515,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     let tab = model.newTab(in: space.id, url: url, at: 0)
     tab.openerID = opener
     if background {
-      ensureContent(for: tab)
-      syncTabStrips()
+      // A background row stays lazy until it is selected.
     } else {
       select(nodeID: tab.id)
     }
@@ -485,6 +523,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   }
 
   func adoptUnownedRequest(_ request: OEOpenRequest) -> OEWebContent? {
+    guard app.engineReady else { return nil }
     guard let space = focusedSpace else { return nil }
     let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
     let content = makeContent(for: tab, url: nil)
@@ -495,6 +534,7 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   // MARK: Extensions
 
   private func reloadExtensionBar() {
+    guard app.engineReady else { return }
     extensionBar.arrangedSubviews.forEach { $0.removeFromSuperview() }
     for action in focusedBrowser?.extensionActions ?? [] {
       let image =
@@ -602,6 +642,43 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   }
 }
 
+// Step A uses the production sidebar while retaining the M1 engine wiring.
+// Step B transfers this wiring to the OpenFeatures host factory.
+extension BrowserWindowController: SidebarDelegate {
+  func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
+    switch intent {
+    case .toggleSidebar: toggleSidebar(nil)
+    case .goBack: goBack(nil)
+    case .goForward: goForward(nil)
+    case .reload: reloadPage(nil)
+    case .stopLoading: stopLoading(nil)
+    case .openCommandBar(let source):
+      if source == .urlField { focusAddressBar(nil) } else { newTab(nil) }
+    case .newTab: newTab(nil)
+    case .select(let id, let space):
+      guard let target = model.space(id: space) else { return false }
+      if focusedSpace?.id != space { focus(space: target) }
+      select(nodeID: id)
+    case .selectFavorite(let id): select(nodeID: id)
+    case .switchSpace(let id):
+      guard let space = model.space(id: id) else { return false }; focus(space: space)
+    case .close(let id):
+      guard model.tab(id: id) != nil else { return false }
+      closeTab(nodeID: id)
+    case .unloadTab(let id):
+      guard let tab = model.tab(id: id) else { return false }
+      if let content = contents[id] { dropContent(id: id, content: content) }
+      resetLiveState(tab)
+      if selectedTab?.id == id { selectNeighbor(afterClosing: id) }
+    default:
+      guard ModelSidebarActions(context: sidebarContext).perform(intent) else { return false }
+      showSelection(focus: false)
+    }
+    app.scheduleSave()
+    return true
+  }
+}
+
 // MARK: - Menu actions
 
 extension BrowserWindowController {
@@ -614,6 +691,7 @@ extension BrowserWindowController {
 
   @objc func focusAddressBar(_ sender: Any?) {
     if !sidebarVisible { toggleSidebar(nil) }
+    addressField.isHidden = false
     window?.makeFirstResponder(addressField)
     addressField.currentEditor()?.selectAll(nil)
   }
@@ -624,16 +702,29 @@ extension BrowserWindowController {
       return
     }
     guard let tab = selectedTab else { return }
-    let order = rows.compactMap(\.nodeID)
-    let position = order.firstIndex(of: selectedNodeID ?? tab.id) ?? 0
-    let isFavorite = focusedProfile?.favorites.contains { $0.id == tab.id } ?? false
-    if isFavorite || model.isPinned(tabID: tab.id) {
-      // Pinned tabs and favorites stay in the sidebar; closing unloads them.
-      if let content = contents[tab.id] { dropContent(id: tab.id, content: content) }
+    closeTab(nodeID: tab.id)
+  }
+
+  private func closeTab(nodeID: ItemID) {
+    guard let tab = model.tab(id: nodeID) else { return }
+    let wasSelected = selectedTab?.id == nodeID
+    let position = rows.compactMap(\.nodeID).firstIndex(of: nodeID) ?? 0
+    let isFavorite = model.profiles.contains { $0.favorites.contains { $0.id == nodeID } }
+    if isFavorite || model.isPinned(tabID: nodeID) {
+      // Pinned entries stay pinned even when they never had a host.
+      if let content = contents[nodeID] { dropContent(id: nodeID, content: content) }
+      resetLiveState(tab)
     } else {
-      model.closeTab(id: tab.id)  // archives; treeChanged closes the page
+      model.closeTab(id: nodeID)
     }
-    let remaining = rows.compactMap(\.nodeID).filter { model.tab(id: $0) != nil && $0 != tab.id }
+    if wasSelected { selectNeighbor(afterClosing: nodeID, formerIndex: position) }
+    app.scheduleSave()
+  }
+
+  private func selectNeighbor(afterClosing id: ItemID, formerIndex: Int? = nil) {
+    let order = rows.compactMap(\.nodeID)
+    let position = formerIndex ?? order.firstIndex(of: id) ?? 0
+    let remaining = order.filter { model.tab(id: $0) != nil && $0 != id }
     let next = remaining.isEmpty ? nil : remaining[min(position, remaining.count - 1)]
     select(nodeID: next)
   }
@@ -677,18 +768,7 @@ extension BrowserWindowController {
   @objc func showDevTools(_ sender: Any?) { selectedContent?.showDevTools() }
 
   @objc func openExtensionsPage(_ sender: Any?) {
-    // chrome://extensions needs a Chrome-style page in stock CEF.
-    guard let space = focusedSpace else { return }
-    let tab = model.newTab(in: space.id, url: OEExtensionManager.managementPageURL, at: 0)
-    let config = OEWebContentConfiguration(context: context(for: space.profileID))
-    config.runtimeStyle = .chrome
-    let content = OEWebContent(configuration: config, url: tab.url)
-    content.delegate = self
-    content.view.isHidden = true
-    contentContainer.addSubview(content.view)
-    contents[tab.id] = content
-    tabIDByContent[ObjectIdentifier(content)] = tab.id
-    select(nodeID: tab.id)
+    openNewTab(url: OEExtensionManager.managementPageURL, background: false)
   }
 
   @objc func toggleSidebar(_ sender: Any?) {
@@ -759,10 +839,17 @@ extension BrowserWindowController {
     guard !text.isEmpty, let url = Self.url(forInput: text, engine: focusedProfile?.settings.searchEngineID) else {
       return
     }
+    addressField.isHidden = true
     if newTabMode || selectedTab == nil {
       newTabMode = false
       openNewTab(url: url, background: false)
     } else if let tab = selectedTab {
+      guard app.engineReady else {
+        tab.url = url
+        queuedNavigations[tab.id] = url
+        app.scheduleSave()
+        return
+      }
       ensureContent(for: tab).load(url)
       tab.url = url
       selectedContent?.focusPage()
@@ -934,6 +1021,7 @@ extension BrowserWindowController: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, createWebContentFor request: OEOpenRequest) -> OEWebContent? {
+    guard app.engineReady else { return nil }
     let config = OEWebContentConfiguration(context: request.context)
     config.runtimeStyle = webContent.runtimeStyle
     switch request.disposition {

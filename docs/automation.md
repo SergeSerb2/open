@@ -85,7 +85,10 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
 | `download-dir` / `downloads` | `path` | Where downloads go; list downloads |
 | `metrics` | `interval` | Chromium task manager rows and the physical footprint of every Open process |
-| `timing` | — | Launch marks in ms since process start, plus the first contentful paint of the selected tab |
+| `timing` | — | Monotonic launch marks from kernel process start, presented-sidebar mark, renderer first contentful paint, and clock-mapping uncertainty |
+| `startup` | — | Actual sidebar class, visible window count, page count and context count recorded before engine start |
+| `host-counts` | — | Cumulative tab host creations, retained tab hosts, and engine web-content count |
+| `sidebar-unload` | `tab` | Production sidebar unload intent without selecting the row |
 | `save` | — | Write the snapshot now; returns its path |
 | `quit` | — | Quit Open normally |
 
@@ -103,6 +106,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 ```sh
 tools/build.sh Debug
 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+tools/e2e/engine_e2e.py --only window --config Release     # five fresh and five restored startup timings
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
@@ -111,3 +115,13 @@ tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idl
 ```
 
 Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+
+Startup regression flags exist only in automation builds:
+`OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
+timer running without a display link. Engine startup must continue with
+`firstFrameConfirmed=false`, `firstFrameWaitTimedOut`, and no `sidebarDrawn` mark.
+`OPEN_AUTOMATION_QUIT_BEFORE_ENGINE=1` requests Open's native terminate action
+during the first-frame wait; `OPEN_AUTOMATION_EARLY_NAVIGATION=<URL>` submits
+Open's address action before readiness; `OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE=1`
+clicks Open's own Quit alert button after a real engine-load failure. They send
+no input to the system or other applications.

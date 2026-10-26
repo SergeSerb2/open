@@ -1,15 +1,16 @@
 import AppKit
 import OpenEngine
 import Security
+import QuartzCore
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
+let app = OEApplication.shared as! OEApplication
 LaunchTiming.shared.mark("main")
 // Open restores windows from its own snapshot (OpenStore), never through
 // AppKit state restoration, which would also show a "reopen windows?" alert
 // after a crash.
 UserDefaults.standard.register(defaults: ["ApplePersistenceIgnoreState": true])
-let app = OEApplication.shared as! OEApplication
 let appDelegate = AppDelegate()
 app.delegate = appDelegate
 // Reserved app shortcuts beat the page (Cmd-T, Cmd-W, Cmd-L, ...).
@@ -20,6 +21,45 @@ appDelegate.options = options
 // The model comes first: the window can be built from it at once, and the
 // engine needs the default profile's folder (docs/plans/profiles.md §6.2).
 let directories = appDelegate.prepareData()
+// Finish AppKit launch and draw the snapshot-backed sidebar before loading
+// Chromium. The same sidebar survives engine readiness; no page exists yet.
+app.setActivationPolicy(.regular)
+app.finishLaunching()
+appDelegate.drawWindowsBeforeEngine()
+
+// Wait for a display callback whose last refresh is later than the flushed
+// window transaction. Chromium's observers must first run in its own loop,
+// so return from this temporary AppKit loop before calling start.
+let firstFrame = FirstWindowFrameObserver(view: appDelegate.windowControllers.first?.window?.contentView)
+firstFrame.start()
+#if OPEN_AUTOMATION
+if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_QUIT_BEFORE_ENGINE"] == "1" {
+  RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+}
+if let input = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_EARLY_NAVIGATION"] {
+  appDelegate.windowControllers.first?.navigateBeforeEngineForAutomation(input)
+}
+#endif
+while !firstFrame.presented && !firstFrame.timedOut && !appDelegate.terminationRequested { CFRunLoopRun() }
+firstFrame.stop()
+if appDelegate.terminationRequested {
+  LaunchTiming.shared.mark("terminationSkippedEngine")
+  appDelegate.saveState()
+  FileHandle.standardError.write(Data("Open: termination before engine; timing \(LaunchTiming.shared.report)\n".utf8))
+  exit(0)
+}
+LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
+if firstFrame.presented {
+  LaunchTiming.shared.mark("sidebarDrawn")
+} else {
+  // An off-screen/asleep display may never tick. Presentation confirmation
+  // is measurement evidence, not a requirement for starting the browser.
+  LaunchTiming.shared.mark("firstFrameWaitTimedOut")
+  FileHandle.standardError.write(Data("Open: first window frame unconfirmed; continuing engine startup\n".utf8))
+}
+
+// Initialize outside the temporary AppKit runloop. Chromium installs native
+// runloop observers during start; those must first run in CefRunMessageLoop.
 let configuration = OEEngineConfiguration()
 // root_cache_path = <root>/Profiles. The default profile's engine data is
 // then Profiles/Default/ (CEF's fixed name for the global context); other
@@ -37,10 +77,28 @@ configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 
 OEEngine.shared.delegate = appDelegate
 LaunchTiming.shared.mark("engineStart")
+#if OPEN_AUTOMATION
+if let data = try? JSONSerialization.data(withJSONObject: LaunchTiming.shared.report, options: [.sortedKeys]) {
+  FileHandle.standardError.write(Data("Open: pre-engine timing ".utf8) + data + Data("\n".utf8))
+}
+#endif
 do {
   try OEEngine.shared.start(configuration: configuration)
 } catch {
   FileHandle.standardError.write(Data("Open: engine failed to start: \(error)\n".utf8))
+  FileHandle.standardError.write(Data("Open: launch timing: \(LaunchTiming.shared.report)\n".utf8))
+  appDelegate.saveState()
+  let alert = NSAlert()
+  alert.messageText = "Open could not start its browser engine."
+  alert.informativeText = error.localizedDescription
+  alert.addButton(withTitle: "Quit")
+  #if OPEN_AUTOMATION
+  if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE"] == "1" {
+    FileHandle.standardError.write(Data("Open: engine failure alert shown; button=Quit\n".utf8))
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { alert.buttons.first?.performClick(nil) }
+  }
+  #endif
+  alert.runModal()
   exit(1)
 }
 LaunchTiming.shared.mark("engineStarted")
@@ -65,4 +123,37 @@ enum CodeSignature {
     else { return false }
     return dict[kSecCodeInfoTeamIdentifier as String] != nil
   }
+}
+
+
+/// A display tick reports the last screen refresh. A refresh after submission
+/// confirms that the window server has had the flushed sidebar transaction.
+@MainActor
+final class FirstWindowFrameObserver: NSObject {
+  private weak var view: NSView?
+  private var link: CADisplayLink?
+  private var timeout: Timer?
+  private var submittedAt: CFTimeInterval = 0
+  private(set) var presented = false
+  private(set) var timedOut = false
+  init(view: NSView?) { self.view = view }
+  func start() {
+    submittedAt = CACurrentMediaTime()
+    var observeDisplay = true
+    #if OPEN_AUTOMATION
+    observeDisplay = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SKIP_DISPLAY_LINK"] != "1"
+    #endif
+    if observeDisplay {
+      link = view?.displayLink(target: self, selector: #selector(frame(_:)))
+      link?.add(to: .main, forMode: .common)
+    }
+    timeout = Timer.scheduledTimer(withTimeInterval: 3, repeats: false) { [weak self] _ in
+      MainActor.assumeIsolated { self?.timedOut = true; CFRunLoopStop(CFRunLoopGetMain()) }
+    }
+  }
+  @objc private func frame(_ link: CADisplayLink) {
+    guard link.timestamp >= submittedAt else { return }
+    presented = true; CFRunLoopStop(CFRunLoopGetMain())
+  }
+  func stop() { link?.invalidate(); link = nil; timeout?.invalidate(); timeout = nil }
 }
