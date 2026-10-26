@@ -13,6 +13,7 @@ final class FeatureRootView: NSView {
 
 @MainActor
 public final class LittleOpenWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
+    public var contentView: NSView { root }
     public let session: LittleOpenSession
     public private(set) var container: WebContentContainer
     private weak var coordinator: LittleOpenCoordinator?
@@ -119,10 +120,11 @@ public final class LittleOpenWindowController: NSWindowController, NSWindowDeleg
         }) }; return menu
     }
     public func windowShouldClose(_ sender: NSWindow) -> Bool { coordinator?.close(sessionID: session.id, archiveReason: nil); return false }
-    public func windowDidBecomeKey(_ notification: Notification) { session.windowIsVisible = true; coordinator?.recordActivity(session.id) }
-    public func windowDidMiniaturize(_ notification: Notification) { session.windowIsVisible = false; coordinator?.onChange?() }
-    public func windowDidDeminiaturize(_ notification: Notification) { session.windowIsVisible = true; coordinator?.onChange?() }
-    public func windowDidChangeOcclusionState(_ notification: Notification) {
-        if let window { session.windowIsVisible = window.isVisible && !window.isMiniaturized && window.occlusionState.contains(.visible) }; coordinator?.onChange?()
+    func updateVisibility() {
+        session.windowIsVisible = window.map { $0.isVisible && !$0.isMiniaturized && $0.occlusionState.contains(.visible) } ?? false
     }
+    public func windowDidBecomeKey(_ notification: Notification) { updateVisibility(); coordinator?.recordActivity(session.id) }
+    public func windowDidMiniaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
+    public func windowDidDeminiaturize(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
+    public func windowDidChangeOcclusionState(_ notification: Notification) { updateVisibility(); coordinator?.onChange?() }
 }

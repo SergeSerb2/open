@@ -48,6 +48,7 @@ public final class PeekOverlayView: NSView {
         pageClip.subviews.forEach { $0.frame = pageClip.bounds }
         panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
     }
+    func clearHost() { pageClip.subviews.forEach { $0.removeFromSuperview() } }
     func showHost(_ host: any WebContentHost) {
         pageClip.subviews.forEach { $0.removeFromSuperview() }
         pageClip.addSubview(host.view); host.view.frame = pageClip.bounds; host.view.autoresizingMask = [.width, .height]

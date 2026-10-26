@@ -28,7 +28,6 @@ public protocol LittleOpenWebContentProviding: AnyObject {
     var onURLChange: ((URL) -> Void)? { get set }
     var onTitleChange: ((String) -> Void)? { get set }
 }
-extension FakeWebContentHost: LittleOpenWebContentProviding {}
 
 /// The routing boundary is smaller than WebContentHost; bridge it in this one place.
 @MainActor

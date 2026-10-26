@@ -8,6 +8,7 @@ import OpenStore
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
+    public var contentView: NSView { root }
     public let windowID: WindowID
     public let model: BrowserModel
     let root: FeatureRootView
@@ -58,16 +59,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         root.onLayout = { [weak self] in self?.layoutContent() }
         treeObserver = model.addObserver { [weak self] _ in self?.scheduleRefresh() }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            let consumed = MainActor.assumeIsolated {
-                guard let self, event.window === self.window else { return false }
-                if event.keyCode == 53 {
-                    if self.peekController.isShown { self.peekController.escape() }
-                    else { self.splitController.performCommand("escape"); self.container.cancelOperation(nil) }; return true
-                }
-                if case .browserCommand(let id)? = self.keyboard.route(event: event, context: RoutingContext(isWebContentFocused: true)), self.handles(id) {
-                    self.performCommand(id); return true
-                }; return false
-            }
+            let consumed = MainActor.assumeIsolated { self?.handleKeyDown(event) ?? false }
             return consumed ? nil : event
         }
         refresh()
@@ -109,6 +101,31 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func changed() { snapshotStore?.scheduleSave(model: model); peekController.refresh(); onVisibilityChange?() }
     private func showToast(_ title: String, undo: (() -> Void)?) { toastUndo = undo; toastLabel.stringValue = title; undoButton.isHidden = undo == nil; toast.isHidden = title.isEmpty }
     public var peekBadgeTabIDs: Set<ItemID> { peekController.peekBadgeTabIDs }
+    /// Shared window-local key path. Focus comes from AppKit's current responder.
+    @discardableResult public func handleKeyDown(_ event: NSEvent) -> Bool {
+        guard event.window === window else { return false }
+        if event.keyCode == 53 {
+            if peekController.isShown { peekController.escape() }
+            else { splitController.performCommand("escape"); container.cancelOperation(nil) }
+            return true
+        }
+        let responder = window?.firstResponder
+        let view = responder as? NSView
+        let textFocused = responder is NSTextView || responder is NSTextField
+        func within(_ ancestor: NSView?) -> Bool {
+            guard let view, let ancestor else { return false }
+            return view === ancestor || view.isDescendant(of: ancestor)
+        }
+        let webFocused = !textFocused && (container.slots.contains { within($0.contentHostView) }
+            || (peekController.isShown && within(peekController.stack.last?.host?.view)))
+        let routing = RoutingContext(isCommandBarOpen: context.isNewTabCommandBarOpen,
+            isSidebarFocused: within(sidebar), isTextFocused: textFocused, isWebContentFocused: webFocused)
+        guard case .browserCommand(let id)? = keyboard.route(event: event, context: routing), handles(id) else { return false }
+        // These bindings have window scope in the registry; restrict them to the
+        // page here so sidebar controls and AppKit field editors retain their keys.
+        if id.hasPrefix("focus-split-pane-"), !webFocused { return false }
+        performCommand(id); return true
+    }
     private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
         if id == "open-in-current-space", peekController.isShown {

@@ -1,7 +1,6 @@
 import AppKit
 import OpenModel
 import OpenDesign
-import OpenFeatures
 
 @MainActor
 public final class PaneSlotView: NSView {
@@ -42,7 +41,11 @@ public final class PaneSlotView: NSView {
         needsLayout = true
     }
     public override func layout() {
-        super.layout(); clip.frame = bounds
+        super.layout(); layoutContents()
+    }
+    /// Updates slot geometry without forcing layout in the embedded web subtree.
+    fileprivate func layoutContents() {
+        clip.frame = bounds
         let bar = paneChrome == nil ? 0 : SplitMetrics.barHeight
         paneChrome?.frame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
         let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
@@ -191,7 +194,9 @@ public final class WebContentContainer: NSView {
     public override func mouseDown(with event: NSEvent) { observeClick(event) }
     public func setLivePaneFrames(_ frames: [CGRect]) {
         guard frames.count == slots.count else { return }
-        for (slot, frame) in zip(slots, frames) where slot.frame != frame { slot.frame = frame; slot.layoutSubtreeIfNeeded() }
+        for (slot, frame) in zip(slots, frames) where slot.frame != frame {
+            slot.frame = frame; slot.layoutContents(); slot.paneChrome?.layoutSubtreeIfNeeded()
+        }
         layoutDividers()
     }
     public func layoutPanes(animated: Bool) {

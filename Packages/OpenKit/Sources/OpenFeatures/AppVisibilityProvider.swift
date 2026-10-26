@@ -13,6 +13,7 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
     private let model: BrowserModel
     private var lastVisible: Set<ItemID> = []
     private var pending: Task<Void, Never>?
+    private var pendingVisible: Set<ItemID> = []
     public init(model: BrowserModel) { self.model = model }
     isolated deinit { pending?.cancel() }
     public func attachHooks() {
@@ -35,12 +36,21 @@ public final class AppVisibilityProvider: SleepVisibilityProviding {
         return SleepVisibilitySnapshot(windows: windows, peek: peek, littleOpen: little, splitPanes: [], pictureInPicture: pipTabIDs)
     }
     public func visibilityChanged() {
-        let visible = sleepVisibility().visibleTabIDs(in: model), hidden = lastVisible.subtracting(visible)
-        lastVisible = visible; pending?.cancel()
+        let visible = sleepVisibility().visibleTabIDs(in: model)
+        let newlyVisible = visible.subtracting(lastVisible), hidden = lastVisible.subtracting(visible)
+        lastVisible = visible
         for id in hidden { sleepController?.tabBecameHidden(id) }
+        pendingVisible.formUnion(newlyVisible); pendingVisible.formIntersection(visible)
+        // Repeated chrome/focus notifications must neither stamp existing tabs
+        // active again nor cancel a newly visible tab's queued wake.
+        guard pending == nil, !pendingVisible.isEmpty else { return }
         pending = Task { [weak self] in
             guard let self else { return }
-            for id in visible { guard !Task.isCancelled else { return }; await self.sleepController?.tabBecameVisible(id) }
+            defer { self.pending = nil }
+            while !Task.isCancelled, let id = self.pendingVisible.first {
+                self.pendingVisible.remove(id)
+                await self.sleepController?.tabBecameVisible(id)
+            }
         }
     }
     /// Future App quit ordering: capture all live histories before closing any cached hosts.

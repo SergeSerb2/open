@@ -1203,7 +1203,17 @@ public final class BrowserModel {
     /// changes nothing when the split or its remaining tab is gone.
     private func takePane(_ tabID: ItemID, from split: Split) -> (@MainActor (BrowserModel) -> Bool)? {
         let wasFocused = split.focusedPaneID == tabID
+        let previousFractions = split.fractions, previousCount = split.panes.count
         guard let removed = detach(tabID) else { return nil }
+        var surviving = previousFractions
+        if surviving.count == previousCount, surviving.allSatisfy({ $0.isFinite && $0 >= 0 }) {
+            surviving.remove(at: removed.index)
+        } else { surviving = [] }
+        let total = surviving.reduce(0, +)
+        split.fractions = total.isFinite && total > 0 ? surviving.map { $0 / total }
+            : Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
+        // Point minimums depend on the current viewport; SplitLayout applies the
+        // 200 pt clamp and narrow-window equal scaling to these normalized shares.
         if wasFocused { split.focusedPaneID = split.panes.first?.id }
         let collapsedIn = collapseIfSinglePane(split)
         let paneIndex = removed.index
@@ -1217,6 +1227,7 @@ public final class BrowserModel {
                 model.emit(.reload(parent: parent))
             }
             guard model.attach(removed.node, to: .splitPane(split.id), at: paneIndex) != nil else { return false }
+            split.fractions = previousFractions
             if wasFocused { split.focusedPaneID = tabID }
             return true
         }

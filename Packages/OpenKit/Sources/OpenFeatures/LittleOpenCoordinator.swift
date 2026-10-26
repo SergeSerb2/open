@@ -50,9 +50,10 @@ public final class LittleOpenCoordinator {
     }
     public func resurface(_ id: WindowID) {
         guard let session = sessions.first(where: { $0.id == id }), let controller = controllers[id] else { return }
-        session.lastActiveAt = Date(); session.windowIsVisible = true
+        session.lastActiveAt = Date()
         if !presentWindows { for c in controllers.values { c.offscreenKey = false } }
         if presentWindows { controller.window?.makeKeyAndOrderFront(nil) } else { controller.offscreenKey = true }
+        controller.updateVisibility()
         sessions.sort { $0.lastActiveAt > $1.lastActiveAt }; onChange?()
     }
     public func recordActivity(_ id: WindowID) {
@@ -85,6 +86,7 @@ public final class LittleOpenCoordinator {
     public func close(sessionID: WindowID, archiveReason: ArchiveReason?) {
         guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
         if let reason = archiveReason { archiveSink?.archive([ArchiveEntry(tab: session.tab, reason: reason, originalLocation: "littleOpen:\(session.id)", spaceID: nil, profileID: session.profileID, archivedAt: Date())]) }
+        session.windowIsVisible = false
         sessions.removeAll { $0.id == sessionID }
         if let controller = controllers.removeValue(forKey: sessionID) { controller.container.closeAll(); controller.window?.delegate = nil; controller.window?.close() }
         onChange?()

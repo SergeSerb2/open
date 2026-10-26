@@ -1,6 +1,7 @@
 import AppKit
 import CoreText
 import OpenModel
+import OpenFeatures
 
 @MainActor
 public final class FakeWebContentHost: WebContentHost {
@@ -90,6 +91,7 @@ public final class FakePageLabel: NSView {
 public final class FakePageView: NSView {
     public let label = FakePageLabel()
     public private(set) var clickCount = 0
+    public private(set) var layoutCount = 0
     public init(color: NSColor) {
         super.init(frame: .zero); wantsLayer = true; layer?.backgroundColor = color.cgColor
         label.font = .systemFont(ofSize: 20); label.textColor = .darkGray;
@@ -101,13 +103,14 @@ public final class FakePageView: NSView {
         super.setFrameSize(newSize); needsLayout = true
         label.frame = CGRect(x: 10, y: newSize.height / 2 - 15, width: max(0, newSize.width - 20), height: 30)
     }
-    public override func layout() { super.layout(); label.frame = CGRect(x: 10, y: bounds.midY - 15, width: max(0, bounds.width - 20), height: 30) }
+    public override func layout() { super.layout(); layoutCount += 1; label.frame = CGRect(x: 10, y: bounds.midY - 15, width: max(0, bounds.width - 20), height: 30) }
     public override func mouseDown(with event: NSEvent) { clickCount += 1 }
 }
 
 @MainActor
 public final class FakeWebContentHostFactory: WebContentHostFactory {
     public private(set) var made: [FakeWebContentHost] = []
+    public func releaseClosedHosts() { made.removeAll { $0.isClosed } }
     public func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost {
         let colors: [NSColor] = [.init(srgbRed: 0.87, green: 0.87, blue: 0.98, alpha: 1), .white,
                                   .init(srgbRed: 0.84, green: 0.94, blue: 0.88, alpha: 1), .init(srgbRed: 0.97, green: 0.90, blue: 0.80, alpha: 1)]
@@ -115,3 +118,5 @@ public final class FakeWebContentHostFactory: WebContentHostFactory {
         if let url { host.load(url) }; return host
     }
 }
+
+extension FakeWebContentHost: LittleOpenWebContentProviding {}

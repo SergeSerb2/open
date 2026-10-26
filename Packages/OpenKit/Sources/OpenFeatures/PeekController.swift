@@ -1,23 +1,28 @@
 import AppKit
 import Observation
 import OpenModel
-import OpenFeatures
 import OpenSuggest
 import OpenDesign
+import OpenRouting
+import Darwin
 
 /// Registrable-domain lookup uses OpenSuggest's bundled ICANN PSL (lead decision Q1).
-/// Unknown/local hosts fall back to exact canonical host comparison.
-enum FeatureSite {
-    static func domain(_ url: URL?) -> String? {
-        guard let host = url?.host()?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")), !host.isEmpty else { return nil }
-        guard let count = PublicSuffixList.shared.suffixLabelCount(host: host) else { return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host }
-        return host.split(separator: ".").suffix(count + 1).joined(separator: ".")
+/// Unknown suffixes use the last two labels; IP literals and localhost stay exact.
+public enum FeatureSite {
+    public static func domain(_ url: URL?) -> String? {
+        guard let raw = url?.host(), !raw.isEmpty else { return nil }
+        let host = HostNormalizer.canonicalHostName(raw)
+        var ipv4 = in_addr(), ipv6 = in6_addr()
+        let isIP = host.withCString { inet_pton(AF_INET, $0, &ipv4) == 1 || inet_pton(AF_INET6, $0, &ipv6) == 1 }
+        if isIP || host == "localhost" { return host }
+        let suffixCount = PublicSuffixList.shared.suffixLabelCount(host: host) ?? 1
+        return host.split(separator: ".").suffix(suffixCount + 1).joined(separator: ".")
     }
-    static func fragmentOnly(_ source: URL?, _ target: URL) -> Bool {
+    public static func fragmentOnly(_ source: URL?, _ target: URL) -> Bool {
         guard let source, target.fragment != nil, var a = URLComponents(url: source, resolvingAgainstBaseURL: false), var b = URLComponents(url: target, resolvingAgainstBaseURL: false) else { return false }
         a.fragment = nil; b.fragment = nil; return a == b
     }
-    static func shouldPeek(source: URL?, target: URL, pinned: Bool, flags: NSEvent.ModifierFlags, defaults: UserDefaults) -> Bool {
+    public static func shouldPeek(source: URL?, target: URL, pinned: Bool, flags: NSEvent.ModifierFlags, defaults: UserDefaults) -> Bool {
         guard ["http", "https"].contains(target.scheme?.lowercased() ?? ""), !flags.contains(.command),
               !flags.contains(.option), !fragmentOnly(source, target) else { return false }
         return PeekPolicy.decision(for: .init(sourceIsPinnedOrFavorite: pinned, sourceHost: domain(source), targetHost: domain(target),
@@ -78,21 +83,23 @@ public final class PeekController {
         let nodeID: ItemID = if case .splitPane(let id)? = model.parent(of: sourceTabID) { id } else { sourceTabID }
         let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, sourceNodeID: nodeID, hostTabID: hostID, host: host)
         stack.append(item)
+        let itemID = item.id
         host.onURLChange = { [weak self, weak host] value in
-            guard let self, let host, let i = self.stack.firstIndex(where: { $0.id == item.id }), self.stack[i].host === host else { return }
+            guard let self, let host, let i = self.stack.firstIndex(where: { $0.id == itemID }), self.stack[i].host === host else { return }
             self.stack[i].url = value
         }
         host.onLoadingChange = { [weak self, weak host] loading in
-            guard let self, let host, self.stack.last?.id == item.id, self.stack.last?.host === host else { return }
+            guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return }
             if !loading {
                 if self.duration(0.12) == 0 { host.view.alphaValue = 1 }
                 else { NSAnimationContext.runAnimationGroup { c in c.duration = self.duration(0.12); host.view.animator().alphaValue = 1 } }
             }
         }
         host.shouldNavigate = { [weak self, weak host] target, flags in
-            guard let self, let host, self.stack.last?.id == item.id, self.stack.last?.host === host else { return false }
+            guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return false }
             if FeatureSite.shouldPeek(source: host.currentURL, target: target, pinned: true, flags: flags, defaults: self.defaults) && self.stack.count < 5 {
-                self.open(url: target, sourceTabID: sourceTabID); return false
+                guard let source = self.stack.last?.sourceTabID else { return false }
+                self.open(url: target, sourceTabID: source); return false
             }
             return true
         }
@@ -124,7 +131,12 @@ public final class PeekController {
         }
     }
     public func refresh() {
-        guard let item = stack.last, let selected = splitController.selected, selected.id == item.sourceNodeID else { overlay.isHidden = true; return }
+        guard let item = stack.last else { overlay.isHidden = true; overlay.clearHost(); return }
+        let sourceIsVisible: Bool
+        if case .favorites(let profileID)? = model.parent(of: item.sourceTabID) {
+            sourceIsVisible = splitController.space?.profileID == profileID
+        } else { sourceIsVisible = splitController.selected?.id == item.sourceNodeID }
+        guard sourceIsVisible else { overlay.isHidden = true; return }
         overlay.isHidden = false; if let host = item.host { overlay.showHost(host) }; overlay.needsLayout = true
     }
     public func escape() {
@@ -164,7 +176,7 @@ public final class PeekController {
     public func dismissAll() {
         expandingGeneration += 1; isExpanding = false; dismissGeneration += 1; isDismissing = false
         undoTask?.cancel(); undoItem = nil; onToast?("", nil)
-        for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; removeKeys(); onChange?()
+        for item in stack { item.host?.close() }; stack.removeAll(); overlay.isHidden = true; overlay.clearHost(); removeKeys(); onChange?()
     }
     private func removeKeys() { if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }; keyMonitor = nil }
     public func expandTop() { expandTop(into: splitController.space?.id) }
@@ -184,19 +196,29 @@ public final class PeekController {
         // Offscreen harnesses have no animation clock; finish the same handoff synchronously.
         if duration(Motion.peekExpand) == 0 && isExpanding { expandingGeneration += 1; promote(item, into: target, split: false) }
     }
-    public func openInSplitTop() {
-        guard let item = stack.last, let space = splitController.space, !isExpanding else { return }
-        guard splitController.canAddPane else { NSSound.beep(); return }
+    @discardableResult public func openInSplitTop() -> Bool {
+        guard let item = stack.last, let space = splitController.space, !isExpanding else { return false }
+        guard splitController.canAddPane else { NSSound.beep(); return false }
         // Guess: PK split semantics, confirmed by lead decision Q4.
-        promote(item, into: space.id, split: true)
+        return promote(item, into: space.id, split: true)
     }
-    private func promote(_ item: PeekItem, into target: SpaceID, split: Bool) {
-        guard stack.last?.id == item.id else { return }; isExpanding = false
+    @discardableResult private func promote(_ item: PeekItem, into target: SpaceID, split: Bool) -> Bool {
+        guard stack.last?.id == item.id, model.space(id: target) != nil else { return false }; isExpanding = false
+        // Favorites cannot be split, even when another tab is now selected.
+        if split, case .favorites? = model.parent(of: item.sourceTabID) { NSSound.beep(); return false }
         let currentURL = item.host?.currentURL ?? item.url
         let tab = model.newTab(in: target, url: currentURL, title: item.host?.title ?? "", at: 0); tab.live.sleepPhase = .live
-        if split, let existing = splitController.split { _ = model.addPane(splitID: existing.id, tabID: tab.id) }
-        else if split, let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
-            model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id); model.focusSplitPane(splitID: made.id, tabID: tab.id)
+        if split {
+            let succeeded: Bool
+            if let existing = splitController.split {
+                succeeded = model.addPane(splitID: existing.id, tabID: tab.id)
+            } else if let made = model.makeSplit(tabIDs: [item.sourceTabID, tab.id]) {
+                model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: made.id)
+                model.focusSplitPane(splitID: made.id, tabID: tab.id); succeeded = true
+            } else { succeeded = false }
+            guard succeeded else {
+                model.closeTab(id: tab.id); NSSound.beep(); return false
+            }
         } else {
             model.focusSpace(windowID: splitController.windowID, spaceID: target)
             model.selectNode(windowID: splitController.windowID, spaceID: target, nodeID: tab.id)
@@ -205,7 +227,7 @@ public final class PeekController {
         // Bind before show, so showing a new tab cannot create and load a replacement host.
         if let host = item.host { splitController.container.adopt(host, for: tab.id) }
         splitController.refresh(); splitController.container.focus(tabID: tab.id)
-        overlay.buttons.forEach { $0.alphaValue = 1 }; refresh(); if stack.isEmpty { removeKeys() }; onChange?()
+        overlay.buttons.forEach { $0.alphaValue = 1 }; refresh(); if stack.isEmpty { removeKeys() }; onChange?(); return true
     }
     public func linkMenu(url: URL, source: ItemID) -> NSMenu {
         let menu = NSMenu(); menu.autoenablesItems = false

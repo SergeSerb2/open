@@ -1,5 +1,6 @@
 import AppKit
 import OpenModel
+import OpenFeatures
 import OpenStore
 import OpenDesign
 
@@ -35,10 +36,10 @@ enum FeatureCLI {
             let little = LittleOpenCoordinator(model: model, archiveSink: nil) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil) as! FakeWebContentHost }
             little.presentWindows = false; little.defaults = defaults; little.open(url: URL(string: RenderCLI.value(args, "--url") ?? "https://example.com")!, profileHint: nil)
             guard let c = little.sessions.first.flatMap({ little.controllers[$0.id] }) else { throw CLIError(description: "no Little Open session") }
-            c.root.frame.size = size; c.window?.setContentSize(size)
-            try await waitForLoads(factory, root: c.root)
-            OffscreenRenderer.settle(c.root, runLoop: 0.01)
-            try output(c.root, args: args, scale: scale); little.closeAll(); return
+            c.contentView.frame.size = size; c.window?.setContentSize(size)
+            try await waitForLoads(factory, root: c.contentView)
+            OffscreenRenderer.settle(c.contentView, runLoop: 0.01)
+            try output(c.contentView, args: args, scale: scale); little.closeAll(); return
         }
         guard ["split", "peek", "bench"].contains(cmd), let window = model.windows.first else { throw CLIError(description: RenderCLI.usage) }
         if let n = RenderCLI.value(args, "--space").flatMap(Int.init), model.spaces.indices.contains(n) { window.focusedSpaceID = model.spaces[n].id }
@@ -73,8 +74,8 @@ enum FeatureCLI {
             let depth = max(1, min(5, Int(RenderCLI.value(args, "--depth") ?? "1") ?? 1))
             for _ in 0..<depth { c.peekController.open(url: URL(string: RenderCLI.value(args, "--peek-url") ?? "https://example.org/preview")!, sourceTabID: source.id) }
         }
-        try await waitForLoads(factory, root: c.root)
-        OffscreenRenderer.settle(c.root, runLoop: 0.01)
+        try await waitForLoads(factory, root: c.contentView)
+        OffscreenRenderer.settle(c.contentView, runLoop: 0.01)
         if cmd == "bench" {
             var samples: [Double] = []
             for _ in 0..<200 { let start = CFAbsoluteTimeGetCurrent(); c.container.needsLayout = true; c.container.layoutSubtreeIfNeeded(); samples.append((CFAbsoluteTimeGetCurrent() - start) * 1000) }
@@ -82,13 +83,13 @@ enum FeatureCLI {
         }
         if let frames = RenderCLI.value(args, "--frames") {
             func rect(_ view: NSView) -> [Double] {
-                let f = view.convert(view.bounds, to: c.root); return [f.minX, size.height - f.maxY, f.width, f.height]
+                let f = view.convert(view.bounds, to: c.contentView); return [f.minX, size.height - f.maxY, f.width, f.height]
             }
             let payload: Any = cmd == "peek" ? ["panel": rect(c.peekController.overlay.panel), "buttons": c.peekController.overlay.buttons.map(rect)] as [String: Any]
                 : c.container.slots.map(rect)
             try JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]).write(to: URL(fileURLWithPath: frames))
         }
-        try output(c.root, args: args, scale: scale)
+        try output(c.contentView, args: args, scale: scale)
     }
     static func waitForLoads(_ factory: FakeWebContentHostFactory, root: NSView) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
