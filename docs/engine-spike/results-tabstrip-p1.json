@@ -1,19 +1,19 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44B8-5555-3144-A161-028377002F35",
-    "embeddedUUID": "4C4C44B8-5555-3144-A161-028377002F35",
+    "distributionUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
+    "embeddedUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793000323"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001810"
   },
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 21640,
+    "pid": 64744,
     "root": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-tabstrip-chrome/Profiles"
   },
-  "started": "2026-10-26 00:39:38",
+  "started": "2026-10-26 01:07:25",
   "style": "chrome",
   "tabstrip": {
     "badge_text": {
@@ -142,7 +142,7 @@
       ],
       "failures": [],
       "ok": true,
-      "ran": 58,
+      "ran": 57,
       "skipped": [
         "page: Back (disabled)",
         "page: Forward (disabled)",
@@ -152,6 +152,7 @@
         "selection: Copy Link to Highlight (disabled)",
         "selection: Speech > Start Speaking",
         "selection: Speech > Stop Speaking (disabled)",
+        "editable: Emoji  Symbols",
         "editable: Undo (disabled)",
         "editable: Redo (disabled)",
         "editable: Writing Direction > Default (disabled)",
@@ -161,7 +162,6 @@
       "targets": {
         "editable": [
           "Look Up \u201cMispeled wordd\u201d",
-          "Emoji  Symbols",
           "Import Passwords",
           "Cut",
           "Copy",
@@ -259,72 +259,95 @@
         [
           "today",
           "https://www.iana.org/help/example-domains",
-          989275042,
-          989275038
+          157046759,
+          157046755
         ],
         [
           "today",
           "https://example.org/",
-          989275041,
-          989275038
+          157046758,
+          157046755
         ],
         [
           "today",
           "https://bitwarden.com/browser-start/",
-          989275040,
-          989275038
+          157046757,
+          157046755
         ],
         [
           "today",
           "https://example.com/",
-          989275039,
-          989275038
+          157046756,
+          157046755
         ]
       ]
+    },
+    "new_window_outlives_opener": {
+      "command_found": true,
+      "new_window": "9460D2B9-AA94-45F6-90EE-1EE0746281B4",
+      "new_window_tabs": [
+        {
+          "id": 157046834,
+          "url": "https://example.com/?new-window",
+          "windowId": 157046833
+        }
+      ],
+      "ok": true,
+      "page_after_close": {
+        "chromeTabId": 157046834,
+        "chromeWindowId": 157046833,
+        "live": true,
+        "style": "chrome",
+        "url": "https://example.com/?new-window"
+      },
+      "page_before_close": true
     },
     "no_cross_window_moves": {
       "chrome_window": {
         "ok": {
-          "id": 989275055,
-          "tab": 989275056
+          "id": 157046772,
+          "tab": 157046773
         }
       },
+      "group_in_chrome_window": {
+        "error": "Grouping is not supported by tabs in this window."
+      },
+      "group_in_open_window": {
+        "error": "Grouping is not supported by tabs in this window."
+      },
+      "group_move_in": null,
       "move_in": {
         "error": "Tabs cannot be moved between windows in this browser."
       },
       "move_out": {
         "error": "Tabs cannot be moved between windows in this browser."
       },
+      "note": "No window of this build can hold a tab group (Chrome windows from windows.create refuse grouping too), so tabGroups.move has no group to carry; if one can be made, the move must fail.",
       "ok": true,
       "windows_create_with_tab": {
         "error": "Tabs cannot be moved between windows in this browser."
       }
     },
-    "no_tab_groups": {
-      "folder": "FB62AC8A-0F0E-467D-9E81-B6C85727CBE7",
-      "folder_tab": [
-        {
-          "groupId": -1,
-          "id": 989275042,
-          "pinned": true
-        }
-      ],
-      "group_call": "Grouping is not supported by tabs in this window.",
-      "ok": true,
-      "tab_groups": 0
-    },
     "on_activated": {
       "events_before": 16,
-      "expected_tab": 989275041,
+      "expected_tab": 157046758,
       "new_events": [
         {
-          "tabId": 989275041,
-          "time": 1793000392620,
+          "tabId": 157046758,
+          "time": 1793002057451,
           "type": "activated",
-          "windowId": 989275038
+          "windowId": 157046755
         }
       ],
       "ok": true
+    },
+    "peek_link_opens_chrome_tab": {
+      "ok": true,
+      "tab": {
+        "chromeTabId": 157046780,
+        "style": "chrome",
+        "url": ""
+      }
     },
     "peek_not_a_tab": {
       "note": "Little Open is not in this shell yet; its pages will follow the same rule (non-model hosts are Alloy).",
@@ -335,6 +358,17 @@
         "url": "https://example.com/?peek"
       },
       "strip_unchanged": true
+    },
+    "peek_promoted_is_tab": {
+      "active_in_chrome_tabs": [
+        "https://example.com/?peek-expand"
+      ],
+      "ok": true,
+      "promoted": {
+        "chromeTabId": 157046782,
+        "style": "chrome",
+        "url": "https://example.com/?peek-expand"
+      }
     },
     "per_tab_badge": {
       "badges": [
@@ -351,26 +385,32 @@
       ],
       "ok": true
     },
+    "popup_panel_close": {
+      "gone": true,
+      "listed_before": true,
+      "ok": true,
+      "opener_sees_closed": true
+    },
     "query_active_current_window": {
-      "expected_tab": 989275040,
+      "expected_tab": 157046757,
       "ok": true,
       "result": [
         {
-          "id": 989275040,
+          "id": 157046757,
           "url": "https://bitwarden.com/browser-start/",
-          "windowId": 989275038
+          "windowId": 157046755
         }
       ]
     },
     "second_space": {
       "activation_switched_space": true,
       "mirror": [
-        989275048,
-        989275047,
-        989275045,
-        989275042,
-        989275040,
-        989275059
+        157046765,
+        157046764,
+        157046762,
+        157046759,
+        157046757,
+        157046778
       ],
       "mirror_matches_chrome_tabs": true,
       "ok": true,
@@ -378,13 +418,13 @@
     },
     "tabs_create": {
       "extension_result": {
-        "id": 989275044,
-        "windowId": 989275038
+        "id": 157046761,
+        "windowId": 157046755
       },
       "note": "tabs.create ignores pinned, index and openerTabId (documented P1 gap).",
       "ok": true,
       "sidebar_tab": {
-        "id": "354FD757-EB6F-47EE-B61F-705A172C84A9",
+        "id": "90496FED-CDB2-4DB8-A940-F8688977ED06",
         "section": "today",
         "url": "https://example.net/?from=extension",
         "visible": true
@@ -394,30 +434,30 @@
       "background": {
         "ok": {
           "discarded": false,
-          "id": 989275046
+          "id": 157046763
         }
       },
       "background_unloaded_in_place": true,
       "ok": true,
       "visible": {
-        "error": "Cannot discard tab with id: 989275040."
+        "error": "Cannot discard tab with id: 157046757."
       }
     },
     "tabs_move": {
       "ok": true,
       "today_after": [
-        "838A9479-4571-4774-8C57-747FFB52D2E4",
-        "354FD757-EB6F-47EE-B61F-705A172C84A9",
-        "AEB8E2B2-6C4E-40A5-9099-D64025AE660B",
-        "9ABD9282-3753-43BD-B2D1-A7242E5FE596",
-        "25F69E9B-3CC3-44C7-9DC0-2F612FEB8F43"
+        "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02",
+        "90496FED-CDB2-4DB8-A940-F8688977ED06",
+        "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
+        "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
+        "AFE8D79F-B897-4ABF-A85A-5BF57B246778"
       ],
       "today_before": [
-        "354FD757-EB6F-47EE-B61F-705A172C84A9",
-        "AEB8E2B2-6C4E-40A5-9099-D64025AE660B",
-        "9ABD9282-3753-43BD-B2D1-A7242E5FE596",
-        "25F69E9B-3CC3-44C7-9DC0-2F612FEB8F43",
-        "838A9479-4571-4774-8C57-747FFB52D2E4"
+        "90496FED-CDB2-4DB8-A940-F8688977ED06",
+        "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
+        "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
+        "AFE8D79F-B897-4ABF-A85A-5BF57B246778",
+        "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02"
       ]
     },
     "tabs_move_exact": {
@@ -430,15 +470,15 @@
       },
       "ok": true,
       "today_after": [
-        "386EE072-5766-457B-A908-0460FB216C46",
-        "F2C55903-6473-423D-B095-10493830BC16",
-        "5483A7B1-728D-4F08-BA0D-C6C0D23A8CE6",
-        "365386BD-7ED2-41AE-9EDE-15AB9A8D3388",
-        "838A9479-4571-4774-8C57-747FFB52D2E4",
-        "354FD757-EB6F-47EE-B61F-705A172C84A9",
-        "AEB8E2B2-6C4E-40A5-9099-D64025AE660B",
-        "9ABD9282-3753-43BD-B2D1-A7242E5FE596",
-        "25F69E9B-3CC3-44C7-9DC0-2F612FEB8F43"
+        "36BA4A50-B614-4274-9448-4D4C84BA6E32",
+        "23B7E1A8-37C2-469A-81DA-D3E777A50BE6",
+        "14EEFFFF-6F23-49D1-9C40-8E22D821054F",
+        "AC7112F9-D1BC-4211-AEFA-017D4B8799ED",
+        "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02",
+        "90496FED-CDB2-4DB8-A940-F8688977ED06",
+        "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
+        "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
+        "AFE8D79F-B897-4ABF-A85A-5BF57B246778"
       ]
     },
     "tabs_remove": {
@@ -466,51 +506,51 @@
       "ok": true,
       "sidebar_rows": [
         [
-          "AEB8E2B2-6C4E-40A5-9099-D64025AE660B",
-          989275042
+          "E549ABC6-935F-493F-BE4B-B05AC4166EB6",
+          157046759
         ],
         [
-          "9ABD9282-3753-43BD-B2D1-A7242E5FE596",
-          989275041
+          "1282AF86-D89D-4208-BA6E-BCA90D1159FD",
+          157046758
         ],
         [
-          "25F69E9B-3CC3-44C7-9DC0-2F612FEB8F43",
-          989275040
+          "AFE8D79F-B897-4ABF-A85A-5BF57B246778",
+          157046757
         ],
         [
-          "838A9479-4571-4774-8C57-747FFB52D2E4",
-          989275039
+          "42B431B2-DB21-4D9A-8C17-B45B8D0E4F02",
+          157046756
         ]
       ],
       "windows": [
         {
           "focused": false,
-          "id": 989275038,
+          "id": 157046755,
           "tabs": [
             {
               "active": false,
-              "id": 989275042,
+              "id": 157046759,
               "index": 0,
               "pinned": false,
               "url": "https://www.iana.org/help/example-domains"
             },
             {
               "active": false,
-              "id": 989275041,
+              "id": 157046758,
               "index": 1,
               "pinned": false,
               "url": "https://example.org/"
             },
             {
               "active": true,
-              "id": 989275040,
+              "id": 157046757,
               "index": 2,
               "pinned": false,
               "url": "https://bitwarden.com/browser-start/"
             },
             {
               "active": false,
-              "id": 989275039,
+              "id": 157046756,
               "index": 3,
               "pinned": false,
               "url": "https://example.com/"
@@ -527,9 +567,9 @@
           "refused": true,
           "request": "close",
           "tab": "",
-          "time": 1793000403.386249,
+          "time": 1793002068.926975,
           "type": "window-request",
-          "window": 989275038
+          "window": 157046755
         }
       ],
       "live_tabs": 5,

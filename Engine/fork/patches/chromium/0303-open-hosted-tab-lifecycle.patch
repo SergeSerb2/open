@@ -71,6 +71,35 @@ index bd5ca463750334a5359289cb3206df31e0976941..6baa6888ffc1817af07cd391cf83ff90
      TabListInterface* tab_list = TabListInterface::From(browser_window);
      CHECK(tab_list);
  
+diff --git a/chrome/browser/extensions/extension_tab_util.cc b/chrome/browser/extensions/extension_tab_util.cc
+index fc2af59c4529bd6cfbd2505c317a6790fa440957..b95cd50a7fd52c5d7d91ee280349086ee828fe89 100644
+--- a/chrome/browser/extensions/extension_tab_util.cc
++++ b/chrome/browser/extensions/extension_tab_util.cc
+@@ -92,6 +92,10 @@
+ #include "ash/webui/os_feedback_ui/url_constants.h"
+ #endif
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/hidden_browser.h"
++#endif
++
+ static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
+ 
+ #if BUILDFLAG(ENABLE_CEF)
+@@ -757,6 +761,13 @@ int ExtensionTabUtil::GetSplitId(const split_tabs::SplitTabId& id) {
+ // static
+ bool ExtensionTabUtil::SupportsTabGroups(BrowserWindowInterface* browser) {
+   CHECK(browser);
++#if BUILDFLAG(IS_MAC)
++  // Open: its windows have no tab groups (folders are not tab groups), so
++  // no tab or group of another window can be grouped or moved into one.
++  if (open_engine::IsHiddenTabStripBrowser(browser)) {
++    return false;
++  }
++#endif
+ #if BUILDFLAG(IS_ANDROID)
+   // Android only supports tab groups for normal browser windows.
+   return browser->GetType() == BrowserWindowInterface::TYPE_NORMAL;
 diff --git a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
 index 6f872ee5a8debb2a536510f80eb6c8456027ce5f..03532ada35072325c38b0199651422790af3bfbe 100644
 --- a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc

@@ -162,6 +162,12 @@ This is the section that decides Open's engine work. Arc runs **upstream Chrome'
 | Side panel (`chrome.sidePanel`) | `ArcBrowserSidePanel` + delegate `ShowSidePanel`/`CloseSidePanel`/`UnhideSidePanel`/`UpdateSidePanelTitle` (C++ `SidePanel::Delegate::…`); `getEntryInfoForTabWithSessionId:` returns `extensionId` + `cachedWebContents` | Show the panel WebContents in Arc's side-panel area |
 | Background/options pages | `runJSInExtensionBackgroundPage:js_code:`; other extension WebContents arrive through the normal `browser:didCreateNewWebContents:isActive:` path (guess: options pages open as Arc tabs) | Treat as tabs |
 
+Notes added 2026-10-25 (shell-side evidence in `features-advanced.md` §11):
+
+- The action snapshot has no badge text or badge color. guess (strong): the `icon` that ArcCore hands over already has Chromium's badge drawn in (`IconWithBadgeImageSource`, via `ExtensionActionViewModel::GetIcon`), so the Swift side draws one image per action.
+- `BrowserExtensionWindow` with its autosave key is a different window kind from the action popup, which `BrowserExtensionsPopUpManager` hosts. guess: it holds popup windows that extensions open with `chrome.windows.create` (ArcCore `createPopupBrowser:withDelegate:`).
+- The `AppTray.PinnedExtension…` types are in the favorites-tray module next to `pinnedExtensions` fields of `AppTrayView`; no evidence says when they show. guess: an alternate display of pinned actions in the favorites tray; not part of Open v1 until a capture shows it.
+
 Engine-side glue that makes this work: `arc::browser::ui::ExtensionsContainer` implements Chrome's `ExtensionsContainer` interface (`CreateExtensionToolbarAction`, `OnPopupShown(extensionId, …)`, `OnPopupClosed(extensionId)` — virtual-method strings), i.e. Arc kept Chrome's action-dispatch machinery and swapped the Views container for a bridge to `BrowserDelegate`. `arc_extensions_browser_client.cc` implements `extensions::ExtensionsBrowserClient`, the interface through which the extension system asks the browser for tab/window data.
 
 ### 4.3 chrome.tabs / chrome.windows with a sidebar tab model
