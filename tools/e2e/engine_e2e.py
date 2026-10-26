@@ -1377,6 +1377,20 @@ def commandbar_checks(factory, results, tmp, config):
         type_query(origin + '/edited'); press('return')
         correct = wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /edited', step=.1)
         results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
+        counts = app.call('host-counts')['created']; selected_before = app.call('window-state')['selected']
+        bar('t'); type_query(origin + '/background'); press('return', modifiers=['cmd'])
+        background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background'), None), step=.1)
+        assert background, app.call('tabs')
+        app.call('wait', tab=background['id'])
+        results['command_return_background'] = {'ok': app.call('window-state')['selected'] == selected_before and app.call('host-counts')['created'] == counts + 1 and app.eval(background['id'], 'document.title') == 'Shell C /background'}
+        for action, query, expected in [('pin-tab','Pin Tab','pinned'),('unpin-tab','Unpin Tab','today')]:
+            bar('t'); actions = type_query(query); assert actions, state()
+            index = next(i for i,r in enumerate(actions['rows']) if r['action'] == action)
+            selected = actions['selected']
+            while selected != index:
+                press('down' if selected < index else 'up'); selected = state()['selected']
+            press('return')
+            results['action_' + action] = {'ok': app.tab(new['id'])['section'] == expected and app.eval(new['id'], 'document.title') == 'Shell C /edited'}
         bar('t'); calc = type_query('12*7'); assert calc, state()
         rows = calc['rows']; index = next(i for i, r in enumerate(rows) if r['kind'] == 'calculator')
         selected = calc['selected']
