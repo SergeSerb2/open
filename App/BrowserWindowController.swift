@@ -710,17 +710,12 @@ extension BrowserWindowController {
   @objc func showDevTools(_ sender: Any?) { selectedContent?.showDevTools() }
 
   @objc func openExtensionsPage(_ sender: Any?) {
-    // chrome://extensions needs a Chrome-style page in stock CEF.
+    // chrome://extensions needs a Chrome style page (a hosted tab with P1).
     guard let space = focusedSpace else { return }
     let tab = model.newTab(in: space.id, url: OEExtensionManager.managementPageURL, at: 0)
     let config = OEWebContentConfiguration(context: context(for: space.profileID))
     config.runtimeStyle = .chrome
-    let content = OEWebContent(configuration: config, url: tab.url)
-    content.delegate = self
-    content.view.isHidden = true
-    contentContainer.addSubview(content.view)
-    contents[tab.id] = content
-    tabIDByContent[ObjectIdentifier(content)] = tab.id
+    adopt(OEWebContent(configuration: config, url: tab.url), for: tab)
     select(nodeID: tab.id)
   }
 

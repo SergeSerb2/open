@@ -106,8 +106,9 @@ tools/e2e/engine_e2e.py --only shell                       # model, keyboard, sp
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
+tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
 OPEN_AUTOMATION=1 tools/build.sh Release
 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
