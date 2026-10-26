@@ -1,0 +1,253 @@
+structure (model → TreeChange → outline diff)
+  OK   rows match the model: first build
+  OK   rows match the model: newTab at the top of Today
+  OK   new tab sits right under New Tab
+  OK   rows match the model: pinTab moves it to Pinned
+  OK   rows match the model: moveNode to the top of Pinned
+  OK   rows match the model: createFolder with one tab
+  OK   rows match the model: folder collapsed (animated)
+  OK   rows match the model: folder expanded (animated)
+  OK   rows match the model: makeSplit of two Today tabs
+  OK   rows match the model: unsplit
+  OK   rows match the model: closeTab inside the folder
+  OK   rows match the model: undo of the close
+  OK   rows match the model: clearToday removes Today and the divider
+  OK   no divider without Today tabs
+  OK   rows match the model: undo of clearToday brings the divider back
+  OK   no full reloads during edits (reloadData calls: 0)
+favorites
+  OK   addFavorite shows a 7th tile at index 1
+  OK   rows match the model: the tab left Today
+  OK   removeFavorite removes the tile
+clicks (window events → outline action → delegate intent → model)
+  OK   click on a pinned row sends select
+  OK   the model selected it
+  OK   click on a folder row toggles it
+  OK   rows match the model: folder collapsed by click
+  OK   click on New Tab asks for the command bar
+  OK   click on the URL field asks for the command bar
+menus
+  OK   pinned tab menu (F0116 order): Copy Link · Share… · — · Change Icon… · Rename… · Mute · Customize Page… · Edit Pinned Page · — · Add Split View · Duplicate · Move to · — · Remove Pin
+  OK   Today tab menu (F0115 order)
+  OK   folder menu (F0119 order)
+  OK   Space menu on empty space (F0117 order)
+drag and drop targets
+  OK   above the first row → Pinned 0
+  OK   after the last pinned row → end of Pinned
+  OK   between New Tab and Today → Today 0
+  OK   onto a folder → into the folder
+  OK   rows match the model: drop intent moves a pinned row (animated move)
+Space switch and swipe
+  OK   focusSpace slides the pager to page 2 (offset 228.0)
+  OK   background cross-fades to Space 2's theme
+  OK   rows match the model: page 2 rows
+  OK   swipe left sends switchSpace to the next Space
+  OK   focus moved to Space 3
+  OK   a short swipe snaps back
+model followups: live web content, undo, titles, and named icons
+  OK   unloaded pinned tab shows × on hover
+  OK   loaded pinned tab changes to − while hovered
+  OK   pinned − click sends unloadTab and keeps the entry
+  OK   pinned tab returns to × when web content goes away
+  OK   pinned × click closes the entry
+  OK   Today tab shows × even with live web content
+  OK   unloaded Favorite shows × on hover
+  OK   loaded Favorite changes to − while hovered
+  OK   Favorite − click sends unloadTab and keeps the entry
+  OK   Favorite returns to × when web content goes away
+  OK   Favorite × click closes the entry
+  OK   header click uses the collapse command
+  OK   rows match the model: undo of header collapse
+  OK   redo of header collapse
+  OK   sidebar mute intent uses the model command
+  OK   sidebar mute undo
+  OK   sidebar mute redo
+  OK   nil title displays Space 1 in the header and switcher
+  OK   untitled Space follows its 1-based position after reorder
+  OK   an explicit Space title appears unchanged
+  OK   all 55 named-icon mappings and the neutral fallback exist on macOS: missing=[]
+  OK   unknown named icons use the neutral symbol
+  OK   RI1 silent unmuted row builds no speaker
+  OK   RI animation window stays offscreen and non-key (visible true, occlusion 8192)
+  OK   RI1 audible unmuted frame and symbol
+  OK   RI tooltip and help are exact: Mute tab
+  OK   RI4 image changes and an actual approved finite fallback animation is active: ["transition"]
+  OK   RI4 image-view layer has no position or bounds animation
+  OK   RI4 actual transition finishes with no keys
+  OK   RI image-view left edge stays within 0.5 pt (audible Optional(2.0), muted Optional(2.0))
+  OK   RI speaker uses slot x + 2 left anchor
+  OK   RI tooltip and help are exact: Unmute tab
+  OK   RI2 window hitTest resolves speaker button
+  OK   RI2 window events toggle mute without selecting
+  OK   RI2 direct native control click also works
+  OK   RI muted silent row retains speaker
+  OK   RI4 unmute while inaudible hides speaker
+  OK   RI4 reveal does not replay hidden unmute
+  OK   RI3 14x20 recording slot before speaker; exact tooltip
+  OK   RI recording-only row has dot and no speaker
+  OK   RI4 Reduce Motion uses static glyph without animation keys
+  OK   RI static glyph shares the left anchor in both states (Optional(3.5), Optional(3.5)); same button true, hidden false, size (20.0, 20.0)
+  OK   RI narrow deep hovered row hides dot before speaker
+  OK   RI compact PiP play/pause token is 22 pt
+MC1–MC10: composed sidebar, fake media hosts, native events and idle layers
+  OK   MC1 no source reserves no media height
+  OK   MC1 pager ends at h - 50
+  OK   MC2 first card frame and C=76: (8.0, 778.0, 212.0, 68.0)
+  OK   MC3 frame, glyph, tooltip and help: previous
+  OK   MC3 frame, glyph, tooltip and help: play
+  OK   MC3 frame, glyph, tooltip and help: next
+  OK   MC3 frame, glyph, tooltip and help: volume
+  OK   MC3 frame, glyph, tooltip and help: pip
+  OK   MC3 actual media tooltip appears after its 0.45 s delay
+  OK   MC4 close starts 0 wide
+  OK   MC4 hover reveals 24 pt close
+  OK   MC4 exit hides close
+  OK   MC5 native hit test: previous
+  OK   MC5 native hit test: next
+  OK   MC5 native hit test: play
+  OK   MC5 native hit test: play
+  OK   MC5 playback controls reach the fake host without selecting
+  OK   MC3 previous/next hide and play shifts to x=6
+  OK   MC5 native hit test: volume drawer
+  OK   MC3 drawer adds 28 pt
+  OK   MC5 native hit test: volume slider
+  OK   MC5 slider delivers volume and percentage
+  OK   MC5 slider accessibility increments by 10 percent
+  OK   MC5 native hit test: close drawer
+  OK   MC5 native hit test: interim mute toggle
+  OK   MC5 interim volume control toggles mute when volume is unavailable
+  OK   MC6 three collapsed cards reserve 68+10 pt
+  OK   MC6 back cards are clipped and their marquees stop
+  OK   MC6 hover expands to 3*68+12
+  OK   MC6 exit waits 0.3 s
+  OK   MC6 real delayed work collapses the stack
+  OK   MC7 overflowing playing title runs in a visible window
+  OK   MC7 live cacheDisplay snapshot contains playing long-title ink
+  OK   MC7 title hover stops the marquee
+  OK   MC7 paused title is static
+  OK   MC7 fitting title has one visible copy and never starts a marquee
+  OK   MC7 Reduce Motion stops the marquee
+  OK   MC7 hidden sidebar stops the marquee
+  OK   MC7 ordered-out window stops the marquee
+  OK   MC8 idle paused window has no CA animations and only the one store dismiss item
+  OK   MC8 idle paused CLI CPU 0.117% (budget 0.5%); no media Timer or display link
+  OK   MC10 mini controls dim with the bottom bar in Peek
+  OK   MC10 closing Peek restores opacity
+  OK   MC5 native hit test: picture in picture
+  OK   MC5 PiP request reaches the fake host and hides the active source
+  OK   MC5 native hit test: title back to tab
+  OK   MC5 title returns to the tab
+  OK   MC5 native hit test: close mini player
+  OK   MC5 close pauses and removes the last card
+  OK   MC retiring card stays visible for its fade but is marked non-interactive
+  OK   MC5 native hit test: replacement B during A fade
+  OK   MC replacement B receives the click during A fade
+  OK   MC source replacement within one event turn leaves one fresh card and no retired view
+  OK   MC5 native hit test: drawer before tab close
+  OK   MC3 drawer is open before tab close
+  OK   MC5 tab close prunes its drawer ID
+  OK   MC3 recreated source returns as a 68 pt card
+  OK   MC3 recording card shows microphone/camera instead of play and volume
+  OK   MC5 native hit test: microphone
+  OK   MC5 native hit test: camera
+  OK   MC5 recording controls reach the host and update their glyphs
+review: drop feedback and actual command results
+  OK   outline rejects a folder into itself
+  OK   outline rejects a folder into its descendant
+  OK   illegal acceptDrop returns false from the model
+  OK   outline rejects split-pane sources
+  OK   outline permits a split inside a folder
+  OK   Favorites rejects folders, splits, and split panes in validation and acceptance
+  OK   drop handlers propagate a delegate refusal
+  OK   legal drop reaches the model
+  OK   pinned ancestry stays pinned after a folder drop
+review: accessibility dump (NSAccessibility APIs, synthetic titles)
+  AX AXButton | Design notes | expanded=false
+  AX AXButton | Team chat | expanded=false
+  AX AXButton | Release checklist | expanded=false
+  AX AXButton | Analytics | expanded=false
+  AX AXButton | Docs home | expanded=false
+  AX AXButton | Roadmap | expanded=false
+  AX AXButton | Inbox zero | expanded=false
+  AX AXButton | Style guide | expanded=false
+  AX AXButton | Status page | expanded=false
+  AX AXButton | Parent | expanded=true
+  AX AXButton | Child | expanded=true
+  AX AXButton | Grandchild | expanded=true
+  AX AXButton | Project board | expanded=false
+  AX AXButton | New Tab | expanded=false
+  AX AXButton | Split View: Pane A, Pane B | expanded=false
+  AX AXButton | Search results | expanded=false
+  AX AXButton | Long article about gardens | expanded=false
+  AX AXButton | Recipe: lemon tart | expanded=false
+  OK   all exposed outline rows are named AX buttons
+  OK   split AX label names both panes
+  OK   folder AX exposes its title and expanded state
+  AX AXButton | Mail
+  AX AXButton | Calendar
+  AX AXButton | Docs
+  AX AXButton | Music
+  AX AXButton | Notes
+  AX AXButton | Maps
+  OK   every favorite tile is a named AX button
+  OK   all visible PlateButtons have AX labels
+  OK   favorite AX press selects the actual model tab
+review: keyboard events → real outline → delegate → model
+  OK   Down exposes one keyboard focus ring through AX
+  OK   Down moves keyboard focus without selecting
+  OK   Return selects the focused tab
+  OK   Space selects the next focused tab
+  OK   Up moves focus back
+  OK   Delete archives the focused tab through the model
+  OK   Left collapses the focused folder
+  OK   folder AX expanded state updates after keyboard collapse
+  OK   Right expands the focused folder
+  OK   Return activates a focused folder
+review: tooltip delay stays armed across pointer movement
+  OK   same row and tooltip schedule and show once during continuous movement
+review: mixed Favorites reload batches
+  OK   32 seeded multi-permutation + insert + delete reloads match collection counts, tile order, and model IDs
+review: spring-loaded cross-Space drag
+  OK   Space icon registers the sidebar drag type
+  OK   Space icon accepts a legal multi-tab drag
+  OK   spring loading waits before switching
+  OK   hover switches Space after 0.5 seconds despite drag updates
+  OK   dropping on the Space icon succeeds
+  OK   multi-tab drop keeps order at Today top and preserves the pinned section
+  OK   cross-Space drop preserves Today and Pinned URL rules
+  OK   Space icon rejects a split pane
+  OK   Space icon rejects a stale source
+  OK   leaving a Space icon cancels spring loading
+  OK   Space drop propagates delegate refusal
+review: theme rebuild count across 120 resize steps
+  OK   live resize performs no theme field rebuilds
+  OK   120 resize steps cause 1 theme rebuild(s), limit 2
+review: teardown with queued observations
+  OK   sidebar, favorites, and pager release safely with queued observation work
+split row (F0081)
+  OK   unselected split row: divider, no pane cells
+  OK   selected split row: one 28 pt cell per pane, 4 pt inside the card, no divider ((12.0, 713.0, 100.0, 28.0) (116.0, 713.0, 100.0, 28.0))
+  OK   selected split: the sidebar toolbar keeps only the toggle (F0081)
+split row menu (Arc builder order)
+  OK   split menu: Separate All Tabs · Add Tab… · Convert to Vertical Split View · — · Tab Options · Pane A · A pane title that runs well pa… · — · Duplicate · Move to · — · Archive Item
+  OK   "Tab Options" is a header
+  OK   pane submenu items
+  OK   Convert runs setSplitOrientation and flips the title
+  OK   Add Tab… is disabled at four panes
+  OK   four-pane selected row has four cells
+  OK   four-pane split titles do not overflow their cells (0 cells with ink)
+  OK   Separate from Split View takes that pane out
+Peek badge and dim (F0090, F0101)
+  OK   a selected tab brings back, forward, and reload back
+  OK   no badge without a Peek
+  OK   a badge on lays out only its own row (1 row layouts; 14 tab rows shown)
+  OK   a Peek URL or favicon change redraws the badge only (0 row layouts, 1 badge draws)
+  OK   badge plate [W − 38, y + 8, 24, 24] ((190.0, 247.0, 24.0, 24.0))
+  OK   the source row trades the selected fill for the lighter Peek fill (235 → 151)
+  OK   toolbar row and bottom bar sit under the Peek dim
+  OK   URL field shows the Peek host (example.org)
+  OK   hovered source row shows its close button in the badge slot (badge hidden, button true)
+  OK   hidden Peek keeps the badge and lifts the dim (F0101)
+  OK   closing the Peek removes the badge
+
+checks: 208 passed, 0 failed
