@@ -724,12 +724,24 @@ final class FolderIconView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let folder else { return }
         let context = context ?? cell?.context
-        let (open, icon, accent) = tracked({
+        let (open, icon, override, accent) = tracked({
             let space = cell?.page?.space ?? context?.focusedSpace
             let appearance = space.flatMap { context?.appearance(for: $0) } ?? contentAppearance
             let accent = space.flatMap { context?.style(for: $0).accentColor(appearance).nsColor } ?? Core.brandBlue.resolved(appearance).nsColor
-            return (folder.isExpanded, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, accent)
+            return (folder.isExpanded, context?.folderIconOverrideProvider?(folder) ?? folder.customIcon, folder.iconOverride, accent)
         }) { [weak self] in self?.needsDisplay = true }
+        // Main's typed override takes precedence; keep the shared row/header
+        // renderer and its existing legacy/custom-icon appearance.
+        if let override {
+            switch override {
+            case .emoji(let value), .symbol(let value), .named(let value): lastDrawnGlyph = value
+            }
+            let size = SpaceListMetrics.faviconInk
+            let ink = backingAlignedRect(CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2,
+                                               width: size, height: size), options: .alignAllEdgesNearest)
+            NodeIconRenderer.draw(override, in: ink, tint: accent)
+            return
+        }
         let ink = bounds.insetBy(dx: 1.5, dy: 2.5)
         lastDrawnGlyph = icon ?? (open ? "folder.open" : "folder.closed")
         if let icon {

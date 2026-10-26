@@ -122,7 +122,7 @@ public final class SpaceCreationProfilePickerModel {
             profileID = selectedProfileID
         }
         nameIssue = nil
-        return model.createSpace(title: title, profileID: profileID, icon: icon, theme: theme)
+        return model.createSpace(title: title, profileID: profileID, icon: icon, theme: theme, at: nil, moving: [])
     }
 }
 
