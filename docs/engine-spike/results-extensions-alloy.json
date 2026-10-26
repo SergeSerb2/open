@@ -10,7 +10,7 @@
     "content_scripts": {
       "darkreader": {
         "mode": "dynamic",
-        "styles": 21
+        "styles": 28
       },
       "isolated_worlds": [
         "1Password \u2013 Password Manager",
@@ -137,28 +137,17 @@
           }
         },
         "bitwarden": {
-          "console_errors": [],
-          "ok": false,
-          "screenshot": "alloy-popup-bitwarden.png",
-          "state": {
-            "elements": 16,
-            "h": 600,
-            "text": "",
-            "w": 48
-          },
-          "tabs_api": {
-            "active": [],
-            "all": [],
-            "current": "error: No current window",
-            "windows": 0
-          }
+          "error": "timed out",
+          "ok": false
         },
         "darkreader": {
-          "console_errors": [
-            "Unrecognized Content-Security-Policy directive 'navigate-to'."
-          ],
+          "error": "eval: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
+          "ok": false
+        },
+        "ublock": {
+          "console_errors": [],
           "ok": false,
-          "screenshot": "alloy-popup-darkreader.png",
+          "screenshot": "alloy-popup-ublock.png",
           "state": {
             "elements": 3,
             "h": 480,
@@ -166,27 +155,7 @@
             "w": 360
           },
           "tabs_api": {
-            "active": [],
-            "all": [],
-            "current": "error: No current window",
-            "windows": 0
-          }
-        },
-        "ublock": {
-          "console_errors": [],
-          "ok": true,
-          "screenshot": "alloy-popup-ublock.png",
-          "state": {
-            "elements": 65,
-            "h": 222,
-            "text": "not a website",
-            "w": 273
-          },
-          "tabs_api": {
-            "active": [],
-            "all": [],
-            "current": "error: No current window",
-            "windows": 0
+            "error": "Cannot read properties of undefined (reading 'query')"
           }
         }
       },
@@ -212,6 +181,8 @@
         282
       ],
       "console": [
+        "State version: 86",
+        "Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist.",
         "Unrecognized Content-Security-Policy directive 'navigate-to'.",
         "%c%s color: red; background: yellow; font-size: 24px; WARNING!",
         "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand."
@@ -223,10 +194,10 @@
           "attachedSheet": 0,
           "class": "NativeWidgetMacNSWindow",
           "firstResponder": "BridgedContentView",
-          "frame": "{{904, 1139}, {448, 196}}",
+          "frame": "{{1056, 910}, {448, 196}}",
           "key": false,
           "level": 0,
-          "number": 3553,
+          "number": 4588,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -239,7 +210,11 @@
       "windows_after": [
         [
           "NSWindow",
-          "{{860, 8}, {1360, 1394}}"
+          "{{606, 8}, {1360, 1394}}"
+        ],
+        [
+          "NSPanel",
+          "{{636, 676}, {48, 632}}"
         ]
       ]
     },
@@ -248,10 +223,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 83779,
-    "state": "/Users/serge/Library/Application Support/Open-E2E-extensions-alloy",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-alloy"
+    "pid": 57880,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-alloy",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-alloy/Profiles"
   },
-  "started": "2026-10-25 18:35:57",
+  "started": "2026-10-25 19:15:19",
   "style": "alloy"
 }

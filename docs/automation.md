@@ -6,7 +6,7 @@ Open's end-to-end tests drive the real app through a local Unix socket. There is
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
 - Release builds include it only with `OPEN_AUTOMATION=1 tools/build.sh Release` (used for measurements). A normal Release build has no socket code at all.
-- Socket: `<user data dir>/automation.sock`, mode 0600. The user data dir is `$OPEN_USER_DATA`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override it. Code: `App/Automation/AutomationServer.swift`.
+- Socket: `<data root>/automation.sock`, mode 0600. The data root is `$OPEN_USER_DATA` or `--user-data-dir=DIR`, else `~/Library/Application Support/Open-Dev` (Debug) or `.../Open` (Release); it holds `State/browser.json` and `Profiles/<dir>/{Engine,State}` (docs/plans/profiles.md §5). `--automation-socket=PATH` or `$OPEN_AUTOMATION_SOCKET` override the socket path. Code: `App/Automation/AutomationServer.swift`.
 
 ## Protocol
 
@@ -47,12 +47,12 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 
 | Command | Args | Result |
 |---|---|---|
-| `ping` | — | pid, Chromium and CEF versions, user data and state dirs |
+| `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
 | `tabs` | — | Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
-| `space-create` | `title`, `profile` | New Space; a new `profile` name gets its own engine context |
+| `space-create` | `title`, `profile` | New Space; a new `profile` name creates an Open profile (`BrowserModel.createProfile`) with its own engine context in `Profiles/<dir>/Engine` |
 | `open` | `url`, `background` | New Today tab at the top (Arc placement) |
 | `select` | `tab` or `index` | Select a tab |
 | `close` | `tab` (id or page number) | Like Cmd-W on that tab; a page number closes that popup |

@@ -136,7 +136,7 @@
       "visible_windows": [
         [
           "NSWindow",
-          "{{860, 8}, {1360, 1394}}"
+          "{{574, 8}, {1360, 1394}}"
         ],
         [
           "NativeWidgetMacFramelessNSWindow",
@@ -162,12 +162,13 @@
     },
     "profiles": {
       "ok": true,
+      "work_engine_dir_exists": true,
       "work_profile_sees": {
         "cookie": "",
         "storage": null
       },
-      "work_space": "346DFD37-7ED2-4BCC-9240-309EE87102E0",
-      "work_tab_context": "Work"
+      "work_space": "AD331320-1D7C-4FF5-BF6D-1F6B7DCC09EF",
+      "work_tab_context": "Profile-9E8501C7"
     },
     "request_filter": {
       "ok": true,
@@ -191,9 +192,14 @@
     },
     "widevine": {
       "cdm_versions": null,
-      "eme": "unavailable: NotSupportedError Unsupported keySystem or supportedConfigurations.",
-      "ok": false,
-      "playback": null
+      "eme": "available: com.widevine.alpha",
+      "ok": true,
+      "playback": {
+        "currentTime": 4.955072,
+        "frames": 123,
+        "keySystem": "com.widevine.alpha",
+        "track": "vp09.00.41.08"
+      }
     },
     "zoom": {
       "innerWidth_100": 1084,
@@ -205,10 +211,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 35463,
-    "state": "/Users/serge/Library/Application Support/Open-E2E-features-alloy",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-features-alloy"
+    "pid": 54851,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-features-alloy",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-features-alloy/Profiles"
   },
-  "started": "2026-10-25 18:33:37",
+  "started": "2026-10-25 19:23:07",
   "style": "alloy"
 }

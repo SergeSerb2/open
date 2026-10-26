@@ -66,11 +66,22 @@ OEEngine.shared.shutdown()                             // CefShutdown
 | `shared`, `delegate`, `configuration`, `isRunning`, `isInitialized` | |
 | `chromiumVersion`, `cefVersion` | `156.0.8078.48`, `156.0.14+g4fa4ab5+chromium-156.0.8078.48` |
 | `start(configuration:)`, `runMessageLoop()`, `terminate()`, `shutdown()` | Lifecycle above |
-| `defaultContext`, `context(identifier:)`, `makeEphemeralContext()`, `contexts` | Profiles; `<userDataDirectory>/<identifier>` |
+| `defaultContext`, `context(identifier:directory:)`, `context(identifier:)`, `makeEphemeralContext()`, `releaseContext(_:completion:)`, `contexts` | Profiles. `userDataDirectory` is Chromium's `root_cache_path`. The global context is the default profile, always at `<userDataDirectory>/Default`: CEF ignores any other child `cache_path` for it (`cef_types.h`, `CefSettings.cache_path`). Other contexts live under the root. Asking for the default folder returns `defaultContext`, so two contexts never share one Chromium profile folder. |
 | `browsers`, `allWebContents`, `webContent(identifier:)` | Live objects (weak registry) |
 | `sampleProcessMetrics(after:)` | Chromium task manager rows: kind, memory, GPU memory, CPU |
 
-`OEEngineConfiguration`: `userDataDirectory`, `userAgentProduct`, `locale`, `defaultRuntimeStyle`, `remoteDebuggingPort`, `additionalSwitches`, `logFile`, `verboseLogging`.
+`OEEngineConfiguration`: `userDataDirectory`, `userAgentProduct`, `locale`, `defaultRuntimeStyle`, `remoteDebuggingPort`, `additionalSwitches`, `logFile`, `verboseLogging`, `keychainServiceName`, `keychainAccountName`, `useMockKeychain`.
+
+The shell follows the profile layout of [plans/profiles.md](plans/profiles.md) §5-6 (`ProfileDirectories` in OpenStore): `userDataDirectory` = `<root>/Profiles`, and every non-default profile's context is `context(identifier: dir, directory: <root>/Profiles/<dir>/Engine)`, created when a Space of that profile is first shown. One deviation, forced by CEF: the plan sets the global `cache_path` to `<root>/Profiles/Default/Engine`, but CEF ignores child paths for the global context, so the default profile's engine data is `<root>/Profiles/Default/` itself (next to its `State/`). Mapping to the interface that plan assumed (§6.6):
+
+| Plan | OpenEngine |
+|---|---|
+| E1 `contextHandle(forProfileID:cachePath:…)` | `context(identifier:directory:)` (cached by identifier; the default profile maps to `defaultContext`) |
+| E2 `releaseContext(forProfileID:)` | `releaseContext(_:completion:)` |
+| E3 `makeWebContent(tabID:context:initialURL:)` | `OEWebContent(configuration:url:)` with `OEWebContentConfiguration(context:)`; the shell keys pages by `ItemID` |
+| E4 context ready | Pages created before a context is ready wait inside the engine; no public flag yet |
+| E5 ad-block hand-off | The `CefRequestContext` behind each `OEBrowserContext` (plans/adblock-fork.md §11) |
+| E6 `makeIncognitoContext(windowID:)` | `makeEphemeralContext()` + `releaseContext(_:completion:)` |
 
 `OEEngineDelegate`: `engineDidInitialize()`, `engineWebContent(forUnownedOpenRequest:)` (Chromium opened a page on its own, for example an extension welcome page or `chrome.tabs.create` from a service worker: return a web content to show it as an Open tab; the engine closes Chromium's own window), `engineWillShutDown()`.
 
@@ -148,3 +159,7 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 | H.264, AAC, Widevine | Not in stock CEF | P4 |
 | Audible state for Web Audio | Media-element probe in the page | P6 |
 | User scripts in an isolated world | Main world | P7 |
+
+## Debugging crashes
+
+The CEF framework is stripped. CEF publishes the matching symbols: `https://cef-builds.spotifycdn.com/cef_binary_<version>_macosarm64_release_symbols.tar.bz2` (2.1 GB for 156.0.14). Check the UUID with `dwarfdump --uuid` against the crash report's image UUID, then `atos -o "<dSYM>/Contents/Resources/DWARF/Chromium Embedded Framework" -arch arm64 -l 0x0 <imageOffset>...` with the offsets from the `.ips` report. Chromium's zombie detector (`CrZombie` in a stack) means a message to a freed Objective-C object.

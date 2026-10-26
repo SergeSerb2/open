@@ -2,103 +2,103 @@
   "config": "Release",
   "measure": {
     "cpu_count": 18,
-    "idle_cpu_10_tabs_percent": 0.71,
+    "idle_cpu_10_tabs_percent": 1.33,
     "launch_ms": {
-      "engineInitialized": 320,
-      "engineStarted": 258,
-      "firstContentfulPaint": 705,
-      "firstLoadEnd": 673,
-      "main": 29,
-      "windowShown": 472
+      "engineInitialized": 309,
+      "engineStarted": 257,
+      "firstContentfulPaint": 649,
+      "firstLoadEnd": 606,
+      "main": 40,
+      "windowShown": 452
     },
     "launch_runs": [
       {
-        "didFinishLaunching": 2453,
-        "engineInitialized": 2291,
-        "engineStart": 2018,
-        "engineStarted": 2192,
-        "firstContentfulPaint": 2985,
-        "firstLoadEnd": 2704,
-        "main": 1882,
-        "modelLoaded": 2291,
-        "windowShown": 2436
+        "didFinishLaunching": 1681,
+        "engineInitialized": 1558,
+        "engineStart": 146,
+        "engineStarted": 1522,
+        "firstContentfulPaint": 1927,
+        "firstLoadEnd": 1902,
+        "main": 53,
+        "modelLoaded": 145,
+        "windowShown": 1669
       },
       {
-        "didFinishLaunching": 489,
-        "engineInitialized": 320,
-        "engineStart": 135,
-        "engineStarted": 258,
-        "firstContentfulPaint": 677,
-        "firstLoadEnd": 630,
-        "main": 34,
-        "modelLoaded": 321,
-        "windowShown": 472
+        "didFinishLaunching": 454,
+        "engineInitialized": 309,
+        "engineStart": 139,
+        "engineStarted": 257,
+        "firstContentfulPaint": 641,
+        "firstLoadEnd": 606,
+        "main": 43,
+        "modelLoaded": 137,
+        "windowShown": 442
       },
       {
-        "didFinishLaunching": 478,
-        "engineInitialized": 272,
-        "engineStart": 118,
-        "engineStarted": 226,
-        "firstContentfulPaint": 705,
-        "firstLoadEnd": 673,
-        "main": 12,
-        "modelLoaded": 273,
-        "windowShown": 461
+        "didFinishLaunching": 464,
+        "engineInitialized": 289,
+        "engineStart": 134,
+        "engineStarted": 238,
+        "firstContentfulPaint": 649,
+        "firstLoadEnd": 605,
+        "main": 40,
+        "modelLoaded": 133,
+        "windowShown": 453
       },
       {
-        "didFinishLaunching": 553,
-        "engineInitialized": 381,
-        "engineStart": 148,
-        "engineStarted": 313,
-        "firstContentfulPaint": 761,
-        "firstLoadEnd": 728,
-        "main": 29,
-        "modelLoaded": 382,
-        "windowShown": 537
+        "didFinishLaunching": 463,
+        "engineInitialized": 314,
+        "engineStart": 153,
+        "engineStarted": 263,
+        "firstContentfulPaint": 683,
+        "firstLoadEnd": 648,
+        "main": 11,
+        "modelLoaded": 151,
+        "windowShown": 452
       }
     ],
     "load_average_at_start": [
-      26.6,
-      25.1,
-      25.6
+      8.9,
+      10.0,
+      14.4
     ],
     "memory_10_tabs": {
       "by_process": [
         [
           "Open Helper",
-          225.5
+          237.0
         ],
         [
           "Open Helper (Renderer)",
-          126.5
+          137.3
         ],
         [
           "Open",
-          84.8
+          85.4
         ],
         [
           "Open Helper (Renderer)",
-          64.9
+          77.8
         ],
         [
           "Open Helper (Renderer)",
-          60.6
+          60.1
         ],
         [
           "Open Helper (Renderer)",
-          55.4
+          54.9
         ],
         [
           "Open Helper (Renderer)",
-          45.7
+          45.8
         ],
         [
           "Open Helper (Renderer)",
-          44.1
+          44.7
         ],
         [
           "Open Helper (Renderer)",
-          41.1
+          40.7
         ],
         [
           "Open Helper (Renderer)",
@@ -106,15 +106,15 @@
         ],
         [
           "Open Helper (Renderer)",
-          34.9
+          35.0
         ],
         [
           "Open Helper (Renderer)",
-          34.7
+          34.8
         ],
         [
           "Open Helper",
-          33.4
+          34.1
         ],
         [
           "Open Helper (Renderer)",
@@ -122,18 +122,18 @@
         ],
         [
           "Open Helper",
-          22.4
+          24.7
         ]
       ],
       "live_pages": 10,
       "processes": 15,
       "task_manager_mb_by_kind": {
-        "browser": 84.8,
-        "gpu": 237.7,
-        "renderer": 571.0,
-        "utility": 55.8
+        "browser": 85.4,
+        "gpu": 245.4,
+        "renderer": 594.1,
+        "utility": 58.8
       },
-      "total_footprint_mb": 935.7
+      "total_footprint_mb": 973.8
     },
     "memory_1_tab": {
       "by_process": [
@@ -143,19 +143,19 @@
         ],
         [
           "Open Helper",
-          42.4
+          45.4
         ],
         [
           "Open Helper (Renderer)",
-          36.5
+          36.7
         ],
         [
           "Open Helper (Renderer)",
-          27.7
+          27.9
         ],
         [
           "Open Helper",
-          26.1
+          26.0
         ],
         [
           "Open Helper",
@@ -166,14 +166,14 @@
       "processes": 6,
       "task_manager_mb_by_kind": {
         "browser": 64.0,
-        "gpu": 42.4,
-        "renderer": 64.2,
-        "utility": 46.1
+        "gpu": 45.4,
+        "renderer": 64.6,
+        "utility": 46.0
       },
-      "total_footprint_mb": 216.8
+      "total_footprint_mb": 220.0
     },
     "ok": true
   },
-  "started": "2026-10-25 18:44:26",
+  "started": "2026-10-25 19:25:54",
   "style": "alloy"
 }

@@ -113,9 +113,9 @@ OpenEngine side: no API change. `OEExtensionAction` gets live values, `-browserD
 
 ## P4. Proprietary codecs and Widevine
 
-- Measured on stock CEF: H.264 `false`, AAC `false`, HEVC `false`; VP9, AV1, Opus `true` (results-features-alloy.json, `codecs`). EME for `com.widevine.alpha` is unavailable (`widevine`).
+- Measured on stock CEF: H.264 `false`, AAC `false`, HEVC `false`; VP9, AV1, Opus `true` (results-features-alloy.json, `codecs`). Widevine EME works in stock CEF once Chromium's component updater has downloaded the CDM (final run: a Widevine stream played), and is unavailable until then.
 - Codecs: no source patch. `Engine/fork/gn/dev.args.gn` and `release.args.gn` already set `proprietary_codecs=true` and `ffmpeg_branding="Chrome"`. Re-run the `codecs` check on the first fork build (`tools/e2e/engine_e2e.py --only features`). H.264/AAC licensing for release builds is on the licensing follow-up list (docs/followups.md).
-- Widevine: out of v1 by lead decision (`Engine/fork/gn/release.args.gn`: `enable_widevine=false`, "it needs a Google license"). Netflix-class sites will not play in v1.
+- Widevine: out of v1 by lead decision (`Engine/fork/gn/release.args.gn`: `enable_widevine=false`, "it needs a Google license"). Note the dev args keep `enable_widevine=true`, so dev builds will behave like stock CEF here and release builds will not. Netflix-class sites will not play in v1.
 
 ## P5. Trim the Chrome layer
 
