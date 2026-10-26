@@ -26,6 +26,8 @@ public final class SoundEffects {
         if let loaded = players[effect] { player = loaded }
         else {
             guard let url = Self.resourceURL(for: effect), let loaded = try? AVAudioPlayer(contentsOf: url) else { return false }
+            loaded.prepareToPlay()
+            // Retain the two small prepared players for repeat playback.
             players[effect] = loaded; player = loaded
         }
         player.currentTime = 0

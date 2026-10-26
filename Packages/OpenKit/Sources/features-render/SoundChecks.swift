@@ -32,5 +32,8 @@ enum SoundChecks {
         defaults.set(false, forKey: "open.advanced.playSoundEffects")
         check(absent && !effects.play(.capture) && !effects.play(.event) && effects.loadedSoundCount == 0 && effects.playCount == 0,
               "SE2 disabled/absent preference neither loads nor plays a sound")
+        defaults.set(true, forKey: "open.advanced.playSoundEffects")
+        check(effects.play(.capture) && effects.playCount == 1 && effects.loadedSoundCount == 1,
+              "SE3 enabled preference plays once through SoundEffects and loads one prepared player")
     }
 }

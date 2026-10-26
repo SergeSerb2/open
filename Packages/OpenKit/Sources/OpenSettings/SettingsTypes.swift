@@ -87,5 +87,14 @@ public extension AutoArchiveInterval {
         "open.library.lastSection": "archive", "open.shortcuts.defaultPriority": "browser",
         "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": true,
     ]
-    public static func register(in defaults: UserDefaults) { defaults.register(defaults: values) }
+    public static func register(in defaults: UserDefaults) {
+        // Seed before registration so the new fallback values do not hide
+        // missing stored keys. Existing per-source choices always win.
+        if let legacy = defaults.object(forKey: "open.general.previewsOnHover") as? Bool {
+            for key in ["open.general.previewsFolders", "open.general.previewsPages"] where defaults.object(forKey: key) == nil {
+                defaults.set(legacy, forKey: key)
+            }
+        }
+        defaults.register(defaults: values)
+    }
 }
