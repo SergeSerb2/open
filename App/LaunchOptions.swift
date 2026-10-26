@@ -5,14 +5,13 @@ import OpenEngine
 /// CEF parses the process command line itself (for example
 /// `--load-extension=/path/to/unpacked`).
 ///
-///   Open [URL...] [--user-data-dir=DIR] [--state-dir=DIR] [--style=chrome]
+///   Open [URL...] [--user-data-dir=DIR] [--style=chrome]
 ///        [--open-remote-debugging-port=N] [--automation-socket=PATH]
 ///        [--chrome-toolbar] [--verbose]
 struct LaunchOptions {
-  /// Chromium profiles (Default/, Local State, ...).
+  /// Open's data root (docs/plans/profiles.md §5): State/browser.json and
+  /// Profiles/<dir>/{Engine,State,...}.
   var userDataDirectory: URL
-  /// OpenModel snapshot root (SnapshotStore: <root>/State/browser.json).
-  var stateDirectory: URL
   var defaultStyle: OERuntimeStyle = .alloy
   var initialURLs: [URL] = []
   var remoteDebuggingPort = 0
@@ -29,7 +28,6 @@ struct LaunchOptions {
       let defaultDir = support.appendingPathComponent("Open", isDirectory: true)
     #endif
     userDataDirectory = env["OPEN_USER_DATA"].map { URL(fileURLWithPath: $0, isDirectory: true) } ?? defaultDir
-    var state: URL? = env["OPEN_STATE_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) }
 
     func path(_ v: String) -> URL {
       URL(fileURLWithPath: (v as NSString).expandingTildeInPath, isDirectory: true)
@@ -40,8 +38,6 @@ struct LaunchOptions {
       }
       if let v = value("user-data-dir") {
         userDataDirectory = path(v)
-      } else if let v = value("state-dir") {
-        state = path(v)
       } else if let v = value("style") {
         defaultStyle = v == "chrome" ? .chrome : .alloy
       } else if let v = value("open-remote-debugging-port") {
@@ -56,7 +52,6 @@ struct LaunchOptions {
         initialURLs.append(url)
       }
     }
-    stateDirectory = state ?? userDataDirectory
     if automationSocket == nil, let p = env["OPEN_AUTOMATION_SOCKET"] {
       automationSocket = URL(fileURLWithPath: p)
     }

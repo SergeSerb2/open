@@ -515,8 +515,13 @@ def feature_checks(app, style, results, tmp):
         app.call("space", space=home)
         app.call("close", tab=a)
         app.call("select", tab=t)
-        return {"ok": "oe_profile" not in r["cookie"] and r["storage"] is None and ctx == "Work",
-                "work_profile_sees": r, "work_tab_context": ctx, "work_space": work_space}
+        # The Work profile's engine data lives in Profiles/<dir>/Engine
+        # (docs/plans/profiles.md §5-6), separate from the default profile.
+        engine_dir = os.path.join(app.user_data, "Profiles", ctx or "?", "Engine")
+        return {"ok": "oe_profile" not in r["cookie"] and r["storage"] is None and ctx not in (None, "Default")
+                      and os.path.isdir(engine_dir),
+                "work_profile_sees": r, "work_tab_context": ctx, "work_engine_dir_exists": os.path.isdir(engine_dir),
+                "work_space": work_space}
 
     def adblock_control():
         c = new_tab(app, "https://example.com/")
@@ -538,7 +543,7 @@ def feature_checks(app, style, results, tmp):
 
     def widevine():
         # Chromium's component updater downloads the CDM (fast-update switch).
-        cdm = os.path.join(app.user_data, "WidevineCdm")
+        cdm = os.path.join(app.user_data, "Profiles", "WidevineCdm")
         got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=120, step=2)
         w = new_tab(app, "https://example.com/")
         r = app.eval(w, '(async () => { try { const a = await navigator.requestMediaKeySystemAccess("com.widevine.alpha",'

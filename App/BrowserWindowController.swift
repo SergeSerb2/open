@@ -173,9 +173,16 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     return out
   }
 
+  /// The engine context of an Open profile: the global context for the
+  /// default profile, else Profiles/<dir>/Engine (docs/plans/profiles.md §6.2).
+  /// Created on first use, so profiles nobody shows cost nothing.
   func context(for profileID: ProfileID) -> OEBrowserContext {
-    let name = model.profile(id: profileID)?.dataDirectoryName ?? "Default"
-    return OEEngine.shared.context(identifier: name.isEmpty ? "Default" : name)
+    guard let profile = model.profile(id: profileID) ?? model.defaultProfile,
+      profile.id != model.defaultProfile?.id
+    else { return OEEngine.shared.defaultContext }
+    let name = profile.dataDirectoryName
+    return OEEngine.shared.context(
+      identifier: name, directory: app.directories.engineDirectory(dataDirectoryName: name))
   }
 
   func engineBrowser(for profileID: ProfileID) -> OEBrowser {
@@ -631,7 +638,7 @@ extension BrowserWindowController {
   }
 
   @objc func restoreLastClosedTab(_ sender: Any?) {
-    let store = app.archiveStore!
+    let store = app.archiveSink.store(for: focusedProfile?.id)
     Task { @MainActor in
       guard let recent = await store.recent(limit: 1).first,
         let record = await store.restore(id: recent.id)

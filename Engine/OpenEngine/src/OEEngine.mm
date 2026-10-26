@@ -249,6 +249,8 @@ class OEDefaultClient : public CefClient,
   CefRefPtr<OEDefaultClient> _defaultClient;
   BOOL _terminating;
   NSUInteger _ephemeralCount;
+  NSURL* _defaultContextDirectory;  // resolved
+  NSMutableArray<dispatch_block_t>* _pendingReleases;
 }
 
 + (OEEngine*)shared {
@@ -327,6 +329,13 @@ class OEDefaultClient : public CefClient,
                                      relativeToURL:nil];
   }
   NSString* root = _configuration.userDataDirectory.path;
+  // The global context is the default profile. CEF uses
+  // <root_cache_path>/Default for it whatever child path is passed, so say
+  // so explicitly.
+  NSURL* defaultDir = [_configuration.userDataDirectory
+      URLByAppendingPathComponent:@"Default"
+                      isDirectory:YES];
+  _defaultContextDirectory = defaultDir;
 
   CefMainArgs args(*_NSGetArgc(), *_NSGetArgv());
   CefSettings settings;
@@ -337,8 +346,7 @@ class OEDefaultClient : public CefClient,
   settings.log_severity =
       _configuration.verboseLogging ? LOGSEVERITY_VERBOSE : LOGSEVERITY_INFO;
   CefString(&settings.root_cache_path) = root.UTF8String;
-  CefString(&settings.cache_path) =
-      [root stringByAppendingPathComponent:@"Default"].UTF8String;
+  CefString(&settings.cache_path) = defaultDir.path.UTF8String;
   NSString* logFile = _configuration.logFile.path
                           ?: [root stringByAppendingPathComponent:@"engine.log"];
   CefString(&settings.log_file) = logFile.UTF8String;
@@ -449,6 +457,14 @@ class OEDefaultClient : public CefClient,
 }
 
 - (void)oe_browserDidClose {
+  if (_pendingReleases.count) {
+    NSArray<dispatch_block_t>* checks = [_pendingReleases copy];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      for (dispatch_block_t check in checks) {
+        check();
+      }
+    });
+  }
   if (_terminating && _running) {
     dispatch_async(dispatch_get_main_queue(), ^{
       [self oe_quitIfDone];
@@ -477,32 +493,83 @@ class OEDefaultClient : public CefClient,
 
 - (OEBrowserContext*)defaultContext {
   if (!_defaultContext) {
-    NSURL* dir = [_configuration.userDataDirectory
-        URLByAppendingPathComponent:@"Default"
-                        isDirectory:YES];
-    _defaultContext = [[OEBrowserContext alloc] initOEWithIdentifier:@"Default"
-                                                            directory:dir
-                                                               global:YES];
+    _defaultContext =
+        [[OEBrowserContext alloc] initOEWithIdentifier:@"Default"
+                                              directory:_defaultContextDirectory
+                                                 global:YES];
     _contexts[@"Default"] = _defaultContext;
   }
   return _defaultContext;
 }
 
 - (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier {
-  if ([identifier isEqualToString:@"Default"]) {
+  return [self contextWithIdentifier:identifier
+                           directory:[_configuration.userDataDirectory
+                                         URLByAppendingPathComponent:identifier
+                                                         isDirectory:YES]];
+}
+
+- (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
+                                 directory:(NSURL*)directory {
+  NSString* path = directory.URLByStandardizingPath.path;
+  if ([identifier isEqualToString:@"Default"] ||
+      [path isEqualToString:_defaultContextDirectory.path]) {
     return self.defaultContext;
   }
   OEBrowserContext* context = _contexts[identifier];
   if (!context) {
-    NSURL* dir =
-        [_configuration.userDataDirectory URLByAppendingPathComponent:identifier
-                                                          isDirectory:YES];
+    NSAssert([path hasPrefix:_configuration.userDataDirectory.path],
+             @"context directory must be inside userDataDirectory");
     context = [[OEBrowserContext alloc] initOEWithIdentifier:identifier
-                                                    directory:dir
+                                                    directory:directory
                                                        global:NO];
     _contexts[identifier] = context;
   }
   return context;
+}
+
+- (void)releaseContext:(OEBrowserContext*)context
+            completion:(void (^)(void))completion {
+  if (context == _defaultContext) {
+    if (completion) completion();
+    return;
+  }
+  [_contexts removeObjectForKey:context.identifier];
+  for (OEBrowser* browser in self.browsers) {
+    if (browser.context == context) {
+      [browser close];
+    }
+  }
+  for (OEWebContent* webContent in self.allWebContents) {
+    if (webContent.context == context) {
+      [webContent close];
+    }
+  }
+  if (!completion) {
+    return;
+  }
+  // Done when no live web content uses the context any more; re-checked
+  // after every browser close (-oe_browserDidClose).
+  __weak OEBrowserContext* weakContext = context;
+  void (^done)(void) = [completion copy];
+  __block BOOL finished = NO;
+  dispatch_block_t check = ^{
+    if (finished) {
+      return;
+    }
+    for (OEWebContent* w in OEEngine.shared.allWebContents) {
+      if (w.context == weakContext && w.live) {
+        return;
+      }
+    }
+    finished = YES;
+    done();
+  };
+  if (!_pendingReleases) {
+    _pendingReleases = [NSMutableArray array];
+  }
+  [_pendingReleases addObject:[check copy]];
+  check();
 }
 
 - (OEBrowserContext*)makeEphemeralContext {

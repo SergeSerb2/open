@@ -9,7 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   var options = LaunchOptions(arguments: [])
   private(set) var model: BrowserModel!
   private(set) var snapshotStore: SnapshotStore!
-  private(set) var archiveStore: ArchiveStore!
+  private(set) var archiveSink: ProfileArchiveSink!
+  private(set) var directories: ProfileDirectories!
   private(set) var windowControllers: [BrowserWindowController] = []
   let undoManager = UndoManager()
   #if OPEN_AUTOMATION
@@ -37,10 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
 
   // MARK: Model
 
-  private func loadModelIfNeeded() {
-    guard model == nil else { return }
-    snapshotStore = SnapshotStore(root: options.stateDirectory)
-    archiveStore = ArchiveStore(root: options.stateDirectory)
+  /// Loads the model and prepares the data root (lock, layout migration,
+  /// profile folders). Runs before the engine starts.
+  @discardableResult
+  func prepareData() -> ProfileDirectories {
+    if let directories { return directories }
+    let root = options.userDataDirectory
+    snapshotStore = SnapshotStore(root: root)
     let loaded: BrowserModel?
     do {
       loaded = try snapshotStore.load()
@@ -52,17 +56,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
     if model.windows.isEmpty, let space = model.spaces.first {
       model.windows.append(BrowserWindowState(focusedSpaceID: space.id))
     }
-    model.archiveSink = archiveStore
+    do {
+      try OpenDataRoot.prepare(root: root, model: model)
+    } catch {
+      FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
+      exit(1)
+    }
+    let directories = ProfileDirectories(root: root.standardizedFileURL.resolvingSymlinksInPath())
+    archiveSink = ProfileArchiveSink(directories: directories) { [weak model] id in
+      let profile = id.flatMap { model?.profile(id: $0) } ?? model?.defaultProfile
+      return profile?.dataDirectoryName ?? "Default"
+    }
+    model.archiveSink = archiveSink
     model.undoManager = undoManager
     model.addObserver { [weak self] _ in self?.scheduleSave() }
     self.model = model
+    self.directories = directories
     LaunchTiming.shared.mark("modelLoaded")
+    return directories
   }
 
   /// Runs at the first of applicationDidFinishLaunching and
   /// engineDidInitialize (their order is not fixed).
   private func showWindowsIfNeeded() {
-    loadModelIfNeeded()
+    prepareData()
     guard windowControllers.isEmpty else { return }
     let states = model.windows.filter { $0.style == .standard }
     for state in states.isEmpty ? Array(model.windows.prefix(1)) : states {
@@ -89,8 +106,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate {
   func saveState() {
     guard let model else { return }
     for controller in windowControllers { controller.saveWindowState() }
-    snapshotStore.saveNow(model: model)
-    archiveStore.flushQueue()
+    do {
+      try snapshotStore.saveNow(model: model)
+    } catch {
+      FileHandle.standardError.write(Data("Open: saving the snapshot failed: \(error)\n".utf8))
+    }
+    archiveSink.flushAll()
   }
 
   // MARK: OEEngineDelegate

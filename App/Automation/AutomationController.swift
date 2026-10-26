@@ -58,7 +58,7 @@
         return [
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
-          "state": app.options.stateDirectory.path,
+          "root": app.directories.root.path,
         ]
 
       // Model-level tabs (the sidebar).
@@ -79,14 +79,11 @@
         // names a new one.
         let model = app.model!
         let name = a["profile"] as? String ?? "Default"
-        let profile =
-          model.profiles.first { $0.dataDirectoryName == name }
-          ?? {
-            let p = Profile(name: name, dataDirectoryName: name)
-            model.profiles.append(p)
-            model.rebuildIndex()
-            return p
-          }()
+        guard
+          let profile = model.profiles.first(where: { $0.name == name })
+            ?? model.createProfile(name: name)
+        else { throw Failure(message: "cannot create profile \(name)") }
+        try app.directories.ensureProfileDirectories(for: profile)
         let space = model.createSpace(title: a["title"] as? String ?? name, profileID: profile.id)
         w.focus(space: space)
         return space.id.description
@@ -227,6 +224,7 @@
       case "popup":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
         let browser = try focusedBrowser(w)
+        browser.context.extensions.reload()
         guard EngineExtensionHost(browser).executeAction(extensionID: id), let popup = browser.extensionPopup else {
           throw Failure(message: "action did not open a popup")
         }

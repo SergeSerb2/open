@@ -12,8 +12,11 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 /// Startup options. Copied by -[OEEngine startWithConfiguration:error:].
 OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 
-/// Chromium "user data dir". Every browser context lives in a subdirectory.
-/// Default: ~/Library/Application Support/Open.
+/// Chromium's root_cache_path. Every persistent browser context lives
+/// under it. The global context (the default profile) is always
+/// <userDataDirectory>/Default: CEF ignores any other child path for it
+/// (cef_types.h, CefSettings.cache_path). Default:
+/// ~/Library/Application Support/Open.
 @property(nonatomic, copy) NSURL* userDataDirectory;
 
 /// Appended to the Chrome user agent product token, e.g. "Open/0.1".
@@ -113,14 +116,29 @@ OE_EXPORT @interface OEEngine : NSObject
 
 #pragma mark Browser contexts (profiles)
 
-/// The context stored in <userDataDirectory>/Default.
+/// The global context (the default profile), stored in
+/// <userDataDirectory>/Default.
 @property(nonatomic, readonly) OEBrowserContext* defaultContext;
 
-/// The context stored in <userDataDirectory>/<identifier>, created on first
-/// use. Contexts have separate cookies, storage, cache, extensions,
-/// permissions, and history (Arc "Profiles").
+/// The context stored in `directory` (at or under userDataDirectory),
+/// created on first use and cached by `identifier`. Contexts have separate
+/// cookies, storage, cache, extensions, permissions, and history (Arc
+/// "Profiles"). The default context's directory returns defaultContext, so
+/// two contexts never share one Chromium profile folder.
+- (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
+                                 directory:(NSURL*)directory
+    NS_SWIFT_NAME(context(identifier:directory:));
+
+/// Same, in <userDataDirectory>/<identifier>.
 - (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
     NS_SWIFT_NAME(context(identifier:));
+
+/// Closes every web content of `context`, forgets the context, and calls
+/// `completion` when Chromium has closed them (profile deletion,
+/// incognito window close). The default context cannot be released.
+- (void)releaseContext:(OEBrowserContext*)context
+            completion:(void (^NS_SWIFT_UI_ACTOR _Nullable)(void))completion
+    NS_SWIFT_NAME(releaseContext(_:completion:));
 
 /// A new in-memory context that writes nothing to disk (incognito windows).
 - (OEBrowserContext*)makeEphemeralContext;

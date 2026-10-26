@@ -16,8 +16,16 @@ app.delegate = appDelegate
 app.keyEquivalentHandler = { event in MainMenu.performReservedShortcut(event) }
 
 let options = LaunchOptions(arguments: CommandLine.arguments)
+appDelegate.options = options
+// The model comes first: the window can be built from it at once, and the
+// engine needs the default profile's folder (docs/plans/profiles.md §6.2).
+let directories = appDelegate.prepareData()
 let configuration = OEEngineConfiguration()
-configuration.userDataDirectory = options.userDataDirectory
+// root_cache_path = <root>/Profiles. The default profile's engine data is
+// then Profiles/Default/ (CEF's fixed name for the global context); other
+// profiles use Profiles/<dir>/Engine/ (BrowserWindowController.context(for:)).
+configuration.userDataDirectory = directories.root.appendingPathComponent("Profiles", isDirectory: true)
+configuration.logFile = directories.root.appendingPathComponent("State/engine.log")
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort
 configuration.verboseLogging = options.verboseLogging
@@ -28,7 +36,6 @@ configuration.userAgentProduct = "Open/0.1"
 configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 
 OEEngine.shared.delegate = appDelegate
-appDelegate.options = options
 LaunchTiming.shared.mark("engineStart")
 do {
   try OEEngine.shared.start(configuration: configuration)
