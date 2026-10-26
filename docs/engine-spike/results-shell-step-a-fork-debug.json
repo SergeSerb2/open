@@ -1,0 +1,91 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+  },
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "9A6A4BBD-BAB5-4AA5-9B58-263552DE553F",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "keyboard": {
+      "ok": true,
+      "restored_same_id": true,
+      "routes": {
+        "cmd_l_window": "NSTextView",
+        "cmd_t_app": "NSTextView"
+      },
+      "tabs": [
+        3,
+        4,
+        3
+      ]
+    },
+    "persistence": {
+      "loaded_after_launch": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "snapshot": "State/browser.json",
+      "tabs": 4
+    },
+    "split_view": {
+      "ok": true,
+      "panes": [
+        "https://example.org/",
+        "https://example.net/"
+      ],
+      "screenshot": "shell-split-view.png"
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "81B4AFA3-F3FD-4FE8-87BF-4E15AD3EC6B0"
+        ],
+        [
+          1,
+          "23BA5470-C004-4347-96B5-7EA01B099AC4"
+        ],
+        [
+          2,
+          "3886F313-BDA0-4463-B9AD-09F053A3441A"
+        ]
+      ]
+    },
+    "window_png": {
+      "file": "shell-window.png",
+      "method": "windowserver+devtools",
+      "ok": true
+    }
+  },
+  "started": "2026-10-25 23:19:14",
+  "style": "alloy"
+}
