@@ -241,6 +241,24 @@
           // Tracking areas follow the hardware pointer, so `hover` also delivers
           // enter, move, and exit to the owners of the areas under the point.
           if action == "hover" { return hover(target, at: NSPoint(x: point[0], y: target.frame.height - point[1])) }
+        } else if action == "click" {
+          // A click with modifiers (for example Option on the zoom button). Controls that
+          // track the mouse wait for the mouse-up on the event queue, so it goes there first.
+          var flags: NSEvent.ModifierFlags = []
+          for name in a["modifiers"] as? [String] ?? [] {
+            switch name { case "option": flags.insert(.option); case "command": flags.insert(.command)
+            case "shift": flags.insert(.shift); case "control": flags.insert(.control); default: break }
+          }
+          let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+          func click(_ type: NSEvent.EventType) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+              windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+          }
+          // Real input arrives after the display cycle has laid the window out (the window
+          // buttons are placed at its end); run that pass before hit-testing.
+          target.layoutIfNeeded()
+          if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+          if let down = click(.leftMouseDown) { target.sendEvent(down) }
         } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
           // The real resize handle consumes these own-window events through
           // NSWindow.nextEvent. No system cursor or keyboard is touched.
@@ -381,6 +399,30 @@
           // check can keep its window away from where someone's pointer rests.
           "cursor": { let p = win.mouseLocationOutsideOfEventStream; return [Double(p.x), Double(win.frame.height - p.y)] }(),
           "trafficLightFrames": controller.trafficLightFrames.map { rect($0.frame) },
+          "trafficLightsDimmed": controller.trafficLightsDimmed, "trafficLightsHovered": controller.trafficLightsHoveredState,
+          "trafficLightButtons": [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [String: Any]? in
+            guard let button = win.standardWindowButton(kind) else { return nil }
+            let ax = button.accessibilityFrame()
+            let origin = win.convertPoint(fromScreen: ax.origin)
+            return ["alpha": Double(button.alphaValue), "hidden": button.isHiddenOrHasHiddenAncestor,
+              // The legacy attribute API: what outside AX clients read for these system widgets.
+              "role": legacyAX(button, "AXRole"), "subrole": legacyAX(button, "AXSubrole"),
+              "axDescription": legacyAX(button, "AXDescription"),
+              "axFrame": [Double(origin.x), Double(win.frame.height - origin.y - ax.height), Double(ax.width), Double(ax.height)],
+              "action": button.action.map { NSStringFromSelector($0) } ?? ""] as [String: Any]
+          },
+          // The window's AX button attributes, as an outside AX client reads them (F0001's dump).
+          "axWindowButtons": ["AXCloseButton", "AXMinimizeButton", "AXZoomButton", "AXFullScreenButton"].compactMap { name -> [String: Any]? in
+            let selector = NSSelectorFromString("accessibilityAttributeValue:")
+            guard win.responds(to: selector), let element = win.perform(selector, with: name)?.takeUnretainedValue() as? NSObject else { return nil }
+            var frame: [Double] = []
+            if let value = element.perform(selector, with: "AXFrame")?.takeUnretainedValue() as? NSValue {
+              let r = value.rectValue, o = win.convertPoint(fromScreen: r.origin)
+              frame = [Double(o.x), Double(win.frame.height - o.y - r.height), Double(r.width), Double(r.height)]
+            }
+            return ["attribute": name, "role": legacyAX(element, "AXRole"), "subrole": legacyAX(element, "AXSubrole"), "frame": frame]
+          },
+          "key": win.isKeyWindow, "appActive": NSApp.isActive, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
@@ -642,7 +684,8 @@
     /// and move to owners whose areas track movement.
     @discardableResult
     private func hover(_ window: NSWindow, at location: NSPoint) -> [String: [String]] {
-      guard let content = window.contentView else { return [:] }
+      // The whole frame view, so the title bar (window buttons) is included.
+      guard let content = window.contentView?.superview ?? window.contentView else { return [:] }
       // AppKit builds tracking areas lazily, once the hardware pointer has reached the
       // window; ask every view for its areas first.
       func prepare(_ view: NSView) { view.updateTrackingAreas(); view.subviews.forEach(prepare) }
@@ -694,6 +737,12 @@
     }
 
     private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
+
+    private func legacyAX(_ object: NSObject, _ attribute: String) -> String {
+      let selector = NSSelectorFromString("accessibilityAttributeValue:")
+      guard object.responds(to: selector), let value = object.perform(selector, with: attribute)?.takeUnretainedValue() else { return "" }
+      return value as? String ?? String(describing: value)
+    }
 
     private func colorComponents(_ color: NSColor?) -> [Int] {
       guard let color = color?.usingColorSpace(.sRGB) else { return [] }

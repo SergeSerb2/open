@@ -52,6 +52,27 @@ public enum SidebarColors {
     public static let addSpacePlusDeactivated = pair(.black(0.45), .white(0.45))
 }
 
+/// Window buttons at rest: Arc's dimmed look, in every window state (docs/re/interaction-states.md §0).
+/// The pointer over the group shows the system's own buttons instead.
+public enum WindowControlColors {
+    /// `DimmedWindowControls` (`ARCUI_ARCUI.bundle` catalog): black; dark appearance
+    /// (0.953, 0.953, 0.918). Arc's grey circles are this color over the background at
+    /// 0.10 (light content, F0001: `#CD876C` on `#E59678`, 0.099–0.103 per channel) and 0.33
+    /// (dark content, F0079, F0129, F0131: `#686973` on `#242538`, 0.326–0.332; plain white
+    /// would need 0.295 on blue against 0.31 on red and green).
+    public static let dimmed = DesignColor(light: .black(1), dark: RGBA(0.953, 0.953, 0.918))
+    public static let fillOpacity = (light: 0.10, dark: 0.33)
+    /// A 1 pt ring just outside the 12 pt circle (r 6–7) in each button's color: F0001,
+    /// F0129, and F0131 show red, yellow, and green edges. Fitted alpha 0.06 (light) and 0.34
+    /// (dark; RMS 3.5–5.6 levels with the ring against 11.7–16.5 without it).
+    public static let ringOpacity = (light: 0.06, dark: 0.34)
+    /// Ring colors, fitted by least squares at those alphas: dark from F0131 and F0129 (the
+    /// two frames agree within 2 levels), light from F0001 (a faint ring, so less certain).
+    public static let closeRing = DesignColor(light: RGBA(hex: 0xDB3B3C), dark: RGBA(hex: 0xFE8179))
+    public static let minimizeRing = DesignColor(light: RGBA(hex: 0xD4A201), dark: RGBA(hex: 0xFECE3F))
+    public static let zoomRing = DesignColor(light: RGBA(hex: 0x2FB513), dark: RGBA(hex: 0x70D249))
+}
+
 /// Command bar and the URL field (`Resources/Assets.car`, `ARC_CommandBar`).
 public enum CommandBarColors {
     public static let iconActiveBackground = pair(.white(1), RGBA(hex: 0x1A1A1A, .displayP3))

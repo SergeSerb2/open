@@ -67,25 +67,30 @@ final class RenderScene: NSView {
     }
 }
 
-/// Stand-in for the system traffic lights in renders: three 12 pt circles at the
-/// measured centers. Inactive style only (black ≈ 0.11 over the theme, F0001).
+/// Stand-in for the window buttons in renders: the window's own dimmed look at rest
+/// (`DimmedTrafficLightsView`, Arc's grey circles), at the measured centers.
 @MainActor
 final class TrafficLightsView: NSView {
+    private let dimmed = DimmedTrafficLightsView()
     override var isFlipped: Bool { true }
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        addSubview(dimmed)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    override func draw(_ dirtyRect: NSRect) {
-        // Inactive lights: black 0.11 on light content (F0001), white 0.31 on dark (F0079).
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        (dark ? NSColor.white.withAlphaComponent(0.31) : NSColor.black.withAlphaComponent(0.11)).setFill()
-        for f in ChromeMetrics.trafficLightFrames {
-            let d = ChromeMetrics.trafficLightDiameter
-            NSBezierPath(ovalIn: NSRect(x: f.midX - d / 2, y: f.midY - d / 2, width: d, height: d)).fill()
-        }
+    override func layout() {
+        super.layout()
+        dimmed.frame = bounds
+        // The dimmed view is not flipped: measure its centers from the bottom.
+        dimmed.centers = ChromeMetrics.trafficLightCenters.map { CGPoint(x: $0.x, y: bounds.height - $0.y) }
+        dimmed.tone = ContentAppearance(effectiveAppearance)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsLayout = true
     }
 }
 

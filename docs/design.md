@@ -38,6 +38,7 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | URL field and tile fill | `SidebarItemBackground` (`#0E0F10` 0.05 P3) | `#FAFBFF` 0.10 | ΔE ≤ 0.61 on 7 elements |
 | URL field under the pointer | `SidebarItemHoveredBackground` (`#0E0F10` 0.10 P3) | `#FAFBFF` 0.15 | F0033 vs F0032 (§16) |
 | Hover-reveal card stroke | `SidebarBorderColor` white 0.30 | same | F0129 `#696875` over `#272739` (§16) |
+| Window buttons at rest | `DimmedWindowControls` black 0.10; ring `#DB3B3C` / `#D4A201` / `#2FB513` at 0.06 | `DimmedWindowControls` `(0.953, 0.953, 0.918)` 0.33; ring `#FE8179` / `#FECE3F` / `#70D249` at 0.34 | F0001, F0129, F0131 (§17) |
 | Row hover, header hover, New Tab hover | `SidebarItemBackground` | same | F0013 ΔE 0.45, F0031 0.49, F0079 0.81 |
 | Button hover plate | black 0.07 `GrayA4` | `GrayA4` | F0024 ΔE 0.38, F0027 0.72 |
 | Selected row, selected tile, "New Tab" during Cmd+T | theme `light.background`, opaque | white 0.20 `TabCellBackgroundCurrent` | F0015 ΔE 1.05, F0016 1.15, F0063 2.00, F0066 2.03 |
@@ -58,7 +59,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 
 | Area | Value | Mark |
 |---|---|---|
-| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]`; the system draws 12 pt circles centered in them, at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden | measured (AX F0001, F0129, F0131; F0001 pixels) |
+| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]` (AX), 12 pt circles centered at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden. At rest, in every window state, Arc's dimmed look: `DimmedWindowControls` over the background (0.10 light, 0.33 dark) with a faint 1 pt ring in each button's color; the pointer over the group shows the system buttons (colors, glyphs, the tiling menu). The system buttons stay for every behavior (§17) | measured (AX F0001, F0129, F0131; pixels F0001, F0129, F0131); ring fitted |
 | Toolbar buttons | 32×32 at y 7; toggle x 77; back / forward / reload at x `W − 106 / W − 72 / W − 38` (pitch 34, reload 6 pt from the edge); hover plate = button frame, radius 6 | measured |
 | URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]`; hover darkens the fill, same frame | measured, text origin fitted |
 | Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (6 → 3 columns at width 228 and 500); no favorites: an 8 pt section | measured; rule for other counts guess; empty section fitted (§16) |
@@ -333,7 +334,7 @@ State elements (other frames): row hover fill 0.0 pt / 0.45; close × 0.0 / 1.39
 | Toggle, forward, copy ink boxes | 1 pt | SF Symbol shapes differ slightly from Arc's art. |
 | Folder glyph | shape | Arc's open folder has an outlined back and a lighter rim. Ours is a simpler two-tone shape in the same accent. |
 | Inactive switcher emoji | darkest pixels within 10 levels | Arc's desaturation method is not known; ours is luma at 0.55. |
-| Traffic lights | not compared by `sidebar-render compare` | System drawn; the renders draw stand-ins and the comparison masks them. The real window's lights are checked separately (§16). |
+| Traffic lights | not compared by `sidebar-render compare` | The comparison masks them; the renders draw the dimmed rest look (`DimmedTrafficLightsView`). The real window's buttons are checked separately (§16, §17). |
 | Favicons | not compared | Masked; renders have no engine favicons. |
 | Light-mode default theme, dark tokens without a dark capture, motion numbers, favorites column rule for counts other than 6 | guesses | No capture yet (interaction-states §19). |
 
@@ -540,3 +541,59 @@ The real app (`OPEN_AUTOMATION=1 tools/build.sh Release`), driven only through t
 | `hide_reveal`, `fullscreen_hover_reveal` | rewritten: condition waits on the card (settled, or gone) instead of fixed sleeps, each sub-condition and its time recorded |
 
 The two rewritten checks failed in about one run of two before (docs/followups.md, PR #53), always on the first reveal after a hide. The reveal itself was not slow. guess (not traced): a pointer event at the real pointer cancelled the pending reveal. Both possible causes are gone: synthetic pointer events carry a tag and the reveal follows only tagged events once a check moves the pointer, and the waits are conditions.
+
+
+## 17. Window buttons: Arc's dimmed look (2026-10-26)
+
+The user decided that the window buttons use Arc's grey look in every window state, with the standard colors and glyphs only while the pointer is over the group.
+
+### 17.1 How Arc does it (metadata only)
+
+| Evidence | Command | Finding |
+|---|---|---|
+| `DimmedWindowControls` color | `xcrun assetutil --info …/ARCUI_ARCUI.bundle/…/Assets.car`; strings "Unable to load color asset named DimmedWindowControls." | Black; dark appearance `(0.953, 0.953, 0.918)` |
+| The captured grey is that color | F0001, F0079, F0129, F0131 pixels (sRGB) | Alpha 0.099–0.103 (light) and 0.326–0.332 (dark) on all three channels; plain white does not fit the dark one (0.295 on blue) |
+| A colored edge | same frames | A 1 pt ring just outside the circle: red, yellow, green (least squares, below) |
+| System buttons, not Arc's own | F0001 AX: `AXButton` + `AXCloseButton` / `AXMinimizeButton` / `AXFullScreenButton` at `[12/35/58, 16, 16, 16]`; `nm -u`: no `NSAccessibility…ButtonSubrole` import | Only system buttons carry those subroles. Open's own system buttons report exactly these AX frames at these positions (14 pt views with a 1 pt AX margin). |
+| System button API | strings: `standardWindowButton:`, `standardWindowButton:forStyleMask:`, `performClose:`, `performMiniaturize:`, `performZoom:`, `zoom:`, `toggleFullScreen:` | Arc creates and drives system buttons |
+| Arc's custom control | `otool -ov`: `_TtC3Arc19WindowControlButton : NSControl` with `mouseEntered:`, `mouseExited:`, `mouseDown:`, `rightMouseDown:`, `mouseUp:`, `mouseDragged:`, `resetCursorRects`, `updateLayer`; fields `iconImageView`, `trackingArea`, `isHovered`, `isPressed`, `onClick`, `onRightClick`, `onDragBegin`, `cursor` | No AX override, so it cannot be the F0001 buttons. guess: other window controls (`LeftAccessoryType.windowControls`, `TopBarConfiguration.shouldShowWindowControls`). |
+| macOS's own inactive look differs | Open's window when not key (macOS 27) | `#E6A78E` over `#E49678` (lighter, light content); white ≈ 0.18 (dark) |
+
+`rea inspect-native-dispatch-metadata` refused the 80 MB binary (its 64 MiB input budget), so the method lists come from `otool -ov`. No Ghidra analysis was run. guess: Arc dims system buttons with `DimmedWindowControls`; how it hides their color is not visible in metadata. The look while Arc is key is not captured.
+
+### 17.2 Choice
+
+| Approach | Keeps | Loses | Arc |
+|---|---|---|---|
+| (a) System buttons drawn inactive while the window is key | everything | — | — |
+| **(a′) System buttons transparent at rest, dimmed circles drawn under them; the pointer over the group shows the system buttons** | the actions, Option-click zoom, the tiling menu on the green button, full screen, AX roles and subroles, the system glyphs and colors on hover | nothing functional | keeps system buttons (17.1) |
+| (b) Our own buttons, wired to the window | the actions (rewired), AX subroles (set by hand) | the tiling menu (system UI), the system's glyph art and hover behavior, the exact full-screen and zoom rules | — |
+
+(a) has no public API: macOS picks the buttons' look from the app's and the window's active state. (a′) is the lightest approach that keeps every behavior, so Open uses it:
+
+- `DimmedTrafficLightsView` (OpenDesign) draws the three circles (CAShapeLayers, no `draw`), takes no clicks, and is no AX element. It sits in the title bar view, right under the buttons, and follows them: §16 geometry, +5/+5 on the hover-reveal card, hidden with them, the same slide.
+- At rest the system buttons have alpha 0: they stay in place for clicks and AX. Its tracking area (`.activeAlways`, the group's rect) swaps the alphas over 0.08 s when the pointer enters or leaves, also while Open is inactive.
+- AppKit can reset the buttons' alpha when it lays the title bar out; the placement pass after each layout puts it back. In full screen the system buttons show as they are.
+- Light or dark follows the Space's content appearance, as for the sidebar.
+
+### 17.3 Comparison with Arc (§7 method)
+
+Open's live window at 2216 × 1394 with the capture-time snapshot, sidebar 228 (F0001) or 500 (F0131, F0129 card), Space 4 without its later theme; Open's window was key and the look dimmed in every row. Fill = the 4 × 4 px core; ring = the mean at r 6.5; RMS over the 18 × 18 px around each button.
+
+| Frame | Button | Arc fill | Open fill | ΔE00 | Arc ring | Open ring | ΔE00 | RMS (levels) |
+|---|---|---|---|---|---|---|---|---|
+| F0001 (light) | close | `#CD876C` | `#CD866C` | 0.15 | `#E49175` | `#E29175` | 0.47 | 1.4 |
+| F0001 | minimize | `#CD876C` | `#CD866C` | 0.18 | `#E39572` | `#E19674` | 0.44 | 1.5 |
+| F0001 | zoom | `#CD876D` | `#CD876C` | 0.33 | `#DB9874` | `#DB9874` | 0.17 | 1.4 |
+| F0131 (dark) | close | `#686973` | `#696A73` | 0.52 | `#5F3F4A` | `#63404C` | 1.10 | 3.7 |
+| F0131 | minimize | `#686973` | `#6A6973` | 0.88 | `#5E533C` | `#625441` | 2.57 | 4.2 |
+| F0131 | zoom | `#686973` | `#6A6973` | 0.54 | `#39543E` | `#3E5642` | 1.69 | 4.3 |
+| F0129 (dark, card) | close | `#686973` | `#6A6973` | 0.98 | `#5F404B` | `#63414C` | 1.09 | 3.8 |
+| F0129 | minimize | `#696A74` | `#6A6973` | 0.65 | `#5F543D` | `#635441` | 2.75 | 4.1 |
+| F0129 | zoom | `#6A6A74` | `#6A6973` | 0.66 | `#3B5540` | `#3F5642` | 1.34 | 4.4 |
+
+![Window buttons](design/window-buttons-dimmed.png)
+
+### 17.4 Verification
+
+New `window` suite rows: `traffic_light_look` (the rest look against the expected composite at each center, ±5 levels, and the dark ring, ±12; alpha 0 at rest and 1 under the pointer; AX roles and subroles unchanged; the same look in a window that is not key and on the card, in light and dark; hidden with the sidebar) and `traffic_light_actions` (Option-click zoom zooms and restores; a click enters full screen, where the system buttons show; the dimmed look returns). The tiling menu is reported SKIP: macOS opens it only for the hardware pointer resting on the green button. The `traffic_lights` row now finds the drawn circles at an 8-level contrast (the light rest look differs from the background by 15–23 levels).
