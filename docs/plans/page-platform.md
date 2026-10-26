@@ -92,7 +92,7 @@ behavior where the evidence proves it:
 - Easels, Notes, Arc Max (including pinch to summarize, PG-3.2).
 - Hover capture of single images (FA CA-4). Deferred.
 - Developer Mode effects beyond §4.10.3 until capture C-D1 exists.
-- Playing sound effects. This plan adds only the hook (§4.6.8).
+- Sound effect files and the player (sidebar-completion §3.13 owns them; §4.6.8 only calls it).
 - The Site Control Center panel itself (its plan owns it). This plan owns the
   commands its Capture, Copy URL, and Clear buttons run.
 
@@ -113,18 +113,18 @@ behavior where the evidence proves it:
 | D-11 | Engine fork series `05xx` (media uses `04xx`, extensions `03xx`). New `OEWebContentChange` bits start at `1u << 15` (media uses 13 and 14). | No collisions with plans in flight. |
 | D-12 | Every engine-dependent behavior has an interim path on today's API, or its command is disabled through a named enabled key until the engine item lands. Interim limits are named in the PR that ships them. | Same rule as app-shell D10 and the Site Control plan. |
 
-## 1. Current state (origin/main `d1720e3`, 2026-10-26; re-verify before you edit)
+## 1. Current state (origin/main `bfef13c`, 2026-10-26; re-verify before you edit)
 
 | Area | State | Evidence |
 |---|---|---|
-| App window | `main` runs the M1 shell. The real window is PR #52 (app-shell Step B); menus and keys are Step C. | `docs/status.md` §0.3 |
-| Toast | `OpenFeatures.BrowserWindowController` has one bottom-center toast: 280 × 34, black 0.85, radius 8, optional Undo. Sources: Peek close (`PeekController.onToast`), the pane Copy button (`WebContentContainer.onToast("Copied Current URL")`). | `BrowserWindowController.swift:32-117`, `PeekController.swift:63-192`, `WebContentContainer.swift:85,173` |
+| App window | `main` runs the real window (app-shell Step B, PR #52 merged): `OpenFeatures.BrowserWindowController`, `App/WebContent/EngineWebContentHost.swift`, `App/TabStripMirror.swift`. Menus and keys are Step C (not merged). | `git log origin/main` (`bfef13c`) |
+| Toast | `OpenFeatures.BrowserWindowController.showToast(_:undo:)`: one bottom-center toast, 280 × 34, black 0.85, radius 8, optional Undo. Sources: Peek close (`PeekController.onToast`), the pane Copy button (`WebContentContainer.onToast("Copied Current URL")`). The sidebar-completion plan adds "Folder deleted", "Cleared Tabs", and "Folder restored…" toasts on it, and its own first-hide hint view (`HintToastView`, measured on A0440). | `BrowserWindowController.swift:76-130, 220, 287-292`, `PeekController.swift:63-193`, `WebContentContainer.swift:89, 190`; `docs/plans/sidebar-completion.md` §3.12, §5 |
 | Engine page API | `OEWebContent`: `takeSnapshot` (visible page PNG), `evaluateJavaScript` (DevTools `Runtime.evaluate`, main world), `sendDevToolsMethod`, `zoomLevel`, `zoomIn/zoomOut/resetZoom` (CEF preset steps), `showDevTools`, `OEWebContentChangeZoom`. No selection, no history-swipe, no panel, no full-page API. | `Engine/OpenEngine/include/OpenEngine/OEWebContent.h`, `OEWebContent.mm:842-868` |
 | Engine app API | `OEEngine.sampleProcessMetrics` over `CefTaskManager`. No tracing wrapper. | `OEEngine.mm:661-688` |
 | Commands | Every id exists: `copy-url-quote`, `capture-page` (Cmd+Shift+2), `capture-full-page`, `capture-portrait`, `clear-cache-and-refresh`, `clear-cookies-and-refresh`, `cast`, `appearance-*`, `network-inspector`, `toggle-developer-mode` (Ctrl+D), `allow-js-apple-events`, `task-manager`, `record-trace`, `cancel-trace`, `copy-open-info`, `reveal-open-data`. `MenuBuilder` already adds the "Websites will use:" header. It has no checkmark, dynamic title, or hidden state. | `CommandRegistry.swift`, `MenuBuilder.swift:45-262` |
 | Settings | `open.advanced.enableSharedQuotes` (A-7) and the "Reset Translated-site Prompts" button (logs `resetTranslatePrompts`) exist. Library ▸ Captures reads `<root>/Captures/` and `State/captures.json`. | `settings-library.md` §2.1, §2.6, §5.5, §6.4 |
 | Site Control plan | Merged (#61). Its Capture ×3 and Copy URL buttons run this plan's commands. It defines engine items E2 (per-site data clear) and E5 (isolated-world evaluate), and the automation command `pasteboard` and the e2e helper `fixture_server(tmp)`. Its lead decision Q2 waits for this plan to define Developer Mode. | `site-control-boost-editor.md` §3.2, §8.2, §9, Appendix |
-| Sleep | `OpenSleep` gates: visible, audible, loading, capturing, PiP, DevTools, downloading, unload, form. Branch `m6/sleep-keepalive` adds a keep-alive host list. No notification gate. | `docs/sleep.md`; `origin/m6/sleep-keepalive` |
+| Sleep | `OpenSleep` gates: visible, keepAlive (built-in host list plus per-profile `keepAliveSites`), audible, loading, capturing, devTools, downloading, unload, form. No notification gate. | `SleepPolicy.swift:19`; `docs/sleep.md` "Keep-alive sites" |
 | Helpers | Five helpers share `Helper/Info.plist`. The Alerts helper has no `NSUserNotificationAlertStyle` and shows "Open Helper (Alerts)". | `Helper/Info.plist`, `project.yml:51-122` |
 | P1 | PR #53: the shell's tabs are Chrome-style pages hosted in one hidden Chrome `Browser` per window. | `docs/engine-patches.md` P1 status (branch `m7/ext-p1-tabstrip`) |
 
@@ -207,7 +207,8 @@ Packages/OpenKit/Sources/OpenSettings/SettingsTypes.swift        EDIT SettingsDe
 Packages/OpenKit/Sources/openkit/PageCLI.swift                   NEW  `openkit url-clean`, `openkit lang-detect`
 Packages/OpenKit/Sources/features-render/…                       EDIT scenes toast, swipe, capture, translate (§8.1)
 Packages/OpenKit/Sources/sidebar-render/…                        EDIT scene url-status (§8.1)
-Packages/OpenKit/Package.swift                                   EDIT target OpenTranslate (+ resource), product, openkit dep
+Packages/OpenKit/Package.swift                                   EDIT target OpenTranslate (+ resource), product, openkit dep; new
+                                                                     features-render files go into that target's explicit `sources` list
 App/Page/PageCommands.swift            NEW  CommandDispatcher extension for this plan's ids (§7.1)
 App/Page/NotificationAuthorization.swift NEW macOS authorization + System Settings link
 App/Page/TranslateAdapter.swift        NEW  OpenTranslate ↔ OEWebContent (evaluate, events)
@@ -319,13 +320,12 @@ number in `OpenDesign/PageTokens.swift`, never inline.
 | `ToastMetrics.minWidth` / `maxWidth` | 60 / 380; the title truncates in the middle | PG-1.2; max guess |
 | `ToastMetrics.maxVisible` | 4 | PG-1.8 |
 | `ToastMetrics.lifetime` / `accessoryLifetime` | 3.0 / 6.0 s | PG-1.7 |
-| `ToastMetrics.shadow` | black 0.25, radius 8, y 2 | guess |
-| `ToastMetrics.edgeStroke` | 1 px inner stroke, black 0.12 | PG-1.5 (darker rows 19 and 63); value guess |
-| `Typography.toast` | 14 pt Semibold, white | PG-1.6 (weight guess) |
+| `ToastMetrics.shadow` | black 0.10, radius 8, y 2 | fitted on the hint toast (sidebar-completion §3.12) |
+| `ToastMetrics.rim` | 1 px inner rim, black 0.20 | fitted on the hint toast (sidebar-completion §3.12); PG-1.5 shows the same darker edge rows |
+| `Typography.toast` | 14 pt Medium, white 0.95 | PG-1.6; weight and alpha as measured on the hint toast (sidebar-completion §3.12) |
 | `Typography.toastSubtitle` | 12 pt Regular, white 0.80 | guess |
-| `SpaceThemeStyle.toastFillTop` | `tooltipFill` (the theme's `light.title`, opaque); default Space: `#2B2A33` | PG-1.5 guess (same derivation as the tooltip) |
-| `SpaceThemeStyle.toastFillBottom` | `toastFillTop` × 0.78 per RGB channel | PG-1.5 (bottom ≈ 0.77 × top) |
-| `Motion.toastIn` | scale 0.3 → 1.0 with `SpringToken(response: 0.32, dampingFraction: 0.8)`; alpha 0 → 1 over 0.12 s linear | PG-1.9; numbers guess |
+| `SpaceThemeStyle.toastFillTop` / `toastFillBottom` | One rule shared with `HintToastTokens` (sidebar-completion §3.12): default dark theme `#442B68` → `#332350` (measured); other themes: the theme's tooltip fill lightened 6 % (top) and darkened 6 % (bottom) in OKLab L (guess there). Move the rule into `SpaceThemeStyle` so both views read one source. | PG-1.5: the olive Space measures bottom ≈ 0.77 × top in RGB, the same ratio as the hint's measured pair; use it as the second calibration point |
+| `Motion.toastIn` | scale 0.3 → 1.0 with `SpringToken(response: 0.32, dampingFraction: 0.8)`; alpha 0 → 1 over 0.12 s linear | PG-1.9 (mid-animation text 12 × 6 pt against about 36 × 17 final, so the start scale is far below 0.9); numbers guess. sidebar-completion §3.12 guesses scale 0.9 for the hint; both should read this token |
 | `Motion.toastOut` | alpha → 0 and scale → 0.96 over 0.20 s ease-out | guess |
 
 Layout of one toast: `[icon?][title / subtitle][accessory?]`. Optional
@@ -364,9 +364,12 @@ public struct ToastContent: Sendable, Equatable {
 }
 ```
 
-Undo toasts (Peek) use `.button(symbol: "arrow.uturn.backward",
-accessibilityLabel: "Undo")` and the source's lifetime. Keycaps reuse the
-tooltip keycap plate (`TooltipMetrics.keycap*`, `SpaceThemeStyle.tooltipKeycap`).
+Undo toasts (Peek, and the sidebar-completion toasts) use
+`.button(symbol: "arrow.uturn.backward", accessibilityLabel: "Undo")` and
+the source's lifetime. Keycaps use the hint toast's measured plate: 27 pt
+tall, radius 6, white 0.10, width = keycap ink + 18 (sidebar-completion
+§3.12). The first-hide hint keeps its own window-anchored view (that plan);
+it reads the same fill, rim, shadow, and text tokens.
 
 #### 4.1.4 Toast catalog (every toast this plan adds or moves)
 
@@ -389,6 +392,7 @@ tooltip keycap plate (`TooltipMetrics.keycap*`, `SpaceThemeStyle.tooltipKeycap`)
 | Trace saved | "Trace Saved" | button `folder` (Show in Finder) | 6 s | guess |
 | Copy Open Info | "Copied Open Info" | none | 3 s | PG-11 (wording guess) |
 | Peek closed | "Peek closed" | Undo | 5 s | M4 (moved) |
+| Folder deleted, Cleared Tabs, Folder restored | the sidebar-completion texts | Undo / none | 5 s | sidebar-completion §3 (moved onto `ToastCenter`) |
 | Sleep discard failed, Boost failure | existing texts (app-shell §3.7) | none | 3 s | app-shell §3.7 (moved) |
 
 ### 4.2 Copy URL family
@@ -507,7 +511,7 @@ empty title uses the host. Same toast as Copy URL.
 | Position | vertical center of the page view; x travels from `−diameter` (hidden) to `edgeInset` as progress goes 0 → 1 (mirrored for forward) |
 | Fill | `SpaceThemeStyle.toastFillTop`; alpha `0.35 + 0.65 × progress` |
 | Glyph | `chevron.backward` / `chevron.forward`, 17 pt Semibold, white |
-| Ready state | at progress 1: scale 1.0 → 1.12 with `Motion.toastIn` spring, one haptic `NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)` |
+| Ready state | at progress 1: scale 1.0 → 1.12 with `Motion.toastIn` spring; no haptic (no evidence) |
 | Completed | fade out 0.18 s while the page navigates |
 | Cancelled | slide back to hidden over 0.20 s ease-out |
 | Reduce Motion | no slide: fade in at the final position |
@@ -602,9 +606,8 @@ user clicks
   committed navigation (from `permissionState(for: .notifications, origin:)`)
   and on every permission change, and calls the sleep controller's existing
   change hook.
-- Order with the keep-alive gate (branch `m6/sleep-keepalive`): put
-  `.notifications` right after `.keepAlive`. Land this step after that
-  branch merges.
+- Order: put `.notifications` right after `.keepAlive` in
+  `SleepPolicy.Gate` (`SleepPolicy.swift:19`).
 - `openkit sleep-demo` gains rows: a notification-allowed tab stays live
   past every mode's discard time; flipping the permission to Block lets it
   freeze on the next pass.
@@ -710,9 +713,10 @@ menu, show the keycap toast (§4.1.4) when
 
 #### 4.6.8 Sound hook
 
-`CaptureController.onCaptured` is the place for the capture sound once
-Open's own sound exists and `open.advanced.playSoundEffects` is on
-(FA §9.7). No sound in this plan.
+`CaptureController.onCaptured` calls `SoundEffects.shared.play(.capture)`
+(sidebar-completion §3.13: Open's own `open-capture.caf`, played only when
+`open.advanced.playSoundEffects` is on). If that plan's step has not landed,
+leave a `// TODO(sound)` at this call site.
 
 ### 4.7 Page translation
 
@@ -1322,7 +1326,7 @@ and these `check` rows:
 
 | ID | Check |
 |---|---|
-| R-T1 | One plain toast: frame `[panel.maxX − 10 − w, panel.minY + 8, w, 42]`, radius 11, text 14 pt white, top and bottom fill per `toastFill*` within 1 unit |
+| R-T1 | One plain toast: frame `[panel.maxX − 10 − w, panel.minY + 8, w, 42]`, radius 11, text 14 pt Medium white 0.95, top and bottom fill per `toastFillTop`/`toastFillBottom` within 1 unit |
 | R-T2 | Copy toast with Share: 46 tall, button `[w − 42, 10, 32, 27]` |
 | R-T3 | Four toasts at one anchor: the newest is on top, three are exiting; a fifth removes the oldest |
 | R-T4 | Lifetime with a fake clock: plain 3.0 s, accessory 6.0 s, hover pause, sticky stays |
@@ -1473,7 +1477,7 @@ tagged `[APP]` need app-shell Steps B and C on `main` (real window, menus,
 | 5 | [APP] | Website appearance, Developer panels, Allow JS from Apple Events, Troubleshooting, Cast hidden | 2, 4 | A1, A2, D1, D4, H1–H4 pass; D2 blocked until EP-4b |
 | 6 | [APP] | Clear Cache / Clear Cookies and Refresh (interim cookie path) | 2; Site Control E2 for the cache row | K1 (interim: host-1 cookie gone), K2 |
 | 7 | [APP] | Notifications: plists, authorization, Site Control tile line, P1 activation rules | app-shell D, P1 | N1, N2, N3, N6 pass (U-N1 done once) |
-| 8 | [OpenKit] | Sleep `.notifications` gate | `m6/sleep-keepalive` merged | `sleep-demo` new rows; N5 |
+| 8 | [OpenKit] | Sleep `.notifications` gate | — (keep-alive gate is on `main`) | `sleep-demo` new rows; N5 |
 | 9 | [OpenKit] | `OpenTranslate` target, runtime JS, detector, backend; `URLStatusButton`; popover | 1 | `openkit lang-detect`; `features-render` R-X1; `sidebar-render` S-US1 |
 | 10 | [APP] | Translation wiring (main world, `// Blocked on P7`) | 9 | X1–X6 pass |
 | 11 | [ENGINE fork] | EP-1 (`0501`) | P1 merged (shared tree queue) | engine-api.md; e2e SW1 with Chrome overlay off |
