@@ -196,6 +196,7 @@ func runRoundtrip(args: [String]) throws {
     guard let second = try store.load() else { print("reload failed"); exit(1) }
     if SnapshotMapper.structurallyEqual(first, second) {
         print("roundtrip OK")
+        print("roundtrip keepAliveSites OK: profiles=\(second.profiles.count) sites=\(second.profiles.reduce(0) { $0 + $1.settings.keepAliveSites.count })")
     } else {
         print("roundtrip MISMATCH")
         exit(1)

@@ -47,6 +47,12 @@ class OEClient : public CefClient,
                                 CefRefPtr<CefProcessMessage> message) override;
 
   // CefLifeSpanHandler
+  void OnBeforeDevToolsPopup(CefRefPtr<CefBrowser> browser,
+                             CefWindowInfo& windowInfo,
+                             CefRefPtr<CefClient>& client,
+                             CefBrowserSettings& settings,
+                             CefRefPtr<CefDictionaryValue>& extra_info,
+                             bool* use_default_window) override;
   bool OnBeforePopup(CefRefPtr<CefBrowser> browser,
                      CefRefPtr<CefFrame> frame,
                      int popup_id,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3 -I
-"""End-to-end checks for OpenEngine and the M1 shell (docs/engine-spike.md).
+"""End-to-end checks for OpenEngine and the app shell (docs/engine-spike.md).
 
 Launches the real Open.app with a fresh profile, drives it only through the
 automation socket (docs/automation.md), and writes results plus screenshots
@@ -19,14 +19,18 @@ Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 import argparse
 import base64
 import json
+import glob
+import re
 import os
 import shutil
 import socket
+import statistics
 import struct
 import subprocess
 import sys
 import time
 import traceback
+from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
@@ -41,11 +45,12 @@ CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 
 class Open:
-    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",)):
+    def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
         self.user_data = user_data
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
         env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
@@ -55,9 +60,15 @@ class Open:
             try:
                 self.call("ping")
                 return
-            except OSError:
+            except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
-        raise RuntimeError("Open did not start")
+            if self.proc.poll() is not None:
+                self.log.close()
+                raise RuntimeError("Open exited before automation; see %s" % log_path)
+        self.proc.kill()
+        self.proc.wait()
+        self.log.close()
+        raise RuntimeError("Open did not start; see %s" % log_path)
 
     def call(self, cmd, timeout=120, **args):
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -930,6 +941,50 @@ def tabstrip_checks(app, results):
               and window_events[0].get("refused") is True,
         "result": remove_window, "events": window_events, "live_tabs": len(live_before)}
 
+    # The mirror is the only owner of strip order: chrome.tabs lists exactly
+    # the mirror's tabs, in its order (favorites, every Space's pinned tabs,
+    # then every Space's Today tabs).
+    def mirror_matches():
+        strip = [x for x in app.call("tab-strip") if x["context"] == live()[0][1]["context"]]
+        ids = []
+        for tab_id in strip[0]["tabs"] if strip else []:
+            page = app.call("tab-state", tab=tab_id).get("page") if tab_id else None
+            ids.append(page["chromeTabId"] if page else None)
+        return ids == strip_ids(pop), ids
+
+    # A tab in a second Space of the same profile: chrome.tabs.update
+    # ({active}) focuses that Space and selects it.
+    home = [x for x in app.call("spaces") if x["focused"]][0]["id"]
+    second = app.call("space-create", title="Second")
+    s2 = new_tab(app, "https://example.com/?second-space")
+    s2_cid = app.call("tab-state", tab=s2)["page"]["chromeTabId"]
+    app.call("space", space=home)
+    time.sleep(1)
+    in_strip = s2_cid in strip_ids(pop)
+    mirror_ok, mirror_ids = mirror_matches()
+    ext_eval(pop, "chrome.tabs.update(%d, {active: true}).then(t => t.id)" % s2_cid)
+    switched = wait_until(lambda: [x for x in app.call("spaces") if x["focused"] and x["id"] == second]
+                          and app.call("tab-state", tab=s2)["visible"], timeout=10)
+    app.call("space", space=home)
+    time.sleep(0.5)
+    results["second_space"] = {"ok": in_strip and mirror_ok and bool(switched), "second_space_tab_in_strip": in_strip,
+                               "mirror_matches_chrome_tabs": mirror_ok, "mirror": mirror_ids,
+                               "activation_switched_space": bool(switched)}
+
+    # A Peek page is Alloy and never a chrome.tabs tab.
+    before = strip_ids(pop)
+    app.call("peek-open", tab=first, url="https://example.com/?peek")
+    peek_page = wait_until(lambda: [x for x in app.call("pages") if "?peek" in x["url"]], timeout=15)
+    all_tabs = ext_eval(pop, "chrome.tabs.query({}).then(ts => ts.map(t => t.url || t.pendingUrl))")
+    after = strip_ids(pop)
+    app.call("peek-close")
+    results["peek_not_a_tab"] = {
+        "ok": bool(peek_page) and peek_page[0]["style"] == "alloy" and after == before
+              and not any("?peek" in (u or "") for u in all_tabs),
+        "peek_page": peek_page and {k: peek_page[0][k] for k in ("style", "url", "kind")},
+        "strip_unchanged": after == before,
+        "note": "Little Open is not in this shell yet; its pages will follow the same rule (non-model hosts are Alloy)."}
+
     ev = events(pop)
     results["events_seen"] = sorted({e["type"] for e in ev})
     app.call("popup-close")
@@ -1058,6 +1113,18 @@ def context_menu_commands(app, results):
 
     tab = new_tab(app, index)
     report = {"targets": {}, "ran": 0, "skipped": [], "dismissed": [], "failures": []}
+    home_windows = [x["id"] for x in app.call("shell-windows")]
+
+    def close_new_windows():
+        """Open windows a command opened (Open Link in New Window)."""
+        extra = [x["id"] for x in app.call("shell-windows") if x["id"] not in home_windows]
+        for window in extra:
+            app.call("window-focus", id=window)
+            app.call("window-close")
+        if extra:
+            time.sleep(0.5)
+            app.call("window-focus", id=home_windows[0])
+        return ["open-window"] * len(extra)
 
     def row():
         rows = [t for t in app.call("tabs") if t["id"] == tab]
@@ -1078,6 +1145,7 @@ def context_menu_commands(app, results):
         app.call("rightclick", tab=tab, x=point["x"], y=point["y"])
 
     crashed = None
+    current = None
     try:
         for target in setups:
             app.call("policy", contextMenu="record")
@@ -1092,6 +1160,7 @@ def context_menu_commands(app, results):
                         or command["submenu"] in CONTEXT_MENU_SKIP_SUBMENUS):
                     report["skipped"].append("%s: %s%s" % (target, label, "" if command["enabled"] else " (disabled)"))
                     continue
+                current = "%s: %s" % (target, label)
                 point = prepare(target)
                 app.call("policy", contextMenu="run:%d" % command["id"])
                 right_click(point)
@@ -1099,7 +1168,7 @@ def context_menu_commands(app, results):
                 if app.proc.poll() is not None:
                     crashed = "%s: %s" % (target, label)
                     break
-                dismissed = app.call("dismiss")
+                dismissed = app.call("dismiss") + close_new_windows()
                 if dismissed:
                     report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
                 app.call("ping")
@@ -1112,8 +1181,12 @@ def context_menu_commands(app, results):
             if crashed:
                 break
     except Exception as e:
+        try:
+            app.proc.wait(5)
+        except subprocess.TimeoutExpired:
+            pass
         if app.proc.poll() is not None and not crashed:
-            crashed = "app exited (%s)" % e
+            crashed = "%s (app exited: %s)" % (current, e)
         else:
             report["failures"].append("harness: %s" % e)
     finally:
@@ -1126,6 +1199,578 @@ def context_menu_commands(app, results):
     report["video"] = video
     report["ok"] = not crashed and not report["failures"] and report["ran"] >= 20 and len(report["targets"]) == len(setups)
     results["context_menu_commands"] = report
+
+
+# ----------------------------------------------------------------------------
+# Window startup checks (Step A; Step B extends this suite).
+
+
+def window_checks(app_factory, results, tmp, config):
+    # Local deterministic text paints without DNS, TLS, or external requests.
+    fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
+    runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
+    results["load_average"] = list(os.getloadavg())
+    results["cpu_count"] = os.cpu_count()
+    for i in range(5):
+        # Clear only this suite's own data root. Warm launches then restore a
+        # selected tab plus an unselected tab from the real saved snapshot.
+        app = app_factory(urls=(fixture,), fresh=True)
+        try:
+            tab = app.call("tabs")[0]
+            app.call("wait", tab=tab["id"])
+            wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
+            runs["cold_fresh_profile"].append(app.call("timing"))
+            evidence = app.call("startup")
+            results["window_before_engine_%d" % i] = {
+                "ok": evidence["pagesBeforeEngine"] == 0 and evidence["contextsBeforeEngine"] == 0
+                      and evidence["visibleWindows"] >= 1
+                      and evidence["sidebarClass"] == "OpenSidebar.SidebarView"
+                      and runs["cold_fresh_profile"][-1]["kernelProcessStart"] is True
+                      and runs["cold_fresh_profile"][-1]["firstFrameConfirmed"] is True
+                      and runs["cold_fresh_profile"][-1]["sidebarDrawn"] <= runs["cold_fresh_profile"][-1]["engineStart"],
+                "evidence": evidence}
+            # Create the second row, then return selection to the first row.
+            other = app.call("open", url="data:text/html,<title>Unselected</title><h1>Unselected</h1>")
+            app.call("select", tab=tab["id"])
+            app.call("save")
+            if i == 0:
+                results["window_png"] = {"ok": True, "file": shot(app, "window-startup.png", max_px=2560)}
+        finally:
+            app.quit()
+        app = app_factory(urls=())
+        try:
+            selected = next(t for t in app.call("tabs") if t["selected"])
+            app.call("wait", tab=selected["id"])
+            wait_until(lambda: "firstContentfulPaint" in app.call("timing"), timeout=10, step=0.1)
+            runs["warm_existing_profile"].append(app.call("timing"))
+            tabs = app.call("tabs")
+            results["selected_only_%d" % i] = {
+                "ok": len(tabs) == 2 and len([t for t in tabs if t["loaded"]]) == 1
+                      and next(t for t in tabs if t["loaded"])["id"] == selected["id"],
+                "tabs": [{k: t[k] for k in ("title", "loaded", "selected")} for t in tabs]}
+        finally:
+            app.quit()
+    results["launch_runs"] = runs
+    results["kernel_process_start"] = {"ok": all(r.get("kernelProcessStart") is True for values in runs.values() for r in values), "samples": sum(map(len, runs.values()))}
+    for label, values in runs.items():
+        medians = {key: statistics.median([r[key] for r in values if key in r])
+                   if all(key in r for r in values) else None
+                   for key in ("main", "modelLoaded", "sidebarDrawn", "engineStart", "engineStarted", "firstContentfulPaint")}
+        results[label] = {"median_ms": medians, "samples": len(values)}
+        if config == "Release":
+            results[label]["ok"] = medians["sidebarDrawn"] is not None and medians["sidebarDrawn"] <= 250 and medians["firstContentfulPaint"] is not None and medians["firstContentfulPaint"] <= 700
+        else:
+            results[label].update(status="SKIP", reason="Release timing budgets are not evaluated in Debug")
+        print(label, medians)
+    # A never-loaded pinned row must never pass through selection while
+    # closing or unloading. The counter is cumulative, so create-then-drop
+    # cannot look like zero retained hosts.
+    app = app_factory(urls=(), fresh=True)
+    try:
+        first = new_tab(app, "data:text/html,<title>Selected</title><h1>Selected</h1>")
+        pinned = app.call("open", url="data:text/html,<title>Never loaded</title><h1>Never loaded</h1>", background=True)["id"]
+        app.call("pin", tab=pinned)
+        before = app.call("host-counts")
+        app.call("close", tab=pinned)
+        after_close = app.call("host-counts")
+        app.call("sidebar-unload", tab=pinned)
+        after_unload = app.call("host-counts")
+        results["close_unloaded_pinned"] = {"ok": before == after_close == after_unload
+            and not app.tab(pinned)["loaded"] and app.tab(first)["selected"]
+            and app.eval(first, "document.title") == "Selected",
+            "before": before, "after_close": after_close, "after_unload": after_unload}
+    finally:
+        app.quit()
+    startup_failure_checks(app_factory, results, tmp)
+    window_flow_checks(app_factory, results, tmp)
+    static_window_comparison(app_factory, results, tmp, "window")
+
+
+# ----------------------------------------------------------------------------
+# Real window and production-sidebar flows (Step B).
+
+
+def fixture(name):
+    return "data:text/html,<title>%s</title><h1>%s</h1>" % (name, name)
+
+
+def check_page(app, tab, title):
+    app.call("wait", tab=tab)
+    state = app.call("window-state")
+    page = app.page(tab)
+    return (app.eval(tab, "document.title") == title and state["selected"] == tab
+            and state["shownPages"] == [tab] and state["engineSelected"] == page["identifier"]
+            and state["engineURL"] == page["url"] and page["live"] and not page["hidden"])
+
+
+def window_flow_checks(factory, results, tmp):
+    app = factory(urls=(), fresh=True)
+    try:
+        first = app.call("window-state")
+        w1 = first["id"]
+        results["native_window"] = {
+            "ok": first["titled"] and first["hiddenTitle"] and not first["peekCreated"]
+                  and all(abs(x - target) <= 1 and abs(y - 16) <= 1
+                          for (x, y), target in zip(first["trafficLights"], [12, 35, 58]))
+                  and first["sidebarClass"] == "OpenSidebar.SidebarView",
+            "state": first}
+        app.call("key", key="escape", route="app")
+        results["keys_keep_peek_lazy"] = {"ok": not app.call("window-state")["peekCreated"]}
+        app.call("save")
+        counts = app.call("frame-save-counters")
+        for index in range(12):
+            app.call("window-frame", frame=[80 + index, 60 + index, 1000, 700])
+        immediate = app.call("frame-save-counters")
+        wait_until(lambda: app.call("frame-save-counters")["captures"] > counts["captures"], timeout=4, step=0.1)
+        debounced = app.call("frame-save-counters")
+        def saved_frame():
+            with open(os.path.join(app.user_data, "State", "browser.json")) as stream:
+                row = json.load(stream)["windows"][0]
+            return [row[k] for k in ("frameX", "frameY", "frameWidth", "frameHeight")]
+        saved = wait_until(lambda: saved_frame() == [91, 71, 1000, 700], timeout=4, step=0.1)
+        results["frame_save_debounced"] = {"ok": immediate["captures"] == counts["captures"]
+            and debounced["captures"] == counts["captures"] + 1
+            and immediate["treeChanges"] == counts["treeChanges"] and immediate["mirrorSyncs"] == counts["mirrorSyncs"] and bool(saved),
+            "before": counts, "immediate": immediate, "debounced": debounced}
+        app.call("window-frame", frame=[80, 60, 1000, 700])
+        a = new_tab(app, fixture("Window A"))
+        b = app.call("open", url=fixture("Window B"), background=True)["id"]
+        results["background_lazy"] = {"ok": not app.tab(b)["loaded"] and not app.tab(b)["hasWebContent"]}
+        app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
+        state = app.call("window-state")
+        results["resize_300"] = {"ok": state["sidebarWidth"] == 300 and state["panel"][0] == 300, "state": state}
+        app.call("mouse", **{"from": [300, 300], "to": [700, 300]})
+        wide = app.call("window-state")
+        app.call("mouse", **{"from": [500, 300], "to": [190, 300]})
+        narrow = app.call("window-state")
+        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 228 and narrow["sidebarMode"] == "anchored"}
+        app.call("mouse", **{"from": [228, 300], "to": [170, 300]})
+        wait_until(lambda: app.call("window-state")["sidebarMode"] == "hidden", timeout=3, step=0.1)
+        hidden = app.call("window-state")
+        app.call("mouse", action="move", x=4, y=300)
+        reveal = wait_until(lambda: app.call("window-state")["revealed"], timeout=3, step=0.05)
+        app.call("select", tab=b)
+        dismissed = not app.call("window-state")["revealed"]
+        selected = check_page(app, b, "Window B")
+        app.call("mouse", action="move", x=4, y=300)
+        wait_until(lambda: app.call("window-state")["revealed"], timeout=3, step=0.05)
+        app.call("mouse", action="move", x=600, y=300)
+        left = wait_until(lambda: not app.call("window-state")["revealed"], timeout=3, step=0.05)
+        results["hide_reveal"] = {"ok": hidden["sidebarMode"] == "hidden" and hidden["panel"][0] == 10
+                                      and bool(reveal) and dismissed and selected and bool(left)}
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        time.sleep(0.3)
+        results["toggle_sidebar"] = {"ok": app.call("window-state")["sidebarMode"] == "anchored"}
+        app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        time.sleep(0.3)
+        app.call("key", key="n", modifiers=["cmd"], route="app")
+        windows = app.call("shell-windows")
+        second = app.call("window-state"); w2 = second["id"]
+        results["multiple_windows"] = {"ok": len(windows) == 2 and w1 != w2 and second["frame"] != hidden["frame"]
+                                            and second["selected"] == "" and second["shownPages"] == [], "windows": windows}
+        app.call("window-frame", frame=[300, 200, 900, 600])
+        space2 = app.call("space-create", title="Second Space")
+        c = new_tab(app, fixture("Window C"))
+        app.call("window-focus", id=w1)
+        strip_before = app.call("tab-strip")
+        space1 = app.call("window-state")["space"]
+        app.call("window-focus", id=w2)
+        app.call("space", space=space1); app.call("select", tab=a)
+        strip_second = app.call("tab-strip")
+        app.call("space", space=space2); app.call("select", tab=c)
+        strip_second_after = app.call("tab-strip")
+        app.call("window-focus", id=w1)
+        strip_after = app.call("tab-strip")
+        results["all_spaces_strip_order"] = {"ok": strip_before == strip_after
+            and strip_before[0]["tabs"] == [b, a] and strip_second[0]["tabs"] == [a, c]
+            and strip_second_after[0]["tabs"] == [a, c] and strip_second_after[0]["active"] == c,
+            "first_before": strip_before, "first_after": strip_after, "second_before": strip_second, "second_after": strip_second_after}
+        app.call("window-focus", id=w2)
+        before = app.call("window-state")
+        app.call("window-fullscreen")
+        def finished_fullscreen(on, changes):
+            state = app.call("window-state")
+            return state if state["fullscreen"] == on and not state["fullscreenTransition"] and state["fullscreenChanges"] >= changes else None
+        entered = wait_until(lambda: finished_fullscreen(True, before["fullscreenChanges"] + 1), timeout=15, step=0.1)
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        time.sleep(0.3)
+        full_hidden = app.call("window-state")
+        app.call("mouse", action="move", x=4, y=300)
+        full_reveal = wait_until(lambda: app.call("window-state")["revealed"], timeout=3, step=0.05)
+        app.call("select", tab=c)
+        full_dismiss = not app.call("window-state")["revealed"]
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        time.sleep(0.3)
+        request = app.eval(c, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        page_full = wait_until(lambda: app.call("window-state")["pageFullscreen"], timeout=5, step=0.1)
+        page_state = app.call("window-state")
+        app.call("fullscreen-exit", tab=c)
+        page_exit = wait_until(lambda: not app.call("window-state")["pageFullscreen"], timeout=5, step=0.1)
+        after_page = app.call("window-state")
+        results["html_fullscreen_in_native"] = {"ok": request == "ok" and bool(page_full) and bool(page_exit)
+            and not page_state["sidebarVisible"] and page_state["panel"] == [0, 0] + page_state["frame"][2:]
+            and after_page["fullscreen"] and after_page["sidebarVisible"] and after_page["panel"][0] == 228,
+            "page_state": page_state, "after_exit": after_page}
+        app.call("window-fullscreen")
+        exited = wait_until(lambda: finished_fullscreen(False, before["fullscreenChanges"] + 2), timeout=15, step=0.1)
+        results["fullscreen"] = {"ok": bool(entered) and bool(exited) and check_page(app, c, "Window C")}
+        results["fullscreen_hover_reveal"] = {"ok": bool(full_reveal) and full_dismiss,
+            "hidden_state": full_hidden, "revealed": bool(full_reveal), "dismissed_on_selection": full_dismiss}
+        request = app.eval(c, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        entered_page = wait_until(lambda: finished_fullscreen(True, before["fullscreenChanges"] + 3), timeout=15, step=0.1)
+        page_state = app.call("window-state")
+        app.call("fullscreen-exit", tab=c)
+        exited_page = wait_until(lambda: finished_fullscreen(False, before["fullscreenChanges"] + 4), timeout=15, step=0.1)
+        after_page = app.call("window-state")
+        results["html_fullscreen_from_window"] = {"ok": request == "ok" and bool(entered_page) and bool(exited_page)
+            and page_state["pageFullscreen"] and not page_state["sidebarVisible"]
+            and page_state["panel"] == [0, 0] + page_state["frame"][2:]
+            and not after_page["pageFullscreen"] and after_page["sidebarVisible"] and check_page(app, c, "Window C"),
+            "page_state": page_state, "after_exit": after_page}
+        results["multiple_window_png"] = {"ok": True, "file": shot(app, "window-multiple.png")}
+        app.call("save")
+        expected = {}
+        for wid in (w1, w2):
+            app.call("window-focus", id=wid)
+            state = app.call("window-state")
+            expected[wid] = {k: state[k] for k in ("frame", "sidebarWidth", "sidebarMode", "space", "selected")}
+        app.call("save")
+    finally:
+        app.quit()
+    app = factory(urls=())
+    try:
+        restored = {}
+        restored_pages = []
+        for row in app.call("shell-windows"):
+            app.call("window-focus", id=row["id"])
+            state = app.call("window-state")
+            restored[row["id"]] = {k: state[k] for k in ("frame", "sidebarWidth", "sidebarMode", "space", "selected")}
+            restored_pages.append(check_page(app, state["selected"], "Window B" if row["id"] == w1 else "Window C"))
+        results["window_persistence"] = {"ok": restored == expected and len(app.call("pages")) == 2 and all(restored_pages)
+                                            and restored[w1]["sidebarWidth"] == 300 and restored[w1]["sidebarMode"] == "hidden"
+                                            and restored[w1]["selected"] == b and restored[w2]["selected"] == c,
+                                         "expected": expected, "restored": restored}
+        # Relaunch intentionally restored only B and C. Load A in both windows
+        # before testing that closing one owner preserves the other's live row.
+        app.call("window-focus", id=w1); app.call("select", tab=a); app.call("wait", tab=a); app.call("select", tab=b)
+        app.call("window-focus", id=w2); app.call("space", space=expected[w1]["space"])
+        app.call("select", tab=a); app.call("wait", tab=a)
+        app.call("space", space=space2); app.call("select", tab=c)
+        app.call("window-close")
+        remaining = app.call("tab-state", tab=a)
+        results["window_close_preserves_other_host"] = {"ok": remaining["loaded"] and remaining["hasWebContent"], "state": remaining}
+        app.call("space", space=space2)
+        results["close_window_keeps_tabs"] = {"ok": len(app.call("shell-windows")) == 1 and any(t["id"] == c for t in app.call("tabs"))}
+        app.call("select", tab=c)
+        last = app.call("window-state")
+        last_expected = {k: last[k] for k in ("id", "frame", "sidebarWidth", "sidebarMode", "space", "selected")}
+        app.call("window-close")
+        no_windows = app.call("shell-windows") == []
+        app.call("window-reopen")
+        reopened = app.call("window-state")
+        reopened_state = {k: reopened[k] for k in last_expected}
+        reopened_page = check_page(app, c, "Window C")
+        results["last_window_reopen"] = {"ok": no_windows and len(app.call("shell-windows")) == 1
+            and reopened_state == last_expected and reopened_page,
+            "expected": last_expected, "reopened": reopened_state, "no_windows_after_close": no_windows, "correct_page": reopened_page}
+        app.call("window-close")
+        app.call("save")
+    finally:
+        app.quit()
+    app = factory(urls=())
+    try:
+        restored = app.call("window-state")
+        restored_state = {k: restored[k] for k in last_expected}
+        restored_page = check_page(app, c, "Window C")
+        results["last_window_relaunch"] = {"ok": len(app.call("shell-windows")) == 1
+            and restored_state == last_expected and restored_page,
+            "expected": last_expected, "restored": restored_state, "correct_page": restored_page}
+    finally:
+        app.quit()
+
+
+def peek_checks(factory, results, tmp):
+    app = factory(urls=(), fresh=True)
+    try:
+        source = new_tab(app, fixture("Peek source"))
+        app.call("pin", tab=source)
+        baseline = app.call("host-counts")
+        app.call("peek-open", tab=source, url=fixture("Peek page"))
+        app.call("wait")
+        state = app.call("peek-state")
+        content = state["stack"][-1]["content"]
+        app.call("wait", tab=content)
+        app.eval(content, "window.openPromotionState=73")
+        strip = app.call("tab-strip")
+        results["peek_active_stays_model_tab"] = {"ok": state["shown"] and strip[0]["tabs"] == [source]
+            and strip[0]["active"] == source and strip[0]["activeIsMember"], "strip": strip}
+        before = app.call("host-counts")
+        results["peek_png"] = {"ok": True, "file": shot(app, "peek-window.png")}
+        app.call("peek-expand")
+        wait_until(lambda: not app.call("peek-state")["stack"], timeout=5, step=0.05)
+        promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
+        counts = app.call("host-counts")
+        strip = app.call("tab-strip")
+        results["expand_rebinds_host"] = {"ok": promoted != source and check_page(app, promoted, "Peek page")
+            and app.page(promoted)["identifier"] == content and app.page(promoted)["hostTab"] == promoted
+            and app.eval(promoted, "window.openPromotionState") == 73 and counts == before
+            and strip[0]["tabs"] == [source, promoted] and strip[0]["active"] == promoted,
+            "before": before, "after": counts, "strip": strip}
+        app.call("close", tab=promoted)
+        wait_until(lambda: app.call("host-counts")["engineContents"] == baseline["engineContents"], timeout=5, step=0.1)
+        after = app.call("host-counts")
+        strip = app.call("tab-strip")
+        results["close_promoted_releases_host"] = {"ok": after["retained"] == baseline["retained"]
+            and after["engineContents"] == baseline["engineContents"] and after["created"] == before["created"]
+            and strip[0]["tabs"] == [source] and check_page(app, source, "Peek source"), "after": after}
+        results["window_png"] = {"ok": True, "file": shot(app, "peek-promoted-window.png")}
+    finally:
+        app.quit()
+    app = factory(urls=(), fresh=True)
+    try:
+        color = new_tab(app, 'data:text/html,<title>Page color</title><body style="background:rgb(222,222,250)"><h1>Page color</h1>')
+        new_tab(app, fixture("White pane"))
+        app.call("split")
+        def pane_color():
+            return next((p["color"] for p in app.call("window-state")["paneBackgrounds"] if p["tab"] == color), [])
+        initial = wait_until(lambda: pane_color() == [222,222,250,255], timeout=5, step=0.1)
+        app.call("navigate", tab=color, url='data:text/html,<title>Page color 2</title><body style="background:rgb(30,80,120)"><h1>Page color 2</h1>')
+        app.call("wait", tab=color)
+        changed = wait_until(lambda: pane_color() == [30,80,120,255], timeout=5, step=0.1)
+        results["page_background_after_load"] = {"ok": bool(initial) and bool(changed)
+            and app.page(color)["pageBackground"] == [30,80,120,255], "host": app.page(color), "pane_color": pane_color()}
+    finally:
+        app.quit()
+
+
+def sidebar_checks(factory, results, tmp):
+    app = factory(urls=(), fresh=True)
+    try:
+        results["empty"] = {"ok": app.call("tabs") == [] and app.call("window-state")["shownPages"] == []}
+        a = new_tab(app, fixture("Sidebar A"))
+        b = app.call("open", url=fixture("Sidebar B"), background=True)["id"]
+        results["new_tab_lazy"] = {"ok": check_page(app, a, "Sidebar A") and not app.tab(b)["loaded"]}
+        app.call("select", tab=b)
+        results["select"] = {"ok": check_page(app, b, "Sidebar B") and app.page(a)["hidden"]}
+        app.call("pin", tab=b)
+        pinned = app.tab(b)
+        app.call("pin", tab=b)
+        unpinned = app.tab(b)
+        results["pin_unpin"] = {"ok": pinned["section"] == "pinned" and pinned["page"]["browserPinned"]
+                                      and unpinned["section"] == "today" and not unpinned["page"]["browserPinned"]
+                                      and check_page(app, b, "Sidebar B")}
+        app.call("close", tab=b)
+        archived = app.call("archive")
+        results["close_today_archives"] = {"ok": not any(t["id"] == b for t in app.call("tabs"))
+                                               and any(t["id"] == b for t in archived) and check_page(app, a, "Sidebar A")}
+        app.call("pin", tab=a)
+        old_page = app.page(a)["identifier"]
+        app.call("close", tab=a)
+        unloaded = app.tab(a)
+        results["close_pinned_unloads"] = {"ok": unloaded["section"] == "pinned" and not unloaded["loaded"]
+                                               and not unloaded["hasWebContent"] and unloaded["sleepPhase"] == "placeholder"}
+        app.call("select", tab=a)
+        results["wake_pinned"] = {"ok": check_page(app, a, "Sidebar A") and app.page(a)["identifier"] != old_page}
+        c = new_tab(app, fixture("Sidebar C"))
+        d = new_tab(app, fixture("Sidebar D"))
+        moved = app.call("sidebar-move", tab=c, section="today", index=0)
+        tabs = app.call("tabs")
+        strip = sorted((t["page"]["browserIndex"], t["id"]) for t in tabs if t.get("page"))
+        results["drag_reorder_intent"] = {"ok": moved and [t["id"] for t in tabs] == [a, c, d]
+                                               and [tid for _, tid in strip] == [a, c, d] and check_page(app, d, "Sidebar D")}
+        folder = app.call("folder-create", title="Fixture Folder")
+        first = app.call("folder-toggle", folder=folder)
+        second = app.call("folder-toggle", folder=folder)
+        results["folder_toggle"] = {"ok": first["accepted"] and second["accepted"] and first["expanded"] != second["expanded"]}
+        app.call("sidebar-clear")
+        results["clear_today"] = {"ok": [t["id"] for t in app.call("tabs")] == [a]
+                                       and len(app.call("archive")) >= 3}
+        s1 = next(s for s in app.call("spaces") if s["focused"])["id"]
+        s2 = app.call("space-create", title="Work", profile="Work")
+        e = new_tab(app, fixture("Sidebar E"))
+        context = app.page(e)["context"]
+        app.call("space", space=s1)
+        app.call("select", tab=a)
+        first_page = check_page(app, a, "Sidebar A")
+        app.call("space", space=s2)
+        second_page = check_page(app, e, "Sidebar E")
+        results["space_switch_wrapper"] = {"ok": first_page and second_page and context != "Default"
+                                                and app.page(e)["context"] == context}
+        results["durable_profile_storage"] = {"status": "BLOCKED", "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof."}
+        background = new_tab(app, fixture("Profile background"))
+        app.call("select", tab=e)
+        previous = app.page(e)["identifier"]
+        changed = app.call("space-profile", space=s2, profile="Work New")
+        selected_auto_created = app.tab(e)["loaded"]
+        live_page = check_page(app, e, "Sidebar E")
+        reset = app.call("tab-state", tab=background)
+        new_context = app.page(e)["context"]
+        results["profile_change_tears_down"] = {"ok": changed and selected_auto_created and live_page and app.page(e)["identifier"] != previous
+            and new_context != context and not reset["loaded"] and not reset["hasWebContent"]
+            and not any(reset[k] for k in ("favicon", "crashed", "loading", "audible", "canGoBack", "canGoForward")) and reset["progress"] == 0,
+            "inactive_tab": reset}
+        third_space = app.call("space-create", title="Background opener", profile="Work New")
+        foreground = new_tab(app, fixture("Foreground Space"))
+        known = {tid for strip in app.call("tab-strip") for tid in strip["tabs"]}
+        app.eval(e, '(() => { const w=window.open("about:blank", "_blank"); if(w) { w.document.write("<title>Background child</title><h1>Background child</h1>"); w.document.close(); } return "opened"; })()')
+        child_ids = wait_until(lambda: set(tid for strip in app.call("tab-strip") for tid in strip["tabs"]) - known, timeout=8, step=0.1)
+        child = next(iter(child_ids)) if child_ids else ""
+        child_state = app.call("tab-state", tab=child) if child else {}
+        results["background_space_window_open"] = {"ok": bool(child) and child_state["space"] == s2
+            and child_state["page"]["context"] == new_context and app.eval(child, "document.title") == "Background child", "child": child_state}
+        app.call("space", space=s2); app.call("select", tab=e)
+        before = [t["id"] for t in app.call("tabs")]
+        refused = app.call("sidebar-move", tab=e, folder="00000000-0000-0000-0000-000000000099", index=0)
+        results["refused_move"] = {"ok": not refused and [t["id"] for t in app.call("tabs")] == before
+                                       and check_page(app, e, "Sidebar E")}
+        cache_tabs = []
+        for i in range(10):
+            tid = new_tab(app, fixture("Cache %d" % i))
+            cache_tabs.append(tid)
+            if i == 0: first_page = app.page(tid)["identifier"]
+        retained = app.call("host-counts")["retained"]
+        evicted = not app.tab(cache_tabs[0])["loaded"]
+        states = []
+        for _ in range(6):
+            time.sleep(0.15)
+            states.append(app.tab(cache_tabs[0]))
+        results["evicted_live_state_stays_unloaded"] = {"ok": evicted and all(not t["hasWebContent"] and not t["loaded"] for t in states),
+            "samples": [{k:t[k] for k in ("hasWebContent", "loaded", "loading", "progress")} for t in states]}
+        app.call("select", tab=cache_tabs[0])
+        results["hidden_cache_lru"] = {"ok": retained <= 9 and evicted
+            and check_page(app, cache_tabs[0], "Cache 0") and app.page(cache_tabs[0])["identifier"] != first_page
+            and app.call("host-counts")["retained"] <= 9, "retained_before_wake": retained}
+        results["window_png"] = {"ok": True, "file": shot(app, "sidebar-window.png")}
+    finally:
+        app.quit()
+    static_window_comparison(factory, results, tmp, "sidebar")
+
+
+def static_window_comparison(factory, results, tmp, suite):
+    common = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, text=True).strip()
+    common = os.path.realpath(os.path.join(ROOT, common))
+    capture_root = os.environ.get("OPEN_ARC_CAPTURE_ROOT", os.path.join(os.path.dirname(common), ".re"))
+    snapshot = os.path.join(capture_root, "design-compare", "snap-real", "State", "browser.json")
+    captures = glob.glob(os.path.join(capture_root, "runtime", "sessions", "20261024-213009-session-full", "0001-*", "win-5245.png"))
+    if not captures or not os.path.isfile(snapshot):
+        results["comparison"] = {"status": "SKIP", "reason": "F0001 capture and capture-time snapshot absent in OPEN_ARC_CAPTURE_ROOT"}
+        print("comparison SKIP: F0001 capture and snapshot absent")
+        return
+    private = os.path.join(ROOT, ".re", "app-shell-comparison-" + suite)
+    os.makedirs(private, exist_ok=True)
+    with open(snapshot) as stream:
+        data = json.load(stream)
+    state = data["windows"][0]
+    state.update(focusedSpaceID=data["spaces"][0]["id"], sidebarWidth=228, sidebarMode="anchored",
+                 frameX=40, frameY=40, frameWidth=2216, frameHeight=1394, selectedNodeBySpace={})
+    data["windows"] = [state]
+    data["spaces"][0]["today"] = []
+    fixture_path = os.path.join(private, "browser.json")
+    with open(fixture_path, "w") as stream:
+        json.dump(data, stream)
+    app = factory(urls=(), snapshot=fixture_path)
+    try:
+        wid = app.call("window-state")["id"]
+        app.call("window-focus", id=wid, activate=True)
+        app.call("window-frame", frame=[40, 40, 2216, 1394])
+        time.sleep(0.5)
+        live_state = app.call("window-state")
+        if live_state["frame"][2:] != [2216, 1394]:
+            raise RuntimeError("capture-size window refused: %s" % live_state["frame"])
+        raw = os.path.join(private, "open-live-2x.png")
+        ours = os.path.join(private, "open-live-1x.png")
+        app.call("snapshot", path=raw)
+        subprocess.run(["sips", "-z", "1394", "2216", raw, "--out", ours], check=True, stdout=subprocess.DEVNULL)
+    finally:
+        app.quit()
+    compare = os.path.join(private, "comparison")
+    binary = os.path.join(ROOT, "Packages", "OpenKit", ".build", "release", "sidebar-render")
+    subprocess.run([binary, "compare", "--arc", captures[0], "--ours", ours, "--out", compare], check=True,
+                   stdout=subprocess.DEVNULL)
+    table = open(os.path.join(compare, "table.md")).read()
+    print(table)
+    elements = []
+    for line in table.splitlines():
+        if not line.startswith("| ") or line.startswith("| Element"): continue
+        cells = [x.strip() for x in line.split("|")[1:-1]]
+        def number(text):
+            try: return float(text)
+            except ValueError: return None
+        elements.append({"element": cells[0], "position_pt": number(cells[1]), "delta_e00": number(cells[2])})
+    worst_position = max((x["position_pt"] or 0 for x in elements), default=0)
+    worst_color = max((x["delta_e00"] or 0 for x in elements), default=0)
+    results["comparison"] = {"ok": bool(elements) and worst_position <= 1 and worst_color <= 2,
+        "capture": "F0001", "elements": elements, "worst_position_pt": worst_position, "worst_delta_e00": worst_color,
+        "private_artifacts": os.path.relpath(private, ROOT), "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks"}
+    # Only element names, measurements, and colors leave .re. No captured
+    # browser titles, URLs, icons, or Arc pixels are committed.
+    with open(os.path.join(OUT, "comparison-" + suite + ".md"), "w") as stream:
+        stream.write(table)
+
+
+# ----------------------------------------------------------------------------
+# Early lifecycle failures go through the real NSApplication terminate and
+# NSAlert button paths, with own-process automation flags compiled out of
+# ordinary Release builds.
+
+
+def startup_failure_checks(factory, results, tmp):
+    app = factory(urls=(), fresh=True)
+    app_path = app.proc.args[0]
+    app.quit()
+    unconfirmed = factory(urls=("data:text/html,<title>Unconfirmed frame</title><h1>Unconfirmed frame</h1>",), fresh=True,
+                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1"})
+    try:
+        tab = unconfirmed.call("tabs")[0]
+        unconfirmed.call("wait", tab=tab["id"])
+        timing = unconfirmed.call("timing")
+        results["first_frame_timeout_continues"] = {"ok": timing["firstFrameConfirmed"] is False
+            and "sidebarDrawn" not in timing and timing["firstFrameWaitTimedOut"] >= 3000
+            and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
+            and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
+            "timing": timing, "hosts": unconfirmed.call("host-counts")}
+    finally:
+        unconfirmed.quit()
+    early_data = os.path.join(tmp, "early-quit")
+    log = os.path.join(tmp, "early-quit.log")
+    with open(log, "w") as stream:
+        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+            env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    text = open(log).read()
+    results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
+        and "engineStart" not in text and os.path.isfile(os.path.join(early_data, "State", "browser.json"))
+        and not os.path.exists(os.path.join(early_data, "State", "engine.log")), "exit": proc.returncode}
+    queued_page = Path(tmp) / "queued-navigation.html"
+    queued_page.write_text("<title>Queued</title><h1>Queued</h1>")
+    queued = factory(urls=("data:text/html,<title>Initial</title><h1>Initial</h1>",), fresh=True,
+                     extra_env={"OPEN_AUTOMATION_EARLY_NAVIGATION": queued_page.resolve().as_uri()})
+    try:
+        tab = queued.call("tabs")[0]
+        queued.call("wait", tab=tab["id"])
+        title = queued.eval(tab["id"], "document.title")
+        counts = queued.call("host-counts")
+        startup = queued.call("startup")
+        results["navigation_before_engine"] = {"ok": title == "Queued"
+            and startup["pagesBeforeEngine"] == 0 and startup.get("earlyHostRequestsRefused") is True and counts["created"] == 1,
+            "title": title, "hosts": counts, "readiness_probe": startup.get("earlyHostRequestsRefused")}
+    finally:
+        queued.quit()
+    # APFS clone of our own app, with its CEF library removed: exercise the
+    # actual library-load failure, not an injected engine success/failure.
+    bundle = os.path.dirname(os.path.dirname(os.path.dirname(app_path)))
+    failed_bundle = os.path.join(tmp, "MissingEngine.app")
+    subprocess.run(["cp", "-cR", bundle, failed_bundle], check=True)
+    shutil.rmtree(os.path.join(failed_bundle, "Contents", "Frameworks", "Chromium Embedded Framework.framework"))
+    failure_data = os.path.join(tmp, "engine-failure")
+    failure_log = os.path.join(tmp, "engine-failure.log")
+    with open(failure_log, "w") as stream:
+        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+            env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    text = open(failure_log).read()
+    results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
+        and "engine failure alert shown; button=Quit" in text, "exit": failed.returncode}
+    shutil.rmtree(failed_bundle)
 
 
 # ----------------------------------------------------------------------------
@@ -1197,12 +1842,27 @@ def measure(app_factory, results, tmp):
     results["ok"] = True
 
 
+def engine_provenance(config):
+    def uuid(path):
+        result = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
+        match = re.search(r'UUID: ([0-9A-F-]+)', result.stdout)
+        return match.group(1) if match else ''
+    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    embedded = uuid(os.path.join(ROOT, 'build', config, 'Open.app/Contents/Frameworks', framework))
+    vendor = uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    stamp_file = Path(ROOT, 'Vendor/cef/.open-source')
+    stamp = stamp_file.read_text().strip() if stamp_file.exists() else ''
+    return {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed',
+            'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip"], required=True)
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek"],
+                    required=True)
     opts = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
@@ -1224,39 +1884,64 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
-    def factory(urls=("about:blank",)):
-        return Open(opts.config, opts.style, user_data, extra, log, urls=urls)
+    def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
+        if fresh or snapshot:
+            shutil.rmtree(user_data, ignore_errors=True)
+        if snapshot:
+            os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
+            shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
+        return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
-    if opts.only == "shell":
-        results["shell"] = {}
-        shell_checks(factory, results["shell"], tmp)
-    elif opts.only == "measure":
-        results["measure"] = {}
-        measure(factory, results["measure"], tmp)
-    else:
-        app = factory(urls=("https://example.com/",))
-        try:
-            results["ping"] = app.call("ping")
-            app.call("window-frame", frame=[80, 60, 1360, 860])
-            results[opts.only] = {}
-            if opts.only == "extensions":
-                extension_checks(app, opts.style, results["extensions"])
-            elif opts.only == "tabstrip":
-                tabstrip_checks(app, results["tabstrip"])
-            else:
-                feature_checks(app, opts.style, results["features"], tmp)
-        finally:
-            app.quit()
+    results["engine"] = engine_provenance(opts.config)
+    try:
+        if opts.only == "shell":
+            results["shell"] = {}
+            shell_checks(factory, results["shell"], tmp)
+        elif opts.only == "window":
+            results["window"] = {}
+            window_checks(factory, results["window"], tmp, opts.config)
+        elif opts.only == "sidebar":
+            results["sidebar"] = {}
+            sidebar_checks(factory, results["sidebar"], tmp)
+        elif opts.only == "peek":
+            results["peek"] = {}
+            peek_checks(factory, results["peek"], tmp)
+        elif opts.only == "measure":
+            results["measure"] = {}
+            measure(factory, results["measure"], tmp)
+        else:
+            app = factory(urls=("https://example.com/",))
+            try:
+                results["ping"] = app.call("ping")
+                app.call("window-frame", frame=[80, 60, 1360, 860])
+                results[opts.only] = {}
+                if opts.only == "extensions":
+                    extension_checks(app, opts.style, results["extensions"])
+                elif opts.only == "tabstrip":
+                    tabstrip_checks(app, results["tabstrip"])
+                else:
+                    feature_checks(app, opts.style, results["features"], tmp)
+            finally:
+                app.quit()
+    except Exception as error:
+        results.setdefault(opts.only, {})["suite"] = {"ok": False, "error": str(error)}
+        traceback.print_exc()
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
+            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED"):
+                print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
+    failures = [k for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek")
+                for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
+    if failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
