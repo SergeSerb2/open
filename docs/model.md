@@ -128,6 +128,7 @@ Writes are atomic: write a temp file, then rename over the target.
 Table `archived_tabs`: `id`, `url`, `title`, `space_id`, `profile_id`, `archived_at`, `reason` (`closed` / `autoArchived` / `clearedToday` / `folderDeleted`), `original_location`, `payload` (full tab DTO JSON for restore).
 `ArchiveStore` implements `ArchiveSink`. `archive(_:)` copies plain values on the main actor. JSON encoding and the SQLite writes run on a private serial queue, in one transaction per call. `discardArchived(ids:)` deletes rows on the same queue.
 Query API: `recent(limit:)`, `search(_:limit:)`, `restore(id:)` (returns the record and deletes the row), `purge(olderThanDays:)`, `count()`. All are async.
+`importRecords(_:)` stores imported archive records in one transaction. A record whose ID is already stored counts as a duplicate and keeps the stored row. It returns `(inserted, duplicates)`.
 The restore flow is: `ArchiveStore.restore(id:)` returns the record, then `BrowserModel.restoreArchivedTab(_:)` puts the tab back.
 
 ### HistoryStore (SQLite + FTS5)
@@ -139,8 +140,9 @@ Budget: under 5 ms on a 100k-URL database for selective command-bar queries. See
 
 ## OpenImport
 
-Read order: sidebar, windows, routing.
-The importer reads only `StorableSidebar.json`, `StorableWindows.json`, and `StorableLinkRouting.json`. It never writes to the Arc folder.
+Read order: sidebar, windows, routing, archive, session.
+The importer reads only `StorableSidebar.json`, `StorableWindows.json`, `StorableLinkRouting.json`, `StorableArchiveItems.json` (if present), and `StorableSessionRestorationData.json` (if present). It never writes to the Arc folder.
+Arc IDs map to stable Open IDs. A UUID Arc ID keeps its UUID. A sentinel string ID gets a deterministic UUID from the ID text. The same Arc item therefore maps to the same Open item on every import.
 
 Sidebar parsing follows [data-model.md](re/data-model.md):
 
@@ -160,20 +162,42 @@ Sidebar parsing follows [data-model.md](re/data-model.md):
 - Routing: `contains` becomes `.hostContains`, `equals` / `exact` becomes `.hostEquals`, `prefix` becomes `.urlPrefix`. Other match kinds are skipped and counted. A rule that points at the most recent Space maps to `.mostRecentSpace`. The file default destination maps directly.
 
 `ImportReport` counts: `totalItems`, `spaces`, `pinnedTabs`, `todayTabs`, `favorites`, `folders`, `splits`, `routingRules`, skipped easels / notes / welcome / unknown, `orphans`, and `skippedRoutingRules`.
-Audit rule: imported nodes + folders + splits + skipped + structural containers = `totalItems`. The CLI prints this check on every import.
-Archive import and Boosts import do not run yet. No real `StorableArchiveItems.json` or `StorableBoostsData.json` exists on this Mac. The report states "not imported" for both.
+Audit rule: imported nodes + folders + splits + skipped + structural containers = `totalItems`. The CLI prints this check on every import and exits non-zero on a mismatch.
+Boosts import does not run yet. No real `StorableBoostsData.json` exists on this Mac. The report states "not imported" for Boosts.
+
+Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md) "Archive and session files (observed)"):
+
+- The file holds an alternating `[id, entry, …]` array. Each entry holds `sidebarItem` (a full sidebar item), `reason`, `archivedAt`, and `source`.
+- Parse is lenient. Unknown keys are ignored. Unknown item kinds, unknown reasons, unknown sources, malformed entries, duplicate IDs in the file, and items that are still live in the sidebar are skipped and counted. The import never fails on one bad entry.
+- Non-tab items are skipped and counted by kind: easels, notes, welcome items, and unknown kinds.
+- Reason map: `manual` → `closed`, `auto` → `autoArchived`, `clearButton` → `clearedToday`, `clearTabGroup` → `clearedToday`. No new reason was added. Both clear actions end in Today's cleared state in Open.
+- `archivedAt` converts from the 2001 epoch (`unix = value + 978307200`).
+- The original Space comes from `source.space._0` through the Arc Space ID → Open Space ID map. An unknown Space ID falls back to the first Space. The profile comes from that Space.
+- The archived item's parent folder is lost in Arc's file (`parentID` is null). The record therefore stores `originalLocation` as `today:<spaceID>`. `restoreArchivedTab` then puts the tab at the top of that Space's Today section.
+- The payload holds the full tab fields (`id`, `url`, `title`, `customTitle`, `customIcon`, `createdAt`, `lastActiveAt`, `isMuted`, `isUnread`). `restoreArchivedTab` rebuilds the tab from it.
+- `ArcImporter.importAll()` returns the archive records. It does not write them. The CLI stores them through `ArchiveStore.importRecords(_:)`. OpenImport therefore still depends only on OpenModel.
+- Re-import is idempotent by Arc item ID. Stable Open IDs plus the store duplicate check give zero new rows on a second import into the same output folder.
+
+Session restoration (`StorableSessionRestorationData.json`):
+
+- The file holds `mapping.keysToValues`, an alternating `[key, int, …]` array. Each key holds `browser.windowID`, `browser.contextID`, and `itemId`. The int is a Chromium SessionID.
+- Used: which sidebar items were open in which window. For one window and one Space, the item with the newest `lastActiveAt` becomes `selectedNodeBySpace` for that Space. A session item that is a Favorite selects in the window's focused Space. Pair order is only a tie-break.
+- Ignored: the Chromium SessionID values (the report counts distinct values only), profile and context detail beyond the incognito check, incognito entries (counted), windows that are absent from `StorableWindows.json` (counted as unmapped windows), and items that are absent from the sidebar, for example archived items (counted as unmapped items). Chromium's own `Sessions/Tabs_*` files are not read.
+- The live file on this Mac at the last check held an empty mapping and `StorableWindows.json` held no windows. The session1 snapshot holds 10 pairs in one window and gives 2 applied selections.
 
 ## openkit CLI
 
 ```text
 openkit import-arc [--arc-dir PATH] --out DIR [--show-titles]
+openkit archive-list DIR [--limit N]
 openkit dump DIR
 openkit roundtrip DIR
 openkit bench
 openkit commands-demo DIR
 ```
 
-`import-arc` imports, saves through `SnapshotStore`, prints the report, then prints the tree.
+`import-arc` imports, saves through `SnapshotStore`, stores archive records through `ArchiveStore`, prints the report, then prints the tree. The report holds sidebar counts, archive counts (file total, imported, stored new, stored duplicates, stored total, skipped by kind, and the archive accounted check), session mapping counts, and the final sidebar accounted check.
+`archive-list` lists stored archive rows, newest first. It prints the row ID prefix, host only, reason, and archive time. Titles print as `•••`. `--limit N` caps the rows shown. The total row count always prints.
 Titles and URLs are redacted by default. The tree prints item kind, ID prefix, and host only. `--show-titles` prints full titles and URLs. Never paste `--show-titles` output into docs.
 `dump` loads a snapshot and prints the tree (redacted).
 `roundtrip` loads, saves, reloads, and compares the two DTOs byte for byte. It exits non-zero on a mismatch.
@@ -204,6 +228,77 @@ A fresh copy of the live Arc folder (2026-10-25) gives the same totals: 46 items
 The one routing rule targets the most recent Space. It now imports as `{"mostRecentSpace":{}}`.
 
 Roundtrip: `roundtrip OK` on both imports and on the `commands-demo` folder.
+
+### Archive and session import (2026-10-25)
+
+Build: `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit` — zero warnings, zero errors.
+The Arc `*.json` files were copied to a temp folder first. Each import ran twice into the same output folder. The second run must store zero new archive rows. Titles and URLs stay redacted. Hosts and ID prefixes are the only values shown.
+
+Live Arc folder, first run:
+
+```text
+import report:
+  totalItems=46 accounted=37 spaces=4
+  pinnedTabs=27 todayTabs=0 favorites=6
+  folders=1 splits=1 routingRules=1
+  skipped easels=0 notes=0 welcome=2 unknown=0
+  orphans=0 skippedRoutingRules=0
+  archive: imported 9 of 10
+  archive filePresent=true total=10 imported=9 storedNew=9 storedDuplicates=0 storedTotal=9
+  archive skipped easels=1 notes=0 welcome=0 unknownKind=0 unknownReason=0 unknownSource=0 malformed=0 duplicatesInFile=0 alreadyLive=0
+  archive check accounted=10 total=10 OK
+  session filePresent=true totalPairs=0 mapped=0 unmappedItems=0 unmappedWindows=0 ignoredIncognito=0 windows=0 appliedSelections=0 distinctChromiumIDs=0 malformedPairs=0
+  containers(structural)=9 check imported+skipped+containers=46 total=46
+  accounted check: OK
+```
+
+Live Arc folder, second run into the same output folder. `storedNew=0` proves idempotent re-import:
+
+```text
+  archive filePresent=true total=10 imported=9 storedNew=0 storedDuplicates=9 storedTotal=9
+  archive check accounted=10 total=10 OK
+  accounted check: OK
+```
+
+Live `archive-list` (redacted):
+
+```text
+archive rows total=9 showing=9
+  archive D6533F59 ••• <www.google.com> reason=autoArchived archivedAt=2026-10-25T16:33:01Z
+  archive 15AABB55 ••• <www.google.com> reason=autoArchived archivedAt=2026-10-25T16:33:01Z
+  archive E10F3ED8 ••• <www.google.com> reason=autoArchived archivedAt=2026-10-25T16:33:01Z
+  archive 5EC187C6 ••• <www.google.com> reason=autoArchived archivedAt=2026-10-25T16:33:01Z
+  archive 22E1B63E ••• <www.google.com> reason=autoArchived archivedAt=2026-10-25T16:33:01Z
+  archive 26E214FD ••• <www.google.com> reason=autoArchived archivedAt=2026-10-25T16:33:01Z
+  archive CDE65C16 ••• <www.thebrowser.company> reason=closed archivedAt=2026-10-25T04:33:24Z
+  archive 7A134AB6 ••• <x.com> reason=closed archivedAt=2026-10-25T04:33:00Z
+  archive AA769F4F ••• <same.energy> reason=closed archivedAt=2026-10-25T04:32:26Z
+```
+
+The live archive file holds 10 entries: 9 tabs and 1 easel. The easel is skipped and counted. Six tabs hold reason `auto`. Three tabs hold reason `manual`. The live session file holds an empty mapping. It gives no selections.
+
+Session1 snapshot (`.re/runtime/appsupport/session1`), first run:
+
+```text
+import report:
+  totalItems=53 accounted=44 spaces=4
+  pinnedTabs=27 todayTabs=6 favorites=6
+  folders=1 splits=1 routingRules=1
+  skipped easels=1 notes=0 welcome=2 unknown=0
+  orphans=0 skippedRoutingRules=0
+  archive: imported 3 of 3
+  archive filePresent=true total=3 imported=3 storedNew=3 storedDuplicates=0 storedTotal=3
+  archive check accounted=3 total=3 OK
+  session filePresent=true totalPairs=10 mapped=10 unmappedItems=0 unmappedWindows=0 ignoredIncognito=0 windows=1 appliedSelections=2 distinctChromiumIDs=10 malformedPairs=0
+  containers(structural)=9 check imported+skipped+containers=53 total=53
+  accounted check: OK
+```
+
+Session1, second run: `storedNew=0 storedDuplicates=3 storedTotal=3`. Session1 `archive-list` shows the same 3 `closed` rows as the last 3 rows of the live list. `roundtrip OK` on the live import, on session1, and on `commands-demo`. `commands-demo` on a fresh folder and on a copy of the imported snapshot: `commands-demo OK: 66 checks passed, 0 failed`.
+
+Restore check: one imported session1 record went through `ArchiveStore.restore(id:)` and `BrowserModel.restoreArchivedTab(_:)`. The tab came back in the Today section of its source Space. This check ran in a throwaway probe outside the repo. It is not a unit test.
+
+Edge check: a synthetic archive with one good tab, one unknown reason, one unknown source, one easel, one unknown kind, and one duplicate ID gave `imported=1` and one count in each skip bucket. The archive check still read OK. `archive-list` on an empty folder reads `archive rows total=0 showing=0`.
 
 Old files still decode. A schema 1 snapshot with the pre-change rule encoding (`{"space":{"_0":…}}` in place of `{"mostRecentSpace":{}}`) loads with `dump` and round-trips with `roundtrip OK`.
 

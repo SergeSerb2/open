@@ -41,7 +41,7 @@ func printTree(model: BrowserModel, showTitles: Bool) {
 }
 
 @MainActor
-func runImportArc(args: [String]) throws {
+func runImportArc(args: [String]) async throws {
     var arcDir: URL?
     var outDir: URL?
     var showTitles = false
@@ -60,9 +60,21 @@ func runImportArc(args: [String]) throws {
         exit(2)
     }
     let importer = ArcImporter(arcDirectory: arcDir)
-    let (model, report) = try importer.importModel()
+    let result = try importer.importAll()
+    let model = result.model
+    var report = result.report
     let store = SnapshotStore(root: outDir)
     store.saveNow(model: model)
+    let archiveStore = ArchiveStore(root: outDir)
+    if !result.archiveRecords.isEmpty {
+        let stored = await archiveStore.importRecords(result.archiveRecords)
+        report.archiveStoredNew = stored.inserted
+        report.archiveStoredDuplicates = stored.duplicates
+    } else if report.archiveFilePresent {
+        report.archiveStoredNew = 0
+        report.archiveStoredDuplicates = 0
+    }
+    let archiveTotalStored = await archiveStore.count()
     print("import report:")
     print("  totalItems=\(report.totalItems) accounted=\(report.accounted) spaces=\(report.spaces)")
     print("  pinnedTabs=\(report.pinnedTabs) todayTabs=\(report.todayTabs) favorites=\(report.favorites)")
@@ -70,11 +82,62 @@ func runImportArc(args: [String]) throws {
     print("  skipped easels=\(report.skippedEasels) notes=\(report.skippedNotes) welcome=\(report.skippedWelcome) unknown=\(report.skippedUnknown)")
     print("  orphans=\(report.orphans) skippedRoutingRules=\(report.skippedRoutingRules)")
     print("  archive: \(report.archiveStatus)")
+    if report.archiveFilePresent {
+        print("  archive filePresent=true total=\(report.archiveTotal) imported=\(report.archiveImported) storedNew=\(report.archiveStoredNew) storedDuplicates=\(report.archiveStoredDuplicates) storedTotal=\(archiveTotalStored)")
+        print("  archive skipped easels=\(report.archiveSkippedEasels) notes=\(report.archiveSkippedNotes) welcome=\(report.archiveSkippedWelcome) unknownKind=\(report.archiveSkippedUnknownKind) unknownReason=\(report.archiveSkippedUnknownReason) unknownSource=\(report.archiveSkippedUnknownSource) malformed=\(report.archiveSkippedMalformed) duplicatesInFile=\(report.archiveDuplicatesInFile) alreadyLive=\(report.archiveAlreadyLive)")
+        let archiveCheck = report.archiveAccounted == report.archiveTotal ? "OK" : "MISMATCH"
+        print("  archive check accounted=\(report.archiveAccounted) total=\(report.archiveTotal) \(archiveCheck)")
+    } else {
+        print("  archive filePresent=false total=0 imported=0")
+    }
     print("  boosts: \(report.boostsStatus)")
-    let containers = report.totalItems - report.accounted - report.orphans
-    // Orphans are already inside accounted via imported counts; show the container count for the audit line.
-    print("  containers(structural)=\(containers) check imported+skipped+containers=\(report.accounted + containers) total=\(report.totalItems)")
+    if report.sessionFilePresent {
+        print("  session filePresent=true totalPairs=\(report.sessionTotalPairs) mapped=\(report.sessionMapped) unmappedItems=\(report.sessionUnmappedItems) unmappedWindows=\(report.sessionUnmappedWindows) ignoredIncognito=\(report.sessionIgnoredIncognito) windows=\(report.sessionWindows) appliedSelections=\(report.sessionAppliedSelections) distinctChromiumIDs=\(report.sessionDistinctChromiumIDs) malformedPairs=\(report.sessionMalformedPairs)")
+    } else {
+        print("  session filePresent=false totalPairs=0 mapped=0")
+    }
+    print("  containers(structural)=\(report.containers) check imported+skipped+containers=\(report.accountedTotal) total=\(report.totalItems)")
+    let sidebarCheck = report.accountedTotal == report.totalItems ? "OK" : "MISMATCH"
+    print("  accounted check: \(sidebarCheck)")
+    if report.accountedTotal != report.totalItems {
+        printTree(model: model, showTitles: showTitles)
+        exit(1)
+    }
+    if report.archiveFilePresent && report.archiveAccounted != report.archiveTotal {
+        printTree(model: model, showTitles: showTitles)
+        exit(1)
+    }
     printTree(model: model, showTitles: showTitles)
+}
+
+@MainActor
+func runArchiveList(args: [String]) async {
+    var dirArg: String?
+    var limit = 100
+    var idx = 0
+    while idx < args.count {
+        switch args[idx] {
+        case "--limit":
+            idx += 1
+            if idx < args.count { limit = Int(args[idx]) ?? 100 }
+        default:
+            if dirArg == nil { dirArg = args[idx] }
+        }
+        idx += 1
+    }
+    guard let dirArg else {
+        FileHandle.standardError.write(Data("usage: openkit archive-list DIR [--limit N]\n".utf8))
+        exit(2)
+    }
+    let store = ArchiveStore(root: URL(fileURLWithPath: dirArg))
+    let rows = await store.recent(limit: max(0, limit))
+    let total = await store.count()
+    print("archive rows total=\(total) showing=\(rows.count)")
+    let formatter = ISO8601DateFormatter()
+    for row in rows {
+        let host = row.url.host() ?? "•••"
+        print("  archive \(row.id.rawValue.uuidString.prefix(8)) ••• <\(host)> reason=\(row.reason.rawValue) archivedAt=\(formatter.string(from: row.archivedAt))")
+    }
 }
 
 @MainActor
