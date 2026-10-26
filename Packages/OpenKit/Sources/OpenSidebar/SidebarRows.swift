@@ -18,6 +18,23 @@ import OpenModel
 final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
+    private var keyboardRing: CAShapeLayer?
+    weak var representedItem: AnyObject?
+    var isKeyboardFocused = false {
+        didSet {
+            guard isKeyboardFocused != oldValue else { return }
+            if isKeyboardFocused, keyboardRing == nil {
+                let ring = CAShapeLayer()
+                ring.fillColor = nil
+                ring.strokeColor = NSColor.keyboardFocusIndicatorColor.cgColor
+                ring.lineWidth = 2
+                layer?.addSublayer(ring)
+                keyboardRing = ring
+                needsLayout = true
+            }
+            keyboardRing?.isHidden = !isKeyboardFocused
+        }
+    }
     weak var page: SpacePageView?
     /// Rows without a fill (spacer, divider) never highlight.
     var allowsHighlight = true { didSet { if allowsHighlight != oldValue { updateFill(animated: false) } } }
@@ -51,6 +68,9 @@ final class SidebarRowView: NSTableRowView {
         let m = SpaceListMetrics.self
         let rect = CGRect(x: m.rowFillInsetX + fillIndent, y: m.rowFillInsetTop,
                           width: bounds.width - 2 * m.rowFillInsetX - fillIndent, height: m.rowFillHeight)
+        keyboardRing?.frame = bounds
+        keyboardRing?.path = CGPath(roundedRect: rect.insetBy(dx: 1, dy: 1), cornerWidth: m.rowFillCornerRadius,
+                                  cornerHeight: m.rowFillCornerRadius, transform: nil)
         fill.frame = rect
         fill.cornerRadius = m.rowFillCornerRadius
         fill.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: rect.size), cornerWidth: m.rowFillCornerRadius,
@@ -90,8 +110,28 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
+    override func isAccessibilityElement() -> Bool { itemID(of: representedItem) != nil || representedItem is NewTabItem }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? {
+        switch representedItem {
+        case let tab as Tab: tab.displayTitle
+        case let folder as Folder: folder.title
+        case let split as Split: "Split View: " + split.panes.map(\.displayTitle).joined(separator: ", ")
+        case is NewTabItem: "New Tab"
+        default: nil
+        }
+    }
+    override func isAccessibilityFocused() -> Bool { isKeyboardFocused }
+    override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
+    override func accessibilityPerformPress() -> Bool {
+        guard let representedItem else { return false }
+        return page?.activate(item: representedItem) ?? false
+    }
+
     override func prepareForReuse() {
         super.prepareForReuse()
+        representedItem = nil
+        isKeyboardFocused = false
         isHovered = false
         isCurrent = false
         isDropTarget = false
@@ -228,6 +268,7 @@ final class TabCellView: SidebarCellView {
     private func makeAccessory() -> PlateButton {
         if let accessory { return accessory }
         let b = PlateButton(glyph: .rowClose)
+        b.accessibleTitle = { [weak self] in self?.showsUnload == true ? "Unload tab" : "Archive tab" }
         b.plateRadius = 6
         b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
         b.plateColor = { _ in SidebarRole.rowPressed }
@@ -243,6 +284,7 @@ final class TabCellView: SidebarCellView {
     private func makeAudio() -> PlateButton {
         if let audio { return audio }
         let b = PlateButton(glyph: .audioPlaying)
+        b.accessibleTitle = { [weak self] in self?.tab?.isMuted == true ? "Unmute tab" : "Mute tab" }
         b.showsHoverPlate = false
         b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
         b.action = { [weak self] in

@@ -95,13 +95,20 @@ public final class TooltipController {
     private var panel: NSPanel?
     private var pending: DispatchWorkItem?
     private weak var owner: NSView?
+    private var scheduledTooltip: Tooltip?
+    public private(set) var scheduleCount = 0
+    public private(set) var showCount = 0
 
     func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
+        if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }
         cancel(for: owner)
         owner = view
+        scheduledTooltip = tooltip
+        scheduleCount += 1
         let work = DispatchWorkItem { [weak self, weak view] in
             MainActor.assumeIsolated {
                 guard let self, let view, self.owner === view else { return }
+                self.pending = nil
                 self.show(tooltip, for: view, at: point)
             }
         }
@@ -113,6 +120,7 @@ public final class TooltipController {
         guard view == nil || owner === view else { return }
         pending?.cancel(); pending = nil
         owner = nil
+        scheduledTooltip = nil
         guard let panel else { return }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Motion.tooltipFade
@@ -122,6 +130,7 @@ public final class TooltipController {
 
     private func show(_ tooltip: Tooltip, for view: NSView, at point: NSPoint?) {
         guard let window = view.window else { return }
+        showCount += 1
         let content = TooltipView(tooltip: tooltip)
         let size = content.fittingSize
         let margin = TooltipMetrics.shadowMargin

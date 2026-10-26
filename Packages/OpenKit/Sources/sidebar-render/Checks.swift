@@ -190,6 +190,8 @@ enum Checks {
         pump()
         check(context.focusedSpace === model.spaces[2], "a short swipe snaps back")
 
+        ReviewChecks.run()
+
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil
         host.close()

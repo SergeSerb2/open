@@ -1,4 +1,5 @@
 import AppKit
+import OpenDesign
 import Metal
 import QuartzCore
 import ImageIO
@@ -51,6 +52,11 @@ final class OffscreenRenderer {
             view.window?.displayIfNeeded()
             if runLoop > 0 { RunLoop.main.run(until: Date().addingTimeInterval(runLoop)) }
         }
+        func prepare(_ v: NSView) {
+            (v as? ThemeBackgroundView)?.prepareForSnapshot()
+            v.subviews.forEach(prepare)
+        }
+        prepare(view)
         CATransaction.flush()
     }
 

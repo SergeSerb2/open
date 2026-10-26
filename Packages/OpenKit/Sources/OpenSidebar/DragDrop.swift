@@ -25,6 +25,24 @@ enum SidebarPasteboard {
         return item
     }
 
+    /// Nil means external URLs; an empty array means an invalid local payload.
+    static func nodeIDs(from pb: NSPasteboard) -> [ItemID]? {
+        let items = pb.pasteboardItems ?? []
+        guard items.contains(where: { $0.types.contains(.sidebarNode) }) else { return nil }
+        var ids: [ItemID] = []
+        for item in items {
+            guard let value = item.string(forType: .sidebarNode), let uuid = UUID(uuidString: value) else { return [] }
+            let id = ItemID(rawValue: uuid)
+            guard !ids.contains(id) else { return [] }
+            ids.append(id)
+        }
+        return ids
+    }
+
+    static func destination(for id: ItemID, in space: SpaceID, model: BrowserModel) -> NodeParent {
+        model.isPinned(tabID: id) ? .spacePinned(space) : .spaceToday(space)
+    }
+
     static func nodeID(from pb: NSPasteboard) -> ItemID? {
         guard let s = pb.pasteboardItems?.first?.string(forType: .sidebarNode), let uuid = UUID(uuidString: s) else { return nil }
         return ItemID(rawValue: uuid)

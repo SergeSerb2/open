@@ -92,8 +92,10 @@ final class TrafficLightsView: NSView {
 @MainActor
 final class RecordingDelegate: SidebarDelegate {
     var log: [SidebarIntent] = []
-    func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) {
+    var refuses = false
+    @discardableResult
+    func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
         log.append(intent)
-        ModelSidebarActions(context: sidebar.context).perform(intent)
+        return !refuses && ModelSidebarActions(context: sidebar.context).perform(intent)
     }
 }

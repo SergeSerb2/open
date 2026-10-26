@@ -28,6 +28,12 @@ public final class ThemeBackgroundView: NSView {
 
     private var current = ThemeLayer(style: .defaultTheme(system: .light))
     private var incoming: ThemeLayer?
+    private var displayLink: CADisplayLink?
+    private var displayTarget: ThemeDisplayTarget?
+    private var resizing = false
+    public private(set) var fieldRebuildCount = 0
+
+    isolated deinit { displayLink?.invalidate() }
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
@@ -52,12 +58,54 @@ public final class ThemeBackgroundView: NSView {
         refresh()
     }
 
+    public override func viewWillStartLiveResize() {
+        super.viewWillStartLiveResize()
+        resizing = true
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+
+    public override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        resizing = false
+        refresh()
+    }
+
     private func refresh() {
+        // Stretch the existing field while resizing. Rebuild only on a display tick.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for layer in [current, incoming].compactMap({ $0 }) {
+            layer.frame = bounds
+            layer.resize(to: bounds.size)
+        }
+        CATransaction.commit()
+        guard !inLiveResize, !resizing, displayLink == nil, bounds.width > 0, bounds.height > 0 else { return }
+        let target = displayTarget ?? ThemeDisplayTarget(owner: self)
+        displayTarget = target
+        let link = displayLink(target: target, selector: #selector(ThemeDisplayTarget.tick(_:)))
+        self.displayLink = link
+        link.add(to: .main, forMode: .common)
+    }
+
+    fileprivate func displayFrame() {
+        displayLink?.invalidate()
+        displayLink = nil
+        guard !inLiveResize, !resizing else { return }
+        rebuildFields()
+    }
+
+    /// Offscreen renderers have no visible display ticks. Flush once after layout.
+    public func prepareForSnapshot() {
+        displayFrame()
+    }
+
+    private func rebuildFields() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         for l in [current, incoming].compactMap({ $0 }) {
             l.frame = bounds
-            l.update(size: bounds.size, active: isWindowActive, scale: scale)
+            if l.update(size: bounds.size, active: isWindowActive, scale: scale) { fieldRebuildCount += 1 }
         }
         CATransaction.commit()
     }
@@ -131,6 +179,14 @@ public final class ThemeBackgroundView: NSView {
     }
 }
 
+/// The display link retains this target, which holds the view weakly.
+@MainActor
+private final class ThemeDisplayTarget: NSObject {
+    weak var owner: ThemeBackgroundView?
+    init(owner: ThemeBackgroundView) { self.owner = owner }
+    @objc func tick(_ link: CADisplayLink) { owner?.displayFrame() }
+}
+
 /// One theme: the gradient field plus the grain tile layers.
 final class ThemeLayer: CALayer {
     var theme: SpaceThemeStyle { didSet { if theme != oldValue { fieldKey = nil; grainKey = nil } } }
@@ -167,23 +223,8 @@ final class ThemeLayer: CALayer {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    @MainActor func update(size: CGSize, active: Bool, scale: CGFloat) {
-        guard size.width > 0, size.height > 0 else { return }
+    @MainActor func resize(to size: CGSize) {
         field.frame = CGRect(origin: .zero, size: size)
-        // Rebuild when the aspect ratio moves by more than 0.5 %.
-        let key = FieldKey(active: active, aspect: Int((size.width / size.height * 200).rounded()))
-        if key != fieldKey {
-            fieldKey = key
-            field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
-        }
-        let noise = theme.noiseFactor
-        guard noise > 0 else { grainColumns.isHidden = true; return }
-        let gkey = GrainKey(noise: noise, scale: scale)
-        if gkey != grainKey {
-            grainKey = gkey
-            grainTile.contents = Grain.tile(noiseFactor: noise, scale: scale)
-            grainTile.contentsScale = scale
-        }
         let t = Grain.tilePoints
         grainTile.frame = CGRect(x: 0, y: 0, width: t, height: t)
         grainRows.frame = CGRect(x: 0, y: 0, width: t, height: size.height)
@@ -192,7 +233,28 @@ final class ThemeLayer: CALayer {
         grainColumns.frame = CGRect(origin: .zero, size: size)
         grainColumns.instanceCount = Int((size.width / t).rounded(.up))
         grainColumns.instanceTransform = CATransform3DMakeTranslation(t, 0, 0)
+    }
+
+    @MainActor func update(size: CGSize, active: Bool, scale: CGFloat) -> Bool {
+        guard size.width > 0, size.height > 0 else { return false }
+        resize(to: size)
+        // Rebuild when the aspect ratio moves by more than 0.5 %.
+        let key = FieldKey(active: active, aspect: Int((size.width / size.height * 200).rounded()))
+        let rebuilt = key != fieldKey
+        if rebuilt {
+            fieldKey = key
+            field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
+        }
+        let noise = theme.noiseFactor
+        guard noise > 0 else { grainColumns.isHidden = true; return rebuilt }
+        let gkey = GrainKey(noise: noise, scale: scale)
+        if gkey != grainKey {
+            grainKey = gkey
+            grainTile.contents = Grain.tile(noiseFactor: noise, scale: scale)
+            grainTile.contentsScale = scale
+        }
         grainColumns.isHidden = false
+        return rebuilt
     }
 }
 

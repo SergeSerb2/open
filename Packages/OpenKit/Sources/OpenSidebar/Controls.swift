@@ -214,6 +214,7 @@ enum FaviconCache {
 class PlateButton: NSView {
     let glyphView = GlyphView()
     let plate = CALayer()
+    var accessibleTitle: (@MainActor () -> String)?
     var action: (@MainActor () -> Void)?
     var menuProvider: (@MainActor () -> NSMenu?)?
     var tooltip: (@MainActor () -> Tooltip?)?
@@ -323,5 +324,15 @@ class PlateButton: NSView {
 
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func isAccessibilityElement() -> Bool { true }
-    override func accessibilityPerformPress() -> Bool { action?(); return action != nil }
+    override func accessibilityLabel() -> String? { accessibleTitle?() ?? tooltip?()?.title ?? super.accessibilityLabel() }
+    override func isAccessibilityEnabled() -> Bool { isEnabled() }
+    override func accessibilityPerformPress() -> Bool {
+        guard isEnabled() else { return false }
+        if let menu = menuProvider?() {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.maxY + 4), in: self)
+            return true
+        }
+        action?()
+        return action != nil
+    }
 }

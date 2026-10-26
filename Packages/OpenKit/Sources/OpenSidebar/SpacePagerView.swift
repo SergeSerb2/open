@@ -43,6 +43,7 @@ final class SpacePagerView: NSView {
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    isolated deinit { loop?.cancel() }
     override var isFlipped: Bool { true }
 
     private var spaces: [Space] { context.model.spaces }

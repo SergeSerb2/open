@@ -65,11 +65,9 @@ public final class SidebarView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    deinit {
-        MainActor.assumeIsolated {
-            if let observerID { context.model.removeObserver(observerID) }
-            loops.forEach { $0.cancel() }
-        }
+    isolated deinit {
+        if let observerID { context.model.removeObserver(observerID) }
+        loops.forEach { $0.cancel() }
     }
 
     public override var isFlipped: Bool { true }
@@ -179,7 +177,8 @@ public final class SidebarView: NSView {
 
 @MainActor
 public protocol SidebarDelegate: AnyObject {
-    func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent)
+    @discardableResult
+    func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool
 }
 
 /// Counters for checks and benches.
@@ -244,6 +243,15 @@ extension SidebarView {
     /// Simulates a two-finger horizontal swipe through the pager's real handler.
     public func simulateSwipe(_ events: [NSEvent]) {
         for e in events { _ = pager.handleScroll(e) }
+    }
+
+    public var favoritesCollection: NSCollectionView { favorites.collection }
+    public func spaceSwitcher(spaceID: SpaceID) -> NSView? { bottomBar.items[spaceID] }
+
+    /// Resync a profile after a bulk import/reload.
+    public func reloadFavorites() {
+        guard let profile = context.favoritesProfile else { return }
+        apply(.reload(parent: .favorites(profile.id)))
     }
 
     /// The focused page's tab list (checks and benches).

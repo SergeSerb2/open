@@ -40,6 +40,7 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    isolated deinit { loop?.cancel() }
     override var isFlipped: Bool { true }
 
     override func layout() {
@@ -72,8 +73,13 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
             if !plan.insertions.isEmpty { self.collection.insertItems(at: Set(plan.insertions.map { IndexPath(item: $0, section: 0) })) }
             for m in plan.moves { self.collection.moveItem(at: IndexPath(item: m.from, section: 0), to: IndexPath(item: m.to, section: 0)) }
         }
-        if plan.isSimple {
-            if animate { collection.animator().performBatchUpdates(updates) } else { collection.performBatchUpdates(updates) }
+        let isReload: Bool
+        if case .reload = change { isReload = true } else { isReload = false }
+        let mixesMovesWithCountChanges = !plan.moves.isEmpty && (!plan.removals.isEmpty || !plan.insertions.isEmpty)
+        // Bulk reloads have no precise edit sequence. Offscreen collection batches
+        // can also retain stale items while AppKit waits for an animation commit.
+        if animate && !isReload && plan.isSimple && !mixesMovesWithCountChanges {
+            collection.animator().performBatchUpdates(updates)
         } else {
             tabs = new
             collection.reloadData()
@@ -111,7 +117,7 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         dropOperation.pointee = .before
         if let id = SidebarPasteboard.nodeID(from: draggingInfo.draggingPasteboard) {
             // Favorites hold tabs only.
-            guard case .tab = context.model.node(id: id) else { return [] }
+            guard let profileID, context.model.canMoveNode(id: id, to: .favorites(profileID)) else { return [] }
             return .move
         }
         return SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).isEmpty ? [] : .copy
@@ -122,15 +128,13 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         let index = indexPath.item
         if let id = SidebarPasteboard.nodeID(from: draggingInfo.draggingPasteboard) {
             if let from = tabs.firstIndex(where: { $0.id == id }) {
-                context.send(.moveFavorite(tabID: id, index: from < index ? index - 1 : index))
+                return context.send(.moveFavorite(tabID: id, index: from < index ? index - 1 : index))
             } else {
-                context.send(.addFavorite(tabID: id, index: index))
+                return context.send(.addFavorite(tabID: id, index: index))
             }
-            return true
         }
         guard let profileID, let url = SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).first else { return false }
-        context.send(.openURL(url, in: .favorites(profileID), index: index))
-        return true
+        return context.send(.openURL(url, in: .favorites(profileID), index: index))
     }
 }
 
@@ -313,4 +317,8 @@ final class FavoriteTileView: NSView {
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }
     override func accessibilityLabel() -> String? { tab?.displayTitle }
+    override func accessibilityPerformPress() -> Bool {
+        guard let tab else { return false }
+        return context?.send(.selectFavorite(tabID: tab.id)) ?? false
+    }
 }

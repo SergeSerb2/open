@@ -50,8 +50,7 @@ public struct ModelSidebarActions {
             }
             return model.moveNode(id: id, to: parent, at: index)
         case .moveToSpace(let id, let space):
-            let pinned = model.isPinned(tabID: id) || model.node(id: id)?.folder != nil
-            return model.moveNode(id: id, to: pinned ? .spacePinned(space) : .spaceToday(space), at: 0)
+            return model.moveNode(id: id, to: SidebarPasteboard.destination(for: id, in: space, model: model), at: 0)
         case .addFavorite(let id, let index):
             guard let profile = context.favoritesProfile else { return false }
             return model.addFavorite(tabID: id, to: profile.id, at: index)
@@ -86,9 +85,8 @@ public struct ModelSidebarActions {
         case .openURL(let url, let parent, let index):
             switch parent {
             case .spacePinned(let s), .spaceToday(let s):
-                let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString)
+                let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString, at: index)
                 if case .spacePinned = parent { return model.moveNode(id: tab.id, to: parent, at: index) }
-                if let index, index != 0 { return model.moveNode(id: tab.id, to: parent, at: index) }
             case .folder, .favorites:
                 guard let space = context.focusedSpace else { return false }
                 let tab = model.newTab(in: space.id, url: url, title: url.host() ?? url.absoluteString)

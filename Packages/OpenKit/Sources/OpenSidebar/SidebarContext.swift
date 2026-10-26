@@ -77,9 +77,10 @@ public final class SidebarContext {
         return "Space \(index)"
     }
 
-    func send(_ intent: SidebarIntent) {
-        guard let sidebar else { return }
-        sidebar.delegate?.sidebar(sidebar, didRequest: intent)
+    @discardableResult
+    func send(_ intent: SidebarIntent) -> Bool {
+        guard let sidebar, let delegate = sidebar.delegate else { return false }
+        return delegate.sidebar(sidebar, didRequest: intent)
     }
 }
 

@@ -143,11 +143,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         })
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            loops.forEach { $0.cancel() }
-            NotificationCenter.default.removeObserver(self)
-        }
+    isolated deinit {
+        loops.forEach { $0.cancel() }
+        NotificationCenter.default.removeObserver(self)
     }
 
     private func forEachLoadedFolder(_ body: (Folder) -> Void) {
@@ -349,6 +347,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     private func configure(_ rowView: SidebarRowView, item: AnyObject?, current: AnyObject?, hover: AnyObject?, animated: Bool) {
         rowView.page = self
+        rowView.representedItem = item
+        rowView.isKeyboardFocused = outline.keyboardItem === item && outline.window?.firstResponder === outline
         let highlight = !(item is SpacerItem || item is DividerItem)
         rowView.allowsHighlight = highlight
         rowView.fillIndent = item.map { CGFloat(outline.level(forItem: $0)) * SpaceListMetrics.indentPerLevel } ?? 0
@@ -395,13 +395,18 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     @objc private func rowClicked() {
         let row = outline.clickedRow
         guard row >= 0, let item = outline.item(atRow: row) else { return }
+        activate(item: item)
+    }
+
+    @discardableResult
+    func activate(item: Any) -> Bool {
         TooltipController.shared.cancel(for: nil)
         switch item {
-        case let t as Tab: context.send(.select(nodeID: t.id, space: space.id))
-        case let s as Split: context.send(.select(nodeID: s.id, space: space.id))
-        case let f as Folder: context.send(.setExpanded(folderID: f.id, expanded: !f.isExpanded))
-        case is NewTabItem: context.send(.openCommandBar(.newTabRow))
-        default: break
+        case let t as Tab: return context.send(.select(nodeID: t.id, space: space.id))
+        case let s as Split: return context.send(.select(nodeID: s.id, space: space.id))
+        case let f as Folder: return context.send(.setExpanded(folderID: f.id, expanded: !f.isExpanded))
+        case is NewTabItem: return context.send(.openCommandBar(.newTabRow))
+        default: return false
         }
     }
 
@@ -537,7 +542,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
         if let id = SidebarPasteboard.nodeID(from: info.draggingPasteboard) {
-            if case .folder(let fid) = dest.parent, fid == id { return [] }
+            guard context.model.canMoveNode(id: id, to: dest.parent) else { return [] }
             return .move
         }
         return SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty ? [] : .copy
@@ -549,12 +554,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             var target = dest.index
             // Same-parent reorder: the model counts the position after removal.
             if context.model.parent(of: id) == dest.parent, let from = siblingIndex(of: id, in: dest.parent), from < target { target -= 1 }
-            context.send(.move(nodeID: id, to: dest.parent, index: target))
-            return true
+            return context.send(.move(nodeID: id, to: dest.parent, index: target))
         }
         guard let url = SidebarPasteboard.urls(from: info.draggingPasteboard).first else { return false }
-        context.send(.openURL(url, in: dest.parent, index: dest.index))
-        return true
+        return context.send(.openURL(url, in: dest.parent, index: dest.index))
     }
 
     private func siblingIndex(of id: ItemID, in parent: NodeParent) -> Int? {
@@ -573,6 +576,63 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 @MainActor
 final class SidebarOutlineView: NSOutlineView {
     weak var page: SpacePageView?
+    private(set) var keyboardItem: AnyObject?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func becomeFirstResponder() -> Bool {
+        let result = super.becomeFirstResponder()
+        page?.updateRowStates(animated: false)
+        return result
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let result = super.resignFirstResponder()
+        // AppKit has not changed firstResponder yet.
+        enumerateAvailableRowViews { view, _ in (view as? SidebarRowView)?.isKeyboardFocused = false }
+        return result
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        keyboardItem = nil
+        page?.updateRowStates(animated: false)
+        super.mouseDown(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard let page, event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { super.keyDown(with: event); return }
+        let rows = (0..<numberOfRows).filter { itemID(of: item(atRow: $0)) != nil || item(atRow: $0) is NewTabItem }
+        let current = keyboardItem.map { row(forItem: $0) } ?? -1
+        switch event.keyCode {
+        case 125, 126: // Down, Up: focus only, leaving selection in the model.
+            let next = event.keyCode == 125 ? rows.first(where: { $0 > current }) : rows.last(where: { $0 < (current < 0 ? numberOfRows : current) })
+            if let next { keyboardItem = item(atRow: next) as AnyObject?; scrollRowToVisible(next) }
+        case 36, 49, 76: // Return, Space, keypad Enter
+            if let keyboardItem { page.activate(item: keyboardItem) }
+        case 123, 124: // Left, Right
+            if let folder = keyboardItem as? Folder {
+                page.context.send(.setExpanded(folderID: folder.id, expanded: event.keyCode == 124))
+            }
+        case 51, 117: // Delete, forward Delete: archive a focused tab.
+            if let tab = keyboardItem as? Tab {
+                let next = rows.first(where: { $0 > current }).flatMap { item(atRow: $0) as AnyObject? }
+                    ?? rows.last(where: { $0 < current }).flatMap { item(atRow: $0) as AnyObject? }
+                page.context.send(.close(nodeID: tab.id))
+                keyboardItem = next
+            }
+        default: super.keyDown(with: event); return
+        }
+        page.updateRowStates(animated: false)
+    }
+
+    override func accessibilityRows() -> [any NSAccessibilityRow]? {
+        (0..<numberOfRows).compactMap { row -> NSTableRowView? in
+            guard itemID(of: item(atRow: row)) != nil || item(atRow: row) is NewTabItem else { return nil }
+            return rowView(atRow: row, makeIfNecessary: true)
+        }
+    }
+
+    override func accessibilityChildren() -> [Any]? { accessibilityRows()?.map { $0 as Any } }
 
     override func reloadData() {
         SidebarDiagnostics.fullReloads += 1
@@ -623,6 +683,8 @@ final class SpaceHeaderView: NSView {
         title.inset = SpaceListMetrics.headerTextInset
         title.text = { [unowned context, space] in context.title(of: space) }
         title.color = { SidebarRole.spaceTitle.nsColor }
+        chevron.accessibleTitle = { [weak space] in space?.isPinnedCollapsed == true ? "Expand Pinned" : "Collapse Pinned" }
+        more.setAccessibilityLabel("Space options")
         chevron.showsHoverPlate = false
         chevron.glyphTint = { _ in SidebarRole.spaceTitle.nsColor }
         chevron.action = { [unowned context, space] in context.send(.setPinnedCollapsed(space: space.id, collapsed: !space.isPinnedCollapsed)) }
