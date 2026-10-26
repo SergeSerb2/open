@@ -770,3 +770,45 @@ Post-merge `tools/verify-all.sh`: **16 PASS, no SKIP**. Both app builds pass.
 | sidebar-render | PASS | 17 |
 | commandbar-render | PASS | 16 |
 | boosts | PASS | 4 |
+
+
+### Final main merge: first-run Settings
+
+Merged main through `4ef33e9b07ab739afe315b9f08313e9eaf1b471b` (#66). It adds the
+shared ImportActions parent protocol and Settings presentation updates. Step C
+keeps the real presenters and the same single SnapshotStore. It adds no first-run
+flow, window setup, sidebar chrome, or P1 delegate changes. The full runtime
+receipts and the later failed attempts above retain their original revisions;
+this merge does not turn those failed attempts into passing evidence.
+
+The command-bar and Settings/Library screenshots were inspected. No new live Arc
+comparison is claimed for those windows; the earlier command-bar comparison
+limits in docs/commandbar.md remain.
+
+Final Debug and Release builds both embed fork UUID
+`4C4C4420-5555-3144-A124-50C9E706917C`, source-stamp suffix `1793001810`
+(`xcrun dwarfdump --uuid` on each app framework). These are build results, not
+new runtime acceptance; runtime UUIDs remain attached to the earlier receipts.
+
+Final rule 10 after the #66 merge: **16 PASS, no SKIP**. Debug and Release
+app builds pass. `features-render check`: **147/147 PASS**; sidebar-render
+**125/125 PASS**. Latest full repository summary:
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 48 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 68 |
+| sidebar-render | PASS | 18 |
+| commandbar-render | PASS | 15 |
+| boosts | PASS | 3 |
