@@ -7,14 +7,16 @@
 //! opaque engine, flat structs, one enum, strings and string vectors.
 //!
 //! Chromium builds Rust with `-Cpanic=abort`, so a panic here ends the
-//! browser process, and `catch_unwind` cannot help. Crate calls that return
-//! a `Result` can still panic on hostile input: guard every known case
-//! before the call (a DAT of 4 bytes or less, review 98-3) and fuzz the rest
+//! browser process, and `catch_unwind` cannot help; neither can it catch an
+//! allocation failure. Crate calls that return a `Result` can still panic or
+//! allocate without bound on hostile input: guard every known case before
+//! the call (the DAT walk below, reviews 98-3 and R2-1) and fuzz the rest
 //! (docs/followups.md). This file indexes nothing it has not checked.
 //!
-//! Nothing here builds CSS text (§8.3): cosmetic results are sanitized
-//! selector and declaration vectors, and the renderer makes one rule per
-//! selector.
+//! Nothing here builds CSS text (§8.3): cosmetic results are sanitized hide
+//! selectors, and the renderer makes one rule per selector. The crate's
+//! `:style()`, `:remove*()` and scriptlet output never crosses the bridge in
+//! v1; the shim discards it and counts it (lead ruling 6, review R2-2).
 
 use std::collections::{BTreeSet, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,19 +29,28 @@ use adblock::Engine;
 /// Bumped on any change to `ParseOptions`, permissions, crate or regex
 /// features, or bridge semantics: a cached DAT from another format is never
 /// loaded (§5.5, review 100-1(a)).
-const SHIM_VERSION: u32 = 2;
+const SHIM_VERSION: u32 = 3;
 /// The adblock crate's features (third_party/rust/adblock/v0_8/BUILD.gn).
 const CRATE_FEATURES: &str = "embedded-domain-resolver,full-regex-handling,resource-assembler";
 /// The regex crate's features (the adblock-v0_8 crate patch, review 97-1).
 const REGEX_FEATURES: &str =
     "perf-backtrack,perf-cache,perf-dfa,perf-inline,perf-onepass,std,unicode";
 
-/// D-17: the longest URL spec (without the fragment) a check matches whole.
-const MATCH_CAP: usize = 8192;
 /// §8.3: the longest selector that crosses the bridge.
 const MAX_SELECTOR: usize = 2048;
 /// §8.3: selector text per frame payload.
 const PAYLOAD_CAP: usize = 256 * 1024;
+
+/// The crate's DAT header: magic, then format version 0
+/// (`data_format/mod.rs`). One MessagePack value follows.
+const DAT_MAGIC: [u8; 4] = [0xd1, 0xd9, 0x3a, 0xaf];
+/// Review R2-1: the most MessagePack values a DAT may hold. Today's
+/// EasyList + EasyPrivacy DAT has 2,017,148 values in 6,791,246 bytes (0.30
+/// per byte); a DAT at the service's 256 MiB read limit would hold about 80
+/// million. 2^27 leaves room above that and stops a value bomb.
+const MAX_DAT_VALUES: u64 = 1 << 27;
+/// The deepest container nesting a DAT may have (today's is 7).
+const MAX_DAT_DEPTH: usize = 32;
 
 #[cxx::bridge(namespace = "open_adblock")]
 mod ffi {
@@ -72,50 +83,41 @@ mod ffi {
         /// The crate's `data:<mime>;base64,…` resource for a `$redirect`, for
         /// every request type; C++ decides whether to serve it (§7.4).
         redirect_data_url: String,
-        /// The URL after `$removeparam`, or empty (always empty when
-        /// `truncated`).
+        /// The URL after `$removeparam`, with the request's fragment, or empty
+        /// (always empty when `truncated`).
         rewritten_url: String,
-        /// CSP directives to add (document and subdocument only), or empty.
+        /// CSP directives to add (subdocument only, R-4), or empty.
         csp_directives: String,
-        /// The URL was longer than the match cap and only its first part was
-        /// matched (§7.7).
+        /// The URL was longer than `max_input_bytes` and only its first part
+        /// was matched (§7.7).
         truncated: bool,
     }
 
-    /// A `##selector:style(declarations)` rule.
-    struct OpenStyleRule {
-        selector: String,
-        /// Sanitized declarations, `; `-separated, each with `!important`.
-        declarations: String,
-    }
-
-    /// A `:remove-attr()` or `:remove-class()` rule.
-    struct OpenRemoveRule {
-        selector: String,
-        names: Vec<String>,
-    }
-
-    /// The cosmetic filters for one page, as sanitized vectors (§8.3). Sorted,
-    /// except `hide_selectors` (sorted only when the payload cap applies).
+    /// The cosmetic filters for one page (§5.2, §8.3): sanitized, sorted
+    /// hide selectors and counters for everything v1 does not apply.
     struct OpenCosmeticResources {
-        /// Selectors to hide (`display: none !important`).
+        /// Selectors to hide (`display: none !important`), sorted, at most
+        /// 256 KiB of selector text.
         hide_selectors: Vec<String>,
-        style_rules: Vec<OpenStyleRule>,
-        /// Selectors of elements to remove from the DOM (`:remove()`).
-        remove_selectors: Vec<String>,
-        remove_attrs: Vec<OpenRemoveRule>,
-        remove_classes: Vec<OpenRemoveRule>,
-        /// The crate's scriptlet code (main world), or empty.
-        scriptlets: String,
-        /// Generic `#@#` exceptions; the renderer echoes them back with its
-        /// class and ID reports.
+        /// Generic `#@#` exceptions, sorted; the renderer echoes them back
+        /// with its class and ID reports.
         exceptions: Vec<String>,
         /// `$generichide`: the renderer must not report class and ID tokens.
         generichide: bool,
-        /// Selectors dropped for a procedural operator (v1 runs none).
+        /// Selectors dropped for a procedural operator (§8.3 rule 3).
         dropped_procedural: u32,
-        /// Selectors and declarations dropped as unsafe or over a cap.
+        /// Selectors dropped as unsafe (§8.3 rules 1, 2, 4).
         dropped_unsafe: u32,
+        /// `:style()` rules, discarded (lead ruling 6).
+        dropped_style: u32,
+        /// `:remove()`, `:remove-attr()` and `:remove-class()` rules,
+        /// discarded (lead ruling 6).
+        dropped_remove: u32,
+        /// Scriptlets the crate resolved for the page, discarded (lead ruling
+        /// 6). The crate resolves only scriptlets whose resource is loaded.
+        dropped_scriptlet: u32,
+        /// Safe selectors past the 256 KiB payload cap, in sorted order.
+        dropped_over_cap: u32,
     }
 
     /// What a text build produced (§5.5).
@@ -130,6 +132,9 @@ mod ffi {
         /// Empty, `json` (the resources file did not parse) or `empty` (it
         /// had no resources).
         resources_error: String,
+        /// Lists consumed by the text build; 0 after a DAT load (a DAT does
+        /// not record it; the service counts the manifest's lists).
+        list_count: u32,
     }
 
     /// Facts about an engine.
@@ -161,6 +166,7 @@ mod ffi {
             url: &str,
             source_url: &str,
             request_type: OpenRequestType,
+            max_input_bytes: u32,
         ) -> OpenBlockerResult;
         fn open_adblock_cosmetic(engine: &OpenAdblockEngine, url: &str) -> OpenCosmeticResources;
         fn open_adblock_hidden_selectors(
@@ -174,8 +180,7 @@ mod ffi {
 }
 
 use ffi::{
-    OpenBlockerResult, OpenBuildReport, OpenCosmeticResources, OpenEngineInfo, OpenRemoveRule,
-    OpenRequestType, OpenStyleRule,
+    OpenBlockerResult, OpenBuildReport, OpenCosmeticResources, OpenEngineInfo, OpenRequestType,
 };
 
 /// One Profile's engine. Shared by every check of the Profile under a read
@@ -275,6 +280,7 @@ pub fn open_adblock_build_report(engine: &OpenAdblockEngine) -> OpenBuildReport 
         lossy_kinds: engine.report.lossy_kinds.iter().map(|k| (*k).to_string()).collect(),
         resources_loaded: engine.report.resources_loaded,
         resources_error: engine.report.resources_error.to_string(),
+        list_count: engine.list_count,
     }
 }
 
@@ -288,17 +294,96 @@ pub fn open_adblock_serialize(engine: &OpenAdblockEngine) -> Vec<u8> {
     }
 }
 
+/// Reads a MessagePack length of `size` big-endian bytes.
+fn take_length(rest: &mut &[u8], size: usize) -> Option<u64> {
+    let (head, tail) = rest.split_at_checked(size)?;
+    *rest = tail;
+    Some(head.iter().fold(0u64, |value, byte| (value << 8) | u64::from(*byte)))
+}
+
+/// Review R2-1: walks the DAT before the crate reads it. `rmp-serde`
+/// allocates a string or binary buffer of the length the stream declares
+/// before it reads the bytes (`decode.rs:870`), so a 15-byte DAT that claims
+/// a 512 MiB string allocated 512 MiB, and an allocation failure aborts the
+/// browser. Here every str, bin and ext length must fit in the bytes left,
+/// every array and map count too (each value takes at least one byte), the
+/// whole value has at most `MAX_DAT_VALUES` values and `MAX_DAT_DEPTH`
+/// levels, and the header must be the crate's (which also covers the 4-byte
+/// DAT of review 98-3). Then the crate cannot allocate more than the DAT's
+/// size for one buffer. No allocation and no recursion here: one pass with
+/// a fixed-size stack of pending counts. Err names the first problem.
+fn check_dat(dat: &[u8]) -> Result<(), &'static str> {
+    let body = dat.strip_prefix(&DAT_MAGIC).ok_or("magic")?;
+    let (&version, mut rest) = body.split_first().ok_or("short")?;
+    if version != 0 {
+        return Err("version");
+    }
+    // Values still to read at each open level; the crate reads one value.
+    let mut pending = [0u64; MAX_DAT_DEPTH + 1];
+    pending[0] = 1;
+    let mut depth = 0usize;
+    let mut values = 0u64;
+    loop {
+        let Some(top) = pending.get_mut(depth) else { return Err("depth") };
+        if *top == 0 {
+            if depth == 0 {
+                return Ok(());
+            }
+            depth -= 1;
+            continue;
+        }
+        *top -= 1;
+        values += 1;
+        if values > MAX_DAT_VALUES {
+            return Err("values");
+        }
+        let (&marker, tail) = rest.split_first().ok_or("short")?;
+        rest = tail;
+        // (payload bytes, child values)
+        let (payload, children) = match marker {
+            0x00..=0x7f | 0xe0..=0xff | 0xc0 | 0xc2 | 0xc3 => (0, 0),
+            0x80..=0x8f => (0, 2 * u64::from(marker & 0x0f)),
+            0x90..=0x9f => (0, u64::from(marker & 0x0f)),
+            0xa0..=0xbf => (u64::from(marker & 0x1f), 0),
+            0xc4 | 0xd9 => (take_length(&mut rest, 1).ok_or("short")?, 0),
+            0xc5 | 0xda => (take_length(&mut rest, 2).ok_or("short")?, 0),
+            0xc6 | 0xdb => (take_length(&mut rest, 4).ok_or("short")?, 0),
+            // ext: the length, then a type byte and the data.
+            0xc7 => (take_length(&mut rest, 1).ok_or("short")? + 1, 0),
+            0xc8 => (take_length(&mut rest, 2).ok_or("short")? + 1, 0),
+            0xc9 => (take_length(&mut rest, 4).ok_or("short")? + 1, 0),
+            0xcc | 0xd0 => (1, 0),
+            0xcd | 0xd1 => (2, 0),
+            0xca | 0xce | 0xd2 => (4, 0),
+            0xcb | 0xcf | 0xd3 => (8, 0),
+            0xd4..=0xd8 => (1 + (1u64 << (marker - 0xd4)), 0),
+            0xdc => (0, take_length(&mut rest, 2).ok_or("short")?),
+            0xdd => (0, take_length(&mut rest, 4).ok_or("short")?),
+            0xde => (0, 2 * take_length(&mut rest, 2).ok_or("short")?),
+            0xdf => (0, 2 * take_length(&mut rest, 4).ok_or("short")?),
+            _ => return Err("marker"),
+        };
+        let payload = usize::try_from(payload).map_err(|_| "length")?;
+        rest = rest.get(payload..).ok_or("length")?;
+        if children > 0 {
+            if children > rest.len() as u64 {
+                return Err("count");
+            }
+            depth += 1;
+            *pending.get_mut(depth).ok_or("depth")? = children;
+        }
+    }
+}
+
 /// Loads a serialized engine into an empty one, then applies the resources
-/// (a DAT never carries them, F-31). False on any error (version skew,
-/// truncation); C++ then builds from text.
+/// (a DAT never carries them, F-31). False on any error (a DAT that fails
+/// the walk above, version skew, truncation); C++ then builds from text.
 pub fn open_adblock_deserialize(
     engine: &mut OpenAdblockEngine,
     dat: &[u8],
     resources_json: &str,
 ) -> bool {
-    // The crate reads the byte after its 4-byte magic without a length check
-    // (data_format/mod.rs:90): a DAT of 4 bytes or less panics (review 98-3).
-    if dat.len() <= 4 {
+    if check_dat(dat).is_err() {
         return false;
     }
     match engine.inner.deserialize(dat) {
@@ -335,33 +420,40 @@ fn crate_request_type(request_type: OpenRequestType) -> &'static str {
     }
 }
 
-/// §7.7: the URL without its fragment, cut to the match cap after the last
-/// separator byte (any byte `^` matches) at or before the cap. True when cut.
-fn match_input(url: &str) -> (&str, bool) {
-    let url = url.split('#').next().unwrap_or("");
-    if url.len() <= MATCH_CAP {
-        return (url, false);
+/// §7.7: the URL without its fragment, and the fragment (with its `#`, or
+/// empty). A URL over `cap` bytes is cut after the last separator (a byte `^`
+/// matches: not `A-Z a-z 0-9 _ - . %`) at or before byte `cap`, at a char
+/// boundary; then the bool is true.
+fn match_input(url: &str, cap: usize) -> (&str, &str, bool) {
+    let (url, fragment) =
+        url.split_at_checked(url.find('#').unwrap_or(url.len())).unwrap_or((url, ""));
+    if url.len() <= cap {
+        return (url, fragment, false);
     }
+    let is_separator =
+        |byte: u8| !(byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'%'));
     let bytes = url.as_bytes();
-    let end = bytes
-        .get(..MATCH_CAP)
-        .unwrap_or(bytes)
-        .iter()
-        .rposition(|b| !(b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b'%')))
-        .map(|i| i + 1)
+    let end = (1..=cap.min(bytes.len()))
+        .rev()
+        .find(|&end| {
+            bytes.get(end - 1).is_some_and(|byte| is_separator(*byte)) && url.is_char_boundary(end)
+        })
         .unwrap_or(0);
-    // `end` follows an ASCII byte (or is 0), so it is a char boundary.
-    (url.get(..end).unwrap_or(""), true)
+    (url.get(..end).unwrap_or(""), fragment, true)
 }
 
 /// One network check (R-4 to R-6). A URL the crate cannot parse is allowed.
+/// `max_input_bytes` is the §7.7 cap: C++ passes `kOpenAdBlockMatchCapBytes`
+/// (16 KiB; 8 KiB only if Step 4's measured gates fail at 16 KiB).
 pub fn open_adblock_check(
     engine: &OpenAdblockEngine,
     url: &str,
     source_url: &str,
     request_type: OpenRequestType,
+    max_input_bytes: u32,
 ) -> OpenBlockerResult {
-    let (url, truncated) = match_input(url);
+    let cap = usize::try_from(max_input_bytes).unwrap_or(usize::MAX);
+    let (url, fragment, truncated) = match_input(url, cap);
     let mut result = OpenBlockerResult {
         matched: false,
         important: false,
@@ -386,9 +478,13 @@ pub fn open_adblock_check(
         }
     }
     if !truncated {
-        result.rewritten_url = blocker.rewritten_url.unwrap_or_default();
+        // The crate saw the URL without its fragment; give the rewrite the
+        // request's fragment back (review R2-3).
+        if let Some(rewritten) = blocker.rewritten_url {
+            result.rewritten_url = rewritten + fragment;
+        }
     }
-    if type_name == "document" || type_name == "subdocument" {
+    if request_type == OpenRequestType::Subdocument {
         result.csp_directives = engine.inner.get_csp_directives(&request).unwrap_or_default();
     }
     result
@@ -526,43 +622,12 @@ pub(crate) fn check_selector(selector: &str) -> Verdict {
     Verdict::Keep
 }
 
-/// §8.3 `:style()` rules. None on unsafe text; else the declarations, each
-/// with `!important`, joined by `; `.
-fn sanitize_declarations(declarations: &[String]) -> Option<String> {
-    const BAD: &[&str] = &[
-        "url(", "image(", "image-set(", "cross-fade(", "element(", "attr(", "expression(", "\\",
-        "/*", "{", "}", "@", "<", "\"", "'",
-    ];
-    let mut out: Vec<String> = Vec::new();
-    for declaration in declarations {
-        let lower = declaration.to_ascii_lowercase();
-        if BAD.iter().any(|bad| lower.contains(bad)) {
-            return None;
-        }
-        for part in declaration.split(';') {
-            let part = part.trim();
-            if part.is_empty() {
-                continue;
-            }
-            if part.to_ascii_lowercase().ends_with("!important") {
-                out.push(part.to_string());
-            } else {
-                out.push(format!("{part} !important"));
-            }
-        }
-    }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out.join("; "))
-    }
-}
-
 /// Counts drops and the payload's selector bytes.
 #[derive(Default)]
 struct Sanitizer {
     procedural: u32,
     unsafe_: u32,
+    over_cap: u32,
     bytes: usize,
 }
 
@@ -578,7 +643,7 @@ impl Sanitizer {
                 false
             }
             Verdict::Keep if self.bytes.saturating_add(selector.len()) > PAYLOAD_CAP => {
-                self.unsafe_ = self.unsafe_.saturating_add(1);
+                self.over_cap = self.over_cap.saturating_add(1);
                 false
             }
             Verdict::Keep => {
@@ -589,8 +654,12 @@ impl Sanitizer {
     }
 }
 
-/// The page's cosmetic filters as sanitized, sorted vectors (R-7, R-8,
-/// §8.3). A URL the crate cannot parse gives empty resources.
+fn count(n: usize) -> u32 {
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+/// The page's cosmetic filters as sanitized, sorted vectors (§5.2, §8.3). A
+/// URL the crate cannot parse gives empty resources.
 pub fn open_adblock_cosmetic(engine: &OpenAdblockEngine, url: &str) -> OpenCosmeticResources {
     // The crate returns owned sets: move the strings, do not copy them.
     let adblock::cosmetic_filter_cache::UrlSpecificResources {
@@ -603,66 +672,36 @@ pub fn open_adblock_cosmetic(engine: &OpenAdblockEngine, url: &str) -> OpenCosme
         injected_script,
         generichide,
     } = engine.inner.url_cosmetic_resources(url);
+
+    // v1 applies none of these (lead ruling 6): count and drop them. The
+    // crate also lists each `:remove()` selector among the style selectors.
+    let dropped_style =
+        style_selectors.keys().filter(|selector| !remove_selectors.contains(*selector)).count();
+    let dropped_remove = remove_selectors.len() + remove_attrs.len() + remove_classes.len();
+    // The crate wraps each resolved scriptlet in this trailer
+    // (cosmetic_filter_cache.rs, adblock 0.8.11).
+    let dropped_scriptlet = injected_script.matches("\n} catch ( e ) { }\n").count();
+    drop((style_selectors, remove_selectors, remove_attrs, remove_classes, injected_script));
+
+    // Sorted, so the payload cap drops the same selectors on every load.
     let mut sanitizer = Sanitizer::default();
-
-    // Hide selectors stay in the crate's order: sorting about 450 strings
-    // costs some 30 µs per document, and each selector is its own rule. Only
-    // a payload over the cap is sorted, so the cap drops the same ones.
     let mut hide_selectors: Vec<String> = hide_selectors.into_iter().collect();
-    if hide_selectors.iter().map(String::len).sum::<usize>() > PAYLOAD_CAP {
-        hide_selectors.sort_unstable();
-    }
+    hide_selectors.sort_unstable();
     hide_selectors.retain(|s| sanitizer.keep(s));
-
-    let mut style_rules = Vec::new();
-    let mut styles: Vec<(String, Vec<String>)> = style_selectors.into_iter().collect();
-    styles.sort_unstable();
-    // The crate lists a `:remove()` selector among the style selectors too.
-    let mut remove_selectors: Vec<String> = remove_selectors
-        .into_iter()
-        .filter(|s| styles.binary_search_by(|(selector, _)| selector.cmp(s)).is_err())
-        .collect();
-    for (selector, declarations) in styles {
-        if !sanitizer.keep(&selector) {
-            continue;
-        }
-        match sanitize_declarations(&declarations) {
-            Some(declarations) => style_rules.push(OpenStyleRule { selector, declarations }),
-            None => sanitizer.unsafe_ = sanitizer.unsafe_.saturating_add(1),
-        }
-    }
-    remove_selectors.sort_unstable();
-    remove_selectors.retain(|s| sanitizer.keep(s));
-
-    let mut remove_rules = |rules: std::collections::HashMap<String, Vec<String>>| {
-        let mut sorted: Vec<(String, Vec<String>)> = rules.into_iter().collect();
-        sorted.sort_unstable();
-        sorted
-            .into_iter()
-            .filter(|(selector, _)| sanitizer.keep(selector))
-            .map(|(selector, mut names)| {
-                names.sort_unstable();
-                OpenRemoveRule { selector, names }
-            })
-            .collect::<Vec<_>>()
-    };
-    let remove_attrs = remove_rules(remove_attrs);
-    let remove_classes = remove_rules(remove_classes);
 
     let mut exceptions: Vec<String> = exceptions.into_iter().collect();
     exceptions.sort_unstable();
 
     OpenCosmeticResources {
         hide_selectors,
-        style_rules,
-        remove_selectors,
-        remove_attrs,
-        remove_classes,
-        scriptlets: injected_script,
         exceptions,
         generichide,
         dropped_procedural: sanitizer.procedural,
         dropped_unsafe: sanitizer.unsafe_,
+        dropped_style: count(dropped_style),
+        dropped_remove: count(dropped_remove),
+        dropped_scriptlet: count(dropped_scriptlet),
+        dropped_over_cap: sanitizer.over_cap,
     }
 }
 
@@ -676,7 +715,7 @@ pub fn open_adblock_hidden_selectors(
 ) -> Vec<String> {
     let exceptions: HashSet<String> = exceptions.iter().cloned().collect();
     let mut selectors = engine.inner.hidden_class_id_selectors(classes, ids, &exceptions);
-    selectors.sort();
+    selectors.sort_unstable();
     let mut sanitizer = Sanitizer::default();
     selectors.retain(|s| sanitizer.keep(s));
     selectors

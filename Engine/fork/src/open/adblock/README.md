@@ -15,15 +15,20 @@ Rules for the Rust shim:
 
 - A panic ends the browser process: Chromium builds Rust with
   `-Cpanic=abort` (`build/config/compiler/BUILD.gn`), so `catch_unwind`
-  cannot help. A crate call that returns a `Result` can still panic on
-  hostile input (a DAT of 4 bytes or less did, review 98-3): guard each known
-  case before the call, index nothing unchecked, and fuzz the rest
-  (`docs/followups.md`).
-- No CSS text is built in Rust: cosmetic results are sanitized selector and
-  declaration vectors (adblock-fork §8.3), and the renderer inserts one rule
-  per selector.
+  cannot help, and an allocation failure aborts too. A crate call that
+  returns a `Result` can still panic or allocate without bound on hostile
+  input (a DAT of 4 bytes or less panicked, review 98-3; a 15-byte DAT made
+  `rmp-serde` allocate 512 MiB, review R2-1): guard each known case before
+  the call, index nothing unchecked, and fuzz the rest
+  (`docs/followups.md`). A DAT passes a bounded MessagePack walk before the
+  crate reads it (`check_dat` in `lib.rs`).
+- No CSS text is built in Rust: cosmetic results are sanitized, sorted hide
+  selectors (adblock-fork §5.2, §8.3), and the renderer inserts one rule per
+  selector. The crate's `:style()`, `:remove*()` and scriptlet output is
+  discarded in the shim and counted (lead ruling 6).
 - No free-form request type crosses the bridge (`OpenRequestType`), and a
-  check matches at most the first 8 KiB of a URL (§7.7).
+  check matches at most `max_input_bytes` of a URL (§7.7; C++ passes
+  16 KiB).
 - `open_adblock_engine_format()` names everything a cached DAT depends on;
   bump `SHIM_VERSION` in `lib.rs` when `ParseOptions`, permissions, features
   or bridge semantics change.
