@@ -412,6 +412,14 @@ The current install already has a signed-in sidebar, so most of §2 is verified.
 7. Re-dump `StorableSidebar.json` structure counts (items by `data` kind) after normal use. Watch for a `note` item to confirm its payload keys.
 8. On the Chromium side: with Arc quit, copy `User Data/Default/Favicons` and dump its schema (it was locked in this session), and confirm whether an `Extensions/` folder appears once an unpacked extension exists.
 
+Status after capture session 2 (2026-10-26; copies in `.re/runtime/appsupport/s2-*`, details in `runtime-observations.md` §9):
+
+- Item 2: still open. The test Boost was deleted before the final copy, so no `StorableBoostsData.json` exists.
+- Item 3: in part. A Space on a second Profile stores `profile: {custom: {_0: {directoryBasename: "Profile 1", machineID: <UUID>}}}`. No `StorableProfiles.json` or `StorableProfileContainers.json` appeared in the copies. The `User Data/` listing was not taken.
+- Item 4: done for Little Arc. `style.little` holds `modalState`, `downloads`, `shouldShowProfileIndicators`, `profile`, and `session {id, entryPoint {externalLink}, preferredFrame {anchor {topRight: [x, y]}, size}, startTime}`. Its `windowContentSidebarItemMap.keysToValues` has one pair in one Little Arc window and none in the other. A split with entries was not open at copy time.
+- New: a collapsed folder that shows one child stores `expandedItems: [folderID, {peeked: {_0: [childID]}}]`.
+- Item 5: `StorableKeyBindings.json` gained two timestamped copies (`StorableKeyBindings.<yyyy-MM-dd-HH-mm-ss-SSS>.json`); no custom binding was made.
+
 Until items 1–3 are done, the importer should ship with archive, Boost, and multi-profile support disabled and visibly reported as "not imported", not silently skipped.
 
 ---

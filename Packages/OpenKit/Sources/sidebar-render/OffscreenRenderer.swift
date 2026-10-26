@@ -70,7 +70,14 @@ final class OffscreenRenderer {
         desc.usage = [.renderTarget, .shaderRead]
         desc.storageMode = .managed
         let texture = device.makeTexture(descriptor: desc)!
-        let renderer = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!])
+        // CARenderer otherwise uses a separate internal queue and only waits until
+        // its work is scheduled. Readback must follow rendering on the same queue.
+        // Contract: QuartzCore/CARenderer.h, kCARendererMetalCommandQueue.
+        let queue = device.makeCommandQueue()!
+        let renderer = CARenderer(mtlTexture: texture, options: [
+            kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!,
+            kCARendererMetalCommandQueue as String: queue,
+        ])
         // The window's context owns the live layers, so render a plain deep copy.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -94,7 +101,6 @@ final class OffscreenRenderer {
             renderer.render()
             renderer.endFrame()
         }
-        let queue = device.makeCommandQueue()!
         let cb = queue.makeCommandBuffer()!
         let blit = cb.makeBlitCommandEncoder()!
         blit.synchronize(resource: texture)
