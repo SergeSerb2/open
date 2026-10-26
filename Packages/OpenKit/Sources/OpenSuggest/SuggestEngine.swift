@@ -139,7 +139,8 @@ public final class SuggestEngine {
         let profileID = context.profileID ?? context.spaceID.flatMap { model?.space(id: $0)?.profileID }
         return SuggestInput(
             rawText: raw, text: text, query: FoldedQuery(text), typed: classifier.classify(text),
-            context: context, searchEngine: SearchEngines.engine(id: context.searchEngineID, in: searchEngines),
+            context: context, searchEngine: SearchEngines.resolve(id: context.searchEngineID, profile: profileID.flatMap { model?.profile(id: $0) }, in: searchEngines),
+            customSearchEngines: profileID.flatMap { model?.profile(id:$0) }?.settings.customSearchEngines ?? [],
             siteSearch: context.siteSearchID.flatMap { siteIndex.byID[$0] },
             currentTab: currentTabState(context), profileID: profileID, now: Date(),
             tabs: index, profileOrdinal: index.ordinal(of: profileID))

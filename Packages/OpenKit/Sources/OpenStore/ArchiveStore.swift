@@ -195,6 +195,56 @@ public final class ArchiveStore: ArchiveSink {
         return rows
     }
 
+    /// Bounded Library page. Only typed enum/UUID values enter the fixed SQL fragments.
+    public func page(limit: Int = 100, offset: Int = 0, query: String = "", spaceID: SpaceID? = nil,
+                     reason: ArchiveReason? = nil, origin: String = "all") async -> [ArchivedTabRecord] {
+        let authority = "substr(url,instr(url,'://')+3)"
+        let host = "substr(\(authority),1,instr(\(authority)||'/','/')-1)"
+        var filter = "(title LIKE ? OR \(host) LIKE ?)"
+        if let spaceID { filter += " AND space_id='\(spaceID.description)'" }
+        if let reason { filter += " AND reason='\(reason.rawValue)'" }
+        if origin == "littleOpen" { filter += " AND lower(original_location) LIKE 'little%'" }
+        if origin == "spaces" { filter += " AND lower(original_location) NOT LIKE 'little%'" }
+        let sql = "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload FROM archived_tabs WHERE \(filter) ORDER BY archived_at DESC,id LIMIT ? OFFSET \(max(0, offset))"
+        return await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                continuation.resume(returning: self?.queryOnQueue(sql: sql, limit: max(1, min(100, limit)), likeText: "%\(query)%", exactID: nil) ?? [])
+            }
+        }
+    }
+
+    public func delete(id: ItemID) async throws { try await delete(ids: [id]) }
+    public func delete(ids: [ItemID]) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            queue.async { [weak self] in
+                guard let self else { continuation.resume(); return }
+                do {
+                    try self.openOnQueue(); guard let db = self.db else { throw self.archiveFailure() }
+                    guard db.exec("BEGIN IMMEDIATE") else { throw self.archiveFailure() }
+                    var committed = false; defer { if !committed { db.exec("ROLLBACK") } }
+                    let statement = db.prepare("DELETE FROM archived_tabs WHERE id=?")
+                    defer { sqlite3_finalize(statement) }
+                    for id in ids { db.bindText(statement, 1, id.description); guard sqlite3_step(statement) == SQLITE_DONE else { throw self.archiveFailure() }; sqlite3_reset(statement) }
+                    guard db.exec("COMMIT") else { throw self.archiveFailure() }; committed = true
+                    continuation.resume()
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+    public func deleteAll() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            queue.async { [weak self] in
+                guard let self else { continuation.resume(); return }
+                do {
+                    try self.openOnQueue(); guard let db = self.db else { throw self.archiveFailure() }
+                    guard db.exec("BEGIN IMMEDIATE") else { throw self.archiveFailure() }
+                    guard db.exec("DELETE FROM archived_tabs"), db.exec("COMMIT") else { db.exec("ROLLBACK"); throw self.archiveFailure() }
+                    continuation.resume()
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
     public func recent(limit: Int = 100) async -> [ArchivedTabRecord] {
         await withCheckedContinuation { continuation in
             queue.async { [weak self] in
@@ -212,6 +262,15 @@ public final class ArchiveStore: ArchiveSink {
                 guard let self else { continuation.resume(returning: []); return }
                 let rows = self.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload FROM archived_tabs WHERE title LIKE ? OR url LIKE ? ORDER BY archived_at DESC LIMIT ?", limit: limit, likeText: like, exactID: nil)
                 continuation.resume(returning: rows)
+            }
+        }
+    }
+
+    /// Reads a row without removing it. The caller commits its sidebar snapshot before delete.
+    public func record(id: ItemID) async -> ArchivedTabRecord? {
+        await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                continuation.resume(returning: self?.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload FROM archived_tabs WHERE id = ?", limit: 1, likeText: nil, exactID: id.rawValue.uuidString).first)
             }
         }
     }
