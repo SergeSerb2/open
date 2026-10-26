@@ -145,7 +145,7 @@ Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCach
 
 ### Page background color
 
-TODO(engine): `OEWebContent` has no page color yet. The M4 split pane bar needs one (`WebContentHost.pageBackgroundColor` and `onPageBackgroundChange` in OpenFeatures). Arc paints each pane's 32 pt bar in the page's own color (F0081: lavender page → `#DEDEFA` bar, white page → white bar; `re/interaction-states.md` §11). The color is not the pixels under the bar, so the engine must report it: the page's `theme-color` or its document background (guess: which one Arc uses). Report it as a state change after the URL change of the same navigation, and again when the page changes it. Until then the bar uses the Space's light background.
+TODO(engine): `OEWebContent` has no page color yet. The M4 split pane bar needs one (`WebContentHost.pageBackgroundColor` and `onPageBackgroundChange` in OpenFeatures). Arc paints each pane's 32 pt bar in the page's own color (F0081: lavender page → `#DEDEFA` bar, white page → white bar; `re/interaction-states.md` §11). The color is not the pixels under the bar, so the engine must report it: the page's `theme-color` or its document background (guess: which one Arc uses). Report it as a state change after the URL change of the same navigation, and again when the page changes it. The App adapter now performs a guarded renderer query after loading ends and emits `onPageBackgroundChange`: valid theme-color, then a nontransparent body/root background, then white. That priority is an App fallback policy, not a confirmed Arc rule. The Space color remains the fallback before the answer. Changes without another loading-end event are not observed yet; a real engine color event is still needed.
 
 ## Extensions
 

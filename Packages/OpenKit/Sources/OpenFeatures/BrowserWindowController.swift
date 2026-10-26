@@ -297,7 +297,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     @discardableResult public func handleKeyDown(_ event: NSEvent) -> Bool {
         guard event.window === window else { return false }
         if event.keyCode == 53 {
-            if peekController.isShown { peekController.escape() }
+            if let peek = peekStorage, peek.isShown { peek.escape() }
             else { splitController.performCommand("escape"); container.cancelOperation(nil) }
             return true
         }
@@ -309,7 +309,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
             return view === ancestor || view.isDescendant(of: ancestor)
         }
         let webFocused = !textFocused && (container.slots.contains { within($0.contentHostView) }
-            || (peekController.isShown && within(peekController.stack.last?.host?.view)))
+            || (peekStorage?.isShown == true && within(peekStorage?.stack.last?.host?.view)))
         let routing = RoutingContext(isCommandBarOpen: context.isNewTabCommandBarOpen,
             isSidebarFocused: within(sidebar), isTextFocused: textFocused, isWebContentFocused: webFocused)
         guard case .browserCommand(let id)? = keyboard.route(event: event, context: routing), handles(id) else { return false }
@@ -321,14 +321,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
         if onCommand?(id) == true { return }
-        if id == "open-in-current-space", peekController.isShown {
+        if id == "open-in-current-space", peekStorage?.isShown == true {
             let menu = NSMenu(title: "Open in Space")
-            for space in model.spaces { menu.addItem(FeatureMenuItem(context.title(of: space)) { [weak self] in self?.peekController.expandTop(into: space.id) }) }
+            for space in model.spaces { menu.addItem(FeatureMenuItem(context.title(of: space)) { [weak self] in self?.peekStorage?.expandTop(into: space.id) }) }
             pendingMoveMenu = menu
             if window?.isVisible == true { menu.popUp(positioning: nil, at: CGPoint(x: root.bounds.midX, y: root.bounds.midY), in: root) }
         }
-        else if id == "go-back", peekController.isShown { peekController.stack.last?.host?.goBack() }
-        else if id == "go-forward", peekController.isShown { peekController.stack.last?.host?.goForward() }
+        else if id == "go-back", peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() }
+        else if id == "go-forward", peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() }
         else { splitController.performCommand(id) }
     }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool { splitController.isCommandEnabled(id, enabledKey: enabledKey) }
@@ -345,8 +345,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
-        case .goBack: if peekController.isShown { peekController.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
-        case .goForward: if peekController.isShown { peekController.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
+        case .goBack: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
+        case .goForward: if peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }
         }
         refresh(); changed(); return true

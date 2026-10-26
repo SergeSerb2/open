@@ -49,6 +49,11 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 |---|---|---|
 | `ping` | — | pid, Chromium and CEF versions, engine root (`Profiles/`) and data root |
 | `tabs` | — | Sidebar tabs of the focused Space in row order: id, title, url, section (`favorites`/`pinned`/`today`), selected, visible, loaded, loading, audible, crashed, favicon, and `page` (engine state, below) when loaded |
+| `tab-state` | `tab` | Model/live state of one tab, including an inactive Space's tab |
+| `tab-strip` | — | Actual engine strips: all-Spaces model IDs, content IDs, active model tab, membership |
+| `frame-save-counters` | — | Actual snapshot captures, dirty schedules, factory tree changes and mirror syncs |
+| `space-profile` | `space`, `profile` name | Production sidebar profile assignment intent; closes old Space hosts |
+| `peek-open`, `peek-expand`, `peek-close`, `peek-state` | `tab`, `url` for open | Production Peek entry, promotion, dismissal and host identity |
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
@@ -118,6 +123,7 @@ tools/build.sh Debug
 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
@@ -143,3 +149,9 @@ capture-time snapshot and capture exist in the main checkout's `.re/`.
 captures, only the comparison is reported SKIP; functional flows still run.
 Private screenshots and snapshot data stay in `.re/app-shell-comparison-*`.
 Only the per-element measurement tables are written to `docs/engine-spike/`.
+
+The window suite reports `kernel_process_start` separately and requires the
+kernel timestamp in all ten benchmark launches. Debug timing rows print named
+SKIP results with a Release-only reason. Sidebar `space_switch_wrapper` proves
+the live page and wrapper context; `durable_profile_storage` remains BLOCKED on
+the CEF `root_cache_path` follow-up in docs/followups.md.

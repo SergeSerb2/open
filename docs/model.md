@@ -643,3 +643,10 @@ public welcome page rather than Arc's native onboarding controller.
 1. Restore position. A restored tab goes to the top of its parent, because the record stores the parent but not the index. Arc's exact position is not verified.
 2. `focusSpace` and `selectNode` register undo. Arc probably does not undo navigation. If not, Cmd-Z after a click would undo the click, not the last edit. Verify in Arc, then drop their undo.
 3. `closeTab` archives pinned tabs and favorites too. In Arc, closing a pinned tab or a favorite may only unload it (guess). The UI layer must pick the right command until this is verified.
+
+Snapshot scheduling marks the live model dirty without preparing folders or
+building a DTO. The one-second debounce captures the DTO on the main actor,
+then queues the atomic file write. `saveNow(model:)` remains synchronous and
+cancels pending generations. `flush()` captures pending dirty state on the main
+actor before waiting for writes. Frame notifications only update window fields
+and schedule this save; they do not notify the engine factory or tab mirror.

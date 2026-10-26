@@ -169,16 +169,46 @@ failure alert, guarded/queued navigation, and close without loading.
 | JS dialogs, permissions, context menus, downloads | Existing delegate bodies ported; downloads route to their owning window |
 | Peek/toast | Library ownership retained; Peek stays lazy; transient hosts survive unrelated model edits |
 
+### Review round 1
+
+A's timeout fix is inherited from `f11822bc240139d5b2052e43967ec23e909374a1`.
+Main's M4 visual finish (`39fb0ed`) is merged with both sides' behavior kept.
+
+| Finding | Fix | Real-interface evidence |
+|---|---|---|
+| 1. Peek identity | `rebind(tabID:)` plus factory adopt hook re-keys hosts and modelHostIDs before container binding | Same engine identifier and JS state through promotion; strip contains the new tab; sidebar close returns retained/engine counts to baseline |
+| 2. Two live-state writers | Host emits callbacks only; container applies live state behind generation and cache-identity checks | Evicted row stays unloaded in six later samples; another window's remaining host keeps its model row live |
+| 3. Profile changes / background opener | Explicit Space-profile teardown, full runtime reset, owning-Space/request-context creation, no profile force unwraps | Old page replaced, inactive row fully reset, background Space window.open creates its child in the correct Space/context |
+| 4. Frame-save cost | Dirty scheduling defers folder preparation and DTO capture to the debounce; saveNow stays synchronous; frame notifications skip factory/mirror work | Twelve moves produce zero immediate captures, one debounced capture, correct saved frame, and no tree/mirror counter change |
+| 5. Active strip / order | Active page is the selected model tab and must belong to its browser strip | Peek does not become active in the strip; a second window's Space changes preserve the first window's order |
+| 6. Sidebar event interception | Removed SidebarView.mouseDown drag override; background drag remains in the root's empty top strip | Sidebar native flow passes; sidebar-render check 125/125 |
+| 7. Honest harness rows | Wrapper-specific name, explicit durable-storage BLOCKED row, independent kernel timestamp row, named Debug timing SKIPs | Both configurations print their exact pass/fail/blocked/skip status |
+| Early host safety | Optional factory/context/content returns refuse before readiness and queue navigation | Startup probe calls all three paths before readiness, confirms refusal, and then loads one queued page |
+| M4 page color | Guarded post-load renderer color query emits the new host callback | A real split pane changes its bar from lavender to blue after navigation; no engine color-change event exists yet |
+| M4 selection / binding | Model owns collapse selection; all visible split panes bind on refresh; one-pane duplicate refresh stays removed | features-render check 147/147 |
+| Lazy Peek | Passive key and navigation checks use existing Peek storage | Escape with no Peek keeps it unconstructed; native startup check passes |
+
+The all-Spaces strip order is intentional (locked engine decision, 2026-10-25):
+favorites first, then Spaces in model order, each in sidebar order (pinned then
+Today, folders and split panes flattened). Each window/profile strip contains
+its own loaded subset. Space focus does not change that order. Peek hosts stay
+outside the strip until promotion.
+
 ### End-to-end evidence
 
 | Suite / build | Result | Evidence |
 |---|---|---|
-| Release `--only window` | 34/34 PASS | [Raw results](engine-spike/results-window-release.json) |
-| Debug `--only window` | 32/32 PASS; Release budget rows are measurement-only | [Raw results](engine-spike/results-window-debug.json) |
-| Debug `--only sidebar` | 15/15 PASS | [Raw results](engine-spike/results-sidebar-debug.json) |
+| Release `--only window` | 38 functional PASS; 2 sidebar timing FAIL (38/40) | [Raw results](engine-spike/results-window-release.json) |
+| Release `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-release.json) |
+| Release `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-release.json) |
+| Release `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-release.json) |
+| Debug `--only window` | 38/38 PASS; 2 named Release-only SKIPs | [Raw results](engine-spike/results-window-debug.json) |
+| Debug `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-debug.json) |
+| Debug `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-debug.json) |
 | Debug `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-debug.json) |
-| Debug and automation-enabled Release builds | PASS; no Swift warnings | `nice -n 10 tools/build.sh Debug/Release` |
-| `tools/verify-all.sh` after merging origin/main | 14 PASS, no SKIP | Summary below |
+| Debug / Release builds | PASS; no Swift warnings | `nice -n 10 tools/build.sh Debug/Release` |
+| sidebar-render / features-render | 125/125 and 147/147 PASS | Real library executables |
+| tools/verify-all.sh | 14 PASS; no SKIP | Summary below |
 
 The window suite checks native chrome, drag resize to 300 pt, the 228/500 pt
 limits, drag-to-hide, hover reveal and dismissal, Cmd+S, Cmd+N, two independent
@@ -197,20 +227,27 @@ eight-hidden-host cache limit. No unit tests or mocked engines are used.
 
 ### Release timing with the real window
 
-Same build, clock and five-fresh/five-warm method as Step A. Fresh profiles do
-not clear OS caches. Values are ms from kernel process start.
+Five fresh and five warm launches use the same monotonic kernel clock and
+presented-frame method as A. OS caches stay intact. Values are milliseconds.
 
 | Case | Sidebar median (≤250) | First paint median (≤700) | Slowest first paint | Verdict |
 |---|---:|---:|---:|---|
-| Fresh profile (5 launches) | 201 | 404 | 1747 | PASS |
-| Warm relaunch (5 launches) | 216 | 417 | 439 | PASS |
+| Fresh profile (5 launches) | 261 | 521 | 2237 | Sidebar FAIL; paint PASS |
+| Warm relaunch (5 launches) | 253 | 493 | 659 | Sidebar FAIL; paint PASS |
 
-All ten samples use the kernel process-start timestamp and the presented-frame
-mark. Maximum paint-clock mapping uncertainty is 0.12 ms. The first fresh launch
-has a 1,747 ms paint outlier, retained in the median. The intermediate `main`
-marks (120/130 ms) and `modelLoaded` marks (122/132 ms) still miss the plan's
-50/120 ms targets. This is a loaded-host run (load averages 7.69/7.57/8.07 on
-18 CPUs), not controlled idle-machine acceptance.
+**The current Release sidebar budgets fail.** All 38 functional window checks
+pass. The main marks are 152/146 ms; modelLoaded is 154/148 ms. Those intermediate
+50/120 ms targets also miss. A large part of the elapsed time is already present
+at the main mark (which includes OEApplication initialization); this observation
+does not establish a cause. The first fresh paint outlier of 2,237 ms stays in
+the median. Maximum paint-clock mapping uncertainty is 0.17 ms. Load averages
+were 8.61/7.85/7.12 on 18 CPUs. This is not controlled idle-machine acceptance.
+
+The prior review attempt measured sidebar medians 258/244 ms and also found an
+eager Peek from passive key routing. That failure remains in
+[results-window-step-b-review-before-lazy-peek-fix.json](engine-spike/results-window-step-b-review-before-lazy-peek-fix.json).
+The passive getter bug is fixed and a new key-path check verifies it. The later
+261/253 ms result remains a timing failure; it is not relabeled as a pass.
 
 An earlier real-window run missed the warm sidebar budget at 252 ms. Removing
 redundant single-pane placeholder updates and repeated host-view reattachment
@@ -221,33 +258,32 @@ Automation now queues mouse motion through AppKit's native event dequeue path,
 and fullscreen checks wait for native completion notifications. The earlier
 failure remains in
 [results-window-step-b-before-native-event-queue.json](engine-spike/results-window-step-b-before-native-event-queue.json).
-The final Debug and Release suites above both pass that check.
+The final Debug and Release suites above both pass that functional check.
 
 Own synthetic screenshots: [sidebar](engine-spike/sidebar-window.png),
-[window](engine-spike/window-startup.png), [second window](engine-spike/window-multiple.png).
+[window](engine-spike/window-startup.png), [second window](engine-spike/window-multiple.png), [Peek](engine-spike/peek-window.png).
 All test windows close after each run.
 
 ### Repository verification
 
-`origin/main` merged through `33aade1f4fc728543383801ec98c34dd84803077` before
-`tools/verify-all.sh`. The full default suite reports no SKIP rows.
+`origin/main` merged through `39fb0edc8cece28f5a443925b9dc4746b9b47070` before final builds and verification. The full default suite reports no SKIP rows.
 
 | Check | Result | Seconds |
 |---|---|---:|
-| build | PASS | 13 |
-| commands-demo | PASS | 1 |
-| roundtrip | PASS | 0 |
-| suggest-check | PASS | 13 |
+| build | PASS | 1 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 1 |
+| suggest-check | PASS | 11 |
 | commands-dump | PASS | 0 |
 | route | PASS | 1 |
 | favicons | PASS | 1 |
-| sleep-demo | PASS | 1 |
-| adblock-perf | PASS | 0 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
 | adblock-catalog | PASS | 0 |
-| profiles | PASS | 2 |
-| sidebar-render | PASS | 15 |
-| commandbar-render | PASS | 14 |
-| boosts | PASS | 2 |
+| profiles | PASS | 1 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 13 |
+| boosts | PASS | 3 |
 
 ### Static window comparison
 
@@ -284,7 +320,7 @@ synthesize the macOS drag session; native resize does use own-window drag
 NSEvents. Functional screenshots use synthetic titles. Static comparison is
 one measured static state; animated states and two-window page transfers are
 not claimed here. Full M1 page-feature acceptance remains Step D; these A/B
-suites cover the window/sidebar flows.
+suites cover window/sidebar flows, Peek promotion/cleanup and live pane color.
 
 Stock CEF reports “Cannot create profile at path …/Profiles/Profile-<id>/Engine”
 for a non-default profile. The sidebar suite proves switching to the correct

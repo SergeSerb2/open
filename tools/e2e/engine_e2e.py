@@ -1,5 +1,5 @@
 #!/usr/bin/env python3 -I
-"""End-to-end checks for OpenEngine and the M1 shell (docs/engine-spike.md).
+"""End-to-end checks for OpenEngine and the app shell (docs/engine-spike.md).
 
 Launches the real Open.app with a fresh profile, drives it only through the
 automation socket (docs/automation.md), and writes results plus screenshots
@@ -805,6 +805,8 @@ def window_flow_checks(factory, results, tmp):
                           for (x, y), target in zip(first["trafficLights"], [12, 35, 58]))
                   and first["sidebarClass"] == "OpenSidebar.SidebarView",
             "state": first}
+        app.call("key", key="escape", route="app")
+        results["keys_keep_peek_lazy"] = {"ok": not app.call("window-state")["peekCreated"]}
         app.call("save")
         counts = app.call("frame-save-counters")
         for index in range(12):
@@ -940,10 +942,15 @@ def window_flow_checks(factory, results, tmp):
                                             and restored[w1]["sidebarWidth"] == 300 and restored[w1]["sidebarMode"] == "hidden"
                                             and restored[w1]["selected"] == b and restored[w2]["selected"] == c,
                                          "expected": expected, "restored": restored}
-        app.call("window-focus", id=w2)
+        # Relaunch intentionally restored only B and C. Load A in both windows
+        # before testing that closing one owner preserves the other's live row.
+        app.call("window-focus", id=w1); app.call("select", tab=a); app.call("wait", tab=a); app.call("select", tab=b)
+        app.call("window-focus", id=w2); app.call("space", space=expected[w1]["space"])
+        app.call("select", tab=a); app.call("wait", tab=a)
+        app.call("space", space=space2); app.call("select", tab=c)
         app.call("window-close")
         remaining = app.call("tab-state", tab=a)
-        results["window_close_preserves_other_host"] = {"ok": remaining["loaded"] and remaining["hasWebContent"]}
+        results["window_close_preserves_other_host"] = {"ok": remaining["loaded"] and remaining["hasWebContent"], "state": remaining}
         app.call("space", space=space2)
         results["close_window_keeps_tabs"] = {"ok": len(app.call("shell-windows")) == 1 and any(t["id"] == c for t in app.call("tabs"))}
         app.call("select", tab=c)
