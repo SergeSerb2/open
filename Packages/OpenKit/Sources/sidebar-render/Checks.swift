@@ -274,6 +274,7 @@ enum Checks {
         check(NamedSpaceIcons.symbolName(for: "unknown-future-icon") == NamedSpaceIcons.fallbackSymbol,
               "unknown named icons use the neutral symbol")
 
+        MediaChecks.runRowIndicators()
         ReviewChecks.run()
         VisualFinishChecks.run()
 

@@ -35,3 +35,6 @@ Small items found during review and verification. Each line: area — issue — 
 - Shell — `--style=<typo>` silently selects Chrome; accept only `chrome` and `alloy`, Chrome when the flag is missing. — PR #53 shell review 11, 2026-10-26
 - App shell e2e — the window suite's edge-hover checks (`hide_reveal`, `fullscreen_hover_reveal`) fail intermittently: about one of the two per run, in both Chrome and Alloy style (2026-10-26 runs on the PR #53 head: chrome FAIL fullscreen_hover_reveal, chrome FAIL hide_reveal, chrome 40/40, alloy FAIL hide_reveal). The failing case is the first reveal after the sidebar hides (`revealed` stays false for 3 s). The reveal itself works: 10 of 10 edge hovers in a loop revealed in 0.38 s in both styles. `hide_reveal` now records each sub-condition. Owner: app shell. — engine lead, 2026-10-26
 
+- Media D8 (2026-10-26): decode the inline speaker-tooltip string and the
+  `SpeakerIcon` timing values from the shared read-only RE snapshots. Cite
+  the symbol/string evidence and confirm the tooltip text/case with S9.
