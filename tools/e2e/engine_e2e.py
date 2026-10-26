@@ -1357,7 +1357,10 @@ def window_flow_checks(factory, results, tmp):
         app.call("mouse", action="move", x=600, y=300)
         left = wait_until(lambda: not app.call("window-state")["revealed"], timeout=3, step=0.05)
         results["hide_reveal"] = {"ok": hidden["sidebarMode"] == "hidden" and hidden["panel"][0] == 10
-                                      and bool(reveal) and dismissed and selected and bool(left)}
+                                      and bool(reveal) and dismissed and selected and bool(left),
+                                  "hidden_mode": hidden["sidebarMode"], "panel_x": hidden["panel"][0],
+                                  "revealed": bool(reveal), "dismissed": dismissed, "selected_page": selected,
+                                  "left": bool(left)}
         app.call("key", key="s", modifiers=["cmd"], route="app")
         time.sleep(0.3)
         results["toggle_sidebar"] = {"ok": app.call("window-state")["sidebarMode"] == "anchored"}

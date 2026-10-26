@@ -1,12 +1,18 @@
 {
   "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "embeddedUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792999269"
+  },
   "shell": {
     "fresh_model": {
       "ok": true,
       "spaces": [
         {
           "focused": true,
-          "id": "B15EB8EC-D6B4-41A0-A68F-807665CE3D03",
+          "id": "38FB061C-9E63-4732-8A1D-37869CDE68E6",
           "pinned": 0,
           "title": "Space",
           "today": 0
@@ -62,15 +68,15 @@
       "strip": [
         [
           0,
-          "3607CCEF-0C81-4281-938A-E195E725ECB8"
+          "CF10ACD1-21D7-4EBD-B5B3-94F29D75B5FE"
         ],
         [
           1,
-          "F2A04230-C1F3-487E-9845-ED59F07B5BC2"
+          "AFEB5EC6-66F2-4DEE-B388-6B6997AFC538"
         ],
         [
           2,
-          "270F1BEC-D76C-4BE1-9D45-F948D4FC1CDE"
+          "E9125D50-5317-47F6-84CE-66AD02B46C0C"
         ]
       ]
     },
@@ -80,6 +86,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 21:46:25",
+  "started": "2026-10-26 00:24:15",
   "style": "chrome"
 }
