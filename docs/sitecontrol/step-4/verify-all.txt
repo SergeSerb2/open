@@ -1,0 +1,21 @@
+
+NAME                   RESULT SECONDS
+build                  PASS   19
+commands-demo          PASS   0
+roundtrip              PASS   1
+suggest-check          PASS   10
+commands-dump          PASS   0
+route                  PASS   1
+favicons               PASS   1
+media-demo             PASS   0
+sleep-demo             PASS   1
+adblock-perf           PASS   0
+adblock-catalog        PASS   0
+profiles               PASS   1
+settings-preview       PASS   77
+sidebar-render         PASS   23
+commandbar-render      PASS   13
+sitecontrol-render     PASS   23
+boosts                 PASS   2
+
+Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-042131.KnKWmk/

@@ -1,0 +1,41 @@
+{
+  "sourceCommit": "912f43f16c72dae0a98ca16cfb32509de94fc141",
+  "resources": {
+    "boost-applier.js": "2d1dcd10e425cef993de62ce95179fc4d915a0fd26acd23113618fac65edb3be",
+    "zap-picker.js": "067102a53aed582e04c2b23cca3f7b50a1eb234830591081f58e90b1baeefba5"
+  },
+  "driverOriginalSHA256": "96de59974adfcea2619fbf089acddc2f0bf9729c7470cc0caace35c4a466368a",
+  "driverSHA256": "810040a5c41c6ebe7892b4237fad313d85e2035a801d65954e6fb2c6873403a9",
+  "changedDriverConfiguration": "localhost origin only; production harness and runtimes unmodified",
+  "requiredCaseIDs": [
+    "A1",
+    "A10",
+    "A11",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7",
+    "A8",
+    "A9",
+    "E1",
+    "E2",
+    "E3",
+    "H0",
+    "H1",
+    "O1",
+    "O2",
+    "O3",
+    "S-A1",
+    "S-A2",
+    "S-A3",
+    "S1",
+    "S2",
+    "S3",
+    "S4"
+  ],
+  "passedRequiredCases": 26,
+  "passedTotalChecks": 38,
+  "evidenceDirectory": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-sitecontrol-step4-boosts-1obxzr8f"
+}
