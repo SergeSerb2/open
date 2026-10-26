@@ -64,7 +64,7 @@ targetTemplates:
         CODE_SIGN_ENTITLEMENTS: "Helper/Entitlements/helper${bundle_suffix}.entitlements"
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../../.."
         SKIP_INSTALL: YES
-        HEADER_SEARCH_PATHS: $(SRCROOT)/Engine/include
+        HEADER_SEARCH_PATHS: $(SRCROOT)/Engine/OpenEngine/include
 
 targets:
   # The only code that includes CEF headers. A dynamic framework so the main
@@ -74,10 +74,10 @@ targets:
     type: framework
     platform: macOS
     sources:
-      - path: Engine/include/OpenEngine
+      - path: Engine/OpenEngine/include/OpenEngine
         headerVisibility: public
         buildPhase: headers
-      - path: Engine/src
+      - path: Engine/OpenEngine/src
         headerVisibility: project
     settings:
       base:
@@ -89,7 +89,7 @@ targets:
         INSTALL_PATH: "@rpath"
         DYLIB_INSTALL_NAME_BASE: "@rpath"
         SKIP_INSTALL: YES
-        HEADER_SEARCH_PATHS: $(CEF_ROOT) $(SRCROOT)/Engine/include
+        HEADER_SEARCH_PATHS: $(CEF_ROOT) $(SRCROOT)/Engine/OpenEngine/include
         GCC_PREPROCESSOR_DEFINITIONS: CEF_USE_SANDBOX=1 __STDC_CONSTANT_MACROS __STDC_FORMAT_MACROS $(inherited)
         OTHER_LDFLAGS: $(CEF_WRAPPER_LIB) -framework AppKit -framework IOSurface -framework QuartzCore
         WARNING_CFLAGS: -Wno-unused-parameter -Wno-shorten-64-to-32 -Wno-comma
