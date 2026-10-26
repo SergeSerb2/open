@@ -42,7 +42,15 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var observerID: UUID?
   private(set) var commandBarSession: AppCommandBarSession?
   private var commandBarNavigationFocus: Set<ItemID> = []
+  private(set) var isClosing = false
+  var saveCaptureTasks: [UUID: Task<Void, Never>] = [:]
+  private var findSelectionTask: Task<Void, Never>?
+  var hasFindSelectionTask: Bool { findSelectionTask != nil }
+  var pendingRenameAlert: NSAlert?
+  private(set) var navigationFocusDecisions = 0
+  private(set) var lastNavigationFocusRestored = false
   func showCommandBar(_ mode: CommandBarMode) {
+    guard !isClosing, !app.terminationRequested else { return }
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
@@ -249,6 +257,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private func dropContent(id: ItemID, content: OEWebContent) { controller?.container.closeHost(for: id); hosts[id]?.close() }
   private func treeChanged(_ change: TreeChange) {
+    guard !isClosing, !app.shutdownPrepared else { return }
     treeChangeCount += 1
     if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
       let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
@@ -368,6 +377,16 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     } else { controller?.refresh(); mirror.sync(); app.scheduleSave() }
   }
   func closeAll() {
+    guard !isClosing else { return }
+    isClosing = true
+    for task in saveCaptureTasks.values { task.cancel() }
+    saveCaptureTasks.removeAll()
+    findSelectionTask?.cancel(); findSelectionTask = nil
+    if let panel = pendingSavePanel { window?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil) }
+    pendingSavePanel = nil
+    if let sheet = pendingRenameAlert?.window { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
+    pendingRenameAlert = nil
+    commandBarNavigationFocus.removeAll()
     commandBarSession?.dismiss()
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
     for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
@@ -489,14 +508,47 @@ extension EngineWebContentHostFactory {
   private func finishCommandBarNavigation(_ page: OEWebContent) {
     guard let id = tabID(for: page), commandBarNavigationFocus.remove(id) != nil else { return }
     DispatchQueue.main.async { [weak self, weak page] in
-      guard let self, let page, self.selectedContent === page,
-            self.window?.isKeyWindow == true, self.commandBarSession?.isPresented != true else { return }
+      guard let self, let page else { return }
       // The bar had focused the old document before navigating. A hosted
       // Chrome tab can reuse its native responder while replacing its renderer;
       // give the committed page a real blur/focus transition after strip sync.
-      self.window?.makeFirstResponder(nil)
-      page.focusPage()
+      self.lastNavigationFocusRestored = self.restorePageFocusIfUnclaimed(page, resetResponder: true)
+      self.navigationFocusDecisions += 1
     }
+  }
+
+  /// Async completions may restore the page only while its native focus is
+  /// unclaimed. Sidebar controls, field editors, sheets and other windows win.
+  @discardableResult
+  func restorePageFocusIfUnclaimed(_ page: OEWebContent? = nil, resetResponder: Bool = false) -> Bool {
+    guard !isClosing, !app.terminationRequested, app.engineReady, NSApp.isActive,
+          let window, window.isKeyWindow, window.attachedSheet == nil,
+          commandBarSession?.isPresented != true,
+          let page = page ?? selectedContent, selectedContent === page else { return false }
+    let responder = window.firstResponder
+    let view = responder as? NSView
+    guard responder == nil || responder === window
+      || view.map({ $0 === page.view || $0.isDescendant(of: page.view) }) == true else { return false }
+    if resetResponder { window.makeFirstResponder(nil) }
+    page.focusPage()
+    return true
+  }
+
+  func focusStateForAutomation() -> [String: Any] {
+    let responder = window?.firstResponder
+    let view = responder as? NSView
+    var owner = "other"
+    if responder == nil || responder === window { owner = "window" }
+    else if findFieldCreated, responder === findField || responder === findField.currentEditor() { owner = "find" }
+    else if commandBarSession?.controller?.editingUndoManager(for: responder) != nil { owner = "commandbar" }
+    else if let view, let sidebar = controller?.sidebar,
+            view === sidebar || view.isDescendant(of: sidebar)
+              || ((responder as? NSTextView)?.delegate as? NSView).map({ $0.isDescendant(of: sidebar) }) == true { owner = "sidebar" }
+    else if let page = selectedContent, let view, view === page.view || view.isDescendant(of: page.view) { owner = "page" }
+    return ["owner": owner, "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
+      "navigationDecisions": navigationFocusDecisions, "lastNavigationRestored": lastNavigationFocusRestored,
+      "findVisible": findFieldCreated && !findField.isHidden,
+      "findText": findFieldCreated ? findField.stringValue : "", "sheet": window?.attachedSheet != nil]
   }
   func selectTabForCommand(_ id: ItemID, spaceID: SpaceID? = nil) {
     guard let tab = model.tab(id: id) else { return }
@@ -524,6 +576,7 @@ extension EngineWebContentHostFactory {
       guard let recent = await store.recent(limit: 1).first,
         let record = await store.restore(id: recent.id)
       else { return }
+      guard !self.isClosing, !self.app.terminationRequested else { return }
       let tab = self.model.restoreArchivedTab(record)
       self.select(nodeID: tab.id)
     }
@@ -1161,10 +1214,16 @@ extension EngineWebContentHostFactory: NSMenuItemValidation {
     case 2: findNext(nil)
     case 3: findPrevious()
     case 7:
-      guard let page = selectedContent else { return }
-      Task { @MainActor [weak self] in
-        if let value = try? await page.evaluateJavaScript("window.getSelection().toString()") as? String,
-           !value.isEmpty { self?.findField.stringValue = value; self?.findNext(nil) }
+      guard !isClosing, app.engineReady, !app.terminationRequested, let page = selectedContent else { return }
+      findSelectionTask?.cancel()
+      findSelectionTask = Task { @MainActor [weak self, weak page] in
+        guard let self, let page, !Task.isCancelled, !self.isClosing,
+              self.app.engineReady, !self.app.terminationRequested else { return }
+        self.app.noteAsyncEngineCall("findSelection")
+        let value = try? await page.evaluateJavaScript("window.getSelection().toString()") as? String
+        guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
+        self.findSelectionTask = nil
+        if let value, !value.isEmpty { self.findField.stringValue = value; self.findNext(nil) }
       }
     default: break
     }

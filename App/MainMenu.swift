@@ -100,10 +100,23 @@ extension EngineWebContentHostFactory {
     case "unpin-tab": if let tab = selectedTab { model.unpinTab(id: tab.id) }
     case "duplicate-tab": if let id = selectedNodeID { _ = model.duplicateNode(id: id) }
     case "rename-tab":
-      guard let tab = selectedTab else { return false }
-      let alert = NSAlert(); alert.messageText = "Rename Tab"; alert.addButton(withTitle: "Save"); alert.addButton(withTitle: "Cancel")
-      let field = NSTextField(string: tab.displayTitle); field.frame.size = NSSize(width: 300, height: 24); alert.accessoryView = field
-      if alert.runModal() == .alertFirstButtonReturn { model.renameNode(id: tab.id, title: field.stringValue) }
+      guard let tab = selectedTab, let controller, let window else { return false }
+      if windowState.sidebarMode == .hidden { controller.toggleSidebar() }
+      controller.sidebar.reveal(nodeID: tab.id)
+      if controller.sidebar.rowFrame(nodeID: tab.id) != nil {
+        controller.sidebar.beginRename(nodeID: tab.id)
+      } else {
+        // Split panes have no standalone outline row. Keep their rename async.
+        guard pendingRenameAlert == nil else { return false }
+        let alert = NSAlert(); alert.messageText = "Rename Tab"; alert.addButton(withTitle: "Save"); alert.addButton(withTitle: "Cancel")
+        let field = NSTextField(string: tab.displayTitle); field.frame.size = NSSize(width: 300, height: 24); alert.accessoryView = field
+        pendingRenameAlert = alert
+        alert.beginSheetModal(for: window) { [weak self] response in
+          guard let self else { return }; self.pendingRenameAlert = nil
+          guard !self.isClosing, !self.app.terminationRequested, response == .alertFirstButtonReturn else { return }
+          self.model.renameNode(id: tab.id, title: field.stringValue)
+        }
+      }
     case "reset-tab": if let tab = selectedTab, let url = tab.pinnedURL { model.resetPinnedTab(id: tab.id); hosts[tab.id]?.load(url) }
     case "replace-pinned-url": if let tab = selectedTab { model.replacePinnedURL(id: tab.id) }
     case "clear-unpinned-tabs": if let space = focusedSpace { model.clearToday(space: space.id) }
@@ -147,17 +160,33 @@ extension EngineWebContentHostFactory {
     app.scheduleSave(); app.scheduleMenuRebuild(); return true
   }
   private func savePage() {
-    guard let page = selectedContent, let window else { return }
+    guard !isClosing, app.engineReady, !app.terminationRequested,
+          let page = selectedContent, let window, pendingSavePanel == nil else { return }
+    let wasActive = NSApp.isActive, wasKey = window.isKeyWindow
     savePageRequestCount += 1
     let panel = NSSavePanel(); pendingSavePanel = panel; panel.nameFieldStringValue = "Page.mhtml"
-    panel.beginSheetModal(for: window) { [weak self] response in
+    panel.beginSheetModal(for: window) { [weak self, weak page] response in
       self?.pendingSavePanel = nil
-      if self?.commandBarSession?.isPresented != true { self?.window?.makeKeyAndOrderFront(nil); self?.selectedContent?.focusPage() }
+      if wasActive && wasKey {
+        DispatchQueue.main.async { [weak self, weak page] in
+          if let page { self?.restorePageFocusIfUnclaimed(page) }
+        }
+      }
       self?.app.scheduleMenuRebuild()
-      guard response == .OK, let url = panel.url else { return }
-      Task { @MainActor in
+      guard let self, !self.isClosing, !self.app.terminationRequested,
+            self.app.engineReady, response == .OK, let url = panel.url, let page else { return }
+      let id = UUID()
+      self.saveCaptureTasks[id] = Task { @MainActor [weak self, weak page] in
+        guard let self else { return }
+        defer { self.saveCaptureTasks[id] = nil }
+        guard !Task.isCancelled, !self.isClosing, self.app.engineReady,
+              !self.app.terminationRequested, let page else { return }
+        await self.app.deferAsyncEngineWorkForAutomation()
+        guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
         do {
+          self.app.noteAsyncEngineCall("saveCapture")
           let result = try await page.sendDevToolsMethod("Page.captureSnapshot", parameters: ["format": "mhtml"])
+          guard !Task.isCancelled, !self.isClosing, self.app.engineReady, !self.app.terminationRequested else { return }
           guard let body = result["data"] as? String else { return }
           try Data(body.utf8).write(to: url, options: .atomic)
         } catch { AppDelegate.commandLog("Could not save page: \(error)") }

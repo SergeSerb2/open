@@ -20,42 +20,9 @@
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
     private var pointerRequestID = 0
-    private var applicationObservers: [NSObjectProtocol] = []
-    private var activationEvents: [[String: Any]] = []
-    private var workspaceObserver: NSObjectProtocol?
     private var nativeInputStart: Double = 0
 
-    init(app: AppDelegate) {
-      self.app = app
-      for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
-        applicationObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
-          let eventName = notification.name.rawValue
-          MainActor.assumeIsolated {
-            guard let self else { return }
-            self.activationEvents.append(["event": eventName,
-              "uptime": ProcessInfo.processInfo.systemUptime, "active": NSApp.isActive,
-              "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
-              "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
-              "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0])
-            if self.activationEvents.count > 256 { self.activationEvents.removeFirst() }
-          }
-        })
-      }
-      workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] notification in
-        let target = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-        let name = target?.localizedName ?? "unknown", pid = target?.processIdentifier ?? 0
-        MainActor.assumeIsolated {
-          guard let self else { return }
-          self.activationEvents.append(["event": "frontmostChanged", "uptime": ProcessInfo.processInfo.systemUptime,
-            "frontmostApp": name, "frontmostPID": pid])
-          if self.activationEvents.count > 256 { self.activationEvents.removeFirst() }
-        }
-      }
-    }
-    isolated deinit {
-      applicationObservers.forEach(NotificationCenter.default.removeObserver)
-      if let workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver) }
-    }
+    init(app: AppDelegate) { self.app = app }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -65,6 +32,7 @@
     }
 
     func handle(_ data: Data) async -> Data {
+      let observationStart = ProcessInfo.processInfo.systemUptime
       var id: Any = NSNull()
       var response: [String: Any]
       var inputCommand = false
@@ -83,6 +51,7 @@
       } catch {
         response = ["id": id, "ok": false, "error": "\(error.localizedDescription)"]
       }
+      response["observationStart"] = observationStart
       if inputCommand { response["nativeInputStart"] = nativeInputStart }
       let safe =
         JSONSerialization.isValidJSONObject(response)
@@ -104,7 +73,7 @@
       case "menu-context":
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
-      case "activation-events": return activationEvents
+      case "activation-events": return app.activationTrace.events
       case "yield-activation":
         guard let pid = a["pid"] as? Int32, pid != getpid(),
           let target = NSRunningApplication(processIdentifier: pid),
@@ -178,6 +147,19 @@
         guard let library = app.settingsPresenter.library, let url = (a["url"] as? String).flatMap(URL.init(string:)) else { throw Failure(message: "Library not open") }
         library.actions.openHistoryItem(url: url); return true
       case "save-page-state": return ["requests": w.savePageRequestCount, "visible": w.pendingSavePanel?.isVisible == true, "pending": w.pendingSavePanel != nil, "number": w.pendingSavePanel?.windowNumber ?? 0] as [String: Any]
+      case "focus-state":
+        let owner = (a["id"] as? String).flatMap { id in app.hostFactories.first { $0.key.description == id }?.value } ?? w
+        return owner.focusStateForAutomation()
+      case "background-read":
+        guard let tab = w.selectedTab, let host = w.hosts[tab.id] else { throw Failure(message: "no live tab") }
+        host.refreshPageBackground(); return true
+      case "async-engine-state":
+        return ["captures": w.saveCaptureTasks.count, "background": w.hosts.values.filter(\.hasBackgroundTask).count]
+      case "save-page-confirm":
+        guard let panel = w.pendingSavePanel, let path = a["path"] as? String else { throw Failure(message: "no Save sheet") }
+        let url = URL(fileURLWithPath: path)
+        panel.directoryURL = url.deletingLastPathComponent(); panel.nameFieldStringValue = url.lastPathComponent
+        panel.ok(nil); return true
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
       case "suggest-remote":
         guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }

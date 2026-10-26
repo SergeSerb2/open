@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
   private(set) var terminationRequested = false
+  private(set) var shutdownPrepared = false
+  private var lateAsyncEngineCalls = 0
+  private var asyncEngineCalls: [String: Int] = [:]
+  private var shutdownTrace: [[String: Any]] = []
   lazy var stores = AppStores(app: self)
   lazy var settingsPresenter = AppSettingsActions(app: self)
   var keyBindings = KeyBindingStore.empty
@@ -36,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private var activeWindowID: WindowID?
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
+    let activationTrace = ActivationTrace()
     private var automation: AutomationServer?
   #endif
 
@@ -62,11 +67,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+    let wasEngineReady = engineReady
     terminationRequested = true
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     saveState()
-    if !engineReady { CFRunLoopStop(CFRunLoopGetMain()) }
+    prepareForEngineShutdown()
+    if !wasEngineReady { CFRunLoopStop(CFRunLoopGetMain()) }
     return .terminateNow
   }
 
@@ -252,8 +259,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   }
 
   func engineWillShutDown() {
+    prepareForEngineShutdown()
     #if OPEN_AUTOMATION
       automation?.stop()
+    #endif
+  }
+
+  /// Runs before OEApplication starts its engine close sequence, and again
+  /// defensively before CefShutdown if the message loop ends by another path.
+  func prepareForEngineShutdown() {
+    guard !shutdownPrepared else { return }
+    shutdownPrepared = true
+    recordShutdownPhase("prepare")
+    afterPaintTask?.cancel(); afterPaintTask = nil
+    menuRebuildTask?.cancel(); menuRebuildTask = nil
+    engineReady = false
+    for factory in Array(hostFactories.values) { factory.closeAll() }
+    recordShutdownPhase("hostsClosed")
+  }
+
+  func noteAsyncEngineCall(_ operation: String) {
+    asyncEngineCalls[operation, default: 0] += 1
+    if shutdownPrepared || !engineReady || terminationRequested { lateAsyncEngineCalls += 1 }
+  }
+
+  /// A real queued task can be held at its scheduling boundary in e2e builds.
+  /// Cancellation interrupts this wait; engine responses are never replaced.
+  func deferAsyncEngineWorkForAutomation() async {
+    #if OPEN_AUTOMATION
+    if let raw = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS"],
+       let milliseconds = Int(raw), milliseconds > 0 {
+      try? await Task.sleep(for: .milliseconds(milliseconds))
+    }
+    #endif
+  }
+
+  func recordShutdownPhase(_ phase: String) {
+    #if OPEN_AUTOMATION
+    guard ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SHUTDOWN_TRACE"] == "1", directories != nil else { return }
+    let factories = Array(hostFactories.values)
+    shutdownTrace.append(["phase": phase, "uptime": ProcessInfo.processInfo.systemUptime,
+      "captureTasks": factories.reduce(0) { $0 + $1.saveCaptureTasks.count },
+      "backgroundTasks": factories.reduce(0) { $0 + $1.hosts.values.filter(\.hasBackgroundTask).count },
+      "selectionTasks": factories.filter(\.hasFindSelectionTask).count,
+      "hosts": factories.reduce(0) { $0 + $1.hosts.count },
+      "closedFactories": factories.filter(\.isClosing).count, "factories": factories.count,
+      "asyncEngineCalls": asyncEngineCalls,
+      "lateAsyncEngineCalls": lateAsyncEngineCalls])
+    let file = directories.root.appendingPathComponent("State/shutdown-order.json")
+    if let data = try? JSONSerialization.data(withJSONObject: shutdownTrace, options: [.prettyPrinted, .sortedKeys]) {
+      try? data.write(to: file, options: .atomic)
+    }
     #endif
   }
 
@@ -279,7 +335,7 @@ extension AppDelegate: CommandDispatcher {
     hostFactories.values.first { $0.ownsKeyWindow(window) }
   }
   func scheduleMenuRebuild() {
-    guard menuRebuildTask == nil else { return }
+    guard !shutdownPrepared, menuRebuildTask == nil else { return }
     menuRebuildTask = Task { @MainActor [weak self] in
       try? await Task.sleep(for: .milliseconds(30))
       guard let self, !Task.isCancelled else { return }
@@ -288,11 +344,13 @@ extension AppDelegate: CommandDispatcher {
   }
   /// No suggestion index, history, hotkey or settings work before first paint.
   func prepareCommandsAfterPaint(_ page: OEWebContent) {
-    guard !commandServicesPrepared, afterPaintTask == nil else { return }
+    guard engineReady, !shutdownPrepared, !terminationRequested,
+          !commandServicesPrepared, afterPaintTask == nil else { return }
     afterPaintTask = Task { @MainActor [weak self, weak page] in
       defer { self?.afterPaintTask = nil }
       for _ in 0..<40 {
-        guard let self, let page, !self.terminationRequested, !Task.isCancelled else { return }
+        guard let self, let page, self.engineReady, !self.shutdownPrepared,
+              !self.terminationRequested, !Task.isCancelled else { return }
         let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
         if painted == true {
           self.prepareCommandServices()

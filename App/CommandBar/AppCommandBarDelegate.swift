@@ -80,7 +80,7 @@ final class AppCommandBarSession: CommandBarDelegate {
   func commandBar(_ commandBar: CommandBarController, didChangePresentation presented: Bool, mode: CommandBarMode) {
     factory.controller?.isCommandBarPresented = presented
     factory.controller?.context.isNewTabCommandBarOpen = presented && mode == .newTab
-    if !presented { factory.selectedContent?.focusPage() }
+    if !presented { factory.restorePageFocusIfUnclaimed() }
     factory.app.scheduleMenuRebuild()
   }
   func commandBar(_ commandBar: CommandBarController, perform intent: CommandBarIntent) {
@@ -95,7 +95,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
       factory.controller?.showToast("Copied", undo: nil)
     case .showHelp: _ = factory.openNewTab(url: AppCommand.helpURL, background: false)
-    case .dismissed: factory.selectedContent?.focusPage()
+    case .dismissed: break // didChangePresentation runs after the bar releases its editor.
     }
   }
   func stateForAutomation() -> [String: Any] {
@@ -105,6 +105,7 @@ final class AppCommandBarSession: CommandBarDelegate {
       "text": bar.text, "editorText": (factory.window?.firstResponder as? NSTextView)?.string ?? "", "editorCanUndo": (factory.window?.firstResponder as? NSTextView)?.undoManager?.canUndo ?? false, "profile": bar.request?.profileID?.description ?? "", "space": bar.request?.spaceID?.description ?? "",
       "selected": bar.selectedIndex ?? -1, "range": [range?.location ?? -1, range?.length ?? 0],
       "firstResultsMs": firstResultsMilliseconds ?? -1, "openFirstResultsMs": openFirstResultsMilliseconds ?? -1,
+      "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation",
       "final": bar.isSnapshotFinal, "newTabHighlighted": factory.controller?.context.isNewTabCommandBarOpen ?? false,
       "rows": bar.suggestions.map { ["id": $0.id, "kind": $0.kind.rawValue, "title": $0.title,
         "url": $0.url?.absoluteString ?? "", "tab": $0.tabID?.description ?? "",
