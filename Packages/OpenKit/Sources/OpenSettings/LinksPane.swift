@@ -74,7 +74,7 @@ public struct LinkRuleSheet:View {
         AppPicker(bundleID:$draft.sourceBundleID)
         if draft.makeRule() == nil {SettingsError(text:"Enter a valid pattern and destination.")}
         SettingsError(text:root.linksError)
-        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save Rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).disabled(draft.makeRule() == nil || (draft.destinationKind == .space && !root.links.spaces.contains{$0.id == draft.spaceID}))}
+        Spacer();HStack {Button("Cancel",action:onDone).keyboardShortcut(.cancelAction);Spacer();Button("Save Rule") {if root.saveLinkRule(draft) {onDone()}}.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(draft.makeRule() == nil || (draft.destinationKind == .space && !root.links.spaces.contains{$0.id == draft.spaceID}))}
     }.padding(24).frame(width:520,height:380).buttonStyle(SettingsButtonStyle())}
 }
 private struct RouteDestinationPicker:View {
