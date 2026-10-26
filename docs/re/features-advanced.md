@@ -838,3 +838,47 @@ Each needs a screenshot from the user (agents may not launch Arc). The list of e
 - Sidebar item and window persistence shapes (`StorableSidebar.json`, `StorableWindows.json`) are owned by the data-model report; this spec quotes only the Split View and link-routing fields.
 - Engine mapping (CEF user scripts, subresource filtering, PiP) is owned by the ArcCore engine report; this spec states the required behavior at the shell boundary.
 
+
+## Capture session 2 answers (2026-10-26)
+
+Runtime facts from the second capture session (1x display, macOS Dark). Full measurements and frame citations are in `interaction-states.md` §20; the routing to plans and PRs is in `capture-session-2-results.md`. Notation: S2 `<item>/<frame>`.
+
+### Little Arc (§3.5)
+
+| Question | Answer | Evidence |
+|---|---|---|
+| q1 Default size and position | The first frame is 490 x 329 at the screen's top-right (20 pt from the right edge, 20 pt below the menu bar) and shows only a command bar. After a page loads, the window grows to 1185 x 832, keeping its top-right corner. `StorableWindows` stores `preferredFrame {anchor {topRight}, size [500, 300]}`. | S2 19/0003, 0011; `s2-little-arc-open` |
+| q4 Reuse or new | A second ⌥⌘N opens a new window at the same first frame, on top of the first. It opens with the command bar focused. | S2 19/0029 |
+| q5 Move to Space | The title bar has "Open in <Space> ⌘O" and a chevron ("More Spaces") that opens a searchable Space list. Where the tab lands was not captured. | S2 19/0011, 0023, 0025 |
+| q6 Several windows | Two windows can be open at once (cap and cycling not tested). | S2 19/0029 |
+| Title bar | 47 pt: window buttons at x 9 / 32 / 55, a Profile chip, the host centered, a copy-link button, the "Open in" pill, and the chevron. | S2 19/0011 |
+
+### Boosts and Zap (§4.6, §5)
+
+| Question | Answer | Evidence |
+|---|---|---|
+| q4 Font list | The simple editor shows a 5 x 4 grid of 20 "Aa" samples, each drawn in its font. Their names are not in AX; the list itself is still open. | S2 10/0030 |
+| q5 Color control | A square dot-grid pad (147 pt) with a hue ring around it once a color is chosen, a large primary knob and a smaller second knob, plus "Invert lightness", "Advanced color controls" (Contrast, Brightness, Original Saturation sliders in a popover), and "Reset to original colors". Not a round hue wheel. The mapping from knob to filter is still open. | S2 10/0030, 0039, 0042 |
+| Editor window | Its own light window (`boostsEditor`, 183 x 588, layer 3) next to the browser window's right edge; first-run card "Edit the Internet with Boosts" with "Make a Boost" / "Maybe Later". | S2 10/0018 |
+| Zap | A 56 pt bar at the bottom of the web content ("Click elements on the page to Zap them", "Done"), a 3 pt blue frame around the content, a yellow tint on the hovered element, and a popup "Zap this" / "Zap all related elements" / "Cancel" with the element's selector. The editor's Zap button then shows the count. | S2 10/0058, 0060 |
+| Code mode | The window widens to 480 pt: "← Back", CSS | JS, a web view, "Pick Selector", "Show Developer Tools". The editor body was not captured ("Internal debugging pages are currently disabled"). | S2 10/0071 |
+| Boost name menu | Rename this Boost… · Shuffle · Reset all Edits · Delete this Boost · — · All Boosts…; delete confirmation "Delete this Boost?" / "This can't be undone." | notes 10:48:09, 10:48:18 (no frame) |
+
+### Site Control Center (§6.4)
+
+| Question | Answer | Evidence |
+|---|---|---|
+| q1 Sections | Order: an action row (Share, New Boost, Capture, Capture area), Extensions, Boosts (only with a Boost), Settings (rows such as "Developer Mode" and "Automatic Picture-In-Picture"), then a footer with "Secure" and "⋯". No header. Header hover shows "Manage". | S2 09/0010, 11/0011; notes 10:47:57 |
+| q5 Other entry points | Not tested. ⌥ + click on the button did not open the panel. | notes 10:28:02 |
+| Panel | A translucent popover with a top arrow, dropping down from the URL field's Site Control button, centered on it (236 pt wide). | S2 09/0010 |
+| ⋯ menu | Clear Cache · Clear Cookies · — · Manage Boosts… · New Boost… · — · Manage Extensions… · Add Extension… · — · All Site Settings…, also while a Boosts section shows. | S2 11/0011 |
+
+### PiP and media (§8.5)
+
+| Question | Answer | Evidence |
+|---|---|---|
+| q2 Mini player | A 33 pt card right above the bottom bar (no title row at rest), controls favicon · previous · play/pause · next · volume. A click on volume expands it to 66 pt with a title row (PiP and Close buttons). Three players collapse to one card with two cards peeking 7 pt each; on hover they expand to three 66 pt cards, 5 pt apart, the most recent at the bottom. `maxActiveMediaControls` ≥ 3. | S2 14b/0014, 0024; 16/0005, 0012 |
+| q3 Visible tab | No mini player for the selected tab; the row shows a leading speaker button instead. | S2 12/0013–0029 |
+| q4 Close and playback | Not captured (item 15). | — |
+| q6 Manual PiP | Not tested. An auto-PiP window closes when its tab is shown again; while it shows, the sidebar has no mini player. | notes 10:31:21, 10:32:08 |
+| PiP window | 320 x 180, 10 pt from the screen's bottom-right corner, corner ≈ 6, video only at rest. Hover controls and the menu: not captured. | S2 13/0002 |

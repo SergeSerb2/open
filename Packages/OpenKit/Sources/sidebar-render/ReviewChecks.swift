@@ -156,10 +156,12 @@ enum ReviewChecks {
         check(!folder.isExpanded, "Return activates a focused folder")
 
         print("review: tooltip delay stays armed across pointer movement")
-        sidebar.reveal(nodeID: secondTab.id)
+        // Today rows keep title tooltips while pinned rows now own Hover Previews.
+        let tooltipTab = space.today.compactMap(\.tab).first!
+        sidebar.reveal(nodeID: tooltipTab.id)
         pump()
         let page = outline.enclosingScrollView!.superview!
-        let rect = outline.rect(ofRow: outline.row(forItem: secondTab))
+        let rect = outline.rect(ofRow: outline.row(forItem: tooltipTab))
         let point = outline.convert(NSPoint(x: 60, y: rect.midY), to: nil)
         let tooltip = TooltipController.shared
         let schedules = tooltip.scheduleCount, shows = tooltip.showCount
@@ -170,7 +172,7 @@ enum ReviewChecks {
             page.mouseMoved(with: event)
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         }
-        check(tooltip.scheduleCount - schedules == 1 && tooltip.showCount - shows == 1, "same row and tooltip schedule and show once during continuous movement")
+        check(tooltip.scheduleCount - schedules == 1 && tooltip.showCount - shows == 1, "same Today row and tooltip schedule and show once during continuous movement")
 
         print("review: mixed Favorites reload batches")
         var seed: UInt64 = 0x332026
