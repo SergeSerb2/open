@@ -28,7 +28,7 @@ enum RenderCLI {
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
-          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion]
+          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
@@ -168,6 +168,17 @@ enum RenderCLI {
             host.close()
         } else {
             image = OffscreenRenderer().render(scene, scale: scale)
+        }
+        if args.contains("--crop-media") {
+            let ids = model.index.values.compactMap(\.tab).filter { $0.live.isAudible || $0.isMuted || $0.live.isCapturing }.map(\.id)
+            guard let frame = ids.compactMap({ scene.sidebar.rowFrame(nodeID: $0) }).min(by: { $0.minY < $1.minY }), frame.minY < scene.bounds.height else {
+                throw CLIError(description: "media row is outside the render canvas; increase --size")
+            }
+            let y = max(0, frame.minY - 12), height = min(frame.height + 24, scene.bounds.height - y)
+            guard let crop = image.cropping(to: CGRect(x: 0, y: y * scale, width: context.sidebarWidth * scale, height: height * scale)) else {
+                throw CLIError(description: "could not crop the actual media row")
+            }
+            image = crop
         }
         if let c = value(args, "--crop")?.split(separator: ",").compactMap({ Double($0) }), c.count == 4 {
             image = image.cropping(to: CGRect(x: c[0] * scale, y: c[1] * scale, width: c[2] * scale, height: c[3] * scale)) ?? image

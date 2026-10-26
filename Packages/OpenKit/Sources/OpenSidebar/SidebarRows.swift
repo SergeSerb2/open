@@ -347,10 +347,13 @@ final class TabCellView: SidebarCellView {
         rowStateChanged()
         let m = SpaceListMetrics.self
         let x0 = indent
-        // Observation-tracked reads: audio and pinned-URL state.
-        let (audible, muted, leftPinned, capturing) = tracked({ (tab?.live.isAudible ?? false, tab?.isMuted ?? false, tab?.hasLeftPinnedURL ?? false, tab?.live.isCapturing ?? false) }) {
-            [weak self] in self?.needsLayout = true
-        }
+        // Load the weak tab once; observation is scoped to the fields this row draws.
+        let currentTab = tab
+        let (audible, muted, leftPinned, capturing) = tracked({
+            guard let currentTab else { return (false, false, false, false) }
+            let live = currentTab.live
+            return (live.isAudible, currentTab.isMuted, currentTab.hasLeftPinnedURL, live.isCapturing)
+        }) { [weak self] in self?.needsLayout = true }
         favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
         let a = m.accessorySize
         accessory?.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
@@ -391,6 +394,7 @@ final class TabCellView: SidebarCellView {
     /// Under pressure, reserve the speaker first and omit the recording dot (lead D9).
     private func layoutMediaAccessories(audible: Bool, muted: Bool, capturing: Bool, titleX: CGFloat, titleRight: CGFloat) -> CGFloat {
         let m = RowMediaMetrics.self, showAudio = audible || muted
+        if !showAudio && !capturing && audio == nil && recording == nil { return titleRight }
         audio?.isHidden = !showAudio
         if !showAudio { audio?.update(tabID: tab?.id, muted: muted, animate: false) }
         let available = max(0, titleRight - titleX - m.gapAfterTitle)
@@ -724,7 +728,21 @@ final class DividerCellView: SidebarCellView {
 
 extension SidebarDiagnostics {
     public static var mediaReduceMotionOverride: Bool?
-    public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? RowMediaAccessibility.shared.reduceMotion }
+}
+
+/// One settings read per accessibility change, not per visible row layout. No timer.
+@MainActor private final class RowMediaAccessibility {
+    static let shared = RowMediaAccessibility()
+    private(set) var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    private var observer: NSObjectProtocol?
+    private init() {
+        observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+            }
+    }
+    isolated deinit { if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) } }
 }
 
 @MainActor private final class RowSpeakerImageView: NSImageView {
@@ -733,7 +751,7 @@ extension SidebarDiagnostics {
 
 @MainActor private final class RowStaticSpeakerView: NSView {
     var glyph: Glyph = .audioPlaying { didSet { if glyph != oldValue { needsDisplay = true } } }
-    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay; identifier = NSUserInterfaceItemIdentifier("media.speakerGlyph") }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -750,7 +768,8 @@ extension SidebarDiagnostics {
     private var staticGlyph: RowStaticSpeakerView?
     private var representedID: ItemID?
     private var lastMuted: Bool?
-    override init(glyph: Glyph?) { super.init(glyph: glyph); glyphView.isHidden = true }
+    private var lastReduceMotion: Bool?
+    override init(glyph: Glyph?) { super.init(glyph: glyph); glyphView.removeFromSuperview() }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func layout() {
         super.layout()
@@ -761,11 +780,16 @@ extension SidebarDiagnostics {
         CATransaction.commit()
     }
     func update(tabID: ItemID?, muted: Bool, animate: Bool = true) {
+        let reduceMotion = SidebarDiagnostics.mediaReducesMotion
+        if representedID == tabID && lastMuted == muted && lastReduceMotion == reduceMotion {
+            if !animate { removeAnimations(symbol?.layer) }
+            return
+        }
         let glyph: Glyph = muted ? .audioMuted : .audioPlaying
         guard let image = glyph.image else { return }
         let changed = representedID == tabID && lastMuted != nil && lastMuted != muted
         let needsImage = lastMuted != muted || representedID != tabID
-        if SidebarDiagnostics.mediaReducesMotion {
+        if reduceMotion {
             symbol?.removeFromSuperview(); symbol = nil
             let view = staticGlyph ?? { let view = RowStaticSpeakerView(frame: bounds); addSubview(view); staticGlyph = view; return view }()
             view.glyph = glyph
@@ -777,6 +801,7 @@ extension SidebarDiagnostics {
             else {
                 view = RowSpeakerImageView(frame: bounds)
                 view.wantsLayer = true; view.imageScaling = .scaleNone; view.imageAlignment = .alignLeft
+                view.identifier = NSUserInterfaceItemIdentifier("media.speakerGlyph")
                 addSubview(view); symbol = view; created = true
             }
             view.contentTintColor = SidebarRole.rowAccessory.nsColor
@@ -797,7 +822,7 @@ extension SidebarDiagnostics {
             }
             if !animate { removeAnimations(view.layer) }
         }
-        representedID = tabID; lastMuted = muted; needsLayout = true
+        representedID = tabID; lastMuted = muted; lastReduceMotion = reduceMotion; needsLayout = true
     }
     private func hasSymbolAnimation(_ layer: CALayer?) -> Bool {
         guard let layer else { return false }

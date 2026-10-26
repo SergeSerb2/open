@@ -17,14 +17,16 @@ import OpenSidebar
     }
     static func animatedLayers(_ layer: CALayer?) -> Int { animationKeys(layer).count }
     static func inkLeft(_ view: NSView) -> CGFloat? {
-        for child in descendants(view) { child.displayIfNeeded(); child.layer?.displayIfNeeded() }
-        CATransaction.flush()
-        let image = OffscreenRenderer().snapshot(view, scale: 2)
-        guard let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return nil }
-        var left = image.width
-        // Compare the speaker body at the center; the slash extends beyond it at the top.
-        for y in (image.height / 2 - 2)..<(image.height / 2 + 2) { for x in 0..<image.width where bytes[y * image.bytesPerRow + x * 4 + 3] > 8 { left = min(left, x) } }
-        return left < image.width ? CGFloat(left) / 2 : nil
+        guard let glyph = descendants(view).first(where: { $0.identifier?.rawValue == "media.speakerGlyph" }),
+              let bitmap = glyph.bitmapImageRepForCachingDisplay(in: glyph.bounds) else { return nil }
+        // The static glyph draws with AppKit. Read it synchronously rather than sampling
+        // a GPU layer clone while its contents are still being published.
+        glyph.cacheDisplay(in: glyph.bounds, to: bitmap)
+        var left = bitmap.pixelsWide
+        for y in (bitmap.pixelsHigh / 2 - 2)..<(bitmap.pixelsHigh / 2 + 2) {
+            for x in 0..<bitmap.pixelsWide where (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.03 { left = min(left, x) }
+        }
+        return left < bitmap.pixelsWide ? CGFloat(left) * glyph.bounds.width / CGFloat(bitmap.pixelsWide) : nil
     }
     static func runRowIndicators() {
         let model = Synthetic.model(); model.rebuildIndex()
@@ -99,7 +101,7 @@ import OpenSidebar
                      "RI4 Reduce Motion uses static glyph without animation keys")
         model.setMuted(tabID: tab.id, muted: true); pump()
         let staticMutedLeft = inkLeft(button)
-        Checks.check(staticLeft != nil && staticMutedLeft != nil && abs((staticLeft ?? -100) - (staticMutedLeft ?? 100)) <= 0.5, "RI static glyph shares the left anchor in both states (\(String(describing: staticLeft)), \(String(describing: staticMutedLeft))); same button \(speaker() === button), hidden \(button.isHidden), size \(button.bounds.size)")
+        Checks.check(staticLeft != nil && staticMutedLeft != nil && (staticLeft ?? 0) >= RowMediaMetrics.glyphInsetX && abs((staticLeft ?? -100) - (staticMutedLeft ?? 100)) <= 0.5, "RI static glyph shares the left anchor in both states (\(String(describing: staticLeft)), \(String(describing: staticMutedLeft))); same button \(speaker() === button), hidden \(button.isHidden), size \(button.bounds.size)")
         runNarrowRecording()
         Checks.check(PiPMetrics.compactPlayGlyph == 22, "RI compact PiP play/pause token is 22 pt")
     }
@@ -115,7 +117,8 @@ import OpenSidebar
         }
         window.sidebarWidth = 228
         let context = SidebarContext(model: model, windowID: window.id); context.forcedHover = .row(tab.id)
-        let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: RecordingDelegate())
+        let delegate = RecordingDelegate()
+        let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: delegate)
         let host = OffscreenRenderer.host(scene, scale: 2)
         defer { host.contentView = nil; host.close() }
         OffscreenRenderer.settle(scene, runLoop: 0.02)
