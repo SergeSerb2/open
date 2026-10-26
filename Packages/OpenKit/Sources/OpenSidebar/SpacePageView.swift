@@ -114,15 +114,18 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             _ = self.context.isNewTabCommandBarOpen
             _ = self.context.forcedHover
         }) { [weak self] in self?.updateRowStates(animated: true) })
-        // Folder expansion and the pinned-collapsed flag.
+        // Folder expansion and the pinned-collapsed flag. Reading the child lists
+        // too re-arms the loop after structural changes, so new folders are tracked.
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
             _ = self.space.isPinnedCollapsed
-            self.forEachLoadedFolder { _ = $0.isExpanded }
+            _ = self.space.pinned.count
+            _ = self.space.today.count
+            self.forEachLoadedFolder { _ = $0.isExpanded; _ = $0.children.count }
         }) { [weak self] in
             guard let self else { return }
             self.syncRoot()
-            self.syncExpansion(animated: true)
+            self.syncExpansion(animated: self.animatesSidebarChanges)
         })
         // Theme and appearance.
         loops.append(ObservationLoop(read: { [weak self] in
@@ -250,36 +253,42 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         switch d { case .root: nil; case .folder(let f): f }
     }
 
-    func syncRoot() { apply(steps: rootItems, target: computeRoot(), parent: nil) { self.rootItems = $0 } }
+    func syncRoot() { apply(target: computeRoot(), in: .root) }
 
     private func syncFolder(_ folder: Folder) {
-        let key = ObjectIdentifier(folder)
-        guard let old = folderChildren[key] else { return }
-        apply(steps: old, target: folder.children.map(\.object), parent: folder) { self.folderChildren[key] = $0 }
+        guard folderChildren[ObjectIdentifier(folder)] != nil else { return }
+        apply(target: folder.children.map(\.object), in: .folder(folder))
     }
 
-    /// Applies the sequential diff between `old` and `new` to the outline.
-    private func apply(steps old: [AnyObject], target new: [AnyObject], parent: Any?, store: ([AnyObject]) -> Void) {
-        let steps = ListDiff.steps(old: old.map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
+    /// Edits a cached child list in place (no copy of a 1,000-item list per step).
+    private func mutate(_ d: Displayed, _ body: (inout [AnyObject]) -> Void) {
+        switch d {
+        case .root: body(&rootItems)
+        case .folder(let f): body(&folderChildren[ObjectIdentifier(f), default: []])
+        }
+    }
+
+    /// Applies the sequential diff between the cached list and `new` to the
+    /// outline. The cache changes step by step with the outline, so data source
+    /// calls during an update always see the outline's current state.
+    private func apply(target new: [AnyObject], in d: Displayed) {
+        let steps = ListDiff.steps(old: list(for: d).map(ObjectIdentifier.init), new: new.map(ObjectIdentifier.init))
         guard !steps.isEmpty else { return }
-        let animate = window != nil
-        var cur = old
+        let animate = animatesSidebarChanges
+        let parent = parentItem(d)
         outline.beginUpdates()
         for step in steps {
             switch step {
             case .remove(let i):
-                let removed = cur.remove(at: i)
+                var removed: AnyObject?
+                mutate(d) { removed = $0.remove(at: i) }
                 if let f = removed as? Folder { dropCache(f) }
-                store(cur)
                 outline.removeItems(at: IndexSet(integer: i), inParent: parent, withAnimation: animate ? [.effectFade, .slideUp] : [])
             case .insert(let j):
-                cur.insert(new[j], at: j)
-                store(cur)
+                mutate(d) { $0.insert(new[j], at: j) }
                 outline.insertItems(at: IndexSet(integer: j), inParent: parent, withAnimation: animate ? [.effectFade, .slideDown] : [])
             case .move(let k, let j):
-                let item = cur.remove(at: k)
-                cur.insert(item, at: j)
-                store(cur)
+                mutate(d) { let item = $0.remove(at: k); $0.insert(item, at: j) }
                 outline.moveItem(at: k, inParent: parent, to: j, inParent: parent)
             }
         }
@@ -453,7 +462,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
     }
 
-    func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool { false }
+    // Do not return false from `shouldShowOutlineCellForItem`: NSOutlineView then
+    // refuses to collapse the item. The triangle is hidden by `frameOfOutlineCell`.
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool { false }
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool { false }
 
@@ -564,6 +574,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 final class SidebarOutlineView: NSOutlineView {
     weak var page: SpacePageView?
 
+    override func reloadData() {
+        SidebarDiagnostics.fullReloads += 1
+        super.reloadData()
+    }
+
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool {
         if responder is PlateButton || responder is RenameField || responder is DividerCellView { return true }
         return super.validateProposedFirstResponder(responder, for: event)
@@ -573,6 +588,7 @@ final class SidebarOutlineView: NSOutlineView {
         page?.menu(at: convert(event.locationInWindow, from: nil))
     }
 
+    /// No disclosure triangle: folder rows toggle on click, as in Arc.
     override func frameOfOutlineCell(atRow row: Int) -> NSRect { .zero }
     override var isOpaque: Bool { false }
 }

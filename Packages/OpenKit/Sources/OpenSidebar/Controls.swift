@@ -163,20 +163,27 @@ enum EmojiRenderer {
 
     private static var grayCache: [String: NSImage] = [:]
 
-    /// The emoji drawn into a gray + alpha bitmap (inactive switcher items are
-    /// desaturated). Drawing color into a gray context converts it to luminance.
+    /// The emoji with its color removed (inactive switcher items): Rec. 709 luma
+    /// of the sRGB values, alpha kept.
     static func grayscale(_ emoji: String, size: CGFloat) -> NSImage? {
         let key = "\(emoji)|\(size)"
         if let i = grayCache[key] { return i }
         let scale: CGFloat = 2
         let px = Int(size * 1.4 * scale)
-        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 2,
-                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 4,
+                                  space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
         ctx.scaleBy(x: scale, y: scale)
         draw(emoji, fontSize: size, in: NSRect(x: 0, y: 0, width: size * 1.4, height: size * 1.4))
         NSGraphicsContext.restoreGraphicsState()
+        guard let data = ctx.data else { return nil }
+        let p = data.bindMemory(to: UInt8.self, capacity: px * px * 4)
+        for i in 0..<(px * px) {
+            let r = Double(p[i * 4]), g = Double(p[i * 4 + 1]), b = Double(p[i * 4 + 2])
+            let y = UInt8(min(255, (0.2126 * r + 0.7152 * g + 0.0722 * b).rounded()))
+            p[i * 4] = y; p[i * 4 + 1] = y; p[i * 4 + 2] = y
+        }
         guard let cg = ctx.makeImage() else { return nil }
         let image = NSImage(cgImage: cg, size: NSSize(width: size * 1.4, height: size * 1.4))
         if grayCache.count > 64 { grayCache.removeAll() }

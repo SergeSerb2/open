@@ -97,7 +97,7 @@ final class SpacePagerView: NSView {
         offset = CGFloat(target) * w
         placeStrip()
         let style = context.style(for: focused)
-        guard animated, previous != nil, window != nil else {
+        guard animated, previous != nil, animatesSidebarChanges else {
             themeBackground?.crossfade(to: style, animated: false)
             finishSlide()
             return

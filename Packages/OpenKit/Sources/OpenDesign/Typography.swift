@@ -58,8 +58,8 @@ public enum Typography {
     /// Command bar input and placeholder: 18 Medium. Row title and subtitle: 13 Medium.
     public static let commandBarInput = FontToken(18, .medium)
     public static let commandBarRow = FontToken(13, .medium)
-    /// Bottom-bar Space switcher emoji (font size). Ink 13–15 pt.
-    public static let switcherEmoji = FontToken(14, .regular)
+    /// Bottom-bar Space switcher emoji (font size). NCC fit on F0001: 12 pt, 1 pt above center (0.983).
+    public static let switcherEmoji = FontToken(12, .regular)
     /// Space header emoji (font size). Fitted by NCC on F0001: 14 pt, 1 pt above center (0.988).
     public static let headerEmoji = FontToken(14, .regular)
 }

@@ -87,7 +87,7 @@ final class URLFieldView: NSView {
         label.inset = SpaceListMetrics.textInset
         label.text = { [unowned context] in context.currentTab?.displayHost ?? "Search or Enter URL…" }
         label.color = { [unowned context] in
-            (context.currentTab == nil ? SidebarRole.secondaryText : SidebarRole.urlText).nsColor
+            (context.currentTab == nil ? SidebarRole.placeholder : SidebarRole.urlText).nsColor
         }
         for b in [copyLink, siteControls] {
             b.context = context

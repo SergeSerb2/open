@@ -104,14 +104,15 @@ public enum MenuColors {
 /// docs/re/interaction-states.md §3–§6). One place to change a role.
 /// Theme-driven roles (tab title, selected fill, tooltip) live on `SpaceThemeStyle`.
 public enum SidebarRole {
-    /// Space title. Fitted on F0001: black 0.45 → `SidebarForegroundDarker`
-    /// (black 0.48 / `GrayA10` gave ΔE 1.8).
-    public static let spaceTitle = SidebarColors.foregroundDarker
-    /// URL placeholder and the "New Tab" label. Fitted on F0001: black 0.30 →
-    /// `SidebarForeground` (0.33 / `CommandBarTextSecondary` gave ΔE 1.9–2.1).
+    /// Space title. Light: black 0.45 → `SidebarForegroundDarker` (fitted on F0001;
+    /// 0.48 / `GrayA10` gave ΔE 1.8). Dark: white 0.55, fitted on the default dark Space (F0079).
+    public static let spaceTitle = DesignColor(light: SidebarColors.foregroundDarker.light, dark: .white(0.55))
+    /// "New Tab" label. Light: black 0.30 → `SidebarForeground` (F0001). Dark: white 0.45 (F0079).
     public static let secondaryText = SidebarColors.foreground
-    /// "New Tab" plus glyph: measured peak black 0.48 → `GrayA10`.
-    public static let newTabGlyph = GrayScale.a(10)
+    /// URL placeholder. Light: black 0.30 (F0001). Dark: white 0.30 over the field fill (F0079); darker than "New Tab".
+    public static let placeholder = DesignColor(light: SidebarColors.foreground.light, dark: .white(0.30))
+    /// "New Tab" plus glyph. Light: peak black 0.48 → `GrayA10`. Dark: white 0.51 (F0079).
+    public static let newTabGlyph = DesignColor(light: GrayScale.a(10).light, dark: .white(0.51))
     /// URL field magnifier: core pixels black ≈ 0.38 (F0001). No catalog token fits
     /// our SF glyph's stroke; 0.40 is fitted. Dark: guess, white at the same alpha.
     public static let magnifier = DesignColor(light: .black(0.40), dark: .white(0.40))
@@ -144,14 +145,15 @@ public enum SidebarRole {
     /// Close (×) and unload (−) glyphs on a hovered or selected row: core pixels
     /// black ≈ 0.56 (F0013, F0015) → `GrayA11`.
     public static let rowAccessory = GrayScale.a(11)
-    /// Bottom-bar plus: core pixels black ≈ 0.55 (F0001) → `GrayA11`.
-    public static let bottomGlyph = GrayScale.a(11)
+    /// Bottom-bar plus: core pixels black ≈ 0.55 (F0001) → `GrayA11`. Dark: white 0.62 (F0079).
+    public static let bottomGlyph = DesignColor(light: GrayScale.a(11).light, dark: .white(0.62))
     /// Bottom-bar Home (Library): core pixels black ≈ 0.52 (F0001), fitted for our
     /// own glyph shape. Dark: guess, white at the same alpha.
     public static let homeGlyph = DesignColor(light: .black(0.52), dark: .white(0.52))
-    /// Space switcher icons that are not current: grayscale at opacity ≈ 0.48
-    /// (fit on the darkest pixels of an inactive emoji, F0001).
-    public static let switcherInactiveOpacity: Double = 0.48
+    /// Space switcher icons that are not current: grayscale (Rec. 709 luma) at
+    /// opacity 0.55. A two-channel fit on an inactive emoji gives ≈ 0.48 for full
+    /// coverage; 0.55 matches the darkest-pixel levels of our 12 pt rendering (F0001).
+    public static let switcherInactiveOpacity: Double = 0.55
     /// The "navigated away from the pinned URL" slash.
     public static let pinnedSlash = SidebarColors.tabSlash
     /// Drop target line while dragging rows.

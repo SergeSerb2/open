@@ -65,7 +65,7 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         let old = tabs
         guard new.map(\.id) != old.map(\.id) else { return }
         let plan = ListDiff.plan(old: old.map(\.id), new: new.map(\.id))
-        let animate = window != nil
+        let animate = animatesSidebarChanges
         let updates = {
             self.tabs = new
             if !plan.removals.isEmpty { self.collection.deleteItems(at: Set(plan.removals.map { IndexPath(item: $0, section: 0) })) }

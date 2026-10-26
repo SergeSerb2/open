@@ -71,8 +71,19 @@ enum GlyphCache {
 
 /// Vectors no SF Symbol covers. Drawn in code, never copied.
 public enum CustomIcon {
-    /// Fallback favicon: rounded square with the host's first letter.
+    @MainActor private static var letters: [String: NSImage] = [:]
+
+    /// Fallback favicon: rounded square with the host's first letter. Cached per letter, size, and colors.
     @MainActor public static func letterFavicon(_ letter: String, size: CGFloat, fill: NSColor, text: NSColor) -> NSImage {
+        let key = "\(letter)|\(size)|\(fill.description)|\(text.description)"
+        if let i = letters[key] { return i }
+        if letters.count > 256 { letters.removeAll() }
+        let image = drawLetterFavicon(letter, size: size, fill: fill, text: text)
+        letters[key] = image
+        return image
+    }
+
+    @MainActor private static func drawLetterFavicon(_ letter: String, size: CGFloat, fill: NSColor, text: NSColor) -> NSImage {
         NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
             let path = NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: size * 0.22, yRadius: size * 0.22)
             fill.setFill(); path.fill()
@@ -134,11 +145,11 @@ public enum CustomIcon {
 
     /// Default Space mark (no emoji set): a sphere with a tilted ring.
     @MainActor public static func planet(in r: CGRect, color: NSColor) {
-        let d = r.width * 0.56
+        let d = r.width * 0.66
         let body = CGRect(x: r.midX - d / 2, y: r.midY - d / 2, width: d, height: d)
         color.setFill()
         NSBezierPath(ovalIn: body).fill()
-        let ring = NSBezierPath(ovalIn: CGRect(x: -r.width * 0.48, y: -r.height * 0.14, width: r.width * 0.96, height: r.height * 0.28))
+        let ring = NSBezierPath(ovalIn: CGRect(x: -r.width * 0.58, y: -r.height * 0.16, width: r.width * 1.16, height: r.height * 0.32))
         var t = AffineTransform(translationByX: r.midX, byY: r.midY)
         t.rotate(byDegrees: -18)
         ring.transform(using: t)

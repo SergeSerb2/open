@@ -169,3 +169,71 @@ public final class SidebarView: NSView {
 public protocol SidebarDelegate: AnyObject {
     func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent)
 }
+
+/// Counters for checks and benches.
+@MainActor
+public enum SidebarDiagnostics {
+    /// `reloadData` calls on any tab list. One per page build; model changes add none.
+    public internal(set) static var fullReloads = 0
+    /// Animate even in windows that are not on screen (frame captures of transitions).
+    public static var forceAnimations = false
+}
+
+extension NSView {
+    /// Structural and Space-switch animations run only in visible windows: an
+    /// offscreen window never completes them, and nobody would see them.
+    var animatesSidebarChanges: Bool { (window?.isVisible ?? false) || SidebarDiagnostics.forceAnimations }
+}
+
+extension SidebarView {
+    /// Rows of the focused page in display order, as outline items (model IDs or
+    /// sentinel names). Lets checks compare the view with the model.
+    public var displayedRows: [String] {
+        guard let page = pager.currentPage else { return [] }
+        return (0..<page.outline.numberOfRows).map { row in
+            let item = page.outline.item(atRow: row)
+            if let id = itemID(of: item) { return id.description }
+            switch item {
+            case is SpacerItem: return "spacer"
+            case is DividerItem: return "divider"
+            case is NewTabItem: return "newTab"
+            default: return "?"
+            }
+        }
+    }
+
+    /// Favorite tiles in display order.
+    public var displayedFavorites: [ItemID] { favorites.tabs.map(\.id) }
+
+    /// Horizontal offset of the pager strip (model value) and the focused page index.
+    public var pagerOffset: CGFloat { -pager.strip.frame.minX }
+
+    /// Context menu titles for a row (or the Space menu for nil).
+    public func menuTitles(nodeID: ItemID?) -> [String] {
+        guard let page = pager.currentPage else { return [] }
+        var point = NSPoint(x: 100, y: page.outline.bounds.maxY + 50)
+        if let nodeID, let obj = context.model.node(id: nodeID)?.object {
+            let row = page.outline.row(forItem: obj)
+            guard row >= 0 else { return [] }
+            let r = page.outline.rect(ofRow: row)
+            point = NSPoint(x: r.midX, y: r.midY)
+        }
+        return page.menu(at: point).items.map { $0.isSeparatorItem ? "—" : $0.title }
+    }
+
+    /// Model destination for a drop at a row boundary of the focused page
+    /// (`childIndex` in the root list, or in a folder).
+    public func dropDestination(intoFolder folder: ItemID?, childIndex: Int) -> (NodeParent, Int)? {
+        guard let page = pager.currentPage else { return nil }
+        let item: Any? = folder.flatMap { context.model.node(id: $0)?.object }
+        return page.dropDestination(item: item, childIndex: childIndex).map { ($0.parent, $0.index) }
+    }
+
+    /// Simulates a two-finger horizontal swipe through the pager's real handler.
+    public func simulateSwipe(_ events: [NSEvent]) {
+        for e in events { _ = pager.handleScroll(e) }
+    }
+
+    /// Clicks the row of a node: the outline's own action runs.
+    public func outlineView(for space: SpaceID? = nil) -> NSOutlineView? { pager.currentPage?.outline }
+}

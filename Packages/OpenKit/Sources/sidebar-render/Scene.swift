@@ -38,7 +38,9 @@ final class RenderScene: NSView {
         addSubview(panelHost)
         if options.revealCard { sidebar.presentation = .floatingCard }
         if !options.sidebarHidden || options.revealCard { addSubview(sidebar) }
-        if options.trafficLights && !(options.sidebarHidden && !options.revealCard) { addSubview(lights) }
+        if options.trafficLights && !(options.sidebarHidden && !options.revealCard) {
+            if options.revealCard { sidebar.addSubview(lights) } else { addSubview(lights) }
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -56,7 +58,7 @@ final class RenderScene: NSView {
         if options.revealCard {
             let i = WindowMetrics.revealCardInset
             sidebar.frame = CGRect(x: i, y: i, width: w, height: bounds.height - 2 * i)
-            lights.frame = CGRect(x: i, y: i, width: 80, height: 40)
+            lights.frame = CGRect(x: 0, y: 0, width: 80, height: 40)
         } else {
             sidebar.frame = CGRect(x: 0, y: 0, width: w, height: bounds.height)
             lights.frame = CGRect(x: 0, y: 0, width: 80, height: 40)
@@ -76,7 +78,9 @@ final class TrafficLightsView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.withAlphaComponent(0.11).setFill()
+        // Inactive lights: black 0.11 on light content (F0001), white 0.31 on dark (F0079).
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        (dark ? NSColor.white.withAlphaComponent(0.31) : NSColor.black.withAlphaComponent(0.11)).setFill()
         for f in ChromeMetrics.trafficLightFrames {
             let d = ChromeMetrics.trafficLightDiameter
             NSBezierPath(ovalIn: NSRect(x: f.midX - d / 2, y: f.midY - d / 2, width: d, height: d)).fill()

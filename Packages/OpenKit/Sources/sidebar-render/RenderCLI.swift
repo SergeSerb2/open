@@ -104,6 +104,22 @@ enum RenderCLI {
         context.isWindowActive = !args.contains("--inactive")
         context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
         if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
+        // Capture-matching edits (render only): clear a Space title, insert a tab into a folder.
+        if let n = value(args, "--untitled").flatMap(Int.init), model.spaces.indices.contains(n) { model.spaces[n].title = "" }
+        if let spec = value(args, "--insert-folder-tab"), let s = context.focusedSpace {
+            // "N/M=Title": insert at child M of the N-th pinned folder.
+            let parts = spec.split(separator: "=", maxSplits: 1).map(String.init)
+            let nm = parts.first?.split(separator: "/").compactMap { Int($0) } ?? []
+            let folders = s.pinned.compactMap(\.folder)
+            if parts.count == 2, nm.count == 2, folders.indices.contains(nm[0]) {
+                let u = URL(string: "https://example.com/")!
+                folders[nm[0]].children.insert(.tab(Tab(url: u, title: parts[1], pinnedURL: u)), at: min(nm[1], folders[nm[0]].children.count))
+                model.rebuildIndex()
+            }
+        }
+        if let n = value(args, "--drop-today").flatMap(Int.init), let s = context.focusedSpace {
+            s.today = Array(s.today.dropFirst(n)); model.rebuildIndex()
+        }
         if args.contains("--collapse-folders") {
             func walk(_ nodes: [SidebarNode]) { for case .folder(let f) in nodes { f.isExpanded = false; walk(f.children) } }
             for s in model.spaces { walk(s.pinned); walk(s.today) }

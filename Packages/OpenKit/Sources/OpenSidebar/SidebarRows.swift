@@ -200,9 +200,11 @@ final class TabCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("tab")
     let favicon = FaviconView()
     let title = TextLabel()
-    let audio = PlateButton(glyph: .audioPlaying)
-    let accessory = PlateButton(glyph: .rowClose)
-    private let slash = CALayer()
+    /// Built on first use: most rows never show them, and every extra layer-backed
+    /// subview costs time when a row scrolls into view.
+    private var audio: PlateButton?
+    private(set) var accessory: PlateButton?
+    private var slash: CALayer?
     weak var tab: Tab? { didSet { bind() } }
 
     required init(frame: NSRect) {
@@ -211,15 +213,7 @@ final class TabCellView: SidebarCellView {
         title.font = Typography.tabTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
         title.inset = SpaceListMetrics.textInset
-        accessory.isHidden = true
-        accessory.plateRadius = 6
-        accessory.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
-        accessory.plateColor = { _ in SidebarRole.rowPressed }
-        audio.isHidden = true
-        audio.showsHoverPlate = false
-        audio.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
-        layer?.addSublayer(slash)
-        addSubview(favicon); addSubview(title); addSubview(audio); addSubview(accessory)
+        addSubview(favicon); addSubview(title)
     }
 
     private func bind() {
@@ -227,16 +221,37 @@ final class TabCellView: SidebarCellView {
         favicon.context = context
         title.text = { [weak self] in self?.tab?.displayTitle ?? "" }
         title.color = { [weak self] in self?.titleColor() ?? .labelColor }
-        accessory.action = { [weak self] in
+        rowStateChanged()
+        needsLayout = true
+    }
+
+    private func makeAccessory() -> PlateButton {
+        if let accessory { return accessory }
+        let b = PlateButton(glyph: .rowClose)
+        b.plateRadius = 6
+        b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
+        b.plateColor = { _ in SidebarRole.rowPressed }
+        b.action = { [weak self] in
             guard let self, let tab = self.tab else { return }
             self.context?.send(self.showsUnload ? .unload(tabID: tab.id) : .close(nodeID: tab.id))
         }
-        audio.action = { [weak self] in
+        addSubview(b)
+        accessory = b
+        return b
+    }
+
+    private func makeAudio() -> PlateButton {
+        if let audio { return audio }
+        let b = PlateButton(glyph: .audioPlaying)
+        b.showsHoverPlate = false
+        b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
+        b.action = { [weak self] in
             guard let self, let tab = self.tab else { return }
             self.context?.send(.toggleMute(tabID: tab.id))
         }
-        rowStateChanged()
-        needsLayout = true
+        addSubview(b)
+        audio = b
+        return b
     }
 
     var isPinned: Bool {
@@ -251,12 +266,15 @@ final class TabCellView: SidebarCellView {
         return context.isTabLoaded(tab)
     }
 
+    private var showsAccessory: Bool { (rowView?.isHovered ?? false) || (rowView?.isCurrent ?? false) }
+
     override func rowStateChanged() {
-        let row = rowView
-        let visible = (row?.isHovered ?? false) || (row?.isCurrent ?? false)
-        accessory.glyphView.glyph = showsUnload ? .rowUnload : .rowClose
-        if accessory.isHidden == visible {
-            accessory.isHidden = !visible
+        let visible = showsAccessory
+        guard visible || accessory != nil else { return }
+        let b = makeAccessory()
+        b.glyphView.glyph = showsUnload ? .rowUnload : .rowClose
+        if b.isHidden == visible {
+            b.isHidden = !visible
             needsLayout = true
         }
     }
@@ -271,27 +289,32 @@ final class TabCellView: SidebarCellView {
         }
         favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
         let a = m.accessorySize
-        accessory.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
+        accessory?.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
         var titleX = m.titleX + x0
         // A pinned tab away from its pinned URL shows "/" before the title (A0414). guess: 4 pt shift.
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        slash.isHidden = !leftPinned
-        if leftPinned {
-            slash.frame = CGRect(x: titleX - 2, y: 13, width: 1.2, height: 15)
-            slash.backgroundColor = SidebarRole.pinnedSlash.cgColor(contentAppearance)
-            slash.setAffineTransform(CGAffineTransform(rotationAngle: 0.3))
-            titleX += 4
+        if leftPinned || slash != nil {
+            let line = slash ?? { let l = CALayer(); layer?.addSublayer(l); slash = l; return l }()
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            line.isHidden = !leftPinned
+            if leftPinned {
+                line.frame = CGRect(x: titleX - 2, y: 13, width: 1.2, height: 15)
+                line.backgroundColor = SidebarRole.pinnedSlash.cgColor(contentAppearance)
+                line.setAffineTransform(CGAffineTransform(rotationAngle: 0.3))
+                titleX += 4
+            }
+            CATransaction.commit()
         }
-        CATransaction.commit()
-        var titleRight = accessory.isHidden ? bounds.width - m.titleTrailingInset : accessory.frame.minX
+        var titleRight = (accessory?.isHidden ?? true) ? bounds.width - m.titleTrailingInset : accessory!.frame.minX
         let showAudio = audible || muted
-        audio.isHidden = !showAudio
+        audio?.isHidden = !showAudio
         if showAudio {
-            audio.glyphView.glyph = muted ? .audioMuted : .audioPlaying
+            let b = makeAudio()
+            b.isHidden = false
+            b.glyphView.glyph = muted ? .audioMuted : .audioPlaying
             let w: CGFloat = 20
             let titleW = min(title.textWidth, titleRight - titleX - w - 2)
-            audio.frame = CGRect(x: titleX + max(titleW, 0) + 2, y: 10, width: w, height: 20)
-            titleRight = min(titleRight, audio.frame.minX)
+            b.frame = CGRect(x: titleX + max(titleW, 0) + 2, y: 10, width: w, height: 20)
+            titleRight = min(titleRight, b.frame.minX)
         }
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
     }
@@ -397,7 +420,10 @@ final class SplitCellView: SidebarCellView {
             let f = FaviconView(); f.tab = pane; f.context = context
             let t = TextLabel(); t.font = Typography.tabTitle.font; t.baseline = SpaceListMetrics.titleBaselineOffset; t.inset = SpaceListMetrics.textInset
             t.text = { [weak pane] in pane?.displayTitle ?? "" }
-            t.color = { [weak self] in self?.titleColor() ?? .labelColor }
+            t.color = { [weak self] in
+                guard let page = self?.page else { return .labelColor }
+                return page.style.splitTitleColor(page.contentAppearanceForSpace).nsColor
+            }
             addSubview(f); addSubview(t)
             favicons.append(f); titles.append(t)
             if i > 0 { let d = CALayer(); layer?.addSublayer(d); dividers.append(d) }
@@ -439,13 +465,20 @@ final class NewTabCellView: SidebarCellView {
         super.init(frame: frame)
         identifier = Self.identifier
         plus.glyph = .newTabPlus
-        plus.tint = { SidebarRole.newTabGlyph.nsColor }
         title.font = Typography.newTab.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
         title.inset = SpaceListMetrics.textInset
         title.text = { "New Tab" }
-        title.color = { SidebarRole.secondaryText.nsColor }
+        rowStateChanged()
         addSubview(plus); addSubview(title)
+    }
+
+    /// While the Cmd+T command bar is open the row is current and its label and
+    /// plus take the title color (F0063); otherwise they are secondary.
+    override func rowStateChanged() {
+        let current = rowView?.isCurrent ?? false
+        plus.tint = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.newTabGlyph.nsColor }
+        title.color = { [weak self] in current ? (self?.titleColor() ?? .labelColor) : SidebarRole.secondaryText.nsColor }
     }
 
     override func layout() {

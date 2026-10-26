@@ -46,7 +46,8 @@ enum Compare {
             throw CLIError(description: "size mismatch: arc \(arc.width)x\(arc.height), ours \(ours.width)x\(ours.height)")
         }
         let layout = SpecLayout(args: args, windowHeight: Double(arc.height) / scale)
-        let elements = layout.elements()
+        let skip = RenderCLI.value(args, "--skip")?.split(separator: ",").map(String.init) ?? []
+        let elements = layout.elements().filter { e in !skip.contains { e.name.contains($0) } }
         var results: [Result] = []
         for e in elements { results.append(measure(e, arc: arc, ours: ours, scale: scale)) }
         let dir = URL(fileURLWithPath: out)
@@ -167,6 +168,12 @@ struct SpecLayout {
     /// A page is loaded: the URL field shows the host and its two buttons, reload is enabled.
     var pageLoaded = false
     var selectedTile: Int?
+    var hoverNewTab = false
+    var hoverButton: String?
+    /// Depth of each row in display order (folder children are indented 16 pt).
+    var depths: [Int] = []
+    /// Rows drawn as split rows (two cells).
+    var splitRows: Set<Int> = []
 
     init(args: [String], windowHeight: Double) {
         self.windowHeight = windowHeight
@@ -180,6 +187,10 @@ struct SpecLayout {
         dark = args.contains("--dark")
         pageLoaded = args.contains("--page-loaded")
         selectedTile = RenderCLI.value(args, "--selected-tile").flatMap(Int.init)
+        hoverNewTab = args.contains("--hover-newtab")
+        hoverButton = RenderCLI.value(args, "--hover-button")
+        depths = RenderCLI.value(args, "--depths")?.split(separator: ",").compactMap { Int($0) } ?? []
+        splitRows = Set(RenderCLI.value(args, "--split-rows")?.split(separator: ",").compactMap { Int($0) } ?? [])
     }
 
     var favHeight: Double { Double(FavoritesMetrics.sectionHeight(count: favorites, sidebarWidth: CGFloat(sidebarWidth))) }
@@ -204,10 +215,21 @@ struct SpecLayout {
 
     func masks() -> [CGRect] {
         var m = tileFrames().map { CGRect(x: $0.midX - 12, y: $0.midY - 12, width: 24, height: 24) }
-        for i in 0..<rowCount { m.append(CGRect(x: 15, y: top(ofRow: i) + 9, width: 22, height: 22)) }
+        for i in 0..<rowCount {
+            let x = 15 + indent(i)
+            m.append(CGRect(x: x, y: top(ofRow: i) + 9, width: 22, height: 22))
+            if isSplit(i) { m.append(CGRect(x: x + 96, y: top(ofRow: i) + 9, width: 22, height: 22)) }
+        }
         m.append(CGRect(x: sidebarWidth, y: 0, width: 4000, height: windowHeight))
+        // System-drawn parts: traffic lights and the window's rounded corners.
+        m.append(CGRect(x: 8, y: 12, width: 70, height: 24))
+        m.append(CGRect(x: 0, y: 0, width: 18, height: 18))
+        m.append(CGRect(x: 0, y: windowHeight - 18, width: 18, height: 18))
         return m
     }
+
+    func indent(_ row: Int) -> Double { Double(row < depths.count ? max(depths[row], 0) : 0) * 16 }
+    func isSplit(_ row: Int) -> Bool { splitRows.contains(row) }
 
     func elements() -> [Compare.Element] {
         typealias E = Compare.Element
@@ -250,10 +272,16 @@ struct SpecLayout {
         for i in 0..<rowCount {
             let y = top(ofRow: i)
             let titleRight = (i == hoverRow || i == selectedRow) ? 186.0 : W - 12
-            e.append(E(name: "row \(i + 1) title", region: CGRect(x: 41, y: y + 8, width: titleRight - 41, height: 25), kind: .ink))
+            let tx = 41 + indent(i)
+            if isSplit(i) {
+                e.append(E(name: "row \(i + 1) split title 1", region: CGRect(x: tx + 18, y: y + 8, width: 60, height: 25), kind: .ink))
+                e.append(E(name: "row \(i + 1) split title 2", region: CGRect(x: tx + 114, y: y + 8, width: 60, height: 25), kind: .ink))
+            } else {
+                e.append(E(name: "row \(i + 1) title", region: CGRect(x: tx, y: y + 8, width: titleRight - tx, height: 25), kind: .ink))
+            }
             if i == hoverRow || i == selectedRow {
                 let name = i == selectedRow ? "row \(i + 1) selected fill" : "row \(i + 1) hover fill"
-                e.append(E(name: name, region: CGRect(x: 8, y: y + 2, width: W - 16, height: 36),
+                e.append(E(name: name, region: CGRect(x: 8 + indent(i), y: y + 2, width: W - 16 - indent(i), height: 36),
                            kind: .fill(sample: CGRect(x: 150, y: y + 5, width: 30, height: 4))))
                 e.append(E(name: "row \(i + 1) close button", region: CGRect(x: W - 39, y: y + 7, width: 26, height: 26), kind: .ink))
             }
@@ -264,9 +292,19 @@ struct SpecLayout {
         let nt = newTabTop
         e.append(E(name: "New Tab plus", region: CGRect(x: 17, y: nt + 11, width: 18, height: 18), kind: .ink))
         e.append(E(name: "New Tab label", region: CGRect(x: 41, y: nt + 8, width: 80, height: 25), kind: .ink))
-        if newTabOpen {
-            e.append(E(name: "New Tab selected fill", region: CGRect(x: 8, y: nt + 2, width: W - 16, height: 36),
+        if newTabOpen || hoverNewTab {
+            e.append(E(name: newTabOpen ? "New Tab selected fill" : "New Tab hover fill", region: CGRect(x: 8, y: nt + 2, width: W - 16, height: 36),
                        kind: .fill(sample: CGRect(x: 150, y: nt + 5, width: 30, height: 4))))
+        }
+        // Button hover plates: sample a strip inside the plate below the glyph.
+        let plates: [String: CGRect] = [
+            "toggle": CGRect(x: 77, y: 7, width: 32, height: 32),
+            "home": CGRect(x: 8, y: H - 41, width: 32, height: 32),
+            "switcher": CGRect(x: 46, y: H - 41, width: 34, height: 32),
+            "plus": CGRect(x: W - 40, y: H - 41, width: 32, height: 32),
+        ]
+        if let b = hoverButton, let p = plates[b] {
+            e.append(E(name: "\(b) hover plate", region: p, kind: .fill(sample: CGRect(x: p.minX + 8, y: p.maxY - 4, width: p.width - 16, height: 2))))
         }
         // Bottom bar.
         e.append(E(name: "bottom: Home", region: CGRect(x: 8, y: H - 41, width: 32, height: 32), kind: .ink))

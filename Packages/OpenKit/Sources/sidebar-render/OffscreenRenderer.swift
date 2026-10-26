@@ -23,6 +23,15 @@ final class OffscreenRenderer {
     /// AppKit builds and draws the layer tree normally. The window reports the
     /// requested backing scale, so 2x renders work on a 1x display.
     func render(_ view: NSView, scale: CGFloat) -> CGImage {
+        let window = Self.host(view, scale: scale)
+        let image = snapshot(view, scale: scale)
+        window.contentView = nil
+        window.close()
+        return image
+    }
+
+    /// Puts `view` in an offscreen window at `scale` and lays it out.
+    static func host(_ view: NSView, scale: CGFloat) -> ScaledWindow {
         let size = view.bounds.size
         let window = ScaledWindow(contentRect: CGRect(origin: CGPoint(x: -20000, y: -20000), size: size),
                                   styleMask: [.borderless], backing: .buffered, defer: false)
@@ -31,13 +40,25 @@ final class OffscreenRenderer {
         window.colorSpace = .sRGB
         window.contentView = view
         view.frame = CGRect(origin: .zero, size: size)
-        view.layoutSubtreeIfNeeded()
-        window.displayIfNeeded()
-        view.layoutSubtreeIfNeeded()
-        window.displayIfNeeded()
-        CATransaction.flush()
-        guard let rootLayer = view.layer else { fatalError("view is not layer-backed") }
+        settle(view)
+        return window
+    }
 
+    /// Layout and display passes until nothing is dirty (observation hops included).
+    static func settle(_ view: NSView, runLoop: TimeInterval = 0) {
+        for _ in 0..<3 {
+            view.layoutSubtreeIfNeeded()
+            view.window?.displayIfNeeded()
+            if runLoop > 0 { RunLoop.main.run(until: Date().addingTimeInterval(runLoop)) }
+        }
+        CATransaction.flush()
+    }
+
+    /// Renders a view that is already in a window. With `presentation`, layers use
+    /// their in-flight animation values (to capture a frame of a transition).
+    func snapshot(_ view: NSView, scale: CGFloat, presentation: Bool = false) -> CGImage {
+        let size = view.bounds.size
+        guard let rootLayer = view.layer else { fatalError("view is not layer-backed") }
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
         let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
         desc.usage = [.renderTarget, .shaderRead]
@@ -52,7 +73,7 @@ final class OffscreenRenderer {
         host.anchorPoint = .zero
         host.position = .zero
         host.sublayerTransform = CATransform3DMakeScale(scale, scale, 1)
-        let copy = LayerCloner.clone(rootLayer)
+        let copy = LayerCloner.clone(rootLayer, presentation: presentation)
         copy.anchorPoint = .zero
         copy.position = .zero
         host.addSublayer(copy)
@@ -77,8 +98,6 @@ final class OffscreenRenderer {
 
         var bgra = [UInt8](repeating: 0, count: w * h * 4)
         texture.getBytes(&bgra, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
-        window.contentView = nil
-        window.close()
 
         // BGRA → RGBA, and flip rows: CARenderer draws with Core Animation's
         // y-up convention, so texture row 0 is the bottom of the layer tree.
@@ -114,7 +133,8 @@ final class ScaledWindow: NSWindow {
 /// Copies a layer tree into plain Core Animation layers with the same look.
 @MainActor
 enum LayerCloner {
-    static func clone(_ src: CALayer) -> CALayer {
+    static func clone(_ model: CALayer, presentation: Bool = false) -> CALayer {
+        let src = presentation ? (model.presentation() ?? model) : model
         let dst: CALayer
         switch src {
         case let s as CAShapeLayer:
@@ -163,8 +183,8 @@ enum LayerCloner {
         dst.shadowOffset = src.shadowOffset
         dst.shadowPath = src.shadowPath
         dst.allowsEdgeAntialiasing = src.allowsEdgeAntialiasing
-        if let m = src.mask { dst.mask = clone(m) }
-        for sub in src.sublayers ?? [] { dst.addSublayer(clone(sub)) }
+        if let m = model.mask { dst.mask = clone(m, presentation: presentation) }
+        for sub in model.sublayers ?? [] { dst.addSublayer(clone(sub, presentation: presentation)) }
         return dst
     }
 }

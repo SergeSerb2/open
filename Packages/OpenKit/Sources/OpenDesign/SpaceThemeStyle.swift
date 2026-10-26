@@ -70,6 +70,12 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         return DefaultThemeText.title.resolved(appearance)
     }
 
+    /// Split-row cell titles. Default theme: measured dimmer (F0079). Themes: guess, the title color.
+    public func splitTitleColor(_ appearance: ContentAppearance) -> RGBA {
+        if let p = palette(for: appearance) { return p.title }
+        return DefaultThemeText.splitTitle.resolved(appearance)
+    }
+
     /// Selected row and selected favorite tile fill. Light content: the theme's
     /// `light.background`, opaque (measured #F6EBE7 / #F7E8E2 against #F6EAE4; a
     /// white overlay does not fit, F0014, F0016). Dark content: white 0.20 (F0084, F0161).
@@ -188,6 +194,9 @@ extension RGBA {
 
 /// Text colors for Spaces without a stored theme (they follow the macOS appearance).
 public enum DefaultThemeText {
-    /// Tab title. Dark: measured on F0072 (default Space, macOS Dark). Light: guess.
-    public static let title = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9, .displayP3), dark: .white(0.92))
+    /// Tab title. Dark: lavender #DDDEFF, from core pixels #D9DAFA on F0079 corrected
+    /// for anti-aliasing. Light: guess (no light-mode capture).
+    public static let title = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9, .displayP3), dark: RGBA(hex: 0xDDDEFF))
+    /// Split-row titles: dimmer and neutral. Dark: white 0.80 (`ForegroundPrimary`), F0079.
+    public static let splitTitle = Core.foregroundPrimary
 }
