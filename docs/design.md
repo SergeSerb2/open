@@ -916,9 +916,22 @@ and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
 | Collapsed stack | Offset 5, width inset 6, opacity 1−.3i; back-card top edge .5 pt separator | Guess; top edge added by design r1, confirm S6 |
 | Expanded stack | Gap 6; collapse delay .3 s; spring response .3/damping 1 | Guess, PP-14 names states |
 | Marquee | Fade 4 left/8 right; delay 3 s; speed 30 pt/s; gap 32 | Left fade code PP-17; remainder guess |
-| PiP window | Corner 12, min 284×160, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
+| PiP window | Corner 12, minimum 284×160 landscape / 160×284 portrait, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
 | PiP corners | Buttons 28×28, padding 8 compact / 10 regular | Code PP-6 |
 | PiP scrubber | Bar 4/6 pt, hit 20; precision step 40 pt, cap 8× | Hit height code PP-7; other geometry/math Open design |
 | Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
 
 Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.
+
+Media review-r1 PiP refinements (Open design; no Arc capture yet): SF skip glyphs
+20/16 pt, hidden below 168 pt; no center plate at rest; whole-window black .25
+dim while controls show (guess). Bottom controls share one center line, with a
+zero offset when the scrubber is hidden. Scrubbing fades utility controls in .15 s
+and keeps a 6 pt bar. Document header glyphs white .85, hover plate white .12 (pressed .18),
+radius 5. First open clamps the /8 fit; reuse keeps the long side. Video PiP uses a 10 pt bottom-right inset. The /8 factor fits capture session 2 item 13 at 2560×1440 and remains a guess elsewhere.
+See plan §4.4 for the lead's exact limits and click-only seek refinement.
+
+PiP review-r2 updates: Play/Pause 28 pt regular / 24 pt compact; Skip 20/16 pt.
+The five center glyphs alone have a cached black .35 shadow, radius 2, offset 0
+(guess until a controls capture). Disabled Skip ahead keeps its tooltip but has
+no plate or growth. The precision hint fades in/out in .15 s with the utilities.
