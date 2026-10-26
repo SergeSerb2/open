@@ -540,8 +540,8 @@ construction in the crate's domain comparison).
   wrap resource parsing so any error path degrades to "no resources".
   The exact assembler entry point in 0.8.11 takes file **paths**
   (`assemble_scriptlet_resources(path)`); if no text-based entry exists,
-  the C++ side writes the resources text to `<list_dir>/resources.txt`
-  (it already lives there, §9.2) and the shim takes
+  the C++ side passes the manifest-verified resources path inside the selected
+  generation (§9.2), without rewriting the immutable input, and the shim takes
   `resources_path: &str` instead of `resources_text: &str`. Pick the
   path form if the text form needs new parsing code — record the choice
   in the PR. Do not write a resources.txt parser.
@@ -719,8 +719,8 @@ namespace open {
 class OpenAdBlockService {
  public:
   // |profile_dir| is the CefRequestContext cache path. The service
-  // reads list files from the directory given to LoadFromDirectory and
-  // writes engine.dat in that same directory (§9.2).
+  // resolves current.json from the adblock root and reads only manifest inputs;
+  // engine.dat is bound to the selected generation (§9.2).
   explicit OpenAdBlockService(base::FilePath profile_dir);
   ~OpenAdBlockService();
 
@@ -738,9 +738,8 @@ class OpenAdBlockService {
   void SetExcludedDomains(std::vector<std::string> registrable_domains);
   bool IsExcluded(const GURL& top_level_url) const;  // any thread
 
-  // Point the service at a list directory and (re)load. |list_dir| holds
-  // <listID>.txt files + resources.txt (§9.2). Triggers: try engine.dat
-  // in that dir first when |prefer_dat| (startup), else build from text.
+  // Point the service at the adblock root and (re)load current.json (§9.2).
+  // Verify manifest inputs before text or a generation-bound DAT load.
   // Always asynchronous; completion swaps the engine atomically (§6.3.1).
   void LoadFromDirectory(base::FilePath list_dir, bool prefer_dat);
   // Re-read the directory given to the last LoadFromDirectory (the
@@ -814,29 +813,16 @@ Implementation notes the implementer must follow:
 
 #### 6.3.2 Build/load algorithm (`BuildOnBackground`, exact order)
 
-1. If `prefer_dat` and `<list_dir>/engine.dat` exists: read it fully
-   (`base::ReadFileToString` with a 256 MiB cap — a larger file is
-   corrupt, log and continue to step 2). Create an empty shim engine,
-   `open_adblock_deserialize`. On success: record `dat_size_bytes`,
-   `engine_from_dat = true`, publish (step 4). On failure: log
-   `engine.dat rejected (<reason>); rebuilding from text`, delete
-   nothing, continue to step 2.
-2. Text build: enumerate `<list_dir>/*.txt` **sorted by file name**
-   (`base::FileEnumerator`, `LC_ALL=C` byte order — build order must be
-   deterministic), skipping `resources.txt` (reserved name, §9.2) and
-   any file whose first line does not start with `[Adblock Plus` or
-   `[uBlock` or `!` after optional BOM/whitespace — a skipped file is
-   logged by name and does not fail the build (Arc skips unknown list
-   IDs the same way, AD-4). Read each as UTF-8 text (lists are UTF-8 by
-   ABP convention; invalid sequences are replaced by the file reader —
-   do not reject the file). Read `<list_dir>/resources.txt` if present
-   (the uBO resources payload, §9.3). Call `open_adblock_build(texts,
-   resources)`.
-3. Serialize the new engine and write `<list_dir>/engine.dat` atomically:
-   write `engine.dat.tmp-<pid>` in the same directory, flush, then
-   `base::ReplaceFile`. A serialize or write failure is logged and does
-   **not** fail the build (the in-memory engine is good; the next start
-   just pays the text-build cost again).
+1. Resolve `current.json` from the `adblock/` root and verify the selected
+   generation using §9.2, including every input hash. On failure keep the old
+   in-memory engine and report the error; Swift handles quarantine/recovery.
+2. If `prefer_dat`, accept only that generation's `engine.dat` with the matching
+   §9.2 receipt and DAT hash (256 MiB read cap). Otherwise build from the exact
+   manifest-listed files in file-name order, after verifying sizes and hashes.
+   Never enumerate the directory for additional filter lists or resources.
+3. Serialize into that generation's `engine.dat` and write its bound receipt,
+   using atomic replacement and fsync. A cache write/serialize failure is logged
+   and does not discard the valid in-memory engine. See §9.2 for torn pairs.
 4. Publish: post to the UI thread (`GetUIThreadTaskRunner` equivalent in
    CEF: `CefCurrentlyOn(UIT)` posting via the existing CEF task helpers —
    in `//open` code, use `content::GetUIThreadTaskRunner({})`), run
@@ -1480,42 +1466,69 @@ App packaging (later, app milestone): the app target copies
 plan does not create the app target; §13 acceptance stages the same
 files beside `cefsimple` via the smoke harness switch (§13.1).
 
-### 9.2 Per-Profile storage (exact paths)
+### 9.2 Per-Profile storage and directory contract
 
-Per Open Profile, under the directory Swift already owns for that
-Profile (`<profile-dir>` = the CefRequestContext cache path's parent
-convention in the app; for `cefsimple` acceptance it is
-`<--user-data-dir>/OpenAdBlockTest`):
+**Lead decision — 2026-10-25: use generations.** This replaces the earlier
+`AdBlock/lists/` layout and any directory-enumeration or unbound-DAT instructions
+elsewhere in this plan. The Swift slice uses `<root>/Profiles/<UUID>/adblock/`.
+The CEF/OpenEngine directory parameter names this `adblock/` root.
 
 ```text
-<profile-dir>/AdBlock/
-  catalog-state.json   Swift-owned: enabled IDs, ETag per list, last-check
-                       per list, catalog version, resources ETag (§9.5)
-  lists/
-    <listID>.txt       last good text per enabled list (Swift writes,
-                       atomically: <listID>.txt.tmp + rename)
-    resources.txt      uBlock Origin resources payload (§9.3; Swift or
-                       the fetch script writes; same atomic rule)
-  engine.dat           browser-owned: serialized engine (§6.3.2 step 3).
-                       Swift never writes it; Swift may delete it to
-                       force a text rebuild.
-  exclusions.json      Swift-owned mirror of the exclusion set for
-                       restart survival; the service's in-memory set
-                       (§6.3.3) is authoritative while running and is
-                       re-seeded from here at Profile open (§12).
+<profile-dir>/adblock/
+  catalog-state.json            Swift state, persisted before current.json moves
+  exclusions.json               Swift exclusion set
+  downloads/<listID>/<n>.body   source caches; never engine inputs
+  current.json                  live {generation, manifestSHA256}, previous ref
+  generations/<n>/
+    <listID>.txt                 exactly one per enabled list
+    manifest.json               generation, full file inventory, state snapshot
+    engine.dat                  optional browser-owned cache for THIS generation
+    engine-inputs.json          browser-owned DAT receipt (see below)
+  quarantine/<n>-<unique>/       rejected generation; never engine inputs
 ```
 
-The directory handed to the CEF API (§11 Step 6) is
-`<profile-dir>/AdBlock/lists/`. `engine.dat` lives **in that same
-directory** (the service appends the file name) — note the diagram:
-service reads `lists/*.txt` + `lists/resources.txt`, writes
-`lists/engine.dat`. Keep it there; a separate engine directory adds a
-second path to the API for no benefit.
+`current.json` is `{ "live": { "generation": n, "manifestSHA256": "..." },
+"previous": { "generation": p, "manifestSHA256": "..." } }`; `previous` can
+be absent. Each manifest file entry has `file`, `bytes`, `sha256`, `listID`,
+`sourceRevision` (ordered upstream content hashes, or the bundled pin), and
+`generation`. The manifest also carries `generation` and an immutable `state`
+snapshot (enabled IDs and complete receipts), so a crash after saving state but
+before moving the pointer can reconcile to the committed set.
 
-First run (offline-capable): Swift seeds `lists/` from the bundled
-`Vendor/adblock/` copies (file copy only, no parse) before the first
-CEF `SetOpenAdBlockListDirectory` call. Blocking therefore works on
-first launch with zero network.
+Enable, disable, and every successful update (including all-304) stage a new,
+complete generation. Verify every input, write and fsync all files and manifest,
+fsync the generation and parent, persist state, then write/fsync a temporary
+`current.json` and atomically rename it over the live pointer. Fsync its parent.
+Only after that commit may cleanup delete generations other than live and its
+previous generation. A crash before the rename leaves the old generation intact;
+unreferenced generations are never promoted. Cache writes are outside this
+transaction and are hash-checked before reuse.
+
+Before emitting `configure`, Swift verifies the selected manifest hash and the
+size and SHA-256 of every listed file. On failure, quarantine that generation,
+verify and restore the pointer's previous generation, or reseed pinned bundled
+defaults / refetch defaults if no valid previous generation exists. Record the
+integrity error and recovery in `lastError`. Reconcile enabled IDs and receipts
+from the current manifest, even if a newer catalog-state was saved before a
+crash. Ignore extra files, stale list folders, and unreferenced generations.
+Legacy settings/exclusions can migrate; legacy list files are refetched.
+
+The engine reads **only** `current.json` → that generation's `manifest.json` →
+its listed inputs. It verifies the manifest hash and each input's size/SHA-256
+before loading, including before DAT use. It must never enumerate `*.txt` to
+choose inputs. Resources, when the deferred resources stage lands, must also be
+manifest inputs. An optional `engine.dat` is valid only inside the selected
+generation, with an `engine-inputs.json` receipt whose generation, manifest hash,
+and complete file→SHA-256 map equal that manifest. The receipt also records the
+DAT's own size and SHA-256; reject torn/missing/mismatched DAT/receipt pairs and
+build from verified text. Never copy DAT between generations. Serialize and
+atomically replace DAT and its receipt in that generation; failure retains the
+valid in-memory engine. A stale background build must not publish into another
+generation. Engine implementation and runtime acceptance remain deferred.
+
+First run seeds a complete generation from pinned bundled defaults before the
+first configure call; without a bundle it fetches verified upstream defaults.
+No incomplete list set is passed to the engine.
 
 ### 9.3 Scriptlet / redirect resources (uBlock Origin)
 
@@ -1602,9 +1615,9 @@ must print nothing in the Step 7 PR.
   design's choice (adblock-design §"Schedule").
 - **What:** for each **enabled** list (plus `resources.txt`): conditional
   GET with `If-None-Match: <stored ETag>` (and `If-Modified-Since` when
-  only a date was stored). `304` → touch `last-check`, nothing else.
-  `200` → verify first line (§9.1 rule), write `<listID>.txt.tmp`,
-  rename, store the new ETag. Unknown list IDs in any remote data are
+  only a date was stored). `304` → retain verified bytes and update `last-check` in the new generation.
+  `200` → verify first line (§9.1 rule) and stage bytes plus the new ETag.
+  Publish the complete generation using §9.2 after all enabled lists succeed. Unknown list IDs in any remote data are
   skipped, never fatal (AD-4). The catalog itself is **committed data**
   (§9.4) in v1 — there is no remote catalog fetch; a catalog change is
   an app update. (Arc fetches a remote manifest; Open deliberately does
@@ -1616,7 +1629,8 @@ must print nothing in the Step 7 PR.
   correct, since a half-updated rule set must never apply.
 - **Failure:** any network/verify failure keeps the old files and the
   old engine, records the error in `catalog-state.json` (`last_error`,
-  no URLs beyond the list ID), and retries at the next interval. No
+  no URLs beyond the list ID), and retries after 1 min, 5 min, 30 min, then the normal 24 h interval.
+  Busy scheduled attempts use the same backoff. Success resets the retry ladder. No
   user-facing alert in v1; Settings shows the status string (§12.2).
 
 Acceptance for list work: §11 Steps 7–8 lists.
@@ -1629,7 +1643,7 @@ Acceptance for list work: §11 Steps 7–8 lists.
 Swift AdBlockStore (main actor)                Browser process (CEF UI thread unless noted)
   catalog.json (committed)                       CefRequestContext (per Profile)
   catalog-state.json (ETags)                       └─ CefBrowserContext::open_adblock_service()
-  lists/<id>.txt  ── SetOpenAdBlockListDirectory ──>  OpenAdBlockService
+  adblock/current.json ── SetOpenAdBlockListDirectory ──>  OpenAdBlockService
   exclusions.json ── SetOpenAdBlockExcludedDomains ─>   ├─ engine_ (shared_ptr, shared_mutex)
   master toggle ──── SetOpenAdBlockEnabled ────────>    ├─ build_runner_ (ThreadPool, MayBlock)
                                                         └─ status_
@@ -1843,9 +1857,9 @@ virtual void SetOpenAdBlockEnabled(bool enabled) = 0;
 virtual bool IsOpenAdBlockEnabled() = 0;
 
 ///
-/// Point the ad-block service at |list_dir| (contains <listID>.txt files
-/// plus resources.txt) and load asynchronously; a serialized engine.dat
-/// in the same directory is preferred at startup. Calling again reloads.
+/// Point the ad-block service at the adblock root and load current.json
+/// asynchronously. Verify only manifest-listed generation inputs and use
+/// a DAT only with its matching generation/input receipt (§9.2).
 ///
 /*--cef(optional_param=list_dir)--*/
 virtual void SetOpenAdBlockListDirectory(const CefString& list_dir) = 0;
@@ -2110,7 +2124,7 @@ State this contract in the Step 8 PR even if the Swift file lands later:
   // blockListsPerProfile, plus Open's catalog-state.json per Profile.
   var isEnabled: Bool                       // master, default true (design choice; factory default unproven, AD-6)
   func enabledListIDs(for profile: ProfileID) -> [String]  // default ["EasyList", "EasyPrivacy"]
-  func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID)  // writes lists/<id>.txt seed/removal + reload trigger
+  func setListEnabled(_ id: String, _ on: Bool, profile: ProfileID)  // publishes a complete generation + reload trigger
   func excludedDomains(for profile: ProfileID) -> [String]
   func setExcluded(_ domain: String, excluded: Bool, profile: ProfileID)  // persists exclusions.json + OEAdBlockController call
   func updateListsNow(profile: ProfileID) async  // §9.5 flow: conditional GETs, atomic writes, one reload trigger
@@ -2119,8 +2133,8 @@ State this contract in the Step 8 PR even if the Swift file lands later:
 ```
 
 Rules: downloads use `URLSession` with `If-None-Match`; multi-URL lists
-concatenate in catalog order (§9.4); writes are temp-file + rename in
-the same directory; a failed list never truncates the old file; the
+concatenate in catalog order (§9.4); publish all enabled files through the
+§9.2 generation transaction; a failed batch keeps the old pointer; the
 24 h timer is per Profile and starts 60 s after Profile open (§9.5);
 incognito Profiles get an in-memory store seeded from bundled lists
 with no disk writes (design §"Per-Profile isolation") — the CEF side
@@ -2149,7 +2163,7 @@ Switches (exact names; read via `CefCommandLine::HasSwitch/GetSwitchValue`
 in `SimpleApp::OnContextInitialized`, before browser creation):
 
 ```text
---open-adblock-dir=<path>       list directory (§9.2 lists/ layout) to load
+--open-adblock-dir=<path>       adblock root (current.json → generation, §9.2) to load
 --open-adblock-exclude=<domain> repeatable; seed exclusions
 --open-adblock-selftest         Step 3 mode: load dir, poll status until
                                 engine_loaded (10 s timeout), print status
@@ -2188,7 +2202,8 @@ Third-party cases need a second origin: run a second server on
 `127.0.0.2` port 8932 serving the same directory (macOS loopback aliases
 work without configuration). The page must not reference the network.
 
-`lists/testlist.txt` (exact rules; ABP syntax; `127.0.0.1` is the
+`generations/1/testlist.txt` (include it with its size/hash in a fixture
+`manifest.json` and bind that manifest through `current.json`, §9.2; exact rules; ABP syntax; `127.0.0.1` is the
 first-party host, `127.0.0.2` the third-party host):
 
 ```text
@@ -2419,3 +2434,14 @@ python3 /tmp/open-adblock-check.py   # §13.3 driver (throwaway, in /tmp)
 - Approved as written. Q-2 (uBO resources format for adblock 0.8.11) is resolved at Step 7 by reading the crate source. R-3: if GN rejects the include path, move the cosmetic sender fully into the CEF patch.
 - Licensing: adblock-rust (MPL-2.0) and uBlock Origin resources/scriptlets (GPL-3.0) are allowed for development and private use. Both go on the pre-release license checklist (docs/followups.md) before any public release.
 - Phasing: the Swift-side, engine-independent parts (list catalog with the 46 upstream URLs, downloader with ETag + SHA-256 pins, on-disk list directory layout per profile, per-site allowlist and global toggle model, `AdBlockStore` contract) start now as an OpenKit target. Engine Steps 1–8 wait for the stock build and the fork scripts (PR #25).
+
+### Swift-slice implementation notes (2026-10-25)
+
+The Lead decisions Swift slice lands as `OpenAdBlock` in OpenKit. Its catalog and
+pins are package resources; `tools/fetch-adblock-lists.sh` reads those same pins.
+The source manifest has regional ID `dk` (not the prose's `ndk`) and 18 Korean
+sources (not 17). BCNYBlocklists' two mirror-relative paths have no public upstream
+host, so its catalog entry is explicitly unavailable rather than using the mirror
+or inventing a URL. The Lead's 2026-10-25 generation decision in §9.2 supersedes
+the earlier list-directory and DAT placement contract. See [adblock-lists.md](../adblock-lists.md) for the Swift store
+contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.
