@@ -15,6 +15,9 @@ let package = Package(
         .library(name: "OpenScripting", targets: ["OpenScripting"]),
         .executable(name: "openkit", targets: ["openkit"]),
         .executable(name: "commands-dump", targets: ["commands-dump"]),
+        .library(name: "OpenDesign", targets: ["OpenDesign"]),
+        .library(name: "OpenSidebar", targets: ["OpenSidebar"]),
+        .executable(name: "sidebar-render", targets: ["sidebar-render"]),
     ],
     targets: [
         .target(name: "OpenModel"),
@@ -27,5 +30,8 @@ let package = Package(
         .target(name: "OpenScripting", dependencies: ["OpenModel", "OpenCommands"]),
         .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting"]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
+        .target(name: "OpenDesign", dependencies: ["OpenModel"]),
+        .target(name: "OpenSidebar", dependencies: ["OpenModel", "OpenDesign"]),
+        .executableTarget(name: "sidebar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
     ]
 )

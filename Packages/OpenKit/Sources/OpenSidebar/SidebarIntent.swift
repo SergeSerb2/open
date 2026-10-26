@@ -1,0 +1,85 @@
+import AppKit
+import OpenModel
+
+/// Where a command-bar request came from. The command bar opens differently
+/// for "edit current URL" and "new tab".
+public enum CommandBarSource: Sendable, Equatable {
+    case urlField
+    case newTabRow
+    case plusButton
+}
+
+/// Every user intent the sidebar can produce. The sidebar never changes the
+/// model or talks to the engine itself; it reports intents to its delegate.
+/// `ModelSidebarActions` maps the model-only intents to `BrowserModel` commands.
+public enum SidebarIntent: Equatable {
+    // Window chrome
+    case toggleSidebar
+    case goBack
+    case goForward
+    case reload
+    case stopLoading
+    case openCommandBar(CommandBarSource)
+    case copyCurrentURL
+    case showSiteControls
+
+    // Selection and Spaces
+    case select(nodeID: ItemID, space: SpaceID)
+    case selectFavorite(tabID: ItemID)
+    case switchSpace(SpaceID)
+    case showLibrary
+    case newSpace
+    case newFolder(in: NodeParent)
+    case manageSpaces
+
+    // Row actions
+    case close(nodeID: ItemID)
+    /// "Close and keep pinned": drop the web content, keep the pinned entry.
+    case unload(tabID: ItemID)
+    case toggleMute(tabID: ItemID)
+    case resetToPinnedURL(tabID: ItemID)
+    case replacePinnedURL(tabID: ItemID)
+    case editPinnedURL(tabID: ItemID)
+    case beginRename(nodeID: ItemID)
+    case rename(nodeID: ItemID, title: String)
+    case setExpanded(folderID: ItemID, expanded: Bool)
+    case pin(tabID: ItemID)
+    case unpin(tabID: ItemID)
+    case duplicate(nodeID: ItemID)
+    case copyLink(nodeID: ItemID, markdown: Bool)
+    case copyAllLinks(folderID: ItemID, markdown: Bool)
+    case share(nodeID: ItemID)
+    case changeIcon(nodeID: ItemID)
+    case customizePage(tabID: ItemID)
+    case openInSplitView(tabID: ItemID)
+    case addSplitView(tabID: ItemID)
+    case newNestedFolder(parentFolderID: ItemID)
+    case turnFolderIntoSpace(folderID: ItemID)
+    case deleteFolder(folderID: ItemID)
+    case clearToday(space: SpaceID)
+
+    // Structure (drag and drop, "Move to")
+    case move(nodeID: ItemID, to: NodeParent, index: Int?)
+    case moveToSpace(nodeID: ItemID, space: SpaceID)
+    case moveToNewSpace(nodeID: ItemID)
+    case addFavorite(tabID: ItemID, index: Int?)
+    case moveFavorite(tabID: ItemID, index: Int)
+    case removeFavorite(tabID: ItemID)
+    case openURL(URL, in: NodeParent, index: Int?)
+
+    // Space header menu
+    case changeSpaceIcon(SpaceID)
+    case renameSpace(SpaceID)
+    case editSpaceTheme(SpaceID)
+    case setSpaceProfile(space: SpaceID, profile: ProfileID)
+    case newProfile(space: SpaceID)
+    case shareSpace(SpaceID)
+    case exportSpaceIntoFolder(space: SpaceID, destination: SpaceID)
+    case deleteSpace(SpaceID)
+    case moveSpace(SpaceID, toIndex: Int)
+}
+
+@MainActor
+public protocol SidebarDelegate: AnyObject {
+    func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent)
+}
