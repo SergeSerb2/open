@@ -1,0 +1,71 @@
+import AppKit
+import OpenModel
+import Observation
+
+@MainActor
+@Observable
+public final class LittleOpenSession: Identifiable {
+    public let id = WindowID()
+    public let tab: Tab
+    public var profileID: ProfileID
+    public let createdAt: Date
+    public var lastActiveAt: Date
+    public var windowIsVisible = false
+    public init(tab: Tab, profileID: ProfileID) {
+        self.tab = tab; self.profileID = profileID; createdAt = Date(); lastActiveAt = createdAt
+    }
+}
+
+/// Routing plan §7 boundary, retained verbatim for the future engine adapter.
+@MainActor
+public protocol LittleOpenWebContentProviding: AnyObject {
+    var view: NSView { get }
+    var currentURL: URL? { get }
+    func load(_ url: URL)
+    func reload()
+    func goBack()
+    func goForward()
+    var onURLChange: ((URL) -> Void)? { get set }
+    var onTitleChange: ((String) -> Void)? { get set }
+}
+extension FakeWebContentHost: LittleOpenWebContentProviding {}
+
+/// The routing boundary is smaller than WebContentHost; bridge it in this one place.
+@MainActor
+final class LittleHostFactory: WebContentHostFactory {
+    let make: (ProfileID) -> any LittleOpenWebContentProviding
+    init(_ make: @escaping (ProfileID) -> any LittleOpenWebContentProviding) { self.make = make }
+    func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost {
+        let base = make(profileID)
+        let host: any WebContentHost = (base as? any WebContentHost) ?? LittleHostAdapter(base: base, tabID: tabID)
+        if let url { host.load(url) }; return host
+    }
+}
+@MainActor
+private final class LittleHostAdapter: WebContentHost {
+    let base: any LittleOpenWebContentProviding
+    let tabID: ItemID
+    var view: NSView { base.view }
+    var currentURL: URL? { base.currentURL }
+    var title = ""
+    var canGoBack: Bool { false }
+    var canGoForward: Bool { false }
+    var isLoading: Bool { false }
+    var onURLChange: ((URL) -> Void)?
+    var onTitleChange: ((String) -> Void)?
+    var onLoadingChange: ((Bool) -> Void)?
+    var onFaviconChange: ((Data?) -> Void)?
+    var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
+    init(base: any LittleOpenWebContentProviding, tabID: ItemID) {
+        self.base = base; self.tabID = tabID
+        base.onURLChange = { [weak self] in self?.onURLChange?($0) }
+        base.onTitleChange = { [weak self] title in self?.title = title; self?.onTitleChange?(title) }
+    }
+    func load(_ url: URL) { base.load(url) }
+    func reload() { base.reload() }
+    func stop() {}
+    func goBack() { base.goBack() }
+    func goForward() { base.goForward() }
+    func focus() { view.window?.makeFirstResponder(view) }
+    func close() { base.onURLChange = nil; base.onTitleChange = nil; onURLChange = nil; onTitleChange = nil; view.removeFromSuperview() }
+}
