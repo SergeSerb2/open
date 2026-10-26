@@ -10,7 +10,7 @@ import OpenStore
     public typealias Section = LibrarySection
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
-        if oldValue != section { selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
+        if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]
@@ -43,6 +43,15 @@ import OpenStore
     public let defaults: UserDefaults
     public let model: BrowserModel
     public let actions: any LibraryActions
+    @ObservationIgnored private let settingsActions: (any SettingsActions)?
+    @ObservationIgnored private var cachedSpaceManagerView: NSView?
+    /// Retry a transient nil; retain the first supplied view across section switches.
+    public var spaceManagerView: NSView? {
+        if let cachedSpaceManagerView { return cachedSpaceManagerView }
+        let view = settingsActions?.makeSpaceManagerView()
+        cachedSpaceManagerView = view
+        return view
+    }
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
     public private(set) var archives: [ProfileID: ArchiveStore]
@@ -56,7 +65,9 @@ import OpenStore
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
     public init(model: BrowserModel, defaults: UserDefaults, actions: any LibraryActions, downloads: any DownloadsProvider, captures: any CapturesProvider,
-                archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore], snapshot: SnapshotStore, faviconStore: FaviconStore? = nil) {
+                archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore], snapshot: SnapshotStore, faviconStore: FaviconStore? = nil, settingsActions: (any SettingsActions)? = nil) {
+        SettingsDefaults.register(in: defaults)
+        self.settingsActions = settingsActions
         self.model = model; self.defaults = defaults; self.actions = actions; self.downloads = downloads; self.captures = captures
         self.archives = archives; self.histories = histories; self.snapshot = snapshot; self.faviconStore = faviconStore
         section = LibrarySection(rawValue: defaults.string(forKey: "open.library.lastSection") ?? "") ?? .archive

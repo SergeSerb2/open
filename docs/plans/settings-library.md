@@ -145,7 +145,7 @@ except where a section says Save.
 | `open.advanced.tabSleepMode` | String (`automatic`/`conservative`/`aggressive`/`never`) | `automatic` | Advanced; sleep policy (section 5.5) |
 | `open.appIcon.selectedID` | String (`openDefault`/`openDark`/`openLight`/`openMono`/`openColor`/`openRetro`) | `openDefault` | App Icon; `NSApp.applicationIconImage` / alternate icon |
 | `open.import.lastArcDir` | String (path) | none | Import wizard (path only; never commit) |
-| `open.library.lastSection` | String (`archive`/`downloads`/`captures`/`media`/`history`) | `archive` | Library restore |
+| `open.library.lastSection` | String (`spaces`/`archive`/`downloads`/`captures`/`media`/`history`) | `archive` | Library restore |
 | `open.translate.enabled` | Bool | `true` | Page translation offer (`docs/plans/page-platform.md` §4.7); no Settings row |
 | `open.translate.neverTranslateHosts` | [String] (lowercase hosts) | `[]` | "Never Translate This Site"; cleared by "Reset Translated-site Prompts" (page-platform §4.7.7) |
 | `open.capture.dragToCaptureEnabled` | Bool | `true` | Cmd+Shift drag to capture (page-platform §4.6.2); no Settings row |

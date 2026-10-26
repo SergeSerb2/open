@@ -39,7 +39,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         archives = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, ArchiveStore(fileURL: directories.archiveFileURL(for: $0))) })
         histories = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, HistoryStore(fileURL: directories.historyFileURL(for: $0))) })
         faviconStore = try FaviconStore(databaseURL: root.appendingPathComponent("State/favicons.sqlite3"))
-        library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore)
+        library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore, settingsActions: actions)
         let library = self.library
         libraryActions.selectedHistoryProfile = { [weak library] in library?.historyProfileID }
         let settings = self.settings
@@ -85,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "previews-legacy-migration"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -274,6 +274,42 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                             && disk["open.general.previewsPages"] as? Bool == false, "sidebar settings did not reach the existing UserDefaults store")
                 let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: env.suite)!, root: env.root, snapshot: vm.snapshot)
                 try require(reloaded.bool("open.sidebar.hideHintShown") && !reloaded.bool("open.general.previewsPages"), "sidebar settings did not survive reload")
+            case "library-spaces":
+                let library = env.library
+                try require(env.actions.spaceManagerMakeCount == 0 && LibrarySection.allCases.first == .spaces,
+                            "L1 Space Manager built before entry or Spaces is not first")
+                library.section = .spaces
+                let manager = library.spaceManagerView
+                try require(manager != nil && env.actions.spaceManagerMakeCount == 1, "L1 factory did not supply the native view")
+                let labels = try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: true,
+                                              to: env.root.appendingPathComponent("library-spaces-check.png"))
+                try require(labels.contains("Space Manager preview"), "L1 injected view did not render")
+                library.section = .archive
+                library.statusText = "Folder restored. Click to view."; library.restoredSpaceID = vm.model.spaces[0].id
+                library.section = .spaces
+                try require(library.statusText.isEmpty && library.restoredSpaceID == nil, "L1 Spaces retained Archive status/View action")
+                try require(library.spaceManagerView === manager && env.actions.spaceManagerMakeCount == 1,
+                            "L1 section switches rebuilt the injected view")
+                let persisted = try env.diskDefaults()
+                try require(persisted["open.library.lastSection"] as? String == "spaces", "L1 selected section did not reach the existing defaults file")
+                let reloaded = LibraryViewModel(model: vm.model, defaults: env.defaults, actions: env.libraryActions, downloads: env.downloadFeed,
+                    captures: env.captures, archives: env.archives, histories: env.histories, snapshot: vm.snapshot, settingsActions: env.actions)
+                try require(reloaded.section == .spaces && env.actions.spaceManagerMakeCount == 1, "L1 Spaces selection did not persist or factory was eager")
+                env.actions.spaceManagerAvailable = false
+                let emptyLabels = try await render(LibraryContent(viewModel: reloaded), size: CGSize(width: 960, height: 640), scale: 1, dark: true,
+                                                   to: env.root.appendingPathComponent("library-spaces-unavailable-check.png"))
+                try require(emptyLabels.contains("Spaces") && !emptyLabels.contains("Space Manager preview") && reloaded.spaceManagerView == nil, "L1 nil injection has no visible empty state")
+                let attempts = env.actions.spaceManagerMakeCount
+                env.actions.spaceManagerAvailable = true
+                reloaded.section = .downloads; reloaded.section = .spaces
+                let recovered = reloaded.spaceManagerView
+                try require(recovered != nil && recovered !== manager && env.actions.spaceManagerMakeCount == attempts + 1,
+                            "L1 transient nil was cached or a manager was shared across view models")
+                try require(reloaded.spaceManagerView === recovered && env.actions.spaceManagerMakeCount == attempts + 1,
+                            "L1 recovered manager was not cached")
+                let recoveredLabels = try await render(LibraryContent(viewModel: reloaded), size: CGSize(width: 960, height: 640), scale: 1, dark: true,
+                                                       to: env.root.appendingPathComponent("library-spaces-recovered-check.png"))
+                try require(recoveredLabels.contains("Space Manager preview"), "L1 recovered manager did not render")
             case "general-toggles":
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()
