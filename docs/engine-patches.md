@@ -215,7 +215,7 @@ The engine parses filter lists in the browser process, which is the most privile
 | Engine build from text, then serialize and write the DAT (in-tree, two lists) | — | 213 to 282 ms | ≤ 1500 ms |
 | DAT load (in-tree) | — | 52 to 62 ms | ≤ 250 ms |
 
-The review's own probe gave the same picture: 28.8 µs against 4.9 µs on realistic URLs, and a hostile `\w{500}` rule compiled to a slow PikeVM before and now fails regex's size limit. At 200 requests a page, the shipped config costs about 1.2 ms of matching. `openkit adblock perf` (Swift allowlist lookups, not regex) stays at p95 0.11 ms per 1,000 lookups (budget 1 ms).
+The review's own probe gave the same picture: 28.8 µs against 4.9 µs on realistic URLs, and a hostile rule such as `\w{300}` compiled to a slow PikeVM before and now fails regex's size limit. At 200 requests a page, the shipped config costs about 1.2 ms of matching. `openkit adblock perf` (Swift allowlist lookups, not regex) stays at p95 0.11 ms per 1,000 lookups (budget 1 ms).
 
 **Untrusted input.** Filter lists (EasyList, EasyPrivacy and the 46-list catalog) are untrusted network input. The engine parses them in the browser process (`FilterSet::add_filter_list`, `Engine::from_filter_set`), and it reads the serialized engine (DAT) back from disk (`Engine::deserialize`). The limits that exist today, in the Swift store (docs/adblock-lists.md):
 - A source is capped at 16 MiB, and a combined list at 64 MiB. The cap is enforced while streaming, and the advertised size is checked.
