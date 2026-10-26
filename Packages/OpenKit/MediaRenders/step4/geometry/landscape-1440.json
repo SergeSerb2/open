@@ -1,0 +1,30 @@
+{
+  "firstBottomLeft" : [
+    2230,
+    10
+  ],
+  "firstSize" : [
+    320,
+    180
+  ],
+  "firstTopLeft" : [
+    2230,
+    1250
+  ],
+  "insets" : [
+    10,
+    10
+  ],
+  "minimumSize" : [
+    285,
+    161
+  ],
+  "natural" : [
+    1600,
+    900
+  ],
+  "screen" : [
+    2560,
+    1440
+  ]
+}

@@ -83,6 +83,7 @@ extension Motion {
     public static let miniPlayerAppearDelay: CFTimeInterval = 0.05
     public static let miniPlayerDisappear: CFTimeInterval = 0.12
     public static let reducedMedia: CFTimeInterval = 0.1
+    public static let pipPresentAlpha: CFTimeInterval = 0.1
     public static let pipPresent = SpringToken(response: 0.3, dampingFraction: 1)
     public static let pipFade: CFTimeInterval = 0.15
     public static let pipControlsHide: CFTimeInterval = 0.3
