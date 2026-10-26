@@ -142,3 +142,11 @@ Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).
 2. Folders as tab groups for `chrome.tabGroups`: yes or no. Arc bridges its groups both ways.
 3. P1 owner: P1 is the largest item and blocks P2 and P3.
+
+## Lead decisions (2026-10-25)
+
+1. Patch order P1 → P2 → P3 approved. Owner of P1: the engine lead (Opus), working alone in the shared Chromium tree; other engine patch series (ad block, tab sleeping) queue behind it in the same tree.
+2. `chrome.windows`: one Chrome window per Open window. Its tab strip holds every LIVE tab of that window across all Spaces (placeholders and sleeping tabs are absent until loaded); the focused tab is the active tab. Space switches do not churn the strip.
+3. Folders map to `chrome.tabGroups` (title = folder name, collapsed = folder collapsed) after core P1 works. Splits are not tab groups.
+4. Default profile engine data stays at `Profiles/Default/` (CEF's fixed default slot); other profiles use `Profiles/<dir>/Engine/`. docs/plans/profiles.md §5 is amended by this decision.
+5. Until P1 lands: extensions run in our own views; the Chrome-style window remains available (debug/advanced menu) for the Web Store and `chrome://extensions`.
