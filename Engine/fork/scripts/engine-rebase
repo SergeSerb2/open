@@ -1,0 +1,85 @@
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+usage() {
+    cat <<'EOF'
+engine-rebase --chromium <tag> --cef-branch <n> [--cef-commit <hash>] [--dry-run]
+No arguments: print the rebase checklist (read-only).
+Engine/fork/scripts/engine-rebase
+EOF
+}
+checklist() {
+    cat <<'EOF'
+1. Announce and freeze feature patches; confirm no build is running.
+2. Snapshot the applied tree and old VERSIONS.
+3. Sync new pins; read cef/CHROMIUM_UPDATE.txt and follow CEF's documented update flow.
+4. Re-apply each Open series; resolve -> engine-refresh-patches -> engine-apply -> continue.
+5. Redo Rust fragments/vendor/gen if crates or the Chromium Rust toolchain moved.
+6. Check overlay paths for upstream collisions; retain pre-rebase-tree.diff.
+7. Build dev, run engine-status and smoke checks, prove release if unblocked.
+8. Open one PR: old/new pins, each patch outcome, build time, smoke, known gaps.
+9. Keep old outputs and snapshot until merge; rollback with old pins, bootstrap, apply, build.
+EOF
+}
+[[ $# -gt 0 ]] || { usage; checklist; exit 0; }
+tag='' branch='' commit='' dry=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; checklist; exit 0 ;;
+        --chromium|--cef-branch|--cef-commit)
+            [[ $# -ge 2 ]] || die "$1 needs a value"
+            case "$1" in --chromium) tag=$2 ;; --cef-branch) branch=$2 ;; --cef-commit) commit=$2 ;; esac
+            shift 2 ;;
+        --dry-run) dry=1; shift ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+[[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ && "$branch" =~ ^[0-9]+$ ]] || die 'provide --chromium <tag> and --cef-branch <n>'
+[[ -z "$commit" || "$commit" =~ ^[0-9a-f]{40}$ ]] || die 'CEF commit must be a full 40-character hash'
+if [[ "$tag" == "$CHROMIUM_TAG" && "$branch" == "$CEF_BRANCH" && "${commit:-$CEF_COMMIT}" == "$CEF_COMMIT" ]]; then
+    export OPEN_ENGINE_READ_ONLY=1
+fi
+checklist
+log "rebase: Chromium $CHROMIUM_TAG -> $tag; CEF $CEF_BRANCH/$CEF_COMMIT -> $branch/${commit:-branch HEAD}"
+if [[ $dry == 1 ]]; then
+    log "dry-run: would verify applied state, snapshot $STATE_DIR/pre-rebase-tree.diff, resolve pins into scratch VERSIONS, sync, and stop for documented CEF update review"
+    exit 0
+fi
+printf 'Type the new Chromium tag to confirm: '
+IFS= read -r confirmation
+[[ "$confirmation" == "$tag" ]] || die 'tag confirmation did not match'
+require_no_build_running
+# Same-pin rehearsal must be read-only, including logs and locks.
+if [[ "$tag" == "$CHROMIUM_TAG" && "$branch" == "$CEF_BRANCH" && "${commit:-$CEF_COMMIT}" == "$CEF_COMMIT" ]]; then
+    "$SCRIPT_DIR/engine-status" || die 'rebase needs a fully applied tree; run engine-apply first'
+    printf 'same pins: verified applied state; no tree or VERSIONS changes\n'
+    exit 0
+fi
+acquire_lock rebase
+export_engine_env
+"$SCRIPT_DIR/engine-status" || die 'rebase needs a fully applied tree; run engine-apply first'
+git -C "$SRC_DIR" diff --binary HEAD > "$STATE_DIR/pre-rebase-tree.diff"
+git -C "$SRC_DIR/cef" diff --binary HEAD > "$STATE_DIR/pre-rebase-cef.diff"
+cp "$FORK_DIR/VERSIONS" "$STATE_DIR/pre-rebase-VERSIONS"
+git -C "$SRC_DIR" fetch --no-tags origin "+refs/tags/$tag:refs/tags/$tag"
+new_chromium=$(git -C "$SRC_DIR" rev-parse "$tag^{commit}")
+git -C "$SRC_DIR/cef" fetch origin "$branch"
+commit=${commit:-$(git -C "$SRC_DIR/cef" rev-parse FETCH_HEAD)}
+git -C "$SRC_DIR/cef" cat-file -e "$commit^{commit}"
+scratch="$STATE_DIR/rebase-VERSIONS"
+python3 - "$FORK_DIR/VERSIONS" "$scratch" "$tag" "$new_chromium" "$branch" "$commit" <<'PY'
+import pathlib, sys
+source, dest, tag, chromium, branch, cef = sys.argv[1:]
+updates = dict(CHROMIUM_TAG=tag, CHROMIUM_COMMIT=chromium, CEF_BRANCH=branch, CEF_COMMIT=cef)
+lines = pathlib.Path(source).read_text().splitlines()
+pathlib.Path(dest).write_text('\n'.join(line.split('=', 1)[0] + '=' + updates[line.split('=', 1)[0]] if line.split('=', 1)[0] in updates else line for line in lines) + '\n')
+PY
+OPEN_ENGINE_VERSIONS="$scratch" "$SCRIPT_DIR/engine-bootstrap" --run
+# CEF explicitly requires version-specific human review. Never invent updater commands.
+cat "$SRC_DIR/cef/CHROMIUM_UPDATE.txt"
+log "STOP: follow cef/CHROMIUM_UPDATE.txt and its referenced CEF update instructions; review upstream patch failures before Open patches"
+printf 'Scratch pins: %s\nAfter CEF update review, install these pins in Engine/fork/VERSIONS, update Rust toolchain pins from the new tree, then run:\n' "$scratch"
+printf '%s\n' 'Engine/fork/scripts/engine-apply --all' 'Engine/fork/scripts/engine-refresh-patches --all' 'Engine/fork/scripts/engine-build --detach' 'Engine/fork/scripts/engine-status'

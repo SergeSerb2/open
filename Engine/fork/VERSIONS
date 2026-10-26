@@ -1,0 +1,17 @@
+# Open engine pins. Source this file; do not parse it with regex.
+# One key per line, KEY=value, no spaces around =. See docs/plans/fork-infra.md §4.
+CHROMIUM_TAG=156.0.8078.48
+CHROMIUM_COMMIT=d0c02bfad08ec92a6ffcf989e53cd995e6381a4c
+CEF_BRANCH=8078
+CEF_COMMIT=4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f
+DEPOT_TOOLS_COMMIT=b52fe87d04af61df3dd07748ff2c2c0b649dca09
+RUST_TOOLCHAIN_REV=1edd55dcfcd573872c727fa3e086369a71661ee0
+RUST_TOOLCHAIN_VERSION=1.100.0
+ADBLOCK_CRATE_VERSION=0.8.11
+RMP_CRATE_VERSION=0.8.11
+ENGINE_ROOT_DEFAULT=Developer/open-engine
+CHROMIUM_SRC_SUBDIR=chromium_git/chromium/src
+OUT_DIR_DEV=out/Release_GN_arm64
+OUT_DIR_RELEASE=out/Release_Official_arm64
+BUILD_JOBS_DEFAULT=10
+TARGET_CPU=arm64

@@ -1,0 +1,106 @@
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+usage() {
+    cat <<'EOF'
+engine-build [--config dev|release] [--target <gn-target>] [--regen] [--detach] [--jobs <n>] [--dry-run]
+Defaults: --config dev --target cefsimple --jobs $BUILD_JOBS_DEFAULT (10)
+Engine/fork/scripts/engine-build --detach
+Engine/fork/scripts/engine-build --config release --target cefsimple
+EOF
+}
+config=dev target=cefsimple regen=0 detach=0 dry=0 jobs=${JOBS:-$BUILD_JOBS_DEFAULT} explicit_jobs=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --config|--target|--jobs)
+            [[ $# -ge 2 ]] || die "$1 needs a value"
+            case "$1" in --config) config=$2 ;; --target) target=$2 ;; --jobs) jobs=$2; explicit_jobs=1 ;; esac
+            shift 2 ;;
+        --regen) regen=1; shift ;;
+        --detach) detach=1; shift ;;
+        --dry-run) dry=1; shift ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+case "$config" in dev) out=$OUT_DIR_DEV ;; release) out=$OUT_DIR_RELEASE ;; *) die "invalid config: $config" ;; esac
+[[ "$jobs" =~ ^[1-9][0-9]*$ ]] || die "invalid jobs: $jobs"
+if [[ $jobs -gt 10 ]]; then
+    [[ $explicit_jobs == 1 ]] || die 'jobs above 10 need explicit --jobs due to the kernel watchdog-panic history'
+    log 'WARNING: jobs above 10 caused kernel watchdog panics on this Mac'
+fi
+export_engine_env
+if [[ $dry == 1 ]]; then
+    log "dry-run: out $SRC_DIR/$out; config $config; regen $regen"
+    log "dry-run: would copy $FORK_DIR/gn/dev.args.gn -> $SRC_DIR/$out/args.gn on create/--regen"
+    [[ "$config" != release ]] || log "dry-run: would append $FORK_DIR/gn/release.args.gn after a newline; require published PGO profile and checkout_pgo_profiles=True"
+    log "dry-run: would gn gen $out on create/--regen; otherwise trust ninja regeneration"
+    log "dry-run: caffeinate -dimsu nice -n 10 autoninja -C $out $target -j $jobs"
+    exit 0
+fi
+require_macos_arm64
+require_no_build_running
+if [[ $detach == 1 && "${OPEN_ENGINE_DETACHED:-0}" != 1 ]]; then
+    mkdir -p "$LOG_DIR"
+    args=(--config "$config" --target "$target" --jobs "$jobs")
+    [[ $regen == 0 ]] || args+=(--regen)
+    OPEN_ENGINE_DETACHED=1 python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+        "$SCRIPT_DIR/engine-build" "${args[@]}" </dev/null >> "$LOG_DIR/build-$config-detached.log" 2>&1 &
+    log "detached build started: log $LOG_DIR/build-$config-detached.log"
+    printf 'tail -f %q\n' "$LOG_DIR/build-$config-detached.log"
+    exit 0
+fi
+acquire_lock build
+if [[ "$config" == release ]] && grep -Eq '^chrome_pgo_phase[[:space:]]*=[[:space:]]*2' "$FORK_DIR/gn/release.args.gn"; then
+    # Use Chromium's own revision-specific filename, not any stale .profdata file.
+    if ! python3 - "$SRC_DIR" <<'PY'
+import pathlib, sys
+src = pathlib.Path(sys.argv[1])
+scope = {}
+try:
+    exec(compile((src.parent / '.gclient').read_text(), '.gclient', 'exec'), {'__builtins__': {}}, scope)
+except (OSError, SyntaxError, ValueError, NameError):
+    sys.exit(1)
+enabled = any(s.get('name') == 'src' and s.get('custom_vars', {}).get('checkout_pgo_profiles') is True for s in scope.get('solutions', []))
+name = src / 'chrome/build/mac-arm.pgo.txt'
+valid = enabled and name.is_file() and (src / 'chrome/build/pgo_profiles' / name.read_text().strip()).is_file()
+sys.exit(0 if valid else 1)
+PY
+    then
+        die 'release: no PGO profile found; set chrome_pgo_phase=0 explicitly in gn/release.args.gn or add the profile'
+    fi
+fi
+if [[ ! -f "$SRC_DIR/$out/args.gn" || $regen == 1 ]]; then
+    mkdir -p "$SRC_DIR/$out"
+    cp "$FORK_DIR/gn/dev.args.gn" "$SRC_DIR/$out/args.gn"
+    if [[ "$config" == release ]]; then
+        # The live dev input has no final newline. Keep the release override separate.
+        printf '\n' >> "$SRC_DIR/$out/args.gn"
+        cat "$FORK_DIR/gn/release.args.gn" >> "$SRC_DIR/$out/args.gn"
+    fi
+    if command -v gn >/dev/null 2>&1; then
+        (cd "$SRC_DIR" && gn gen "$out")
+    elif [[ -f "$ENGINE_ROOT/depot_tools/gn.py" ]]; then
+        (cd "$SRC_DIR" && vpython3 "$ENGINE_ROOT/depot_tools/gn.py" gen "$out")
+    else
+        die 'gn is absent; run engine-bootstrap'
+    fi
+else
+    log 'args.gn exists: trusting ninja regeneration; args unchanged'
+fi
+mkdir -p "$LOG_DIR"
+build_log=$(mktemp "$LOG_DIR/build-$config-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")
+start=$(date +%s)
+set +e
+(cd "$SRC_DIR" && caffeinate -dimsu nice -n 10 autoninja -C "$out" "$target" -j "$jobs") 2>&1 | tee "$build_log"
+rc=${PIPESTATUS[0]}
+set -e
+result_path="$SRC_DIR/$out/$target"
+[[ "$target" != *framework* && "$target" != *cef*framework* ]] || result_path="$SRC_DIR/$out/Chromium Embedded Framework.framework"
+log "build summary: config=$config target=$target out=$out elapsed=$(($(date +%s) - start))s exit=$rc"
+tail -n 5 "$build_log"
+log "built target: $result_path; log: $build_log"
+exit "$rc"

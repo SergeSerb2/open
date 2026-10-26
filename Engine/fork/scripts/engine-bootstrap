@@ -1,0 +1,140 @@
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+usage() {
+    cat <<'EOF'
+engine-bootstrap [--skip-sync] [--skip-hooks] [--dry-run] [--run]
+Env: OPEN_ENGINE_ROOT (default ~/Developer/open-engine), JOBS (default 10)
+No arguments: show help. Use --run for all phases.
+Engine/fork/scripts/engine-bootstrap --run
+EOF
+}
+[[ $# -gt 0 ]] || { usage; exit 0; }
+skip_sync=0 skip_hooks=0 dry=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --help|-h) usage; exit 0 ;;
+        --run) shift ;;
+        --skip-sync) skip_sync=1; shift ;;
+        --skip-hooks) skip_hooks=1; shift ;;
+        --dry-run) dry=1; shift ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+if [[ $dry == 1 ]]; then
+    log "dry-run: phase 0 preflight: Xcode, Python, Git, Metal toolchain"
+    log "dry-run: phase 1 clone/fetch/checkout depot_tools $DEPOT_TOOLS_COMMIT if needed"
+    log "dry-run: phase 2 require a warm cache at $ENGINE_ROOT/git_cache"
+    log "dry-run: phase 3 (skip=$skip_sync) require 150 GB free; fetch/checkout $CHROMIUM_TAG; .gclient checkout_pgo_profiles=True; gclient sync --nohooks --with_branch_heads --force --reset -D -j 12; CEF automate --branch=$CEF_BRANCH --checkout=$CEF_COMMIT --no-chromium-update --no-depot-tools-update --no-build --no-distrib --arm64-build --with-pgo-profiles"
+    log "dry-run: phase 4 (skip=$skip_hooks) gclient runhooks -j 12"
+    log "dry-run: phase 5 engine-status; stamps $STATE_DIR/bootstrap-<phase>.done; logs $LOG_DIR"
+    exit 0
+fi
+require_no_build_running
+require_macos_arm64
+acquire_lock sync
+export_engine_env
+trap 'log "ERROR: bootstrap failed (exit $?), command: $BASH_COMMAND" >&2' ERR
+fingerprint=$(shasum -a 256 "${OPEN_ENGINE_VERSIONS:-$FORK_DIR/VERSIONS}" | awk '{print $1}')
+downstream_changed=0
+phase_done() { printf '%s\n' "$fingerprint" > "$STATE_DIR/bootstrap-$1.done"; log "phase $1 end"; }
+phase_matches() { [[ $downstream_changed == 0 && -f "$STATE_DIR/bootstrap-$1.done" && "$(cat "$STATE_DIR/bootstrap-$1.done")" == "$fingerprint" ]]; }
+log 'phase 0 start: preflight'
+xcodebuild -version || die 'run: sudo xcodebuild -license accept && xcodebuild -runFirstLaunch'
+python3 --version
+git --version
+xcrun --find metal >/dev/null 2>&1 || die 'run: xcodebuild -downloadComponent MetalToolchain'
+phase_done 0
+log 'phase 1 start: depot_tools'
+if [[ ! -d "$ENGINE_ROOT/depot_tools/.git" ]]; then
+    git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$ENGINE_ROOT/depot_tools"
+fi
+[[ -z "$(git -C "$ENGINE_ROOT/depot_tools" status --porcelain)" ]] || die 'depot_tools is dirty; preserve your changes before bootstrap'
+if phase_matches 1 && [[ "$(git -C "$ENGINE_ROOT/depot_tools" rev-parse HEAD)" == "$DEPOT_TOOLS_COMMIT" ]]; then
+    log 'phase 1 already up to date (stamp + HEAD)'
+else
+    if [[ "$(git -C "$ENGINE_ROOT/depot_tools" rev-parse HEAD)" != "$DEPOT_TOOLS_COMMIT" ]]; then
+        git -C "$ENGINE_ROOT/depot_tools" fetch --quiet
+        git -C "$ENGINE_ROOT/depot_tools" checkout --quiet "$DEPOT_TOOLS_COMMIT"
+    fi
+    downstream_changed=1
+fi
+phase_done 1
+log 'phase 2 start: git cache'
+if [[ ! -d "$ENGINE_ROOT/git_cache" || -z "$(ls -A "$ENGINE_ROOT/git_cache")" ]]; then
+    die "git cache is empty. Copy a warm cache to $ENGINE_ROOT/git_cache, then re-run. First fill from googlesource is slow; no GCS bootstrap URL is documented in sync.sh."
+fi
+phase_done 2
+log 'phase 3 start: sync'
+if [[ $skip_sync == 1 ]]; then
+    log 'phase 3 skipped by --skip-sync (no stamp written)'
+elif phase_matches 3 && [[ "$(git -C "$SRC_DIR" rev-parse HEAD)" == "$CHROMIUM_COMMIT" && "$(git -C "$SRC_DIR/cef" rev-parse HEAD)" == "$CEF_COMMIT" ]]; then
+    log 'phase 3 already up to date (stamp + both HEADs)'
+else
+    require_no_build_running
+    free_kb=$(df -k "$ENGINE_ROOT" | awk 'END {print $4}')
+    [[ $free_kb -ge 157286400 ]] || die "sync needs at least 150 GB free; found $free_kb KiB"
+    [[ -f "$ENGINE_ROOT/automate/automate-git.py" ]] || die "missing $ENGINE_ROOT/automate/automate-git.py; install the CEF automate script there first"
+    mkdir -p "$SRC_DIR"
+    if [[ ! -d "$SRC_DIR/.git" ]]; then
+        git init "$SRC_DIR"
+        git -C "$SRC_DIR" remote add origin https://chromium.googlesource.com/chromium/src.git
+    fi
+    git -C "$SRC_DIR" fetch --no-tags origin "+refs/tags/$CHROMIUM_TAG:refs/tags/$CHROMIUM_TAG"
+    [[ "$(git -C "$SRC_DIR" rev-parse "$CHROMIUM_TAG^{commit}")" == "$CHROMIUM_COMMIT" ]] || die 'Chromium tag does not match CHROMIUM_COMMIT'
+    git -C "$SRC_DIR" checkout --quiet "$CHROMIUM_TAG"
+    python3 - "$SRC_DIR/../.gclient" <<'PY'
+import ast, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+if p.exists():
+    scope = {}
+    exec(compile(p.read_text(), str(p), 'exec'), {'__builtins__': {}}, scope)
+    solutions = scope['solutions']
+else:
+    solutions = [dict(name='src', managed=False, url='https://chromium.googlesource.com/chromium/src.git', deps_file='DEPS')]
+solution = next(s for s in solutions if s['name'] == 'src')
+solution.setdefault('custom_vars', {})['checkout_pgo_profiles'] = True
+# Preserve any other existing gclient assignments.
+text = p.read_text() if p.exists() else ''
+text += '\nsolutions = ' + repr(solutions) + '\n'
+p.write_text(text)
+PY
+    (cd "$SRC_DIR/.." && gclient sync --nohooks --with_branch_heads --force --reset -D -j 12)
+    python3 "$ENGINE_ROOT/automate/automate-git.py" --download-dir="$ENGINE_ROOT/chromium_git" \
+        --depot-tools-dir="$ENGINE_ROOT/depot_tools" --branch="$CEF_BRANCH" --checkout="$CEF_COMMIT" \
+        --no-chromium-update --no-depot-tools-update --no-build --no-distrib --arm64-build --with-pgo-profiles
+    [[ "$(git -C "$SRC_DIR/cef" rev-parse HEAD)" == "$CEF_COMMIT" ]] || die 'CEF automate did not install the pinned commit'
+    downstream_changed=1
+    phase_done 3
+fi
+log 'phase 4 start: hooks'
+if [[ $skip_hooks == 1 ]]; then
+    log 'phase 4 skipped by --skip-hooks (no stamp written)'
+elif phase_matches 4 && [[ -f "$SRC_DIR/build/util/LASTCHANGE.committime" ]]; then
+    log 'phase 4 already up to date (stamp + LASTCHANGE.committime)'
+else
+    (cd "$SRC_DIR/.." && gclient runhooks -j 12)
+    [[ -f "$SRC_DIR/build/util/LASTCHANGE.committime" ]] || die 'hooks did not generate build/util/LASTCHANGE.committime'
+    phase_done 4
+fi
+log 'phase 5 start: verification'
+status_json="$STATE_DIR/bootstrap-status.json"
+if ! "$SCRIPT_DIR/engine-status" --json "$status_json"; then
+    # A fresh zero-patch tree can be missing only the Open placeholder overlay.
+    if ! python3 - "$status_json" "$SCRIPT_DIR/engine-status" <<'PY'
+import json, subprocess, sys
+checks = json.load(open(sys.argv[1]))['checks']
+failures = [c for c in checks if c['result'] == 'FAIL']
+plan = subprocess.check_output([sys.argv[2], '--patch-plan'], text=True)
+allowed = not any(line.startswith('active\t') for line in plan.splitlines()) and all(c['name'] == 'S-4 Overlay' and 'missing or different:' in c['detail'] for c in failures)
+sys.exit(0 if allowed else 1)
+PY
+    then
+        die 'engine-status failed; inspect its named checks, then run engine-apply --all if Open overlay/patches are pending'
+    fi
+    log 'zero-patch bootstrap complete; Open patches/overlay not yet applied: run engine-apply --all'
+fi
+phase_done 5
