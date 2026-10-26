@@ -293,7 +293,49 @@ The per-Profile layout is:
   AdBlock/lists/                          future ad-block data
 ```
 
-`ProfileDirectories` owns these paths and creates empty directories. `OpenDataRoot.prepare()` runs migration before any store opens and holds a root lock for the process lifetime. Each history/archive/sleep SQLite set is copied into a staging `State` directory on the destination volume, flushed with `fsync`, and published with one atomic macOS directory swap. The JSON journal at `State/profile-migration.json` plus a commit marker resolves each interrupted step. Source cleanup follows durable publication and checks file identity, size, and modification time. Missing destination mains permit migration; destination orphan sidecars are retained under `State/.quarantine/`. A legacy WAL/SHM left by an older interrupted migration joins its destination main. Conflicting mains refuse store opens and retain the entire legacy set. Legacy symlinks are never moved: only regular targets inside the root are eligible; unsafe or dangling targets refuse the store and preserve the sources. This is a **ONE-WAY** disk-layout change: older builds ignore `Profiles/` and would open empty legacy-path databases. The favicon cache stays global and can disclose that some Profile visited an origin; no favicon isolation is claimed.
+`ProfileDirectories` owns these paths and creates empty directories. `OpenDataRoot.prepare()` runs migration before any store opens. Each history/archive/sleep SQLite set is copied into a staging `State` directory on the destination volume, flushed with `fsync`, and published with one atomic macOS directory swap. The JSON journal at `State/profile-migration.json` plus a commit marker resolves each interrupted step. Source cleanup follows durable publication and checks file identity, size, and modification time. Missing destination mains permit migration; destination orphan sidecars are retained under `State/.quarantine/`. A legacy WAL/SHM left by an older interrupted migration joins its destination main. Conflicting mains refuse store opens and retain the entire legacy set. Legacy symlinks are never moved: only regular targets inside the root are eligible; unsafe or dangling targets refuse the store and preserve the sources. This is a **ONE-WAY** disk-layout change: older builds ignore `Profiles/` and would open empty legacy-path databases. The favicon cache stays global and can disclose that some Profile visited an origin; no favicon isolation is claimed.
+
+### Data-root lock
+
+`OpenDataRoot.prepare()` returns a `Preparation` token with its canonical root
+and `migrationReport`. Retain that token until the operation finishes. A
+process-wide `Mutex` registry holds one fd and a reference count for each
+`realpath` root. Repeated preparations, including symlink aliases, share the
+same open file description. They do not take another BSD `flock` on a new fd.
+Synchronous store queues can acquire and release references without an actor hop.
+Migration and live-model directory setup still run on the main actor.
+
+`SnapshotStore` retains a reference before reading snapshot bytes and across
+its writes. Each SQLite connection retains its own reference until it closes,
+including deferred SleepStore close. CLI bootstrap tokens cover the interval
+before SQLite opens. The last reference unlocks and closes the fd and removes
+the migration-cache entry. A later preparation rechecks migration on disk.
+Failed acquisition or migration releases its temporary reference.
+
+The file remains `State/.profile-data.lock`. Acquisition uses `LOCK_EX | LOCK_NB`
+and `O_CLOEXEC`: another process using the same root fails at once with a
+`lock data root` error. Different roots have independent locks. The lock file
+stays on disk after release; its presence alone does not mean the root is busy.
+
+Verification on 2026-10-25 (America/Vancouver), using the release `openkit`
+and fresh synthetic roots only:
+
+| Lock check | Result |
+|---|---|
+| `commands-demo`, 50 iterations | PASS: 103 checks per run; zero lock failures |
+| `sleep-demo`, 50 iterations | PASS: 105 checks per run; zero lock failures; the second SQLite connection reloaded the same history in every run |
+| Two processes, same root | PASS: pause the first `commands-demo` after observing its kernel lock; `profiles DIR list` exits 1 in 0.131 s with `lock data root` / `Resource temporarily unavailable`; the first then completes successfully |
+| Two processes, symlink alias of the same root | PASS: the second process exits 1 with the same lock error in 0.122 s |
+| Two processes, different roots | PASS: both hold their root locks concurrently, then both `commands-demo` processes finish with exit 0 |
+| Root after its owner exits | PASS: a new `profiles DIR list` exits 0 |
+| Last reference released before process exit | PASS: observe the `sleep-demo` review scenario root go from locked to unlocked; pause that still-live process and run `profiles` on the released root, exit 0; resume the first process, 105/105 and exit 0 |
+
+The external Python drivers only launch the real CLIs, observe kernel `flock`,
+and pause/resume their own child processes. Receipts and drivers are outside
+Git at `/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-dataroot-fix-dkc382ib`.
+The full runner result is recorded in [verification.md](verification.md).
+
+### Profiles bootstrap
 
 Bootstrap contract: load → migrate → repair → ensure directories → attach `ProfileArchiveSink` → observe events → save after commands. Profiles CLI mutations save repairs even if the requested command refuses, except deletion: an archive failure must not save any snapshot changes. A `list --json` result keeps maintenance notices on stderr. `suggest --history DIR` selects that snapshot's default Profile history file; a direct path must be `…/Profiles/<dir>/State/history.sqlite3`. The old `State/history.sqlite3` path is a usage error.
 

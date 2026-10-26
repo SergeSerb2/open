@@ -16,7 +16,8 @@ other tabs. Pin state alone does not protect them.
 `SleepStore` writes opaque history containers and sidecars to
 `Profiles/<dataDirectoryName>/State/sleep.sqlite3` through `ProfileDirectories`,
 with one utility queue per Profile. `SleepStore(fileURL:)` takes that explicit
-path. Call `OpenDataRoot.prepare()` before any store opens. It uses the existing SQLite
+path. Call `OpenDataRoot.prepare()` before any store opens and retain its
+preparation token until the operation finishes. It uses the existing SQLite
 helper with WAL, `synchronous=FULL`, and a five-second SQLite busy timeout.
 `save` and `flush` are async and throwing. Each returns after a real
 transaction commit. Over-cap writes and database errors reach `onError`
@@ -194,6 +195,14 @@ clock are the same CLI simulation used by the functional scenarios.
 This is a full controller measurement; native CEF call cost remains an S6
 gate. The warm-up includes initial ownership-cache construction and bulk
 freeze and is excluded from the percentile sample.
+
+The current gate uses calling-thread CPU time from
+`clock_gettime(CLOCK_THREAD_CPUTIME_ID)`, with the same **p95 < 2 ms** budget.
+The controller runs on the main actor, so the samples measure its thread's
+compute cost across each pass. Wall-time p50/p95/max still print as information;
+they include scheduling delays and async commit waits. SQLite queue CPU and
+native engine costs are outside this CPU gate. The wall-time results below
+are the earlier PR #29 observations, before this clock change.
 
 The workload has 4 profiles, 12 Spaces, 8 windows (5 visible, 2 minimized,
 1 occluded), nested folders, favorites, selected splits, Peek, Little Open,

@@ -102,8 +102,10 @@ private struct Fixture {
 /// 100k synthetic URLs plus the pages the scenarios need.
 private func makeHistory(at root: URL) async -> HistoryStore {
     let directories = ProfileDirectories(root: root)
-    do { try await OpenDataRoot.prepare(root: root) }
+    let dataRoot: OpenDataRoot.Preparation
+    do { dataRoot = try await OpenDataRoot.prepare(root: root) }
     catch { profileCLIError("cannot prepare data root: \(error)") }
+    defer { withExtendedLifetime(dataRoot) {} }
     try! directories.ensureProfileDirectories(dataDirectoryName: "Default")
     let history = HistoryStore(fileURL: directories.historyFileURL(dataDirectoryName: "Default"))
     let now = Date()

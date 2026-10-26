@@ -10,6 +10,19 @@ public final class SnapshotStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "open.snapshot", qos: .utility)
     private var pendingWork: DispatchWorkItem?
     private let lock = NSLock()
+    private var dataRootLock: DataRootLock?
+
+    private func holdRootLock() throws {
+        try lock.withLock {
+            if dataRootLock == nil { dataRootLock = try DataRootLock.acquire(root: root) }
+        }
+    }
+
+    @MainActor
+    private func prepare(model: BrowserModel) throws {
+        try holdRootLock()
+        _ = try OpenDataRoot.prepare(root: root, model: model)
+    }
 
     public init(root: URL? = nil) {
         if let root { self.root = root }
@@ -22,6 +35,11 @@ public final class SnapshotStore: @unchecked Sendable {
     /// Debounced save. Call from the main actor after any command.
     @MainActor
     public func scheduleSave(model: BrowserModel) {
+        do { try prepare(model: model) }
+        catch {
+            FileHandle.standardError.write(Data("SnapshotStore prepare failed: \(error)\n".utf8))
+            return
+        }
         let dto = SnapshotMapper.dto(from: model)
         lock.lock()
         pendingWork?.cancel()
@@ -34,6 +52,7 @@ public final class SnapshotStore: @unchecked Sendable {
     /// Synchronous save (also used by flush and the CLI).
     @MainActor
     public func saveNow(model: BrowserModel) throws {
+        try prepare(model: model)
         let dto = SnapshotMapper.dto(from: model)
         lock.lock(); pendingWork?.cancel(); pendingWork = nil; lock.unlock()
         try queue.sync { try write(dto: dto) }
@@ -66,6 +85,7 @@ public final class SnapshotStore: @unchecked Sendable {
     }
 
     public func loadData() throws -> SnapshotFileDTO? {
+        try holdRootLock()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
         let data = try Data(contentsOf: fileURL)
         return try JSONDecoder().decode(SnapshotFileDTO.self, from: data)

@@ -47,7 +47,9 @@ func prepareProfiles(_ model: BrowserModel, root: URL, json: Bool = false) throw
     func notice(_ line: String) {
         if json { FileHandle.standardError.write(Data((line + "\n").utf8)) } else { print(line) }
     }
-    let report = try OpenDataRoot.prepare(root: root, model: model)
+    let preparation = try OpenDataRoot.prepare(root: root, model: model)
+    defer { withExtendedLifetime(preparation) {} }
+    let report = preparation.migrationReport
     for line in report.moved { notice("migration moved \(line)") }
     for line in report.skipped { notice("migration skipped \(line)") }
     let repaired = model.repairMissingProfileReferences()
