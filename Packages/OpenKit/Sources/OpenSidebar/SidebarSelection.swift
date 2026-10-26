@@ -7,6 +7,7 @@ public final class SidebarSelection {
     public private(set) var ids: [ItemID] = []
     public private(set) var anchor: ItemID?
     public var isEmpty: Bool { ids.isEmpty }
+    @ObservationIgnored var onChange: (@MainActor () -> Void)?
     @ObservationIgnored private var members: Set<ItemID> = []
     @ObservationIgnored private var states: [ItemID: WeakRowSelectionState] = [:]
     @ObservationIgnored private var extensionBase: Set<ItemID>?
@@ -45,8 +46,15 @@ public final class SidebarSelection {
         let kept = ids.filter { visible.contains($0) }
         let positions = Dictionary(uniqueKeysWithValues: displayOrder.enumerated().map { ($1, $0) })
         let oldIndex = anchor.flatMap { positions[$0] }
+        let keptSet = Set(kept)
+        let known = (order ?? displayOrder).filter { keptSet.contains($0) }
+        let ranks = Dictionary(uniqueKeysWithValues: (known + kept.filter { !known.contains($0) }).enumerated().map { ($1, $0) })
         let nearest = oldIndex.flatMap { index in
-            kept.min { abs((positions[$0] ?? index) - index) < abs((positions[$1] ?? index) - index) }
+            kept.min {
+                let left = positions[$0].map { abs($0 - index) } ?? Int.max
+                let right = positions[$1].map { abs($0 - index) } ?? Int.max
+                return left == right ? ranks[$0, default: Int.max] < ranks[$1, default: Int.max] : left < right
+            }
         }
         let keptAnchor = anchor.flatMap { visible.contains($0) ? $0 : nil } ?? nearest ?? kept.first
         self.visible = visible
@@ -69,8 +77,10 @@ public final class SidebarSelection {
         let shrank = !members.subtracting(seen).isEmpty
         members = seen
         if shrank { releaseHiddenStates() }
-        if ids != ordered { ids = ordered }
+        let changed = ids != ordered
+        if changed { ids = ordered }
         if self.anchor != anchor { self.anchor = anchor }
+        if changed { onChange?() }
     }
 
     func rowState(for id: ItemID) -> SidebarRowSelectionState {

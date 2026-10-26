@@ -93,13 +93,37 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         accent ?? Core.brandBlue.resolved(appearance)
     }
 
-    /// Guess pending C5/C6: stronger accent for small marks and links.
-    /// Folder glyphs retain their separately measured accent role.
-    public func contrastAccent(_ appearance: ContentAppearance) -> RGBA {
-        if appearance == .light { return shadedDarkAccent ?? titleColor(.light).withAlpha(1) }
-        if let tintedLightAccent { return tintedLightAccent }
-        let c = accentColor(.dark)
-        return RGBA(c.red * 0.55 + 0.45, c.green * 0.55 + 0.45, c.blue * 0.55 + 0.45)
+    /// Guess pending C5/C6: preserve the Space accent if it meets the target,
+    /// then try the theme's darker accent, then the title color. Folder glyphs
+    /// retain their separately measured accent role. Callers with a solid card
+    /// supply its actual background; rows conservatively cover the gradient.
+    public func contrastAccent(_ appearance: ContentAppearance, against background: RGBA? = nil, minimumContrast: Double = 3) -> RGBA {
+        let backgrounds: [RGBA]
+        if let background { backgrounds = [background] }
+        else {
+            let field = ThemeField.Evaluator(style: self, windowSize: CGSize(width: 1000, height: 1000), isActive: true)
+            backgrounds = [0.0, 0.5, 1.0].flatMap { u in
+                [0.0, 0.5, 1.0].map { v in
+                    let (r, g, b) = field.color(u: u, v: v)
+                    return RGBA(r, g, b)
+                }
+            }
+        }
+        func luminance(_ color: RGBA) -> Double {
+            func linear(_ value: Double) -> Double {
+                let x = min(1, max(0, value))
+                return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4)
+            }
+            return linear(color.red) * 0.2126 + linear(color.green) * 0.7152 + linear(color.blue) * 0.0722
+        }
+        for candidate in [accentColor(appearance), shadedDarkAccent].compactMap({ $0 }) {
+            let ink = luminance(candidate)
+            if backgrounds.allSatisfy({ base in
+                let background = luminance(base)
+                return (max(ink, background) + 0.05) / (min(ink, background) + 0.05) >= minimumContrast
+            }) { return candidate.withAlpha(1) }
+        }
+        return titleColor(appearance).withAlpha(1)
     }
 
     /// Tooltip capsule fill: the theme's `light.title`, opaque (exact match, F0021–F0033).
