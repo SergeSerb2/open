@@ -143,7 +143,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         reveal.onChange = { [weak self] shown in self?.setRevealCard(shown) }
         // Another app took the pointer: no more pointer events will come to hide the card.
         trafficLightObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismissSidebarReveal() }
+            MainActor.assumeIsolated {
+                // Tagged automation owns the virtual pointer until process exit.
+                // Another agent activating an app does not move that pointer.
+                if BrowserWindowController.pointerEventFilter == nil { self?.dismissSidebarReveal() }
+            }
         })
         pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             MainActor.assumeIsolated {

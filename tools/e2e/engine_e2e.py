@@ -47,6 +47,55 @@ EXT = {
 CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 
+class FocusInterruption(RuntimeError):
+    def __init__(self, message, evidence):
+        super().__init__(message)
+        self.evidence = evidence
+
+
+class FocusTracker:
+    """Check-boundary trace. Only native-focus steps depend on activation."""
+    def __init__(self):
+        self.apps = []
+        self.checkpoints = {}
+
+    def loss(self):
+        interruptions = []
+        for app in self.apps:
+            checkpoint = self.checkpoints.get(app.pid, 0)
+            steps = app.native_steps[checkpoint:]
+            if not steps:
+                continue
+            events = app.activation_trace if app.closed else app.call("activation-events")
+            # A background application is expected during socket/model/pointer
+            # work. Only loss after native input's readiness grant interrupts.
+            for event in events:
+                if event["uptime"] >= min(steps) and event.get("frontmostPID") not in (None, 0, app.pid):
+                    interruptions.append(dict(event, openPID=app.pid))
+        return interruptions
+
+    def checkpoint(self):
+        self.checkpoints = {app.pid: len(app.native_steps) for app in self.apps}
+
+
+class CheckedResults(dict):
+    def __init__(self, tracker):
+        super().__init__()
+        self.tracker = tracker
+
+    def __setitem__(self, key, value):
+        if isinstance(value, dict) and "ok" in value:
+            interruptions = self.tracker.loss()
+            if interruptions:
+                # Retain even a successful assertion as INTERRUPTED. It cannot
+                # count as a pass in this attempt. Retry from a fresh fixture,
+                # since a dispatched key may already have mutated its state.
+                super().__setitem__(key, {"status": "INTERRUPTED", "assertion": value, "focus": interruptions})
+                raise FocusInterruption("foreground lost during " + key, interruptions)
+            self.tracker.checkpoint()
+        super().__setitem__(key, value)
+
+
 class Open:
     def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
         if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
@@ -63,6 +112,10 @@ class Open:
             subprocess.run(["nice", "-n", "10", "xcrun", "swiftc", "-O", "-swift-version", "6", "-parse-as-library",
                             activator_source, "-o", self.activator], check=True)
         self.pid = None
+        self.closed = False
+        self.native_steps = []
+        self.activation_trace = []
+        self.focus_tracker = None
         env = dict(os.environ, OPEN_USER_DATA=user_data)
         env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
@@ -95,14 +148,15 @@ class Open:
         raise RuntimeError("Open did not start; see %s" % log_path)
 
     def call(self, cmd, timeout=120, **args):
-        foreground_input = cmd in ("key", "focus", "mouse") or (cmd == "window-focus" and args.get("activate"))
+        foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
         if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
             # verified PID; a bundle identifier can name another Open worktree.
             activation = subprocess.run([self.activator, str(self.pid), self.executable], capture_output=True, text=True, timeout=10)
             if activation.returncode:
-                raise RuntimeError("Exact-PID activation refused: " + activation.stdout.strip() + " " + activation.stderr.strip())
+                native = self.call("native-focus-state")
+                raise FocusInterruption("Exact-PID activation refused: " + activation.stdout.strip() + " " + activation.stderr.strip(), [native])
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(self.sock)
@@ -115,8 +169,19 @@ class Open:
             buf += chunk
         s.close()
         resp = json.loads(buf)
+        if foreground_input and resp.get("nativeInputStart", 0) > 0:
+            self.native_steps.append(resp["nativeInputStart"])
         if not resp.get("ok"):
+            if foreground_input:
+                native = self.call("native-focus-state")
+                if not native["active"] or native["frontmostPID"] != self.pid:
+                    raise FocusInterruption("%s: %s" % (cmd, resp.get("error")), [native])
             raise RuntimeError("%s: %s" % (cmd, resp.get("error")))
+        if cmd == "mouse" and self.focus_tracker:
+            # Pointer checks use the tagged virtual pointer and socket state,
+            # not application activation. A later native key/capture step
+            # establishes its own readiness grant and trace interval.
+            self.focus_tracker.checkpoint()
         return resp["result"]
 
     def eval(self, tab, js, **kw):
@@ -131,6 +196,12 @@ class Open:
                 time.sleep(1)
 
     def quit(self):
+        if self.closed:
+            return
+        try:
+            self.activation_trace = self.call("activation-events")
+        except Exception:
+            pass
         try:
             self.call("quit")
         except Exception:
@@ -157,6 +228,7 @@ class Open:
         if os.path.exists(self.launch_log_path):
             self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
         self.log.close()
+        self.closed = True
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
@@ -2750,13 +2822,18 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
+    tracker = FocusTracker()
+
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+        app = Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+        app.focus_tracker = tracker
+        tracker.apps.append(app)
+        return app
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
     def framework_uuid(path):
@@ -2769,31 +2846,31 @@ def main():
     stamp_path = os.path.join(ROOT, 'Vendor/cef/.open-source')
     stamp = Path(stamp_path).read_text().strip() if os.path.exists(stamp_path) else ''
     results['engine'] = {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed', 'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
-    try:
+    def execute():
         if opts.only == "shell":
-            results["shell"] = {}
+            results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
         elif opts.only in ("commandbar", "actions"):
-            results[opts.only] = {}
+            results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
         elif opts.only == "window":
-            results["window"] = {}
+            results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config)
         elif opts.only == "sidebar":
-            results["sidebar"] = {}
+            results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
         elif opts.only == "peek":
-            results["peek"] = {}
+            results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
         elif opts.only == "measure":
-            results["measure"] = {}
+            results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
             app = factory(urls=("https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
-                results[opts.only] = {}
+                results[opts.only] = CheckedResults(tracker)
                 if opts.only == "extensions":
                     extension_checks(app, opts.style, results["extensions"])
                 elif opts.only == "tabstrip":
@@ -2802,9 +2879,35 @@ def main():
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
-    except Exception as error:
-        results.setdefault(opts.only, {})["suite"] = {"ok": False, "error": str(error)}
-        traceback.print_exc()
+
+    interrupted_attempts = []
+    for attempt in range(1, 4):
+        tracker = FocusTracker()
+        shutil.rmtree(user_data, ignore_errors=True)
+        interruption = None
+        try:
+            execute()
+        except FocusInterruption as error:
+            interruption = {"reason": str(error), "focus": error.evidence}
+        except Exception as error:
+            loss = tracker.loss()
+            if loss:
+                interruption = {"reason": str(error), "focus": loss}
+            else:
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(error)})
+                traceback.print_exc()
+        finally:
+            for instance in tracker.apps:
+                instance.quit()
+        if interruption is None:
+            break
+        interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
+                                         checks=dict(results.get(opts.only, {}))))
+        print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
+        if attempt == 3:
+            dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
+                "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": 3})
+    results["interrupted_attempts"] = interrupted_attempts
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
@@ -2813,13 +2916,15 @@ def main():
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
-            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED"):
+            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
     failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)
+    if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):
+        sys.exit(2)
 
 
 if __name__ == "__main__":

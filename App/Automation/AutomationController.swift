@@ -22,6 +22,8 @@
     private var pointerRequestID = 0
     private var applicationObservers: [NSObjectProtocol] = []
     private var activationEvents: [[String: Any]] = []
+    private var workspaceObserver: NSObjectProtocol?
+    private var nativeInputStart: Double = 0
 
     init(app: AppDelegate) {
       self.app = app
@@ -32,13 +34,28 @@
             guard let self else { return }
             self.activationEvents.append(["event": eventName,
               "uptime": ProcessInfo.processInfo.systemUptime, "active": NSApp.isActive,
-              "keyWindow": NSApp.keyWindow?.windowNumber ?? 0])
+              "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
+              "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
+              "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0])
             if self.activationEvents.count > 256 { self.activationEvents.removeFirst() }
           }
         })
       }
+      workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] notification in
+        let target = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        let name = target?.localizedName ?? "unknown", pid = target?.processIdentifier ?? 0
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.activationEvents.append(["event": "frontmostChanged", "uptime": ProcessInfo.processInfo.systemUptime,
+            "frontmostApp": name, "frontmostPID": pid])
+          if self.activationEvents.count > 256 { self.activationEvents.removeFirst() }
+        }
+      }
     }
-    isolated deinit { applicationObservers.forEach(NotificationCenter.default.removeObserver) }
+    isolated deinit {
+      applicationObservers.forEach(NotificationCenter.default.removeObserver)
+      if let workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver) }
+    }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -50,12 +67,15 @@
     func handle(_ data: Data) async -> Data {
       var id: Any = NSNull()
       var response: [String: Any]
+      var inputCommand = false
       do {
         guard let request = try JSONSerialization.jsonObject(with: data) as? [String: Any],
           let cmd = request["cmd"] as? String
         else { throw Failure(message: "expected {\"cmd\": …}") }
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
+        inputCommand = cmd == "key" || cmd == "focus" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
         response = ["id": id, "ok": true, "result": result]
       } catch let failure as Failure {
@@ -63,6 +83,7 @@
       } catch {
         response = ["id": id, "ok": false, "error": "\(error.localizedDescription)"]
       }
+      if inputCommand { response["nativeInputStart"] = nativeInputStart }
       let safe =
         JSONSerialization.isValidJSONObject(response)
         ? response : ["id": id, "ok": false, "error": "unserializable result"]
@@ -84,6 +105,11 @@
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "activation-events": return activationEvents
+      case "native-focus-state":
+        return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
+          "uptime": ProcessInfo.processInfo.systemUptime,
+          "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
+          "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0] as [String: Any]
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
@@ -309,7 +335,6 @@
       case "mouse":
         let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
         guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
-        try await activateForInput(target)
         pointerRequestID += 1
         let motionTag = Self.syntheticPointerTag + pointerRequestID
         func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
@@ -919,6 +944,7 @@
         if NSApp.isActive { target.makeKeyAndOrderFront(nil) }
         try await Task.sleep(for: .milliseconds(10))
       }
+      nativeInputStart = ProcessInfo.processInfo.systemUptime
     }
 
     private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
