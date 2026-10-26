@@ -135,6 +135,8 @@ targets:
         product: OpenStore
       - package: OpenKit
         product: OpenWeb
+      - package: OpenKit
+        product: OpenFeatures
       - target: OpenHelper
         embed: false
         link: false
