@@ -3,6 +3,10 @@ import OpenModel
 
 public struct ImportReport: Sendable {
     public var totalItems: Int = 0
+    public var profiles: Int = 0
+    public var profilesGuessed: Int = 0
+    public var chromiumDirsFound: Int = 0
+    public var chromiumDirsMissing: Int = 0
     public var spaces: Int = 0
     public var pinnedTabs: Int = 0
     public var todayTabs: Int = 0
@@ -127,7 +131,7 @@ public struct ArcImporter {
     }
 
     @MainActor
-    public func importAll() throws -> ArcImportResult {
+    public func importAll(directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
         let sidebarURL = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: sidebarURL), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ImportError.missingSidebar
@@ -163,33 +167,125 @@ public struct ArcImporter {
             i += 2
         }
 
-        // Profiles: one per distinct Space.profile value. All observed installs use {default:true}.
+        // Multi-Profile Storable field shapes remain inferred. Unknown shapes are ignored.
+        struct ProfileMetadata {
+            var name: String?
+            var directory: String?
+        }
+        func readJSON(_ path: String) -> Any? {
+            guard let data = try? Data(contentsOf: arcDirectory.appendingPathComponent(path)) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data)
+        }
+        func entries(_ raw: Any?) -> [(String, [String: Any])] {
+            if let array = raw as? [Any] {
+                var result: [(String, [String: Any])] = []
+                var index = 0
+                while index + 1 < array.count {
+                    if let id = array[index] as? String, let object = array[index + 1] as? [String: Any] { result.append((id, object)) }
+                    index += 2
+                }
+                return result
+            }
+            guard let object = raw as? [String: Any] else { return [] }
+            for wrapper in ["profiles", "storableProfiles", "profileContainers", "storableProfileContainers"] {
+                if let nested = object[wrapper] { return entries(nested) }
+            }
+            return object.keys.sorted().compactMap { key in (object[key] as? [String: Any]).map { (key, $0) } }
+        }
+        func string(_ object: [String: Any], _ keys: [String]) -> String? {
+            keys.compactMap { object[$0] as? String }.first { !$0.isEmpty }
+        }
+        func refKey(_ raw: Any?) -> String {
+            if let raw = raw as? String { return raw }
+            guard let object = raw as? [String: Any] else { return "default" }
+            if object["default"] as? Bool == true { return "default" }
+            return object.keys.sorted().compactMap { object[$0] as? String }.first ?? "default"
+        }
+        var metadata: [String: ProfileMetadata] = [:]
+        var metadataOrder: [String] = []
+        var sourceDirectories: Set<String> = []
+        func mergeMetadata(_ key: String, name: String?, directory: String?) {
+            if metadata[key] == nil { metadataOrder.append(key) }
+            let old = metadata[key]
+            metadata[key] = ProfileMetadata(name: old?.name ?? name, directory: old?.directory ?? directory)
+        }
+        for (key, object) in entries(readJSON("StorableProfiles.json")) {
+            let id = string(object, ["id"]) ?? key
+            let directory = string(object, ["profileDirectoryBasename", "directoryBasename", "directory"])
+            mergeMetadata(id, name: string(object, ["name", "displayName", "title"]), directory: directory)
+            if let directory { sourceDirectories.insert(directory) }
+        }
+        var profileRefBySpace: [String: Any] = [:]
+        for (key, object) in entries(readJSON("StorableProfileContainers.json")) {
+            let id = string(object, ["id"]) ?? key
+            let name = string(object, ["name", "displayName", "title"])
+            let directory = string(object, ["profileDirectoryBasename", "directoryBasename", "directory"])
+            if name != nil || directory != nil { mergeMetadata(id, name: name, directory: directory) }
+            if let ref = object["profile"] ?? object["profileID"] {
+                profileRefBySpace[string(object, ["spaceID"]) ?? key] = ref
+            }
+            if let spaceIDs = object["spaceIDs"] as? [String] {
+                for spaceID in spaceIDs { profileRefBySpace[spaceID] = object["profile"] ?? object["profileID"] ?? id }
+            }
+        }
+        if let local = readJSON("User Data/Local State") as? [String: Any],
+           let info = (local["profile"] as? [String: Any])?["info_cache"] as? [String: Any] {
+            for directory in info.keys.sorted() {
+                let key = metadataOrder.first { metadata[$0]?.directory == directory } ?? (directory == "Default" ? "default" : directory)
+                mergeMetadata(key, name: (info[directory] as? [String: Any])?["name"] as? String, directory: directory)
+                sourceDirectories.insert(directory)
+            }
+        }
+        for directory in sourceDirectories {
+            var isDirectory: ObjCBool = false
+            let safe = !directory.isEmpty && directory != "." && directory != ".." && !directory.contains("/")
+            let found = safe && FileManager.default.fileExists(atPath: arcDirectory.appendingPathComponent("User Data").appendingPathComponent(directory).path, isDirectory: &isDirectory) && isDirectory.boolValue
+            if found { report.chromiumDirsFound += 1 } else { report.chromiumDirsMissing += 1 }
+        }
+        let defaultMetadataKey: String? = metadata["default"] != nil ? "default" : nil
+        func canonicalKey(_ ref: String) -> String {
+            if ref == "default" || ref == defaultMetadataKey { return "default" }
+            if metadata[ref] != nil { return ref }
+            if let match = metadataOrder.first(where: { metadata[$0]?.directory == ref }) {
+                return match == defaultMetadataKey ? "default" : match
+            }
+            return ref == "Default" ? "default" : ref
+        }
+        func metadataFor(_ key: String) -> ProfileMetadata? {
+            if key == "default" { return defaultMetadataKey.flatMap { metadata[$0] } }
+            return metadata[key]
+        }
         var profileIDByKey: [String: ProfileID] = [:]
         var profiles: [Profile] = []
         func profileID(for raw: Any?) -> ProfileID {
-            let key: String
-            if let dict = raw as? [String: Any], dict["default"] as? Bool == true {
-                key = "default"
-            } else if let dict = raw as? [String: Any], let s = dict.values.first as? String {
-                key = s
-            } else { key = "default" }
+            let key = canonicalKey(refKey(raw))
             if let existing = profileIDByKey[key] { return existing }
             let pid = ProfileID(rawValue: Self.deterministicUUID(for: key, namespace: "profile"))
             profileIDByKey[key] = pid
-            let name = key == "default" ? "Default" : "Profile"
-            let dirName = key == "default" ? "Default" : key
-            profiles.append(Profile(id: pid, name: name, dataDirectoryName: dirName))
+            let found = metadataFor(key)
+            let fallback = "Profile-" + pid.description.prefix(8).uppercased()
+            var directory = key == "default" ? "Default" : (existingDirectories[pid] ?? found?.directory ?? fallback)
+            directory = String(directory.unicodeScalars.map { scalar -> Character in
+                CharacterSet.controlCharacters.contains(scalar) || "/:\\".unicodeScalars.contains(scalar) ? "-" : Character(String(scalar))
+            })
+            if directory.isEmpty || directory == "." || directory == ".." { directory = fallback }
+            if key != "default", directory.caseInsensitiveCompare("Default") == .orderedSame { directory = "Default-named" }
+            let stem = directory
+            var suffix = 2
+            while profiles.contains(where: { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame })
+                || (key != "default" && directoryNamesToAvoid.contains(directory.lowercased())
+                    && existingDirectories[pid]?.caseInsensitiveCompare(directory) != .orderedSame) {
+                directory = "\(stem)-\(suffix)"; suffix += 1
+            }
+            profiles.append(Profile(id: pid, name: found?.name ?? (key == "default" ? "Default" : "Profile"), dataDirectoryName: directory))
+            if key != "default", found?.name == nil && found?.directory == nil { report.profilesGuessed += 1 }
             return pid
         }
-
-        // Pre-create profiles in Space order.
-        for (_, obj) in spacesRaw { _ = profileID(for: obj["profile"]) }
-        if profiles.isEmpty {
-            let pid = ProfileID(rawValue: Self.deterministicUUID(for: "default", namespace: "profile"))
-            profileIDByKey["default"] = pid
-            profiles.append(Profile(id: pid, name: "Default", dataDirectoryName: "Default"))
-        }
-        let defaultProfileID = profileIDByKey["default"] ?? profiles[0].id
+        // Space order controls display order and collision suffixes. Sidebar links win.
+        for (id, object) in spacesRaw { _ = profileID(for: object["profile"] ?? profileRefBySpace[id]) }
+        for key in metadataOrder { _ = profileID(for: key) }
+        _ = profileID(for: ["default": true])
+        let defaultProfileID = profiles.first(where: { $0.dataDirectoryName == "Default" })?.id ?? profiles[0].id
 
         // Icon / theme helpers.
         func spaceIcon(from customInfo: [String: Any]?) -> SpaceIcon? {
@@ -375,7 +471,7 @@ public struct ArcImporter {
         var spaces: [Space] = []
         var reachedArcIDs: Set<String> = []
         for (spaceArcID, obj) in spacesRaw {
-            let pid = profileID(for: obj["profile"])
+            let pid = profileID(for: obj["profile"] ?? profileRefBySpace[spaceArcID])
             let info = obj["customInfo"] as? [String: Any]
             let title = (obj["title"] as? String) ?? "Space"
             let space = Space(id: Self.spaceID(forArcID: spaceArcID), title: title, icon: spaceIcon(from: info), theme: spaceTheme(from: info), profileID: pid)
@@ -396,27 +492,24 @@ public struct ArcImporter {
         }
         report.spaces = spaces.count
 
-        // Favorites (topApps) per profile. Observed: single container.
-        if let topApps = holder["topAppsContainerIDs"] as? [Any], topApps.count >= 2, let favCID = topApps[1] as? String,
-           let container = itemsByID[favCID] {
-            reachedArcIDs.insert(favCID)
-            var favorites: [Tab] = []
-            for childID in (container["childrenIds"] as? [String]) ?? [] {
-                reachedArcIDs.insert(childID)
-                if let node = buildNode(arcID: childID), let tab = node.tab {
-                    if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
-                    favorites.append(tab)
+        // Every alternating ProfileRef/container pair owns its own Favorites.
+        if let topApps = holder["topAppsContainerIDs"] as? [Any] {
+            var offset = 0
+            while offset + 1 < topApps.count {
+                defer { offset += 2 }
+                guard let containerID = topApps[offset + 1] as? String, let container = itemsByID[containerID] else { continue }
+                let owner = profileID(for: topApps[offset])
+                reachedArcIDs.insert(containerID)
+                for childID in (container["childrenIds"] as? [String]) ?? [] {
+                    reachedArcIDs.insert(childID)
+                    if let tab = buildNode(arcID: childID)?.tab {
+                        if tab.pinnedURL == nil { tab.pinnedURL = tab.url }
+                        profiles.first(where: { $0.id == owner })?.favorites.append(tab)
+                    }
                 }
             }
-            // Attach to the profile named by topAppsContainerIDs[0]; default profile in practice.
-            let favProfileID: ProfileID
-            if let ref = topApps[0] as? [String: Any], ref["default"] as? Bool == true {
-                favProfileID = defaultProfileID
-            } else { favProfileID = defaultProfileID }
-            if let profile = profiles.first(where: { $0.id == favProfileID }) {
-                profile.favorites = favorites
-            }
         }
+        report.profiles = profiles.count
 
         // Opener references: remap Arc opener ids to Open tabs (best effort by URL+order is skipped;
         // we keep opener unset because Arc ids do not survive. This is deliberate: openerID uses Open IDs.)

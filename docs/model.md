@@ -1,4 +1,4 @@
-# OpenKit model design (M1)
+# OpenKit model design (M1 + M5 Profiles)
 
 Status: implemented. Package: [OpenKit](../Packages/OpenKit/Package.swift).
 No third-party dependencies. SQLite uses the system `SQLite3` module.
@@ -55,7 +55,7 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 ### Commands
 
 State changes only through named commands on `BrowserModel`:
-`newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`.
+`newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
 Query: `isPinned(tabID:)`.
 `moveNode`, `addFavorite`, and `removeFavorite` return `false` when they refuse a move. `makeSplit` and `createFolder` return `nil`. A refused command changes nothing, emits no event, and registers no undo.
 
@@ -90,22 +90,22 @@ Query: `isPinned(tabID:)`.
 - Every archive entry stores the tab's direct parent as `originalLocation` (`pinned:<uuid>`, `today:<uuid>`, `folder:<uuid>`, `favorites:<uuid>`, `split:<uuid>`; see `NodeParent.archiveLocation`), plus the owning Space and profile.
 - `restoreArchivedTab(_ record:)` rebuilds the tab from the record payload with its original ID. It places the tab, in this order: at the top of the original parent if that parent still exists (a split only while it has fewer than 4 panes); else at the top of the original Space's Today section; else at the top of the focused Space's Today section. The pinned-URL rule applies for the destination. The tab gets `lastActiveAt = now`, so auto-archive does not take it again at once. A record whose ID is already in the sidebar returns that tab unchanged. Undo sends the tab back to the archive.
 - `ArchivedTabRecord` lives in OpenModel, so the model does not depend on OpenStore.
-- `ArchiveSink` has two calls: `archive(_ entries: [ArchiveEntry])` and `discardArchived(ids:)`. A bulk command makes one `archive` call for all of its tabs. When a tab comes back to the sidebar (restore, or undo of a close, clear, or Space delete), the model calls `discardArchived`. So a tab is never in the sidebar and in the archive at the same time.
+- `ArchiveSink` has asynchronous `archive(_ entries: [ArchiveEntry])` and `discardArchived(ids:)` paths, plus throwing `archiveForProfileDeletion(_:directoryName:)` for confirmed deletion writes. A bulk command makes one `archive` call for all of its tabs. When a tab comes back to the sidebar (restore, or undo of a close, clear, or Space delete), the model calls `discardArchived`. So a tab is never in the sidebar and in the archive at the same time.
 
 #### Undo
 
-- Every command registers undo on the injected `UndoManager?`, except `archiveExpiredTabs`. Auto-archive runs in the background, so Cmd-Z must not bring old tabs back. The archive is its history.
+- Every command registers undo on the injected `UndoManager?`, except `archiveExpiredTabs` and load maintenance (`repairMissingProfileReferences`). Auto-archive runs in the background, so Cmd-Z must not bring old tabs back. The archive is its history.
 - One command is one undo step. With per-event grouping (the AppKit default), the event's group holds the step. With `groupsByEvent = false` (the CLI), the model opens one group per command. The model never changes the undo manager's settings.
 - Undo and redo call internal primitives only, never public commands. So an undo step never registers a second step. Redo runs the change again and captures fresh state for the next undo.
 - `archiveExpiredTabs` can remove Today tabs and dissolve Today splits under older undo steps. Each undo step checks that its nodes are still where it expects. It skips the ones that are gone, so it never duplicates a node or drops a tab that was not archived.
 
 ### Events and lookup
 
-After each structural command, `BrowserModel` sends synchronous main-actor `TreeChange` events to registered observers: `.insert(parent:index:nodeID)`, `.remove(parent:index:nodeID)`, `.move(fromParent:fromIndex:toParent:toIndex:nodeID)`, `.reload(parent)`.
+After each structural command, `BrowserModel` sends synchronous main-actor `TreeChange` events to registered observers: `.insert(parent:index:nodeID)`, `.remove(parent:index:nodeID)`, `.move(fromParent:fromIndex:toParent:toIndex:nodeID)`, `.reload(parent)`, `.spaceProfileChanged(spaceID:from:to:)`.
 `NodeParent` is `.spacePinned`, `.spaceToday`, `.folder`, `.favorites`, or `.splitPane`.
 Single-node commands send precise events: `newTab` one `.insert`, `moveNode` / `addFavorite` / `removeFavorite` one `.move`, `closeTab` one `.remove`. Commands that change several lists at once (`makeSplit`, `unsplit`, a split collapse) send one `.reload` per changed parent.
 Bulk commands make one pass. `clearToday` sends one `.reload`. `archiveExpiredTabs(now:)` sends one `.reload` per parent whose list changed (the Today section, a folder, or a split).
-Property changes send no event. Observation covers them.
+Other property changes send no event. Observation covers them. A Space Profile change is an explicit event so the future engine adapter can recreate its web contents.
 
 `BrowserModel` keeps `index: [ItemID: SidebarNode]` and `parentByID: [ItemID: NodeParent]`. Lookup is O(1).
 Commands update both maps in place. Insert and remove cost O(size of the subtree). A move costs O(1) for the maps, because only the moved node's own parent entry changes. The pinned-URL rule adds O(tabs in the subtree) when a move enters or leaves Pinned or Favorites.
@@ -119,11 +119,13 @@ Child lists change in place, so a move does not copy the parent's array.
 DTOs are separate from the live classes. `SnapshotFileDTO.schemaVersion` is 1.
 The file is `<root>/State/browser.json`. Root is injectable. Default root is `~/Library/Application Support/Open`.
 `scheduleSave(model:)` encodes on the main actor, then writes on a background queue after a 1 s debounce.
-`saveNow(model:)` writes at once. `flush()` drains the queue. Use `saveNow` at quit so the last state is on disk.
+`saveNow(model:)` throws on failure and returns only after the atomic write is durable. `flush()` drains the queue. Use `saveNow` at quit so the last state is on disk.
 Writes are atomic: write a temp file, then rename over the target.
-`load()` rebuilds the live model. A missing file returns nil.
+`load()` rebuilds the live model and calls `OpenDataRoot.prepare()` before returning. A missing file prepares the root and returns nil.
 
 ### ArchiveStore (SQLite)
+
+`ArchiveStore(fileURL:)` opens a Profile file from `ProfileDirectories.archiveFileURL(for:)`. `ProfileArchiveSink` routes each model batch by Profile and forwards undo discards to every created store.
 
 Table `archived_tabs`: `id`, `url`, `title`, `space_id`, `profile_id`, `archived_at`, `reason` (`closed` / `autoArchived` / `clearedToday` / `folderDeleted`), `original_location`, `payload` (full tab DTO JSON for restore).
 `ArchiveStore` implements `ArchiveSink`. `archive(_:)` copies plain values on the main actor. JSON encoding and the SQLite writes run on a private serial queue, in one transaction per call. `discardArchived(ids:)` deletes rows on the same queue.
@@ -132,6 +134,8 @@ Query API: `recent(limit:)`, `search(_:limit:)`, `restore(id:)` (returns the rec
 The restore flow is: `ArchiveStore.restore(id:)` returns the record, then `BrowserModel.restoreArchivedTab(_:)` puts the tab back.
 
 ### HistoryStore (SQLite + FTS5)
+
+`HistoryStore(fileURL:)` opens a Profile file from `ProfileDirectories.historyFileURL(for:)`. The former `root:` initializer is removed.
 
 Tables: `urls(id, url UNIQUE, title, visit_count, typed_count, last_visit)`, `visits(id, url_id, time, transition)`, and external-content FTS5 `history_fts(title, url)` kept in sync by triggers. WAL mode is on.
 `recordVisit` upserts the URL and appends a visit. `recordVisitsBulk` remains the URL-only bench path. Phase 2 uses `importHistoryBatch` to write visits and recompute counts from those visits.
@@ -259,6 +263,140 @@ The external compile command used `xcrun swiftc -c -target arm64-apple-macos26.0
 
 No real Keychain item was read or created. No real Login Data, Cookies, or Web Data was decrypted or opened for this correction pass. No real secret consent run was attempted. All real sidebar and history output databases were deleted after verification. Counts-only receipts and synthetic driver files remain outside the repository under `/tmp/open-pr24-security-a9kcykir`; no personal data or generated data files are committed.
 
+## Profiles (M5 core)
+
+Implemented the non-engine steps of [profiles.md](plans/profiles.md), including its Lead decisions. The App and engine steps remain deferred. The model performs no I/O. No snapshot DTO changed; `schemaVersion` remains 1.
+
+`createProfile` trims and validates names, rejects case-insensitive duplicates, and creates `Default` for the first Profile when that directory is available, or a unique `Profile-<8 uppercase hex>` name. Bootstrap reserves every existing `Profiles/` entry and every name in `State/retired-profile-dirs.json`, without case sensitivity. The deletion sink durably records that tombstone before removing the Profile. Undo and disk wipes retain the tombstone. Names have a 64-grapheme limit and reject path separators, colons, control characters, `.` and `..`. Rename never changes the directory. Default identity is the Profile whose directory is exactly `Default`, else the first Profile. Display order is array order.
+
+`deleteProfile` refuses the default Profile and any Profile with assigned Spaces. It calls the throwing `archiveForProfileDeletion` path and waits for the FULL-synchronous SQLite commit before removing any model entries. An archive failure throws and keeps the Profile, Favorites, events, and undo stack unchanged. Redo failures reach `onArchiveError`. Undo restores the same Profile and Favorites and discards their archive rows. The model never deletes disk data. An explicit disk wipe is separate; after engine teardown, the App can call `ProfileDirectories.deleteProfileData`. Undo after a wipe restores the sidebar, with empty browsing data.
+
+`moveSpace(id:toProfile:)` changes only the Space's Profile reference. Tabs keep their IDs, URLs and pinned URLs; Favorites remain with their owner Profile. It emits one `.spaceProfileChanged`, with an inverse event on undo. The combined `updateSpace` editor emits the same event and retains one undo step for all four edited values. A missing target Profile refuses the entire edit, with no event or undo step. `createSpace` falls back to the default for a missing Profile. `repairMissingProfileReferences` repairs dangling references in Space order, emits each change, and registers no undo. Snapshot mapping stays lossless; bootstrap/CLI maintenance owns repair.
+
+`ProfilesSettingsModel` exposes ordered rows, name and delete reasons, command wrappers, the Profile indicator, and App-owned pending disk-wipe data. `spaceProfileChoices`, `SpaceCreationProfilePickerModel`, and `ChangeProfileRequest` supply the creation picker and confirm-before-move data. The picker starts with the window's focused Space Profile, then falls back to default. Failed Profile creation creates no Space. These types contain no views, persistence, engine calls, or UserDefaults writes.
+
+The per-Profile layout is:
+
+```text
+<root>/State/browser.json                  global snapshot
+<root>/State/favicons.sqlite3              global cache, deliberately shared
+<root>/Profiles/<dataDirectoryName>/
+  Engine/                                 future engine context
+  State/history.sqlite3
+  State/archive.sqlite3
+  State/sleep.sqlite3                      SleepStore(fileURL:)
+  Boosts/boosts.json
+  AdBlock/lists/                          future ad-block data
+```
+
+`ProfileDirectories` owns these paths and creates empty directories. `OpenDataRoot.prepare()` runs migration before any store opens and holds a root lock for the process lifetime. Each history/archive/sleep SQLite set is copied into a staging `State` directory on the destination volume, flushed with `fsync`, and published with one atomic macOS directory swap. The JSON journal at `State/profile-migration.json` plus a commit marker resolves each interrupted step. Source cleanup follows durable publication and checks file identity, size, and modification time. Missing destination mains permit migration; destination orphan sidecars are retained under `State/.quarantine/`. A legacy WAL/SHM left by an older interrupted migration joins its destination main. Conflicting mains refuse store opens and retain the entire legacy set. Legacy symlinks are never moved: only regular targets inside the root are eligible; unsafe or dangling targets refuse the store and preserve the sources. This is a **ONE-WAY** disk-layout change: older builds ignore `Profiles/` and would open empty legacy-path databases. The favicon cache stays global and can disclose that some Profile visited an origin; no favicon isolation is claimed.
+
+Bootstrap contract: load → migrate → repair → ensure directories → attach `ProfileArchiveSink` → observe events → save after commands. Profiles CLI mutations save repairs even if the requested command refuses, except deletion: an archive failure must not save any snapshot changes. A `list --json` result keeps maintenance notices on stderr. `suggest --history DIR` selects that snapshot's default Profile history file; a direct path must be `…/Profiles/<dir>/State/history.sqlite3`. The old `State/history.sqlite3` path is a usage error.
+
+Import reserves `Default` for the actual default key, suffixes named claimants as `Default-named` (then numbered collisions), and always materializes that default key. Re-import preserves each matching Profile ID's directory, while new named Profiles avoid disk directories and tombstones. An unowned reserved `Default` directory refuses import. Import resolves all Space and `topApps` Profile refs, uses lenient Storable metadata and `Local State` precedence, preserves deterministic IDs, sanitizes directory basenames, and suffixes case-insensitive collisions. Space links missing from the sidebar can come from `StorableProfileContainers.json`. Local State directories with no Space still produce Profiles. The report prints Profile counts, guessed mappings, source-directory presence, and per-Profile Space/Favorite counts. Chromium data is recorded by the mapping; no engine files are copied. Real multi-Profile Storable shapes remain unverified; the evidence remains single-Profile disk data plus synthetic copied fixtures, as [data-model.md](re/data-model.md#26-spaces) and the plan state.
+
+Boosts landed before this change. `BoostStore(root:profileID:fileURL:)` now accepts the canonical `ProfileDirectories.boostsFileURL(for:)` destination without adding an OpenStore dependency. Its original standalone constructor remains compatible. The future App must pass the explicit Profile file URL; see [boosts.md](boosts.md).
+
+### Profiles verification (2026-10-25)
+
+Every package build used only `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`. Baseline and final release builds passed with zero warnings and zero errors. Baseline `commands-demo` was 66/66; the final extension is 102/102. Merged `origin/main` (`f4f87da`) before final verification; no conflicts occurred and every existing package target remained present.
+
+| Check | Observed result |
+|---|---|
+| P-1 | Empty root: `no snapshot at DIR`, exit 0 |
+| P-2 | Personal gets `Default`; Work gets `Profile-XXXXXXXX`; 2 Profiles and all empty directory trees |
+| P-3 | Duplicate `work` refused, exit 1; snapshot SHA-256 unchanged |
+| P-4 | Work Space created on Work; Work has 1 Space, Personal 0 |
+| P-5 | Assigned Work delete refused, exit 1; snapshot SHA-256 unchanged |
+| P-6 | Work Space assigned to Personal; Work 0 Spaces, Personal 1 |
+| P-7 | Default Personal delete refused, exit 1; snapshot SHA-256 unchanged |
+| P-8 | Temp deleted, 0 archived Favorites; its disk directory remains |
+| P-9 | Copied live JSON: 46/46 sidebar accounted, 10/10 archive accounted (9 imported, 1 skipped); 1 Default Profile, 4 Spaces, 6 Favorites; repeat inserts 0; roundtrip OK |
+| P-10 | Dump shows the assigned Profile; roundtrip OK; schema 1 |
+| P-11 | Rename and emoji survive reload; directory unchanged. Used the stable UUID for set-icon after rename because the plan's old `Work` name no longer resolves |
+| P-12 | Legacy history/archive/sleep and WAL/SHM bytes moved intact; second call moves 0; existing destination and skipped legacy source preserved |
+
+Additional Profile checks: invalid and duplicate names, unknown/ambiguous surface errors, missing snapshots, same-Profile refusal, malformed options, and repair saved before a refused mutation. The real CLI demo proves accepted-command undo after refusals, rename/icon/settings undo and redo, exact Space-change events, combined editor undo, unchanged tab identity/pinned URLs, Favorites staying with their owner, one-call Profile deletion, per-Profile archive routing, undo discard, repair without undo, and index consistency.
+
+Synthetic import fixtures passed with two Profiles, one Space and one Favorite each, metadata precedence, stable IDs on repeat, ProfileContainer-only Space links, an unused Local State directory, unknown shapes/refs, unsafe directory names, and both case-only and exact directory collisions. No real multi-Profile Arc session was created or launched.
+
+A temporary Swift caller loaded a copied real import, exercised Settings and picker commands, saved and reloaded the snapshot, checked default/assigned delete blocks, failed-create behavior, focused-window selection, and change-confirm data. It also verified the explicit disk wipe affects only its temporary Profile directory and that Boost files reload separately for two Profiles. The old BoostStore constructor still works. The caller used the Swift interpreter over a temporary dylib linked from the already-built release objects; no extra package build or test target was added. A separate real CLI migration of an actual SQLite WAL set retained 100 committed rows and returned `PRAGMA quick_check = ok`.
+
+| Regression | Result |
+|---|---|
+| `import-arc` on a temporary copy of live `*.json` | PASS, sidebar 46/46 and archive 10/10 accounted; repeat stores 0 new rows |
+| `roundtrip` | PASS on pre-change import, new import, profile CLI sequence, and both demo roots |
+| `commands-demo` fresh + copied import | PASS, 102/102 each; default archive rows 19 and 28 |
+| `suggest-check` | PASS, 31/31, including its local HTTP flows |
+| `commands-dump` | PASS, `commands-dump OK` |
+| `route` A1–A17 | PASS; A12–A17: 35/48/3/11/4/6 CLI decisions |
+| `favicons` | PASS, 1,000 synthetic ingests and 10,000 lookups; stats, missing-icon failure, and empty fetch |
+| `bench` | PASS, including 100k history URLs and 2,000 expired tabs through the composite archive sink |
+| `verify-secrets-fixture` | PASS; generated fixture only, no real Keychain access |
+| `suggest --history` | PASS for root and per-Profile file; old global file rejected with exit 2 |
+| Adblock / sleep CLIs | Not present in merged main; no claim of verification |
+
+Counts-only receipts and temporary drivers are under `/tmp` (the OS temporary directory). Copied user JSON and generated data were never committed. No Arc launch, desktop control, engine-tree command, engine build, unit test, or subagent was used.
+
+Deferred: engine contexts, cross-Profile live content recreation, cookie/incognito isolation, per-context memory measurement, App persistence/confirmation/wipe wiring, real multi-Profile capture, idle context eviction, download-location settings, tab-level cross-Profile moves, and Chromium engine-data import. These are separate engine/App or later milestone gates; this CLI result does not claim them.
+
+### PR #32 data-safety corrections (2026-10-25)
+
+Merged `origin/main` at `006752759f02aae305b5b541dc382ca2f67d8e89` first
+(merge commit `50b7400`). The only conflict was the additive CLI usage text;
+Profiles and OpenSleep both remain in `Package.swift`. Every build used
+`nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`.
+The final build passed with zero warnings and zero errors.
+
+| Finding | Fix | Result through the real CLI on temporary roots |
+|---|---|---|
+| 1. SQLite main/WAL/SHM could be split by a crash | Stage the complete set inside a destination-volume State directory; fsync files and directories; publish with one directory rename/swap. A durable JSON journal and marker drive recovery before source cleanup. Check source identity before removing it. | PASS: 27 injected abort boundaries across history, archive, and sleep; every resume retained 100 committed rows and `PRAGMA quick_check = ok`. A second run was inert. Changed sources after publication were preserved and refused. |
+| 2. Orphans and store-open order stranded legacy data | `OpenDataRoot.prepare()` is shared by snapshot loads and all direct-store CLI/bench/suggest/Sleep paths. Quarantine destination sidecars when its main is missing. Resume legacy sidecars when a prior migration already moved the main. | PASS: destination orphan quarantine, older partial main/WAL migration, conflicting-main refusal, and legacy orphan-only refusal. CLI startup probes for dump, roundtrip, archive-list, commands-demo, route, suggest, and sleep-sim all stopped before store open. A separate suggest history root also prepared first. |
+| 3. Profile deletion could drop Favorites after a failed archive | Throwing confirmed archive path waits for SQLite FULL commit before model removal; failed deletion does not save even load repairs. | PASS: `chmod 000` archive DB caused exit 1; snapshot SHA-256, Profile, and Favorite stayed intact. After unblocking, deletion committed exactly one archived Favorite. Existing undo/redo flows passed. |
+| 4. `updateSpace` accepted a stale Profile ID | Refuse the whole edit before changes, events, or undo registration. | PASS: the real `commands-demo` flow now checks the stale-ID combined edit; 103/103 on fresh and imported roots. |
+| 5. Named imports could take the default Profile identity | Only Arc's default key gets `Default`; named claimants get `Default-named` plus collision suffixes. Always materialize the default key. | PASS: a synthetic Arc fixture encountered the named claimant first; it remained non-default and Arc's default key remained default. Repeat import kept stable IDs/directories. |
+| 6. Deleted directory names could be reused | Bootstrap reserves all existing `Profiles/` entries and durable `State/retired-profile-dirs.json` tombstones without case sensitivity. Both model creation and import honor reservations; matching import IDs retain their own directory. | PASS: delete/create picked another directory; mixed-case disk and tombstone reservations blocked `Default`; deleting and wiping a named import then re-importing chose `Default-named-2`. Unowned reserved Default data refused import and stayed intact. |
+| 7. Legacy symlinks could move links or escape the root | Resolve legacy links; accept only regular targets inside the data root; refuse unsafe stores before opening them. Never move the link itself. | PASS: inside-root history target plus WAL retained 100 committed rows; outside-root target hash and original link stayed unchanged with exit 1. |
+| 8. CLI reported success after a failed snapshot save | `SnapshotStore.saveNow` throws; durable atomic writes propagate errors; all CLI save sites use `try` and print success only after commit. | PASS: simulated disk full exited 1 with a clear error, no success line, and unchanged snapshot SHA-256. |
+
+The failure switches are explicit diagnostics:
+`OPENKIT_DEBUG_MIGRATION_CRASH=journal|copy-<filename>|staged|published|cleanup-<filename>`
+exits 86 at that migration boundary. `OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL=1`
+throws a simulated ENOSPC before the snapshot write. No isolated tests or
+mock stores were added.
+
+The now-implemented `SleepStore(fileURL:)` uses
+`ProfileDirectories.sleepFileURL(for:)`. Its CLI adapter selects the owning
+Profile for each tab. The Sleep benchmark now gives its four Profiles four
+separate directories; committed row counts were 0/5/5/5 (15 total).
+
+| Required verification | Final observed result |
+|---|---|
+| P-1–P-12 | PASS, including refused-mutation snapshot hashes, persisted icon/rename, default rules, and migration reruns |
+| Copied live Arc `*.json` import | PASS: sidebar 46/46 and archive 10/10 accounted; 9 imported archive rows; repeat inserts 0 |
+| `roundtrip` | PASS on profile sequence, imported snapshot, and routing legacy fixture |
+| `commands-demo` | PASS: 103/103 on fresh root and copied import |
+| `suggest-check` | PASS: 31/31, including local HTTP flows |
+| `commands-dump` | PASS, exit 0 |
+| `route` A1–A17 | PASS; A12–A17 used 35/48/3/11/4/6 CLI decisions |
+| `sleep-demo` | PASS: 105/105; full 5,000-tab controller pass p50 0.336 ms, p95 0.799 ms, max 10.124 ms over 200 passes |
+| `sleep-sim` | PASS: 48-hour gate and quiet-phase checks; 27 stored rows |
+| `bench` | PASS: 100k history URLs; complete move/undo index checks; 2,000 archived rows |
+
+Two preliminary Sleep runs each retained **FAILED: 104/105**, solely for
+p95 timing (2.828 ms and 2.677 ms). The host then had active engine compiler,
+Open renderer, and backup processes. Those results are retained; the final
+run above used the final per-Profile fixture and passed the unchanged 2 ms
+p95 limit. No background process was stopped and no threshold was changed.
+
+Receipts and temporary CLI drivers are under `/tmp/open-pr32-final-evidence`;
+preliminary receipts remain under `/tmp/open-pr32-evidence`. A supplemental
+probe initially tried to delete an assigned Profile and correctly refused;
+the corrected sequence moved its Space first. All copied user JSON and
+full CLI trees remain outside Git. No Arc launch, desktop control, engine
+build/sync, unit test, or subagent was used. App/engine isolation gates stay
+deferred as listed above.
+
 ## openkit CLI
 
 ```text
@@ -266,11 +404,19 @@ openkit import-arc [--arc-dir PATH] --out DIR [--show-titles]
 openkit import-arc-history --arc-user-data DIR --db PATH [--profile NAME]
 openkit import-arc-secrets --arc-user-data DIR [--profile NAME] --dry-run [--allow-keychain-access] [--out-manifest PATH]
 openkit verify-secrets-fixture
-openkit archive-list DIR [--limit N]
+openkit archive-list DIR [--limit N] [--profile PROFILE]
 openkit dump DIR
 openkit roundtrip DIR
 openkit bench
 openkit commands-demo DIR
+openkit profiles DIR list [--show-titles] [--json]
+openkit profiles DIR create --name NAME [--icon emoji:TEXT|symbol:NAME] [--json]
+openkit profiles DIR rename PROFILE --name NAME
+openkit profiles DIR set-icon PROFILE [--icon emoji:TEXT|symbol:NAME|none]
+openkit profiles DIR assign-space SPACE --to PROFILE
+openkit profiles DIR create-space --title TITLE --profile PROFILE
+openkit profiles DIR delete PROFILE
+openkit profiles DIR show PROFILE [--show-titles]
 ```
 
 `import-arc` imports, saves through `SnapshotStore`, stores archive records through `ArchiveStore`, prints the report, then prints the tree. The report holds sidebar counts, archive counts (file total, imported, stored new, stored duplicates, stored total, skipped by kind, and the archive accounted check), session mapping counts, and the final sidebar accounted check.
@@ -279,7 +425,7 @@ Titles and URLs are redacted by default. The tree prints item kind, ID prefix, a
 `dump` loads a snapshot and prints the tree (redacted).
 `roundtrip` loads, saves, reloads, and compares the two DTOs byte for byte. It exits non-zero on a mismatch.
 `bench` builds a synthetic model (5,000 items over 10 Spaces) and times snapshot encode / decode / save / load. It inserts 100k history URLs and times 1,000 selective searches (p50 / p95). Then it times `moveNode` ×10,000 on a 5,000-item model (with and without an UndoManager), undoes every move, and times `archiveExpiredTabs` on 2,000 expired tabs (model only, then with the real `ArchiveStore`).
-`commands-demo` runs every command against the real `ArchiveStore` in `DIR` and prints OK or FAIL for each check (66 checks), plus the tree at key steps. It covers: new tab, pin, folder; a split in a folder (allowed) with undo and redo; favorite move and unfavorite with undo and redo; placement rejections (split or folder into Favorites, a favorite into a split, a folder into its own descendant) with no events and no undo; a pane close that collapses its split, with undo; pinned to Today moves that clear `pinnedURL`, for a tab and for a folder with a split inside, with undo; close, archive, restore, with undo and redo; both restore fallbacks; restore into a split; `deleteSpace` with undo; `clearToday` with undo and redo; `archiveExpiredTabs` with a fake clock; and undo after auto-archive changed the tree. It exits non-zero on any failure.
+`commands-demo` runs every command against the real `ArchiveStore` in `DIR` and prints OK or FAIL for each check (103 checks), plus the tree at key steps. It covers: new tab, pin, folder; a split in a folder (allowed) with undo and redo; favorite move and unfavorite with undo and redo; placement rejections (split or folder into Favorites, a favorite into a split, a folder into its own descendant) with no events and no undo; a pane close that collapses its split, with undo; pinned to Today moves that clear `pinnedURL`, for a tab and for a folder with a split inside, with undo; close, archive, restore, with undo and redo; both restore fallbacks; restore into a split; `deleteSpace` with undo; `clearToday` with undo and redo; `archiveExpiredTabs` with a fake clock; undo after auto-archive changed the tree, and the Profile command flows described above. It exits non-zero on any failure.
 
 ## Verification (real runs, 2026-10-24)
 

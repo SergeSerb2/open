@@ -25,7 +25,7 @@ public final class SnapshotStore: @unchecked Sendable {
         let dto = SnapshotMapper.dto(from: model)
         lock.lock()
         pendingWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.write(dto: dto) }
+        let work = DispatchWorkItem { [weak self] in self?.writeReportingFailure(dto: dto) }
         pendingWork = work
         lock.unlock()
         queue.asyncAfter(deadline: .now() + 1.0, execute: work)
@@ -33,10 +33,10 @@ public final class SnapshotStore: @unchecked Sendable {
 
     /// Synchronous save (also used by flush and the CLI).
     @MainActor
-    public func saveNow(model: BrowserModel) {
+    public func saveNow(model: BrowserModel) throws {
         let dto = SnapshotMapper.dto(from: model)
         lock.lock(); pendingWork?.cancel(); pendingWork = nil; lock.unlock()
-        write(dto: dto)
+        try queue.sync { try write(dto: dto) }
     }
 
     /// Writes synchronously. If a debounced DTO is pending it is written; otherwise no-op.
@@ -51,24 +51,18 @@ public final class SnapshotStore: @unchecked Sendable {
         }
     }
 
-    private func write(dto: SnapshotFileDTO) {
-        do {
-            let dir = fileURL.deletingLastPathComponent()
-            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.sortedKeys]
-            let data = try encoder.encode(dto)
-            let tmp = dir.appendingPathComponent("browser.json.tmp-\(UUID().uuidString)")
-            try data.write(to: tmp)
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tmp)
-            } else {
-                try FileManager.default.moveItem(at: tmp, to: fileURL)
-            }
-        } catch {
-            // Persistence failure must not crash the app. Surface via stderr for the CLI.
-            FileHandle.standardError.write(Data("SnapshotStore write failed: \(error)\n".utf8))
+    private func writeReportingFailure(dto: SnapshotFileDTO) {
+        do { try write(dto: dto) }
+        catch { FileHandle.standardError.write(Data("SnapshotStore write failed: \(error)\n".utf8)) }
+    }
+
+    private func write(dto: SnapshotFileDTO) throws {
+        if ProcessInfo.processInfo.environment["OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL"] == "1" {
+            throw NSError(domain: NSPOSIXErrorDomain, code: 28, userInfo: [NSLocalizedDescriptionKey: "snapshot write failed: simulated disk full"])
         }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        try DurableFiles.write(encoder.encode(dto), to: fileURL)
     }
 
     public func loadData() throws -> SnapshotFileDTO? {
@@ -79,7 +73,12 @@ public final class SnapshotStore: @unchecked Sendable {
 
     @MainActor
     public func load() throws -> BrowserModel? {
-        guard let dto = try loadData() else { return nil }
-        return SnapshotMapper.model(from: dto)
+        guard let dto = try loadData() else {
+            try OpenDataRoot.prepare(root: root)
+            return nil
+        }
+        let model = SnapshotMapper.model(from: dto)
+        try OpenDataRoot.prepare(root: root, model: model)
+        return model
     }
 }
