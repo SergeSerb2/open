@@ -34,7 +34,7 @@ let package = Package(
         .target(name: "OpenModel"),
         .target(name: "OpenFeatures", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands"]),
         .executableTarget(name: "features-render", dependencies: ["OpenModel", "OpenStore", "OpenFeatures", "OpenDesign", "OpenSleep"], sources: ["Scene", "main.swift", "Checks.swift", "FeatureCompare.swift", "OffscreenRenderer.swift", "Compare.swift", "RenderCLI.swift"]),
-        .target(name: "OpenSleep", dependencies: ["OpenModel"]),
+        .target(name: "OpenSleep", dependencies: ["OpenModel"], resources: [.copy("Resources/keep-alive-sites.json")]),
         .target(name: "OpenBoosts", dependencies: ["OpenModel"], exclude: ["Harness"], resources: [.copy("Resources/boost-applier.js"), .copy("Resources/zap-picker.js")]),
         .target(name: "OpenRouting", dependencies: ["OpenModel"]),
         .target(name: "OpenStore", dependencies: ["OpenModel"], linkerSettings: [.linkedLibrary("sqlite3")]),
