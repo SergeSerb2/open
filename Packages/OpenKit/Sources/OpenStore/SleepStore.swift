@@ -44,7 +44,7 @@ public final class SleepStore {
         queue.async { withExtendedLifetime(connection) {} }
     }
 
-    private enum Failure: Error { case sqlite }
+    private enum Failure: Error { case sqlite, tooLarge }
 
     nonisolated private func report(_ message: String) {
         DispatchQueue.main.async { [weak self] in self?.onError?(message) }
@@ -54,7 +54,8 @@ public final class SleepStore {
         if let db { return db }
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let opened = try SQLiteDB(path: fileURL.path)
-        guard opened.exec("""
+        // Sleep history must survive quit and renderer release, including WAL writes.
+        guard opened.exec("PRAGMA synchronous=FULL"), opened.exec("PRAGMA busy_timeout=5000"), opened.exec("""
         CREATE TABLE IF NOT EXISTS sleep_history(
           tab_id TEXT PRIMARY KEY, container BLOB NOT NULL,
           current_index INTEGER NOT NULL, entry_count INTEGER NOT NULL,
@@ -67,14 +68,14 @@ public final class SleepStore {
         return opened
     }
 
-    public func save(_ record: SleepHistoryRecord) {
+    /// Returns only after a real SQLite transaction commits with synchronous=FULL.
+    public func save(_ record: SleepHistoryRecord) async throws {
         guard record.container.count <= Self.maximumContainerBytes else {
             onError?("SleepStore: container exceeds 2 MiB; write dropped")
-            return
+            throw Failure.tooLarge
         }
-        queue.async { [self, record] in
-            do {
-                let db = try openOnQueue()
+        do {
+            try await write { db in
                 guard let stmt = db.prepare("INSERT OR REPLACE INTO sleep_history VALUES(?,?,?,?,?,?,?,?,?,?,?)") else { throw Failure.sqlite }
                 defer { sqlite3_finalize(stmt) }
                 db.bindText(stmt, 1, record.tabID.rawValue.uuidString)
@@ -88,8 +89,31 @@ public final class SleepStore {
                 db.bindInt(stmt, 8, record.hasPageState ? 1 : 0); db.bindInt(stmt, 9, Int64(record.containerVersion))
                 db.bindText(stmt, 10, record.chromiumTag); db.bindDouble(stmt, 11, record.capturedAt.timeIntervalSince1970)
                 guard sqlite3_step(stmt) == SQLITE_DONE else { throw Failure.sqlite }
-            } catch { report("SleepStore: save failed") }
+            }
+        } catch { onError?("SleepStore: save failed"); throw error }
+    }
+
+    private func write(_ body: @escaping @Sendable (SQLiteDB) throws -> Void) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            queue.async { [self] in
+                do {
+                    let db = try openOnQueue()
+                    guard db.exec("BEGIN IMMEDIATE") else { throw Failure.sqlite }
+                    do {
+                        try body(db)
+                        guard db.exec("COMMIT") else { throw Failure.sqlite }
+                    } catch { db.exec("ROLLBACK"); throw error }
+                    continuation.resume()
+                } catch { continuation.resume(throwing: error) }
+            }
         }
+    }
+
+    /// Serial queue barrier plus a transaction commit. WAL is durable before return;
+    /// checkpointing is not needed for recovery and would contend with readers.
+    public func flush() async throws {
+        do { try await write { _ in } }
+        catch { onError?("SleepStore: flush failed"); throw error }
     }
 
     private func query<T: Sendable>(_ fallback: T, _ body: @escaping @Sendable (SQLiteDB) throws -> T) async -> T {

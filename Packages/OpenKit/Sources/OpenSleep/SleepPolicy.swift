@@ -40,20 +40,25 @@ public struct SleepPolicy: Sendable {
     public func action(tab: Tab, visible: Set<ItemID>, now: Date,
                        lastAudibleAt: Date? = nil, lastCommitAt: Date? = nil,
                        downloading: Bool = false, hasUnloadHandlers: Bool = false,
-                       sleptAt: Date? = nil) -> Action {
-        guard blockingReason(tab: tab, visible: visible, now: now, lastAudibleAt: lastAudibleAt,
+                       sleptAt: Date? = nil, hiddenAt: Date? = nil) -> Action {
+        let action = timedAction(phase: tab.live.sleepPhase, hiddenAt: hiddenAt ?? tab.lastActiveAt,
+                                 sleptAt: sleptAt, now: now)
+        guard action != .none,
+              blockingReason(tab: tab, visible: visible, now: now, lastAudibleAt: lastAudibleAt,
                              lastCommitAt: lastCommitAt, downloading: downloading,
-                             hasUnloadHandlers: hasUnloadHandlers, forDiscard: false) == nil else { return .none }
-        let age = now.timeIntervalSince(tab.lastActiveAt)
-        switch tab.live.sleepPhase {
+                             hasUnloadHandlers: hasUnloadHandlers, forDiscard: action == .discard) == nil else { return .none }
+        return action
+    }
+
+    /// Check phase deadlines before reading the more expensive runtime gates.
+    /// A sleeping tab needs no hide clock; a frozen tab in off mode needs no work.
+    public func timedAction(phase: SleepPhase, hiddenAt: Date, sleptAt: Date?, now: Date) -> Action {
+        switch phase {
         case .placeholder: return .none
-        case .live: return age >= freezeDelay ? .freeze : .none
+        case .live: return now.timeIntervalSince(hiddenAt) >= freezeDelay ? .freeze : .none
         case .frozen:
-            guard let delay = mode.discardDelay, age >= max(freezeDelay, delay),
-                  blockingReason(tab: tab, visible: visible, now: now, lastAudibleAt: lastAudibleAt,
-                                 lastCommitAt: lastCommitAt, downloading: downloading,
-                                 hasUnloadHandlers: hasUnloadHandlers, forDiscard: true) == nil else { return .none }
-            return .discard
+            guard let delay = mode.discardDelay else { return .none }
+            return now.timeIntervalSince(hiddenAt) >= max(freezeDelay, delay) ? .discard : .none
         case .sleeping:
             return sleptAt.map { now.timeIntervalSince($0) >= destroyDelay } == true ? .destroy : .none
         }

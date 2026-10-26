@@ -2,6 +2,7 @@ import Foundation
 import OpenModel
 import OpenSleep
 import OpenStore
+import SQLite3
 
 @MainActor
 private final class SleepTrace {
@@ -23,12 +24,20 @@ private final class CLISleepStore: SleepHistoryStoring {
             FileHandle.standardError.write(Data((message + "\n").utf8))
         }
     }
-    func saveSleepHistory(tabID: ItemID, envelope e: SleepHistoryEnvelope) {
-        trace.record("save", tabID)
-        disk.save(SleepHistoryRecord(tabID: tabID, container: e.container, currentIndex: e.currentIndex,
+    func save(tabID: ItemID, envelope e: SleepHistoryEnvelope) async throws {
+        trace.record("save-start", tabID)
+        try await disk.save(SleepHistoryRecord(tabID: tabID, container: e.container, currentIndex: e.currentIndex,
             entryCount: e.entryCount, currentURL: e.currentURL, currentTitle: e.currentTitle,
             faviconURL: e.faviconURL, hasPageState: e.hasPageState, containerVersion: e.containerVersion,
             chromiumTag: e.chromiumTag, capturedAt: e.capturedAt))
+        trace.record("save", tabID)
+    }
+    var flushStarted = false
+    var flushFinished = false
+    func flush() async throws {
+        flushStarted = true
+        try await disk.flush()
+        flushFinished = true
     }
     func sleepHistory(tabID: ItemID) async -> SleepHistoryEnvelope? {
         guard let r = await disk.load(tabID: tabID) else { return nil }
@@ -62,6 +71,8 @@ private final class SimulatedSleepEngine: SleepEngine {
     var createdURLs: [ItemID: URL] = [:]
     var retryCount = 0
     var criticalCount = 0
+    var pauseCreate = false
+    var createContinuation: CheckedContinuation<Void, Never>?
     var pauseDiscard = false
     var continuation: CheckedContinuation<Void, Never>?
 
@@ -70,6 +81,7 @@ private final class SimulatedSleepEngine: SleepEngine {
     }
     func createContent(tabID: ItemID, url: URL, history: SleepHistoryEnvelope?) async -> Bool {
         trace.record(history == nil ? "create-fresh" : "create-history", tabID)
+        if pauseCreate { await withCheckedContinuation { createContinuation = $0 } }
         if let history {
             guard let decoded = try? SleepHistoryContainer(data: history.container),
                   decoded.currentIndex == history.currentIndex, decoded.entries.count == history.entryCount,
@@ -107,8 +119,25 @@ private final class SimulatedSleepEngine: SleepEngine {
             currentURL: tab.url, currentTitle: tab.title, faviconURL: URL(string: "https://example.invalid/favicon.ico"),
             hasPageState: packed.hasPageState, chromiumTag: "adapter-tag-overridden", capturedAt: clock.date)
     }
-    func hasUnloadHandlers(tabID: ItemID) -> Bool { unloaded.contains(tabID) }
+    func hasUnloadHandlers(tabID: ItemID) -> Bool { trace.record("unload-query", tabID); return unloaded.contains(tabID) }
     func handleCriticalPressure() { criticalCount += 1 }
+}
+
+/// The CLI plays the app role: window state is explicit, independent of selection.
+@MainActor
+private final class CLISleepVisibility: SleepVisibilityProviding {
+    let model: BrowserModel
+    var states: [WindowID: SleepVisibilitySnapshot.WindowState] = [:]
+    var peek: Set<ItemID> = [], littleOpen: Set<ItemID> = []
+    var splitPanes: Set<ItemID> = [], pictureInPicture: Set<ItemID> = []
+    var reads = 0
+    init(model: BrowserModel) { self.model = model }
+    func sleepVisibility() -> SleepVisibilitySnapshot {
+        reads += 1
+        return SleepVisibilitySnapshot(windows: Dictionary(uniqueKeysWithValues: model.windows.map {
+            ($0.id, states[$0.id] ?? .visible)
+        }), peek: peek, littleOpen: littleOpen, splitPanes: splitPanes, pictureInPicture: pictureInPicture)
+    }
 }
 
 @MainActor
@@ -122,6 +151,7 @@ private final class SleepScenario {
     let store: CLISleepStore
     let engine: SimulatedSleepEngine
     let controller: SleepController
+    let visibility: CLISleepVisibility
     var logs: [String] = []
 
     init(root: URL, mode: SleepMode = .balanced) {
@@ -131,7 +161,8 @@ private final class SleepScenario {
         model = BrowserModel(profiles: [profile], spaces: [space], windows: [window])
         store = CLISleepStore(root: root, trace: trace)
         engine = SimulatedSleepEngine(model: model, clock: clock, trace: trace)
-        controller = SleepController(model: model, engine: engine, store: store, chromiumTag: "156.0.8078.48", now: { [clock] in clock.date })
+        visibility = CLISleepVisibility(model: model)
+        controller = SleepController(model: model, engine: engine, store: store, visibility: visibility, chromiumTag: "156.0.8078.48", now: { [clock] in clock.date })
         controller.onLog = { [weak self] in self?.logs.append($0) }
     }
     func tab(age: TimeInterval = 0, pinned: Bool = false) -> Tab {
@@ -301,10 +332,10 @@ func runSleepDemo(args: [String]) async throws {
     let exact = SleepHistoryEnvelope(container: maxPacked.encoded(), currentIndex: 0, entryCount: 1,
         currentURL: URL(string: "https://example.invalid/cap")!, currentTitle: "Cap", hasPageState: true,
         chromiumTag: "156.0.8078.48", capturedAt: cap.clock.date)
-    cap.store.saveSleepHistory(tabID: capID, envelope: exact)
+    try await cap.store.save(tabID: capID, envelope: exact)
     check("exact 2 MiB boundary stored intact", await cap.store.sleepHistory(tabID: capID) == exact)
     var over = exact; over.container.append(0)
-    cap.store.saveSleepHistory(tabID: capID, envelope: over)
+    do { try await cap.store.save(tabID: capID, envelope: over) } catch {}
     let retained = await cap.store.sleepHistory(tabID: capID)
     check("over-cap write rejected and logged; old record retained", cap.store.errors.count == 1 && retained == exact)
     let bytes = await cap.store.disk.totalBytes()
@@ -312,7 +343,7 @@ func runSleepDemo(args: [String]) async throws {
     check("totalBytes and allTabIDs report stored blobs", bytes == exact.container.count + (retryBlob?.container.count ?? 0) && storedIDs == [capID, retry.id])
     cap.store.disk.delete(tabIDs: [capID, retry.id]); cap.store.disk.flushQueue()
     check("batch delete works", await cap.store.disk.allTabIDs().isEmpty)
-    cap.store.saveSleepHistory(tabID: capID, envelope: exact); cap.store.deleteSleepHistory(tabID: capID)
+    try await cap.store.save(tabID: capID, envelope: exact); cap.store.deleteSleepHistory(tabID: capID)
     check("single delete and missing load work", await cap.store.sleepHistory(tabID: capID) == nil)
 
     let corrupt = scenario("corrupt")
@@ -320,7 +351,7 @@ func runSleepDemo(args: [String]) async throws {
     await corrupt.controller.debugSleepNow(tabID: bad.id)
     var badBlob = (await corrupt.store.sleepHistory(tabID: bad.id))!
     badBlob.container[0] ^= 1
-    corrupt.store.saveSleepHistory(tabID: bad.id, envelope: badBlob)
+    try await corrupt.store.save(tabID: bad.id, envelope: badBlob)
     bad.url = URL(string: "https://example.invalid/stale-snapshot")!
     await corrupt.controller.handleMemoryPressure(.critical); await corrupt.select(bad)
     check("corrupt SQLite blob wake falls back to sidecar URL with Back disabled", corrupt.trace.ids("create-fresh") == [bad.id] && corrupt.engine.createdURLs[bad.id] == badBlob.currentURL && !bad.live.canGoBack && !bad.live.canGoForward && corrupt.logs.contains { $0.contains("sleep-restore-fallback") })
@@ -357,7 +388,7 @@ func runSleepDemo(args: [String]) async throws {
     splitScenario.window.selectedNodeBySpace[splitScenario.space.id] = split.id
     await splitScenario.controller.tick()
     check("selected split protects every pane", splitScenario.controller.visibleTabIDs() == [left.id, right.id] && left.live.sleepPhase == .live && right.live.sleepPhase == .live)
-    await splitScenario.controller.captureAllForQuit()
+    try await splitScenario.controller.captureAllForQuit()
     check("quit capture includes both split panes", Set(await splitScenario.store.disk.allTabIDs()) == [left.id, right.id])
     splitScenario.model.closeTab(id: left.id); splitScenario.controller.tabClosed(left.id)
     check("archive close retains sleep row", await splitScenario.store.sleepHistory(tabID: left.id) != nil)
@@ -376,39 +407,294 @@ func runSleepDemo(args: [String]) async throws {
     let invalidRoot = root.appendingPathComponent("not-a-directory")
     try Data([0]).write(to: invalidRoot)
     let invalidStore = CLISleepStore(root: invalidRoot, trace: SleepTrace())
-    invalidStore.saveSleepHistory(tabID: ItemID(), envelope: exact)
+    do { try await invalidStore.save(tabID: ItemID(), envelope: exact) } catch {}
     _ = await invalidStore.disk.allTabIDs()
     await Task.yield()
     check("SQLite/open failures surface onError and keep CLI running", !invalidStore.errors.isEmpty)
 
-    try runSleepPolicyBench(check: check)
+    try await runSleepReviewScenarios(root: root, check: check)
+    try await runSleepControllerBench(root: root.appendingPathComponent("bench"), check: check)
     print("sleep-demo \(failed == 0 ? "OK" : "FAIL"): \(passed) checks passed, \(failed) failed")
     if failed != 0 { throw SleepCLIError.checksFailed(failed) }
 }
 
 @MainActor
-private func runSleepPolicyBench(check: (String, Bool) -> Void) throws {
-    let now = Date(timeIntervalSince1970: 1_700_000_000)
+private func runSleepReviewScenarios(root: URL, check: (String, Bool) -> Void) async throws {
+    func scenario(_ name: String) -> SleepScenario { SleepScenario(root: root.appendingPathComponent("review-" + name)) }
+    let read = scenario("hide-clock"), tab = read.tab()
+    await read.select(tab); read.clock.advance(600); await read.controller.tick()
+    await read.select(nil)
+    let hidden = read.clock.date
+    await read.controller.tick(); read.clock.advance(29); await read.controller.tick()
+    check("10-minute read then hide stays live through hide+29 s", tab.live.sleepPhase == .live && read.controller.hiddenAt[tab.id] == hidden)
+    read.clock.advance(1); await read.controller.tick()
+    check("10-minute read freezes at hide+30 s", tab.live.sleepPhase == .frozen)
+    read.clock.advance(269); await read.controller.tick()
+    let before = tab.live.sleepPhase == .frozen
+    read.clock.advance(1); await read.controller.tick()
+    check("10-minute read discards at hide+300 s", before && tab.live.sleepPhase == .sleeping)
+    await read.select(tab)
+    check("show clears hiddenAt", read.controller.hiddenAt[tab.id] == nil)
+
+    let splitRead = scenario("split-clock")
+    let left = splitRead.tab(age: 900), right = splitRead.tab(age: 900)
+    let split = splitRead.model.makeSplit(tabIDs: [left.id, right.id])!
+    splitRead.model.selectNode(windowID: splitRead.window.id, spaceID: splitRead.space.id, nodeID: split.id)
+    check("model split selection stamps every pane", left.lastActiveAt == right.lastActiveAt && left.lastActiveAt > splitRead.clock.date)
+    for id in [left.id, right.id] { await splitRead.controller.tabBecameVisible(id) }
+    splitRead.clock.advance(600)
+    splitRead.model.focusSplitPane(splitID: split.id, tabID: right.id)
+    check("model split focus stamps every visible pane", split.focusedPaneID == right.id && left.lastActiveAt == right.lastActiveAt && left.lastActiveAt > splitRead.clock.date)
+    for id in [left.id, right.id] { await splitRead.controller.tabBecameVisible(id) }
+    await splitRead.select(nil); await splitRead.controller.tick()
+    let panesWait = left.live.sleepPhase == .live && right.live.sleepPhase == .live
+    splitRead.clock.advance(30); await splitRead.controller.tick()
+    check("both split panes freeze from hide time after a long read", panesWait && left.live.sleepPhase == .frozen && right.live.sleepPhase == .frozen)
+
+    let critical = scenario("one-phase"), frozen = critical.tab(age: 400), live = critical.tab(age: 400)
+    frozen.live.sleepPhase = .frozen
+    await critical.controller.handleMemoryPressure(.critical)
+    check("critical pressure discards frozen tab but keeps its shell for this pass", frozen.live.sleepPhase == .sleeping && critical.controller.liveContent.contains(frozen.id) && critical.trace.ids("destroy").isEmpty)
+    check("critical pressure never skips live directly to sleeping", live.live.sleepPhase == .live)
+    await critical.controller.handleMemoryPressure(.critical)
+    check("next critical pass destroys only a tab already sleeping", critical.trace.ids("destroy") == [frozen.id])
+
+    let restoreRace = scenario("pressure-restore-race")
+    let priorSleep = restoreRace.tab(age: 400), newSleep = restoreRace.tab(age: 400), creating = restoreRace.tab(age: 400)
+    await restoreRace.controller.debugSleepNow(tabID: priorSleep.id)
+    newSleep.live.sleepPhase = .frozen
+    restoreRace.controller.tabClosed(creating.id)
+    restoreRace.window.selectedNodeBySpace[restoreRace.space.id] = creating.id
+    restoreRace.engine.pauseCreate = true
+    let restoring = Task { await restoreRace.controller.handleMemoryPressure(.critical) }
+    while restoreRace.engine.createContinuation == nil { await Task.yield() }
+    await restoreRace.controller.debugSleepNow(tabID: newSleep.id)
+    await restoreRace.select(priorSleep)
+    restoreRace.engine.createContinuation?.resume(); restoreRace.engine.createContinuation = nil
+    await restoring.value
+    check("critical pass rechecks visibility after async restore and preserves start-phase boundary", restoreRace.controller.liveContent.contains(priorSleep.id) && restoreRace.controller.liveContent.contains(newSleep.id) && !restoreRace.trace.ids("destroy").contains(priorSleep.id) && !restoreRace.trace.ids("destroy").contains(newSleep.id))
+
+    for state in [SleepVisibilitySnapshot.WindowState.minimized, .occluded, .closed] {
+        let s = scenario("window-\(state)"), selected = s.tab(age: 1000)
+        await s.select(selected); s.clock.advance(600)
+        s.visibility.states[s.window.id] = state
+        await s.controller.tick()
+        let hiddenNow = s.controller.hiddenAt[selected.id] == s.clock.date && selected.live.sleepPhase == .live
+        s.clock.advance(30); await s.controller.tick()
+        let froze = selected.live.sleepPhase == .frozen
+        s.clock.advance(270); await s.controller.tick()
+        check("\(state) selected window tab uses hide timers then sleeps", hiddenNow && froze && selected.live.sleepPhase == .sleeping)
+    }
+    let removed = scenario("removed-window"), removedTab = removed.tab(age: 1000)
+    await removed.select(removedTab); removed.model.windows = []
+    await removed.controller.tick(); removed.clock.advance(30); await removed.controller.tick()
+    removed.clock.advance(270); await removed.controller.tick()
+    check("removed window's selected tab becomes eligible", removedTab.live.sleepPhase == .sleeping)
+
+    let surfaces = scenario("surfaces")
+    let peek = surfaces.tab(age: 1000), little = surfaces.tab(age: 1000)
+    let pip = surfaces.tab(age: 1000), pane = surfaces.tab(age: 1000)
+    surfaces.visibility.states[surfaces.window.id] = .minimized
+    surfaces.visibility.peek = [peek.id]; surfaces.visibility.littleOpen = [little.id]
+    surfaces.visibility.pictureInPicture = [pip.id]; surfaces.visibility.splitPanes = [pane.id]
+    await surfaces.controller.tick(); surfaces.clock.advance(48 * 3600)
+    await surfaces.controller.tick(); await surfaces.controller.handleMemoryPressure(.critical)
+    for (name, protected) in [("Peek", peek), ("Little Open", little), ("PiP", pip), ("explicit split pane", pane)] {
+        await surfaces.controller.debugSleepNow(tabID: protected.id)
+        check("\(name) remains live under time, critical pressure and debug sleep", protected.live.sleepPhase == .live && !surfaces.trace.ids("freeze").contains(protected.id))
+    }
+    surfaces.visibility.peek = []; await surfaces.controller.tick()
+    surfaces.clock.advance(29); await surfaces.controller.tick()
+    let peekWait = peek.live.sleepPhase == .live
+    surfaces.clock.advance(1); await surfaces.controller.tick()
+    check("closing Peek starts a fresh 30 s hide timer", peekWait && peek.live.sleepPhase == .frozen)
+
+    let queries = scenario("unload-budget")
+    let tabs = (0..<67).map { _ in queries.tab(age: 400) }
+    queries.engine.unloaded.insert(tabs[0].id)
+    var bounded = true, unknownProtected = true
+    for _ in 0..<3 {
+        let count = queries.trace.ids("unload-query").count
+        await queries.controller.tick()
+        bounded = bounded && queries.trace.ids("unload-query").count - count <= queries.controller.maximumUnloadQueriesPerPass
+        let known = Set(queries.trace.ids("unload-query"))
+        unknownProtected = unknownProtected && tabs.filter { !known.contains($0.id) }.allSatisfy { $0.live.sleepPhase == .frozen }
+    }
+    let sampled = Set(queries.trace.ids("unload-query"))
+    check("unload queries are bounded at 32/pass and cover all 67 tabs round-robin", bounded && sampled == Set(tabs.map(\.id)))
+    check("unknown unload state cannot permit discard; true handler blocks discard", unknownProtected && tabs[0].live.sleepPhase == .frozen)
+    queries.engine.unloaded.remove(tabs[0].id)
+    queries.controller.tabUnloadHandlersChanged(tabs[0].id, hasHandlers: false)
+    await queries.controller.tick()
+    check("unload event updates cache without waiting for sampling", tabs[0].live.sleepPhase == .sleeping)
+    let reads = queries.visibility.reads
+    await queries.controller.tick()
+    check("a settled pass reads the visibility provider exactly once", queries.visibility.reads == reads + 1)
+
+
+    let moving = scenario("ownership-revision"), moved = moving.tab(age: 400)
+    moving.profile.settings.sleepMode = .off
+    let targetProfile = Profile(settings: ProfileSettings(sleepMode: .aggressive))
+    let targetSpace = Space(profileID: targetProfile.id)
+    moving.model.profiles.append(targetProfile); moving.model.spaces.append(targetSpace); moving.model.rebuildIndex()
+    await moving.controller.tick()
+    moving.model.moveNode(id: moved.id, to: .spaceToday(targetSpace.id), at: nil)
+    await moving.controller.tick()
+    check("tree revision invalidates cached ownership after a profile move", moved.live.sleepPhase == .sleeping)
+
+    let backoff = scenario("backoff"), failing = backoff.tab(age: 400)
+    backoff.engine.failDiscard.insert(failing.id)
+    let start = backoff.clock.date
+    await backoff.controller.debugSleepNow(tabID: failing.id)
+    var timelineOK = backoff.controller.retryAfter[failing.id] == start.addingTimeInterval(30)
+    for (boundary, next) in [(30.0, 90.0), (90.0, 210.0), (210.0, 450.0)] {
+        backoff.clock.date = start.addingTimeInterval(boundary - 1)
+        let attempts = backoff.trace.ids("discard").count
+        await backoff.controller.tick(); await backoff.controller.handleMemoryPressure(.critical)
+        timelineOK = timelineOK && backoff.trace.ids("discard").count == attempts
+        backoff.clock.advance(1); await backoff.controller.tick()
+        timelineOK = timelineOK && backoff.trace.ids("discard").count == attempts + 1 && backoff.controller.retryAfter[failing.id] == start.addingTimeInterval(next)
+    }
+    check("failed discard attempts at 0/30/90/210 s; pressure respects backoff", timelineOK)
+    for _ in 0..<6 {
+        backoff.clock.date = backoff.controller.retryAfter[failing.id]!
+        await backoff.controller.tick()
+    }
+    check("exponential backoff caps at 30 min", backoff.controller.retryAfter[failing.id]!.timeIntervalSince(backoff.clock.date) == 1800)
+    backoff.controller.tabUserInteracted(failing.id)
+    await backoff.controller.tick()
+    check("user interaction resets failed-discard backoff to 30 s", backoff.controller.retryAfter[failing.id]!.timeIntervalSince(backoff.clock.date) == 30)
+    backoff.engine.failDiscard.remove(failing.id)
+    backoff.clock.advance(30); await backoff.controller.tick()
+    check("successful discard clears all backoff", failing.live.sleepPhase == .sleeping && backoff.controller.retryAfter[failing.id] == nil)
+    print("backoff timeline: attempts=0,30,90,210 s; next=450 s; cap=1800 s")
+
+    // A real SQLite writer lock holds the real store queue, not a mocked seam.
+    let durable = scenario("durable"), quitTab = durable.tab(age: 400)
+    try await durable.store.disk.flush()
+    var connection: OpaquePointer?
+    guard sqlite3_open(durable.store.disk.fileURL.path, &connection) == SQLITE_OK else { throw SleepCLIError.checksFailed(1) }
+    defer { sqlite3_close(connection) }
+    func sql(_ statement: String) throws {
+        guard sqlite3_exec(connection, statement, nil, nil, nil) == SQLITE_OK else { throw SleepCLIError.checksFailed(1) }
+    }
+    try sql("BEGIN IMMEDIATE")
+    var quitDone = false
+    let quit = Task { try await durable.controller.captureAllForQuit(); quitDone = true }
+    try await Task.sleep(for: .milliseconds(25))
+    check("quit capture stays suspended while the real save transaction is blocked", !quitDone && durable.trace.ids("save-start") == [quitTab.id] && durable.trace.ids("save").isEmpty)
+    try sql("COMMIT"); try await quit.value
+    // Read through a second connection immediately after return, without draining the writer queue.
+    var stmt: OpaquePointer?
+    let prepared = sqlite3_prepare_v2(connection, "SELECT count(*) FROM sleep_history", -1, &stmt, nil) == SQLITE_OK
+    let committed = prepared && sqlite3_step(stmt) == SQLITE_ROW && sqlite3_column_int(stmt, 0) == 1
+    sqlite3_finalize(stmt)
+    check("quit returns after save and flush; second connection sees committed row", quitDone && committed && durable.store.flushFinished)
+    durable.store.flushStarted = false; durable.store.flushFinished = false
+    try sql("BEGIN IMMEDIATE")
+    let flush = Task { try await durable.store.flush() }
+    try await Task.sleep(for: .milliseconds(25))
+    check("async flush waits for its real transaction commit", durable.store.flushStarted && !durable.store.flushFinished)
+    try sql("COMMIT"); try await flush.value
+
+    try sql("BEGIN IMMEDIATE")
+    let sleep = Task { await durable.controller.debugSleepNow(tabID: quitTab.id) }
+    try await Task.sleep(for: .milliseconds(25))
+    check("discard cannot release the renderer before durable save", durable.trace.ids("discard").isEmpty && quitTab.live.sleepPhase == .frozen)
+    try sql("COMMIT"); await sleep.value
+    check("discard follows committed save", quitTab.live.sleepPhase == .sleeping && durable.trace.calls.last(where: { ["save", "discard"].contains($0.0) })?.0 == "discard")
+    durable.model.closeTab(id: quitTab.id); durable.controller.tabClosed(quitTab.id)
+    check("undoable close retains committed history", await durable.store.sleepHistory(tabID: quitTab.id) != nil)
+    durable.controller.tabPurged(tabID: quitTab.id); try await durable.store.flush()
+    check("permanent purge deletes the sleep row", await durable.store.sleepHistory(tabID: quitTab.id) == nil)
+
+
+    let purgeRace = durable.tab(age: 400)
+    try sql("BEGIN IMMEDIATE")
+    let purging = Task { await durable.controller.debugSleepNow(tabID: purgeRace.id) }
+    try await Task.sleep(for: .milliseconds(25))
+    durable.model.closeTab(id: purgeRace.id); durable.controller.tabPurged(tabID: purgeRace.id)
+    try sql("COMMIT"); await purging.value; try await durable.store.flush()
+    check("purge during an awaited save cannot resurrect history", await durable.store.sleepHistory(tabID: purgeRace.id) == nil)
+
+    let badRoot = root.appendingPathComponent("review-storage-failure")
+    try Data([0]).write(to: badRoot)
+    let broken = SleepScenario(root: badRoot), unsaved = broken.tab(age: 400)
+    await broken.controller.debugSleepNow(tabID: unsaved.id)
+    check("failed durable save prevents engine discard and applies backoff", broken.trace.ids("discard").isEmpty && unsaved.live.sleepPhase == .frozen && broken.controller.retryAfter[unsaved.id] != nil)
+    var quitThrew = false
+    do { try await broken.controller.captureAllForQuit() } catch { quitThrew = true }
+    check("quit capture propagates save failure to its caller", quitThrew)
+    broken.controller.tabClosed(unsaved.id)
+    var flushThrew = false
+    do { try await broken.controller.captureAllForQuit() } catch { flushThrew = true }
+    check("quit capture propagates flush failure even with no captures", flushThrew)
+
+    let events = scenario("short-events"), short = events.tab(age: 400)
+    short.live.isAudible = true; events.controller.tabAudioChanged(short.id)
+    short.live.isAudible = false; events.controller.tabAudioChanged(short.id)
+    events.clock.advance(59); await events.controller.tick()
+    check("audio start/stop entirely between ticks retains the full grace", short.live.sleepPhase == .live)
+    events.clock.advance(1); await events.controller.tick()
+    events.controller.tabDidCommit(short.id)
+    events.clock.advance(9); await events.controller.tick()
+    check("background commit event protects without a sampled loading transition", short.live.sleepPhase == .live)
+    events.clock.advance(1); await events.controller.tick()
+    check("event protection expires at the exact boundary", short.live.sleepPhase == .frozen)
+}
+
+@MainActor
+private func runSleepControllerBench(root: URL, check: (String, Bool) -> Void) async throws {
+    let clock = SleepClock(), trace = SleepTrace()
     let tabs = (0..<5000).map { i in
-        let tab = Tab(url: URL(string: "https://example.invalid/bench")!, lastActiveAt: now.addingTimeInterval(-Double(i)))
-        tab.live.sleepPhase = i.isMultiple(of: 2) ? .live : .frozen
+        let tab = Tab(url: URL(string: "https://example.invalid/bench")!, lastActiveAt: clock.date.addingTimeInterval(i.isMultiple(of: 250) ? -400 : -Double(40 + i % 70)))
+        tab.live.sleepPhase = .live
+        if i % 47 == 1 { tab.live.isAudible = true }
+        if i % 61 == 2 { tab.live.isCapturing = true }
+        if i % 79 == 3 { tab.live.isLoading = true }
+        if i % 101 == 4 { tab.live.devToolsOpen = true }
         return tab
     }
-    let policy = SleepPolicy(), visible: Set<ItemID> = [tabs[0].id]
-    var samples: [Double] = [], decisions = 0
-    for _ in 0..<101 {
-        let start = ContinuousClock.now
-        var count = 0
-        for tab in tabs {
-            if policy.action(tab: tab, visible: visible, now: now) != .none { count += 1 }
+    let profiles = (0..<4).map { Profile(name: "Bench \($0)", settings: ProfileSettings(sleepMode: $0 == 0 ? .conservative : $0 == 3 ? .aggressive : .balanced)) }
+    var spaces: [Space] = []
+    for (p, profile) in profiles.enumerated() {
+        profile.favorites = Array(tabs[(p * 1250)..<(p * 1250 + 10)])
+        for i in 0..<3 {
+            let first = p * 1250 + 10 + i * 413
+            let end = i == 2 ? (p + 1) * 1250 : first + 413
+            let split = Split(panes: Array(tabs[first..<(first + 4)]), focusedPaneID: tabs[first].id)
+            let nested = Folder(children: [.folder(Folder(children: tabs[(first + 4)..<end].map { .tab($0) }))])
+            spaces.append(Space(profileID: profile.id, pinned: [.split(split)], today: [.folder(nested)]))
         }
+    }
+    let windows = spaces.prefix(8).map { space in
+        BrowserWindowState(focusedSpaceID: space.id, selectedNodeBySpace: [space.id: space.pinned[0].id])
+    }
+    let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows)
+    let visibility = CLISleepVisibility(model: model)
+    for window in windows.suffix(2) { visibility.states[window.id] = .minimized }
+    visibility.states[windows[5].id] = .occluded
+    visibility.peek = [tabs[90].id, tabs[1300].id]; visibility.littleOpen = [tabs[2600].id]
+    visibility.pictureInPicture = [tabs[3900].id]; visibility.splitPanes = [tabs[4998].id, tabs[4999].id]
+    let store = CLISleepStore(root: root, trace: trace)
+    let engine = SimulatedSleepEngine(model: model, clock: clock, trace: trace)
+    let controller = SleepController(model: model, engine: engine, store: store, visibility: visibility,
+                                     chromiumTag: "156.0.8078.48", now: { clock.date })
+    await controller.tick() // One warm-up: builds derived ownership and freezes eligible tabs.
+    var samples: [Double] = []
+    for pass in 0..<200 {
+        // App visibility changes still enter the measured controller through the provider.
+        visibility.peek = [tabs[90 + pass % 4].id, tabs[1300].id]
+        let start = ContinuousClock.now
+        await controller.tick()
         let elapsed = start.duration(to: .now).components
-        decisions += count
         samples.append(Double(elapsed.seconds) * 1000 + Double(elapsed.attoseconds) / 1e15)
     }
-    samples.removeFirst(); samples.sort()
-    print(String(format: "policy tick 5000 tabs: p50=%.3f ms p95=%.3f ms max=%.3f ms; decisions=%d", samples[50], samples[95], samples[99], decisions))
-    check("policy tick over 5000 tabs < 2 ms (maximum)", samples[99] < 2 && decisions > 0)
+    samples.sort()
+    let p50 = samples[99], p95 = samples[189], maximum = samples[199]
+    print(String(format: "FULL controller pass 5000 tabs / 200 passes: p50=%.3f ms p95=%.3f ms max=%.3f ms", p50, p95, maximum))
+    print("bench workload: profiles=4 spaces=12 windows=8 visibleWindows=5; unloadQueries=\(trace.ids("unload-query").count) discards=\(trace.ids("discard").count) committedRows=\(await store.disk.allTabIDs().count)")
+    check("full controller pass over 5000 tabs < 2 ms p95 (200 measured passes)", p95 < 2 && trace.ids("discard").count > 0 && model.index.values.compactMap(\.tab).count == 5000)
 }
 
 @MainActor
@@ -422,7 +708,8 @@ func runSleepSimulation(args: [String]) async throws {
     let engine = SimulatedSleepEngine(model: model, clock: clock, trace: trace)
     for tab in tabs { tab.live.sleepPhase = .live; tab.lastActiveAt = clock.date }
     for profile in model.profiles { profile.settings.sleepMode = .balanced }
-    let controller = SleepController(model: model, engine: engine, store: store, chromiumTag: "156.0.8078.48", now: { clock.date })
+    let visibility = CLISleepVisibility(model: model)
+    let controller = SleepController(model: model, engine: engine, store: store, visibility: visibility, chromiumTag: "156.0.8078.48", now: { clock.date })
     let initiallyVisible = controller.visibleTabIDs()
     var pool = tabs.filter { !initiallyVisible.contains($0.id) }
     // Keep model counts intact. Assign runtime gates to distinct imported tabs.

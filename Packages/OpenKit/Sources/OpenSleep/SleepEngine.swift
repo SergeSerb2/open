@@ -25,12 +25,24 @@ public struct SleepHistoryEnvelope: Sendable, Equatable {
 
 @MainActor
 public protocol SleepHistoryStoring: AnyObject {
-    func saveSleepHistory(tabID: ItemID, envelope: SleepHistoryEnvelope)
+    /// Returns only after the history transaction commits. Failure must throw.
+    func save(tabID: ItemID, envelope: SleepHistoryEnvelope) async throws
+    /// Awaits all preceding writes and their durable commit before quit.
+    func flush() async throws
     func sleepHistory(tabID: ItemID) async -> SleepHistoryEnvelope?
     func deleteSleepHistory(tabID: ItemID)
 }
 
 /// The app's OpenEngine adapter implements this boundary. No CEF types cross it.
+///
+/// HARD S6 ADAPTER REQUIREMENT: deliver tabDidCommit and tabAudioChanged for
+/// EVERY tab commit/audio event, including background tabs and short events
+/// between ticks. Sampling alone is forbidden. Update capture/PiP/download,
+/// loading, DevTools, and form state on EVERY corresponding engine event.
+/// Feed PiP and all auxiliary surfaces into SleepVisibilityProviding, and call
+/// visibility hooks on window/surface changes. Report user interaction through
+/// tabUserInteracted, and unload-handler changes through tabUnloadHandlersChanged.
+/// Staggered queries are a fallback, never a replacement for event delivery.
 @MainActor
 public protocol SleepEngine: AnyObject {
     func createContent(tabID: ItemID, url: URL, history: SleepHistoryEnvelope?) async -> Bool
@@ -42,6 +54,42 @@ public protocol SleepEngine: AnyObject {
     func captureHistory(tabID: ItemID) -> SleepHistoryEnvelope?
     func hasUnloadHandlers(tabID: ItemID) -> Bool
     func handleCriticalPressure()
+}
+
+/// One app-owned snapshot, read once at the start of each controller pass.
+/// Missing or closed windows contribute no selected tabs. Auxiliary sets must
+/// contain only tabs actually shown; PiP remains protected independently of windows.
+public struct SleepVisibilitySnapshot: Sendable {
+    public enum WindowState: Sendable { case visible, minimized, occluded, closed }
+    public var windows: [WindowID: WindowState]
+    public var peek: Set<ItemID>
+    public var littleOpen: Set<ItemID>
+    public var splitPanes: Set<ItemID>
+    public var pictureInPicture: Set<ItemID>
+
+    public init(windows: [WindowID: WindowState], peek: Set<ItemID> = [],
+                littleOpen: Set<ItemID> = [], splitPanes: Set<ItemID> = [],
+                pictureInPicture: Set<ItemID> = []) {
+        self.windows = windows; self.peek = peek; self.littleOpen = littleOpen
+        self.splitPanes = splitPanes; self.pictureInPicture = pictureInPicture
+    }
+
+    @MainActor
+    public func visibleTabIDs(in model: BrowserModel) -> Set<ItemID> {
+        var ids = peek.union(littleOpen).union(splitPanes).union(pictureInPicture)
+        for window in model.windows where windows[window.id] == .visible {
+            guard let id = window.selectedNodeBySpace[window.focusedSpaceID],
+                  let node = model.index[id] else { continue }
+            if let split = node.split { ids.formUnion(split.panes.map(\.id)) }
+            else if node.tab != nil { ids.insert(id) }
+        }
+        return ids
+    }
+}
+
+@MainActor
+public protocol SleepVisibilityProviding: AnyObject {
+    func sleepVisibility() -> SleepVisibilitySnapshot
 }
 
 /// Open's v1 packing contract. Payloads remain opaque; this does not decode Chromium pickles.

@@ -4,7 +4,8 @@ S0 implements the Swift data and policy layer from
 [`plans/memory-fork.md`](plans/memory-fork.md), including its lead appendix.
 `OpenSleep` depends only on `OpenModel`. The app will supply the engine and
 store adapters in S6. S1–S6, CEF APIs, Chromium patches, switches, and app
-wiring remain outside this change. The CEF patch series is empty.
+wiring remain outside this change. The CEF patch series has no active
+patches; main now supplies its comment header.
 
 `TabLiveState` holds runtime sleep phase, capture/PiP, DevTools, and form
 protection. Only the per-profile `sleepMode` is added to the JSON snapshot.
@@ -14,9 +15,13 @@ other tabs. Pin state alone does not protect them.
 
 `SleepStore` writes opaque history containers and sidecars to
 `State/sleep.sqlite3` on one utility queue. It uses the existing SQLite
-helper and WAL settings. Over-cap writes and database errors reach
-`onError` on the main actor. A failed write keeps any prior row. Archive
-close retains the history row for later restore.
+helper with WAL, `synchronous=FULL`, and a five-second SQLite busy timeout.
+`save` and `flush` are async and throwing. Each returns after a real
+transaction commit. Over-cap writes and database errors reach `onError`
+on the main actor and throw to the caller. A failed write keeps any prior
+row. Archive close retains the history row for later restore. Permanent
+delete and archive purge must call `controller.tabPurged(tabID:)` in S6;
+that path destroys content and deletes its stored history.
 
 The Swift `SleepHistoryContainer` implements the OPNH v1 packing contract:
 little-endian header and lengths, 1–512 entries, valid current index, known
@@ -27,18 +32,49 @@ second over-cap result fails capture; the controller keeps the tab frozen.
 The future OpenEngine bridge must enforce the same contract at the CEF
 boundary.
 
-The controller uses explicit app visibility hooks after model selection
-changes. The tick computes protection from current window selections and
-all panes of each selected split. It refreshes unload flags and processes
-tabs oldest first, with one timed transition per tab per tick. One global
-5-second task and one OS memory-pressure source start and stop together.
-Warning pressure uses the normal capture/save/discard path on eligible
-frozen tabs, without waiting for the mode delay. Critical pressure also
-destroys eligible sleeping content and calls the engine pressure hook.
-Async discard completion rechecks current visibility and engine discard
-state. Quit capture includes all live/frozen split panes. With no trusted
-cheap entry-count callback yet, it takes the plan's “when in doubt,
-capture” path rather than skipping a potentially changed history.
+The app must supply `SleepVisibilityProviding`. Each pass reads one snapshot
+with per-window visible/minimized/occluded/closed state plus actual tabs
+shown in Peek, Little Open, split panes, and PiP. Missing/closed windows
+contribute no selection. Every pane in a selected split of a visible
+window counts as visible. Extra surface sets contain only actually shown
+tabs; PiP protects a tab even when its parent window is minimized.
+
+The app calls visibility hooks immediately after selection/window/surface
+changes. The pass also reconciles snapshot changes. `tabBecameHidden`
+records `hiddenAt`; showing clears it. Freeze/discard ages use hide time.
+Only tabs never shown this session fall back to persisted `lastActiveAt`.
+Model split selection and focus stamp every pane's activity time.
+
+One global five-second task and one OS memory-pressure source start and
+stop together. Each pass builds profile policies once. Tab ownership uses
+the model index/parent map, memoized by the model's structural revision;
+normal ticks do not walk each tab's ancestors. Unload queries run in stable
+round-robin order, capped at 32 per pass. Unknown unload state blocks
+discard until queried or supplied by an event. Action plans are made before
+execution; critical pressure snapshots sleeping tabs at pass entry, before
+any async restore. It destroys only those tabs, after current visibility
+is checked. A tab gets at most one phase transition in that pass.
+Warning pressure skips the mode delay for eligible frozen tabs. Critical
+pressure also calls the engine pressure hook. Both honor protection and
+retry backoff. Failed capture/save/discard or false discard completion
+backs off for 30, 60, 120 seconds, doubling to a 30-minute cap. Success or
+`tabUserInteracted` resets it.
+
+Discard awaits a committed save before renderer release. After an async
+save or engine operation, current visibility is rechecked for races;
+these necessary checks are in addition to the single pass snapshot.
+`captureAllForQuit() async throws` awaits all live/frozen captures, their
+saves, and `flush`. S6 must await it before completing quit and handle
+storage errors. Quit capture includes all live split panes. There is no
+trusted cheap entry-count callback yet, so it captures each eligible tab.
+
+**Hard S6 adapter contract:** call `tabDidCommit` and `tabAudioChanged`
+for every tab event, including background events that begin and end
+between ticks. Deliver capture, PiP, download, loading, DevTools, form,
+and unload-handler changes on every event. Report user interaction and
+visibility transitions immediately. Sampling alone is forbidden. The
+contract is also on the `SleepEngine` protocol in source. S0 CLI checks
+exercise these callbacks; live engine delivery remains an S6 gate.
 
 ## CLI verification
 
@@ -71,7 +107,7 @@ that temporary store on exit. It does not save over its input snapshot.
 
 | Check | Observed result |
 |---|---|
-| `sleep-demo` | 62 checks passed, 0 failed; exit 0 |
+| `sleep-demo` | 105 checks passed, 0 failed; exit 0 |
 | Timing | Freeze at 30 s; discard at 900/300/120 s; off freezes without timed discard; destroy at 24 h after discard |
 | Never-sleep gates | Visible, audible, loading, capturing, PiP, DevTools, and downloading block freeze and debug discard |
 | Grace periods | Audio protected for 60 s after stop; loading for 10 s after completion; form proxy for 300 s |
@@ -96,7 +132,21 @@ Expected stderr from the intentional failure cases:
 SleepStore: container exceeds 2 MiB; write dropped
 SleepStore: save failed
 SleepStore: read failed
+SleepStore: flush failed
 ```
+
+## PR #29 review findings
+
+| Finding | Fix | CLI result |
+|---|---|---|
+| 1. Selection-time ages; missing split activity | Record/clear per-tab `hiddenAt`; fallback only for never-shown tabs. Stamp all panes on split selection/focus. | Ten-minute read stays live to hide+29 s, freezes at +30 s, discards at +300 s. Both split panes pass. |
+| 2. Critical discard and destroy in one pass | Snapshot sleeping IDs before any async restore; plan each tab's one phase action before execution. | First critical pass retains the newly discarded shell; next pass destroys it. Async restore/selection race also passes. |
+| 3. Model selection was the only visibility | Require app-owned window/surface snapshots; reconcile hides/shows. Recheck after async boundaries. | Minimized, occluded, closed and removed windows sleep on hide timers. Peek, Little Open, PiP and shown split panes stay live through time, pressure and debug sleep. |
+| 4. Excessive tick cost and engine queries | Cache parent-map ownership by tree revision, group by owner, build policies/visibility once, hold one runtime record per tab, check deadlines before gates, round-robin at most 32 unload queries. | All 67 tabs sampled within 3 passes; unknown state blocks discard; profile move invalidates ownership. Full 5,000-tab/200-pass p95 **1.916 ms**. |
+| 5. Quit/discard did not await durable history | Async throwing `save`/`flush`; real SQLite commits with `synchronous=FULL`; save before renderer release. | A real writer lock holds quit/save/flush/discard; release permits completion. A second connection immediately sees the quit row. Save/flush failures reach the caller; failed save prevents discard. |
+| 6. Purge leaked history rows | `tabPurged(tabID:)` tears down content and deletes history, including a second delete after an in-flight save. Document mandatory S6 permanent-delete/archive-purge calls. | Undoable close retains history; purge deletes it; purge racing an awaited save cannot resurrect it. |
+| 7. Failed discards retried every tick | Per-tab exponential backoff, 30 s through 30 min; reset after success or interaction. | Attempts at 0/30/90/210 s; next 450 s; pressure cannot bypass it. Cap and both resets pass. |
+| 8. Event delivery was optional | Hard `SleepEngine` adapter docs require every commit/audio/capture/PiP/download event, plus other protection/visibility changes. | Audio start/stop wholly between ticks retains 60 s grace; a background commit protects for 10 s without sampled loading. Native event wiring remains S6. |
 
 ## Imported snapshot: 48 simulated hours
 
@@ -133,14 +183,37 @@ blobs, not a measurement of real Chromium histories or renderer memory.
 
 ## Performance and existing CLIs
 
-Release policy scan over 5,000 tabs: p50 **0.658 ms**, p95 **0.871 ms**,
-maximum **1.113 ms**; all 100 measured scans were below 2 ms.
+The review benchmark measures `await SleepController.tick()` over 5,000
+real model tabs for **200 measured passes**, after one warm-up pass. It
+includes the app visibility provider, reconciliation, profile policies,
+indexed ownership, phase/gate decisions, 32 round-robin engine queries per
+pass, transition execution, and any awaited SQLite saves. The engine and
+clock are the same CLI simulation used by the functional scenarios.
+This is a full controller measurement; native CEF call cost remains an S6
+gate. The warm-up includes initial ownership-cache construction and bulk
+freeze and is excluded from the percentile sample.
 
-The performance command runs 101 scans and drops the first warm-up scan.
-Each measured scan sends all 5,000 real Tab objects through the pure policy
-with a fixed clock and a visible set. The budget check uses the maximum
-of the remaining 100 samples. It measures policy decisions; it excludes
-engine work, SQLite I/O, and native wake/paint time.
+The workload has 4 profiles, 12 Spaces, 8 windows (5 visible, 2 minimized,
+1 occluded), nested folders, favorites, selected splits, Peek, Little Open,
+PiP, and explicit split surfaces. It mixes audible/capturing/loading/DevTools
+tabs with quiet tabs. Hidden ages span 40–109 seconds, with twenty older
+tabs; protected older tabs stay live. The simulated clock stays fixed so
+the 200 passes measure the same scale and phase deadlines. Peek membership
+changes each pass. Discard candidates keep the real store path in the
+measurement, including durable commit latency.
+
+Final release full-pass result: **p50 0.551 ms, p95 1.916 ms, max
+49.722 ms**. The **p95 < 2 ms** budget passed. All 200 samples, including
+the maximum, are retained; the budget does not impose a maximum latency.
+Across warm-up plus measured passes the engine received 6,432 unload
+queries and 15 discards; SQLite held all 15 committed rows. These numbers
+include async commit waits; they do not claim native renderer or UI latency.
+
+The first full-pass implementation failed the budget: p50 4.578 ms,
+p95 6.207 ms, max 13.235 ms. Consolidating per-tab runtime records and
+checking phase deadlines before gates reduced repeated UUID hashing and
+runtime reads. Grouping tabs by indexed owner removed per-tab policy-map
+lookups. The workload and its durable writes stayed the same.
 
 | Existing command | Result |
 |---|---|
@@ -153,7 +226,7 @@ engine work, SQLite I/O, and native wake/paint time.
 | Route A1–A11 | PASS, plus usage, empty-state, source, prefix, and failure paths |
 | Route A12–A17 | PASS: IPv6 35, IDN 48, migration 3, ports 11, bare authorities 4, stale-rule defaults 6 CLI decisions |
 | Dependency boundary | All three OpenSleep files import Foundation and OpenModel only |
-| CEF patch series | Zero bytes |
+| CEF patch series | No active patches; comment header from main |
 
 The route replay used the existing temporary CLI drivers with a fresh
 imported fixture. One driver had a case mismatch in its documentation
@@ -175,11 +248,27 @@ remain unverified until the engine and app steps. The fixtures are ready
 for those checks. The existing routing and scripting targets were kept;
 the plan's earlier target inventory predates them.
 
-Before publication, `git fetch origin && git merge origin/main` merged
-`922fe5f05934555ff132f960a9a5ac445d01d8dc` without conflicts. That merge
-added documentation only. The built Swift sources were unchanged. Imported
-round-trip, the 48-hour simulation, and both 66/66 command demos passed
-again after the merge.
+The PR #29 review update started with `git fetch origin && git merge
+origin/main`. Main at `f4f87da` added fork infrastructure, Boosts, and
+import targets. The prescribed union script resolved `Package.swift` while
+keeping both targets. CLI usage kept both branches' commands. The merged
+package built before the review fixes, and the final package built with
+the same release command and no warnings/errors. No Chromium build or
+shared engine-tree operation ran.
 
-Verified release `openkit` SHA-256:
-`31506802c2d72b5bd56cef51b7494dbf445ce93c355ab4dfdcb6771452222a6e`.
+The review requirements supersede the original plan's selection-time clock,
+fire-and-forget store seam, model-only visibility, and all-tabs unload
+sampling. The lead's phase ladder, mode delays, split-pane quit capture,
+Chrome-style requirement, and S0-only scope remain in force.
+
+Final raw CLI receipts (including the failed performance iterations) are
+outside the repository at
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-sleep-pr29-review-f32uvocn`.
+`sleep-demo-final.stdout` records 105/105 and the 200-pass benchmark;
+`sleep-sim-final.stdout` records the passing 48-hour run. The routing
+receipts include A1–A17. The reused temporary A14 driver again needed its
+case-only `PR` assertion corrected to `pr` before comparing lowercased
+document text; routing source was unchanged.
+
+Verified final release `openkit` SHA-256:
+`098826ae5d70f4f78c8bf331af244f7c150744a82aeda21f485453e967e36f0b`.
