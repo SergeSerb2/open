@@ -168,7 +168,8 @@ func runProfiles(args: [String]) throws {
         try snapshot.saveNow(model: model); print("assigned space \(s.id.description.prefix(8)) -> profile \(p.id.description.prefix(8))")
     case "create-space":
         let p = profile(options["--profile"]!)
-        let s = model.createSpace(title: options["--title"]!, profileID: p.id)
+        guard let s = model.createSpace(title: options["--title"]!, profileID: p.id, icon: nil, theme: SpaceTheme(), at: nil, moving: [])
+        else { profileCLIError("unknown profile \(p.id)", code: 2) }
         try snapshot.saveNow(model: model); print("created space \(s.id.description.prefix(8)) profile=\(p.id.description.prefix(8))")
     case "delete":
         let p = profile(positional[0]), favoriteCount = p.favorites.count
