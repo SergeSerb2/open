@@ -392,7 +392,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func syncSelectionIndexes() {
-        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted else { return }
+        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted, !outline.trackingMouseDown else { return }
         let wanted = IndexSet(context.selection.ids.compactMap { id in
             guard let object = context.model.node(id: id)?.object else { return nil }
             let row = outline.row(forItem: object)
@@ -694,6 +694,7 @@ final class SidebarOutlineView: NSOutlineView {
     private(set) var keyboardItem: AnyObject?
     var didActivateMouseDown = false
     var dragWasStarted = false
+    var trackingMouseDown = false
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -711,6 +712,11 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        trackingMouseDown = true
+        defer {
+            trackingMouseDown = false
+            if !dragWasStarted { page?.syncSelectionIndexes() }
+        }
         keyboardItem = nil
         didActivateMouseDown = false
         dragWasStarted = false

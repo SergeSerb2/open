@@ -81,7 +81,7 @@ struct SidebarMenus {
             items.append(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))
         }
         items += [item("Duplicate", .duplicateNodes(ids: ids)), .separator()]
-        if !tabs.isEmpty { items.append(item(tabs.count == 1 ? "Archive Item" : "Archive Items", .archiveNodes(ids: tabs))) }
+        if !tabs.isEmpty { items.append(item("Archive Items", .archiveNodes(ids: tabs))) }
         if !folders.isEmpty { items.append(item("Delete", .deleteFolders(ids: folders))) }
         return menu(items)
     }
@@ -99,7 +99,8 @@ struct SidebarMenus {
         NSSharingServicePicker(items: [tab.url]).standardShareMenuItem
     }
 
-    /// Today (unpinned) tab (F0115).
+    /// Today (unpinned) tab: capture session 2, 08-folder-preview frame 0050.
+    /// Archive Other Tabs remains a guessed Option alternate.
     func todayTab(_ tab: Tab) -> NSMenu {
         var items: [NSMenuItem] = [
             item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
@@ -107,7 +108,7 @@ struct SidebarMenus {
             item("Open in Split View", .openInSplitView(tabID: tab.id)),
             moveTo(tab.id),
             .separator(),
-            item("Archive Item", .close(nodeID: tab.id)),
+            item("Archive Tab", .close(nodeID: tab.id)),
         ]
         if let space = context.model.parent(of: tab.id).flatMap(spaceID(of:)) {
             var keep = Set(context.selection.ids)
@@ -116,6 +117,9 @@ struct SidebarMenus {
             alternate.isAlternate = true
             alternate.keyEquivalentModifierMask = .option
             items.append(alternate)
+            let today = context.model.space(id: space)?.today ?? []
+            let below = today.firstIndex(where: { $0.id == tab.id }).map { Array(today.dropFirst($0 + 1).map(\.id)) } ?? []
+            items.append(item("Archive Tabs Below", enabled: !below.isEmpty, .archiveNodes(ids: below)))
         }
         return menu(items)
     }
