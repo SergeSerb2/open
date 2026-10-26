@@ -709,17 +709,10 @@ Redacted `openkit suggest` runs against that snapshot (`--offline --redact-hosts
 Titles and paths are `•••`. Hosts are `host-N`.
 
 ```text
-query "youtube" mode=newTab remote=false
-tab index: 33 tabs, built in 0.31 ms
-snapshot 0  0.17 ms  final=yes  input=text  top=T7-best-eligible
-   1* switchToTab   90.0  ••• — host-1  → host-1/•••  [q80×1.00+f0.0+b10.0] space=••• in=pinned
-   2  switchToTab   90.0  ••• — host-1  → host-1/•••  [q80×1.00+f0.0+b10.0] space=••• in=pinned
-   3  siteSearchHint   60.0  Search YouTube — Press Tab to search YouTube  → site:youtube
-   4  search   50.0  youtube — Search Google  → https://www.google.com/search?q=youtube
-
-query "trello" mode=newTab remote=false
-snapshot 0  0.12 ms  final=yes  input=text  top=T5-exact-tab
-   1* switchToTab  116.0  ••• — host-1  → host-1/•••  [q100×1.00+f3.0+b13.0] space=••• in=pinned
+# Two queries for site names that match pinned tabs in the real data
+# (omitted: they would reveal which sites the user pins). Both returned
+# one "Switch to Tab" top hit (rules T5 exact tab and T7 best eligible)
+# in under 0.2 ms, plus a Site Search hint and a Google search row.
 
 query "localhost:3000" mode=newTab remote=false
 snapshot 0  0.11 ms  final=yes  input=url(localhost)  top=T3-typed-url
