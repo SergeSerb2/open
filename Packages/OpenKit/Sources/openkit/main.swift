@@ -2,7 +2,7 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check> ...")
+    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
@@ -17,6 +17,8 @@ do {
         try await MainActor.run { try runDump(args: rest) }
     case "roundtrip":
         try await MainActor.run { try runRoundtrip(args: rest) }
+    case "route":
+        try await MainActor.run { try runRoute(args: rest) }
     case "bench":
         await runBench()
     case "commands-demo":

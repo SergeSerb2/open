@@ -19,13 +19,34 @@ public enum AutoArchiveInterval: String, Codable, CaseIterable, Sendable {
 
 public struct ProfileSettings: Codable, Hashable, Sendable {
     public var autoArchiveAfter: AutoArchiveInterval
-    public var littleArcAutoArchiveAfter: AutoArchiveInterval
+    public var littleOpenAutoArchiveAfter: AutoArchiveInterval
     public var searchEngineID: String
 
-    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleArcAutoArchiveAfter: AutoArchiveInterval = .twelveHours, searchEngineID: String = "duckduckgo") {
+    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "duckduckgo") {
         self.autoArchiveAfter = autoArchiveAfter
-        self.littleArcAutoArchiveAfter = littleArcAutoArchiveAfter
+        self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchEngineID = searchEngineID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID
+        case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        autoArchiveAfter = try container.decode(AutoArchiveInterval.self, forKey: .autoArchiveAfter)
+        littleOpenAutoArchiveAfter = try container.decodeIfPresent(AutoArchiveInterval.self, forKey: .littleOpenAutoArchiveAfter)
+            ?? container.decodeIfPresent(AutoArchiveInterval.self, forKey: .littleArcAutoArchiveAfter)
+            ?? .sixHours
+        searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(autoArchiveAfter, forKey: .autoArchiveAfter)
+        try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
+        try container.encode(searchEngineID, forKey: .searchEngineID)
     }
 }
 
@@ -70,7 +91,7 @@ public enum SidebarMode: String, Codable, Sendable {
 }
 
 public enum WindowStyle: String, Codable, Sendable {
-    case standard, littleArc
+    case standard, littleOpen
 }
 
 @MainActor
@@ -109,21 +130,117 @@ public enum RoutingMatch: Codable, Hashable, Sendable {
 
 public enum RoutingDestination: Codable, Hashable, Sendable {
     case space(SpaceID)
-    case littleArc
+    case littleOpen
     case mostRecentSpace
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: RoutingDestinationCodingKey.self)
+        guard let key = container.allKeys.first, container.allKeys.count == 1 else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "RoutingDestination: expected one key"))
+        }
+        switch key.stringValue {
+        case "space":
+            let nested = try container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: key)
+            self = .space(try nested.decode(SpaceID.self, forKey: .value))
+        case "littleOpen", "littleArc": // Legacy snapshots, decode only.
+            self = .littleOpen
+        case "mostRecentSpace":
+            self = .mostRecentSpace
+        default:
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "RoutingDestination: unknown key \(key.stringValue)"))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: RoutingDestinationCodingKey.self)
+        switch self {
+        case .space(let id):
+            var nested = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .space)
+            try nested.encode(id, forKey: .value)
+        case .littleOpen:
+            _ = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .littleOpen)
+        case .mostRecentSpace:
+            _ = container.nestedContainer(keyedBy: RoutingDestinationSpaceKey.self, forKey: .mostRecentSpace)
+        }
+    }
 }
 
-public enum DefaultDestination: Codable, Hashable, Sendable {
-    case mostRecentSpace
-    case littleArc
-    case space(SpaceID)
+// String passthrough keeps unknown and legacy keys visible to the strict decoder.
+private struct RoutingDestinationCodingKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+    static let space = Self(stringValue: "space")
+    static let littleOpen = Self(stringValue: "littleOpen")
+    static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
 }
+
+private enum RoutingDestinationSpaceKey: String, CodingKey { case value = "_0" }
+
+public enum DefaultDestination: Codable, Hashable, Sendable {
+    case space(SpaceID)
+    case littleOpen
+    case mostRecentSpace
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: DefaultDestinationCodingKey.self)
+        guard let key = container.allKeys.first, container.allKeys.count == 1 else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "DefaultDestination: expected one key"))
+        }
+        switch key.stringValue {
+        case "space":
+            let nested = try container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: key)
+            self = .space(try nested.decode(SpaceID.self, forKey: .value))
+        case "littleOpen", "littleArc": // Legacy snapshots, decode only.
+            self = .littleOpen
+        case "mostRecentSpace":
+            self = .mostRecentSpace
+        default:
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "DefaultDestination: unknown key \(key.stringValue)"))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: DefaultDestinationCodingKey.self)
+        switch self {
+        case .space(let id):
+            var nested = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .space)
+            try nested.encode(id, forKey: .value)
+        case .littleOpen:
+            _ = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .littleOpen)
+        case .mostRecentSpace:
+            _ = container.nestedContainer(keyedBy: DefaultDestinationSpaceKey.self, forKey: .mostRecentSpace)
+        }
+    }
+}
+
+// String passthrough keeps unknown and legacy keys visible to the strict decoder.
+private struct DefaultDestinationCodingKey: CodingKey {
+    let stringValue: String
+    var intValue: Int? { nil }
+    init(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
+    static let space = Self(stringValue: "space")
+    static let littleOpen = Self(stringValue: "littleOpen")
+    static let mostRecentSpace = Self(stringValue: "mostRecentSpace")
+}
+
+private enum DefaultDestinationSpaceKey: String, CodingKey { case value = "_0" }
 
 public struct RoutingRule: Codable, Hashable, Sendable, Identifiable {
     public var id: RuleID
     public var match: RoutingMatch
     public var destination: RoutingDestination
-    public init(id: RuleID = RuleID(), match: RoutingMatch, destination: RoutingDestination) {
+    /// Bundle ids use trimmed lowercase as their canonical form.
+    public var sourceBundleID: String?
+    public init(id: RuleID = RuleID(), match: RoutingMatch, destination: RoutingDestination, sourceBundleID: String? = nil) {
         self.id = id; self.match = match; self.destination = destination
+        let source = sourceBundleID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        self.sourceBundleID = source?.isEmpty == false ? source : nil
     }
 }
