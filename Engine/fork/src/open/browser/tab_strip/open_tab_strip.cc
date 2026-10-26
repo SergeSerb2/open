@@ -675,20 +675,21 @@ CefRefPtr<CefTabStrip> CefTabStrip::Create(
   if (!impl->VerifyBrowserContext()) {
     return nullptr;
   }
-  // A context with a disk path whose Chrome profile CEF could not create
-  // falls back to a unique off-the-record profile of the default profile
-  // (ChromeBrowserContext::ProfileCreated). Extensions of the default
+  // Backstop. A context with a disk path whose Chrome profile CEF could not
+  // create falls back to a unique off-the-record profile of the default
+  // profile (ChromeBrowserContext::ProfileCreated). Extensions of the default
   // profile allowed in incognito could see such tabs, so these contexts get
-  // no tab strip; their pages stay Alloy. Ephemeral contexts (no disk path)
-  // are Open's incognito windows and keep their tab strip.
-  // TODO(open): remove with the profile layout fix (m5/profiles-engine-root).
+  // no tab strip; their pages stay Alloy. OEEngine already refuses a folder
+  // that is not a direct child of root_cache_path, so this fires only if CEF
+  // fails for another reason. Ephemeral contexts (no disk path) are Open's
+  // incognito windows and keep their tab strip.
   Profile* profile = CefRequestContextImpl::GetProfile(impl.get());
   CefBrowserContext* browser_context = impl->GetBrowserContext();
   if (profile && profile->IsOffTheRecord() && !profile->IsPrimaryOTRProfile() &&
       browser_context && !browser_context->cache_path().empty()) {
-    LOG(WARNING) << "Open: no tab strip for "
-                 << browser_context->cache_path().value()
-                 << " (no disk profile)";
+    LOG(ERROR) << "Open: no tab strip for "
+               << browser_context->cache_path().value()
+               << " (Chromium kept it in memory, not on disk)";
     return nullptr;
   }
   return new open_engine::OpenTabStrip(impl, handler);

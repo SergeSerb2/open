@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var snapshotStore: SnapshotStore!
   private(set) var archiveSink: ProfileArchiveSink!
   private(set) var directories: ProfileDirectories!
+  /// The engine layout step's outcome (and the data root lock).
+  private(set) var engine: OpenDataRoot.EnginePreparation!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
   private(set) var windowControllers: [BrowserWindowController] = []
   let undoManager = UndoManager()
@@ -55,19 +57,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   // MARK: Model
 
-  /// Loads the model and prepares the data root (lock, layout migration,
-  /// profile folders). Runs before the engine starts.
+  /// Prepares the data root (lock, Chromium's layout, Open's stores, profile
+  /// folders) and loads the model. Runs before the engine starts.
   @discardableResult
   func prepareData() -> ProfileDirectories {
     if let directories { return directories }
     let root = options.userDataDirectory
-    snapshotStore = SnapshotStore(root: root)
-    let loaded: BrowserModel?
+    // Chromium's data layout is its own step, before the snapshot loads. A
+    // migration problem selects the old layout for this launch (retried on
+    // the next one); it never touches the model.
     do {
-      loaded = try snapshotStore.load()
+      engine = try OpenDataRoot.prepareEngineLayout(root: root)
     } catch {
-      FileHandle.standardError.write(Data("Open: snapshot failed to load, starting fresh: \(error)\n".utf8))
-      loaded = nil
+      FileHandle.standardError.write(Data("Open: data root \(root.path) unavailable: \(error)\n".utf8))
+      exit(1)
+    }
+    let layout = engine.result
+    if !layout.report.moved.isEmpty || !layout.report.skipped.isEmpty || layout.problem != nil {
+      FileHandle.standardError.write(Data(
+        "Open: engine layout \(layout.layout) in \(String(format: "%.1f", layout.milliseconds)) ms\n".utf8))
+    }
+    snapshotStore = SnapshotStore(root: root)
+    // Only an unreadable snapshot starts a fresh model, and the unreadable
+    // file is kept beside the new one, never overwritten.
+    var loaded: BrowserModel?
+    do {
+      loaded = try snapshotStore.loadData().map(SnapshotMapper.model(from:))
+    } catch {
+      let kept = snapshotStore.fileURL.deletingLastPathComponent()
+        .appendingPathComponent("browser.unreadable-\(Int(Date().timeIntervalSince1970)).json")
+      try? FileManager.default.moveItem(at: snapshotStore.fileURL, to: kept)
+      FileHandle.standardError.write(Data(
+        "Open: snapshot unreadable (kept as \(kept.lastPathComponent)), starting fresh: \(error)\n".utf8))
     }
     let model = loaded ?? Self.makeDefaultModel()
     if model.windows.isEmpty, let space = model.spaces.first {
