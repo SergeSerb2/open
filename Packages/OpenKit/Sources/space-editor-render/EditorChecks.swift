@@ -26,7 +26,7 @@ enum EditorChecks {
             scene.controller.close()
         }
         try drag(); try addRemove(); try modes(); try keyboardAndAccessibility()
-        try controls(); try reviewedFlows()
+        try controls(); try reviewedFlows(); try reviewedControls()
     }
     static func controls() throws {
         for scale in [1.0, 2.0] {
@@ -92,7 +92,8 @@ enum EditorChecks {
         let layouts = (slider.layoutPassCount, dial.layoutPassCount, scene.view.layoutPassCount)
         scene.mouse(.leftMouseDown, at: CGPoint(x: 14, y: 28), in: slider)
         for x in stride(from: 24.0, through: 114, by: 10) { scene.mouse(.leftMouseDragged, at: CGPoint(x: x, y: 28), in: slider) }
-        check(slider.value == 0.5 && slider.thumbFrame.midX == 114 && scene.controller.previewCount == before, "E6 slider value maps to calibrated 200 pt travel and queues pointer previews")
+        check(slider.value == 0.5 && scene.view.controlFrames["thumb"]?.midX == 132 && scene.controller.previewCount == before,
+              "E6 slider midpoint is literal content x=132 and queues pointer previews")
         scene.controller.flushPreviewFrame(); OffscreenRenderer.settle(scene.view)
         scene.mouse(.leftMouseUp, at: CGPoint(x: 114, y: 28), in: slider); scene.controller.flushPreviewFrame()
         check(scene.space.theme.style?.intensityFactor == 0.5 && scene.controller.commitCount == 1,
@@ -136,7 +137,7 @@ enum EditorChecks {
               && dial.centerButton.accessibilityLabel() == "Cycle noise texture"
               && scene.view.presets.visibleSwatches[0].accessibilityLabel()?.hasPrefix("Set Space color to ") == true,
               "E1 remaining native accessibility roles, labels, and texture value")
-        check(scene.view.add.nextKeyView === scene.view.presets.previous
+        check(scene.view.add.nextKeyView === scene.view.presets.visibleSwatches[0]
               && scene.view.presets.next.nextKeyView === slider && slider.nextKeyView === dial.centerButton
               && dial.centerButton.nextKeyView === dial, "E1 complete keyboard focus order")
         scene.controller.close()
@@ -284,7 +285,7 @@ enum EditorChecks {
         scene.panel.orderOut(nil); scene.controller.close()
 
         let empty = try EditorScene(style: nil)
-        check(empty.view.pad.nextKeyView === empty.view.modes.buttons[0] && empty.view.remove.nextKeyView == nil && empty.view.add.nextKeyView == nil,
+        check(empty.view.pad.nextKeyView === empty.view.presets.visibleSwatches[0] && empty.view.remove.nextKeyView == nil && empty.view.add.nextKeyView == nil,
               "E1 empty-state key chain excludes hidden buttons")
         empty.controller.close()
         let held = try EditorScene()
@@ -299,8 +300,79 @@ enum EditorChecks {
         check(held.controller.state.style?.colorCount == count, "E1 repeated button activation is ignored")
         check(!(held.view.pad.accessibilityValue() as? String ?? "").contains(" %"), "E1 AX lightness uses a percent without a space")
         held.click(held.view.add); held.click(held.view.add)
-        check(held.view.remove.nextKeyView === held.view.modes.buttons[0] && held.view.add.nextKeyView == nil,
+        check(held.view.remove.nextKeyView === held.view.presets.visibleSwatches[0] && held.view.add.nextKeyView == nil,
               "E1 key chain removes disabled Add at three colors")
         held.controller.close()
+    }
+    static func reviewedControls() throws {
+        let scene = try EditorScene(), dial = scene.view.noise, slider = scene.view.intensity
+        for target in [slider, dial] as [NSView] {
+            let original = scene.space.theme, commits = scene.controller.commitCount
+            scene.undo.removeAllActions()
+            scene.scroll(target, y: 1, phase: 1)
+            for _ in 0..<3 { scene.scroll(target, y: 1, phase: 2); scene.controller.flushPreviewFrame() }
+            RunLoop.main.run(until: Date().addingTimeInterval(0.18)); scene.controller.flushPreviewFrame()
+            check(scene.controller.commitCount == commits && !scene.undo.canUndo,
+                  "E6 \(target === slider ? "slider" : "dial") phased scroll previews without intermediate undo")
+            scene.scroll(target, phase: 4)
+            scene.scroll(target, y: 1, momentum: 1); scene.scroll(target, y: 1, momentum: 2)
+            scene.scroll(target, momentum: 3); scene.controller.flushPreviewFrame()
+            check(scene.controller.commitCount == commits + 1 && scene.undo.canUndo,
+                  "E6 \(target === slider ? "slider" : "dial") momentum end commits exactly once")
+            scene.undo.undo(); scene.controller.prepareForSnapshot()
+            check(scene.space.theme == original && !scene.undo.canUndo, "E6 one undo restores the whole scroll gesture")
+        }
+        let commits = scene.controller.commitCount
+        for _ in 0..<4 { scene.scroll(slider, y: -1); scene.controller.flushPreviewFrame() }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2)); scene.controller.flushPreviewFrame()
+        check(scene.controller.commitCount == commits + 1, "E6 phase-free wheel events coalesce until idle")
+        let keyboardCommit = scene.controller.commitCount
+        scene.scroll(dial, y: 1, phase: 1); scene.key(124, target: dial)
+        check(scene.controller.commitCount == keyboardCommit + 2, "E6 keyboard input finishes a scroll before its own undo step")
+        scene.controller.apply(.setNoise(0.98, final: true)); scene.controller.flushPreviewFrame()
+        check(dial.hiddenDotIndices.isEmpty, "E6 non-wrapping slot distance hides no dot at noise 0.98")
+        scene.controller.apply(.setNoise(1, final: true)); scene.controller.flushPreviewFrame()
+        check(dial.hiddenDotIndices == [0], "E6 exact endpoint hides only coincident slot zero")
+        scene.mouse(.leftMouseDown, at: dial.ringPoint(angle: 9), in: dial)
+        scene.mouse(.leftMouseUp, at: dial.ringPoint(angle: 9), in: dial); scene.controller.flushPreviewFrame()
+        check(abs(dial.value - 0.025) < 1e-9, "E6 between-dot click keeps its continuous angle rather than snapping")
+        scene.mouse(.leftMouseDown, at: dial.ringPoint(angle: 18), in: dial)
+        scene.mouse(.leftMouseUp, at: dial.ringPoint(angle: 18), in: dial); scene.controller.flushPreviewFrame()
+        check(abs(dial.value - 0.05) < 1e-9 && dial.hiddenDotIndices == [1], "E6 inside-dot click snaps and hides only the nearest slot")
+        scene.controller.apply(.setNoise(0, final: true)); scene.controller.flushPreviewFrame()
+        let previews = dial.previewCompositionCount
+        for _ in 0..<4 { scene.click(dial.centerButton) }
+        check(dial.previewCompositionCount == previews, "E6 zero noise skips preview composition across all textures")
+        scene.controller.apply(.setNoise(0.1, final: true)); scene.controller.flushPreviewFrame()
+        check(dial.previewCompositionCount == previews, "E6 returning to the same nonzero texture reuses the existing preview")
+        let fresh = try EditorScene()
+        for _ in 0..<3 { fresh.click(fresh.view.noise.centerButton) }
+        check(fresh.view.noise.previewCompositionCount == 0, "E6 fresh zero-noise texture cycling composes nothing")
+        fresh.controller.apply(.setNoise(0.1, final: true)); fresh.controller.flushPreviewFrame()
+        check(fresh.view.noise.previewCompositionCount == 1, "E6 first nonzero noise composes the chosen preview once")
+        let phaseEnd = fresh.controller.commitCount
+        fresh.scroll(fresh.view.noise, y: 1, phase: 1); fresh.scroll(fresh.view.noise, phase: 4)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.12)); fresh.controller.flushPreviewFrame()
+        check(fresh.controller.commitCount == phaseEnd + 1, "E6 phase end without momentum commits once after its grace interval")
+        fresh.controller.close()
+        let empty = try EditorScene(style: nil)
+        check(empty.view.intensity.alphaValue == 0.35 && empty.view.noise.alphaValue == 0.35,
+              "E1 empty state dims disabled slider and dial to 0.35")
+        empty.controller.close()
+        scene.panel.setFrameOrigin(CGPoint(x: -20000, y: -20000)); scene.panel.orderBack(nil)
+        var nativePages = true
+        for page in 0..<5 {
+            scene.controller.apply(.setPresetPage(page)); OffscreenRenderer.settle(scene.view)
+            scene.clickContent(CGPoint(x: 60, y: 380))
+            nativePages = nativePages && scene.space.theme.style?.keyColor == SpaceStylePresets.all[page * 9].style.keyColor
+            check(scene.space.theme.style?.keyColor == SpaceStylePresets.all[page * 9].style.keyColor,
+                  "E4 native click selects page \(page + 1)'s visible swatch")
+        }
+        check(nativePages, "E4 panel.sendEvent hits a visible swatch after every page transition")
+        scene.panel.orderOut(nil)
+        let beforeClose = scene.controller.commitCount
+        scene.scroll(slider, y: 1, phase: 1); scene.controller.close()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        check(scene.controller.commitCount == beforeClose + 1, "E6 close finishes one scroll and cancels its idle callback")
     }
 }

@@ -511,12 +511,12 @@ state (**guess**). Each click is one commit.
 | Property | Value |
 |---|---|
 | Track | capsule 224 × 16, `ThemeEditorColors.trackFill` (white ≈ 0.08) |
-| Wave | sine, wavelength 37.5 pt, amplitude 13.75 pt, stroke 4.5 pt round caps, from x 30 to x 230; left of the thumb `waveActive` (white ≈ 0.53), right `waveInactive` (white ≈ 0.15) |
-| Thumb | white capsule 24 × 56 (radius 12), shadow black 0.2 / radius 2 / y 1 (**guess**) |
+| Wave | slider-local `y = 28 − 11.75·sin(2π(x − 7.8)/37.9)`, x 7.8…216.2 (5.5 periods, centerline endpoints); stroke 4.5 pt round caps. Left of the thumb `waveActive` (white ≈ 0.53), right `waveInactive` (white ≈ 0.15); disjoint masks prevent alpha stacking. |
+| Thumb | white capsule 24 × 56 (radius 12), faint white 0.04 halo / radius 3 / offset 0; light mode black 0.12 / 1 pt stroke |
 | Value | 0…1; thumb center x = 32 + 200·value; input uses the same mapping |
 | Interaction | mouse down on the track jumps the thumb, then drags; scroll wheel ± 0.02 per line; keys ←/→ ± 0.05 |
 | Label / tooltip | "Intensity" |
-| Live | preview per frame; commit on mouse up |
+| Live | preview per frame; commit on mouse up. Scroll phase plus momentum is one undo step, finished at momentum end; an 80 ms phase-end grace allows momentum to begin. Phase-free wheel mice finish after 150 ms idle. |
 
 Lead calibration decision (2026-10-26 01:43:21 and 01:43:54
 America/Vancouver): F0137 and F0138 place the 24 × 56 pt thumb at panel
@@ -535,16 +535,20 @@ input all use the calibrated art center.
 
 | Property | Value |
 |---|---|
-| Ring | 20 dot slots at an 18° pitch, radius 32.5, dot 4.5 pt. Unlit `dotUnlit` (white ≈ 0.15), lit `dotLit` (white ≈ 0.5). Slot `k` (0…19, clockwise from 12 o'clock) is lit when `k·18° ≤ noise·360°`. The slot under the tick is hidden. |
-| Tick | white capsule 7.5 × 15.5, centered on the ring at `noise × 360°` clockwise from 12 o'clock, rotated to point at the center |
-| Center | 40 pt disc. Noise 0: 1 pt ring `dotUnlit`, no fill. Noise > 0: `ThemeTexture.knobPreview` of the selected texture, opacity `0.4 + 0.6·noise` (**guess**), 1 pt ring |
+| Ring | 20 dot slots at an 18° pitch, radius 32.5, dot 4.5 pt. Unlit `dotUnlit` (white ≈ 0.15), lit `dotLit` (white ≈ 0.5). Slot `k` (0…19, clockwise from 12 o'clock) is lit when `k·18° ≤ noise·360°`. Hide only the nearest slot using non-wrapping distance over 0…342° and a 9° tolerance. At noise 0.98 hide none; at exactly 1 hide coincident slot 0. Lead decision 2026-10-26 09:56:38 America/Vancouver. |
+| Tick | white capsule 7.5 × 15.5, centered on the ring at `noise × 360°` clockwise from 12 o'clock, rotated to point at the center; light mode black 0.12 / 1 pt stroke |
+| Center | 40 pt disc. Noise 0: 1 pt ring `dotUnlit`, no fill or preview composition. Noise > 0: `ThemeTexture.knobPreview` of the selected texture, opacity `0.4 + 0.6·noise` (**guess**), 1 pt ring. Preview-only top-to-bottom gradient about ±7 gray levels and twice the grain contrast about its mean; Space tiles stay unchanged. |
 | Click center | cycle texture grain → sand → denim → tweed → grain (tooltip "Cycle noise texture"); one commit |
 | Drag on ring | noise = angle / 360°, clamped 0…1; a jump of more than 0.5 between ticks clamps to the nearer end (no wrap) |
-| Click a dot | noise snaps to `k × 0.05` |
-| Scroll wheel | ± 0.01 per line (**guess**) |
+| Click a dot | inside a 3 pt radius, noise snaps to `k × 0.05`; between dots, keep the pressed angle continuous |
+| Scroll wheel | ± 0.01 per line (**guess**); phase and momentum commit once per gesture, with the same wheel idle fallback as the slider |
 | Trackpad rotate | `rotation` degrees / 360 (Arc `NoiseFactorGesture.rotation`) |
 | Keys | ←/→ ± 0.05 |
 | Label | "Noise" |
+
+R1 design correction: disabled slider and dial use alpha 0.35 in the empty
+state (**guess**, lead accepted). Light harness renders use a light backdrop.
+R1 does not change the approved thumb mapping, dial center, or hit frames.
 
 ### 5.9 Color tokens (`OpenDesign/ThemeEditorTokens.swift`, new)
 
@@ -557,7 +561,7 @@ Dark values are measured on F0137 over the popover material. Light values are
 | `dot` | white 0.20 | black 0.14 |
 | `knobRing` | white 1.0 | white 1.0 (+ black 0.12 1 pt outer stroke) |
 | `glyph` | white 0.50 | black 0.45 |
-| `glyphSelected` | white 0.90 | black 0.85 |
+| `glyphSelected` | white 0.50 | black 0.45 |
 | `selectedPlate` | white 0.10 | black 0.07 |
 | `hoverPlate` | white 0.06 | black 0.04 |
 | `secondaryText` | white 0.50 | black 0.45 |
@@ -1044,6 +1048,13 @@ from the capture at AX `[500, 35, 382, 534]`.
 | Dial tick angle (F0138) | ± 2° | 162° expected |
 | Lit dot count (F0138) | exact (9) | |
 | Window background + sidebar after edit (F0139 / F0141) | `docs/design.md` §8 targets (≤ 1 pt, ΔE00 ≤ 2) | via `space-editor-render window` with the stored style |
+
+R1 follow-up (2026-10-26): compare the inset material body edges and
+continuous corner contours as well as the existing controls. The slider
+wave rises first and its dim layer starts at the thumb center. The dial
+uses non-wrapping dot suppression (no hidden dot at 0.98), per the lead's
+09:56:38 decision. F0138 still masks the animated Automatic glyph; F0137
+remains its calibration reference. No approved control geometry is reopened.
 
 The creation form, the icon picker, 2–3 knobs, forced modes, page 2, and the
 light appearance have no capture yet. Their checks are geometry-only until

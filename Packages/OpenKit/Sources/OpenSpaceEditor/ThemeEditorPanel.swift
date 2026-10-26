@@ -132,7 +132,9 @@ public final class ThemeEditorContentView: NSView {
         if let focused = window?.firstResponder as? NSView, all.contains(where: { $0 === focused }),
            !views.contains(where: { $0 === focused }) { window?.makeFirstResponder(views.first) }
     }
-    public func finishGestures() { pad.finishKeyboardGesture() }
+    public func finishGestures() {
+        pad.finishKeyboardGesture(); intensity.finishScrollGesture(); noise.finishScrollGesture()
+    }
 }
 
 @MainActor private final class EditorFlippedView: NSView {

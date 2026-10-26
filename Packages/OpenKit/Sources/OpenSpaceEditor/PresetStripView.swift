@@ -80,7 +80,7 @@ public final class PresetSwatchView: NSView {
             let gradient = CAGradientLayer(); gradient.frame = bounds
             gradient.colors = [color(colors[0]), color(colors[1])]; gradient.startPoint = .zero; gradient.endPoint = CGPoint(x: 1, y: 1)
             art.addSublayer(gradient)
-            let disc = CAShapeLayer(); disc.path = CGPath(ellipseIn: CGRect(x: 15, y: 15, width: 9, height: 9), transform: nil)
+            let disc = CAShapeLayer(); disc.path = CGPath(ellipseIn: CGRect(x: 12, y: 12, width: 9, height: 9), transform: nil)
             disc.fillColor = color(colors[2]); art.addSublayer(disc)
         } else { art.backgroundColor = color(colors[0]) }
         rim.frame = bounds; rim.path = CGPath(ellipseIn: bounds.insetBy(dx: 0.5, dy: 0.5), transform: nil)
@@ -93,6 +93,7 @@ public final class PresetSwatchView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshContrast() }
     private func refreshContrast() {
         rim.strokeColor = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? ThemeEditorColors.glyph.cgColor(contentAppearance) : authoredRim
@@ -117,7 +118,7 @@ public final class PresetSwatchView: NSView {
         if bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() }
     }
     public override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 || event.keyCode == 49 { onPress?() } else { super.keyDown(with: event) }
+        if event.keyCode == 36 || event.keyCode == 49 { if !event.isARepeat { onPress?() } } else { super.keyDown(with: event) }
     }
     public override func accessibilityPerformPress() -> Bool { onPress?(); return true }
     private func updateScale() {

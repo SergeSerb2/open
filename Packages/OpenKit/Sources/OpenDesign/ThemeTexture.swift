@@ -45,13 +45,30 @@ public enum ThemeTexture {
         let context = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 4,
                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        context.setFillColor(ThemeEditorColors.noisePreviewBase.cgColor)
-        context.fill(CGRect(x: 0, y: 0, width: px, height: px))
         // Deliberate 2× sample, centered on the disc. Missing tiles leave neutral gray.
-        if let tile = tile(t, noiseFactor: 1, scale: scale) {
-            context.draw(tile, in: CGRect(x: -Double(px) / 2, y: -Double(px) / 2, width: Double(px) * 2, height: Double(px) * 2))
+        guard let tile = tile(t, noiseFactor: 1, scale: scale) else {
+            context.setFillColor(ThemeEditorColors.noisePreviewBase.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: px, height: px))
+            return context.makeImage()!
         }
-        return context.makeImage()!
+        context.draw(tile, in: CGRect(x: -Double(px) / 2, y: -Double(px) / 2, width: Double(px) * 2, height: Double(px) * 2))
+        let sample = context.data!.assumingMemoryBound(to: UInt8.self)
+        let mean = (0..<(px * px)).reduce(0.0) { $0 + Double(sample[$1 * 4 + 3]) / 255 } / Double(px * px)
+        // Preview art only: twice the grain deviation around its mean, plus
+        // a top-to-bottom ±7-level shade. Space texture strength is unchanged.
+        var pixels = [UInt8](repeating: 255, count: px * px * 4)
+        for y in 0..<px {
+            let shade = ThemeEditorColors.noisePreviewBase.red + (7.0 / 255) * (1 - 2 * Double(y) / Double(max(1, px - 1)))
+            for x in 0..<px {
+                let i = (y * px + x) * 4, alpha = Double(sample[i + 3]) / 255
+                let gray = UInt8((min(1, max(0, shade * (1 - mean - 2 * (alpha - mean)))) * 255).rounded())
+                pixels[i] = gray; pixels[i + 1] = gray; pixels[i + 2] = gray
+            }
+        }
+        let data = Data(pixels) as CFData
+        return CGImage(width: px, height: px, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: px * 4,
+                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: CGDataProvider(data: data)!, decode: nil, shouldInterpolate: true, intent: .defaultIntent)!
     }
 
     private static func cached(_ t: SpaceStyleTexture, noise: Double, scale: CGFloat) -> Tile? {
