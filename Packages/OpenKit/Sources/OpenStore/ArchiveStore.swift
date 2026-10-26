@@ -80,6 +80,47 @@ public final class ArchiveStore: ArchiveSink {
         queue.sync {}
     }
 
+    /// Stores imported archive records. A record whose ID is already stored
+    /// counts as a duplicate and keeps the stored row. This makes re-import
+    /// idempotent by Arc item ID (the importer maps Arc IDs to stable Open IDs).
+    public func importRecords(_ records: [ArchivedTabRecord]) async -> (inserted: Int, duplicates: Int) {
+        guard !records.isEmpty else { return (0, 0) }
+        return await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                guard let self else { continuation.resume(returning: (0, records.count)); return }
+                self.openOnQueue()
+                guard let db = self.db else { continuation.resume(returning: (0, records.count)); return }
+                var inserted = 0
+                var duplicates = 0
+                db.exec("BEGIN IMMEDIATE")
+                let check = db.prepare("SELECT 1 FROM archived_tabs WHERE id = ? LIMIT 1")
+                let insert = db.prepare("INSERT INTO archived_tabs(id,url,title,space_id,profile_id,archived_at,reason,original_location,payload) VALUES(?,?,?,?,?,?,?,?,?)")
+                for record in records {
+                    let key = record.id.rawValue.uuidString
+                    db.bindText(check, 1, key)
+                    let exists = sqlite3_step(check) == SQLITE_ROW
+                    sqlite3_reset(check)
+                    if exists { duplicates += 1; continue }
+                    db.bindText(insert, 1, key)
+                    db.bindText(insert, 2, record.url.absoluteString)
+                    db.bindText(insert, 3, record.title)
+                    db.bindText(insert, 4, record.spaceID?.rawValue.uuidString)
+                    db.bindText(insert, 5, record.profileID?.rawValue.uuidString)
+                    db.bindDouble(insert, 6, record.archivedAt.timeIntervalSince1970)
+                    db.bindText(insert, 7, record.reason.rawValue)
+                    db.bindText(insert, 8, record.originalLocation)
+                    db.bindText(insert, 9, record.payloadJSON)
+                    if sqlite3_step(insert) == SQLITE_DONE { inserted += 1 } else { duplicates += 1 }
+                    sqlite3_reset(insert)
+                }
+                sqlite3_finalize(check)
+                sqlite3_finalize(insert)
+                db.exec("COMMIT")
+                continuation.resume(returning: (inserted, duplicates))
+            }
+        }
+    }
+
     nonisolated private func insertOnQueue(_ rows: [ArchiveRow]) {
         guard let db else { return }
         let encoder = JSONEncoder()

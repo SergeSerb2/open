@@ -2,7 +2,7 @@ import Foundation
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|dump|roundtrip|bench|commands-demo|suggest|suggest-check> ...")
+    print("usage: openkit <import-arc|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
@@ -10,7 +10,9 @@ let rest = Array(arguments.dropFirst())
 do {
     switch command {
     case "import-arc":
-        try await MainActor.run { try runImportArc(args: rest) }
+        try await runImportArc(args: rest)
+    case "archive-list":
+        await runArchiveList(args: rest)
     case "dump":
         try await MainActor.run { try runDump(args: rest) }
     case "roundtrip":

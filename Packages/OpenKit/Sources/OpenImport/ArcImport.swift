@@ -16,16 +16,58 @@ public struct ImportReport: Sendable {
     public var skippedUnknown: Int = 0
     public var orphans: Int = 0
     public var skippedRoutingRules: Int = 0
+    public var containers: Int = 0
     public var archiveStatus: String = "not imported (no real file exists)"
     public var boostsStatus: String = "not imported (no real file exists)"
     /// imported tabs (pinned + today + favorites items that are tabs) + folders + splits + skipped* + orphans should equal total non-container items.
     public var importedTabNodes: Int = 0
+    // Archive (StorableArchiveItems.json)
+    public var archiveFilePresent: Bool = false
+    public var archiveTotal: Int = 0
+    public var archiveImported: Int = 0
+    public var archiveSkippedEasels: Int = 0
+    public var archiveSkippedNotes: Int = 0
+    public var archiveSkippedWelcome: Int = 0
+    public var archiveSkippedUnknownKind: Int = 0
+    public var archiveSkippedUnknownReason: Int = 0
+    public var archiveSkippedUnknownSource: Int = 0
+    public var archiveSkippedMalformed: Int = 0
+    public var archiveDuplicatesInFile: Int = 0
+    public var archiveAlreadyLive: Int = 0
+    /// Filled by the CLI after it writes to ArchiveStore: rows that were new vs already stored.
+    public var archiveStoredNew: Int = 0
+    public var archiveStoredDuplicates: Int = 0
+    // Session restoration (StorableSessionRestorationData.json)
+    public var sessionFilePresent: Bool = false
+    public var sessionTotalPairs: Int = 0
+    public var sessionMapped: Int = 0
+    public var sessionUnmappedItems: Int = 0
+    public var sessionUnmappedWindows: Int = 0
+    public var sessionIgnoredIncognito: Int = 0
+    public var sessionWindows: Int = 0
+    public var sessionAppliedSelections: Int = 0
+    public var sessionDistinctChromiumIDs: Int = 0
+    public var sessionMalformedPairs: Int = 0
 
     public var accounted: Int {
-        // Every item object is exactly one of: container (structural, not counted),
-        // imported node, skipped, or orphan (orphans are also imported, counted separately).
         importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedWelcome + skippedUnknown
     }
+    /// Every sidebar item object: imported + skipped + structural containers.
+    public var accountedTotal: Int { accounted + containers }
+    public var archiveAccounted: Int {
+        archiveImported + archiveSkippedEasels + archiveSkippedNotes + archiveSkippedWelcome
+            + archiveSkippedUnknownKind + archiveSkippedUnknownReason + archiveSkippedUnknownSource
+            + archiveSkippedMalformed + archiveDuplicatesInFile + archiveAlreadyLive
+    }
+}
+
+/// Full import result. The CLI stores `archiveRecords` through ArchiveStore;
+/// OpenImport itself stays free of OpenStore so the layering in Package.swift holds.
+@MainActor
+public struct ArcImportResult {
+    public var model: BrowserModel
+    public var report: ImportReport
+    public var archiveRecords: [ArchivedTabRecord]
 }
 
 public enum ImportError: Error {
@@ -52,8 +94,40 @@ public struct ArcImporter {
         return Date(timeIntervalSince1970: value + epoch2001)
     }
 
+    /// Stable Open ID for one Arc ID. UUID Arc IDs keep their UUID. Sentinel
+    /// string IDs get a deterministic UUID from two FNV-1a hashes of the ID.
+    /// Stable IDs make re-import idempotent: the same Arc item always maps
+    /// to the same Open item, so ArchiveStore never creates a second row.
+    static func deterministicUUID(for arcID: String, namespace: String) -> UUID {
+        if let uuid = UUID(uuidString: arcID) { return uuid }
+        let seed = "\(namespace):\(arcID)"
+        func fnv(_ text: String, offset: UInt64) -> UInt64 {
+            var hash = offset
+            for byte in text.utf8 { hash = (hash ^ UInt64(byte)) &* 1099511628211 }
+            return hash
+        }
+        let h1 = fnv(seed, offset: 14695981039346656037)
+        let h2 = fnv(String(seed.reversed()), offset: 1469598103934665603)
+        var bytes = [UInt8](repeating: 0, count: 16)
+        for i in 0..<8 { bytes[i] = UInt8((h1 >> UInt64(8 * i)) & 0xff) }
+        for i in 0..<8 { bytes[8 + i] = UInt8((h2 >> UInt64(8 * i)) & 0xff) }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40
+        bytes[8] = (bytes[8] & 0x3f) | 0x80
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
+    static func itemID(forArcID arcID: String) -> ItemID { ItemID(rawValue: deterministicUUID(for: arcID, namespace: "item")) }
+    static func spaceID(forArcID arcID: String) -> SpaceID { SpaceID(rawValue: deterministicUUID(for: arcID, namespace: "space")) }
+
     @MainActor
     public func importModel() throws -> (model: BrowserModel, report: ImportReport) {
+        let result = try importAll()
+        return (result.model, result.report)
+    }
+
+    @MainActor
+    public func importAll() throws -> ArcImportResult {
         let sidebarURL = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: sidebarURL), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ImportError.missingSidebar
@@ -78,6 +152,7 @@ public struct ArcImporter {
             i += 2
         }
         report.totalItems = itemsByID.count
+        report.containers = itemsByID.values.filter { (($0["data"] as? [String: Any])?.keys.first) == "itemContainer" }.count
 
         var spacesRaw: [(id: String, obj: [String: Any])] = []
         i = 0
@@ -99,7 +174,7 @@ public struct ArcImporter {
                 key = s
             } else { key = "default" }
             if let existing = profileIDByKey[key] { return existing }
-            let pid = ProfileID()
+            let pid = ProfileID(rawValue: Self.deterministicUUID(for: key, namespace: "profile"))
             profileIDByKey[key] = pid
             let name = key == "default" ? "Default" : "Profile"
             let dirName = key == "default" ? "Default" : key
@@ -110,7 +185,7 @@ public struct ArcImporter {
         // Pre-create profiles in Space order.
         for (_, obj) in spacesRaw { _ = profileID(for: obj["profile"]) }
         if profiles.isEmpty {
-            let pid = ProfileID()
+            let pid = ProfileID(rawValue: Self.deterministicUUID(for: "default", namespace: "profile"))
             profileIDByKey["default"] = pid
             profiles.append(Profile(id: pid, name: "Default", dataDirectoryName: "Default"))
         }
@@ -169,6 +244,12 @@ public struct ArcImporter {
         // Build nodes recursively from childrenIds. Memoize by Arc id.
         var nodeByArcID: [String: SidebarNode] = [:]
         var building: Set<String> = []
+        var skipCounted: Set<String> = []
+        func countSkip(_ arcID: String, _ apply: () -> Void) {
+            guard !skipCounted.contains(arcID) else { return }
+            skipCounted.insert(arcID)
+            apply()
+        }
 
         func buildNode(arcID: String) -> SidebarNode? {
             if let cached = nodeByArcID[arcID] { return cached }
@@ -177,13 +258,13 @@ public struct ArcImporter {
             building.insert(arcID)
             defer { building.remove(arcID) }
             guard let dataDict = item["data"] as? [String: Any], let kind = dataDict.keys.first else {
-                report.skippedUnknown += 1
+                countSkip(arcID) { report.skippedUnknown += 1 }
                 return nil
             }
             let payload = dataDict[kind]
             switch kind {
             case "tab":
-                guard let td = payload as? [String: Any] else { report.skippedUnknown += 1; return nil }
+                guard let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
                 let urlString = td["savedURL"] as? String ?? "about:blank"
                 let url = URL(string: urlString) ?? URL(string: "about:blank")!
                 let savedTitle = td["savedTitle"] as? String ?? ""
@@ -191,6 +272,7 @@ public struct ArcImporter {
                 // Custom title only when it differs from the saved title.
                 let customTitle = (itemTitle != nil && itemTitle != savedTitle) ? itemTitle : nil
                 let tab = Tab(
+                    id: Self.itemID(forArcID: arcID),
                     url: url, title: savedTitle, customTitle: customTitle,
                     customIcon: tabCustomIcon(from: td),
                     createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
@@ -202,7 +284,7 @@ public struct ArcImporter {
                 nodeByArcID[arcID] = node
                 return node
             case "list":
-                let folder = Folder(title: (item["title"] as? String) ?? "Folder")
+                let folder = Folder(id: Self.itemID(forArcID: arcID), title: (item["title"] as? String) ?? "Folder")
                 var children: [SidebarNode] = []
                 for childID in (item["childrenIds"] as? [String]) ?? [] {
                     if let child = buildNode(arcID: childID) { children.append(child) }
@@ -229,7 +311,7 @@ public struct ArcImporter {
                     let sum = fractions.reduce(0, +)
                     if sum > 0 { fractions = fractions.map { $0 / sum } }
                 }
-                let split = Split(orientation: orientation, fractions: fractions, panes: panes,
+                let split = Split(id: Self.itemID(forArcID: arcID), orientation: orientation, fractions: fractions, panes: panes,
                                   focusedPaneID: (sd["focusItemID"] as? String).flatMap { nodeByArcID[$0]?.id })
                 // focusItemID refers to an Arc id; resolve after panes exist.
                 if let focusArc = sd["focusItemID"] as? String, let idx = ((item["childrenIds"] as? [String]) ?? []).firstIndex(of: focusArc), idx < panes.count {
@@ -242,16 +324,16 @@ public struct ArcImporter {
             case "itemContainer":
                 return nil // structural, not a sidebar node
             case "easel":
-                report.skippedEasels += 1
+                countSkip(arcID) { report.skippedEasels += 1 }
                 return nil
             case "note":
-                report.skippedNotes += 1
+                countSkip(arcID) { report.skippedNotes += 1 }
                 return nil
             case "welcomeToArc":
-                report.skippedWelcome += 1
+                countSkip(arcID) { report.skippedWelcome += 1 }
                 return nil
             default:
-                report.skippedUnknown += 1
+                countSkip(arcID) { report.skippedUnknown += 1 }
                 return nil
             }
         }
@@ -296,7 +378,7 @@ public struct ArcImporter {
             let pid = profileID(for: obj["profile"])
             let info = obj["customInfo"] as? [String: Any]
             let title = (obj["title"] as? String) ?? "Space"
-            let space = Space(title: title, icon: spaceIcon(from: info), theme: spaceTheme(from: info), profileID: pid)
+            let space = Space(id: Self.spaceID(forArcID: spaceArcID), title: title, icon: spaceIcon(from: info), theme: spaceTheme(from: info), profileID: pid)
             let (pinnedCID, todayCID) = containerIDs(for: obj)
             func nodes(forContainer cid: String?) -> [SidebarNode] {
                 guard let cid, let container = itemsByID[cid] else { return [] }
@@ -310,7 +392,6 @@ public struct ArcImporter {
             }
             space.pinned = nodes(forContainer: pinnedCID)
             space.today = nodes(forContainer: todayCID)
-            _ = spaceArcID
             spaces.append(space)
         }
         report.spaces = spaces.count
@@ -358,16 +439,21 @@ public struct ArcImporter {
         // Orphans: item objects never reached and not containers.
         var orphanNodes: [SidebarNode] = []
         for (arcID, item) in itemsByID {
-            guard let dataDict = item["data"] as? [String: Any], let kind = dataDict.keys.first else { continue }
+            guard let dataDict = item["data"] as? [String: Any], let kind = dataDict.keys.first else {
+                if !skipCounted.contains(arcID) { countSkip(arcID) { report.skippedUnknown += 1 } }
+                continue
+            }
             if kind == "itemContainer" { continue }
-            if reachedArcIDs.contains(arcID) { continue }
             if nodeByArcID[arcID] != nil { continue } // built as a split pane etc.
-            // Was it skipped (easel/note/welcome/unknown)? buildNode already counted those; avoid double count.
-            if kind == "tab" || kind == "list" || kind == "splitView" {
-                if let node = buildNode(arcID: arcID) {
-                    orphanNodes.append(node)
-                    report.orphans += 1
-                }
+            if reachedArcIDs.contains(arcID) {
+                // Direct child already attempted. If it was skipped, countSkip kept it once.
+                continue
+            }
+            // Unreached item: build it so tab/list/split become orphans and every
+            // other kind is counted once as skipped. This keeps the audit exact.
+            if let node = buildNode(arcID: arcID) {
+                orphanNodes.append(node)
+                report.orphans += 1
             }
         }
         if !orphanNodes.isEmpty, let first = spaces.first {
@@ -392,6 +478,7 @@ public struct ArcImporter {
 
         // Windows.
         var windows: [BrowserWindowState] = []
+        var windowByArcID: [String: BrowserWindowState] = [:]
         let arcSpaceIDToOpen: [String: SpaceID] = Dictionary(uniqueKeysWithValues: zip(spacesRaw.map { $0.id }, spaces.map { $0.id }))
         if let winData = try? Data(contentsOf: arcDirectory.appendingPathComponent("StorableWindows.json")),
            let winRoot = try? JSONSerialization.jsonObject(with: winData) as? [String: Any],
@@ -408,7 +495,10 @@ public struct ArcImporter {
                 let focused = focusedArc.flatMap { arcSpaceIDToOpen[$0] } ?? spaces[0].id
                 let style: WindowStyle
                 if let styleDict = w["style"] as? [String: Any], styleDict.keys.contains("littleArc") { style = .littleArc } else { style = .standard }
+                let arcWindowID = w["id"] as? String
+                let windowID = arcWindowID.map { WindowID(rawValue: Self.deterministicUUID(for: $0, namespace: "window")) } ?? WindowID()
                 let window = BrowserWindowState(
+                    id: windowID,
                     focusedSpaceID: focused,
                     sidebarWidth: (w["sidebarWidth"] as? NSNumber)?.doubleValue ?? 228,
                     sidebarMode: (w["sidebarMode"] as? String) == "hidden" ? .hidden : .anchored,
@@ -416,6 +506,7 @@ public struct ArcImporter {
                     stayOnTop: (w["stayOnTop"] as? Bool) ?? false
                 )
                 windows.append(window)
+                if let arcWindowID { windowByArcID[arcWindowID] = window }
             }
             _ = winRoot["lastFocusedSpaceID"]
         }
@@ -457,8 +548,207 @@ public struct ArcImporter {
         }
         report.routingRules = rules.count
 
+        // MARK: Archive (StorableArchiveItems.json)
+        // Lenient parse. Unknown keys, reasons, sources, and non-tab kinds are
+        // skipped and counted. The record payload holds the full tab fields so
+        // BrowserModel.restoreArchivedTab can rebuild the tab. The parent
+        // folder is lost in Arc's file, so the restore target is the source
+        // Space's Today section (today:<spaceID>).
+        var archiveRecords: [ArchivedTabRecord] = []
+        let archiveURL = arcDirectory.appendingPathComponent("StorableArchiveItems.json")
+        if FileManager.default.fileExists(atPath: archiveURL.path) {
+            report.archiveFilePresent = true
+            if let archiveData = try? Data(contentsOf: archiveURL),
+               let archiveRoot = try? JSONSerialization.jsonObject(with: archiveData) as? [String: Any],
+               let flat = archiveRoot["items"] as? [Any] {
+                report.archiveTotal = flat.count / 2
+                if flat.count % 2 != 0 { report.archiveSkippedMalformed += 1 }
+                var seenArcIDs: Set<String> = []
+                var idx = 0
+                while idx + 1 < flat.count {
+                    defer { idx += 2 }
+                    guard let key = flat[idx] as? String, let entry = flat[idx + 1] as? [String: Any] else {
+                        report.archiveSkippedMalformed += 1
+                        continue
+                    }
+                    guard let sidebarItem = entry["sidebarItem"] as? [String: Any] else {
+                        report.archiveSkippedMalformed += 1
+                        continue
+                    }
+                    let arcID = (sidebarItem["id"] as? String) ?? key
+                    if seenArcIDs.contains(arcID) { report.archiveDuplicatesInFile += 1; continue }
+                    seenArcIDs.insert(arcID)
+                    guard let dataDict = sidebarItem["data"] as? [String: Any], let kind = dataDict.keys.first else {
+                        report.archiveSkippedUnknownKind += 1
+                        continue
+                    }
+                    switch kind {
+                    case "tab": break
+                    case "easel": report.archiveSkippedEasels += 1; continue
+                    case "note": report.archiveSkippedNotes += 1; continue
+                    case "welcomeToArc": report.archiveSkippedWelcome += 1; continue
+                    default: report.archiveSkippedUnknownKind += 1; continue
+                    }
+                    let reason: ArchiveReason
+                    switch entry["reason"] as? String {
+                    case "manual": reason = .closed
+                    case "auto": reason = .autoArchived
+                    case "clearButton", "clearTabGroup": reason = .clearedToday
+                    default: report.archiveSkippedUnknownReason += 1; continue
+                    }
+                    guard let source = entry["source"] as? [String: Any],
+                          let spaceSource = source["space"] as? [String: Any],
+                          let arcSpaceID = spaceSource["_0"] as? String else {
+                        report.archiveSkippedUnknownSource += 1
+                        continue
+                    }
+                    if nodeByArcID[arcID] != nil {
+                        report.archiveAlreadyLive += 1
+                        continue
+                    }
+                    guard let td = dataDict["tab"] as? [String: Any],
+                          let urlString = td["savedURL"] as? String,
+                          let url = URL(string: urlString) else {
+                        report.archiveSkippedMalformed += 1
+                        continue
+                    }
+                    let openSpaceID = arcSpaceIDToOpen[arcSpaceID] ?? spaces[0].id
+                    let ownerSpace = spaces.first(where: { $0.id == openSpaceID }) ?? spaces[0]
+                    let savedTitle = td["savedTitle"] as? String ?? ""
+                    let itemTitle = sidebarItem["title"] as? String
+                    let customTitle = (itemTitle != nil && itemTitle != savedTitle) ? itemTitle : nil
+                    let tab = Tab(
+                        id: Self.itemID(forArcID: arcID),
+                        url: url, title: savedTitle, customTitle: customTitle,
+                        customIcon: tabCustomIcon(from: td),
+                        createdAt: Self.date(from2001: (sidebarItem["createdAt"] as? NSNumber)?.doubleValue),
+                        lastActiveAt: Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue),
+                        isMuted: (td["savedMuteStatus"] as? String) == "mute",
+                        isUnread: (sidebarItem["isUnread"] as? Bool) ?? false
+                    )
+                    let archivedAt = Self.date(from2001: (entry["archivedAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue)
+                    var payload: [String: Any] = [
+                        "id": tab.id.rawValue.uuidString,
+                        "url": tab.url.absoluteString,
+                        "title": tab.title,
+                        "createdAt": tab.createdAt.timeIntervalSince1970,
+                        "lastActiveAt": tab.lastActiveAt.timeIntervalSince1970,
+                        "isMuted": tab.isMuted,
+                        "isUnread": tab.isUnread,
+                    ]
+                    if let customTitle { payload["customTitle"] = customTitle }
+                    if let icon = tab.customIcon { payload["customIcon"] = icon }
+                    let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
+                    let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
+                    let location = "today:\(openSpaceID.rawValue.uuidString)"
+                    archiveRecords.append(ArchivedTabRecord(
+                        id: tab.id, url: tab.url, title: tab.displayTitle,
+                        spaceID: openSpaceID, profileID: ownerSpace.profileID,
+                        archivedAt: archivedAt, reason: reason,
+                        originalLocation: location, payloadJSON: payloadJSON
+                    ))
+                }
+                archiveRecords.sort { $0.archivedAt < $1.archivedAt }
+                report.archiveImported = archiveRecords.count
+                report.archiveStatus = "imported \(archiveRecords.count) of \(report.archiveTotal)"
+            } else {
+                report.archiveStatus = "present but unreadable"
+            }
+        }
+
+        // MARK: Session restoration (StorableSessionRestorationData.json)
+        // Used: which sidebar items were open in which window. Per window and
+        // Space, the item with the newest lastActiveAt becomes the selection.
+        // Ignored: the Chromium SessionID values (only counted as distinct),
+        // profile/context detail beyond the incognito check, pair order
+        // beyond the tie-break, windows absent from StorableWindows.json,
+        // and items absent from the sidebar (archived or deleted items).
+        let sessionURL = arcDirectory.appendingPathComponent("StorableSessionRestorationData.json")
+        if FileManager.default.fileExists(atPath: sessionURL.path) {
+            report.sessionFilePresent = true
+            if let sessionData = try? Data(contentsOf: sessionURL),
+               let sessionRoot = try? JSONSerialization.jsonObject(with: sessionData) as? [String: Any],
+               let mapping = sessionRoot["mapping"] as? [String: Any],
+               let flat = mapping["keysToValues"] as? [Any] {
+                report.sessionTotalPairs = flat.count / 2
+                if flat.count % 2 != 0 { report.sessionMalformedPairs += 1 }
+                // Open item -> owning Space. Favorites resolve per window below.
+                var spaceByItem: [ItemID: SpaceID] = [:]
+                var tabByItem: [ItemID: Tab] = [:]
+                func collect(_ nodes: [SidebarNode], space: SpaceID) {
+                    for node in nodes {
+                        switch node {
+                        case .tab(let tab): spaceByItem[tab.id] = space; tabByItem[tab.id] = tab
+                        case .folder(let folder): collect(folder.children, space: space)
+                        case .split(let split): for pane in split.panes { spaceByItem[pane.id] = space; tabByItem[pane.id] = pane }
+                        }
+                    }
+                }
+                for space in spaces {
+                    collect(space.pinned, space: space.id)
+                    collect(space.today, space: space.id)
+                }
+                var favoriteIDs: Set<ItemID> = []
+                for profile in profiles {
+                    for tab in profile.favorites { favoriteIDs.insert(tab.id); tabByItem[tab.id] = tab }
+                }
+                let arcItemToOpen: [String: ItemID] = Dictionary(uniqueKeysWithValues: nodeByArcID.map { ($0.key, $0.value.id) })
+                var windowIDsSeen: Set<String> = []
+                var chromiumIDs: Set<Int> = []
+                var perWindow: [String: [(item: ItemID, order: Int)]] = [:]
+                var order = 0
+                var idx = 0
+                while idx + 1 < flat.count {
+                    defer { idx += 2; order += 1 }
+                    guard let key = flat[idx] as? [String: Any] else { report.sessionMalformedPairs += 1; continue }
+                    if let number = flat[idx + 1] as? NSNumber { chromiumIDs.insert(number.intValue) }
+                    guard let browser = key["browser"] as? [String: Any],
+                          let arcWindowID = browser["windowID"] as? String,
+                          let arcItemID = key["itemId"] as? String else {
+                        report.sessionMalformedPairs += 1
+                        continue
+                    }
+                    windowIDsSeen.insert(arcWindowID)
+                    if let context = browser["contextID"] as? [String: Any],
+                       let contextType = context["contextType"] as? [String: Any],
+                       contextType.keys.contains("incognito") {
+                        report.sessionIgnoredIncognito += 1
+                        continue
+                    }
+                    guard windowByArcID[arcWindowID] != nil else { report.sessionUnmappedWindows += 1; continue }
+                    guard let openItem = arcItemToOpen[arcItemID] else { report.sessionUnmappedItems += 1; continue }
+                    report.sessionMapped += 1
+                    perWindow[arcWindowID, default: []].append((openItem, order))
+                }
+                report.sessionWindows = windowIDsSeen.count
+                report.sessionDistinctChromiumIDs = chromiumIDs.count
+                for (arcWindowID, entries) in perWindow {
+                    guard let window = windowByArcID[arcWindowID] else { continue }
+                    var bestBySpace: [SpaceID: (item: ItemID, order: Int, active: Date)] = [:]
+                    for entry in entries {
+                        let targetSpace: SpaceID
+                        if favoriteIDs.contains(entry.item) { targetSpace = window.focusedSpaceID }
+                        else if let owned = spaceByItem[entry.item] { targetSpace = owned }
+                        else { continue }
+                        let active = tabByItem[entry.item]?.lastActiveAt ?? .distantPast
+                        if let current = bestBySpace[targetSpace] {
+                            if active > current.active || (active == current.active && entry.order > current.order) {
+                                bestBySpace[targetSpace] = (entry.item, entry.order, active)
+                            }
+                        } else {
+                            bestBySpace[targetSpace] = (entry.item, entry.order, active)
+                        }
+                    }
+                    for (spaceID, best) in bestBySpace {
+                        window.selectedNodeBySpace[spaceID] = best.item
+                        report.sessionAppliedSelections += 1
+                    }
+                }
+            }
+        }
+
         let model = BrowserModel(profiles: profiles, spaces: spaces, windows: windows, routingRules: rules, defaultDestination: defaultDestination)
-        return (model, report)
+        return ArcImportResult(model: model, report: report, archiveRecords: archiveRecords)
     }
 
     private func parseDestination(_ raw: Any?, arcSpaceIDToOpen: [String: SpaceID]) -> DefaultDestination? {
