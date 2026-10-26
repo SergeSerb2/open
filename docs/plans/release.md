@@ -607,17 +607,17 @@ release values passed on the command line, so no second build system exists:
 CEF_SOURCE=fork OPEN_KEEP_LOCALES="<from §2.7>" tools/build.sh Release
 ```
 
-`project.yml` gains a `Release` config entry (Step 6) with exactly:
+Local Xcode builds, including `Release`, keep
+`ENABLE_HARDENED_RUNTIME: NO` and ad-hoc signing. Ad-hoc signatures have no
+Team ID, so Hardened Runtime's Library Validation rejects the embedded
+`OpenEngine.framework` before the engine starts. A project-wide Release
+runtime override would break local Release runs and launch measurements.
 
-```yaml
-    Release:
-      ENABLE_HARDENED_RUNTIME: YES
-```
-
-Nothing else changes in `project.yml` signing settings. The Xcode build
-still ad-hoc signs what `tools/embed-cef.sh` copies; §4.3 then re-signs the
-copied app in place. Set `ENABLE_HARDENED_RUNTIME` so any future Xcode-only
-archive already carries the runtime flag, but treat §4.3 as the authority.
+`tools/release.sh` owns Hardened Runtime: §4.3 re-signs the staged app and
+its nested code with `--options runtime`, then fails if the app signature
+lacks the runtime flag. Its preflight does not require an Xcode Release
+runtime setting. Production still requires one Developer ID identity and
+matching Team IDs; this decision does not relax the shipped signatures.
 
 `OPEN_AUTOMATION` stays off for release: the automation socket is Debug-only
 unless explicitly requested, and a shipped build must never contain it.
@@ -1173,7 +1173,7 @@ Work top to bottom. [NOW] steps need no user item; [USER] steps wait for §10.
 | 3 [NOW] Locales file | Create `tools/release-locales.txt` (§2.7 initial content) | File committed; a build with it shows only `en.lproj` in the framework |
 | 4 [NOW] Bundle IDs | §4.1 `project.yml` migration to `io.github.sergeserb2.open…` | `tools/build.sh` Debug still builds + launches; no `app.open.browser` ID remains (comments excluded) |
 | 5 [NOW] Entitlements | §4.2: rewrite `App/Open.entitlements`; confirm the five helper files already match (edit only on drift) | `plutil -lint` on all six; Debug build launches; renderer page with JIT (any JS-heavy site) does not crash |
-| 6 [NOW] App release build | §5: `Release` config entry, `App/Info.plist` keys (placeholder public key), About stamp readback | Release app builds; `PlistBuddy` prints the stamp; About shows version/build on the ad-hoc app |
+| 6 [NOW] App release build | §5: keep local Release ad-hoc and runnable; `tools/release.sh` owns Hardened Runtime; `App/Info.plist` keys (placeholder public key), About stamp readback | Release app builds and loads JavaScript and media; launch measurements run; `release.sh --dry-run` passes; `PlistBuddy` prints the stamp; About shows version/build on the ad-hoc app |
 | 7 [NOW] Sparkle dependency + tools | §6.1: pin Sparkle, link to Open, install CLI tools to `~/Developer/open-release-tools/` with recorded SHA-256 | App builds with Sparkle embedded; `generate_appcast -h` runs from the pinned tools dir; size delta recorded |
 | 8 [NOW] Updater UI | §6.5/§6.6: `App/UpdaterController.swift`, menu + Settings › General hooks, channel defaults | "Check for Updates…" exists once, invokes Sparkle UI (error reaching the placeholder feed is a pass at this step); channel control writes `OpenUpdateChannel` |
 | 9 [NOW] License artifacts | §7: `docs/release/licenses.md`, `docs/release/licenses/*.txt`, `tools/generate-acknowledgements.py`, first `docs/release/notes/` template instance | Generator emits RTF + TXT; About Credits show stamp + rows; conditional GPL row handled per §7.1 |
@@ -1210,7 +1210,7 @@ docs/release/notes/<marketing>.md        (one per release, §8.3)
 Edited files:
 
 ```text
-project.yml                               (bundle IDs §4.1, Release config §5.1, Sparkle §6.1)
+project.yml                               (bundle IDs §4.1, local signing §5.1, Sparkle §6.1)
 App/Info.plist                            (§5.2 keys; Open* stamps on rebases)
 App/Open.entitlements                     (§4.2)
 App/AppDelegate.swift                     (updater ownership, §6.5; minimal diff)
@@ -1280,3 +1280,12 @@ None of Q-1…Q-5 blocks Steps 1–11. Only §10 blocks Step 13.
 - Approved as the M9 plan. Implementation is scheduled after app-shell integration (so the pipeline packages the real window), starting with the credential-free `tools/release.sh --dry-run`, entitlements, Acknowledgements, and versioning. The official engine build waits for the engine lead's patch series (it occupies the shared Chromium tree for hours).
 - Sparkle 2 is an approved third-party dependency (reason: industry-standard signed updates; MIT license).
 - Items needed from the user are tracked in the plan; nothing is purchased or created on the user's behalf.
+- 2026-10-26: `tools/release.sh` alone applies Hardened Runtime. Keep local
+  ad-hoc Release builds runnable: their absent Team ID makes Library
+  Validation reject `OpenEngine.framework`. Remove the project Release
+  runtime override and its preflight requirement; retain signing-time
+  `--options runtime` and the runtime-signature gate. A temporary copy under
+  `/tmp` may use a lead-approved disable-library-validation entitlement for
+  supplemental JIT/helper verification only; delete it afterwards. This
+  exception never enters source entitlements or the shipped app and does
+  not validate shipped signatures.

@@ -78,17 +78,22 @@ public enum ThemeField {
         let underlay: Double
 
         public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
+            // Clamp only the render inputs. Stored extended keys and palette math stay intact.
+            func fill(_ color: RGBA) -> RGBA {
+                func channel(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
+                return RGBA(channel(color.red), channel(color.green), channel(color.blue), color.alpha)
+            }
             switch style.fill {
             case .blended(let b, let o):
-                base = b.map { OKLab.fromSRGB($0.red, $0.green, $0.blue) }
-                var ov = o.map { (OKLab.fromSRGB($0.red, $0.green, $0.blue), $0.alpha) }
+                base = b.map(fill).map { OKLab.fromSRGB($0.red, $0.green, $0.blue) }
+                var ov = o.map(fill).map { (OKLab.fromSRGB($0.red, $0.green, $0.blue), $0.alpha) }
                 // A clear first stop fades in the second stop's own color
                 // (no darkening through black; measured).
                 if ov.count == 2, ov[0].1 == 0 { ov[0].0 = ov[1].0 }
                 overlay = ov
                 corners = []
             case .corners(let c):
-                base = []; overlay = []; corners = c
+                base = []; overlay = []; corners = c.map(fill)
             }
             baseParam = Param(ThemeField.endpoints(ThemeField.baseLine, size: windowSize))
             overlayParam = Param(ThemeField.endpoints(ThemeField.overlayLine, size: windowSize))

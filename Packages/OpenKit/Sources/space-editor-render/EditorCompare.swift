@@ -53,6 +53,7 @@ enum EditorCompare {
             return Double(((expected - 4)...(expected + 4)).max { abs(level($0) - level($0 - 1)) < abs(level($1) - level($1 - 1)) }!)
         }
         for (name, frame, verticalSpan, horizontalSpan) in [
+            ("material body frame", CGRect(x: 13, y: 13, width: 356, height: 508), 110..<175, 100..<180),
             ("pad frame", CGRect(x: 21, y: 21, width: 340, height: 340), 110..<175, 35..<95),
             ("selected mode frame", CGRect(x: 135, y: 45, width: 32, height: 32), 55..<67, 145..<157)] {
             func box(_ image: Bitmap) -> CGRect {
@@ -67,6 +68,38 @@ enum EditorCompare {
             row.positionError = zip([a.minX, a.maxX, a.minY, a.maxY], [o.minX, o.maxX, o.minY, o.maxY]).map { abs($0 - $1) }.max()
             row.note = "median edge step; error ≤ 1 pt"; rows.append(row)
         }
+        var corner = Compare.Result(name: "material continuous corners")
+        var cornerError = 0.0
+        for right in [false, true] { for bottom in [false, true] {
+            func profile(_ image: Bitmap) -> [CGPoint] {
+                var points = [CGPoint(x: 40, y: 0)]
+                for row in 0..<20 {
+                    let y = bottom ? 520 - row : 13 + row
+                    let inside = image.lum(right ? 329 : 53, y), half = (255 + inside) / 2
+                    var previous = 255.0
+                    for column in 0..<40 {
+                        let x = right ? 368 - column : 13 + column, value = image.lum(x, y)
+                        if value <= half {
+                            points.append(CGPoint(x: Double(column) - 0.5 + (previous - half) / max(0.01, previous - value), y: Double(row) + 0.5)); break
+                        }
+                        previous = value
+                    }
+                }
+                points.append(CGPoint(x: 0, y: 40)); return points
+            }
+            let a = profile(arc), o = profile(ours)
+            func distance(_ point: CGPoint, to line: [CGPoint]) -> Double {
+                zip(line, line.dropFirst()).map { p, q in
+                    let dx = q.x - p.x, dy = q.y - p.y
+                    let t = min(1, max(0, ((point.x - p.x) * dx + (point.y - p.y) * dy) / max(0.0001, dx * dx + dy * dy)))
+                    return hypot(point.x - p.x - t * dx, point.y - p.y - t * dy)
+                }.min() ?? .infinity
+            }
+            for point in a { cornerError = max(cornerError, distance(point, to: o)) }
+            for point in o { cornerError = max(cornerError, distance(point, to: a)) }
+        } }
+        corner.positionError = cornerError; corner.note = "four continuous-20 profiles; max normal distance ≤ 1 pt"
+        rows.append(corner)
         fill("knob disc", CGRect(x: center.x - 7, y: center.y - 7, width: 14, height: 14), limit: 2)
         // Ring core excludes antialiased edges and the colored disc.
         fill("knob ring", CGRect(x: center.x - 2, y: center.y - 20, width: 4, height: 2), limit: 2)
@@ -80,6 +113,23 @@ enum EditorCompare {
             if let a = row.arcBox, let o = row.oursBox {
                 row.positionError = max(abs(a.midX - o.midX), abs(a.midY - o.midY), abs(a.height - o.height))
                 row.note = String(format: "center Δ %.1f,%.1f pt; height Δ %.1f pt; shape masked; ΔE00 ≤ 2", o.midX - a.midX, o.midY - a.midY, o.height - a.height)
+            }
+            if let ac = row.arcColor, let oc = row.oursColor {
+                func background(_ image: Bitmap) -> [Double] {
+                    var channels = [[Double]](repeating: [], count: 3)
+                    let r = rect.insetBy(dx: -1, dy: -1), (x0, y0, x1, y1) = image.clamp(r)
+                    for y in y0..<y1 { for x in x0..<x1 where x == x0 || x == x1 - 1 || y == y0 || y == y1 - 1 {
+                        let pixel = image.pixel(x, y); for c in 0..<3 { channels[c].append(pixel[c]) }
+                    } }
+                    return channels.map { let values = $0.sorted(); return values[values.count / 2] }
+                }
+                let ab = background(arc), ob = background(ours)
+                let normalized = (0..<3).map { c -> Double in
+                    let alpha = min(1, max(0, (ac[c] - ab[c]) / max(1, 255 - ab[c])))
+                    return ob[c] + (255 - ob[c]) * alpha
+                }
+                row.deltaE = ColorMath.deltaE2000(normalized, oc)
+                row.note += "; core ΔE compensates local material tint"
             }
             rows.append(row)
         }
@@ -198,6 +248,8 @@ enum EditorCompare {
             if let error = row.positionError, error > 1 { return true }
             if row.name == "knob outer frame" && row.positionError == nil { return true }
             if let delta = row.deltaE { return delta > (row.name == "knob disc" || row.name == "knob ring" || row.name.hasSuffix("glyph") || row.name.hasPrefix("swatch") || row.name == "intensity thumb" || row.name.hasPrefix("dial") ? 2 : 3) }
+            if row.name == "material continuous corners" { return row.positionError == nil }
+
             return row.arcBox == nil || row.oursBox == nil
         }
         if !failed.isEmpty || !extraFailures.isEmpty { throw CLIError(description: "editor comparison failed: \((failed.map(\.name) + extraFailures).joined(separator: ", "))") }

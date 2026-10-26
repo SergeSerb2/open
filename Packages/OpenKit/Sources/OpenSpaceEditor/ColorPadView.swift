@@ -8,7 +8,8 @@ public final class ColorPadView: NSView {
     public private(set) var state = ThemeEditorState()
     public private(set) var layoutPassCount = 0
     public var renderScale: CGFloat = 1 { didSet { refreshAppearance() } }
-    public let emptyLabel = NSTextField(wrappingLabelWithString: "Tap to pick a color\nfor this space")
+    public let emptyLabel = NSTextField(wrappingLabelWithString: "Tap to pick a color for this space")
+    private var arrowKeys: Set<UInt16> = []
     private let dots = CALayer()
     private let knobs = (0..<3).map { _ in KnobLayers() }
     private var tracking: NSTrackingArea?
@@ -30,13 +31,20 @@ public final class ColorPadView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     public override var focusRingMaskBounds: NSRect { bounds }
     public override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill() }
     public override func draw(_ dirtyRect: NSRect) {
         if window?.firstResponder === self { NSFocusRingPlacement.only.set(); drawFocusRingMask() }
     }
     public override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
-    public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
+    public override func resignFirstResponder() -> Bool {
+        finishKeyboardGesture()
+        needsDisplay = true; return true
+    }
+    public func finishKeyboardGesture() {
+        if !arrowKeys.isEmpty { arrowKeys.removeAll(); onAction?(.endKeyboardGesture) }
+    }
     public override func layout() {
         super.layout(); layoutPassCount += 1
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -74,6 +82,10 @@ public final class ColorPadView: NSView {
     }
     public override func mouseUp(with event: NSEvent) { onAction?(.endDrag) }
     public override func keyDown(with event: NSEvent) {
+        if [123, 124, 125, 126].contains(event.keyCode) {
+            if arrowKeys.isEmpty { onAction?(.beginKeyboardGesture) }
+            arrowKeys.insert(event.keyCode)
+        }
         let shifted = event.modifierFlags.contains(.shift)
         switch event.keyCode {
         case 123: onAction?(.keyboardHue(shifted ? -20 : -5))
@@ -86,7 +98,12 @@ public final class ColorPadView: NSView {
     public override func accessibilityValue() -> Any? {
         guard let style = state.style else { return "No color" }
         let color = ThemeColorMath.hsl(ThemeColorMath.toP3(style.keyColor))
-        return "Hue \(Int((color.h * 360).rounded()))°, lightness \(Int((color.l * 100).rounded())) %"
+        return "Hue \(Int((color.h * 360).rounded()))°, lightness \(Int((color.l * 100).rounded()))%"
+    }
+    public override func keyUp(with event: NSEvent) {
+        if arrowKeys.remove(event.keyCode) != nil {
+            if arrowKeys.isEmpty { onAction?(.endKeyboardGesture) }
+        } else { super.keyUp(with: event) }
     }
     public override func accessibilityPerformIncrement() -> Bool { onAction?(.keyboardHue(5)); return state.style != nil }
     public override func accessibilityPerformDecrement() -> Bool { onAction?(.keyboardHue(-5)); return state.style != nil }

@@ -7,9 +7,7 @@ public enum ThemeEditorColors {
     public static let knobRing = DesignColor(.white(1))
     public static let glyph = DesignColor(light: .black(0.45), dark: .white(0.50))
     // F0137 Automatic core #C6C5C5 over the selected plate: white 0.50.
-    public static let glyphSelected = DesignColor(light: .black(0.85), dark: .white(0.50))
-    // F0137 Add core #C1C1C4; the fixed offscreen material needs this slight cool tint.
-    public static let addGlyph = DesignColor(light: .black(0.45), dark: RGBA(0.98, 0.98, 1, 0.54))
+    public static let glyphSelected = DesignColor(light: .black(0.45), dark: .white(0.50))
     public static let selectedPlate = DesignColor(light: .black(0.07), dark: .white(0.10))
     public static let hoverPlate = DesignColor(light: .black(0.04), dark: .white(0.06))
     public static let secondaryText = glyph

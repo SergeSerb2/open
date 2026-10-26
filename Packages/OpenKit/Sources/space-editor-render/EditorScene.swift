@@ -3,13 +3,14 @@ import OpenDesign
 import OpenModel
 import OpenSpaceEditor
 
-/// The real editor, real model, and real undo manager in windows never ordered.
+/// Real editor/model/undo. Renders stay unordered; native-event probes order
+/// only at (-20000,-20000), entirely outside every screen, then order out.
 @MainActor
 final class EditorScene {
     let model: BrowserModel
     let owner: NSWindow
     let controller: ThemeEditorController
-    let undo = UndoManager()
+    let undo: UndoManager
     var view: ThemeEditorContentView { controller.panel.editorView }
     var panel: ThemeEditorPanel { controller.panel }
     var space: Space { model.spaces[0] }
@@ -20,18 +21,20 @@ final class EditorScene {
         SpaceStyle(keyColor: RGBAColor(red: 0.570741951, green: 0.392751396, blue: -0.130948484))
     }
 
-    init(style: SpaceStyle? = capturedStyle, scale: CGFloat = 1, light: Bool = false) throws {
+    init(style: SpaceStyle? = capturedStyle, scale: CGFloat = 1, light: Bool = false, ownerUndo: Bool = false) throws {
         model = try RenderCLI.fixtureModel()
         model.spaces[0].theme = style.map { SpaceTheme(style: $0) } ?? SpaceTheme()
-        undo.groupsByEvent = false; model.undoManager = undo
-        owner = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 900, height: 700),
+        owner = EditorOwnerWindow(contentRect: CGRect(x: -20000, y: -20000, width: 900, height: 700),
                          styleMask: .borderless, backing: .buffered, defer: false)
         owner.isReleasedWhenClosed = false
+        undo = ownerUndo ? owner.undoManager! : UndoManager()
+        if !ownerUndo { undo.groupsByEvent = false }
+        model.undoManager = undo
         controller = ThemeEditorController(model: model, spaceID: model.spaces[0].id, window: owner,
-                                            anchor: .sidebarTrailingEdge(sidebarFrameInWindow: CGRect(x: 0, y: 0, width: 228, height: 700)), undoManager: undo)
+                                            anchor: .sidebarTrailingEdge(sidebarFrameInWindow: CGRect(x: 0, y: 0, width: 228, height: 700)))
         panel.renderScale = scale; panel.colorSpace = .sRGB
         panel.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
-        panel.backdrop = RGBA(hex: 0x797979)
+        panel.backdrop = RGBA(hex: light ? 0xECECEC : 0x797979)
         controller.show(); controller.prepareForSnapshot(); OffscreenRenderer.settle(view)
         // The captured editor has no keyboard focus ring. Checks focus controls explicitly.
         panel.makeFirstResponder(nil)
@@ -64,7 +67,26 @@ final class EditorScene {
                                     context: nil, characters: characters, charactersIgnoringModifiers: characters,
                                     isARepeat: false, keyCode: code)!
         if flags.contains(.command) { _ = panel.performKeyEquivalent(with: event) }
-        else { target.keyDown(with: event) }
+        else {
+            target.keyDown(with: event)
+            sendKey(code, target: target, flags: flags, type: .keyUp)
+            controller.flushPreviewFrame()
+        }
+    }
+    func sendKey(_ code: UInt16, target: NSResponder, flags: NSEvent.ModifierFlags = [], type: NSEvent.EventType = .keyDown, repeatKey: Bool = false) {
+        let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                                    windowNumber: panel.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",
+                                    isARepeat: repeatKey, keyCode: code)!
+        if type == .keyUp { target.keyUp(with: event) } else { target.keyDown(with: event) }
+    }
+    func clickContent(_ point: CGPoint) {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = NSEvent.mouseEvent(with: type, location: view.content.convert(point, to: nil), modifierFlags: [],
+                                          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: panel.windowNumber,
+                                          context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)!
+            panel.sendEvent(event)
+        }
+        controller.flushPreviewFrame()
     }
     func snapshot() -> CGImage {
         controller.prepareForSnapshot(); OffscreenRenderer.settle(view)
@@ -83,6 +105,12 @@ final class EditorScene {
                        "dark": scene.view.modes.buttons[2], "remove": scene.view.remove, "add": scene.view.add,
                        "previous": scene.view.presets.previous, "next": scene.view.presets.next]
         if let name = RenderCLI.value(args, "--hover"), let button = buttons[name] { button.forcedHover = true }
+        if let name = RenderCLI.value(args, "--pressed"), let button = buttons[name] {
+            scene.mouse(.leftMouseDown, at: CGPoint(x: 16, y: 16), in: button)
+        }
+        if let name = RenderCLI.value(args, "--focus") {
+            scene.panel.makeFirstResponder(name == "pad" ? scene.view.pad : buttons[name])
+        }
         if RenderCLI.value(args, "--hover") == "knob", let point = scene.view.pad.primaryKnobCenter {
             scene.mouse(.mouseMoved, at: point, in: scene.view.pad)
         }
@@ -94,4 +122,9 @@ final class EditorScene {
         print("editor rendered \(image.width)x\(image.height)")
         scene.controller.close()
     }
+}
+
+@MainActor private final class EditorOwnerWindow: NSWindow {
+    private let eventUndo = UndoManager()
+    override var undoManager: UndoManager? { eventUndo }
 }

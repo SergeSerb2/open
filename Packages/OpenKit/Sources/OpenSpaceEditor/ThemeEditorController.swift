@@ -26,10 +26,12 @@ public final class ThemeEditorController {
     private var frameTarget: EditorFrameTarget?
 
     public convenience init(model: BrowserModel, spaceID: SpaceID, window: NSWindow,
-                            anchor: ThemeEditorAnchor, undoManager: UndoManager?) {
+                            anchor: ThemeEditorAnchor) {
         let baseline = model.space(id: spaceID)?.theme ?? SpaceTheme()
+        let manager = model.undoManager ?? window.undoManager ?? UndoManager()
+        model.undoManager = manager
         self.init(model: model, spaceID: spaceID, draft: SpaceStyle.seed(from: baseline), baseline: baseline,
-                  window: window, anchor: anchor, undoManager: undoManager ?? model.undoManager, onChange: nil)
+                  window: window, anchor: anchor, undoManager: manager, onChange: nil)
     }
 
     public convenience init(draft: SpaceStyle?, window: NSWindow, anchor: ThemeEditorAnchor,
@@ -49,6 +51,7 @@ public final class ThemeEditorController {
         draftChange = onChange
         draftUndo = onChange.map { DraftUndoRelay(onRestore: $0) }
         panel.editorUndoManager = undoManager
+        if let model { panel.undoProvider = { [weak model] in model?.undoManager } }
         draftUndo?.controller = self
         panel.editorView.onAction = { [weak self] in self?.apply($0) }
         panel.onEscape = { [weak self] in self?.close() }
@@ -73,8 +76,9 @@ public final class ThemeEditorController {
             frame.origin = CGPoint(x: position.x, y: position.y - frame.height)
         }
         if let screen = window.screen?.visibleFrame {
-            frame.origin.x = min(max(frame.minX, screen.minX + 8), screen.maxX - frame.width - 8)
-            frame.origin.y = min(max(frame.minY, screen.minY + 8), screen.maxY - frame.height - 8)
+            let band = ThemeEditorMetrics.contentInset
+            frame.origin.x = min(max(frame.minX, screen.minX + 8 - band), screen.maxX - frame.width - 8 + band)
+            frame.origin.y = min(max(frame.minY, screen.minY + 8 - band), screen.maxY - frame.height - 8 + band)
         }
         panel.setFrame(frame, display: false)
         // Harness windows are never ordered. The production owner orders its child.
@@ -113,10 +117,15 @@ public final class ThemeEditorController {
 
     public func apply(_ action: ThemeEditorAction) {
         guard !isClosed else { return }
+        if pendingFinish && !state.isGestureInProgress { flushPreviewFrame() }
+        switch action {
+        case .setAppearance, .addColor, .removeColor, .selectPreset, .cycleTexture: finishBeforeExternalAction()
+        default: break
+        }
         let wasGesture = state.isGestureInProgress
         let previous = state.style
         switch action {
-        case .dragKnob, .setIntensity(_, final: false), .setNoise(_, final: false):
+        case .beginKeyboardGesture, .dragKnob, .setIntensity(_, final: false), .setNoise(_, final: false):
             if !wasGesture { finishBeforeExternalAction(); captureBaseline() }
         default: break
         }
@@ -124,12 +133,14 @@ public final class ThemeEditorController {
         panel.editorView.apply(state)
         let changed = previous != state.style
         switch action {
-        case .dragKnob, .setIntensity(_, final: false), .setNoise(_, final: false):
+        case .beginKeyboardGesture, .dragKnob, .setIntensity(_, final: false), .setNoise(_, final: false):
             pendingPreview = pendingPreview || changed
             if pendingPreview { requestFrame() }
-        case .endDrag, .setIntensity(_, final: true), .setNoise(_, final: true):
+        case .endKeyboardGesture, .endDrag, .setIntensity(_, final: true), .setNoise(_, final: true):
             pendingPreview = pendingPreview || changed; pendingFinish = true; requestFrame()
         case .setPresetPage: break
+        case .keyboardHue where state.isGestureInProgress, .keyboardRadius where state.isGestureInProgress:
+            pendingPreview = pendingPreview || changed; if pendingPreview { requestFrame() }
         default:
             if changed {
                 writePreview(); commit()
@@ -185,6 +196,7 @@ public final class ThemeEditorController {
         displayLink = link; link.add(to: .main, forMode: .common)
     }
     private func finishBeforeExternalAction() {
+        panel.editorView.finishGestures()
         if state.isGestureInProgress { state.apply(.endDrag); panel.editorView.apply(state); pendingFinish = true }
         if pendingPreview || pendingFinish { flushPreviewFrame() }
     }

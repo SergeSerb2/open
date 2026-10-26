@@ -27,8 +27,9 @@ public enum ThemeColorMath {
     private static let srgb = CGColorSpace(name: CGColorSpace.extendedSRGB)!
 
     public static func toP3(_ c: RGBAColor) -> P3 {
-        let source = CGColor(colorSpace: srgb, components: [c.red, c.green, c.blue, 1])!
-        let values = source.converted(to: p3, intent: .relativeColorimetric, options: nil)!.components!
+        let components = [c.red, c.green, c.blue].map { CGFloat($0.isFinite ? $0 : 0) } + [1]
+        guard let source = CGColor(colorSpace: srgb, components: components),
+              let values = source.converted(to: p3, intent: .relativeColorimetric, options: nil)?.components else { return P3(0, 0, 0) }
         return P3(clamp(values[0]), clamp(values[1]), clamp(values[2]))
     }
 
@@ -94,10 +95,9 @@ public enum ThemeColorMath {
     }
 
     public static func harmony(key: P3, count: Int, wheel: SpaceStyleWheel) -> [P3] {
-        guard count > 0 else { return [] }
+        guard (1...3).contains(count) else { return [] }
         let angles: [Double]
-        if count >= 4 { angles = (0..<count).map { Double($0) * 360 / Double(count) } }
-        else if wheel == .analogous { angles = [0, 40, -40] }
+        if wheel == .analogous { angles = [0, 40, -40] }
         else { angles = count == 2 ? [0, 180] : [0, 150, 210] }
         return angles.prefix(count).map { rotate(key, degrees: $0) }
     }

@@ -382,6 +382,19 @@ Tiles are generated lazily on first use, cached per (texture, noise bucket of
 0.05, scale), shared by all windows. `ThemeLayer` uses `ThemeTexture` instead
 of `Grain`. Cross-fades already cover texture changes (two layers).
 
+Review R1: the tile cache caps at 32 entries and evicts its oldest half.
+Grain image/mean pairs cache per (bucket, scale), bounded at 64 entries;
+normalized denim patterns are reused across buckets, bounded at four scales.
+The harness gates cold 2x tile generation at a loose 500 ms and a 64×64
+field rebuild per preset style at 250 ms; strict B1 stays in Step 5.
+
+Lead design decision (2026-10-26): D-8 keeps grain strength and monochrome
+bytes unchanged. F0139's noise-0.45 strength gap and per-channel grain are
+Step 9 calibration items. No strength or chromatic adjustment lands here.
+Fill colors alone clamp to sRGB 0…1 at render time; stored extended keys
+and primary/semantic palette derivation remain unchanged. F0139 is checked
+with `compare --spec theme-window` over six background-only regions.
+
 ### 4.5 Intensity
 
 `ThemeField.layerAlpha` becomes `ThemeField.layerAlpha(intensity:)`. Ship the
@@ -398,7 +411,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Property | Value | Evidence |
 |---|---|---|
 | Type | `ThemeEditorPanel: NSPanel`, borderless, `isFloatingPanel = false`, child of the browser window (`addChildWindow(_:ordered: .above)`), `canBecomeKey = true`, `hasShadow = true`, clear background | D-4 |
-| Material | `NSVisualEffectView`, `.popover` material, `.behindWindow`, `state = .active`, corner radius 16 (**guess**, visual ≈ 14–16) | F0137 crop; `#797979` over a white page in macOS Dark |
+| Material | `NSVisualEffectView`, `.popover`, `.behindWindow`, `.active`, only in body `(13,13,356,508)`, continuous corner radius 20; outer 13 pt band transparent | Opus R1 F0137 corner fit SSE 0.009; replaces the full-frame radius-16 guess |
 | Outer size | 382 × 534 pt | §14 AX |
 | Content inset | 13 pt each side → content 356 × 508 | §14 AX |
 | Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp inside the screen's `visibleFrame` with 8 pt margins; if clamped horizontally, keep it fully on screen. | §14 (x 500 = sidebar width, y 35) |
@@ -408,6 +421,13 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Close triggers | Esc; mouse down in any app window outside the panel (local event monitor); the app deactivates (`NSApplication.didResignActiveNotification`); the browser window closes or switches Space; the edited Space is deleted | Arc `didKeyDownEscape`; transient popover behavior |
 
 ### 5.2 Layout (content coordinates, origin top-left, pt)
+
+R1: screen clamping keeps the material **body** 8 pt inside `visibleFrame`,
+not the transparent outer band. Model-backed editor sessions use the model's
+single undo manager (defaulting to the owner's manager when unassigned).
+Remove/Add both use 16 pt Medium and `glyph`; the cool `addGlyph` token is
+removed. Light `glyphSelected` is black 0.45. Empty copy stays exactly
+"Tap to pick a color for this space"; AX percentages have no space.
 
 | Element | Frame | Notes |
 |---|---|---|
@@ -793,8 +813,8 @@ occurs only once, and satisfies the placement rules in `docs/model.md`
 (including no move into its own descendant). An explicit insertion index
 must be in `0...spaces.count`. On any refusal return nil: no Space, moves,
 undo, TreeChange, or snapshot dirty state. After validation, create and move
-the nodes as one undo step. An empty moving list with a valid index never
-fails.
+the nodes as one undo step. An empty moving list with a valid index and a
+live Profile ID never fails.
 
 Lead review amendment (2026-10-26, Step 1 round 1): refuse a moving list
 that includes both an ancestor and its descendant. If any relocation fails
@@ -804,9 +824,16 @@ none. The real CLI exercises a forced late failure and checks snapshot
 bytes, undo depth, and the index. Success emits one `.move` per node, no
 source-parent reload, and has byte-identical undo and redo snapshots.
 
-The existing nonoptional `createSpace(title:profileID:icon:theme:)` forwards
-with `at: nil, moving: []`; it may force-unwrap with a comment explaining
-that this path cannot fail. Its callers do not change. Step 7's
+Lead review decision (2026-10-26 09:36 America/Vancouver): unknown Profile
+IDs refuse the failable overload before any mutation, undo, event, or save.
+The existing nonoptional `createSpace(title:profileID:icon:theme:)` requires
+a live Profile ID, delegates with `at: nil, moving: []`, and treats nil as
+a programmer error with a precondition naming the bad ID. Data/import/
+automation/restored-state callers use the failable overload. The caller
+audit changed the Settings selector, profiles CLI, and automation boundary;
+the remaining callers obtain IDs from live model objects or synthetic
+fixtures. Rollback fault injection is DEBUG-only, absent in production.
+Step 7's
 `moveToNewSpace` and `turnFolderIntoSpace` likewise return false or nil on
 refusal and change nothing.
 
@@ -820,7 +847,7 @@ from `docs/model.md` apply to every refusal.
 ```swift
 @MainActor public final class ThemeEditorController {
     public init(model: BrowserModel, spaceID: SpaceID, window: NSWindow,
-                anchor: ThemeEditorAnchor, undoManager: UndoManager?)
+                anchor: ThemeEditorAnchor)
     public init(draft: SpaceStyle?, window: NSWindow, anchor: ThemeEditorAnchor,
                 onChange: @escaping @MainActor (SpaceStyle?) -> Void)   // creation form
     public func show()
@@ -975,7 +1002,7 @@ space-editor-render bench    # B1
 | ID | Check |
 |---|---|
 | M1 | The committed fixture is the example theme in `runtime-observations.md` §3.3 (key `#FF8558`): our primary palette within 1/255 and both semantic palettes within 0.003 of the listed values. With `--arc-json FILE` (a local read-only copy of `StorableSidebar.json`, never committed) the same check runs over every stored theme and prints only counts and max errors. |
-| M2 | Harmony: analogous and complementary, n = 1…4, hue offsets within 0.1°, S and L unchanged. |
+| M2 | Harmony: analogous and complementary, n = 1…3, hue offsets within 0.1°, S and L unchanged. |
 | M3 | Pad round trip: 2,000 seeded random colors inside each mode's range: color → knob → color within 1/255. |
 | M4 | Appearance: forced Light / Dark always win for 500 random keys. Automatic with bias 0 gives light, light, light, dark for the key colors `#FF8558`, `#2F83E4`, `#F8D558`, `#926400` (extended sRGB; the 4 stored samples, colors only). |
 | E1 | Editor layout: every control frame equals §5.2 within 0.5 pt at 1x and 2x. |
@@ -986,6 +1013,10 @@ space-editor-render bench    # B1
 | E6 | Slider and dial: value ↔ geometry, texture cycle order, dot-click snap to 0.05 steps, no wrap past the ends, scroll steps. |
 | E7 | Live propagation: 2 window scenes on the same Space and 1 on another; a drag changes both same-Space backgrounds and sidebar title colors in the same frame; the third is unchanged; no cross-fade animation during the drag; one cross-fade on a preset click. |
 | E8 | Close triggers: Esc, outside click, Space switch, Space delete. Esc mid-drag commits. |
+
+**Step 5 hard gate:** do not ship `edit-theme` wiring until E8 verifies
+outside click, app deactivation, Space switch, and Space delete all close
+the panel. These triggers remain deferred here, not waived.
 | C1 | Form at widths 180 / 200 / 228 / 300 / 500: width class, card frames, submit placement. Return creates (title, icon, style, Profile, focus); Esc cancels with no model change and no undo step; undo of create removes the Space. "Move to ▸ New Space…" moves the tab; "Turn into Space" moves children and removes the folder in one step. |
 | I1 | Picker: pages, search filter, a pick stores `.emoji` / `.named`, "Remove icon" stores nil, folder default page Icons. |
 | P1 | Persistence: snapshot round trip with `style` and `iconOverride`; a fixture snapshot written before Step 1 decodes and renders byte-identical PNGs (`window` scene) before and after this plan. |
@@ -1055,6 +1086,16 @@ height error 3 → 0 pt, center error ≤ 1 pt, F0137 core ΔE00 1.07 / 0.58.
 The procedural preview base changes only the dial art, not Space textures
 or their mean-darkness/cache rules. All remaining translucent colors use
 the stated ΔE00 ≤ 3 bound (largest: active wave 2.13).
+
+R1 design correction: the body is `(13,13,356,508)` with continuous radius
+20 and a transparent outer band. The editor comparison now includes body
+edges and four corner contours (normal distance, not horizontal distance
+near a tangent). F0137 body edges are exact; corner normal error is 0.4 pt.
+Remove/Add share 16 pt Medium and `glyph`, with no Add-specific tint.
+Glyph core ΔE compensates the local captured material before comparison
+with the fixed gray harness backdrop, because the blue tint behind Add in
+F0137 belongs to the blur, not the glyph. Raw cores stay listed in the
+table. Add's raw ΔE is 2.02; material-compensated ΔE is 0.36.
 
 F0137 calibration (Step 3; sizes are SF point sizes, all Medium):
 
@@ -1133,6 +1174,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | Q2 | Which theme a brand-new Space starts with (not decoded). | Brand preset `spaces.count mod 9`, 1 color, Automatic, noise 0, intensity 0.8. Deterministic, and neighbors differ. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
 | Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
+| Q4 review capture detail | Intensity zero. | Capture intensity **0** explicitly and determine whether Arc keeps a visible tint. Keep Open's current gray-at-zero result and provisional law until Step 9. |
 | Q5 | Page 2 of the presets. | Brand 1–9 with 3 analogous colors. Evidence: 2 of 3 stored gradients are Brand5 / Brand6 with exactly ±40°. |
 | Q6 | New Space form placement. | Sidebar page (code evidence: 190 / 227 pt width breakpoints). Ask the user for a 30 s capture of "New Space…" before Step 7 if certainty is needed. |
 | Q7 | Where a new Space is inserted. | At the end of the Space list for every entry point. Arc supports "after Space X"; we can switch to "after the focused Space" with one parameter. |

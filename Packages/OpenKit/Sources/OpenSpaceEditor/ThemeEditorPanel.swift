@@ -9,7 +9,8 @@ public enum ThemeEditorAnchor {
 
 @MainActor
 public final class ThemeEditorPanel: NSPanel {
-    public var editorUndoManager: UndoManager?
+    var editorUndoManager: UndoManager?
+    var undoProvider: (@MainActor () -> UndoManager?)?
     public var onEscape: (@MainActor () -> Void)?
     public var beforeUndo: (@MainActor () -> Void)?
     public var renderScale: CGFloat? { didSet { editorView.renderScale = renderScale ?? backingScaleFactor } }
@@ -23,16 +24,21 @@ public final class ThemeEditorPanel: NSPanel {
         isFloatingPanel = false; hasShadow = true; isOpaque = false; backgroundColor = .clear
         isReleasedWhenClosed = false; hidesOnDeactivate = false
         contentView = editorView
-        editorView.wantsLayer = true; editorView.layer?.cornerRadius = 16; editorView.layer?.masksToBounds = true
+        editorView.wantsLayer = true
+        editorView.content.layer?.cornerRadius = 20; editorView.content.layer?.cornerCurve = .continuous
+        editorView.content.layer?.masksToBounds = true
         material.material = .popover; material.blendingMode = .behindWindow; material.state = .active
-        material.frame = editorView.bounds; material.autoresizingMask = [.width, .height]
-        editorView.addSubview(material, positioned: .below, relativeTo: editorView.content)
+        material.frame = CGRect(origin: .zero, size: ThemeEditorMetrics.contentSize); material.autoresizingMask = [.width, .height]
+        editorView.content.addSubview(material, positioned: .below, relativeTo: editorView.pad)
         setAccessibilityRole(.popover); setAccessibilityLabel("Edit Theme")
     }
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
     public override var backingScaleFactor: CGFloat { renderScale ?? super.backingScaleFactor }
-    public override var undoManager: UndoManager? { editorUndoManager ?? parent?.undoManager }
+    public override var undoManager: UndoManager? {
+        if let undoProvider { return undoProvider() }
+        return editorUndoManager ?? parent?.undoManager
+    }
     public override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onEscape?(); return }
         super.keyDown(with: event)
@@ -51,7 +57,7 @@ public final class ThemeEditorPanel: NSPanel {
 
     private func updateBackdrop() {
         material.isHidden = backdrop != nil
-        editorView.layer?.backgroundColor = backdrop?.cgColor
+        editorView.content.layer?.backgroundColor = backdrop?.cgColor
     }
 }
 
@@ -60,18 +66,21 @@ public final class ThemeEditorContentView: NSView {
     public let content: NSView = EditorFlippedView()
     public let pad = ColorPadView(frame: ThemeEditorMetrics.pad)
     public let modes = AppearanceModeBar(frame: ThemeEditorMetrics.modeBar)
-    public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color")
-    public let add = ThemeEditorButton(symbol: "plus", label: "Add color", pointSize: 17, glyphColor: ThemeEditorColors.addGlyph)
+    public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color", pointSize: 16)
+    public let add = ThemeEditorButton(symbol: "plus", label: "Add color", pointSize: 16)
     public let presets = PresetStripView(frame: CGRect(x: 0, y: 364, width: 356, height: 32))
     public let intensity = SineSliderView(frame: ThemeEditorMetrics.intensity)
     public let noise = NoiseDialView(frame: ThemeEditorMetrics.noise)
+    private var keyViews: [NSView] = []
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
     public private(set) var layoutPassCount = 0
     public var renderScale: CGFloat = 1 { didSet { pad.renderScale = renderScale; noise.renderScale = renderScale } }
 
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
-        content.wantsLayer = true; addSubview(content)
+        content.wantsLayer = true
+        content.frame = CGRect(origin: CGPoint(x: 13, y: 13), size: ThemeEditorMetrics.contentSize)
+        addSubview(content)
         let controls: [NSView] = [pad, modes, remove, add, presets, intensity, noise]
         for view in controls { content.addSubview(view) }
         remove.frame = ThemeEditorMetrics.remove; add.frame = ThemeEditorMetrics.add
@@ -94,11 +103,10 @@ public final class ThemeEditorContentView: NSView {
         pad.apply(state); modes.mode = state.appearance
         remove.isHidden = state.style == nil; add.isHidden = state.style == nil
         remove.enabled = state.style != nil; add.enabled = state.style.map { $0.colorCount < 3 } ?? false
-        let pageChanged = presets.page != state.presetPage
         presets.apply(page: state.presetPage)
         intensity.apply(value: state.style?.intensityFactor ?? 0.8, enabled: state.style != nil)
         noise.apply(value: state.style?.noiseFactor ?? 0, texture: state.style?.texture ?? .grain, enabled: state.style != nil)
-        if pageChanged { configureKeyViews() }
+        configureKeyViews()
     }
     public var controlFrames: [String: CGRect] {
         var result = ["pad": pad.frame, "remove": remove.frame, "add": add.frame]
@@ -115,10 +123,16 @@ public final class ThemeEditorContentView: NSView {
         return result
     }
     public func configureKeyViews(extra: [NSView] = []) {
-        let views: [NSView] = modes.buttons + [pad, remove, add, presets.previous] + presets.visibleSwatches
+        let all: [NSView] = modes.buttons + [pad, remove, add, presets.previous] + presets.visibleSwatches
             + [presets.next, intensity, noise.centerButton, noise] + extra
+        let views = all.filter { !$0.isHidden && $0.acceptsFirstResponder && (($0 as? ThemeEditorButton)?.enabled ?? true) }
+        guard views.count != keyViews.count || zip(views, keyViews).contains(where: { $0 !== $1 }) else { return }
+        for old in keyViews { old.nextKeyView = nil }; keyViews = views
         for (index, view) in views.enumerated() { view.nextKeyView = views[(index + 1) % views.count] }
+        if let focused = window?.firstResponder as? NSView, all.contains(where: { $0 === focused }),
+           !views.contains(where: { $0 === focused }) { window?.makeFirstResponder(views.first) }
     }
+    public func finishGestures() { pad.finishKeyboardGesture() }
 }
 
 @MainActor private final class EditorFlippedView: NSView {

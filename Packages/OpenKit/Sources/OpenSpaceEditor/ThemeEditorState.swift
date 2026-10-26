@@ -11,6 +11,7 @@ public enum ThemeEditorAction: Equatable, Sendable {
     case setIntensity(Double, final: Bool)
     case setNoise(Double, final: Bool), cycleTexture
     case keyboardHue(Double), keyboardRadius(Double)
+    case beginKeyboardGesture, endKeyboardGesture
 }
 
 /// Values only. Views paint the state; the controller owns preview and undo.
@@ -42,7 +43,8 @@ public struct ThemeEditorState: Equatable, Sendable {
                 if point == startPointer { return }
             } else { target = point }
             setColor(at: target)
-        case .endDrag:
+        case .beginKeyboardGesture: isGestureInProgress = true
+        case .endDrag, .endKeyboardGesture:
             isGestureInProgress = false; startKnob = nil; startPointer = nil
         case .addColor:
             if let value = style, value.colorCount < 3 { style?.colorCount += 1 }
@@ -80,7 +82,7 @@ public struct ThemeEditorState: Equatable, Sendable {
             style = value
         case .keyboardRadius(let delta):
             guard let position = knob else { return }
-            let r = hypot(position.x, position.y), target = min(0.99, max(0, r + delta * 0.99))
+            let r = hypot(position.x, position.y), target = min(0.99, max(0, r + delta))
             let h = r > 0 ? atan2(position.y, position.x) : 0
             setColor(at: CGPoint(x: cos(h) * target, y: sin(h) * target))
         }
