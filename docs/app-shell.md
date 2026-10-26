@@ -914,7 +914,7 @@ pointer filter is installed; its default nil preserves ordinary deactivation beh
 | Reported failure | Root cause and evidence | Change |
 |---|---|---|
 | Native key focus (`keyWindow=0`) | A raw executable can show a window without a foreground grant. Same-app raw-vs-LaunchServices controls are retained in `focus-capture-causes.json`. Activation is asynchronous and can be refused or lost to another app. | Launch the exact bundle through LaunchServices; activate only its verified PID; wait for the actual requested key window before native input. A lost grant is INTERRUPTED, not PASS. |
-| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if that page is still selected, its window is key and the bar is closed. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
+| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if Open is active, that page is still selected, its window is key, the bar and sheets are closed, and the first responder is still the page or window. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
 | Comparison capture size | AppKit constrained a 1394 pt request to 1050 on a 1080 pt display. A controlled larger request likewise clipped under ordinary constraints and stayed exact with the existing capture hook. | Keep #90's unconstrained automation frame mode and poll the exact reference dimensions. No comparison tolerance changes. |
 | Hover and card-pixel checks | Synthetic moves previously advanced before native dequeue, and real activation traces then confirmed repeated didResignActive notifications during dwell/hold/capture. The production card intentionally dismisses on resignation. The lead confirmed concurrent user/agent foreground use. | Acknowledge each tagged native motion and reveal-tracker delivery. Tagged pointer sessions ignore unrelated activation changes; normal sessions still dismiss. A real-app check yields only Open and verifies reveal/dismiss while inactive. Pixel/native-focus steps retain interruption evidence and bounded retries. |
 | Direct deactivation control failed | NSApp.deactivate did not complete a foreground handoff or emit a resignation in the controlled run; native key-window readiness then timed out. This was a control-method failure, not evidence of a page/menu defect. | Replace it with a second owned Open process, exact-executable validation and AppKit cooperative activation. Native resignation itself is sufficient interruption evidence; app metadata can update later. Retain the failed control receipts. |
@@ -929,8 +929,8 @@ only a complete uninterrupted retry can contribute accepted passes. Exhaustion
 exits 2. Ordinary assertion failures exit 1. The native fault-injection receipt
 checks this policy against two owned real app instances, not an isolated model or mock.
 
-The lead cannot reserve the foreground. Remaining interrupted workflows therefore
-stay pending the lead's exclusive focus-dependent verification before merge.
+The lead accepted the three Debug and three Release locked runs with zero
+foreground interruptions as the required focus acceptance on 2026-10-26.
 All timing misses, ordinary failures, interrupted attempts, named Debug timing
 SKIPs and durable profile-storage BLOCKED rows remain explicit in the linked
 summary and raw receipts. Step I must remeasure launch budgets on an idle machine.
@@ -963,8 +963,7 @@ its error reporting active=true and equal target/key window numbers. No external
 foreground loss was observed. Its exact cause is **unconfirmed**. Later 45/45
 runs and 80 additional locked real-app navigation/Copy cycles do not erase it.
 The exact two-tab diagnostic captured 400 native input steps with active/key state
-at every before/after boundary. Focus acceptance remains pending the lead
-exclusive run. No timing budget or comparison tolerance changed.
+at every before/after boundary. The lead accepted the locked three-run matrix as focus acceptance on 2026-10-26. No timing budget or comparison tolerance changed.
 
 [Full three-run tables, six Release medians, command-bar timings and all verifier rows](engine-spike/step-c-main-recheck/post-a962f39/final-summary.md).
 [Unresolved focus failure and diagnostic provenance](engine-spike/step-c-main-recheck/post-a962f39/focus-readiness-unresolved.json).
@@ -990,7 +989,7 @@ pointer filter is installed; its default nil preserves ordinary deactivation beh
 | Reported failure | Root cause and evidence | Change |
 |---|---|---|
 | Native key focus (`keyWindow=0`) | A raw executable can show a window without a foreground grant. Same-app raw-vs-LaunchServices controls are retained in `focus-capture-causes.json`. Activation is asynchronous and can be refused or lost to another app. | Launch the exact bundle through LaunchServices; activate only its verified PID; wait for the actual requested key window before native input. A lost grant is INTERRUPTED, not PASS. |
-| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if that page is still selected, its window is key and the bar is closed. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
+| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if Open is active, that page is still selected, its window is key, the bar and sheets are closed, and the first responder is still the page or window. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
 | Comparison capture size | AppKit constrained a 1394 pt request to 1050 on a 1080 pt display. A controlled larger request likewise clipped under ordinary constraints and stayed exact with the existing capture hook. | Keep #90's unconstrained automation frame mode and poll the exact reference dimensions. No comparison tolerance changes. |
 | Hover and card-pixel checks | Synthetic moves previously advanced before native dequeue, and real activation traces then confirmed repeated didResignActive notifications during dwell/hold/capture. The production card intentionally dismisses on resignation. The lead confirmed concurrent user/agent foreground use. | Acknowledge each tagged native motion and reveal-tracker delivery. Tagged pointer sessions ignore unrelated activation changes; normal sessions still dismiss. A real-app check yields only Open and verifies reveal/dismiss while inactive. Pixel/native-focus steps retain interruption evidence and bounded retries. |
 | Direct deactivation control failed | NSApp.deactivate did not complete a foreground handoff or emit a resignation in the controlled run; native key-window readiness then timed out. This was a control-method failure, not evidence of a page/menu defect. | Replace it with a second owned Open process, exact-executable validation and AppKit cooperative activation. Native resignation itself is sufficient interruption evidence; app metadata can update later. Retain the failed control receipts. |
@@ -1006,8 +1005,8 @@ only a complete uninterrupted retry can contribute accepted passes. Exhaustion
 exits 2. Ordinary assertion failures exit 1. The native fault-injection receipt
 checks this policy against two owned real app instances, not an isolated model or mock.
 
-The lead cannot reserve the foreground. Remaining interrupted workflows therefore
-stay pending the lead's exclusive focus-dependent verification before merge.
+The lead accepted the three Debug and three Release locked runs with zero
+foreground interruptions as the required focus acceptance on 2026-10-26.
 All timing misses, ordinary failures, interrupted attempts, named Debug timing
 SKIPs and durable profile-storage BLOCKED rows remain explicit in the linked
 summary and raw receipts. Step I must remeasure launch budgets on an idle machine.
@@ -1053,7 +1052,9 @@ All 30 invocations finished. **Zero final foreground interruptions**. The
 expected negative-control interruptions are separate. Debug window timing SKIPs
 and sidebar durable-profile-storage BLOCKED rows remain explicit. All twelve
 live static comparisons passed at **≤1 pt / worst ΔE00 1.61**. First/repeat
-command-bar results pass 50 ms in all six actions runs.
+command-bar internal results pass 50 ms in all six actions runs. These numbers
+start at showCommandBar entry and end when the first snapshot is applied; they
+exclude preceding key routing, socket transport and frame presentation.
 
 All six Release sidebar launch medians exceed 250 ms under load; first paint
 passes 700 ms in all six. Load averages at the three starts were 46.03, 10.75
@@ -1064,7 +1065,7 @@ Release shell repetition 1 has a confirmed engine allocator startup crash before
 automation on persistence relaunch. Its original FAIL, stack and follow-up remain.
 The earlier native key-readiness failure has an unconfirmed cause after 80
 additional real-app diagnostic cycles; the current six actions runs pass, and the
-lead's exclusive focus acceptance remains pending. No check, time budget or
+lead accepted the locked three-run matrix as focus acceptance on 2026-10-26. No check, time budget or
 comparison tolerance was relaxed.
 
 [Full three-run, timing, comparison and 19-row verifier tables](engine-spike/step-c-main-recheck/final-summary.md).
@@ -1072,3 +1073,32 @@ comparison tolerance was relaxed.
 The final command-bar, Settings and Library screenshots were inspected and
 contain only Open's synthetic fixtures. No new Arc comparison is claimed for
 those three windows. No unit tests or desktop input.
+
+
+### Step C code review round 1
+
+The lead accepted the prior three Debug and three Release locked runs with zero
+foreground interruptions as focus acceptance. The recorded allocator startup
+FAIL remains in the historical receipts. It has no Open frames, is not attributed
+to this PR, and is nonblocking per the lead; the [separate allocator debug task](t3-thread://v1/thread:delegated-task:command%3Amcp%3A113d67cd-becd-4e78-a257-e72ea2a8568f%3Adelegate-task%3Adebug-1027-release-relaunch-zone-crash-v1) owns it.
+
+Post-load, command-bar-dismiss and Save-sheet callbacks now share a guarded focus
+restore. Open must be active, the window key, the same page selected, the bar
+and sheets closed, and the first responder still the page or the window. A
+sidebar editor, URL field, Find field, command bar or sheet keeps its focus.
+Actual slow HTTP response fixtures exercise sidebar, Find, inactive load, and
+inactive programmatic dismissal. The old build loses sidebar focus and changes
+the inactive dismissal responder; both red receipts are retained.
+
+Rename Tab uses the existing sidebar inline editor. A split pane with no outline
+row uses an asynchronous sheet. The actions suite checks commit, Escape cancel,
+and a running page timer while editing. Save capture, page-background and Find
+selection tasks have owners and cancellation. Quit cancels these tasks and
+closes all hosts before engine shutdown; the shell suite records and asserts
+that order with real queued Save/background work.
+
+The 50 ms rows measure internal command-bar work: showCommandBar entry to first
+snapshot applied. Preceding key routing, socket transport and frame presentation
+are excluded. Every timed polling/capture interval now has a native activation
+trace bound, even without a key call. Unexpected foreground loss remains
+INTERRUPTED with at most three fresh workflow attempts.

@@ -283,3 +283,33 @@ A lead-requested display hold is enforced by `.re/hold-on-screen`. While it exis
 the harness refuses new Open launches. The file must be removed only after an
 explicit resume instruction; an elapsed estimate is not permission. Offscreen
 renderers and compilation do not require removing the file.
+
+
+### Step C review: focus and shutdown observations
+
+Automation responses include `observationStart` (process monotonic uptime).
+`focus-state` reports the current responder owner, Find text/visibility, sheet
+state, and the count/result of post-navigation focus decisions. It accepts an
+optional standard-window `id` without activating that window. `activation-events`
+starts before the first window/engine turn and reports native resignation and
+workspace foreground changes. The e2e runner guards every timed poll/capture
+interval as well as native-input intervals. An unexpected foreground change
+stores INTERRUPTED, preserves the original assertion and trace, and allows at
+most three fresh workflow attempts. No interrupted assertion counts as a pass.
+Intentional inactive-window controls first verify the exact owned peer's PID and
+native handoff event, then start a new background-state observation interval.
+
+`commandbar-state.timingScope` labels the existing 50 ms bar timings exactly:
+showCommandBar entry to first snapshot applied. They exclude preceding key
+routing, socket transport and frame presentation.
+
+`save-page-configure(path:)` sets the path on Open's pending native Save sheet;
+the runner confirms it with the native Return key.
+`background-read` starts the selected live host's real background-color read.
+`async-engine-state` reports owned pending capture and background tasks. With
+`OPEN_AUTOMATION_SHUTDOWN_TRACE=1`, the own-profile State/shutdown-order.json
+records prepare, hostsClosed, engineShutdownBegin and engineShutdownEnd. The
+ordering check queues actual Save/background work with the automation-only
+`OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
+must clear work and close hosts before the actual engine shutdown boundary. The
+flag delays scheduling; it does not replace engine responses.

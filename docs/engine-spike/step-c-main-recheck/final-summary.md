@@ -19,7 +19,7 @@ Debug window runs have two named Release-only timing SKIPs each. Sidebar runs re
 
 ## Native-focus interruptions
 
-Up to three fresh workflow attempts are allowed. Original assertions and the frontmost app trace remain in each receipt. A dispatched key is never retried against partially changed state. The lead will repeat focus-dependent acceptance without competing on-screen tests before merge.
+Up to three fresh workflow attempts are allowed. Original assertions and the frontmost app trace remain in each receipt. A dispatched key is never retried against partially changed state. The lead accepted the three Debug and three Release locked runs with zero foreground interruptions as the required focus acceptance on 2026-10-26.
 
 | Run | Attempt | Interrupted step/reason | Frontmost app(s) |
 |---|---:|---|---|
@@ -43,7 +43,7 @@ CoreFoundation and RunningBoardServices frames. This remains **FAIL**, not
 INTERRUPTED or a timing load exception. See the [stack](engine-startup-crash.txt)
 and [provenance](engine-startup-crash.json). Why the pointer lacked a malloc zone
 is unconfirmed; the engine lead owns that investigation (docs/followups.md).
-Later passing shell runs do not clear this failure.
+Later passing shell runs do not clear this failure. The lead confirmed that the stack has no Open frames, is not attributed to Step C, and does not block this merge; the [separate allocator debug task](t3-thread://v1/thread:delegated-task:command%3Amcp%3A113d67cd-becd-4e78-a257-e72ea2a8568f%3Adelegate-task%3Adebug-1027-release-relaunch-zone-crash-v1) owns it.
 
 ## Readiness controls and prior failures
 
@@ -65,12 +65,11 @@ active=true and matching target/key numbers, but omitted target.isKeyWindow.
 Eighty separate real-app diagnostic cycles did not reproduce it. Current native
 errors capture the actual predicate values, key identity and foreground metadata;
 conditions and deadlines are unchanged. All six current actions runs pass, but
-that does not establish the historical failure's cause. The lead's exclusive
-focus-dependent verification remains required before merge.
+that does not establish the historical failure's cause. The lead accepted this locked matrix as focus acceptance on 2026-10-26.
 
 ## Command-bar result timing (ms)
 
-The first measurement includes construction. Repeat measurements use the same real bar. The 50 ms assertions remain unchanged.
+Scope: showCommandBar entry to first snapshot applied, including construction on the first open. Preceding key routing, socket transport and frame presentation are excluded. These are internal bar timings, not end-to-end key-to-visible latency. Repeat measurements use the same real bar. The 50 ms assertions remain unchanged.
 
 | Config | Repeat | First open | First query phase | Repeat open | Budget |
 |---|---:|---:|---:|---:|---|
