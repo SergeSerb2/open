@@ -202,11 +202,18 @@ executable launches remain only in the intentional early-quit/missing-engine
 checks. A raw executable can have a visible window but no foreground activation
 grant on macOS 26. `NSApp.activate()` is a request, not a synchronous grant.
 
-Key injection requires the real application and requested window to become
-active/key; it fails before sending events if readiness times out. `focus` waits
+Key and page-focus commands require the real application and requested
+window to become active/key; they fail before sending events if readiness times out. `focus` waits
 for both the page's native responder and `document.hasFocus()`. `window-state`
 reports those native flags and screen bounds. Tests poll the resulting UI state
 instead of treating the key response as proof that the UI has finished changing.
+`activation-events` returns a bounded list of this app's native activation and
+resignation notifications, with monotonic uptime and its key-window number.
+The trace includes the frontmost application's name and PID, as does
+`native-focus-state`. Input responses include the native readiness-grant uptime.
+Window-chrome receipts retain this timeline to distinguish foreground loss from
+an edge or animation failure. Only foreground app metadata is read; input goes
+only to Open, and no other app's window content is read.
 
 `--only actions` runs the complete Step C command-bar/native-menu/action flow,
 including page Copy/Paste/Undo/Select All, model undo, lazy duplication, and real
@@ -223,6 +230,24 @@ activates an Open instance by bundle identifier. App cleanup waits for that PID
 to exit even if the LaunchServices waiter has ended. Native mouse moves carry a
 request tag and return only after the local monitor and reveal tracker have
 consumed that request. Coalescing stays enabled and production chrome is unchanged.
+While the tagged pointer filter is installed, unrelated app deactivation does
+not dismiss the virtual pointer's reveal card. Ordinary app sessions still dismiss
+it on deactivation. Pointer checks assert socket state without requiring activation.
+
+`yield-activation pid=…` allows a cooperative handoff only to another instance
+of the exact same Open executable. The harness uses a second owned instance with
+private data to verify inactive tagged hover and to exercise interrupted native
+input. It never activates or sends input to an unrelated app.
+
+Native-focus assertions use the activation trace from their readiness grant to
+the assertion boundary. An outside foreground change makes that attempt
+`INTERRUPTED`, even if its assertion succeeded. The original assertion, app name
+and trace remain in the receipt. The harness retries at most three attempts,
+from a fresh workflow fixture: replaying a single destructive key could otherwise
+close a second tab or apply an edit twice. Interrupted attempts never enter the
+accepted pass count. Exhausting attempts prints `INTERRUPTED` and exits 2;
+an ordinary failed assertion still prints FAIL and exits 1. No check, tolerance,
+timing budget or native event route is replaced by a successful no-op.
 
 A lead-requested display hold is enforced by `.re/hold-on-screen`. While it exists,
 the harness refuses new Open launches. The file must be removed only after an
