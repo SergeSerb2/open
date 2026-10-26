@@ -23,7 +23,7 @@ import Foundation
 public enum ThemeField {
     /// Gradient opacity over the underlay. Fitted 0.62–0.645 on two Spaces with
     /// `intensityFactor` 0.8.
-    public static let layerAlpha: Double = 0.64
+    public static func layerAlpha(intensity: Double) -> Double { 0.8 * min(1, max(0, intensity)) }
     /// Underlay gray for `translucencyStyle: light`, active and inactive window.
     public static let lightUnderlayActive: Double = 0.694
     public static let lightUnderlayInactive: Double = 0.83
@@ -92,7 +92,7 @@ public enum ThemeField {
             }
             baseParam = Param(ThemeField.endpoints(ThemeField.baseLine, size: windowSize))
             overlayParam = Param(ThemeField.endpoints(ThemeField.overlayLine, size: windowSize))
-            alpha = ThemeField.layerAlpha
+            alpha = style.usesLegacyIntensity ? 0.64 : ThemeField.layerAlpha(intensity: style.intensityFactor)
             switch style.translucency {
             case .light: underlay = isActive ? ThemeField.lightUnderlayActive : ThemeField.lightUnderlayInactive
             case .dark: underlay = isActive ? ThemeField.darkUnderlayActive : ThemeField.darkUnderlayInactive
@@ -125,9 +125,11 @@ public enum ThemeField {
                 let (orr, og, ob) = OKLab.toLinear(o)
                 let ba = alpha
                 outA = oa + (1 - oa) * ba
-                r = (orr * oa + r * ba * (1 - oa)) / outA
-                g = (og * oa + g * ba * (1 - oa)) / outA
-                bl = (ob * oa + bl * ba * (1 - oa)) / outA
+                if outA > 0 {
+                    r = (orr * oa + r * ba * (1 - oa)) / outA
+                    g = (og * oa + g * ba * (1 - oa)) / outA
+                    bl = (ob * oa + bl * ba * (1 - oa)) / outA
+                }
             }
             let er = OKLab.encode(r), eg = OKLab.encode(g), eb = OKLab.encode(bl)
             let u0 = underlay * (1 - outA)

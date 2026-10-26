@@ -351,8 +351,8 @@ public enum ThemeTexture {
 ```
 
 All four are black tiles with darkness in alpha (the `Grain` scheme from
-`docs/design.md` §3.6), peak alpha `noiseFactor × 0.1`, and the same mean
-darkness as grain within 10 %. Our own patterns, seeded and deterministic:
+`docs/design.md` §3.6), pattern-mark peak alpha `noiseFactor × 0.1`, and the
+same mean darkness as grain within 10 %. Our own patterns, seeded and deterministic:
 
 | Texture | Pattern (Open design) |
 |---|---|
@@ -360,6 +360,23 @@ darkness as grain within 10 %. Our own patterns, seeded and deterministic:
 | sand | sparse speckle: 18 % of pixels, 1–2 px dots, random alpha 0.4–1.0 |
 | denim | 45° twill: lines 3 pt apart, 1 pt wide, alpha modulated by 1D value noise along the line |
 | tweed | short orthogonal dashes (4–7 pt) on a 3 pt grid, random orientation, slight jitter |
+
+Lead amendment, user message **2026-10-25 23:58:10 America/Vancouver**, on
+§4.4: keep equal mean darkness so a texture switch does not change the
+Space's overall brightness. At tile-build time, at the same noise factor,
+compute `base = max(0, grainMean − patternMean)` for sand, denim, and tweed.
+Composite each pattern mark over the uniform base:
+`alpha = base + mark × (1 − base)`. The mark's own peak remains
+`noiseFactor × 0.1`; the composited pixel can exceed it. Grain never gains
+a base. The cache key remains (texture, noise bucket, scale), since the base
+is derived from those inputs. This is **Open design**, to calibrate against
+the editor capture in Step 9.
+
+The `space-editor-render` texture check (M5) asserts every texture's mean is
+within 10% of grain at noise factors 0.25, 0.5, and 1.0, at 1x and 2x. For
+sand at noise 1, the mean alpha of peak marks minus the base must be at
+least 0.03. Peak marks are the marks in the top 10% of the prescribed mark
+alpha range.
 
 Tiles are generated lazily on first use, cached per (texture, noise bucket of
 0.05, scale), shared by all windows. `ThemeLayer` uses `ThemeTexture` instead

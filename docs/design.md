@@ -453,3 +453,66 @@ The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktre
 Worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because the re-derived script skips the URL copy and Site Control buttons there. Element counts differ in six states (F0016, F0024, F0027, F0031, F0063, F0066): the re-derived script skips URL-host, button, and row-title elements whose text or state differs between the snapshot and the capture. The known differences in §9 remain (Home hover 2 pt, F0063/F0066 selected fill ≈ 2.0, blue grain 2.38).
 
 Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone, up to three times; then the outputs matched. The bottom-band glitch got more frequent under machine load.
+
+## 16. Space editor theme engine (Step 2)
+
+`ThemeColorMath` implements the decoded P3 HSL, luminance bands, harmony,
+pad mapping, and appearance rule (`re/design-tokens.md` §6.5). Primary roles
+convert to extended sRGB before semantic source-over composition. Evidence:
+`space-editor-render math --arc-json <read-only StorableSidebar.json copy>`
+reproduces all four stored primary and semantic palettes with maximum
+component error 0.000000. The committed documented #FF8558 fixture has
+primary error 0.001567 and semantic error 0.002172, within 1/255 and 0.003.
+The fixture's table values are clamped, rounded sRGB hex
+(`re/runtime-observations.md` §3.3); the private-input check compares full
+extended components and prints counts and maximum errors only.
+
+`SpaceThemeStyle` resolves stored editor inputs first, then the unchanged
+Arc JSON parser, mapped stops, and default theme. `SpaceStyle.seed(from:)`
+only initializes editor state; it does not write the model. The 45 presets
+retain each source color space. Page 2 uses three analogous colors, as the
+lead specified. Unknown math versions remain stored and use the default
+render until their derivation is implemented; they are never reinterpreted
+as version 1. The sidebar style cache holds 256 entries and removes the
+oldest half when full.
+
+`ThemeTexture` keeps the existing grain bytes and draws Open's own sand,
+denim, and tweed. Tiles are shared by texture, noise bucket of 0.05, and
+scale. The lead's 2026-10-25 23:58:10 America/Vancouver message adds a base
+alpha of `max(0, grainMean - patternMean)` beneath non-grain patterns. Marks
+composite over that base; their own peak remains `noiseFactor × 0.1`.
+The approach is Open design and needs Step 9 calibration. Non-grain tiles
+use 16-bit grayscale plus alpha (four bytes per pixel), so the shared cache
+does not need large RGBA float tiles and low-noise bases retain precision.
+
+Editor styles use `ThemeField.layerAlpha(intensity:) = 0.8 × intensity`.
+The §4.5 fallback is active for imported themes and mapped stops: their
+opacity remains 0.64 until calibration. The F0069 comparison uses the same
+19-element selection as the existing result (9 pinned rows; row titles and
+New Tab skipped because those states differ in the saved snapshot).
+
+| F0069 | Worst position | Worst ΔE00 | Background mean ΔE00 | Panel mean ΔE00 |
+|---|---|---|---|---|
+| Step 1 head `2eedbfc`, opacity 0.64 | 1.0 pt | 2.38 | 1.39 | 1.59 |
+| Provisional opacity 0.80 on the imported intensity-1 theme | 1.0 pt | 2.93 | 1.62 | 2.51 |
+| Step 2, imported fallback 0.64 | 1.0 pt | 2.38 | 1.39 | 1.59 |
+
+The final F0069 PNG and comparison table are byte-identical to the Step 1
+baseline. Thirteen sidebar scene PNGs and `sidebar-render check` output
+(125 passed, 0 failed) are also byte-identical before and after Step 2.
+Private captures and comparison images stay in `.re/`; none are committed.
+
+The new offscreen harness reuses Open's own window composition, comparison
+method, and synchronized CARenderer path. At Step 2 it implements:
+
+```text
+space-editor-render math [--arc-json FILE]
+space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
+space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec window --out DIR
+space-editor-render check
+```
+
+`check` covers M1–M4, M5 texture means at noise 0.25/0.5/1 and scales 1/2,
+sand peak contrast, cache sharing, and P1 DTO/icon persistence plus three
+frozen pre-Step-1 window PNGs. `tools/verify-all.sh` runs it as `space-editor`.
+Editor, form, picker, and live-window acceptance belong to later steps.

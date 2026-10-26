@@ -12,7 +12,7 @@ QUICK=0
 ONLY=
 ARC=0
 KEEP=0
-NAMES='commands-demo roundtrip space-legacy suggest-check commands-dump route favicons sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render commandbar-render boosts import-arc'
+NAMES='commands-demo roundtrip space-legacy space-editor suggest-check commands-dump route favicons sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render commandbar-render boosts import-arc'
 
 usage() {
     cat <<EOF
@@ -127,6 +127,9 @@ available() {
     case "$1" in
         space-legacy)
             [ -f "$BIN/openkit" ] && [ -f "$BIN/sidebar-render" ] || { echo 'legacy Space gate requires openkit and sidebar-render'; return 1; }
+            ;;
+        space-editor)
+            [ -f "$BIN/space-editor-render" ] || { echo 'space-editor-render target does not exist'; return 1; }
             ;;
         commands-dump|sidebar-render|commandbar-render|settings-preview)
             [ -f "$BIN/$1" ] || { echo "target $1 does not exist"; return 1; }

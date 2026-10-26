@@ -25,6 +25,7 @@ let package = Package(
         .library(name: "OpenDesign", targets: ["OpenDesign"]),
         .library(name: "OpenSidebar", targets: ["OpenSidebar"]),
         .executable(name: "sidebar-render", targets: ["sidebar-render"]),
+        .executable(name: "space-editor-render", targets: ["space-editor-render"]),
         .library(name: "OpenCommandBar", targets: ["OpenCommandBar"]),
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
@@ -49,6 +50,7 @@ let package = Package(
         .target(name: "OpenDesign", dependencies: ["OpenModel"]),
         .target(name: "OpenSidebar", dependencies: ["OpenModel", "OpenDesign"]),
         .executableTarget(name: "sidebar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
+        .executableTarget(name: "space-editor-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]
