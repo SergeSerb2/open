@@ -2,6 +2,7 @@ import AppKit
 import OpenDesign
 import OpenModel
 import OpenSidebar
+import OpenStore
 
 /// Performance bench on a synthetic 1,000-row Space: build and first frame,
 /// scrolling, model edits through `TreeChange`, and a Space switch.
@@ -102,6 +103,67 @@ enum Bench {
             guard p95 <= 0.001, SidebarDiagnostics.tabRowLayouts - layouts <= 2,
                   SidebarDiagnostics.fullReloads == reloads else { throw CLIError(description: "selection performance budget exceeded") }
             context.selection.clear()
+        }
+
+        if let count = RenderCLI.value(args, "--bulk").flatMap(Int.init), count > 0 {
+            let undo = UndoManager()
+            undo.groupsByEvent = false
+            model.undoManager = undo
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("sidebar-bulk-\(UUID())")
+            let archive = ArchiveStore(fileURL: directory.appendingPathComponent("archive.sqlite3"))
+            model.archiveSink = archive
+            defer { archive.flushQueue(); try? FileManager.default.removeItem(at: directory) }
+            let space = context.focusedSpace!
+            guard space.today.count >= count else { throw CLIError(description: "not enough Today rows for --bulk") }
+            let ids = Array(space.today.prefix(count).map(\.id))
+            let folder = model.createFolder(in: .spacePinned(space.id), title: "Bulk destination")!
+            OffscreenRenderer.settle(scene, runLoop: 0.001)
+            let switcher = sidebar.spaceSwitcher(spaceID: model.spaces[1].id)!
+            let reloads = SidebarDiagnostics.fullReloads
+            var moves: [Double] = [], archives: [Double] = [], folderMoves: [Double] = [], spaceMoves: [Double] = []
+            for _ in 0..<40 {
+                context.selection.select(ids, anchor: ids.first)
+                OffscreenRenderer.settle(scene, runLoop: 0.001)
+                let drag = SidebarDragEvent(ids: ids, window: host)
+                var accepted = false
+                moves.append(time {
+                    accepted = outline.dataSource?.outlineView?(outline, acceptDrop: drag, item: nil, childIndex: 1) == true
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+                guard accepted else { throw CLIError(description: "bulk drop refused") }
+                undo.undo(); OffscreenRenderer.settle(scene, runLoop: 0.001)
+                context.selection.select(ids, anchor: ids.first)
+                OffscreenRenderer.settle(scene, runLoop: 0.001)
+                folderMoves.append(time {
+                    accepted = outline.dataSource?.outlineView?(outline, acceptDrop: drag, item: folder, childIndex: -1) == true
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+                guard accepted, folder.children.map(\.id) == ids else { throw CLIError(description: "cross-parent bulk drop failed") }
+                undo.undo(); OffscreenRenderer.settle(scene, runLoop: 0.001)
+                context.selection.select(ids, anchor: ids.first)
+                spaceMoves.append(time {
+                    accepted = switcher.performDragOperation(drag)
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+                guard accepted, Array(model.spaces[1].today.prefix(count).map(\.id)) == ids else { throw CLIError(description: "Space-icon bulk drop failed") }
+                undo.undo(); OffscreenRenderer.settle(scene, runLoop: 0.001)
+                context.selection.select(ids, anchor: ids.first)
+                let delete = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                               windowNumber: host.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 51)!
+                archives.append(time {
+                    outline.keyDown(with: delete)
+                    scene.layoutSubtreeIfNeeded(); host.displayIfNeeded()
+                })
+                undo.undo(); OffscreenRenderer.settle(scene, runLoop: 0.001)
+            }
+            let moveP95 = moves.sorted()[38], archiveP95 = archives.sorted()[38]
+            print("MS14 bulk \(count) ×40 (real drop/Delete + model + diff + display + SQLite sink): move p95 \(ms(moveP95)), archive p95 \(ms(archiveP95))")
+            let folderP95 = folderMoves.sorted()[38], spaceP95 = spaceMoves.sorted()[38]
+            print("MS14 bulk \(count) Today → folder ×40: p95 \(ms(folderP95)); Space-icon bulk move ×40: p95 \(ms(spaceP95))")
+            guard folderP95 <= 0.016, spaceP95 <= 0.016, moveP95 <= 0.016, archiveP95 <= 0.016, SidebarDiagnostics.fullReloads == reloads,
+                  sidebar.displayedRows == Checks.expectedRows(context: context) else { throw CLIError(description: "bulk performance or row consistency budget exceeded") }
+            model.archiveSink = nil
+            model.undoManager = nil
         }
 
         // Model edits: each command emits a TreeChange that the page applies as a diff.

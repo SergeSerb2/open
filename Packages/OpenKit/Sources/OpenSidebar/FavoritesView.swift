@@ -115,10 +115,10 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
                         proposedIndexPath: AutoreleasingUnsafeMutablePointer<NSIndexPath>,
                         dropOperation: UnsafeMutablePointer<NSCollectionView.DropOperation>) -> NSDragOperation {
         dropOperation.pointee = .before
-        if let id = SidebarPasteboard.nodeID(from: draggingInfo.draggingPasteboard) {
+        if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
             // Favorites hold tabs only.
-            guard let profileID, context.model.canMoveNode(id: id, to: .favorites(profileID)) else { return [] }
-            return .move
+            guard let profileID else { return [] }
+            return ids.contains { context.model.canMoveNode(id: $0, to: .favorites(profileID)) } ? .move : []
         }
         return SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).isEmpty ? [] : .copy
     }
@@ -126,12 +126,9 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     func collectionView(_ collectionView: NSCollectionView, acceptDrop draggingInfo: any NSDraggingInfo,
                         indexPath: IndexPath, dropOperation: NSCollectionView.DropOperation) -> Bool {
         let index = indexPath.item
-        if let id = SidebarPasteboard.nodeID(from: draggingInfo.draggingPasteboard) {
-            if let from = tabs.firstIndex(where: { $0.id == id }) {
-                return context.send(.moveFavorite(tabID: id, index: from < index ? index - 1 : index))
-            } else {
-                return context.send(.addFavorite(tabID: id, index: index))
-            }
+        if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
+            guard !ids.isEmpty, let profileID else { return false }
+            return context.send(.moveNodes(ids: ids, to: .favorites(profileID), index: index))
         }
         guard let profileID, let url = SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).first else { return false }
         return context.send(.openURL(url, in: .favorites(profileID), index: index))
@@ -147,6 +144,7 @@ final class FavoritesCollectionView: NSCollectionView {
     override func menu(for event: NSEvent) -> NSMenu? {
         let p = convert(event.locationInWindow, from: nil)
         guard let owner, let menus = owner.menus, let i = indexPathForItem(at: p)?.item, owner.tabs.indices.contains(i) else { return nil }
+        owner.context.selection.clear()
         return menus.favorite(owner.tabs[i])
     }
 }

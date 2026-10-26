@@ -615,3 +615,73 @@ runner is unavailable, so main-versus-branch identity is the acceptance gate.
 exist and SKIPs only when those inputs are absent. `SIDEBAR_CAPTURE_ROOT` selects
 a different private input root; `SIDEBAR_BASELINE_RENDERER` supplies a prebuilt
 main binary. The full local verification run passed every available row.
+
+## 18. Sidebar completion S2 (2026-10-26)
+
+Selection menus use the order in sidebar-completion §3.1. Tabs and splits offer
+bulk pin/unpin; mixed selections offer Delete for folders. No menu shows Archive
+Folder (lead Q1). Single folder Delete now reaches M2's one-record folder archive.
+The folder and Space menu titles use curly quotes. Right-clicking an unselected
+row clears the transient selection; right-clicking a selected row in a group
+keeps the group and shows its selection menu. Favorites do not join it (Q9's
+current-row inclusion remains as implemented in S1).
+
+`ModelSidebarActions` maps move, archive, folder creation at the first selected
+slot, pin/unpin, duplicate, Clear keeping IDs, folder archive, and Space export to
+M1/M2's atomic commands. Consumed selection clears before the command; a refused
+delegate restores it. Pin and Duplicate retain selection. New Folder starts
+inline rename after the native outline has applied its changes. Cmd+D,
+Cmd+Shift+N, and Delete use this path when the outline has a selection.
+`SidebarContext.performSelectionCommand` accepts the existing registry IDs;
+`SidebarView.perform(_:)` exposes the same transaction path to later App handlers.
+
+Two App handoff details make the plan concrete:
+
+- `moveNodesToNewSpace(ids:)` carries every selected ID to the New Space form.
+  §3.1 requires this action, but §2.2 omitted its enum case. It stays App-owned.
+- The selection menu's `deleteFolders(ids:)` contains only folders. Delete on a
+  mixed keyboard selection carries all selected IDs in that same intent. The
+  App must confirm once, then call `sidebar.perform(.archiveNodes(ids: ids))` for
+  one undo step. Cancel preserves the selection. Copy Links, confirmation sheets,
+  and the New Space form still belong to the later App lane.
+
+The outline mirrors selection into `selectedRowIndexes` with native highlights
+suppressed. Production pasteboard writers emit one item per selected row in
+visible order. A plain press on a selected row preserves this native drag hint
+until release; a click activates the row, and a drag keeps the group. Successful
+outline, folder, Favorites, and Space-icon drops use the bulk model commands.
+Refused sources are skipped; an entirely refused drop preserves selection.
+Actual drag-session callbacks dim source rows to 0.4 and restore them on end.
+
+Bulk actions buffer only the sidebar's synchronous view events. The model still
+emits per-node `TreeChange`s. Each affected parent is reconciled once: departures
+first, then final inserts/moves, then expansion and selection sync. Native edits
+share an outline update group. This removes per-node layout work without a full
+reload. Single-node model events keep the existing incremental path. The initial
+50-row move cohort exceeded 16 ms; this batching reduced its p95 to 4.99 ms.
+A real Delete-event cohort measured archive p95 4.18 ms with the SQLite sink
+attached. The benchmark uses drop/Delete entry points; NSMenu action helper
+animation is outside that command-work measurement. Menu actions have separate
+functional checks. Selection toggle p95 was 0.22 ms with zero row layouts; scroll
+p95 was 2.74 ms in that local cohort. These are load-dependent measurements.
+
+Lead Q14 clarification: Option changes only the tooltip to **Clear unselected
+Today tabs**. The label remains **↓ Clear** and its width never changes. The
+tooltip updates without pointer movement and resets when the window resigns key. Its action keeps the
+current row and selected rows through `clearToday(space:keeping:)`. The Today
+menu's Archive Other Tabs is a native Option alternate immediately after Archive
+Item. A per-window local flags monitor keeps this correct when web content has
+focus. The default Clear geometry is unchanged.
+
+`sidebar-render check` drives real menus, key events, native selected row indexes,
+pasteboard writers, drop callbacks, undo, and SQLite archive writes. It covers
+MS7–MS12, CU1–CU4, and TF1–TF3, including refused drops, folder records, and an
+unhandled App confirmation. It uses no unit tests or substitute views/models.
+The drag fixture supplies event metadata; it does not create a global desktop
+drag session. `sidebar-render bench --rows 1000 --selection --bulk 50` enforces
+the selection and bulk budgets and verifies row consistency with no full reload.
+The 13-state runner from §17.1 remains the visual regression gate. CU5 additionally
+runs the committed `sidebar-render divider-check` command against the baseline
+release renderer: synthetic divider pixels at rest and with Clear must match.
+All bounded paired attempts remain in the comparison output directory. Native
+App flow E1–E4 and alert/clipboard/form integration remain with the App lane.

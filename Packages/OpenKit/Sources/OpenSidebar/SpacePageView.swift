@@ -23,6 +23,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var rootItems: [AnyObject] = []
     private var folderChildren: [ObjectIdentifier: [AnyObject]] = [:]
     private var loops: [ObservationLoop] = []
+    private var mirroringSelection = false
+    private var draggingIDs: Set<ItemID> = []
+    private var applyingBulk = false
     private var hoveredItem: AnyObject? { didSet { if hoveredItem !== oldValue { updateRowStates(animated: true) } } }
     private var tracking: NSTrackingArea?
 
@@ -68,6 +71,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.floatsGroupRows = false
         outline.autoresizesOutlineColumn = false
         outline.allowsEmptySelection = true
+        outline.allowsMultipleSelection = true
         outline.focusRingType = .none
         outline.dataSource = self
         outline.delegate = self
@@ -107,6 +111,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     // MARK: Observation
 
     private func observe() {
+        loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.selection.ids }) { [weak self] in
+            self?.syncSelectionIndexes()
+        })
         // Selection, command bar state, forced hover: update row fills.
         loops.append(ObservationLoop(read: { [weak self] in
             guard let self else { return }
@@ -191,6 +198,48 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             // Profile changes do not change this page's rows.
             return false
         }
+    }
+
+    /// Reconcile final parent lists once for a synchronous bulk command. Remove
+    /// departing children first, so cross-parent inserts never duplicate an item
+    /// in AppKit. Cached lists and native edits still advance together.
+    func applyBulk(_ changes: [TreeChange]) {
+        var root = false
+        var folders: [Folder] = []
+        var seen: Set<ItemID> = []
+        func include(_ parent: NodeParent) {
+            switch displayedItem(for: parent) {
+            case .root: root = true
+            case .folder(let folder): if seen.insert(folder.id).inserted { folders.append(folder) }
+            case nil: break
+            }
+        }
+        for change in changes {
+            switch change {
+            case .insert(let parent, _, _), .remove(let parent, _, _), .reload(let parent): include(parent)
+            case .move(let from, _, let to, _, _): include(from); include(to)
+            case .spaceProfileChanged: break
+            }
+        }
+        guard root || !folders.isEmpty else { return }
+        applyingBulk = true
+        outline.beginUpdates()
+        let parents: [Displayed] = folders.map { .folder($0) } + (root ? [.root] : [])
+        for parent in parents {
+            if case .folder(let folder) = parent, folderChildren[ObjectIdentifier(folder)] == nil { continue }
+            let retained = Set(target(for: parent).map(ObjectIdentifier.init))
+            apply(target: list(for: parent).filter { retained.contains(ObjectIdentifier($0)) }, in: parent)
+        }
+        for parent in (root ? [.root] : []) + folders.map({ Displayed.folder($0) }) {
+            if case .folder(let folder) = parent, folderChildren[ObjectIdentifier(folder)] == nil { continue }
+            apply(target: target(for: parent), in: parent)
+        }
+        outline.endUpdates()
+        applyingBulk = false
+        syncExpansion(animated: animatesSidebarChanges)
+        updateRowStates(animated: false)
+        pruneSelection()
+        syncSelectionIndexes()
     }
 
     private enum Displayed {
@@ -298,8 +347,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
         }
         outline.endUpdates()
-        syncExpansion(animated: animate)
-        updateRowStates(animated: false)
+        if !applyingBulk {
+            syncExpansion(animated: animate)
+            updateRowStates(animated: false)
+        }
     }
 
     private func dropCache(_ folder: Folder) {
@@ -332,11 +383,25 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     private func pruneSelection() {
-        guard context.focusedSpace?.id == space.id, !context.selection.isEmpty else { return }
+        guard !applyingBulk, context.focusedSpace?.id == space.id, !context.selection.isEmpty else { return }
         let order = selectableOrder
         context.selection.prune(keeping: Set(order), order: order)
         let ordered = order.filter { context.selection.contains($0) }
         if context.selection.ids != ordered { context.selection.select(ordered, anchor: context.selection.anchor) }
+        syncSelectionIndexes()
+    }
+
+    func syncSelectionIndexes() {
+        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted, !outline.trackingMouseDown else { return }
+        let wanted = IndexSet(context.selection.ids.compactMap { id in
+            guard let object = context.model.node(id: id)?.object else { return nil }
+            let row = outline.row(forItem: object)
+            return row >= 0 ? row : nil
+        })
+        guard outline.selectedRowIndexes != wanted else { return }
+        mirroringSelection = true
+        outline.selectRowIndexes(wanted, byExtendingSelection: false)
+        mirroringSelection = false
     }
 
     func modifySelection(item: Any, modifiers: NSEvent.ModifierFlags) -> Bool {
@@ -348,6 +413,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         }
         if modifiers.contains(.command) { selection.toggle(id, order: order) }
         else { selection.extend(to: id, order: order) }
+        syncSelectionIndexes()
         TooltipController.shared.cancel(for: nil)
         return true
     }
@@ -389,6 +455,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         rowView.isCurrent = item != nil && item === current
         rowView.isPeekSource = context.peekSourceNodeID.map { itemID(of: item) == $0 } ?? false
         rowView.isHovered = item != nil && item === hover
+        rowView.alphaValue = itemID(of: item).map { draggingIDs.contains($0) } == true ? 0.4 : 1
         if let cell = rowView.view(atColumn: 0) as? DividerCellView { cell.showsClear = item === hover && hover === divider }
     }
 
@@ -420,6 +487,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         if let tab = item as? Tab, let rowView = outline.rowView(atRow: row, makeIfNecessary: false) {
             TooltipController.shared.schedule(Tooltip(title: tab.displayTitle, subtitle: "Double-click to rename", placement: .beside, style: style),
                                               for: rowView, at: rowView.convert(point, from: self))
+        } else if item is DividerItem, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? DividerCellView {
+            cell.trackPointer(at: cell.convert(point, from: self))
         } else {
             TooltipController.shared.cancel(for: nil)
         }
@@ -428,6 +497,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     // MARK: Clicks
 
     @objc private func rowClicked() {
+        outline.didActivateMouseDown = true
         let row = outline.clickedRow
         guard row >= 0, let item = outline.item(atRow: row) else { return }
         activate(item: item)
@@ -447,6 +517,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     @objc private func rowDoubleClicked() {
+        outline.didActivateMouseDown = true
         let row = outline.clickedRow
         guard row >= 0, let item = outline.item(atRow: row) else { return }
         beginRename(item: item as AnyObject)
@@ -460,9 +531,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         beginRename(item: obj)
     }
 
-    private func beginRename(item: AnyObject) {
+    fileprivate func beginRename(item: AnyObject) {
         let row = outline.row(forItem: item)
-        guard row >= 0, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) else { return }
+        guard row >= 0, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: true) else { return }
         (cell as? TabCellView)?.beginRename()
         (cell as? FolderCellView)?.beginRename()
     }
@@ -470,6 +541,10 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func menu(at point: NSPoint) -> NSMenu {
         let row = outline.row(at: point)
         let item = row >= 0 ? outline.item(atRow: row) : nil
+        if let id = itemID(of: item), context.selection.contains(id) {
+            if context.selection.ids.count >= 2 { return menus.selection(context.selection.ids) }
+        } else { context.selection.clear() }
+        TooltipController.shared.cancel(for: nil)
         switch item {
         case let t as Tab: return context.model.isPinned(tabID: t.id) ? menus.pinnedTab(t) : menus.todayTab(t)
         case let f as Folder: return menus.folder(f)
@@ -506,6 +581,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     // Do not return false from `shouldShowOutlineCellForItem`: NSOutlineView then
     // refuses to collapse the item. The triangle is hidden by `frameOfOutlineCell`.
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool { false }
+    func outlineViewSelectionDidChange(_ notification: Notification) { syncSelectionIndexes() }
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool { false }
 
     func outlineView(_ outlineView: NSOutlineView, rowViewForItem item: Any) -> NSTableRowView? {
@@ -547,6 +623,22 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         return SidebarPasteboard.writer(for: node)
     }
 
+    func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
+                     willBeginAt screenPoint: NSPoint, forItems draggedItems: [Any]) {
+        outline.dragWasStarted = true
+        TooltipController.shared.cancel(for: nil)
+        draggingIDs = Set(draggedItems.compactMap { itemID(of: $0) })
+        updateRowStates(animated: false)
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
+                     endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        draggingIDs = []
+        outline.dragWasStarted = false
+        syncSelectionIndexes()
+        updateRowStates(animated: false)
+    }
+
     /// Model destination for a proposed outline drop, or nil when not allowed.
     func dropDestination(item: Any?, childIndex: Int) -> (parent: NodeParent, index: Int, retarget: (Any?, Int)?)? {
         switch item {
@@ -577,35 +669,22 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?, proposedChildIndex index: Int) -> NSDragOperation {
         guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
-        if let id = SidebarPasteboard.nodeID(from: info.draggingPasteboard) {
-            guard context.model.canMoveNode(id: id, to: dest.parent) else { return [] }
-            return .move
+        if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
+            return ids.contains { context.model.canMoveNode(id: $0, to: dest.parent) } ? .move : []
         }
         return SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty ? [] : .copy
     }
 
     func outlineView(_ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int) -> Bool {
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
-        if let id = SidebarPasteboard.nodeID(from: info.draggingPasteboard) {
-            var target = dest.index
-            // Same-parent reorder: the model counts the position after removal.
-            if context.model.parent(of: id) == dest.parent, let from = siblingIndex(of: id, in: dest.parent), from < target { target -= 1 }
-            return context.send(.move(nodeID: id, to: dest.parent, index: target))
+        if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
+            guard !ids.isEmpty else { return false }
+            return context.send(.moveNodes(ids: ids, to: dest.parent, index: dest.index))
         }
         guard let url = SidebarPasteboard.urls(from: info.draggingPasteboard).first else { return false }
         return context.send(.openURL(url, in: dest.parent, index: dest.index))
     }
 
-    private func siblingIndex(of id: ItemID, in parent: NodeParent) -> Int? {
-        let list: [SidebarNode]
-        switch parent {
-        case .spacePinned: list = space.pinned
-        case .spaceToday: list = space.today
-        case .folder(let fid): list = context.model.node(id: fid)?.folder?.children ?? []
-        default: return nil
-        }
-        return list.firstIndex { $0.id == id }
-    }
 }
 
 /// Outline view that lets row buttons take clicks and builds context menus.
@@ -613,6 +692,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 final class SidebarOutlineView: NSOutlineView {
     weak var page: SpacePageView?
     private(set) var keyboardItem: AnyObject?
+    var didActivateMouseDown = false
+    var dragWasStarted = false
+    var trackingMouseDown = false
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -630,20 +712,56 @@ final class SidebarOutlineView: NSOutlineView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        trackingMouseDown = true
+        defer {
+            trackingMouseDown = false
+            if !dragWasStarted { page?.syncSelectionIndexes() }
+        }
         keyboardItem = nil
+        didActivateMouseDown = false
+        dragWasStarted = false
+        let pressedRow = row(at: convert(event.locationInWindow, from: nil))
+        let pressedItem = pressedRow >= 0 ? item(atRow: pressedRow) : nil
+        let pressedControl: NSView? = {
+            guard pressedRow >= 0, let row = rowView(atRow: pressedRow, makeIfNecessary: false), let parent = row.superview else { return nil }
+            var hit = row.hitTest(parent.convert(event.locationInWindow, from: nil))
+            while let view = hit, view !== row {
+                if view is PlateButton || view is NSControl { return view }
+                hit = view.superview
+            }
+            return nil
+        }()
+        if let pressedControl { pressedControl.mouseDown(with: event); return }
         if let page {
             let row = row(at: convert(event.locationInWindow, from: nil))
             if row >= 0, let item = item(atRow: row), page.modifySelection(item: item, modifiers: event.modifierFlags) {
                 window?.makeFirstResponder(self)
                 return
             }
-            page.context.selection.clear()
+            if row < 0 || itemID(of: item(atRow: row)).map({ page.context.selection.contains($0) }) != true {
+                page.context.selection.clear()
+            }
+            page.syncSelectionIndexes()
         }
         page?.updateRowStates(animated: false)
         super.mouseDown(with: event)
+        // AppKit can omit its action for a row that was already in the mirrored
+        // native selection. Preserve drag tracking, then handle a plain release.
+        if !didActivateMouseDown, !dragWasStarted, pressedControl == nil, let pressedItem {
+            if event.clickCount >= 2 { page?.beginRename(item: pressedItem as AnyObject) }
+            else { page?.activate(item: pressedItem) }
+        }
     }
 
     override func keyDown(with event: NSEvent) {
+        if let page, !page.context.selection.isEmpty, event.modifierFlags.intersection([.control, .option]).isEmpty {
+            if event.modifierFlags.contains(.command) {
+                if event.keyCode == 2, !event.modifierFlags.contains(.shift) { _ = page.context.performSelectionCommand("pin-unpin-tab"); return }
+                if event.keyCode == 45, event.modifierFlags.contains(.shift) { _ = page.context.performSelectionCommand("new-folder"); return }
+            } else if event.keyCode == 51 || event.keyCode == 117 {
+                _ = page.context.deleteSelection(); return
+            }
+        }
         guard let page, event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { super.keyDown(with: event); return }
         let rows = (0..<numberOfRows).filter { itemID(of: item(atRow: $0)) != nil || item(atRow: $0) is NewTabItem }
         let current = keyboardItem.map { row(forItem: $0) } ?? -1
@@ -671,11 +789,11 @@ final class SidebarOutlineView: NSOutlineView {
                 page.context.send(.setExpanded(folderID: folder.id, expanded: event.keyCode == 124))
             }
         case 51, 117: // Delete, forward Delete: archive a focused tab.
-            if let tab = keyboardItem as? Tab {
+            if let id = itemID(of: keyboardItem) {
                 let next = rows.first(where: { $0 > current }).flatMap { item(atRow: $0) as AnyObject? }
                     ?? rows.last(where: { $0 < current }).flatMap { item(atRow: $0) as AnyObject? }
-                page.context.send(.close(nodeID: tab.id))
-                keyboardItem = next
+                page.context.send(keyboardItem is Folder ? .deleteFolder(folderID: id) : .close(nodeID: id))
+                if page.context.model.node(id: id) == nil { keyboardItem = next }
             }
         default: super.keyDown(with: event); return
         }
@@ -687,6 +805,11 @@ final class SidebarOutlineView: NSOutlineView {
             guard itemID(of: item(atRow: row)) != nil || item(atRow: row) is NewTabItem else { return nil }
             return rowView(atRow: row, makeIfNecessary: true)
         }
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        page?.context.isOptionHeld = event.modifierFlags.contains(.option)
+        super.flagsChanged(with: event)
     }
 
     override func accessibilityChildren() -> [Any]? { accessibilityRows()?.map { $0 as Any } }

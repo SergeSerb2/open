@@ -128,7 +128,7 @@ final class SwitcherItemView: PlateButton {
     private func operation(for pb: NSPasteboard) -> NSDragOperation {
         guard let context, context.model.space(id: space.id) != nil else { return [] }
         if let ids = SidebarPasteboard.nodeIDs(from: pb) {
-            return !ids.isEmpty && ids.allSatisfy {
+            return !ids.isEmpty && ids.contains {
                 context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: space.id, model: context.model))
             } ? .move : []
         }
@@ -148,7 +148,7 @@ final class SwitcherItemView: PlateButton {
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, self.springScheduled, let context = self.context else { return }
-                    if let ids, !ids.allSatisfy({ context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: self.space.id, model: context.model)) }) { return }
+                    if let ids, !ids.contains(where: { context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: self.space.id, model: context.model)) }) { return }
                     context.send(.switchSpace(self.space.id))
                 }
             }
@@ -174,12 +174,7 @@ final class SwitcherItemView: PlateButton {
         cancelSpringLoad()
         guard !operation(for: sender.draggingPasteboard).isEmpty, let context else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: sender.draggingPasteboard) {
-            // Insert in reverse order at zero, keeping each source section's order.
-            let moves = ids.map { ($0, SidebarPasteboard.destination(for: $0, in: space.id, model: context.model)) }
-            for (id, parent) in moves.reversed() {
-                guard context.send(.move(nodeID: id, to: parent, index: 0)) else { return false }
-            }
-            return true
+            return context.send(.moveNodesToSpace(ids: ids, space: space.id))
         }
         let urls = SidebarPasteboard.urls(from: sender.draggingPasteboard)
         for url in urls.reversed() {

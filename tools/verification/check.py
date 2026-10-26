@@ -538,6 +538,9 @@ def main():
         # directory (which may be an artifact upload directory).
         text = run(*args, timeout=1800)
         matches(r"^tables identical: 13/13;", text)
+        output = Path(re.search(r"output: (\S+)", text)[1])
+        baseline = os.environ.get("SIDEBAR_BASELINE_RENDERER") or str(output / "main-source/Packages/OpenKit/.build/release/sidebar-render")
+        all_passed(run(str(root / "Packages/OpenKit/.build/release/sidebar-render"), "divider-check", "--baseline", baseline, "--out", str(output / "cu5")))
     elif name == "boosts":
         boosts(root)
     elif name == "import-arc":

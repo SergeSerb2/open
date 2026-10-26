@@ -12,6 +12,9 @@ public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
     public let selection = SidebarSelection()
+    /// Live Option state, also forced by the offscreen renderer. One window
+    /// monitor updates this even while web content is first responder.
+    public var isOptionHeld = false
     /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
@@ -129,7 +132,67 @@ public final class SidebarContext {
         default: break
         }
         guard let sidebar, let delegate = sidebar.delegate else { return false }
-        return delegate.sidebar(sidebar, didRequest: intent)
+        let consumes: Bool
+        switch intent {
+        case .moveNodes, .moveNodesToSpace, .moveNodesToNewSpace, .archiveNodes, .newFolderFromSelection: consumes = true
+        default: consumes = false
+        }
+        let previousIDs = consumes ? selection.ids : []
+        let previousAnchor = consumes ? selection.anchor : nil
+        // Consumed selections need not be pruned after every node in a bulk
+        // command. A refused delegate restores the unchanged view state.
+        if consumes {
+            selection.clear()
+            sidebar.pager.currentPage?.syncSelectionIndexes()
+        }
+        let batches: Bool
+        switch intent {
+        case .moveNodes, .moveNodesToSpace, .archiveNodes, .newFolderFromSelection,
+             .setPinned, .duplicateNodes, .duplicate, .exportSpaceIntoFolder: batches = true
+        default: batches = false
+        }
+        if batches { sidebar.beginModelUpdates() }
+        let accepted = delegate.sidebar(sidebar, didRequest: intent)
+        if batches { sidebar.endModelUpdates() }
+        if consumes, !accepted {
+            selection.select(previousIDs, anchor: previousAnchor)
+            sidebar.pager.currentPage?.syncSelectionIndexes()
+        } else if accepted, case .archiveNodes = intent, let page = sidebar.pager.currentPage {
+            let visible = Set(page.selectableOrder)
+            let kept = previousIDs.filter { visible.contains($0) && model.node(id: $0) != nil }
+            selection.select(kept, anchor: previousAnchor.flatMap { kept.contains($0) ? $0 : nil } ?? kept.first)
+            page.syncSelectionIndexes()
+        }
+        return accepted
+    }
+
+    /// Existing command IDs only. The App command registry can use this same
+    /// path as the focused outline; an empty selection falls through to the App.
+    @discardableResult
+    public func performSelectionCommand(_ commandID: String) -> Bool {
+        let ids = selection.ids
+        guard !ids.isEmpty else { return false }
+        switch commandID {
+        case "pin-unpin-tab":
+            let pinnable = ids.filter { model.node(id: $0)?.folder == nil }
+            guard !pinnable.isEmpty else { return false }
+            return send(.setPinned(ids: ids, pinned: !pinnable.allSatisfy { model.isPinned(tabID: $0) }))
+        case "duplicate-tab": return send(.duplicateNodes(ids: ids))
+        case "new-folder": return send(.newFolderFromSelection(ids: ids))
+        default: return false
+        }
+    }
+
+    @discardableResult
+    func deleteSelection() -> Bool {
+        let ids = selection.ids
+        guard !ids.isEmpty else { return false }
+        if ids.contains(where: { model.node(id: $0)?.folder != nil }) {
+            // The App confirms once, archives all IDs in one command, and clears
+            // the selection only on confirmation. Cancel preserves the selection.
+            return send(.deleteFolders(ids: ids))
+        }
+        return send(.archiveNodes(ids: ids))
     }
 }
 

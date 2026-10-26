@@ -33,6 +33,10 @@ public final class SidebarView: NSView {
     private var pointerTracking: NSTrackingArea?
     private var observerID: UUID?
     private var loops: [ObservationLoop] = []
+    private var modifierMonitor: Any?
+    private var modelUpdateDepth = 0
+    private var pendingChanges: [TreeChange] = []
+    private var pendingRename: ItemID?
 
     public init(context: SidebarContext) {
         self.context = context
@@ -45,6 +49,15 @@ public final class SidebarView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         context.sidebar = self
+        NotificationCenter.default.addObserver(self, selector: #selector(windowResignedKey(_:)), name: NSWindow.didResignKeyNotification, object: nil)
+        modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, event.window === self.window {
+                    self.context.isOptionHeld = event.modifierFlags.contains(.option)
+                }
+            }
+            return event
+        }
         let renaming = SidebarMenus(context: context, beginRename: { [weak self] id in self?.beginRename(nodeID: id) })
         favorites.menus = renaming
         pager.menus = renaming
@@ -69,11 +82,17 @@ public final class SidebarView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     isolated deinit {
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+        if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }
         if let observerID { context.model.removeObserver(observerID) }
         loops.forEach { $0.cancel() }
     }
 
     public override var isFlipped: Bool { true }
+
+    @objc private func windowResignedKey(_ notification: Notification) {
+        if let resigned = notification.object as? NSWindow, resigned === window { context.isOptionHeld = false }
+    }
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
@@ -169,6 +188,7 @@ public final class SidebarView: NSView {
     }
 
     private func apply(_ change: TreeChange) {
+        if modelUpdateDepth > 0 { pendingChanges.append(change); return }
         switch change {
         case .insert(let p, _, _), .remove(let p, _, _), .reload(let p):
             if case .favorites = p { favorites.apply(change) }
@@ -181,6 +201,39 @@ public final class SidebarView: NSView {
         pager.apply(change)
         needsLayout = true
     }
+
+    /// Model events remain per-node; only this view's synchronous transaction is
+    /// coalesced. This avoids ending and relaying out an outline 50 times.
+    func beginModelUpdates() { modelUpdateDepth += 1 }
+
+    func endModelUpdates() {
+        modelUpdateDepth -= 1
+        guard modelUpdateDepth == 0 else { return }
+        let changes = pendingChanges
+        pendingChanges = []
+        if !changes.isEmpty {
+            pager.applyBulk(changes)
+            if let profile = context.favoritesProfile {
+                favorites.apply(.reload(parent: .favorites(profile.id)))
+            }
+        }
+        if let id = pendingRename {
+            pendingRename = nil
+            reveal(nodeID: id)
+            layoutSubtreeIfNeeded()
+            beginRename(nodeID: id)
+        }
+    }
+
+    func renameInsertedNode(_ id: ItemID) {
+        if modelUpdateDepth > 0 { pendingRename = id }
+        else { reveal(nodeID: id); layoutSubtreeIfNeeded(); beginRename(nodeID: id) }
+    }
+
+    /// App command handlers and confirmed alerts use the same transactional path
+    /// as menus and drops, including selection consumption and view batching.
+    @discardableResult
+    public func perform(_ intent: SidebarIntent) -> Bool { context.send(intent) }
 
     /// Starts inline rename of a row (or of the Space title when `nodeID` is nil).
     public func beginRename(nodeID: ItemID?) {
@@ -279,7 +332,7 @@ extension SidebarView {
             let r = page.outline.rect(ofRow: row)
             point = NSPoint(x: r.midX, y: r.midY)
         }
-        return page.menu(at: point).items.map { $0.isSeparatorItem ? "—" : $0.title }
+        return page.menu(at: point).items.filter { !$0.isAlternate }.map { $0.isSeparatorItem ? "—" : $0.title }
     }
 
     /// Model destination for a drop at a row boundary of the focused page
@@ -306,6 +359,14 @@ extension SidebarView {
 
     /// The focused page's tab list (checks and benches).
     public var focusedOutline: NSOutlineView? { pager.currentPage?.outline }
+
+    /// Actual Clear control and its displayed strings, for host diagnostics.
+    public var clearControl: (view: NSView, title: String, tooltip: String)? {
+        guard let page = pager.currentPage else { return nil }
+        let row = page.outline.row(forItem: page.divider)
+        guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? DividerCellView else { return nil }
+        return (cell, cell.clearTitle, cell.clearTooltipTitle)
+    }
 
     /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
     public func contextMenu(nodeID: ItemID?) -> NSMenu? {
