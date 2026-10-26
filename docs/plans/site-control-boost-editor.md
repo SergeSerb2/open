@@ -93,7 +93,7 @@ engine extension state. This plan adds no second store for any of those values (
 | D-10 | Boost editing and creation are disabled in incognito windows. Existing Boosts still apply there (boosts plan Q4 default). | Arc refuses Boost install in Incognito ("Open this link outside Incognito Mode to install this Boost", BO-10). Editing in incognito would write a site visit into the persistent Profile store. Lead question Q6 confirms. |
 | D-11 | The panel shows Arc's sections in Arc's order: header, actions, Settings, Boosts, Extensions, footer. Labels are Arc's decoded labels (§2, Appendix B). Layout values are Open choices or guesses until a capture exists (§11.1 R-1). | No capture of the panel exists (`docs/re/interaction-states.md` §2, "Only its tooltip"). Labels and structure are proven by strings and decompiled constants (SC-9 to SC-16). |
 
-## 1. Current state (verified 2026-10-25 on `origin/main` 42bba0b; re-verify before you edit)
+## 1. Current state (verified 2026-10-25 on `origin/main` 724e35d, after M5 #51; re-verify before you edit)
 
 Run `git log --oneline -3` and read each file below before you change its area.
 
@@ -109,7 +109,7 @@ Run `git log --oneline -3` and read each file below before you change its area.
 | OpenWeb | `WebProfile.permission(_:origin:)`, `setPermission(_:for:origin:)` for 12 `SitePermission` kinds with `ask/allow/block`. `WebContent.snapshotPNG()`, `evaluateJavaScript` (main world). | `Packages/OpenKit/Sources/OpenWeb/OpenWeb.swift`. |
 | Engine | `OEBrowserContext.permissionState/setPermissionState` (12 kinds → Chromium content settings), `clearBrowsingData(origin:completion:)` (cookies for one origin and the HTTP cache of all sites), user scripts (main world only, P7), `OEWebContent.showDevTools()`, `takeSnapshot()`, `isCapturingCamera/Microphone`, `OEExtensionManager.installedExtensions`, `OEBrowser.extensionActions` (manifest defaults until P2). No security state. No per-origin cache clear. No "changed settings" query. No extension pin API. | `Engine/OpenEngine/include/OpenEngine/OEBrowserContext.h`, `OEWebContent.h`; `docs/engine-api.md`. |
 | App wiring | None for this feature. `app-shell.md` §4.5 (Boost adapter), §4.6 (ad-block adapter), §4.9 (an interim `NSPopover` with rows) and Step D/F own the hooks. This plan (§3, §6.4) replaces the §4.9 interim popover. | `docs/plans/app-shell.md`. |
-| Library / Settings | `OpenSettings` (SwiftUI Settings and Library windows) does not exist on `main` yet; `docs/plans/settings-library.md` plans it. `open.advanced.enableBoosts` is specified there (A-5) but not yet read by any code. | `ls Packages/OpenKit/Sources` (no `OpenSettings`). |
+| Settings / Library | `OpenSettings` exists (M5, #51): SwiftUI Settings and Library windows. `LibrarySection` = `archive, downloads, captures, media, history`; section files sit at `Sources/OpenSettings/*Section.swift`; data comes through snapshot providers (`DownloadsProvider`, `CapturesProvider`) and `LibraryActions`. `SettingsDefaults.values` registers `open.advanced.enableBoosts = true`; the Advanced pane shows the tile "Enable Boosts on websites you visit". No App code reads the key yet. The ad-block allowlist (`AdBlockSettingsModel.setExcluded`) calls `AdBlockStore.setExcluded` and then `SettingsActions.setAdBlockExcludedDomains(_:profileID:)`. `settings-preview` runs in `tools/verify-all.sh`. | `Packages/OpenKit/Sources/OpenSettings/LibraryTypes.swift`, `SettingsTypes.swift`, `AdvancedPane.swift`, `AdBlockSettingsModel.swift`. |
 | Harness | `features-render`, `commandbar-render`, `sidebar-render` exist; `commandbar-render check` runs in `tools/verify-all.sh`. | `Packages/OpenKit/Package.swift`, `tools/verify-all.sh` `NAMES`. |
 
 Path note (not this plan's to fix): `ProfileDirectories.adBlockListsDirectory` builds
@@ -611,13 +611,18 @@ interstitial instead of the controls (BO-21):
 ### 4.11 Boosts list (Library)
 
 The `view-boosts` command, the "Manage" header, and "All Boosts…" open the Library window on a new
-section "Boosts" (settings plan §6; add `boosts` to `open.library.lastSection`). Arc keeps Boosts
-in its Home/Library (`BoostsPage`, `HomeBoostsDelegateAction`, BO-12). The section is a SwiftUI view
-in `OpenSettings` (`Sources/OpenSettings/Library/BoostsSection.swift`), like the other Library
-sections. It reads and writes through a provider protocol the App implements, in the settings
-plan's `DownloadsProvider` style: `BoostsLibraryProvider` with `boosts(profile:) -> [Boost]`,
-`setEnabled(_:enabled:profile:)`, `rename(_:to:profile:)`, `delete(_:profile:)`, `edit(_:profile:)`,
-and `onChange`. The App's implementation calls `BoostStore` (no second store).
+section "Boosts". Arc keeps Boosts in its Home/Library (`BoostsPage`, `HomeBoostsDelegateAction`,
+BO-12). Add `case boosts` to `LibrarySection` (after `captures`; symbol `paintbrush.pointed`), so
+`open.library.lastSection` accepts `boosts`. The section is a SwiftUI view,
+`Sources/OpenSettings/BoostsSection.swift`, like `DownloadsSection.swift`. Data follows the
+existing snapshot-provider pattern in `LibraryTypes.swift`, so `OpenSettings` gains no `OpenBoosts`
+dependency: `public struct BoostItemSnapshot: Identifiable, Sendable { id: String (Boost UUID),
+name, domain, pathPrefix: String?, isEnabled, accentIndex: Int }`, `@MainActor public protocol
+BoostsProvider: AnyObject { func boosts(profileID: ProfileID) -> [BoostItemSnapshot] }`, and four
+`LibraryActions` methods: `setBoostEnabled(id:enabled:profileID:)`, `renameBoost(id:to:profileID:)`,
+`deleteBoost(id:profileID:)`, `editBoost(id:profileID:)`. The App implements them over `BoostStore`
+(no second store). Profile scope: the Library's existing profile selection (`historyProfileID`
+pattern in `LibraryViewModel`).
 
 | Part | Value |
 |---|---|
@@ -637,7 +642,7 @@ and `onChange`. The App's implementation calls `BoostStore` (no second store).
 |---|---|---|---|
 | Site permission (12 kinds today) | Settings tiles | `WebProfile.setPermission(_:for:origin:)` → `OEBrowserContext.setPermissionState` | Chromium content settings of the Profile's engine directory (`Preferences`, `profile.content_settings.exceptions`). Open keeps no copy. |
 | Other content settings (E1) | Settings tiles | `WebProfile.setSiteSetting(_:kind:origin:)` (new, E1) | Same Chromium store |
-| Per-site ad-block exclusion | Ad-block tile; Settings allowlist (settings plan §5.5) | `AdBlockStore.setExcluded(_:excluded:profile:)` | `<root>/Profiles/<profile UUID>/adblock/exclusions.json` (registrable domains). Engine via `AdBlockEngineEvent.exclusions`. |
+| Per-site ad-block exclusion | Ad-block tile; Settings allowlist (`AdBlockSettingsModel.setExcluded`) | `AdBlockStore.setExcluded(_:excluded:profile:)`, then the App's `setAdBlockExcludedDomains(_:profileID:)` engine path — the same two calls the Settings allowlist makes, so both writers behave the same | `<root>/Profiles/<profile UUID>/adblock/exclusions.json` (registrable domains). Engine via `AdBlockEngineEvent.exclusions`. |
 | Ad-block master switch | Settings only (the panel reads it) | `AdBlockStore.setEnabled` | `<root>/adblock-settings.json` `nativeAdBlockEnabled` |
 | Boost enabled | Boost switch, Library switch | `BoostStore.setEnabled(id:enabled:)` | `<root>/Profiles/<dataDirectoryName>/Boosts/boosts.json` (`ProfileDirectories.boostsFileURL(for:)`) |
 | Boost name, scope, color, font, text size, case, CSS, JS | Editor | `BoostStore.upsert` | same file |
@@ -651,8 +656,10 @@ and `onChange`. The App's implementation calls `BoostStore` (no second store).
 | Cookies, cache | ⋯ menu | `WebProfile.clearSiteData(origin:kinds:)` (E2) | Chromium |
 | Panel state | — | none | Arc has `PersistedSiteControlCenterState` (contents unknown); Open persists nothing (Open choice) |
 
-Register the three new `open.boosts.*` defaults with `UserDefaults.standard.register(defaults:)`
-next to the settings plan registry, and add them to that plan's §2.1 table in the same PR.
+Register the three new `open.boosts.*` defaults in `SettingsDefaults.values`
+(`Sources/OpenSettings/SettingsTypes.swift`, the one registry) and add them to the settings plan's
+§2.1 table in the same PR. `OpenSiteControl` reads them with `UserDefaults.standard` and the same
+fallbacks.
 
 ### 5.2 Model change (the only OpenBoosts model edit)
 
@@ -734,7 +741,10 @@ Packages/OpenKit/Sources/OpenSiteControl/
   BoostEditorPanel.swift          BoostEditorController (public entry), NSPanel, placement, resize, simple/code switch
   BoostEditorViews.swift          header, banners, wheel, sliders, font strip, tool tiles, Zaps list, interstitial
   CodeEditorView.swift            NSTextView subclass, highlighter, gutter, indentation rules
-Packages/OpenKit/Sources/OpenSettings/Library/BoostsSection.swift   Library "Boosts" section (SwiftUI) + BoostsLibraryProvider protocol (§4.11)
+Packages/OpenKit/Sources/OpenSettings/BoostsSection.swift          Library "Boosts" section (SwiftUI, §4.11)
+Packages/OpenKit/Sources/OpenSettings/LibraryTypes.swift           LibrarySection.boosts, BoostItemSnapshot, BoostsProvider, LibraryActions additions
+Packages/OpenKit/Sources/OpenSettings/SettingsTypes.swift          three open.boosts.* defaults in SettingsDefaults.values
+Packages/OpenKit/Sources/settings-preview/LibraryPreview.swift     boosts section states (empty, 3 Boosts, global off)
 Packages/OpenKit/Sources/sitecontrol-render/          main.swift, Scenes.swift, Flows.swift, Bench.swift, FakeSources.swift (+ reuse OffscreenRenderer pattern)
 Packages/OpenKit/Sources/OpenFeatures/PaneChromeView.swift   enable button 4, forward its action
 Packages/OpenKit/Sources/OpenFeatures/BrowserWindowController.swift  handle .showSiteControls, .customizePage, commands (§6.4)
@@ -743,7 +753,7 @@ App/Boosts/BoostEngineAdapter.swift                   (app-shell §4.5) + previe
 App/Automation/AutomationController.swift             site-controls, boost-editor, boosts, pasteboard commands (§8.2)
 tools/e2e/engine_e2e.py                               --only sitecontrol, --only boosteditor
 tools/verify-all.sh, tools/verification/check.py      add sitecontrol-render (runs `sitecontrol-render check`)
-docs/boosts.md, docs/commands.md, docs/plans/settings-library.md   one-line updates each (§5.1, §4.1)
+docs/boosts.md, docs/commands.md, docs/plans/settings-library.md   one-line updates each (§5.1, §4.1, §4.11)
 ```
 
 `OpenSiteControl` must not import `OpenFeatures` (the controller sits in OpenFeatures and imports
@@ -906,7 +916,7 @@ disabled, 3 extensions), `scc-insecure`, `scc-adblock-excluded`, `scc-adblock-un
 `scc-many` (scrolls), `scc-pane-anchor`, `scc-dark`, `editor-interstitial`, `editor-simple`,
 `editor-advanced-color`, `editor-neutral-page`, `editor-not-active`, `editor-zap-on` (3 Zaps),
 `editor-zap-blocked-p7`, `editor-code-css`, `editor-code-js-dirty`, `editor-menu`. (The Library
-section renders through the settings plan's `settings-preview`, not here.)
+section renders through `settings-preview`, not here.)
 
 Flows (each asserts the fake's recorded calls and the view state):
 
@@ -1033,7 +1043,7 @@ Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary (`AGE
 | 2 | Sections: tiles, Boost rows, extensions grid, ⋯ menu, reload row, keyboard, AX, animations | `SiteControlTiles.swift`, `SiteControlView.swift`, `SiteControlController.swift` | F3–F9, F20–F22 PASS; all `scc-*` states render; bench "click → first draw" < 8 ms |
 | 3 | App data source + actions; anchors (URL field, pane bar); intents and commands; automation `site-controls`, `pasteboard`; e2e `sitecontrol` | `App/SiteControl/AppSiteControlSource.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenFeatures/PaneChromeView.swift`, `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`, `docs/automation.md` | `--only sitecontrol` S1–S9 PASS (S10 blocked) on the real app; `--only features` still PASS |
 | 4 | OpenBoosts `BoostColorWheel` + normalization; editor session (undo, preview/commit, h0); simple-mode views; interstitial; menu | `OpenBoosts/Boost.swift`, `BoostStore.swift`, `docs/boosts.md`, `OpenSiteControl/BoostEditorSession.swift`, `BoostEditorPanel.swift`, `BoostEditorViews.swift` | F10–F12, F14–F16, F19 PASS; `editor-*` simple states render; `boosts` harness (verify-all) still 26/26 |
-| 5 | App editor host: adapter preview/refresh, commands `new-boost`/`edit-boost`/`new-legacy-boost`/`view-boosts`, `.customizePage`; Library Boosts section + App provider (needs settings plan Step 7); automation `boost-editor`, `boosts`; e2e `boosteditor` B1–B3, B6–B10 | `App/Boosts/BoostEngineAdapter.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenSettings/Library/BoostsSection.swift`, the App's Library provider, automation, e2e | Listed e2e checks PASS on the real app; `settings-preview` renders the `boosts` section (empty and with 3 Boosts) |
+| 5 | App editor host: adapter preview/refresh, commands `new-boost`/`edit-boost`/`new-legacy-boost`/`view-boosts`, `.customizePage`; Library Boosts section + App provider; automation `boost-editor`, `boosts`; e2e `boosteditor` B1–B3, B6–B10 | `App/Boosts/BoostEngineAdapter.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenSettings/BoostsSection.swift`, `OpenSettings/LibraryTypes.swift`, `settings-preview/LibraryPreview.swift`, the App's Library provider, automation, e2e | Listed e2e checks PASS on the real app; `settings-preview check` (verify-all) PASS with the new `boosts` section states |
 | 6 | Zap integration: tile, list, hover preview, remove, picker events; picker bar label | `BoostEditorViews.swift`, `BoostEditorSession.swift`, `App/Boosts/BoostEngineAdapter.swift`, `zap-picker.js` | F13 PASS; `boosts` harness PASS; B4 PASS after P7, else `blocked: P7` |
 | 7 | Code mode: code editor, highlighter, gutter, CSS live, JS refresh, devtools toggle, size persistence | `CodeEditorView.swift`, `BoostEditorPanel.swift`, `BoostEditorViews.swift` | F17, F18 PASS; bench keystroke < 2 ms; B5 PASS |
 | 8 | "Pick Selector": picker select mode (`zap:enter` with `mode: "select"`; page → native `picker:selected {boostID, sessionNonce, selector, matches}`; no commit, no hide); the editor inserts the selector at the CSS caret | `zap-picker.js`, `PickerMessages.swift`, `docs/boosts.md` (bridge table), `tools/verification/boosts.mjs` (new check: select mode commits nothing and returns the same selector a click would commit) | `boosts` harness PASS including the new check; flow "Pick Selector inserts the selector" PASS |
