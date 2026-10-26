@@ -562,6 +562,32 @@ Bench (Apple Silicon, release build). Three runs; ranges shown:
 
 The move bench picks random tabs and moves them to random slots in random Pinned, Today, and folder parents across all 10 Spaces (seeded, so runs are comparable). The expiry bench has 1,500 top-level tabs, 400 tabs in 20 folders, and 100 panes in 50 three-pane splits that collapse, plus 450 fresh tabs.
 
+## Model followup verification (2026-10-25)
+
+Merged `origin/main` at `5de74ee` before the final release build. Every build
+used `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`; the final
+build had no warnings or errors. No unit tests or subagents were used.
+
+| Real CLI / check | Result |
+|---|---|
+| `commands-demo` on a fresh root and a copy of the imported root | 115/115 each; both roundtrips OK |
+| `sidebar-render check` | 103/103: the prior 81 plus 22 checks for live-state glyphs/actions, collapse/mute undo, Space titles/reordering, and named symbols |
+| `import-arc --counts-only` on a temporary copy of live top-level JSON | Sidebar 46/46 and archive 10/10 accounted; 2 welcome tabs imported, 0 skipped; 1 untitled Space remains nil; named icons `planet=1`, unknown 0 |
+| Import repeat and snapshot roundtrip | 0 new archive rows; roundtrip OK; copied inputs unchanged |
+| Synthetic files through `import-arc` | All 55 named icons retained; 1 unknown reported with neutral fallback; orphan and archived welcome tabs imported; missing sidebar refused |
+| `NSImage(systemSymbolName:)` in `sidebar-render check` | All 55 mappings plus the fallback exist on macOS 26 |
+| `suggest-check` | 31/31 |
+| `sleep-demo` | 105/105 |
+| `adblock perf` | Lookup p95 0.1370 ms (<1); profile open p95 4.9870 ms (<10); 5,000 matches |
+| Profiles P-1 through P-12 | PASS, including refusal snapshot hashes and legacy SQLite migration |
+| Frozen sidebar renders against the existing baseline executable | All 13 state PNGs byte-identical; the Arc error tables in design.md §8 are unchanged |
+
+The fixed archive clock in `commands-demo` predates imported activity, so the
+demo's four expired tabs remain the only expiry candidates on a copied import.
+Raw copies, rendered captures, logs, and temporary drivers stayed outside Git.
+Engine unload wiring remains deferred; welcome items use a normal tab to the
+public welcome page rather than Arc's native onboarding controller.
+
 ## Open design questions
 
 1. Restore position. A restored tab goes to the top of its parent, because the record stores the parent but not the index. Arc's exact position is not verified.

@@ -345,6 +345,9 @@ func runCommandsDemo(args: [String]) async throws {
 
     step("archiveExpiredTabs with a fake clock")
     let old = Date(timeIntervalSince1970: 0)
+    // Before imported activity (Arc uses the 2001 epoch), so only the demo
+    // tabs expire even when another Space contains old imported Today tabs.
+    let expiryNow = Date(timeIntervalSinceReferenceDate: 0)
     let e1 = model.newTab(in: sid, url: url("e1"), title: "E1")
     let e2 = model.newTab(in: sid, url: url("e2"), title: "E2")
     let fresh = model.newTab(in: sid, url: url("fresh"), title: "Fresh")
@@ -359,7 +362,7 @@ func runCommandsDemo(args: [String]) async throws {
     one.lastActiveAt = old
     let callsBeforeExpiry = sink.archiveCalls
     events.removeAll()
-    let expired = model.archiveExpiredTabs(now: Date())
+    let expired = model.archiveExpiredTabs(now: expiryNow)
     print("  archiveExpiredTabs archived=\(expired) events=\(events.map(describe))")
     check(expired == 4 && sink.archiveCalls == callsBeforeExpiry + 1, "4 expired tabs (top level, folder, split pane) in one sink call")
     let expectedReloads = Set(["reload(today)", "reload(\(label(.folder(expiryFolder.id))))", "reload(\(label(.splitPane(expirySplit.id))))"])
@@ -373,7 +376,7 @@ func runCommandsDemo(args: [String]) async throws {
     let u2 = model.newTab(in: sid, url: url("u2"), title: "U2")
     guard let staleSplit = model.makeSplit(tabIDs: [u1.id, u2.id]) else { print("makeSplit failed"); exit(1) }
     u2.lastActiveAt = old
-    model.archiveExpiredTabs(now: Date())
+    model.archiveExpiredTabs(now: expiryNow)
     check(model.node(id: staleSplit.id) == nil && model.parent(of: u1.id) == .spaceToday(sid), "auto-archive took U2; the split collapsed to U1")
     undo.undo()
     check(occurrences(of: u1.id, in: model) == 1 && occurrences(of: u2.id, in: model) == 0 && indexMatchesRebuild(model),
