@@ -335,7 +335,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Feature | RE | Plan | Library code | App wiring | Verified how | Status | Notes |
 |---|---|---|---|---|---|---|---|
 | 46-list catalog, upstream URLs, pins, ETag downloads, per-profile lists, global switch | FA AD-3, AD-4, AD-6 | adblock-fork (Swift slice) | `OpenAdBlock/*` | none | verify-all `adblock-perf`, `adblock-catalog` | planned (App) | |
-| Network blocking (adblock-rust in the fork) | FA AD-2, AD-5; `docs/adblock-design.md` | adblock-fork Steps 1–8 | — | none (engine request-filter hook exists: e2e `features` "Request filter") | engine hook only | planned | Until the fork engine lands, the App bridge blocks nothing at rule level (app-shell Q6). |
+| Network blocking (adblock-rust in the fork) | FA AD-2, AD-5; `docs/adblock-design.md` | adblock-fork Steps 1–8 | Step 1: crate vendored (`Engine/fork/patches/rust/0001-adblock-vendor.patch`, branch `m6/adblock-engine`) | none (engine request-filter hook exists: e2e `features` "Request filter") | Step 1: crate builds under Chromium's rustc 1.100; A/B match bench (docs/engine-patches.md P8 "Security review") | planned (Step 1 in PR) | Until the fork engine lands, the App bridge blocks nothing at rule level (app-shell Q6). |
 | Cosmetic filtering and scriptlets | FA AD-5 | adblock-fork | — | none | none | planned | |
 | Per-site exclusion | FA AD-7 | adblock-lists | `SiteRules.swift` | none | `openkit adblock` | planned | |
 | Settings: lists by category, advanced, reset, debug info | FA AD-8 | settings §5.5 | `OpenSettings/AdBlockSettingsModel.swift` | none | `settings-preview` (loopback server) | planned | |
@@ -626,7 +626,7 @@ Memory has no budget in `docs/architecture.md`. Latest values (fork, `results-me
 | U-3 | Notary credentials (app-specific password, `store-credentials "open-notary"`) | Notarization |
 | U-4 | Approve the Sparkle key generation and keep the private key backup | Update signing |
 | U-5 | Enable GitHub Pages for `SergeSerb2/open` (`gh-pages` branch) | Update feed |
-| U-6 | Confirm the license and patent review (MPL-2.0 adblock-rust, GPL-3.0 uBO resources, H.264/AAC, Chromium/CEF) | First public release |
+| U-6 | Confirm the license, patent and security review (MPL-2.0 adblock-rust, GPL-3.0 uBO resources, H.264/AAC, Chromium/CEF; the adblock, regex and aho-corasick crate review in docs/engine-patches.md "Security review") | First public release |
 | U-7 | Approve each public release (tag, `gh release create`) | Each release |
 
 ### 5.2 Arc sessions only the user can run

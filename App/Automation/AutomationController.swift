@@ -241,10 +241,44 @@
           // hardware pointer of whoever uses the Mac cannot disturb a check.
           BrowserWindowController.pointerEventFilter = { $0.eventNumber == AutomationController.syntheticPointerTag }
           let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+          let location = NSPoint(x: point[0], y: target.frame.height - point[1])
           if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
           // Tracking areas follow the hardware pointer, so `hover` also delivers
-          // enter, move, and exit to the owners of the areas under the point.
-          if action == "hover" { return hover(target, at: NSPoint(x: point[0], y: target.frame.height - point[1])) }
+          // enter, move, and exit to the owners of the areas under the point. The automation
+          // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
+          // that re-reads the pointer then (the window buttons' hover) must still see the old
+          // point, so the enter and exit events drive the change, as real pointer motion does.
+          if action == "hover" {
+            let result = hover(target, at: location)
+            BrowserWindowController.automationPointer = (number, location)
+            return result
+          }
+          // Known at once (the move event is queued), for state that reads where the pointer
+          // is rather than waiting for an event: the window buttons' hover.
+          BrowserWindowController.automationPointer = (number, location)
+          // A move delivers no enter or exit, so the owners `hover` entered before may no longer
+          // hold the pointer; the next `hover` enters the owners under its point again.
+          hoveredOwners = [:]
+        } else if action == "click" {
+          // A click with modifiers (for example Option on the zoom button). Controls that
+          // track the mouse wait for the mouse-up on the event queue, so it goes there first.
+          var flags: NSEvent.ModifierFlags = []
+          for name in a["modifiers"] as? [String] ?? [] {
+            switch name { case "option": flags.insert(.option); case "command": flags.insert(.command)
+            case "shift": flags.insert(.shift); case "control": flags.insert(.control); default: break }
+          }
+          let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+          // A click happens where the pointer is.
+          BrowserWindowController.automationPointer = (number, point)
+          func click(_ type: NSEvent.EventType) -> NSEvent? {
+            NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+              windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+          }
+          // Real input arrives after the display cycle has laid the window out (the window
+          // buttons are placed at its end); run that pass before hit-testing.
+          target.layoutIfNeeded()
+          if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
+          if let down = click(.leftMouseDown) { target.sendEvent(down) }
         } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
           // The real resize handle consumes these own-window events through
           // NSWindow.nextEvent. No system cursor or keyboard is touched.
@@ -448,6 +482,24 @@
           // check can keep its window away from where someone's pointer rests.
           "cursor": { let p = win.mouseLocationOutsideOfEventStream; return [Double(p.x), Double(win.frame.height - p.y)] }(),
           "trafficLightFrames": controller.trafficLightFrames.map { rect($0.frame) },
+          "trafficLightsDimmed": controller.trafficLightsDimmed, "trafficLightsHovered": controller.trafficLightsHoveredState,
+          "trafficLightButtons": [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [String: Any]? in
+            guard let button = win.standardWindowButton(kind) else { return nil }
+            // In process, the buttons' own AX role reads AXUnknown; outside clients see the
+            // window's attributes below, so only those carry roles here.
+            return ["alpha": Double(button.alphaValue), "hidden": button.isHiddenOrHasHiddenAncestor,
+              "action": button.action.map { NSStringFromSelector($0) } ?? ""] as [String: Any]
+          },
+          // The window's AX button attributes, as an outside AX client reads them (F0001's dump).
+          // Role and subrole only: their AXFrame does not resolve in process.
+          "axWindowButtons": ["AXCloseButton", "AXMinimizeButton", "AXZoomButton", "AXFullScreenButton"].compactMap { name -> [String: Any]? in
+            let selector = NSSelectorFromString("accessibilityAttributeValue:")
+            guard win.responds(to: selector), let element = win.perform(selector, with: name)?.takeUnretainedValue() as? NSObject else { return nil }
+            return ["attribute": name, "role": legacyAX(element, "AXRole"), "subrole": legacyAX(element, "AXSubrole")]
+          },
+          "automationPointer": BrowserWindowController.automationPointer.map { p -> Any in
+            p.window == win.windowNumber ? [Double(p.location.x), Double(win.frame.height - p.location.y)] : NSNull() } ?? NSNull(),
+          "key": win.isKeyWindow, "appActive": NSApp.isActive, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
@@ -483,6 +535,9 @@
         w.window?.performClose(nil); return true
       case "window-fullscreen":
         w.window?.toggleFullScreen(nil); return true
+      case "window-deminiaturize":
+        // What a click on the window's Dock tile does.
+        w.window?.deminiaturize(nil); return true
       case "sidebar-move":
         let tab = try modelTab(a, w)
         let parent: NodeParent
@@ -733,7 +788,8 @@
     /// and move to owners whose areas track movement.
     @discardableResult
     private func hover(_ window: NSWindow, at location: NSPoint) -> [String: [String]] {
-      guard let content = window.contentView else { return [:] }
+      // The whole frame view, so the title bar (window buttons) is included.
+      guard let content = window.contentView?.superview ?? window.contentView else { return [:] }
       // AppKit builds tracking areas lazily, once the hardware pointer has reached the
       // window; ask every view for its areas first.
       func prepare(_ view: NSView) { view.updateTrackingAreas(); view.subviews.forEach(prepare) }
@@ -785,6 +841,12 @@
     }
 
     private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
+
+    private func legacyAX(_ object: NSObject, _ attribute: String) -> String {
+      let selector = NSSelectorFromString("accessibilityAttributeValue:")
+      guard object.responds(to: selector), let value = object.perform(selector, with: attribute)?.takeUnretainedValue() else { return "" }
+      return value as? String ?? String(describing: value)
+    }
 
     private func colorComponents(_ color: NSColor?) -> [Int] {
       guard let color = color?.usingColorSpace(.sRGB) else { return [] }
