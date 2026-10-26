@@ -24,7 +24,7 @@ if CommandLine.arguments.contains("--markdown") {
         print("| `\(command.id)` | \(command.title) | \(shortcut) | \(command.scope.rawValue) | \(command.menuPathDisplay) |")
     }
     print("")
-    print("Reserved (out-of-scope Arc keys):")
+    print("Reserved (out-of-scope keys):")
     for command in CommandRegistry.all where command.isReserved {
         print("- `\(command.id)` \(command.title): \(command.shortcutDisplay.isEmpty ? "—" : command.shortcutDisplay)")
     }
@@ -69,7 +69,7 @@ MainActor.assumeIsolated {
     print("== Conflicts (defaults) ==")
     let conflicts = ConflictChecker.check()
     for conflict in conflicts {
-        print("  \(conflict)\(conflict.isKnownArcDuplicate ? " (known Arc duplicate, resolved by focus)" : "")")
+        print("  \(conflict)\(conflict.isKnownArcDuplicate ? " (known default duplicate, resolved by focus)" : "")")
     }
     let unexpected = ConflictChecker.unexpected(conflicts)
     if unexpected.isEmpty {
@@ -119,11 +119,13 @@ MainActor.assumeIsolated {
     print("  suggest actions=\(suggestActions.count) (OpenSuggest seed=\(ActionRegistry.arcDefaults.actions.count))")
     let suggestIDs = Set(suggestActions.map(\.id))
     if suggestIDs.count != suggestActions.count { fail("duplicate suggest action ids") }
-    for action in ActionRegistry.arcDefaults.actions where !suggestIDs.contains(action.id) && action.id != "focus-space" {
-        print("  note: seed action not in adapter: \(action.id)")
-    }
     let adapterRegistry = CommandRegistry.makeSuggestRegistry()
     print("  adapter registry actions=\(adapterRegistry.actions.count)")
+    let adapterIDs = Set(adapterRegistry.actions.map(\.id))
+    let seedIDs = Set(ActionRegistry.arcDefaults.actions.map(\.id))
+    let missingSeedIDs = seedIDs.subtracting(adapterIDs).sorted()
+    print("  seed coverage=\(seedIDs.intersection(adapterIDs).count)/\(seedIDs.count)")
+    for id in missingSeedIDs { fail("seed action not in adapter: \(id)") }
 
     // Global hotkey smoke: register, read back, unregister. Print only; a
     // busy system key is an environment fact, not a code failure.
@@ -154,6 +156,10 @@ MainActor.assumeIsolated {
     do {
         let expected = try ExpectedMenu.load()
         let comparison = MenuComparator.compare(built: rows, expected: expected)
+        print("  renamed (by design): \(comparison.renamed.count)")
+        for rename in comparison.renamed {
+            print("    \(rename.item.path) > \(rename.item.title) → \(rename.title)")
+        }
         for item in comparison.missing { print("  missing: \(item.path) > \(item.title) [\(item.shortcut)]") }
         for row in comparison.extra { print("  extra: \(row.path) > \(row.title) [\(row.shortcut)]") }
         for diff in comparison.different { print("  different: \(diff.item.path) > \(diff.item.title) expected [\(diff.item.shortcut)] built [\(diff.builtShortcut)]") }

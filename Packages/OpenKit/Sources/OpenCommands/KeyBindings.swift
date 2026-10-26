@@ -93,7 +93,7 @@ public struct ShortcutConflict: Sendable, Hashable, CustomStringConvertible {
     public var isKnownArcDuplicate: Bool {
         let pair = Set(commandIDs)
         return pair == ["new-folder", "new-incognito-window"]
-            || pair == ["little-arc-global", "new-little-arc-window"]
+            || pair == ["little-open-global", "new-little-open-window"]
             || pair == ["show-fonts", "new-tab"]
     }
 }

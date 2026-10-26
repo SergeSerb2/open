@@ -1,7 +1,7 @@
 import Carbon
 import Foundation
 
-/// System-wide Little Arc hotkey through Carbon `RegisterEventHotKey`.
+/// System-wide Little Open hotkey through Carbon `RegisterEventHotKey`.
 /// Opt-in: the app registers only while the setting is on, and must call
 /// `unregister()` when the setting turns off or the shortcut changes.
 /// Mirrors Arc `GlobalHotkeyManager` / `registerLittleBrowserShortcut`.

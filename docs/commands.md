@@ -5,7 +5,7 @@ Dev executable: `commands-dump`. No third-party dependencies.
 No unit tests, per AGENTS.md. Verification is end to end through `commands-dump`.
 
 `OpenCommands` is the single source of truth for every browser command.
-Menus, key bindings, keyboard routing, the global Little Arc hotkey, and the
+Menus, key bindings, keyboard routing, the global Little Open hotkey, and the
 command bar all read the same registry. Source facts come from
 [docs/re/menus-and-hotkeys.md](re/menus-and-hotkeys.md) (Arc 1.170.0, build 89123).
 
@@ -19,7 +19,7 @@ command bar all read the same registry. Source facts come from
 | `MenuBuilder.swift` | Builds the full `NSMenu` tree in Arc order. Routes clicks through `CommandDispatcher`. |
 | `KeyBindings.swift` | Override file (`KeyBindingStore`), conflict checker. |
 | `KeyboardRouter.swift` | Decides browser key versus web page key for one event. |
-| `GlobalHotkey.swift` | Carbon `RegisterEventHotKey` wrapper for the global Little Arc key. |
+| `GlobalHotkey.swift` | Carbon `RegisterEventHotKey` wrapper for the global Little Open key. |
 | `SuggestAdapter.swift` | Feeds `OpenSuggest`'s `ActionRegistry` from this registry. |
 | `ExpectedMenu.swift` | Loads the menu table extracted from the RE report and compares it with the built menu. |
 
@@ -34,7 +34,7 @@ Out-of-scope Arc commands (Easels, Notes, Arc Max/ChatGPT, Send to Dia,
 account items) stay in the registry with `isReserved = true`. They get no menu
 item, and the conflict checker rejects any active command that takes their keys.
 
-Scopes: `global` (system-wide, Little Arc), `window`, `sidebar-focused`,
+Scopes: `global` (system-wide, Little Open), `window`, `sidebar-focused`,
 `command-bar`, and `web-content` (text and page keys). A wider scope contains
 the narrower ones when the checker looks for collisions.
 
@@ -42,6 +42,8 @@ The app feeds the command bar with `CommandRegistry.makeSuggestRegistry()`.
 It returns an `OpenSuggest.ActionRegistry`, so menu titles, shortcuts, and
 command-bar rows cannot drift. Pin/Unpin is one menu command and two
 command-bar actions (`pin-tab` needs a Today tab, `unpin-tab` needs a pinned tab).
+Little Open commands keep "Little Arc" as a search alias. Display titles use
+"Little Open".
 
 ## Menu bar
 
@@ -92,7 +94,7 @@ and reports two kinds: `duplicate` (two active commands share keys in
 overlapping scopes) and `reserved-key-reuse` (an active command takes a
 reserved key). Three pairs ship in Arc itself and count as known, because
 focus resolves them: New Folder / New Incognito Window (Cmd+Shift+N, sidebar
-focus wins), Show Fonts / New Tab (Cmd+T, text focus wins), and the Little Arc
+focus wins), Show Fonts / New Tab (Cmd+T, text focus wins), and the Little Open
 global / window twins (Cmd+Opt+N). Every other conflict fails `commands-dump`
 and must block a settings save.
 
@@ -118,10 +120,10 @@ Rules, in order:
    twice to use Arc's shortcut."
 6. No matching command: web focus gets the keys; other focus goes to the system.
 
-## Global hotkey (Little Arc)
+## Global hotkey (Little Open)
 
 `GlobalHotkeyService` wraps Carbon `RegisterEventHotKey` (signature `OPEN`,
-id 1). The app registers the `little-arc-global` shortcut (Cmd+Opt+N) only
+id 1). The app registers the `little-open-global` shortcut (Cmd+Opt+N) only
 while the opt-in setting is on. `register` replaces any old registration.
 `unregister()` removes the Carbon hotkey and its event handler. The service
 cleans up on deinit. System shortcuts may still take priority, as Arc warns.
@@ -141,7 +143,11 @@ adapter, registers and unregisters the global hotkey, tests double-press
 routing, and compares the built menu with
 `Sources/OpenCommands/Resources/expected-menu.json`, the menu table extracted
 from the RE report. It prints every missing, extra, and different item. The
-only allowed gaps are the 11 out-of-scope Arc rows. Exit code is non-zero on
+table keeps its reference titles. The comparison maps "New Little Arc Window"
+to "New Little Open Window" and "Open Little Arc or Peek in…" to
+"Move Little Open or Peek to Space…", then lists both under
+`renamed (by design): 2`. The adapter must cover all 79 seed action ids.
+The only allowed gaps are the 11 out-of-scope Arc rows. Exit code is non-zero on
 any unexpected conflict or difference.
 
 ## Command table
@@ -164,7 +170,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `open-command-bar` | Open Command Bar | Cmd+L | command-bar | File |
 | `new-window` | New Window | Cmd+N | window | File |
 | `new-incognito-window` | New Incognito Window | Cmd+Shift+N | window | File |
-| `new-little-arc-window` | New Little Arc Window | Cmd+Opt+N | window | File |
+| `new-little-open-window` | New Little Open Window | Cmd+Opt+N | window | File |
 | `blank-window` | Blank Window | Cmd+Ctrl+N | window | File |
 | `close-window` | Close Window | Cmd+Shift+W | window | File |
 | `archive-tab` | Archive Tab | Cmd+W | window | File |
@@ -245,7 +251,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `reset-all-tabs-in-space` | Reset all tabs in this Space | — | window | Tabs |
 | `peek-email` | Peek Email… | Cmd+Shift+E | window | Tabs |
 | `join-meeting` | Join Meeting | Cmd+Ctrl+J | window | Tabs |
-| `open-in-current-space` | Open Little Arc or Peek in… | Cmd+O | window | Tabs |
+| `open-in-current-space` | Move Little Open or Peek to Space… | Cmd+O | window | Tabs |
 | `go-back` | Go Back | Cmd+[, Cmd+Left | window | Archive |
 | `go-forward` | Go Forward | Cmd+], Cmd+Right | window | Archive |
 | `view-archive` | View Archive | — | window | Archive |
@@ -306,7 +312,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `air-traffic-control` | Air Traffic Control | — | window | — |
 | `manage-passwords` | Manage Passwords | — | window | — |
 | `search-settings` | Search Settings | — | window | — |
-| `little-arc-global` | Show Little Arc (Global) | Cmd+Opt+N | global | — |
+| `little-open-global` | Show Little Open (Global) | Cmd+Opt+N | global | — |
 | `show-shortcuts-overlay` | Show Shortcuts While Holding Command | — | window | — |
 | `go-to-tab-1` | Go to Tab 1 | Cmd+1 | window | — |
 | `go-to-tab-2` | Go to Tab 2 | Cmd+2 | window | — |
@@ -334,15 +340,15 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `next-split-pane` | Next Split Pane | Ctrl+Shift+} | window | — |
 | `previous-split-pane` | Previous Split Pane | Ctrl+Shift+{ | window | — |
 
-Reserved (out-of-scope Arc keys):
+Reserved (out-of-scope keys):
 - `reserved-new-note` New Note (reserved): Ctrl+Shift+N
 - `reserved-new-note-in-split` New Note in Split (reserved): Ctrl+Opt+N
 - `reserved-new-easel` New Easel (reserved): Ctrl+Shift+E
 - `reserved-new-chatgpt-message` New ChatGPT Message (reserved): Cmd+Opt+G
 - `reserved-send-to-dia` Send to Dia (reserved): —
 - `reserved-view-easels-notes` View Easels & Notes (reserved): —
-- `reserved-export-arc-notes` Export Arc Notes (reserved): —
-- `reserved-share-arc` Share Arc (reserved): —
+- `reserved-export-arc-notes` Export Notes (reserved): —
+- `reserved-share-arc` Share App (reserved): —
 - `reserved-sign-out` Sign Out (reserved): —
 
 ## Open questions
@@ -353,7 +359,7 @@ Reserved (out-of-scope Arc keys):
 2. Go to Tab (Cmd+1…9), Go to Space (Ctrl+1…9), and Split pane focus
    (Ctrl+Shift+1…4) defaults come from public docs, not the nib. Read the real
    values in Arc Settings > Shortcuts before shipping.
-3. The global Little Arc default (Cmd+Opt+N) and its on/off default are
+3. The global Little Open default (Cmd+Opt+N) and its on/off default are
    guesses from strings. Confirm in Arc Settings.
 4. The forbidden-combination list for custom shortcuts lives in Arc code and
    is not in strings. Open rejects only reserved-key reuse for now.

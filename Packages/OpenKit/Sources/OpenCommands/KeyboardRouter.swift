@@ -52,7 +52,7 @@ public enum RoutingDecision: Sendable, Equatable {
 /// `keyDown` path before the web view sees the event.
 ///
 /// Rules, in order:
-/// 1. Another app frontmost: only `global` commands fire (Little Arc).
+/// 1. Another app frontmost: only `global` commands fire (Little Open).
 /// 2. Command bar open: command-bar scope wins; Escape closes; other window
 ///    commands stay off so typing keeps working.
 /// 3. Text focus: edit commands (Undo, Copy, font keys) go to the system.
@@ -97,7 +97,7 @@ public final class KeyboardRouter: @unchecked Sendable {
             return context.isWebContentFocused ? .webContent : .system
         }
 
-        // Global twin (Little Arc) also fires while Open is active.
+        // Global twin (Little Open) also fires while Open is active.
         if command.scope == .global { return .browserCommand(command.id) }
 
         // Rule 4: sidebar focus picks the sidebar command over its window twin.

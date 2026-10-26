@@ -185,7 +185,7 @@ public enum MenuBuilder {
 
     private static func buildFileMenu(target: MenuCommandTarget, overrides: KeyBindingStore) -> NSMenu {
         let menu = NSMenu(title: "File")
-        add(menu, ["new-tab", "open-command-bar", "new-window", "new-incognito-window", "new-little-arc-window", "blank-window"], target: target, overrides: overrides)
+        add(menu, ["new-tab", "open-command-bar", "new-window", "new-incognito-window", "new-little-open-window", "blank-window"], target: target, overrides: overrides)
         menu.addItem(.separator())
         add(menu, ["archive-tab", "close-window", "restore-last-closed-tab"], target: target, overrides: overrides)
         menu.addItem(.separator())

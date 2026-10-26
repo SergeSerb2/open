@@ -23,7 +23,8 @@ public struct ExpectedMenuItem: Sendable, Codable, Hashable {
 /// Loads the machine-readable menu table bundled with OpenCommands.
 /// The table is a hand extraction of the Full menu tree in
 /// `docs/re/menus-and-hotkeys.md`, with Arc names renamed to Open names
-/// (About Arc becomes About Open) and out-of-scope rows flagged.
+/// (About Arc becomes About Open) and out-of-scope rows flagged. Further
+/// product renames are applied only in the comparison, preserving the table.
 public enum ExpectedMenu {
     public static func load() throws -> [ExpectedMenuItem] {
         guard let url = Bundle.module.url(forResource: "expected-menu", withExtension: "json") else {
@@ -31,6 +32,13 @@ public enum ExpectedMenu {
         }
         return try JSONDecoder().decode([ExpectedMenuItem].self, from: Data(contentsOf: url))
     }
+
+    /// Intentional product names for the remaining in-scope Arc menu titles.
+    /// Global and reserved command titles have no built menu row to compare.
+    public static let titleRenames: [String: String] = [
+        "New Little Arc Window": "New Little Open Window",
+        "Open Little Arc or Peek in…": "Move Little Open or Peek to Space…",
+    ]
 
     /// Extra built titles the comparison allows: system and dynamic rows that
     /// have no fixed row in the nib table.
@@ -51,6 +59,7 @@ public struct MenuComparison: Sendable {
     public var extra: [(path: String, title: String, shortcut: String)]
     public var different: [(item: ExpectedMenuItem, builtShortcut: String)]
     public var allowedMissing: [ExpectedMenuItem]
+    public var renamed: [(item: ExpectedMenuItem, title: String)]
 
     public var unexpectedCount: Int { missing.count + extra.count + different.count }
 }
@@ -63,6 +72,15 @@ public enum MenuComparator {
         built: [(path: String, title: String, shortcut: String, commandID: String?, hidden: Bool)],
         expected: [ExpectedMenuItem]
     ) -> MenuComparison {
+        var renamed: [(item: ExpectedMenuItem, title: String)] = []
+        let expected = expected.map { item in
+            guard let title = ExpectedMenu.titleRenames[item.title] else { return item }
+            renamed.append((item, title))
+            var mapped = item
+            mapped.title = title
+            return mapped
+        }
+
         // Index built visible rows by (path, title). Dynamic rows (payload ids) skip the check.
         var builtByKey: [String: String] = [:]
         var builtRows: [(path: String, title: String, shortcut: String)] = []
@@ -91,7 +109,7 @@ public enum MenuComparator {
             }
             if item.inScope, !item.shortcut.isEmpty, builtShortcut != item.shortcut {
                 // A command with alternates shows its first key; accept any default.
-                if let command = CommandRegistry.active.first(where: { $0.title == item.title || displayTitleMatches($0, item) }),
+                if let command = CommandRegistry.active.first(where: { $0.title == item.title }),
                    command.defaultShortcuts.map(\.display).contains(item.shortcut) {
                     continue
                 }
@@ -103,10 +121,6 @@ public enum MenuComparator {
         let extra = builtRows.filter { row in
             !expectedKeys.contains("\(row.path)\u{1}\(row.title)") && !ExpectedMenu.isAllowedExtra(path: row.path, title: row.title)
         }
-        return MenuComparison(missing: missing, extra: extra, different: different, allowedMissing: allowedMissing)
-    }
-
-    private static func displayTitleMatches(_ command: CommandDefinition, _ item: ExpectedMenuItem) -> Bool {
-        command.title == item.title
+        return MenuComparison(missing: missing, extra: extra, different: different, allowedMissing: allowedMissing, renamed: renamed)
     }
 }

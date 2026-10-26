@@ -4,7 +4,7 @@ Status: implemented. Package target `OpenSuggest` in `Packages/OpenKit`.
 No third-party dependencies. Verification is end to end through the `openkit` CLI.
 No unit tests, per AGENTS.md.
 
-OpenSuggest is the engine-agnostic, UI-free backend of Arc's command bar.
+OpenSuggest is the engine-agnostic, UI-free backend of Open's command bar.
 It covers Cmd+T (new tab), Cmd+L (edit current URL), and tab search.
 Evidence for Arc behavior is in `docs/re/features-core.md` §4 and
 `docs/re/menus-and-hotkeys.md`. Arc ranks with an on-device ML model
@@ -320,7 +320,7 @@ Only commands that make sense in a command bar are seeded.
 Seed ids, grouped as in `ActionRegistry.arcDefaults` (79 actions, plus the dynamic `focus-space`):
 
 - Tabs and windows: `new-tab` (⌘T), `new-window` (⌘N), `new-incognito-window` (⇧⌘N),
-  `new-little-arc-window` (⌥⌘N), `archive-tab` (⌘W, current tab), `restore-last-closed-tab` (⇧⌘T),
+  `new-little-open-window` (⌥⌘N), `archive-tab` (⌘W, current tab), `restore-last-closed-tab` (⇧⌘T),
   `duplicate-tab`, `rename-tab`, `pin-tab` (⌘D, Today tab), `unpin-tab` (⌘D, pinned tab),
   `add-to-favorites`, `remove-from-favorites`, `reset-tab`, `replace-pinned-url`,
   `copy-url` (⇧⌘C), `copy-url-markdown` (⌥⇧⌘C), `copy-url-quote` (⌃⇧⌘C),
@@ -348,6 +348,8 @@ Seed ids, grouped as in `ActionRegistry.arcDefaults` (79 actions, plus the dynam
 
 Left out on purpose: Easels, Notes, Arc Max, Dia, account items, and Capture.
 Full titles, aliases, symbols, and requirements are in `ActionRegistry.swift`.
+Both "little open" and the old-name alias "little arc" find
+`new-little-open-window`, displayed as "New Little Open Window".
 
 Rules:
 
@@ -676,7 +678,7 @@ zero warnings, zero errors (Swift 6.4, strict concurrency).
 | 18 | PASS | search-tabs mode → only tab rows, best tab on top |
 | 19 | PASS | edit mode: current URL → navigate it; the current tab is not offered |
 | 20 | PASS | actions hide when they do not apply (Pin vs Unpin) |
-| 21 | PASS | Arc trigger phrase "clear today" → Clear Unpinned Tabs |
+| 21 | PASS | Search alias "clear today" → Clear Unpinned Tabs |
 | 22 | PASS | "personal" → Focus on Personal (dynamic Space action) |
 | 23 | PASS | Site Search: "yt cats" row, "you" Tab hint, scoped query, Tab target |
 | 24 | PASS | tab index: cached between keystrokes; title/URL change patches 1 tab; new tab rebuilds, re-folding only it |
