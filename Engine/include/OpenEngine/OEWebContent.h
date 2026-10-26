@@ -144,7 +144,7 @@ NS_SWIFT_UI_ACTOR
 @end
 
 /// One page (ADK "WebContent"). Its `view` can go anywhere: several per
-/// window (Split View), or a floating panel (Peek, Little Arc, extension
+/// window (Split View), or a floating panel (Peek, Little Open, extension
 /// popups). The view can move between windows.
 ///
 /// The Chromium browser is created when `view` first moves into a window,
@@ -283,7 +283,7 @@ typedef NS_ENUM(NSInteger, OEOpenDisposition) {
   OEOpenDispositionNewForegroundTab,
   OEOpenDispositionNewBackgroundTab,
   /// window.open with features (width/height). Arc opens these in a small
-  /// window (Little Arc style).
+  /// window (Little Open style).
   OEOpenDispositionNewPopup,
   OEOpenDispositionNewWindow,
   OEOpenDispositionOffTheRecord,

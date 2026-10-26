@@ -13,7 +13,8 @@ settings:
   base:
     ARCHS: arm64
     MACOSX_DEPLOYMENT_TARGET: "26.0"
-    CEF_ROOT: $(SRCROOT)/Vendor/cef/current
+    # Filled by tools/fetch-cef.sh (CDN build) or tools/fetch-engine.sh (fork).
+    CEF_ROOT: $(SRCROOT)/Vendor/cef
     CEF_WRAPPER_LIB: $(CEF_ROOT)/build/libcef_dll_wrapper/libcef_dll_wrapper.a
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"

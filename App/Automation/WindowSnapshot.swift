@@ -31,7 +31,9 @@
       var overlays: [(NSRect, NSImage)] = []
       for content in OEEngine.shared.allWebContents
       where content.view.window === window && !content.view.isHiddenOrHasHiddenAncestor && content.isLive {
-        guard let png = try? await content.takeSnapshot(), let page = NSImage(data: png) else { continue }
+        // A page that never painted (for example chrome://extensions in an
+        // Alloy page) never answers; skip it after a short wait.
+        guard let png = await pagePNG(content, timeout: 3), let page = NSImage(data: png) else { continue }
         // Window base coordinates cover the whole frame, origin bottom-left.
         overlays.append((content.view.convert(content.view.bounds, to: nil), page))
       }
@@ -48,6 +50,28 @@
       else { throw AutomationController.Failure(message: "PNG encoding failed") }
       try png.write(to: url)
       return method
+    }
+
+    @MainActor
+    private final class Once {
+      var done = false
+    }
+
+    private static func pagePNG(_ content: OEWebContent, timeout: Double) async -> Data? {
+      await withCheckedContinuation { (continuation: CheckedContinuation<Data?, Never>) in
+        let once = Once()
+        content.takeSnapshot { png, _ in
+          guard !once.done else { return }
+          once.done = true
+          continuation.resume(returning: png)
+        }
+        Task { @MainActor in
+          try? await Task.sleep(for: .seconds(timeout))
+          guard !once.done else { return }
+          once.done = true
+          continuation.resume(returning: nil)
+        }
+      }
     }
 
     private static func windowServerImage(_ window: NSWindow) -> CGImage? {

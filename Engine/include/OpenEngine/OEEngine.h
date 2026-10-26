@@ -38,6 +38,19 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// Verbose Chromium logging. Default: NO.
 @property(nonatomic) BOOL verboseLogging;
 
+/// Keychain item that holds the cookie and password encryption key.
+/// Default: "Open Safe Storage" / "Open". Stock Chromium uses the shared
+/// "Chromium Safe Storage" item, which other Chromium-based apps may own,
+/// and accessing that makes macOS ask the user. Changing these later makes
+/// stored cookies and passwords unreadable.
+@property(nonatomic, copy) NSString* keychainServiceName;
+@property(nonatomic, copy) NSString* keychainAccountName;
+
+/// Use an in-memory mock key instead of the keychain. For ad-hoc signed
+/// development builds only: their signature changes on every build, so
+/// macOS would ask for keychain access each time. Default: NO.
+@property(nonatomic) BOOL useMockKeychain;
+
 @end
 
 /// Engine-level callbacks. All on the main thread.

@@ -267,14 +267,21 @@ def extension_checks(app, style, results):
             continue
         t = new_tab(app, e["options"], background=True)
         time.sleep(2)
-        st = app.eval(t, '({elements: document.querySelectorAll("*").length, title: document.title})')
-        options[e["name"]] = {"url": e["options"], "elements": st["elements"], "title": st["title"],
-                              "ok": st["elements"] > 20}
-        if e["id"] == EXT["darkreader"]:
-            app.call("select", tab=t)
-            time.sleep(1)
-            options[e["name"]]["screenshot"] = shot(app, "%s-options-darkreader.png" % style)
-        app.call("close", tab=t)
+        try:
+            st = app.eval(t, '({elements: document.querySelectorAll("*").length, title: document.title})')
+            options[e["name"]] = {"url": e["options"], "elements": st["elements"], "title": st["title"],
+                                  "ok": st["elements"] > 20}
+            if e["id"] == EXT["darkreader"]:
+                app.call("select", tab=t)
+                time.sleep(1)
+                options[e["name"]]["screenshot"] = shot(app, "%s-options-darkreader.png" % style)
+            app.call("close", tab=t)
+        except RuntimeError as err:
+            # An extension page may close its own tab (window.close()), which
+            # Chrome allows; record it instead of stopping the suite.
+            still_there = any(x["id"] == t for x in app.call("tabs"))
+            options[e["name"]] = {"url": e["options"], "ok": False, "error": str(err),
+                                  "tab_still_in_sidebar": still_there}
     results["options_pages"] = {"ok": bool(options) and all(v["ok"] for v in options.values()), "pages": options}
 
     # chrome://extensions in our web view (style decides: the shell's
@@ -718,13 +725,19 @@ def measure(app_factory, results, tmp):
         idle = app.call("metrics", interval=10)
     finally:
         app.quit()
+    kind_names = {0: "unknown", 1: "browser", 2: "gpu", 3: "renderer", 4: "extension", 5: "utility",
+                  6: "service_worker", 7: "other"}
+
     def summary(m):
+        # Chromium's task manager (private footprint per task, by kind) and
+        # the OS view (physical footprint per process, what Activity Monitor
+        # shows). The totals use the OS view.
         kinds = {}
         for p in m["tasks"]:
-            kinds.setdefault(p["kind"], 0)
-            kinds[p["kind"]] += max(p["memory"], 0)
+            k = kind_names.get(p["kind"], str(p["kind"]))
+            kinds[k] = round(kinds.get(k, 0) + mb(max(p["memory"], 0)), 1)
         return {"total_footprint_mb": mb(m["totalFootprint"]), "processes": len(m["processes"]),
-                "live_pages": m["livePages"],
+                "live_pages": m["livePages"], "task_manager_mb_by_kind": kinds,
                 "by_process": sorted(((x["name"], mb(x["footprint"])) for x in m["processes"]), key=lambda x: -x[1])}
     results["memory_1_tab"] = summary(m1)
     results["memory_10_tabs"] = summary(m10)

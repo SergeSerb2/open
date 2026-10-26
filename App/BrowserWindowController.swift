@@ -69,7 +69,13 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
   private(set) var pendingDialogs: [OEJavaScriptDialog] = []
 
   // Views
-  private let sidebar = NSView()
+  private let sidebar: NSVisualEffectView = {
+    let v = NSVisualEffectView()
+    v.material = .sidebar
+    v.blendingMode = .behindWindow
+    v.state = .followsWindowActiveState
+    return v
+  }()
   private let spacePopup = NSPopUpButton(frame: .zero, pullsDown: false)
   private let addressField = NSTextField()
   private let extensionBar = NSStackView()
@@ -198,11 +204,10 @@ final class BrowserWindowController: NSWindowController, NSWindowDelegate {
     guard let root = window?.contentView else { return }
     root.wantsLayer = true
 
-    sidebar.wantsLayer = true
-    sidebar.layer?.backgroundColor = NSColor(calibratedWhite: 0.93, alpha: 1).cgColor
     root.addSubview(sidebar)
     contentContainer.wantsLayer = true
-    contentContainer.layer?.backgroundColor = NSColor(calibratedWhite: 0.86, alpha: 1).cgColor
+    contentContainer.layer?.cornerRadius = 6
+    contentContainer.layer?.masksToBounds = true
     root.addSubview(contentContainer)
 
     spacePopup.target = self

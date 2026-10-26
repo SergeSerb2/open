@@ -15,7 +15,7 @@ CONFIG="${1:-Debug}"
 JOBS="${OPEN_BUILD_JOBS:-6}"
 export PATH="/opt/homebrew/bin:$PATH"
 
-# Idempotent: exits at once when Vendor/cef/current is ready.
+# Idempotent: exits at once when Vendor/cef/ holds the selected engine.
 "$ROOT/tools/fetch-cef.sh"
 
 cd "$ROOT"

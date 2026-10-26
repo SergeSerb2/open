@@ -25,6 +25,8 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
                                                   isDirectory:YES];
     _additionalSwitches = @[];
     _defaultRuntimeStyle = OERuntimeStyleAlloy;
+    _keychainServiceName = @"Open Safe Storage";
+    _keychainAccountName = @"Open";
   }
   return self;
 }
@@ -39,6 +41,9 @@ NSErrorDomain const OEErrorDomain = @"app.open.engine";
   c.additionalSwitches = _additionalSwitches;
   c.logFile = _logFile;
   c.verboseLogging = _verboseLogging;
+  c.keychainServiceName = _keychainServiceName;
+  c.keychainAccountName = _keychainAccountName;
+  c.useMockKeychain = _useMockKeychain;
   return c;
 }
 
@@ -344,11 +349,20 @@ class OEDefaultClient : public CefClient,
     CefString(&settings.user_agent_product) =
         _configuration.userAgentProduct.UTF8String;
   }
+  CefString(&settings.keychain_service_name) =
+      _configuration.keychainServiceName.UTF8String;
+  CefString(&settings.keychain_account_name) =
+      _configuration.keychainAccountName.UTF8String;
   // Enables Chrome policy lookup under our bundle id (managed preferences).
   CefString(&settings.chrome_policy_id) =
       NSBundle.mainBundle.bundleIdentifier.UTF8String ?: "app.open.browser";
 
-  CefRefPtr<CefApp> app = OECreateApp(_configuration.additionalSwitches);
+  NSArray<NSString*>* switches = _configuration.additionalSwitches;
+  if (_configuration.useMockKeychain &&
+      ![switches containsObject:@"--use-mock-keychain"]) {
+    switches = [switches arrayByAddingObject:@"--use-mock-keychain"];
+  }
+  CefRefPtr<CefApp> app = OECreateApp(switches);
   if (!CefInitialize(args, settings, app, nullptr)) {
     if (error) {
       *error = [NSError

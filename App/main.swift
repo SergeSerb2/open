@@ -1,5 +1,6 @@
 import AppKit
 import OpenEngine
+import Security
 
 // Chromium's message pump needs the CefAppProtocol NSApplication subclass,
 // created before anything else touches AppKit.
@@ -21,16 +22,10 @@ configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort
 configuration.verboseLogging = options.verboseLogging
 configuration.userAgentProduct = "Open/0.1"
-// Unknown --switches on our command line reach Chromium directly (CEF reads
-// argv), so only add what the app itself decides.
-var switches: [String] = []
-#if DEBUG
-  // CEF stores its cookie key in the shared "Chromium Safe Storage" keychain
-  // item. Ad-hoc signed dev builds would get a keychain prompt on every
-  // rebuild, so dev builds use Chromium's mock keychain.
-  switches.append("--use-mock-keychain")
-#endif
-configuration.additionalSwitches = switches
+// Ad-hoc signed builds (no Team ID) get a new signature on every build, so
+// macOS would ask for keychain access each time; they use Chromium's mock key.
+// Developer ID builds use the "Open Safe Storage" keychain item.
+configuration.useMockKeychain = !CodeSignature.hasTeamIdentifier
 
 OEEngine.shared.delegate = appDelegate
 appDelegate.options = options
@@ -47,3 +42,20 @@ OEEngine.shared.runMessageLoop()
 appDelegate.saveState()
 OEEngine.shared.shutdown()
 exit(0)
+
+/// The running app's code signature.
+enum CodeSignature {
+  static var hasTeamIdentifier: Bool {
+    var code: SecCode?
+    guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return false }
+    var staticCode: SecStaticCode?
+    guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return false }
+    var info: CFDictionary?
+    guard
+      SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info)
+        == errSecSuccess,
+      let dict = info as? [String: Any]
+    else { return false }
+    return dict[kSecCodeInfoTeamIdentifier as String] != nil
+  }
+}
