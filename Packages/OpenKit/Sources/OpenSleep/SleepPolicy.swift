@@ -4,24 +4,28 @@ import OpenModel
 /// Pure decisions. Pin/favorite status deliberately is not an input.
 public struct SleepPolicy: Sendable {
     public var mode: SleepMode
+    public let keepAliveRules: KeepAliveRules
     public let freezeDelay: TimeInterval = 30
     public let destroyDelay: TimeInterval = 24 * 3600
     public let audioProtection: TimeInterval = 60
     public let loadProtection: TimeInterval = 10
     public let formProtection: TimeInterval = 300
 
-    public init(mode: SleepMode = .balanced) { self.mode = mode }
+    public init(mode: SleepMode = .balanced, keepAliveRules: KeepAliveRules = .builtIn) {
+        self.mode = mode; self.keepAliveRules = keepAliveRules
+    }
 
     public enum Gate: String, Sendable {
-        case visible, audible, loading, capturing, devTools, downloading, unload, form
+        case visible, keepAlive, audible, loading, capturing, devTools, downloading, unload, form
     }
     public enum Action: Sendable { case none, freeze, discard, destroy }
 
     @MainActor
     public func blockingReason(tab: Tab, visible: Set<ItemID>, now: Date,
                                lastAudibleAt: Date?, lastCommitAt: Date?, downloading: Bool,
-                               hasUnloadHandlers: Bool, forDiscard: Bool) -> Gate? {
+                               hasUnloadHandlers: Bool, forDiscard: Bool, keepAlive: Bool? = nil) -> Gate? {
         if visible.contains(tab.id) { return .visible }
+        if keepAlive ?? keepAliveRules.matches(tab.url) { return .keepAlive }
         if tab.live.isAudible || recent(lastAudibleAt, now, audioProtection) { return .audible }
         if tab.live.isLoading || recent(lastCommitAt, now, loadProtection) { return .loading }
         if tab.live.isCapturing { return .capturing }
