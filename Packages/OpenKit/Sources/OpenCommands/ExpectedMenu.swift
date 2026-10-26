@@ -1,0 +1,112 @@
+import Foundation
+
+/// One row of the menu table extracted from `docs/re/menus-and-hotkeys.md`.
+/// `inScope` is false for Arc items Open v1 drops on purpose (Easels, Notes,
+/// Arc Max, Send to Dia, account items). Those rows may be missing from the
+/// built menu; every other missing, extra, or different row is a failure.
+public struct ExpectedMenuItem: Sendable, Codable, Hashable {
+    /// Menu path without the item title, joined with " > ". Empty for the Open menu.
+    public var path: String
+    public var title: String
+    /// Shortcut display such as `Cmd+Shift+T`. Empty when the item has no keys.
+    public var shortcut: String
+    public var inScope: Bool
+
+    public init(path: String, title: String, shortcut: String = "", inScope: Bool = true) {
+        self.path = path
+        self.title = title
+        self.shortcut = shortcut
+        self.inScope = inScope
+    }
+}
+
+/// Loads the machine-readable menu table bundled with OpenCommands.
+/// The table is a hand extraction of the Full menu tree in
+/// `docs/re/menus-and-hotkeys.md`, with Arc names renamed to Open names
+/// (About Arc becomes About Open) and out-of-scope rows flagged.
+public enum ExpectedMenu {
+    public static func load() throws -> [ExpectedMenuItem] {
+        guard let url = Bundle.module.url(forResource: "expected-menu", withExtension: "json") else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        return try JSONDecoder().decode([ExpectedMenuItem].self, from: Data(contentsOf: url))
+    }
+
+    /// Extra built titles the comparison allows: system and dynamic rows that
+    /// have no fixed row in the nib table.
+    public static let allowedExtraTitles: Set<String> = [
+        "Services", "Websites will use:",
+    ]
+
+    public static func isAllowedExtra(path: String, title: String) -> Bool {
+        if allowedExtraTitles.contains(title) { return true }
+        if path == "Spaces", title.hasPrefix("") { return false }
+        return false
+    }
+}
+
+/// Result of one menu comparison.
+public struct MenuComparison: Sendable {
+    public var missing: [ExpectedMenuItem]
+    public var extra: [(path: String, title: String, shortcut: String)]
+    public var different: [(item: ExpectedMenuItem, builtShortcut: String)]
+    public var allowedMissing: [ExpectedMenuItem]
+
+    public var unexpectedCount: Int { missing.count + extra.count + different.count }
+}
+
+public enum MenuComparator {
+    /// Compares built rows (from `MenuBuilder.flatten`) with the expected table.
+    /// Hidden alternate carriers match the same expected row through their
+    /// command's full shortcut list, so they never count as extra.
+    public static func compare(
+        built: [(path: String, title: String, shortcut: String, commandID: String?, hidden: Bool)],
+        expected: [ExpectedMenuItem]
+    ) -> MenuComparison {
+        // Index built visible rows by (path, title). Dynamic rows (payload ids) skip the check.
+        var builtByKey: [String: String] = [:]
+        var builtRows: [(path: String, title: String, shortcut: String)] = []
+        for row in built where !row.hidden {
+            if let id = row.commandID, id.hasPrefix("go-to-"), row.path == "Spaces" || row.path == "Tabs" {
+                // Dynamic Space and tab rows have no fixed expected row.
+                if row.commandID != nil, row.title != CommandRegistry.byID[row.commandID ?? ""]?.title {
+                    continue
+                }
+            }
+            let key = "\(row.path)\u{1}\(row.title)"
+            if builtByKey[key] == nil {
+                builtByKey[key] = row.shortcut
+                builtRows.append((row.path, row.title, row.shortcut))
+            }
+        }
+
+        var missing: [ExpectedMenuItem] = []
+        var allowedMissing: [ExpectedMenuItem] = []
+        var different: [(item: ExpectedMenuItem, builtShortcut: String)] = []
+        for item in expected {
+            let key = "\(item.path)\u{1}\(item.title)"
+            guard let builtShortcut = builtByKey[key] else {
+                if item.inScope { missing.append(item) } else { allowedMissing.append(item) }
+                continue
+            }
+            if item.inScope, !item.shortcut.isEmpty, builtShortcut != item.shortcut {
+                // A command with alternates shows its first key; accept any default.
+                if let command = CommandRegistry.active.first(where: { $0.title == item.title || displayTitleMatches($0, item) }),
+                   command.defaultShortcuts.map(\.display).contains(item.shortcut) {
+                    continue
+                }
+                different.append((item, builtShortcut))
+            }
+        }
+
+        let expectedKeys = Set(expected.map { "\($0.path)\u{1}\($0.title)" })
+        let extra = builtRows.filter { row in
+            !expectedKeys.contains("\(row.path)\u{1}\(row.title)") && !ExpectedMenu.isAllowedExtra(path: row.path, title: row.title)
+        }
+        return MenuComparison(missing: missing, extra: extra, different: different, allowedMissing: allowedMissing)
+    }
+
+    private static func displayTitleMatches(_ command: CommandDefinition, _ item: ExpectedMenuItem) -> Bool {
+        command.title == item.title
+    }
+}

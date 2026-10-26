@@ -1,0 +1,956 @@
+[
+ {
+  "path": "Open",
+  "title": "About Open",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Set as Default Browser",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Settings…",
+  "shortcut": "Cmd+,",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Check for Updates…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Import from Another Browser…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Hide Open",
+  "shortcut": "Cmd+H",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Hide Others",
+  "shortcut": "Cmd+Opt+H",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Show All",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Quit Open",
+  "shortcut": "Cmd+Q",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Tab…",
+  "shortcut": "Cmd+T",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Open Command Bar",
+  "shortcut": "Cmd+L",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Window",
+  "shortcut": "Cmd+N",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Incognito Window",
+  "shortcut": "Cmd+Shift+N",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Little Arc Window",
+  "shortcut": "Cmd+Opt+N",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Blank Window",
+  "shortcut": "Cmd+Ctrl+N",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Archive Tab",
+  "shortcut": "Cmd+W",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Close Window",
+  "shortcut": "Cmd+Shift+W",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Restore Last Closed Tab",
+  "shortcut": "Cmd+Shift+T",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Print…",
+  "shortcut": "Cmd+P",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Save Page As…",
+  "shortcut": "Cmd+Shift+S",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Share…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Capture…",
+  "shortcut": "Cmd+Shift+2",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Capture Full Page",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Capture in Portrait Mode",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Profile",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Boost",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Edit Boost",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "New Legacy Boost (Advanced)",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "File",
+  "title": "Boost Gallery",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Undo",
+  "shortcut": "Cmd+Z",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Redo",
+  "shortcut": "Cmd+Shift+Z",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Cut",
+  "shortcut": "Cmd+X",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Copy",
+  "shortcut": "Cmd+C",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Paste",
+  "shortcut": "Cmd+V",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Paste and Match Style",
+  "shortcut": "Cmd+Shift+V",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Delete",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Select All",
+  "shortcut": "Cmd+A",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Copy URL",
+  "shortcut": "Cmd+Shift+C",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Copy URL as Markdown",
+  "shortcut": "Cmd+Opt+Shift+C",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Copy URL as Quote",
+  "shortcut": "Cmd+Ctrl+Shift+C",
+  "inScope": true
+ },
+ {
+  "path": "Edit",
+  "title": "Emoji & Symbols",
+  "shortcut": "Cmd+Ctrl+Space",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Find",
+  "title": "Find…",
+  "shortcut": "Cmd+F",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Find",
+  "title": "Find Next",
+  "shortcut": "Cmd+G",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Find",
+  "title": "Find Previous",
+  "shortcut": "Cmd+Shift+G",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Find",
+  "title": "Find and Replace…",
+  "shortcut": "Cmd+Opt+F",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Find",
+  "title": "Use Selection to Find",
+  "shortcut": "Cmd+E",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Find",
+  "title": "Jump to Selection",
+  "shortcut": "Cmd+J",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Spelling and Grammar",
+  "title": "Show Spelling and Grammar",
+  "shortcut": "Cmd+:",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Spelling and Grammar",
+  "title": "Check Document Now",
+  "shortcut": "Cmd+;",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Spelling and Grammar",
+  "title": "Check Spelling While Typing",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Spelling and Grammar",
+  "title": "Check Grammar With Spelling",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Spelling and Grammar",
+  "title": "Correct Spelling Automatically",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Show Substitutions",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Smart Copy/Paste",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Smart Quotes",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Smart Dashes",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Smart Links",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Text Replacement",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Substitutions",
+  "title": "Data Detectors",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Transformations",
+  "title": "Make Upper Case",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Transformations",
+  "title": "Make Lower Case",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Transformations",
+  "title": "Capitalize",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Speech",
+  "title": "Start Speaking",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Speech",
+  "title": "Stop Speaking",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Format > Font",
+  "title": "Show Fonts",
+  "shortcut": "Cmd+T",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Format > Font",
+  "title": "Bold",
+  "shortcut": "Cmd+B",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Format > Font",
+  "title": "Italic",
+  "shortcut": "Cmd+I",
+  "inScope": true
+ },
+ {
+  "path": "Edit > Format > Font",
+  "title": "Underline",
+  "shortcut": "Cmd+U",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Show/Hide Sidebar",
+  "shortcut": "Cmd+S",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Show/Hide Toolbar",
+  "shortcut": "Cmd+Shift+D",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Enter Full Screen",
+  "shortcut": "Cmd+Ctrl+F",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Refresh the Page",
+  "shortcut": "Cmd+R",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Force Refresh the Page",
+  "shortcut": "Cmd+Shift+R",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Stop Loading",
+  "shortcut": "Cmd+.",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Clear Cache and Refresh",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Clear Cookies and Refresh",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Zoom In",
+  "shortcut": "Cmd++",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Zoom Out",
+  "shortcut": "Cmd+-",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Zoom to Actual Size",
+  "shortcut": "Cmd+0",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Add Split View",
+  "shortcut": "Ctrl+Shift+=",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Close this Split Pane",
+  "shortcut": "Ctrl+Shift+-",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Expand Current Split",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Separate Page from Split View",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Reveal Current Tab",
+  "shortcut": "Ctrl+Space",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Expand Pinned Section",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Collapse Pinned Section",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Cast…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View",
+  "title": "Exit",
+  "shortcut": "Esc",
+  "inScope": true
+ },
+ {
+  "path": "View > Appearance",
+  "title": "Automatic",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View > Appearance",
+  "title": "Light",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View > Appearance",
+  "title": "Dark",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "Developer Tools",
+  "shortcut": "F12",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "JavaScript Console",
+  "shortcut": "Cmd+Opt+J",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "View Source",
+  "shortcut": "Cmd+Opt+U",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "Inspect Elements",
+  "shortcut": "Cmd+Opt+C",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "Network Inspector",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "Toggle Developer Mode",
+  "shortcut": "Ctrl+D",
+  "inScope": true
+ },
+ {
+  "path": "View > Developer",
+  "title": "Allow JavaScript from Apple Events",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "Next Space",
+  "shortcut": "Cmd+Opt+Right",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "Previous Space",
+  "shortcut": "Cmd+Opt+Left",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "New Space…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "Manage Spaces…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "Rename Space",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "Edit Theme…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Spaces",
+  "title": "Change Profile",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "New Tab…",
+  "shortcut": "Cmd+T",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Pin/Unpin Tab",
+  "shortcut": "Cmd+D",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Duplicate",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Rename Current Item",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Reset Tab to Original URL",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Reset all tabs in this Space",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Next Tab",
+  "shortcut": "Cmd+Opt+Down",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Previous Tab",
+  "shortcut": "Cmd+Opt+Up",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Cycle Tab Forward",
+  "shortcut": "Cmd+Ctrl+Right",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Cycle Tab Backward",
+  "shortcut": "Cmd+Ctrl+Left",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Tab Switcher (forward)",
+  "shortcut": "Ctrl+Tab",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Tab Switcher (backward)",
+  "shortcut": "Ctrl+Shift+Tab",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "New Folder…",
+  "shortcut": "Cmd+Shift+N",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Expand All Folders",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Collapse All Folders",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Clear Unpinned Tabs",
+  "shortcut": "Cmd+Shift+K",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Peek Email…",
+  "shortcut": "Cmd+Shift+E",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Join Meeting",
+  "shortcut": "Cmd+Ctrl+J",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
+  "title": "Open Little Arc or Peek in…",
+  "shortcut": "Cmd+O",
+  "inScope": true
+ },
+ {
+  "path": "Archive",
+  "title": "Go Back",
+  "shortcut": "Cmd+[",
+  "inScope": true
+ },
+ {
+  "path": "Archive",
+  "title": "Go Forward",
+  "shortcut": "Cmd+]",
+  "inScope": true
+ },
+ {
+  "path": "Archive",
+  "title": "View History",
+  "shortcut": "Cmd+Y",
+  "inScope": true
+ },
+ {
+  "path": "Archive",
+  "title": "View Archive",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Archive",
+  "title": "Clear Archive",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Extensions",
+  "title": "Manage Extensions…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Extensions",
+  "title": "Add Extension…",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "Minimize",
+  "shortcut": "Cmd+M",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "Zoom",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "View Downloads",
+  "shortcut": "Cmd+Shift+J",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "View Library",
+  "shortcut": "Cmd+Shift+L",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "View Media",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "View Boosts",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Window",
+  "title": "Bring All to Front",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help",
+  "title": "Open Help Center",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help",
+  "title": "Getting Started",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help",
+  "title": "Essential Keyboard Shortcuts",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help",
+  "title": "Release Notes",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help",
+  "title": "Contact the Team",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help > Troubleshooting",
+  "title": "Open Task Manager",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help > Troubleshooting",
+  "title": "Record Trace",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help > Troubleshooting",
+  "title": "Cancel Trace",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help > Troubleshooting",
+  "title": "Copy Open Info",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Help > Troubleshooting",
+  "title": "Reveal Open Data",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Open",
+  "title": "Share Arc",
+  "shortcut": "",
+  "inScope": false
+ },
+ {
+  "path": "Open",
+  "title": "Sign Out",
+  "shortcut": "",
+  "inScope": false
+ },
+ {
+  "path": "Open",
+  "title": "Privacy Policy",
+  "shortcut": "",
+  "inScope": false
+ },
+ {
+  "path": "File",
+  "title": "New Note",
+  "shortcut": "Ctrl+Shift+N",
+  "inScope": false
+ },
+ {
+  "path": "File",
+  "title": "New Easel",
+  "shortcut": "Ctrl+Shift+E",
+  "inScope": false
+ },
+ {
+  "path": "File",
+  "title": "New Note (in Split)",
+  "shortcut": "Ctrl+Opt+N",
+  "inScope": false
+ },
+ {
+  "path": "File",
+  "title": "Send to Dia",
+  "shortcut": "",
+  "inScope": false
+ },
+ {
+  "path": "Tabs",
+  "title": "New ChatGPT Message…",
+  "shortcut": "Cmd+Opt+G",
+  "inScope": false
+ },
+ {
+  "path": "Window",
+  "title": "View Easels & Notes",
+  "shortcut": "",
+  "inScope": false
+ },
+ {
+  "path": "Help",
+  "title": "Export Arc Notes",
+  "shortcut": "",
+  "inScope": false
+ },
+ {
+  "path": "Help",
+  "title": "Restore Data",
+  "shortcut": "",
+  "inScope": false
+ }
+]
