@@ -269,6 +269,20 @@ static let brandBlue = Color(.displayP3, red: 0.192, green: 0.224, blue: 0.984, 
 
 Keep the color space per token. Do not convert `p3` tokens to `srgb`. The values shift.
 
+### 1.8 Media controls and Picture in Picture
+
+Source: `xcrun assetutil --info` on `ARC_MediaControlsFeature.bundle/Contents/Resources/Assets.car` and `ARC_PictureInPicture.bundle/Contents/Resources/Assets.car` (raw: `.re/media/assets-*.json`). Behavior and layout facts are in features-advanced §8.
+
+| Token | Light | Dark | Space | Use |
+|---|---|---|---|---|
+| `PlaybackControlForeground` (MediaControlsFeature) | #000000/0.50 | #FFFFFF/0.66 | srgb | Mini player control glyphs. Same values as `CommandBarAccessoryForegroundColor` (§1.4); Open's palette has this pair as `CommandBarColors.accessoryForeground`. |
+| `DocumentPiPTopBarBackgroundColor` (PictureInPicture) | #212123/1.00 | #212123/1.00 | srgb | Document PiP top bar; the same dark color in both appearances. Components 0.129, 0.129, 0.137. |
+| `DocumentPiPHairlineColor` (PictureInPicture) | #FFFFFF/0.20 | #FFFFFF/0.20 | srgb | Line under the Document PiP top bar. |
+
+Images in the PiP bundle: `GoBack` and `GoForward` (PDF vectors, 54×54 pt canvas; the skip-15-seconds buttons), `meet-pip-chat-selected` and `-unselected` (SVG, 24×24 pt; Meet chat toggle). The mini player bundle has no images: it uses SF Symbols (`pip` 12 pt; `xmark`, `play.fill`, `pause.fill`, `backward.end.fill`, `forward.end.fill`, `mic.fill`, `mic.slash.fill`, `video.fill`, `video.slash.fill` 14 pt; `speaker.wave.1.fill`, `speaker.wave.3.fill`; sizes from the decompiles in `.re/media/ghidra-media.txt`). Open draws its own skip and chat glyphs; SF Symbols are system glyphs and may be used.
+
+Numbers from code (decompiles, not measurements): tooltip delay 0.45 s on every mini player and PiP button; PiP corner buttons 28 pt with 8 pt (small) or 10 pt (large) padding; mini player close button 24 pt wide on hover, 0 otherwise; marquee title built with 4, 8, 32, 3.0, 1.0 (guess: left fade, right fade, loop gap in pt, start delay in s, speed factor).
+
 ## 2. Images and icons
 
 Source: `xcrun assetutil --info <Assets.car>` for each catalog.
