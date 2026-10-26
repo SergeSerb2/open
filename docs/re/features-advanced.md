@@ -327,7 +327,148 @@ declaration order (`.re/features-advanced/strings-main.txt`).
 
 Answers to §4.6: question 4 is partly answered by BO-18 (font list, guess on ownership). Question 5
 is answered by BO-17 (a palette remap with a primary hue, a secondary hue offset, and lightness
-controls, not a hue rotation). Question 7 has a lead: the owner maps in BO-17.
+controls, not a hue rotation) and in depth by BO-23 (§4.8). Question 7 has a lead: the owner maps
+in BO-17.
+
+### 4.8 Color remap mechanism (2026-10-26)
+
+Method: read-only batch runs on the shared Ghidra project (`analyzeHeadless … -process Arc-arm64
+-noanalysis -readOnly`, scripts in `~/Library/Caches/OpenRE/ghidra-scripts-boostcolor/`, output in
+`.re/boost-color/`), plus `nm`, `strings -a`, and `xcrun swift-demangle` on both arm64 slices, and
+a numeric fit against the capture evidence S2-22 (`docs/re/interaction-states.md` §20.15 on the
+Site Control plan branch; frames S2 10/0018 vs 0039, local only). Raw output and the fit script
+stay in `.re/boost-color/` (`ghidra-boostcolor*.txt`, `strings-core.txt`, `fit.py`, `fit-out.txt`).
+
+- **BO-23 — The Boost color remap is a 20-float matrix that acts in HSLA space, built in Swift
+  from the stored scheme, registered per host pattern in the profile, pushed to renderers over
+  Mojo, and applied at paint time to non-image content.** The parts, each with its evidence:
+
+  **(a) The transport types.** `ArcHSLAMatrix` is an ArcCore value type that holds exactly twenty
+  floats (`m0`…`m19`, one `{HSLAMatrix=ffff…}` struct of 20 `f` fields, `initWithMatrix:` taking
+  `[20f]`; `otool -oV` dump in `.re/arccore/objc-methods.txt`). The name is literal: the matrix
+  operates on HSLA channels, not RGBA (proven by the fit in (e) below; a plain RGBA matrix is
+  refuted). `ArcColor` is a separate 4-byte RGBA value type and plays no part in this path.
+  `ArcBrowserContextEffects` (one per profile) exposes `registerColorFilter:forHostPattern:`
+  (20 floats + pattern string), `unregisterColorFilter:`, `registerColorScheme:forHostPattern:`
+  (a 64-bit integer + pattern), and `unregisterColorScheme:` (type encodings in the same dump).
+  The per-tab counterparts on the web contents are `applyColorFilter:` (takes an `ArcHSLAMatrix`
+  object), `applyColorScheme:`, `removeColorFilter`, and `removeColorScheme` (selector strings in
+  both binaries; `applyColorScheme:` sits next to `applyColorFilter:` in `__objc_methname`).
+
+  **(b) The Swift call sites.** Each selector has exactly one `objc_msgSend` stub in the main
+  binary and exactly one direct caller, a thin ADK wrapper (selref chain traced in
+  `.re/boost-color/ghidra-boostcolor.txt` and `ghidra-boostcolor2.txt`): the register wrapper at
+  `0x1004db3dc` reads the profile's `effects` object and passes a pointer 0x20 bytes into a Swift
+  buffer (the element storage of a 20-element float array) plus the bridged host-pattern string;
+  the scheme wrapper at `0x1004db4bc` passes one integer the same way; the per-tab wrapper at
+  `0x10054496c` allocates an `ArcHSLAMatrix` from the same kind of buffer and calls
+  `applyColorFilter:` on the tab's web view. So Swift builds a `[Float]` of 20 values and hands
+  it across; the per-host registration covers future navigations in the profile, and the per-tab
+  calls cover live preview on already-open tabs (the editor previews live, BO-13). The wrappers
+  themselves are reached only through stored function pointers (their entry points appear as data
+  in client structs; no direct callers exist), so the function that fills the 20 floats was not
+  isolated by static references in this pass. Its inputs are known from the stored model (BO-17):
+  `primaryHueDegrees`, `primarySaturation`, `secondaryHueOffset`, `invertLightness`,
+  `baseAppearance`, and the advanced settings (`preservedSaturation`, `preservedLightness`,
+  `lightnessShift`, `secondarySaturation`, `primaryLightness`, `secondaryLightness`, curves).
+  A generic reshaping helper `asMatrix(x:y:)` (`ARCFoundationBase/FloatingPoint+Math.swift`,
+  string and assert site at `0x1007dd3ec`) turns a flat array into an x-by-y matrix and traps
+  unless the count matches; guess: the builder finishes with a call of this shape (4 rows of 5,
+  or 5 by 4), but no caller was traced to it.
+
+  **(c) What `registerColorScheme:` does instead.** It carries one integer, not a matrix. Guess
+  (strong): it is the forced light/dark appearance for the host — Chromium's preferred color
+  scheme override — driven by `BoostColorScheme.baseAppearance` (`light`/`dark`, BO-17) and by
+  `invertLightness`. It makes the page's own `prefers-color-scheme` media queries and UA styling
+  render in the chosen appearance, while the color filter then remaps whatever colors result.
+  The two registrations are independent: either can be present without the other, and each has
+  its own unregister and per-tab remove (evidence in (a)). Which integer means light versus dark
+  was not determined; Open should treat the pair as {appearance override} + {HSLA matrix} and
+  probe the encoding at runtime when it builds its own engine side.
+
+  **(d) The engine side.** ArcCore strings place the browser-side registry in
+  `arc/browser/browser_context/effects_impl.cc`, immediately beside the strings
+  `NotifyBoostConfigChanged` and `arc.mojom.EffectsAgent` (`.re/boost-color/strings-core.txt`
+  lines 701698–701700): the browser process keeps the per-profile registrations and notifies
+  renderers over the `arc.mojom.EffectsAgent` Mojo interface when a Boost config changes. The
+  only Arc renderer source paths in the binary are `arc/renderer/render_frame_agent_impl.cc` and
+  `arc/renderer/ad_blocker_agent.cc`, so guess: the `EffectsAgent` receiver lives in (or beside)
+  the render-frame agent and stores the current matrix per frame/document. No Arc-specific
+  DarkMode or image-classification strings exist in ArcCore (the only `DarkModeFilter` hit is
+  upstream `GpuImageDecodeCache::DarkModeFilter`), and C++ symbols are stripped, so the exact
+  paint hook cannot be named from symbols. Guess: the hook sits where Chromium's own forced-dark
+  filter sits — in Blink/cc paint, as a color filter on paint flags for text, backgrounds,
+  borders, and vector content — because that is the one place a per-document filter can skip
+  raster images, and skipping images is observed behavior (S2-22: icons and images keep their
+  colors). A whole-surface compositing filter is refuted by the same observation: it could not
+  leave images untouched.
+
+  **(e) The math, fitted to S2-22.** Capture inputs (measured in interaction-states §20.15):
+  primary knob at screen angle 252.3°, radius 46.2 pt on a 133 pt plate, so hue ≈ 253.6° (the
+  knob fill's measured hue) and intensity ρ ≈ 46.2 / 66.5 ≈ 0.69; secondary knob locked 45°
+  clockwise at the same radius (296.6°, fill hue 297.9°), which matches the stored fields as
+  `primaryHueDegrees` ≈ 253, `primarySaturation` ≈ ρ, `secondaryHueOffset` ≈ +45°;
+  `invertLightness` off; advanced sliders at 50 (neutral). Four measured page pairs:
+  #FFFFFF → #E4E2F3, #FCF5E6 → #D4C7F8, #222222 → #56285D, #333333 → #632F6F. Tests
+  (`.re/boost-color/fit.py`):
+  - An affine RGBA matrix in sRGB space is refuted: the grey ramp is not linear per channel
+    (fitting the two dark greys mispredicts white by 27–95 levels per channel). Linear-light RGB
+    is worse (50–166 levels). So the 20 floats are not an `SkColorMatrix`-style RGBA filter,
+    despite the same count.
+  - In HSL the three greys fit an affine law almost exactly: output lightness
+    L′ = 0.761·L + 0.159 (residuals under 0.001) and output saturation S′ ≈ 0.40, constant
+    across the ramp (residuals under 0.003). Output hue moves with lightness, from 292.1° at
+    L = 0.133 down to 247.1° at L = 1. Those are exactly the two knob hues: extrapolating the
+    hue line to L = 0 gives ≈ 299°, the secondary knob (297.9°); the L = 1 end should be the
+    primary knob (253.6°) but measures 247.1°, a 6.5° shortfall that this fit does not explain
+    (guess: hue is interpolated against post-remap lightness L′, or the knob-to-degrees law is
+    slightly non-linear).
+  - The saturated near-white pair shows the preservation terms: input S = 0.786 comes out at
+    0.778, not at the grey-ramp constant 0.40. A law of the form S′ = base + k·S with base ≈ 0.40
+    gives k ≈ 0.48 — consistent with `preservedSaturation` at its neutral slider value of 50
+    (guess: the slider maps 0…100 to a 0…1 keep factor, neutral 0.5). With hue set by the
+    L-lerp above and S′, L′ affine as fitted, predicted outputs land at ΔE00 0.01 for white,
+    1.4–1.5 for the two dark greys, and 7.4 for the saturated near-white. The last miss says one
+    more term is at work for already-saturated colors (guess: hue is also partly preserved, or
+    `preservedLightness` bends L′ for high-S inputs; the stored `curves`/`points` in BO-17 may
+    also shape the advanced mapper's output beyond a single matrix).
+  In matrix terms, one consistent reading (guess, offered as the shape Open should implement
+  and then tune against fresh captures): convert each painted color to HSLA; apply the 4×5
+  matrix to (H, S, L, A, 1) with H in turns and wrap on output; convert back. The rows that the
+  capture can see are: H′ = primaryHue/360 + (secondaryHueOffset/360)·(1 − L) (dark end takes
+  the secondary hue, light end the primary); S′ = s₀ + preservedSaturation·S, with s₀ ≈ 0.40 at
+  ρ ≈ 0.69 in this capture (how s₀ scales with ρ is unknown; guess s₀ grows with
+  `primarySaturation`); L′ = 0.761·L + 0.159 at neutral sliders, with `invertLightness` flipping
+  the L row to roughly L′ = 1 − (0.761·L + 0.159) and the brightness/contrast sliders
+  (`lightnessShift` family, BO-17) moving the slope and offset; A′ = A. Grey inputs have no hue
+  of their own, which is why white and grey take the knob hues at all — the hue row reads L, not
+  the input hue, at least when S is 0.
+
+  **(f) What gets recolored.** Proven by S2-22 only for: flat page colors (backgrounds and text
+  colors move) and raster images/icons (unchanged). Everything else is a guess from the hook in
+  (d): text follows the flat-color path; CSS gradients are painted as shaders, so guess they are
+  either remapped per color stop or skipped like images — not observed; SVG fills are vector
+  paint, so guess remapped; canvas and video present as image content, so guess unchanged, like
+  raster images. Each needs one capture to settle.
+
+  **(g) Performance.** No caching or scheduling evidence was found in symbols or strings (no
+  cache, invalidation, or raster strings tie to this feature in either binary). What the
+  structure does prove: the matrix is computed once in Swift per scheme change, registered once
+  per host pattern per profile, and pushed to renderers as a change notification
+  (`NotifyBoostConfigChanged`), so steady-state cost is the paint-time transform itself, not
+  recomputation. Guess: the renderer treats a matrix change as a full repaint invalidation for
+  matching frames (the same as a forced-dark toggle) and otherwise pays only the per-draw color
+  conversion; a display-list or layer cache keyed on the matrix is likely but unproven. For
+  Open's fork: cache the converted paint ops only if profiling demands it; the HSL round-trip
+  per solid-color draw is the cost to measure first.
+
+This answers §4.6 question 5 in full: the wheel does not rotate hues and does not generate CSS.
+It stores a primary hue, a saturation (knob radius), and a secondary hue offset; Swift turns
+those plus the lightness options into a 20-float HSLA matrix; the engine applies that matrix in
+the renderer at paint time to non-image content; and `registerColorScheme:` separately forces
+the page's light/dark appearance. The generated-CSS guess in BO-3 is wrong for color (the
+`arc://boost/v2/css/` scheme still stands for hand-written Boost CSS) and BO-3 should be read
+with BO-23 in place of its remap sentence.
 
 ---
 
