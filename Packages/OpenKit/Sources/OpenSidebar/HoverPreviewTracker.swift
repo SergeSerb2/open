@@ -1,4 +1,5 @@
 import AppKit
+import OpenDesign
 import OpenModel
 
 public struct SidebarHoverPreviewRequest: Equatable, Sendable {
