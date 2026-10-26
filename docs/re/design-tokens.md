@@ -695,6 +695,8 @@ Sources: the arm64 slice `.re/bin/Arc-arm64`, read with `llvm-objdump -d` at the
 
 sD = `shadedDark`, tL = `tintedLight`. The other 6 roles are aliases of the primary palette (see `runtime-observations.md` §3.3).
 
+Update 2026-10-26 (runtime): the default theme stores no palette, but its tooltip fill gives its `light.title`: `#0A0D4F`, exact after display-profile → sRGB conversion, in capture session 2 frames 14b/0024, 03/0010, 03/0014, and 19/0025 (default dark theme). Tooltips paint `light.title`: themed Space 1 reads `#320E00`, its stored value (session 1 F0021–F0033). The table above then puts the default theme's `dark.backgroundExtra` at half of `#0A0D4F`; the mini player card fill in 14b/0024 reads `#050627`, which matches within one level per channel (derived). Detail: `interaction-states.md` §5.
+
 **Harmony colors** (`0x100d807dc`, inputs: key color, count n, wheel). Pure HSL hue rotations; saturation and lightness stay the same.
 
 | n | `analogous` | `complimentary` |
@@ -745,7 +747,7 @@ Measure each item in Arc with the user signed in. Record light and dark, and hov
 - Tab row height (rest, hover, current). Include the row gap and the section gap.
 - Favorites tile size, gap, and grid count at the default sidebar width.
 - Folder row height and indent step. Pinned tab row height if it differs.
-- Corner radii: tab row, favorites tile, command bar, popover, web view clip.
+- Corner radii: tab row, favorites tile, command bar, popover, web view clip. Tab row resolved 2026-10-26: 12 continuous in capture sessions 1 and 2 (`interaction-states.md` §3 corner note). The other radii stay open here.
 - Web view inset on each side and the gap between sidebar and web view (the rounded web content look).
 - Traffic light position: x and y from the window corner, and button gap. Note the custom `WindowControlButton` type. Measured 2026-10-26: 16 pt buttons at x 12 / 35 / 58, y 16 (gap 23), circles centered at x 20 / 43 / 66, y 24 (`interaction-states.md` §0, §13).
 - Top bar height. Space switcher size and gap. Plus button size.
