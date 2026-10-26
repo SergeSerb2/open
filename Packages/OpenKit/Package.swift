@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "OpenModel", targets: ["OpenModel"]),
+        .library(name: "OpenRouting", targets: ["OpenRouting"]),
         .library(name: "OpenStore", targets: ["OpenStore"]),
         .library(name: "OpenImport", targets: ["OpenImport"]),
         .library(name: "OpenSuggest", targets: ["OpenSuggest"]),
@@ -15,11 +16,12 @@ let package = Package(
     ],
     targets: [
         .target(name: "OpenModel"),
+        .target(name: "OpenRouting", dependencies: ["OpenModel"]),
         .target(name: "OpenStore", dependencies: ["OpenModel"], linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "OpenImport", dependencies: ["OpenModel"]),
         .target(name: "OpenSuggest", dependencies: ["OpenModel", "OpenStore"], resources: [.copy("Resources/public_suffix_list.dat")]),
         .target(name: "OpenCommands", dependencies: ["OpenModel", "OpenSuggest"], resources: [.copy("Resources/expected-menu.json")], linkerSettings: [.linkedFramework("Carbon")]),
-        .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest"]),
+        .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting"]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
     ]
 )
