@@ -39,3 +39,5 @@ Small items found during review and verification. Each line: area — issue — 
   the symbol/string evidence and confirm the tooltip text/case with S9.
 
 - Offscreen text anti-aliasing is nondeterministic between builds (row-title color metrics only); investigate font smoothing in the shared Renderer.
+
+- Engine (ad-block, post-v1) — early-hints (`103`) preloads never reach Open's ad-block hook (`WillCreateURLLoaderFactory` is not called for the early-hints factory), so a preload of a blocked URL still goes to the network; the page's own request for it is blocked (N-21). Accepted for v1. Post-v1 fix: wrap main-frame navigation factories too, only to drop blocked `Link: rel=preload` entries in `OnReceiveEarlyHints` (one more hop on every main-frame load). Trigger: if the Step 4 corpus manifest (`Engine/fork/adblock/bench/corpus-manifest.json`, `early_hints.pages_with_blocked_preload_share`) shows blocked 103-preload URLs on 2 % or more of corpus pages, bring the wrap back to the lead before Step 8 (docs/plans/adblock-fork.md R-14, §7.8). — lead ruling on PR #105, 2026-10-26

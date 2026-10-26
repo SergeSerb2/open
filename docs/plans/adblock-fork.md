@@ -1640,17 +1640,47 @@ machine, with the §13.3 CDP driver and a stock-behaving `cefsimple`
 3. Load each page, wait for `load` plus 10 s, and record the `url` of
    every CDP `Network.requestWillBeSent` event whose `type` is not
    `Document`, `http`/`https` only.
-4. Write the union to `.re/adblock-corpus/corpus.txt`: one URL per line,
-   fragments removed, de-duplicated, sorted byte-wise (git-ignored,
-   AGENTS.md rule 2). At least 2,000 lines.
+4. **Early hints (R-14, lead ruling 2026-10-26).** During the same load,
+   record every CDP `Network.responseReceivedEarlyHints` event
+   (experimental; raw `103` headers,
+   `third_party/blink/public/devtools_protocol/domains/Network.pdl:1766-1774`).
+   From its `Link` header values, keep each entry with `rel=preload` (and
+   `rel=modulepreload`), resolve its URL against the page URL, and keep its
+   `as=` value. Write `<url> <as> <page origin>` lines to
+   `.re/adblock-corpus/early-hints.txt` (git-ignored), one per page and
+   URL. Early hints exist only for outermost main frames (§7.2), so these
+   come from the front pages themselves. Guess: CEF's DevTools emits this
+   event for main-frame navigations; if no page in the list sends one,
+   note it in the manifest (`"early_hints_seen": false`) and the PR, and
+   the trigger below cannot fire on that corpus.
+5. Write the union of step 3 to `.re/adblock-corpus/corpus.txt`: one URL
+   per line, fragments removed, de-duplicated, sorted byte-wise
+   (git-ignored, AGENTS.md rule 2). At least 2,000 lines.
+6. Count blocked preloads with the real engine and the staged lists:
+   `--open-adblock-selftest --open-adblock-bench=early-hints.txt`
+   (non-official; the bench takes the optional `<type> <source-origin>`
+   columns, §13.1), with `as=` mapped to `OpenRequestType` as in §7.3
+   (`script` → `Script`, `style` → `Stylesheet`, `image` → `Image`,
+   `font` → `Font`, `fetch` → `Xmlhttprequest`, anything else → `Other`).
+   A preload counts as blocked when `matched` is true.
 
 *Manifest (committed, never the URLs).*
 `Engine/fork/adblock/bench/corpus-manifest.json`, written by the Step 4
 PR: `{ "version", "captured", "cefsimple_build", "pages": [front-page
 URLs], "url_count", "length_bytes": { "p50", "p90", "p99", "max" },
 "third_party_share", "corpus_sha256", "sample_rule", "samples": {
-"0": sha256, "1": sha256, "2": sha256 } }`. `corpus_sha256` is the
-SHA-256 of `corpus.txt` as written in step 4. Any later run (rebase,
+"0": sha256, "1": sha256, "2": sha256 }, "early_hints": {
+"early_hints_seen", "pages_with_103", "preload_urls",
+"blocked_preload_urls", "pages_with_blocked_preload",
+"pages_with_blocked_preload_share" } }`. `corpus_sha256` is the
+SHA-256 of `corpus.txt` as written in step 5. `pages_with_blocked_preload`
+counts pages with at least one blocked 103-preload URL; its share is
+that count divided by the number of pages in the list.
+
+*R-14 trigger.* If `pages_with_blocked_preload_share` is **2 % or more**,
+the main-frame factory wrap (R-14) goes back to the lead **before Step 8**
+starts; the Step 4 PR states the numbers and flags the trigger. With a
+20–49-page list, one affected page is already above 2 %. Any later run (rebase,
 another machine) first checks its `corpus.txt` against `corpus_sha256`;
 a mismatch means a new corpus version and a new manifest, never a silent
 swap. Third-party share uses the crate's own rule (request host vs
@@ -2728,6 +2758,10 @@ Acceptance (record CDP output and the gate table in the PR):
       (16 KiB unless a gate fails there, §7.7). The PR states that
       `corpus.txt` matched `corpus_sha256` of the committed manifest, and
       that every `corpus.html` run used one 200-URL sample.
+- [ ] The manifest's `early_hints` block is filled (§7.8 capture steps 4
+      and 6). The PR states `pages_with_blocked_preload` and its share,
+      and whether the R-14 trigger (≥ 2 % of corpus pages) fired; if it
+      did, the PR asks the lead to rule on the wrap before Step 8.
 - [ ] `phys_footprint` of the browser with one engine (single context in
       `cefsimple`): within the §6.6 budget. The two-Profile footprint and
       `engine_shared=1` are Step 8 checks (review r1 finding 9).
@@ -3506,7 +3540,7 @@ and states what ran instead. Never substitute a unit test.
 | R-11 | Sanitizer drops valid list rules (long selectors, unbalanced-looking escapes); v1 also drops all `:style()`, `:remove*()` and scriptlet rules by design | Counted in status (`cosmetic_dropped_*`); Step 5 reports the counts on 20 corpus pages; loosen a rule only with a new review of 98-2 |
 | R-12 | P-3 hunk position in CEF's `WillCreateURLLoaderFactory` moves on a CEF bump | Rebase note (§11 Step 9): the Open call stays first in the CEF branch; N-15 proves the order after every rebase |
 | R-13 | Worker WebSockets and frameless sockets are not checked | Known v1 gap (§7.2); Brave needed a content patch for it (F-33) |
-| R-14 | Early-hints (`103`) preloads never reach `WillCreateURLLoaderFactory` (§7.2, F-22), so a preload of a blocked URL still goes to the network, before the page commits (review r1 finding 6) | Known v1 gap. The page's own request for that URL is checked and blocked (N-21), so the preloaded response is never used by the page. Named remedy for the lead: wrap main-frame navigation factories too, only to drop blocked `Link: rel=preload` entries in `OnReceiveEarlyHints` (`navigation_url_loader_impl.cc:1390-1432`); cost: one more hop on every main-frame load. Chromium has no switch that turns early-hints preloads off (only `EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`) |
+| R-14 | Early-hints (`103`) preloads never reach `WillCreateURLLoaderFactory` (§7.2, F-22), so a preload of a blocked URL still goes to the network before the page commits (review r1 finding 6) | **Accepted gap for v1 (lead ruling, 2026-10-26).** Reason: the fix costs one extra hop on every main-frame load, while the leak is only the network fetch. The page's own request for the preloaded URL is still checked and blocked (N-21), so the page never uses the preloaded response. Post-v1 fix (not built in v1): wrap main-frame navigation factories as well, only to drop blocked `Link: rel=preload` entries in `OnReceiveEarlyHints` (`navigation_url_loader_impl.cc:1390-1432`). Chromium has no switch that turns early-hints preloads off (only `EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`). Measured: the Step 4 corpus capture counts blocked 103-preload URLs (§7.8). **Trigger:** if blocked 103-preload URLs appear on 2 % or more of corpus pages, the wrap goes back to the lead before Step 8. Tracked in `docs/followups.md` |
 | Q-1 | Does the app milestone want `OpenFeatures` created by Step 8 or later? | Step 8 decides by target existence (§11 Step 8); the §12.3 contract is normative either way |
 | Q-2 | Exact uBO resources input format for crate 0.8.11's assembler | Resolved by reading the crate source at Step 7 (§9.3); if it needs a directory, the reserved-name change there applies |
 | Q-3 | Arc's factory default (on/off), exact scope-dialog labels, update interval | Unproven Arc facts (AD-6/§7.4 of features-advanced). Open's choices (on, "this site" default, 24 h) are product decisions recorded in §9.5/§12.2; the lead may revisit after runtime observation of Arc per AGENTS.md RE rules |
@@ -3727,6 +3761,17 @@ fixed in the text:
 | 14 | 256 KiB cap had no owner; renderer rule count unbounded | Owner: the shim, unit: selector bytes, counted in `dropped_over_cap`; worst-case renderer payload recorded at Step 5 | §5.2; §8.3; §6.6; Step 5 |
 | 15 | Mid-page exclusion untested; N-18 could pass untested | N-20 (mid-page exclusion through the CEF API, Step 6); N-18 labeled "hook reachability only; error-object correctness unverified" unless a local HTTP/3 endpoint is stood up | §13.3 N-18, N-20; Steps 4 and 6 |
 | 16 | Citation drift in F-22 | Full paths; the two missing service-worker call sites added; early hints marked as not reaching the hook | F-22 |
+
+**Lead ruling on R-14 (2026-10-26).** Accept the early-hints gap for v1;
+do not build the main-frame factory wrap. Reason: the wrap adds a hop to
+every main-frame load, and the leak is only the network fetch, because
+the page's own request for the preloaded URL is still blocked (N-21). The
+gap is measured: the Step 4 corpus capture records every `103`
+`Link: rel=preload` URL and counts those the staged lists block, and the
+committed manifest carries the count and the number of affected pages
+(§7.8). Trigger: blocked 103-preload URLs on 2 % or more of corpus pages
+send the wrap back to the lead before Step 8. Where: R-14; §7.8 capture
+steps 4 and 6, manifest, trigger; Step 4 acceptance; `docs/followups.md`.
 
 New facts this round (read-only, same tree): early hints build their
 factory without `ContentClientParams` and exist only for outermost main
