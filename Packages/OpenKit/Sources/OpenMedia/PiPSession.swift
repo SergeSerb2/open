@@ -28,7 +28,9 @@ import OpenModel
     }
     @discardableResult public func request(tabID: ItemID, automatic: Bool) -> Effect? {
         guard activeSource?.tabID != tabID else { return nil }
-        let replaced = activeSource.map { Effect(tabID: $0.tabID, reason: .replaced, pause: false) }
+        let minimizedID: ItemID?
+        if case .minimized(let id) = state { minimizedID = id } else { minimizedID = nil }
+        let replaced = (activeSource?.tabID ?? minimizedID).map { Effect(tabID: $0, reason: .replaced, pause: false) }
         state = .requesting(tabID: tabID, automatic: automatic)
         return replaced
     }

@@ -207,6 +207,21 @@ MediaCoordinator ──▶ AppVisibilityProvider (pipTabIDs, mediaControlTabIDs)
 
 Threading: everything above runs on the main actor. Engine media events
 arrive on the main thread (`OEWebContentDelegate` is `NS_SWIFT_UI_ACTOR`).
+Step 6 owns window teardown: stop the closing window's sidebar observations,
+then call `MediaSourceStore.removeWindow(windowID:)` after moving or removing
+its remaining sources. Empty window publications otherwise retain stable
+identity until that explicit teardown.
+
+Field-level observation contract (lead review round 2): Step 3 views must
+read only the fields they draw. In particular, do not observe video area,
+position, or a closed drawer's changing volume merely to build the card list.
+`WindowMediaSources.allSources` names the uncapped card candidates;
+`visibleSources(windowID:displayed:)` alone applies displayed exclusions and
+the three-card cap. Sleep `mediaControls` is exactly that shown-card set plus
+eligible non-controllable playing/paused sessions. Displayed, PiP-active,
+and fourth controllable sources get no extra mediaControls protection;
+OpenSleep's audible and PiP gates remain separate.
+
 No work happens on a timer except the one paused auto-dismiss check
 (§4.3), which is a single `DispatchWorkItem` for the earliest deadline.
 
@@ -389,10 +404,11 @@ of the title with the right fade.
     public func update(tabID: ItemID, windowID: WindowID, state: WebMediaState, isMuted: Bool, isCapturing: Bool)
     public func remove(tabID: ItemID)
     public func move(tabID: ItemID, toWindow: WindowID)
+    public func removeWindow(windowID: WindowID)
     public func updateAuxiliaryPage(pageID: UUID, windowID: WindowID, state: WebMediaState, isMuted: Bool, isCapturing: Bool)
     public func removeAuxiliaryPage(pageID: UUID)
     public func sourceList(windowID: WindowID) -> WindowMediaSources
-    public func sleepProtectedTabIDs(windowID: WindowID) -> Set<ItemID>
+    public func sleepProtectedTabIDs(windowID: WindowID, displayed: Set<ItemID>) -> Set<ItemID>
     public func dismiss(tabID: ItemID)
     public func noteInteraction(tabID: ItemID)
     public func setPiP(tabID: ItemID, _ pip: MediaSource.PiP)
@@ -408,7 +424,9 @@ paused deadline and reschedules it when deadlines change. `media-demo`
 injects the same dispatch scheduler with short wall-clock delays, advances
 the domain clock, and waits for actual dispatch delivery. Removing the
 `asyncAfter` call must fail MS5. Expiry republishes each affected window's
-list; it never sets the separate user-dismiss flag. Identical updates do
+list; it never sets the separate user-dismiss flag. A user-dismissed paused
+entry still has a deadline and is removed from the registry at expiry; the
+next playing event creates it again. Identical updates do
 not replace dictionary entries or publish a window list. A source move
 and a close/archive/crash are explicit events, with no final media update
 required. Nothing else is timed.

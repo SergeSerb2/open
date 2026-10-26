@@ -37,8 +37,8 @@ import OpenWeb
 
 /// Stable observable identity per window: views of B do not observe A's registry writes.
 @MainActor @Observable public final class WindowMediaSources {
-    public fileprivate(set) var sources: [MediaSource] = []
-    public fileprivate(set) var sleepProtectedTabIDs: Set<ItemID> = []
+    public fileprivate(set) var allSources: [MediaSource] = []
+    public fileprivate(set) var nonControllableTabIDs: Set<ItemID> = []
     fileprivate init() {}
 }
 
@@ -59,6 +59,8 @@ import OpenWeb
         self.clock = clock; self.scheduler = scheduler
     }
     isolated deinit { dismissWork?.cancel() }
+
+    public var registeredWindowCount: Int { windows.count }
 
     public func sourceList(windowID: WindowID) -> WindowMediaSources {
         if let list = windows[windowID] { return list }
@@ -93,6 +95,13 @@ import OpenWeb
         guard let source = sources.removeValue(forKey: tabID) else { return }
         publish(source.windowID); reschedule()
     }
+    /// Step 6 owns window teardown: stop its sidebar observations, then call this on close.
+    public func removeWindow(windowID: WindowID) {
+        for id in sources.filter({ $0.value.windowID == windowID }).map(\.key) { sources.removeValue(forKey: id) }
+        for id in auxiliarySources.filter({ $0.value.windowID == windowID }).map(\.key) { auxiliarySources.removeValue(forKey: id) }
+        if let list = windows.removeValue(forKey: windowID) { list.allSources = []; list.nonControllableTabIDs = [] }
+        reschedule()
+    }
     public func move(tabID: ItemID, toWindow windowID: WindowID) {
         guard let source = sources[tabID], source.windowID != windowID else { return }
         let previous = source.windowID; source.windowID = windowID
@@ -112,13 +121,16 @@ import OpenWeb
         source.pip = pip; publish(source.windowID)
     }
     public func visibleSources(windowID: WindowID, displayed: Set<ItemID>) -> [MediaSource] {
-        Array(sourceList(windowID: windowID).sources.filter { s in
+        Array(sourceList(windowID: windowID).allSources.filter { s in
             guard let tabID = s.tabID else { return false }
             return !displayed.contains(tabID)
         }.prefix(Self.maxVisible))
     }
-    /// Includes non-controllable sessions with no card; paused protection has the same 60-min expiry.
-    public func sleepProtectedTabIDs(windowID: WindowID) -> Set<ItemID> { sourceList(windowID: windowID).sleepProtectedTabIDs }
+    /// Exactly the shown cards plus eligible non-controllable sessions. Audible/PiP gates live in OpenSleep.
+    public func sleepProtectedTabIDs(windowID: WindowID, displayed: Set<ItemID>) -> Set<ItemID> {
+        Set(visibleSources(windowID: windowID, displayed: displayed).compactMap(\.tabID))
+            .union(sourceList(windowID: windowID).nonControllableTabIDs)
+    }
 
     private func apply(_ source: MediaSource, state: WebMediaState, isMuted: Bool, isCapturing: Bool) {
         let old = source.playback, now = clock()
@@ -144,7 +156,7 @@ import OpenWeb
         source.lastState = state; source.isCapturing = isCapturing
     }
     private func deadline(_ s: MediaSource) -> Date? {
-        guard let paused = s.pausedAt, !s.userDismissed else { return nil }
+        guard let paused = s.pausedAt else { return nil }
         return max(paused, s.lastInteractionAt ?? paused).addingTimeInterval(Self.pausedTimeout)
     }
     private func isExpired(_ s: MediaSource, at now: Date) -> Bool { deadline(s).map { $0 <= now } ?? false }
@@ -157,9 +169,9 @@ import OpenWeb
             if case .active = s.pip { return false }
             return true
         }.sorted { $0.order > $1.order }
-        if list.sources.map(\.tabID) != cards.map(\.tabID) { list.sources = cards }
-        let protected = Set(eligible.filter { $0.playback == .playing || $0.playback == .paused }.compactMap(\.tabID))
-        if list.sleepProtectedTabIDs != protected { list.sleepProtectedTabIDs = protected }
+        if list.allSources.map(\.tabID) != cards.map(\.tabID) { list.allSources = cards }
+        let protected = Set(eligible.filter { !$0.isControllable && ($0.playback == .playing || $0.playback == .paused) }.compactMap(\.tabID))
+        if list.nonControllableTabIDs != protected { list.nonControllableTabIDs = protected }
     }
     private func reschedule() {
         dismissWork?.cancel(); dismissWork = nil
@@ -169,7 +181,11 @@ import OpenWeb
         dismissWork = scheduler.schedule(after: max(0, due.timeIntervalSince(now))) { [weak self] in self?.expirePausedSources() }
     }
     private func expirePausedSources() {
-        // Expiry never sets userDismissed: later interaction can restore the card and protection.
+        // Ordinary expiry retains an interactive source. A user-dismissed paused entry is
+        // cleaned up at the same deadline; its next playing event creates a fresh source.
+        let now = clock()
+        for id in sources.filter({ $0.value.userDismissed && isExpired($0.value, at: now) }).map(\.key) { sources.removeValue(forKey: id) }
+        for id in auxiliarySources.filter({ $0.value.userDismissed && isExpired($0.value, at: now) }).map(\.key) { auxiliarySources.removeValue(forKey: id) }
         for windowID in Array(windows.keys) { publish(windowID) }
         reschedule()
     }
