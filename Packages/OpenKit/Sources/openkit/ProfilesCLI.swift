@@ -142,7 +142,7 @@ func runProfiles(args: [String]) throws {
         else { model.profiles.forEach(line); print("profiles=\(model.profiles.count) spaces=\(model.spaces.count)") }
     case "show":
         let p = profile(positional[0]); line(p)
-        for s in model.spaces(using: p.id) { print("space \(s.id.description.prefix(8)) title=\(enabled.contains("--show-titles") ? s.title : "•••")") }
+        for s in model.spaces(using: p.id) { print("space \(s.id.description.prefix(8)) title=\(enabled.contains("--show-titles") ? model.displayTitle(for: s) : "•••")") }
     case "create":
         let name = options["--name"]!
         guard let p = model.createProfile(name: name, icon: icon) else {

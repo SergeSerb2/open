@@ -138,9 +138,9 @@ public struct ChangeProfileRequest: Sendable {
     @MainActor
     public init?(spaceID: SpaceID, toProfile profileID: ProfileID, in model: BrowserModel) {
         guard let space = model.space(id: spaceID), let target = model.profile(id: profileID), space.profileID != profileID else { return nil }
-        self.spaceID = space.id; spaceTitle = space.title; fromProfileID = space.profileID
+        self.spaceID = space.id; spaceTitle = model.displayTitle(for: space); fromProfileID = space.profileID
         toProfileID = target.id; toProfileName = target.name
-        warning = "Each Profile has different browser data, so you might get logged out or lose your progress in \(space.title). Its tabs will reopen with \(target.name) data."
+        warning = "Each Profile has different browser data, so you might get logged out or lose your progress in \(spaceTitle). Its tabs will reopen with \(target.name) data."
         dontShowAgainKey = "open.profiles.confirmInterProfileMove"
     }
 

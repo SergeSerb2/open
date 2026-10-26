@@ -252,7 +252,7 @@ Rendering: the composed window (`RenderScene`: theme background, web panel chrom
 
 ## 7. Comparison method
 
-1. Snapshot: copy `StorableSidebar.json`, `StorableWindows.json`, and `StorableLinkRouting.json` from `~/Library/Application Support/Arc` to a temp folder (read-only), then `openkit import-arc --arc-dir <copy> --out <snapshot>`. We used the copies taken at capture time, so the tree matches the frames. Render-only edits match a frame's exact state: `--clear-today`, `--drop-today N`, `--untitled N`, `--insert-folder-tab` (the importer skips Arc's welcome items).
+1. Snapshot: copy `StorableSidebar.json`, `StorableWindows.json`, and `StorableLinkRouting.json` from `~/Library/Application Support/Arc` to a temp folder (read-only), then `openkit import-arc --arc-dir <copy> --out <snapshot>`. We used the copies taken at capture time, so the tree matches the frames. Render-only edits match a frame's exact state: `--clear-today`, `--drop-today N`, `--untitled N`, `--insert-folder-tab` (older snapshots omit Arc's welcome items).
 2. Render the same window size and sidebar width at 1x (the captures are 1x).
 3. `compare` loads both PNGs into sRGB. Core Graphics converts the capture through its embedded display profile, as runtime-observations §0 asks.
 4. Elements come from the metrics (toolbar glyphs, URL field parts, each tile, header icon and title, each row title, fills, "New Tab", divider, bottom glyphs, background samples, panel fill). For each element, a plane `a + b·x + c·y` is fitted to the luminance of a 1 px ring around its region. Ink = pixels at least half of the peak contrast away from the plane. Position error = the largest of the 4 edge differences between the two ink boxes, in points. Fills scan the middle row and column against the sample's contrast. Emoji use the contrast-weighted centroid.
@@ -351,20 +351,30 @@ Two fixes came from profiling: building the close and audio buttons on demand (s
 
 ## 12. End-to-end checks
 
-`sidebar-render check` drives the real view stack in an offscreen window: 40 checks, all passing. Covered: rows match the model after `newTab`, `pinTab`, `moveNode`, `createFolder`, folder collapse and expand, `makeSplit` and `unsplit`, `closeTab` and its undo, `clearToday` and its undo (divider goes and comes back); no `reloadData` during edits; favorites add and remove; clicks (a mouse-down delivered to the hit-tested view, the mouse-up through the event queue) on a pinned row, a folder, "New Tab", and the URL field reach the delegate and the model; context menu item order for 4 targets; drop-target mapping for 4 positions; a Space switch moves the pager and the theme; a swipe switches Spaces and a short swipe snaps back.
+`sidebar-render check` drives the real view stack in an offscreen window: 103 checks, all passing (the prior 81 plus 22 model-followup checks). Covered: rows match the model after `newTab`, `pinTab`, `moveNode`, `createFolder`, folder collapse and expand, `makeSplit` and `unsplit`, `closeTab` and its undo, `clearToday` and its undo (divider goes and comes back); no `reloadData` during edits; favorites add and remove; clicks (a mouse-down delivered to the hit-tested view, the mouse-up through the event queue) on a pinned row, a folder, "New Tab", and the URL field reach the delegate and the model; context menu item order for 4 targets; drop-target mapping for 4 positions; a Space switch moves the pager and the theme; a swipe switches Spaces and a short swipe snaps back.
 
 ## 13. Model and import changes needed
 
-The sidebar uses only `OpenModel`'s public API. These gaps need model or importer work (not done here):
+Implemented by the model followups:
 
-1. `setPinnedCollapsed(space:collapsed:)` command with undo. The sidebar now sets `Space.isPinnedCollapsed` directly through `ModelSidebarActions`.
-2. `setMuted(tabID:_:)` command with undo. `toggleMute` sets `Tab.isMuted` directly.
-3. A runtime "has live web content" flag (for example `TabLiveState.isLoaded`). Arc shows "−" (unload) instead of "×" on loaded pinned tabs. The sidebar takes a closure, `SidebarContext.isTabLoaded`, for now.
-4. Importer: an untitled Arc Space imports with the title "Space". Arc shows "Space N"; the sidebar does that only for an empty title. Keep the title empty.
-5. Importer: Arc's named Space icons (for example `planet` on the default Space) import as `.symbol("planet")`, which is not an SF Symbol. The sidebar draws our planet mark for unknown names. A `SpaceIcon.named(String)` case would make this explicit.
-6. Importer: Arc welcome items ("Getting Started" and others in the default folder) are skipped, but Arc shows them as tabs. Decide whether to import them as plain tabs.
-7. New tabs from Cmd+T go to the top of Today in Arc (F0041). `newTab(in:url:at:)` appends when `at` is nil; the App should pass `at: 0`.
-8. A command to unload a pinned tab (keep the entry, drop the web content) for the "−" button: an engine action in the App, reported as `SidebarIntent.unload`.
+1. `setPinnedSectionCollapsed(spaceID:collapsed:)` and `setMuted(tabID:muted:)`
+   register undo/redo and emit no `TreeChange`. `ModelSidebarActions` calls them.
+2. `TabLiveState.hasWebContent` is observable and never persisted. Hovered pinned
+   tabs and Favorites show “−” while true and “×” otherwise. “−” sends
+   `SidebarIntent.unloadTab(id)` to the App; engine wiring is still pending.
+3. Untitled imported Spaces keep `title == nil`. The sidebar header and switcher
+   use `BrowserModel.displayTitle(for:)`: “Space N” for the current 1-based position.
+4. `SpaceIcon.named` preserves Arc's identifiers. A recreated mapping resolves
+   them to checked SF Symbols; unknown names use a reported neutral fallback.
+5. `welcomeToArc` items import as ordinary tabs, including archive records, and
+   count as imported. Their stored title and timestamps are retained. Arc's
+   payload has no saved URL, so Open uses its public welcome page as the normal-tab
+   destination. This is an import policy, not a claim to reproduce Arc's native onboarding.
+6. `newTab` defaults to index 0 in Today. An explicit index still wins.
+
+The CLI checks exercise these changes through real model commands, snapshot
+save/load, and the offscreen AppKit sidebar. The comparison error table in §8
+is retained unchanged.
 
 
 ## 14. PR #33 review corrections (2026-10-25)

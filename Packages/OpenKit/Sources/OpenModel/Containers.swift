@@ -88,7 +88,7 @@ public final class Profile {
 @Observable
 public final class Space {
     public let id: SpaceID
-    public var title: String
+    public var title: String?
     public var icon: SpaceIcon?
     public var theme: SpaceTheme
     public var profileID: ProfileID
@@ -96,7 +96,7 @@ public final class Space {
     public var today: [SidebarNode]
     public var isPinnedCollapsed: Bool
 
-    public init(id: SpaceID = SpaceID(), title: String = "Space", icon: SpaceIcon? = nil, theme: SpaceTheme = SpaceTheme(), profileID: ProfileID, pinned: [SidebarNode] = [], today: [SidebarNode] = [], isPinnedCollapsed: Bool = false) {
+    public init(id: SpaceID = SpaceID(), title: String? = nil, icon: SpaceIcon? = nil, theme: SpaceTheme = SpaceTheme(), profileID: ProfileID, pinned: [SidebarNode] = [], today: [SidebarNode] = [], isPinnedCollapsed: Bool = false) {
         self.id = id; self.title = title; self.icon = icon; self.theme = theme
         self.profileID = profileID; self.pinned = pinned; self.today = today
         self.isPinnedCollapsed = isPinnedCollapsed

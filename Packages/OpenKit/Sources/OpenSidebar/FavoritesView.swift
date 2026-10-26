@@ -240,6 +240,7 @@ final class FavoriteTileView: NSView {
     weak var owner: FavoritesView?
     private let fill = CALayer()
     private let favicon = FaviconView()
+    private(set) var accessory: PlateButton?
     private var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; hoverChanged() } } }
     private var tracking: NSTrackingArea?
 
@@ -289,6 +290,30 @@ final class FavoriteTileView: NSView {
             fill.shadowOpacity = 0
         }
         CATransaction.commit()
+        updateAccessory(hovered: hovered)
+    }
+
+    private func updateAccessory(hovered: Bool) {
+        let unload = tracked({ tab?.live.hasWebContent ?? false }) { [weak self] in self?.needsDisplay = true }
+        guard hovered || accessory != nil else { return }
+        let button: PlateButton
+        if let accessory { button = accessory }
+        else {
+            button = PlateButton(glyph: .rowClose)
+            button.plateRadius = 6
+            button.accessibleTitle = { [weak self] in self?.tab?.live.hasWebContent == true ? "Unload tab" : "Archive tab" }
+            button.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
+            button.plateColor = { _ in SidebarRole.rowPressed }
+            button.action = { [weak self] in
+                guard let self, let tab = self.tab else { return }
+                self.context?.send(tab.live.hasWebContent ? .unloadTab(tab.id) : .close(nodeID: tab.id))
+            }
+            addSubview(button)
+            accessory = button
+        }
+        button.glyphView.glyph = unload ? .rowUnload : .rowClose
+        button.frame = CGRect(x: bounds.width - 22, y: 1, width: 22, height: 22)
+        button.isHidden = !hovered
     }
 
     override func updateTrackingAreas() {
@@ -311,8 +336,12 @@ final class FavoriteTileView: NSView {
         }
     }
 
-    /// Clicks, drags, and menus go to the collection view.
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// The action owns its hit target; the collection handles tile selection and drags.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let accessory, !accessory.isHidden else { return nil }
+        let local = convert(point, from: superview)
+        return accessory.frame.contains(local) ? accessory.hitTest(local) : nil
+    }
 
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityRole() -> NSAccessibility.Role? { .button }

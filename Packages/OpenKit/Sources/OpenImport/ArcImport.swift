@@ -16,7 +16,10 @@ public struct ImportReport: Sendable {
     public var routingRules: Int = 0
     public var skippedEasels: Int = 0
     public var skippedNotes: Int = 0
-    public var skippedWelcome: Int = 0
+    public var importedWelcome: Int = 0
+    public var namedSpaceIcons: [String: Int] = [:]
+    public var unknownNamedSpaceIcons: Int = 0
+    public var untitledSpaces: Int = 0
     public var skippedUnknown: Int = 0
     public var orphans: Int = 0
     public var skippedRoutingRules: Int = 0
@@ -29,6 +32,7 @@ public struct ImportReport: Sendable {
     public var archiveFilePresent: Bool = false
     public var archiveTotal: Int = 0
     public var archiveImported: Int = 0
+    public var archiveImportedWelcome: Int = 0
     public var archiveSkippedEasels: Int = 0
     public var archiveSkippedNotes: Int = 0
     public var archiveSkippedWelcome: Int = 0
@@ -54,7 +58,7 @@ public struct ImportReport: Sendable {
     public var sessionMalformedPairs: Int = 0
 
     public var accounted: Int {
-        importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedWelcome + skippedUnknown
+        importedTabNodes + folders + splits + skippedEasels + skippedNotes + skippedUnknown
     }
     /// Every sidebar item object: imported + skipped + structural containers.
     public var accountedTotal: Int { accounted + containers }
@@ -90,6 +94,9 @@ public struct ArcImporter {
             self.arcDirectory = base.appendingPathComponent("Arc", isDirectory: true)
         }
     }
+
+    // Arc stores welcome items without a URL. Import as a regular tab to its public welcome page.
+    static let welcomeURL = URL(string: "https://arc.net/welcome-to-arc")!
 
     private static let epoch2001: TimeInterval = 978307200
 
@@ -294,7 +301,11 @@ public struct ArcImporter {
             if let scalar = iconType["emoji"] as? NSNumber, let s = UnicodeScalar(scalar.intValue) {
                 return .emoji(String(Character(s)))
             }
-            if let named = iconType["icon"] as? String { return .symbol(named) }
+            if let named = iconType["icon"] as? String {
+                if NamedSpaceIcons.symbols[named] != nil { report.namedSpaceIcons[named, default: 0] += 1 }
+                else { report.unknownNamedSpaceIcons += 1 }
+                return .named(named)
+            }
             return nil
         }
 
@@ -426,8 +437,16 @@ public struct ArcImporter {
                 countSkip(arcID) { report.skippedNotes += 1 }
                 return nil
             case "welcomeToArc":
-                countSkip(arcID) { report.skippedWelcome += 1 }
-                return nil
+                guard let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
+                let tab = Tab(id: Self.itemID(forArcID: arcID), url: Self.welcomeURL,
+                              title: item["title"] as? String ?? "Getting Started",
+                              createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
+                              lastActiveAt: Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
+                              isUnread: item["isUnread"] as? Bool ?? false)
+                let node = SidebarNode.tab(tab)
+                nodeByArcID[arcID] = node
+                report.importedWelcome += 1
+                return node
             default:
                 countSkip(arcID) { report.skippedUnknown += 1 }
                 return nil
@@ -473,7 +492,8 @@ public struct ArcImporter {
         for (spaceArcID, obj) in spacesRaw {
             let pid = profileID(for: obj["profile"] ?? profileRefBySpace[spaceArcID])
             let info = obj["customInfo"] as? [String: Any]
-            let title = (obj["title"] as? String) ?? "Space"
+            let title = (obj["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            if title == nil { report.untitledSpaces += 1 }
             let space = Space(id: Self.spaceID(forArcID: spaceArcID), title: title, icon: spaceIcon(from: info), theme: spaceTheme(from: info), profileID: pid)
             let (pinnedCID, todayCID) = containerIDs(for: obj)
             func nodes(forContainer cid: String?) -> [SidebarNode] {
@@ -676,10 +696,9 @@ public struct ArcImporter {
                         continue
                     }
                     switch kind {
-                    case "tab": break
+                    case "tab", "welcomeToArc": break
                     case "easel": report.archiveSkippedEasels += 1; continue
                     case "note": report.archiveSkippedNotes += 1; continue
-                    case "welcomeToArc": report.archiveSkippedWelcome += 1; continue
                     default: report.archiveSkippedUnknownKind += 1; continue
                     }
                     let reason: ArchiveReason
@@ -699,15 +718,15 @@ public struct ArcImporter {
                         report.archiveAlreadyLive += 1
                         continue
                     }
-                    guard let td = dataDict["tab"] as? [String: Any],
-                          let urlString = td["savedURL"] as? String,
+                    guard let td = dataDict[kind] as? [String: Any],
+                          let urlString = kind == "welcomeToArc" ? Self.welcomeURL.absoluteString : td["savedURL"] as? String,
                           let url = URL(string: urlString) else {
                         report.archiveSkippedMalformed += 1
                         continue
                     }
                     let openSpaceID = arcSpaceIDToOpen[arcSpaceID] ?? spaces[0].id
                     let ownerSpace = spaces.first(where: { $0.id == openSpaceID }) ?? spaces[0]
-                    let savedTitle = td["savedTitle"] as? String ?? ""
+                    let savedTitle = td["savedTitle"] as? String ?? (kind == "welcomeToArc" ? (sidebarItem["title"] as? String ?? "Getting Started") : "")
                     let itemTitle = sidebarItem["title"] as? String
                     let customTitle = (itemTitle != nil && itemTitle != savedTitle) ? itemTitle : nil
                     let tab = Tab(
@@ -734,6 +753,7 @@ public struct ArcImporter {
                     let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
                     let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
                     let location = "today:\(openSpaceID.rawValue.uuidString)"
+                    if kind == "welcomeToArc" { report.archiveImportedWelcome += 1 }
                     archiveRecords.append(ArchivedTabRecord(
                         id: tab.id, url: tab.url, title: tab.displayTitle,
                         spaceID: openSpaceID, profileID: ownerSpace.profileID,

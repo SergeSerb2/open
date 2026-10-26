@@ -32,13 +32,13 @@ A view that reads one object redraws only when that object changes.
 
 Persisted `Tab` fields: `id`, `url`, `title`, `customTitle`, `pinnedURL`, `customIcon`, `createdAt`, `lastActiveAt`, `isMuted`, `openerID`, `isUnread`.
 `pinnedURL` is set when a tab is pinned or made a favorite.
-Runtime-only state lives in `tab.live: TabLiveState`: `isLoading`, `progress`, `isAudible`, `isCrashed`, `canGoBack`, `canGoForward`, `faviconPNG`.
+Runtime-only state lives in `tab.live: TabLiveState`: `hasWebContent`, `isLoading`, `progress`, `isAudible`, `isCrashed`, `canGoBack`, `canGoForward`, `faviconPNG`.
 `TabLiveState` is never persisted.
 
 `Folder`: `id`, `title`, `isExpanded`, `children: [SidebarNode]` (any depth).
 `Split`: `id`, `orientation` (`.horizontal` / `.vertical`), `fractions`, `panes: [Tab]` (2–4), `focusedPaneID`.
 
-`Space`: `id`, `title`, `icon` (`.emoji` / `.symbol`), `theme: SpaceTheme`, `profileID`, `pinned`, `today`, `isPinnedCollapsed`.
+`Space`: `id`, optional `title`, `icon` (`.emoji` / `.symbol` / `.named`), `theme: SpaceTheme`, `profileID`, `pinned`, `today`, `isPinnedCollapsed`.
 `SpaceTheme` holds mapped light/dark background and foreground colors, gradient stops, and `importedArcThemeJSON: Data?` for the raw Arc theme.
 
 `Profile`: `id`, `name`, `icon`, `favorites: [Tab]` (per profile, as in Arc), `settings`, `dataDirectoryName`.
@@ -55,8 +55,12 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 ### Commands
 
 State changes only through named commands on `BrowserModel`:
-`newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
-Query: `isPinned(tabID:)`.
+`newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `setPinnedSectionCollapsed(spaceID:collapsed:)`, `setMuted(tabID:muted:)`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
+Query: `isPinned(tabID:)`. `newTab` without an explicit index inserts at the top of Today. Collapse and mute are property-only undo steps. Same-value or missing-target commands register no undo and send no event.
+
+Untitled Spaces store `title == nil`; schema-1 snapshots accept both missing/null and existing string titles. `displayTitle(for:)` uses “Space N” for the current 1-based position when the title is nil or empty. `SpaceIcon.named` retains the imported identifier across snapshot save/load. [NamedSpaceIcons.swift](../Packages/OpenKit/Sources/OpenModel/NamedSpaceIcons.swift) supplies the checked SF Symbol mapping and neutral fallback. Older builds cannot decode the new named-icon enum case.
+
+`TabLiveState.hasWebContent` defaults to false. The future engine adapter owns it. Snapshot save/load discards it with all other live state. Sidebar unload intents do not change or archive the model entry.
 `moveNode`, `addFavorite`, and `removeFavorite` return `false` when they refuse a move. `makeSplit` and `createFolder` return `nil`. A refused command changes nothing, emits no event, and registers no undo.
 
 #### Placement rules
@@ -160,12 +164,12 @@ Sidebar parsing follows [data-model.md](re/data-model.md):
 - Space theme: the raw `windowTheme` JSON goes to `importedArcThemeJSON`. Light/dark background and foreground map from `semanticColorPalette` when present.
 - Leniency: unknown keys and unknown `data` cases are skipped and counted. Nothing fails except a missing `sidebar.containers`.
 - Orphans (tab, folder, or split objects that no root reaches) become today items in the first Space and are counted in the report.
-- Easels, notes, and welcome items are skipped and counted.
+- Easels and notes are skipped and counted. Welcome items import as ordinary tabs, retain their titles/timestamps, and use the public welcome page when the payload has no URL. `importedWelcome` is a subset of imported tabs, never an additional accounting term.
 - One Open profile is created per distinct `Space.profile` value. All observed data uses `{default: true}`, so one profile serves all Spaces.
 - Windows: one `BrowserWindowState` per entry. Focus, sidebar width and mode, style, and stay-on-top map over. Unknown styles become standard windows.
 - Routing: `contains` becomes `.hostContains`, `equals` / `exact` becomes `.hostEquals`, `prefix` becomes `.urlPrefix`. Other match kinds are skipped and counted. A rule that points at the most recent Space maps to `.mostRecentSpace`. The file default destination maps directly.
 
-`ImportReport` counts: `totalItems`, `spaces`, `pinnedTabs`, `todayTabs`, `favorites`, `folders`, `splits`, `routingRules`, skipped easels / notes / welcome / unknown, `orphans`, and `skippedRoutingRules`.
+`ImportReport` counts: `totalItems`, `spaces`, `pinnedTabs`, `todayTabs`, `favorites`, `folders`, `splits`, `routingRules`, imported welcome, named-icon counts, untitled Spaces, skipped easels / notes / unknown, `orphans`, and `skippedRoutingRules`.
 Audit rule: imported nodes + folders + splits + skipped + structural containers = `totalItems`. The CLI prints this check on every import and exits non-zero on a mismatch.
 Boosts import does not run yet. No real `StorableBoostsData.json` exists on this Mac. The report states "not imported" for Boosts.
 
@@ -173,7 +177,7 @@ Archive (`StorableArchiveItems.json`, shape in [data-model.md](re/data-model.md)
 
 - The file holds an alternating `[id, entry, …]` array. Each entry holds `sidebarItem` (a full sidebar item), `reason`, `archivedAt`, and `source`.
 - Parse is lenient. Unknown keys are ignored. Unknown item kinds, unknown reasons, unknown sources, malformed entries, duplicate IDs in the file, and items that are still live in the sidebar are skipped and counted. The import never fails on one bad entry.
-- Non-tab items are skipped and counted by kind: easels, notes, welcome items, and unknown kinds.
+- Welcome archive items import as ordinary tabs. Other non-tab items are skipped and counted by kind: easels, notes, and unknown kinds.
 - Reason map: `manual` → `closed`, `auto` → `autoArchived`, `clearButton` → `clearedToday`, `clearTabGroup` → `clearedToday`. No new reason was added. Both clear actions end in Today's cleared state in Open.
 - `archivedAt` converts from the 2001 epoch (`unix = value + 978307200`).
 - The original Space comes from `source.space._0` through the Arc Space ID → Open Space ID map. An unknown Space ID falls back to the first Space. The profile comes from that Space.
@@ -399,8 +403,10 @@ deferred as listed above.
 
 ## openkit CLI
 
+`Sources/openkit/main.swift` has one append-only `(name, handler)` table. Both dispatch and usage derive from it; registering a command adds one entry.
+
 ```text
-openkit import-arc [--arc-dir PATH] --out DIR [--show-titles]
+openkit import-arc [--arc-dir PATH] --out DIR [--show-titles|--counts-only]
 openkit import-arc-history --arc-user-data DIR --db PATH [--profile NAME]
 openkit import-arc-secrets --arc-user-data DIR [--profile NAME] --dry-run [--allow-keychain-access] [--out-manifest PATH]
 openkit verify-secrets-fixture
@@ -421,7 +427,7 @@ openkit profiles DIR show PROFILE [--show-titles]
 
 `import-arc` imports, saves through `SnapshotStore`, stores archive records through `ArchiveStore`, prints the report, then prints the tree. The report holds sidebar counts, archive counts (file total, imported, stored new, stored duplicates, stored total, skipped by kind, and the archive accounted check), session mapping counts, and the final sidebar accounted check.
 `archive-list` lists stored archive rows, newest first. It prints the row ID prefix, host only, reason, and archive time. Titles print as `•••`. `--limit N` caps the rows shown. The total row count always prints.
-Titles and URLs are redacted by default. The tree prints item kind, ID prefix, and host only. `--show-titles` prints full titles and URLs. Never paste `--show-titles` output into docs.
+`--counts-only` omits the tree and per-Profile directory names; known icon identifiers are printed with counts, and unknown names are reported as a count only. Titles and URLs are redacted by default. The tree prints item kind, ID prefix, and host only. `--show-titles` prints full titles and URLs. Never paste `--show-titles` output into docs.
 `dump` loads a snapshot and prints the tree (redacted).
 `roundtrip` loads, saves, reloads, and compares the two DTOs byte for byte. It exits non-zero on a mismatch.
 `bench` builds a synthetic model (5,000 items over 10 Spaces) and times snapshot encode / decode / save / load. It inserts 100k history URLs and times 1,000 selective searches (p50 / p95). Then it times `moveNode` ×10,000 on a 5,000-item model (with and without an UndoManager), undoes every move, and times `archiveExpiredTabs` on 2,000 expired tabs (model only, then with the real `ArchiveStore`).
@@ -555,6 +561,32 @@ Bench (Apple Silicon, release build). Three runs; ranges shown:
 | `archiveExpiredTabs` on 2,000 expired tabs, real `ArchiveStore` | 1.9–2.3 ms on the main actor + 12–14 ms background write (one transaction) |
 
 The move bench picks random tabs and moves them to random slots in random Pinned, Today, and folder parents across all 10 Spaces (seeded, so runs are comparable). The expiry bench has 1,500 top-level tabs, 400 tabs in 20 folders, and 100 panes in 50 three-pane splits that collapse, plus 450 fresh tabs.
+
+## Model followup verification (2026-10-25)
+
+Merged `origin/main` at `5de74ee` before the final release build. Every build
+used `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`; the final
+build had no warnings or errors. No unit tests or subagents were used.
+
+| Real CLI / check | Result |
+|---|---|
+| `commands-demo` on a fresh root and a copy of the imported root | 115/115 each; both roundtrips OK |
+| `sidebar-render check` | 103/103: the prior 81 plus 22 checks for live-state glyphs/actions, collapse/mute undo, Space titles/reordering, and named symbols |
+| `import-arc --counts-only` on a temporary copy of live top-level JSON | Sidebar 46/46 and archive 10/10 accounted; 2 welcome tabs imported, 0 skipped; 1 untitled Space remains nil; named icons `planet=1`, unknown 0 |
+| Import repeat and snapshot roundtrip | 0 new archive rows; roundtrip OK; copied inputs unchanged |
+| Synthetic files through `import-arc` | All 55 named icons retained; 1 unknown reported with neutral fallback; orphan and archived welcome tabs imported; missing sidebar refused |
+| `NSImage(systemSymbolName:)` in `sidebar-render check` | All 55 mappings plus the fallback exist on macOS 26 |
+| `suggest-check` | 31/31 |
+| `sleep-demo` | 105/105 |
+| `adblock perf` | Lookup p95 0.1370 ms (<1); profile open p95 4.9870 ms (<10); 5,000 matches |
+| Profiles P-1 through P-12 | PASS, including refusal snapshot hashes and legacy SQLite migration |
+| Frozen sidebar renders against the existing baseline executable | All 13 state PNGs byte-identical; the Arc error tables in design.md §8 are unchanged |
+
+The fixed archive clock in `commands-demo` predates imported activity, so the
+demo's four expired tabs remain the only expiry candidates on a copied import.
+Raw copies, rendered captures, logs, and temporary drivers stayed outside Git.
+Engine unload wiring remains deferred; welcome items use a normal tab to the
+public welcome page rather than Arc's native onboarding controller.
 
 ## Open design questions
 
