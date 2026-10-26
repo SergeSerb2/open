@@ -128,7 +128,7 @@ final class SwitcherItemView: PlateButton {
     private func operation(for pb: NSPasteboard) -> NSDragOperation {
         guard let context, context.model.space(id: space.id) != nil else { return [] }
         if let ids = SidebarPasteboard.nodeIDs(from: pb) {
-            return !ids.isEmpty && ids.allSatisfy {
+            return !ids.isEmpty && ids.contains {
                 context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: space.id, model: context.model))
             } ? .move : []
         }
@@ -138,6 +138,7 @@ final class SwitcherItemView: PlateButton {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        context?.suppressPreviews(.drag, true)
         let operation = operation(for: sender.draggingPasteboard)
         guard !operation.isEmpty else { cancelSpringLoad(); return [] }
         let ids = SidebarPasteboard.nodeIDs(from: sender.draggingPasteboard)
@@ -148,7 +149,7 @@ final class SwitcherItemView: PlateButton {
             let work = DispatchWorkItem { [weak self] in
                 MainActor.assumeIsolated {
                     guard let self, self.springScheduled, let context = self.context else { return }
-                    if let ids, !ids.allSatisfy({ context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: self.space.id, model: context.model)) }) { return }
+                    if let ids, !ids.contains(where: { context.model.canMoveNode(id: $0, to: SidebarPasteboard.destination(for: $0, in: self.space.id, model: context.model)) }) { return }
                     context.send(.switchSpace(self.space.id))
                 }
             }
@@ -165,21 +166,19 @@ final class SwitcherItemView: PlateButton {
         springPayload = nil
     }
 
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { cancelSpringLoad() }
-    override func draggingEnded(_ sender: any NSDraggingInfo) { cancelSpringLoad() }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { cancelSpringLoad(); context?.suppressPreviews(.drag, false) }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { cancelSpringLoad(); context?.suppressPreviews(.drag, false) }
     override func concludeDragOperation(_ sender: (any NSDraggingInfo)?) { cancelSpringLoad() }
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool { !operation(for: sender.draggingPasteboard).isEmpty }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { context?.suppressPreviews(.drag, false) }
         cancelSpringLoad()
         guard !operation(for: sender.draggingPasteboard).isEmpty, let context else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: sender.draggingPasteboard) {
-            // Insert in reverse order at zero, keeping each source section's order.
-            let moves = ids.map { ($0, SidebarPasteboard.destination(for: $0, in: space.id, model: context.model)) }
-            for (id, parent) in moves.reversed() {
-                guard context.send(.move(nodeID: id, to: parent, index: 0)) else { return false }
-            }
-            return true
+            let accepted = context.send(.moveNodesToSpace(ids: ids, space: space.id))
+            context.haptics.dropped(accepted)
+            return accepted
         }
         let urls = SidebarPasteboard.urls(from: sender.draggingPasteboard)
         for url in urls.reversed() {
