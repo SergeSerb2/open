@@ -153,12 +153,19 @@ func runAdBlock(args: [String]) async throws {
             lookups.append(Double(end - loadedAt) / 1_000_000)
             try loaded.closeProfile(profile)
         }
-        times.sort()
-        let p95 = times[Int(ceil(Double(times.count) * 0.95)) - 1]
-        print(String(format: "settings_load_and_1000_lookups p95_ms=%.4f groups=10 lookups=10000 matches=%d budget_ms=1", p95, matches))
+        // Two budgets (lead decision 2026-10-25): per-lookup cost is what pages pay; profile open
+        // includes the mandatory SHA-256 integrity scan of the live list generation and runs once,
+        // off the main thread, so it gets its own, larger budget.
+        func p95(_ values: [Double]) -> Double {
+            let sorted = values.sorted()
+            return sorted[Int(ceil(Double(sorted.count) * 0.95)) - 1]
+        }
+        let lookupP95 = p95(lookups), loadP95 = p95(loads), totalP95 = p95(times)
+        print(String(format: "lookups_1000 p95_ms=%.4f budget_ms=1 groups=10 lookups=10000 matches=%d", lookupP95, matches))
+        print(String(format: "profile_open_with_integrity_scan p95_ms=%.4f budget_ms=10", loadP95))
+        print(String(format: "combined p95_ms=%.4f (informational)", totalP95))
         print("groups_ms=\(times.map { String(format: "%.4f", $0) }.joined(separator: ","))")
-        print(String(format: "load_max_ms=%.4f lookup_1000_max_ms=%.4f", loads.max() ?? 0, lookups.max() ?? 0))
-        guard p95 < 1, matches == 5000 else { throw AdBlockError("performance budget or match check failed") }
+        guard lookupP95 < 1, loadP95 < 10, matches == 5000 else { throw AdBlockError("performance budget or match check failed") }
     default: throw AdBlockError("unknown adblock action")
     }
 }

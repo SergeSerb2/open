@@ -340,3 +340,12 @@ pass does not claim CEF/DAT runtime acceptance.
   value-only engine events. An OpenEngine adapter still needs to bind those events.
 - Engine steps, resources assembly, actual page blocking, and app packaging are
   deferred as requested. CLI reload-event counts prove the Swift contract only.
+
+### Performance budgets (lead decision, 2026-10-25)
+
+The single "load + 1,000 lookups < 1 ms" gate mixed two different costs once warm-open integrity verification became mandatory. `openkit adblock perf` now checks two budgets:
+
+| Metric | Budget | Measured (lead run, Chromium build running) |
+|---|---|---|
+| 1,000 allowlist lookups (what page loads pay) | p95 < 1 ms | 0.444 ms |
+| Profile open incl. SHA-256 scan of the live generation (once per profile, off the main thread) | p95 < 10 ms | 6.555 ms |
