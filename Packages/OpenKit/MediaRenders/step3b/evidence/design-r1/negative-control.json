@@ -1,0 +1,15 @@
+{
+  "old_production_commit": "85fd3613a66f66c6399511074110e95f667081a4",
+  "harness_files_identical": true,
+  "motion_harness_sha256": "946403bf4109feb1247ae9caed064e45dfd977d23b82b89ca6e265e2e45528f4",
+  "old_result": {
+    "passed": 13,
+    "failed": 36
+  },
+  "fixed_result": {
+    "passed": 49,
+    "failed": 0
+  },
+  "old_renderer_sha256": "8a3ff1f758609f8cb95a1e3a009be77c55cec6e10dc044ffa1c9799fcf1c095a",
+  "fixed_renderer_sha256": "5edbe747bfeb342899e7453726aac50ec198e3e717d42b95a66230d254fab19f"
+}

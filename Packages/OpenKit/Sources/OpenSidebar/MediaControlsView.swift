@@ -75,6 +75,7 @@ import OpenModel
         let identity = ObjectIdentifier(card)
         guard animatesMediaChanges else { card.removeFromSuperview(); return }
         retiring[identity] = card
+        let start = MediaAnimationStart(layer: card.layer, frame: card.frame)
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self, weak card] in
             Task { @MainActor in
@@ -84,7 +85,7 @@ import OpenModel
                 if self.ordered.isEmpty && self.retiring.isEmpty { self.holdingLastHeight = 0; self.measure(.structure) }
             }
         }
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = card.layer?.presentation()?.opacity ?? 1; fade.toValue = 0
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = start.opacity; fade.toValue = 0
         fade.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : Motion.miniPlayerDisappear
         card.layer?.opacity = 0; card.layer?.add(fade, forKey: "media.disappear")
         CATransaction.commit()
@@ -110,16 +111,17 @@ import OpenModel
                                : requiredHeight - m.rowHeight - CGFloat(i) * m.stackOffset
             let target = CGRect(x: inset, y: y, width: max(0, bounds.width - 2 * inset), height: card.cardHeight)
             let previous = card.frame, oldOpacity = card.alphaValue
+            let start = MediaAnimationStart(layer: card.layer, frame: previous)
             let opacity = isExpanded ? CGFloat(1) : 1 - CGFloat(i) * m.stackOpacityStep
             CATransaction.begin(); CATransaction.setDisableActions(true)
             card.frame = target; card.alphaValue = opacity
             CATransaction.commit()
             if previous != .zero && previous != target {
-                animateMediaFrame(card.layer, from: previous, to: target, enabled: animatesMediaChanges, drawer: heightTransition == .drawer)
+                animateMediaFrame(card.layer, from: start, to: target, enabled: animatesMediaChanges, drawer: heightTransition == .drawer)
             }
             if oldOpacity != opacity && animatesMediaChanges {
                 let fade: CABasicAnimation = SidebarDiagnostics.mediaReducesMotion ? CABasicAnimation(keyPath: "opacity") : Motion.miniPlayerStack.animation(keyPath: "opacity")
-                fade.fromValue = oldOpacity; fade.toValue = opacity
+                fade.fromValue = start.opacity; fade.toValue = opacity
                 if SidebarDiagnostics.mediaReducesMotion { fade.duration = Motion.reducedMedia }
                 card.layer?.add(fade, forKey: "media.stackOpacity")
             }

@@ -189,8 +189,8 @@ extension MediaChecks {
             guard let b = first.control(named:id)?.view else { Checks.check(false,"MC3 disabled control exists"); continue }
             let count = delegate.intents.count
             b.mouseEntered(with:event(.mouseMoved,b)); pump(0.15)
-            let plates = b.layer?.sublayers?.filter { $0.cornerRadius == 6 } ?? []
-            Checks.check(!b.isHidden && !b.isAccessibilityEnabled() && first.control(named:id)?.tooltip == nil && plates.allSatisfy { $0.opacity == 0 }, "MC3 disabled \(id) is present, no tooltip or hover plate")
+            let plates = b.layer?.sublayers?.filter { $0.cornerRadius == MiniPlayerMetrics.buttonPlateRadius } ?? []
+            Checks.check(!b.isHidden && !b.isAccessibilityEnabled() && first.control(named:id)?.tooltip == nil && plates.count == 1 && plates.allSatisfy { $0.opacity == 0 }, "MC3 disabled \(id) is present, no tooltip or hover plate")
             click(b,id); b.mouseExited(with:event(.mouseMoved,b))
             Checks.check(delegate.intents.count == count, "MC3 disabled \(id) sends no intent")
         }

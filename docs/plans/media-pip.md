@@ -355,7 +355,7 @@ struck rows below are #92's guesses.
 |---|---|
 | One source | ~~One card. `stackHeight = 68` (96 with the drawer).~~ |
 | Several, pointer outside the container | ~~The front card (most recent) is laid out as above. Card `i` (1, 2) sits behind it, offset up by `5·i` pt, inset `6·i` pt on each side, opacity `1 − 0.3·i`. Only its top 5 pt show. Each back card has a 0.5 pt top edge in `SidebarColors.separator` at the card opacity (review-r1 guess; confirm S6). `stackHeight = 68 + 5·(n − 1)`.~~ Guess from `MiniPlayerViewState{yOffset, widthOffset, opacity}` (PP-14). |
-| Several, pointer over the container | ~~Cards lay out top to bottom, oldest on top, front card at the bottom, 6 pt apart. `stackHeight = Σ heights + 6·(n − 1)`.~~ Expand at once on pointer enter; collapse 0.3 s after pointer exit (Arc has an immediate and a debounced hover-off; values guessed; kept in §13.6). Spring `Motion.miniPlayerStack` (response 0.3, damping 1.0; kept). The pager shrinks with it (kept; fact in S2 14b/0024). |
+| Several, pointer over the container | ~~Cards lay out top to bottom, oldest on top, front card at the bottom, 6 pt apart. `stackHeight = Σ heights + 6·(n − 1)`.~~ Expand at once on pointer enter; collapse 0.3 s after pointer exit (Arc has an immediate and a debounced hover-off; values guessed; kept in §13.6). Spring `Motion.miniPlayerStack` (response 0.2, damping 1.0; guess from the measured Space spring). The pager shrinks with it (kept; fact in S2 14b/0024). |
 
 #### 4.2.5 Marquee title — removed
 
@@ -1608,7 +1608,7 @@ insets (guess).
 | Slot use (audio or video source) | 0 favicon, 1 previous, 2 play/pause, 3 next, 4 volume | fact E2 |
 | Favicon | 16 × 16, centered in its 24 × 24 button: `[x_0 + 4, H − 24, 16, 16]` | fact E2 (ink x 22…37) |
 | Glyphs | the SF Symbol image centered in its 24 × 24 button | image centering is the placement rule; ink-box centers can be offset by up to 1 pt (E2, E3) |
-| Hover plate | the whole 24 × 24 button, radius 6 continuous (`ChromeMetrics.buttonPlateRadius`) | fact: E3 (volume), E7 (pause) |
+| Hover plate | the whole 24 × 24 button, radius 5 continuous (`MiniPlayerMetrics.buttonPlateRadius`) | fit E3/E7: RMS 0.034 at 5 continuous vs 0.116 at 6; independent design review r1 |
 
 At `W` 228 the slots are at card x 10/52/94/136/178 (pitch 42). At 500
 the pitch is 110; at the 164 minimum it is 26, which leaves 2 pt between
@@ -1802,7 +1802,7 @@ waits on a timer while the card is at rest (D-11, MC8, MC9).
 
 | Change | What moves | Timing | Status |
 |---|---|---|---|
-| Hover in | One card: its top edge moves up 33 pt; its bottom edge stays. A stack: each card moves to its expanded frame, widens, and goes to opacity 1; the slots re-space with the width. The pager's bottom edge moves up by the same amount. | starts on pointer enter; spring `Motion.miniPlayerStack` (response 0.3, damping 1.0) for every frame and opacity change | guess (the end states are fact) |
+| Hover in | One card: its top edge moves up 33 pt; its bottom edge stays. A stack: each card moves to its expanded frame, widens, and goes to opacity 1; the slots re-space with the width. The pager's bottom edge moves up by the same amount. | starts on pointer enter; spring `Motion.miniPlayerStack` (response 0.2, damping 1.0) for every frame and opacity change | guess (the end states are fact) |
 | Title rows appear | opacity 0 → 1 at their final place; the card's clipped content reveals them as the top edge rises | `Motion.miniPlayerReveal` (0.15 s), ease-out, starting with the spring | guess |
 | Hover out | the reverse of hover in | starts `MiniPlayerMetrics.collapseDelay` (0.3 s) after the pointer leaves the hover rect; the same spring | delay guess (PP-14 has a debounced hover-off). E4 and E8 show the collapse finished within about 1.3 s. |
 | Title rows leave | opacity 1 → 0 | `Motion.miniPlayerDisappear` (0.12 s), ease-in, starting with the spring | guess |
@@ -1820,12 +1820,21 @@ our tokens (Space switch spring 0.20 s, folder expand 0.20 s ease-out;
 `interaction-states.md` §20.12). If a mini-player capture shows the same,
 change `Motion.miniPlayerStack` only.
 
-How to animate: set the final frames once. Then, in one `CATransaction`,
-add `CASpringAnimation`s from the previous model frames (`position`,
+How to animate: capture each layer's current presentation position, bounds size,
+opacity and shadow path before changing its model values whenever a `media.*`
+animation is active. Otherwise derive the start position from the old frame and
+the layer's `anchorPoint` (AppKit backing layers anchor at `(0,0)`, not the center).
+Set the final frames once. Then, in one `CATransaction`, add `CASpringAnimation`s
+from the captured on-screen values (`position`,
 `bounds.size`, `opacity`, and the shadow layer's `shadowPath`) to each card,
 its content view, and each row and button that moved. Add no per-frame
-code, display link, or timer. The pager keeps the existing `.stack` height
-transition in `SidebarView.layout()`.
+code, display link, or timer. The pager keeps the `.stack` height transition in `SidebarView.layout()`.
+Both the pager and container use anchor-correct start positions and retarget from
+presentation values during an interruption. Title and drawer rows keep their
+on-screen place while the content clip reveals them:
+`titleRow.y = bounds.height - cardHeight(expanded: true, drawer: drawerIsOpen)`;
+`drawerRow.y = bounds.height - 2 * rowHeight`. The row frame changes use the same
+spring as the card; their final expanded positions remain 0 and 33.
 
 ### 13.7 Open items (provisional designs, to capture later)
 
@@ -1863,15 +1872,15 @@ and MC9. Run heavy jobs through
 | `OpenDesign/Palette.swift` | In `SidebarRole`: remove `miniPlayerFill` and `miniPlayerHoverFill`. Add `mediaControlGlyphDisabled = DesignColor(light: .black(0.17), dark: .white(0.22))`, `miniPlayerTitle = Core.foregroundPrimary` (the existing `ForegroundPrimary` token). Keep `mediaControlGlyph` and `mediaDrawerKnob`. |
 | `OpenDesign/Typography.swift` | `miniPlayerTitle = FontToken(13, .regular)`. |
 | `OpenDesign/Icons.swift` | `mediaPlay`, `mediaPause`, `mediaPrevious`, `mediaNext`, `mediaClose`, `mediaVolumeMuted`, `mediaMicrophone`, `mediaMicrophoneMuted`, `mediaCamera`, `mediaCameraOff`: 14 pt `.medium`. `mediaVolume`: `speaker.wave.3.fill`, 14 pt `.medium`. `mediaPiP`: `pip`, 12 pt `.medium`. `mediaVolumeLow` and `mediaVolumeHigh`: 12 pt `.medium`. Fill `arcInk` with the §13.4.3 ink boxes; note "media plan §13.4.3". Do not change the `pip*` glyphs of the PiP window. |
-| `OpenDesign/Motion.swift` | No value changes. Change the media comment to cite §13.6 (all guesses). |
+| `OpenDesign/Motion.swift` | Mini-player spring response 0.2 s, damping 1; keep it a guess until O9. Other motion tokens stay unchanged. |
 | `OpenSidebar/MiniPlayerCardView.swift` | Rewrite the layout (§13.8.2, §13.8.3). Expose `titleState: MiniPlayerTitleState` and register `control(named: "favicon")`. |
 | `OpenSidebar/Controls.swift` | Add an optional Core Text draw receipt for the title hook; keep `TextLabel` internal. Only the mini-player title installs the receipt. |
 | `OpenSidebar/MediaControlsView.swift` | Rewrite the stack math and the hover (§13.8.3). |
 | `OpenSidebar/MarqueeLabel.swift` | Delete it. |
 | `OpenSidebar/SidebarContext.swift` | `SidebarMediaHover` becomes `case expanded, title(ItemID)` (remove `stack` and `card`). |
-| `OpenSidebar/SidebarView.swift` | No geometry change (it reads `requiredHeight`). Keep the `.stack` spring path for hover changes. |
+| `OpenSidebar/SidebarView.swift` | Keep geometry driven by `requiredHeight`. Anchor-correct animation starts and presentation-based retargeting for pager/container height changes; retain the `.stack` spring path. |
 | `sidebar-render/MediaScene.swift` | The flags in §13.8.4. |
-| `sidebar-render/MediaChecks.swift` | MC1–MC15 (§13.8.5). RI checks are unchanged. |
+| `sidebar-render/MediaChecks.swift`, `MediaMotionChecks.swift`, `Checks.swift` | MC1–MC15 (§13.8.5), including native offscreen motion regression gates and a focused `--media-motion-only` run. RI checks are unchanged. |
 | `sidebar-render/MediaCompare.swift` (new), `RenderCLI.swift` | `compare-media` (§13.8.6). |
 | `sidebar-render/OffscreenRenderer.swift` | Preserve `allowsGroupOpacity` when cloning layers, so back cards composite as one image (§13.8.2). |
 | `sidebar-render/Bench.swift` | The `--media-card` log line reports the new height (`container 41.0 pt`). |
@@ -1889,6 +1898,7 @@ public enum MiniPlayerMetrics {
     public static let cornerRadius: CGFloat = 10          // fit E2, E3; cornerCurve .continuous
     public static let button: CGFloat = 24                // code PP-16; fact E2
     public static let buttonY: CGFloat = 5                // inside a row; fact E2, E3
+    public static let buttonPlateRadius: CGFloat = 5      // fit E3/E7: continuous RMS 0.034 vs 0.116 at 6
     public static let slotInset: CGFloat = 10             // first slot x, and the gap after the last slot; fact E2, E6
     public static let slotCount = 5                       // fact E2
     public static let faviconSize: CGFloat = 16           // fact E2
@@ -2050,7 +2060,7 @@ Frames are ± 0.5 pt.
 | MC12 | Corner and shadow: the content layer has `cornerRadius` 10, `cornerCurve` `.continuous`, and `masksToBounds`. The shadow layer has an opaque black `shadowColor` (alpha 1), `shadowOpacity` 0.21, `shadowRadius` 4, `shadowOffset` zero, and a `shadowPath` equal to the rounded rect of the card bounds after every frame change. |
 | MC13 | Drawer (a fake host with volume): a click on volume while expanded gives a 99 pt card, `C = 107`, and a drawer row `[0, 33, cardW, 33]` laid out per O2. Collapse closes it (`C = 41`) and removes its ID from `context.mediaDrawers`; re-expansion does not reopen it. |
 | MC14 | Recording source: slots 0/1/2 hold the favicon, the microphone, and the camera; there is no Play, Previous, Next, or Volume. |
-| MC15 | Transitions run and end: on hover in, the cards, the pager, and the title rows carry animation keys; 0.8 s later no key remains. With Reduce Motion there are only `opacity` keys, of 0.1 s. |
+| MC15 | Motion regressions in the composed sidebar: the height-animation start equals the current on-screen position for non-centered anchors; at +16 ms the pager stays at its model x/y. Re-enter 50 ms into a real delayed collapse: the container, pager, card, content, title opacity and shadow start from presentation values; at +16 ms the visible card/container height has no backward jump. Title/drawer rows never overlap the controls during motion. Run one- and three-card cases and the drawer. With Reduce Motion OFF, native play/pause image replacement and live AppKit ink are checked. `check --media-motion-only` runs this same focused flow. Transitions run and end: on hover in, the cards, the pager, and the title rows carry animation keys; 0.8 s later no key remains. With Reduce Motion there are only `opacity` keys, of 0.1 s. |
 
 #### 13.8.6 Comparison with Arc (`docs/design.md` §7 method)
 

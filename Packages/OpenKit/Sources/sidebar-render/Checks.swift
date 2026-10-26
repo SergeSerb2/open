@@ -35,6 +35,12 @@ enum Checks {
     }
 
     static func run(_ args: [String]) throws {
+        if args == ["--media-motion-only"] {
+            MediaMotionChecks.run()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
         let model = Synthetic.model()
         model.rebuildIndex()
         let undo = UndoManager()
@@ -276,6 +282,7 @@ enum Checks {
 
         MediaChecks.runRowIndicators()
         MediaChecks.runMiniPlayers()
+        MediaMotionChecks.run()
         ReviewChecks.run()
         VisualFinishChecks.run()
         CompletionChecks.run()

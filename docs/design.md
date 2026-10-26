@@ -992,13 +992,13 @@ Mini player (Step 3b). Frames: S2 14b/0012 (no card), 14b/0014 (rest),
 | Glyphs | SF 14 pt Medium: `backward.end.fill`, `play.fill`/`pause.fill`, `forward.end.fill`, `speaker.wave.3.fill` (muted `speaker.slash.fill`), `xmark`; `pip` 12 pt Medium | sizes Code PP-16; names fact (AX symbol descriptions, S2 14b/0014, 14b/0024); weight fit (ink mass); muted guess |
 | Glyph color | white 0.66 / black 0.50 (`PlaybackControlForeground`) | Code design-tokens §1.8; dark fact S2 14b/0014 (ΔE00 0.65) |
 | Disabled glyph | white 0.22 / black 0.17 | dark fact S2 14b/0014 (ΔE00 0.43); light guess |
-| Hover plate | 24 × 24, radius 6; `GrayA4` (white 0.08 / black 0.07); pressed `GrayA6` | dark fact S2 14b/0024, 16/0012 (ΔE00 0.49); light and pressed guess |
+| Hover plate | 24 × 24, radius 5 continuous (`MiniPlayerMetrics.buttonPlateRadius`); `GrayA4` (white 0.08 / black 0.07); pressed `GrayA6` | dark color fact S2 14b/0024, 16/0012 (ΔE00 0.49); radius fit E3/E7, RMS 0.034 at 5 vs 0.116 at 6; light and pressed guess |
 | Title row | title x 14, baseline 22, ends 10 pt before PiP `[cardW − 58, 5]`; Close `[cardW − 34, 5]`; shown only while expanded | fact S2 14b/0024, 16/0012 |
 | Title type | 13 Regular; `ForegroundPrimary` (white 0.80 / `#0E0F10` 0.90); one line, tail "…"; no marquee | dark fact S2 14b/0024 (ΔE00 0.24; Core Text fit); light guess |
 | Collapsed stack | back card i: 7·i pt up, 5·i pt inset per side, opacity 1 − 0.2·i, not masked | geometry fact S2 16/0005 (AX); opacity fit (ΔE00 0.46 / 0.52) |
 | Expanded stack | 66 pt cards, 5 pt apart, newest at the bottom; one card also expands on hover | fact S2 16/0012; the single-card hover derived (S2 14b/0024 vs 0025) |
 | Media tooltip | beside the pointer; delay 0.45 s | placement fact S2 14b/0024; delay Code PP-6; titles Code PP-16 |
-| Motion | hover: spring response 0.3 / damping 1, collapse 0.3 s after exit; title rows fade in 0.15 s, out 0.12 s; first card 0.22 s; Reduce Motion 0.1 s fades | guess (no capture timed it) |
+| Motion | hover: spring response 0.2 / damping 1, collapse 0.3 s after exit; title rows fade in 0.15 s, out 0.12 s; first card 0.22 s; Reduce Motion 0.1 s fades | guess (no capture timed it) |
 | Volume drawer | a 33 pt row above the controls while expanded (card 99); track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | guess (not captured; behind EM-2) |
 
 Removed by Step 3b (superseded by S2 facts): the 68 pt card with an

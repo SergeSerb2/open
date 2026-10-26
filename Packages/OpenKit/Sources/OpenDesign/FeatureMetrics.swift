@@ -70,6 +70,7 @@ public enum MiniPlayerMetrics {
     public static let cornerRadius: CGFloat = 10          // fit E2, E3; cornerCurve .continuous
     public static let button: CGFloat = 24                // code PP-16; fact E2
     public static let buttonY: CGFloat = 5                // inside a row; fact E2, E3
+    public static let buttonPlateRadius: CGFloat = 5      // fit E3/E7: continuous RMS 0.034 vs 0.116 at 6
     public static let slotInset: CGFloat = 10             // first slot x, and the gap after the last slot; fact E2, E6
     public static let slotCount = 5                       // fact E2
     public static let faviconSize: CGFloat = 16           // fact E2

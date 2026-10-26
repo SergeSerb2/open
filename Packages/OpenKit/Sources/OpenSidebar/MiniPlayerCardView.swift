@@ -32,6 +32,7 @@ public struct MiniPlayerTitleState {
     private var pointerOnTitle = false
     private var pressed = false
     private var previousShadowPath: CGPath?
+    private var titleRowTransition = 0
     private var resizingDrawer = false
     private var lastDrawerOpen = false
     public var isRetiring = false
@@ -135,14 +136,16 @@ public struct MiniPlayerTitleState {
         guard expanded != isExpanded else { return }
         isExpanded = expanded
         if !expanded, let id = source.tabID { context.mediaDrawers.remove(id) }
-        let oldOpacity = titleRow.alphaValue
+        let start = MediaAnimationStart(layer: titleRow.layer, frame: titleRow.frame)
+        titleRowTransition += 1
+        let transition = titleRowTransition
         titleRow.isHidden = false; titleRow.alphaValue = expanded ? 1 : 0
         if animatesMediaChanges {
             CATransaction.begin()
             CATransaction.setCompletionBlock { [weak self] in Task { @MainActor in
-                guard let self, !self.isExpanded else { return }; self.titleRow.isHidden = true
+                guard let self, self.titleRowTransition == transition, !self.isExpanded else { return }; self.titleRow.isHidden = true
             } }
-            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = oldOpacity; fade.toValue = titleRow.alphaValue
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = start.opacity; fade.toValue = titleRow.alphaValue
             fade.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : (expanded ? Motion.miniPlayerReveal : Motion.miniPlayerDisappear)
             fade.timingFunction = expanded ? Motion.easeOut : CAMediaTimingFunction(name: .easeIn)
             titleRow.layer?.add(fade, forKey: "media.titleRowOpacity")
@@ -152,6 +155,7 @@ public struct MiniPlayerTitleState {
     }
     private func makeButton(_ id: String, glyph: Glyph?, title: String, row: NSView, action: @escaping @MainActor () -> Void) {
         let button = MediaControlButton(glyph: glyph); button.context = context
+        button.plateRadius = MiniPlayerMetrics.buttonPlateRadius
         button.glyphTint = { enabled in (enabled ? SidebarRole.mediaControlGlyph : SidebarRole.mediaControlGlyphDisabled).nsColor }
         button.accessibleTitle = { title }; button.action = action
         button.setAccessibilityIdentifier("media." + id)
@@ -199,7 +203,7 @@ public struct MiniPlayerTitleState {
         titleLabel.needsDisplay = true; needsLayout = true
     }
     public override func setFrameSize(_ newSize: NSSize) {
-        if bounds.size != newSize && bounds.size != .zero { previousShadowPath = shadowLayer.shadowPath }
+        if bounds.size != newSize && bounds.size != .zero { previousShadowPath = shadowLayer.presentation()?.shadowPath ?? shadowLayer.shadowPath }
         super.setFrameSize(newSize)
         CATransaction.begin(); CATransaction.setDisableActions(true)
         shadowLayer.frame = bounds
@@ -211,11 +215,13 @@ public struct MiniPlayerTitleState {
         let m = MiniPlayerMetrics.self, w = bounds.width
         let views = [contentView, titleRow, drawerRow, controlsRow, titleLabel, slider] + Array(buttons.values)
         let previous = views.map { $0.frame }
-        let oldShadow = previousShadowPath ?? shadowLayer.presentation()?.shadowPath ?? shadowLayer.shadowPath
+        let starts = views.map { MediaAnimationStart(layer: $0.layer, frame: $0.frame) }
+        let oldShadow = shadowLayer.presentation()?.shadowPath ?? previousShadowPath ?? shadowLayer.shadowPath
         CATransaction.begin(); CATransaction.setDisableActions(true)
         contentView.frame = bounds
-        titleRow.frame = CGRect(x: 0, y: 0, width: w, height: m.rowHeight)
-        drawerRow.frame = CGRect(x: 0, y: m.rowHeight, width: w, height: m.rowHeight)
+        // Rows keep their on-screen place; the clipped top edge reveals them (§13.6).
+        titleRow.frame = CGRect(x: 0, y: bounds.height - m.cardHeight(expanded: true, drawer: drawerIsOpen), width: w, height: m.rowHeight)
+        drawerRow.frame = CGRect(x: 0, y: bounds.height - 2 * m.rowHeight, width: w, height: m.rowHeight)
         controlsRow.frame = CGRect(x: 0, y: bounds.height - m.rowHeight, width: w, height: m.rowHeight)
         buttons["close"]?.frame = CGRect(x: w - m.closeTrailing, y: m.buttonY, width: m.button, height: m.button)
         buttons["pip"]?.frame = CGRect(x: w - m.pipTrailing, y: m.buttonY, width: m.button, height: m.button)
@@ -231,8 +237,8 @@ public struct MiniPlayerTitleState {
         shadowLayer.frame = bounds
         shadowLayer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: m.cornerRadius, cornerHeight: m.cornerRadius, transform: nil)
         CATransaction.commit()
-        for (view, old) in zip(views, previous) where old != .zero && old != view.frame {
-            animateMediaFrame(view.layer, from: old, to: view.frame, enabled: animatesMediaChanges, drawer: resizingDrawer)
+        for (index, view) in views.enumerated() where previous[index] != .zero && previous[index] != view.frame {
+            animateMediaFrame(view.layer, from: starts[index], to: view.frame, enabled: animatesMediaChanges, drawer: resizingDrawer)
         }
         if animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion, let oldShadow, oldShadow != shadowLayer.shadowPath {
             let a: CABasicAnimation = resizingDrawer ? CABasicAnimation(keyPath: "shadowPath") : Motion.miniPlayerStack.animation(keyPath: "shadowPath")
@@ -273,18 +279,35 @@ public struct MiniPlayerTitleState {
     override func hitTest(_ point: NSPoint) -> NSView? { let hit = super.hitTest(point); return hit === self ? nil : hit }
 }
 
-@MainActor func animateMediaFrame(_ layer: CALayer?, from old: CGRect, to target: CGRect, enabled: Bool, drawer: Bool = false) {
+/// Snapshot before changing any model geometry. AppKit layers normally anchor at zero.
+/// A running media animation must retarget from the pixels currently on screen.
+@MainActor struct MediaAnimationStart {
+    let position: CGPoint
+    let size: CGSize
+    let opacity: Float
+    let wasAnimating: Bool
+
+    init(layer: CALayer?, frame: CGRect) {
+        wasAnimating = layer?.animationKeys()?.contains { $0.hasPrefix("media.") } == true
+        let visible = wasAnimating ? layer?.presentation() : nil
+        let anchor = layer?.anchorPoint ?? .zero
+        position = visible?.position ?? CGPoint(x: frame.minX + frame.width * anchor.x, y: frame.minY + frame.height * anchor.y)
+        size = visible?.bounds.size ?? frame.size
+        opacity = visible?.opacity ?? layer?.opacity ?? 1
+    }
+}
+
+@MainActor func animateMediaFrame(_ layer: CALayer?, from start: MediaAnimationStart, to target: CGRect, enabled: Bool, drawer: Bool = false) {
     guard enabled else { return }
     if SidebarDiagnostics.mediaReducesMotion {
-        let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 0; a.toValue = 1; a.duration = Motion.reducedMedia
+        let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = start.wasAnimating ? start.opacity : 0; a.toValue = 1; a.duration = Motion.reducedMedia
         layer?.add(a, forKey: "media.frameFade")
     } else {
         let move: CABasicAnimation = drawer ? CABasicAnimation(keyPath: "position") : Motion.miniPlayerStack.animation(keyPath: "position")
-        let anchor = layer?.anchorPoint ?? CGPoint(x: 0.5, y: 0.5)
-        move.fromValue = CGPoint(x: old.minX + old.width * anchor.x, y: old.minY + old.height * anchor.y); move.toValue = layer?.position
+        move.fromValue = start.position; move.toValue = layer?.position
         let size: CABasicAnimation = drawer ? CABasicAnimation(keyPath: "bounds.size") : Motion.miniPlayerStack.animation(keyPath: "bounds.size")
         if drawer { for a in [move, size] { a.duration = Motion.miniPlayerResize; a.timingFunction = Motion.easeInOut } }
-        size.fromValue = old.size; size.toValue = target.size
+        size.fromValue = start.size; size.toValue = target.size
         layer?.add(move, forKey: "media.position"); layer?.add(size, forKey: "media.size")
     }
 }
