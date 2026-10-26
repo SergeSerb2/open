@@ -24,6 +24,12 @@ public final class ProfileArchiveSink: ArchiveSink {
     public func archive(_ entries: [ArchiveEntry]) {
         for (id, batch) in Dictionary(grouping: entries, by: \.profileID) { store(for: id).archive(batch) }
     }
+    public func archiveFolder(_ entry: ArchiveFolderEntry) { store(for: entry.profileID).archiveFolder(entry) }
+    public func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry]) {
+        let tabs = Dictionary(grouping: entries, by: \.profileID)
+        let trees = Dictionary(grouping: folders, by: \.profileID)
+        for id in Set(tabs.keys).union(trees.keys) { store(for: id).archive(tabs[id] ?? [], folders: trees[id] ?? []) }
+    }
     public func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
         // A Profile delete contains only one Profile, so the archive is one transaction.
         try store(for: entries.first?.profileID).archiveForProfileDeletion(entries, directoryName: directoryName)

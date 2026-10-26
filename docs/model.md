@@ -671,3 +671,29 @@ then queues the atomic file write. `saveNow(model:)` remains synchronous and
 cancels pending generations. `flush()` captures pending dirty state on the main
 actor before waiting for writes. Frame notifications only update window fields
 and schedule this save; they do not notify the engine factory or tab mirror.
+
+## Sidebar completion M2 (2026-10-26)
+
+Delete (`closeTab` on a folder, or a folder in `archiveNodes`) now archives one
+folder record with reason `folderDeleted`. `archiveFolder` provides the same model
+behavior. No Archive Folder menu or command is added. `ArchiveRecordKind` is
+explicit: old rows, including old `folderDeleted` rows, stay tabs. Mixed bulk
+archives use one sink batch and one SQLite transaction per Profile. Folder payloads
+retain nested folders, splits, original IDs, and customization. The optional
+`originalSection` payload key preserves Pinned/Today fallback after a parent is
+removed; the parent UUID alone cannot recover that information.
+
+The archive opens and adds `kind TEXT NOT NULL DEFAULT 'tab'` with schema version 1
+in one FULL-synchronous transaction. Repeat opens are inert. Diagnostic switch
+`OPENKIT_DEBUG_ARCHIVE_MIGRATION_CRASH=alter|version` exits 86 before commit so the
+real CLI runner can verify rollback and recovery. Existing row payloads are not
+rewritten. Folder restore skips live child IDs, uses the original parent or section,
+then focused Today, and refreshes activity. One undo writes the folder row back.
+The Library saves the sidebar snapshot before deleting the archive row and rolls
+back insertion on a save failure. It shows a folder glyph, a recursive tab count,
+and "Folder restored to <Space>. Click to view." with View.
+
+Release harness verification: `commands-demo` 166/166 including FA1–FA7 and the
+M1 checks; `settings-preview check --only library-folder-archive` PASS for L2/L3,
+View, durable save failure, and legacy row meaning. No unit tests or desktop input.
+App restore-last-closed dispatch by record kind remains App-lane wiring.
