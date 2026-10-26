@@ -8,6 +8,7 @@ final class CountingSink: ArchiveSink {
     let store: ProfileArchiveSink
     var archiveCalls = 0
     var lastBatch: [ArchiveEntry] = []
+    var lastFolders: [ArchiveFolderEntry] = []
 
     init(store: ProfileArchiveSink) { self.store = store }
 
@@ -15,6 +16,12 @@ final class CountingSink: ArchiveSink {
         archiveCalls += 1
         lastBatch = entries
         store.archive(entries)
+    }
+
+    func archiveFolder(_ entry: ArchiveFolderEntry) { archive([], folders: [entry]) }
+    func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry]) {
+        archiveCalls += 1; lastBatch = entries; lastFolders = folders
+        store.archive(entries, folders: folders)
     }
 
     func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
@@ -507,6 +514,7 @@ func runCommandsDemo(args: [String]) async throws {
           "live web content is absent after snapshot reload")
     space.title = savedTitle; space.icon = savedIcon
     try snapshots.saveNow(model: model)
+    try await runFolderArchiveDemo(root: root.appendingPathComponent("FolderArchive"), check: check)
     try await runSidebarCommandsDemo(root: root.appendingPathComponent("SidebarCommands"), check: check)
     composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")
