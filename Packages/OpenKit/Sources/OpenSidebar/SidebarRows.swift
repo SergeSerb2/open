@@ -18,6 +18,7 @@ import OpenModel
 final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
+    private var animatesSelectionChange = false
     private var keyboardRing: CAShapeLayer?
     weak var representedItem: AnyObject? {
         didSet { if representedItem !== oldValue { needsDisplay = true } }
@@ -83,7 +84,11 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
-    override func updateLayer() { updateFill(animated: false) }
+    override func updateLayer() {
+        let animated = animatesSelectionChange
+        animatesSelectionChange = false
+        updateFill(animated: animated)
+    }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -99,7 +104,10 @@ final class SidebarRowView: NSTableRowView {
         let multiselected = tracked({
             guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
             return selection.rowState(for: id).isSelected
-        }) { [weak self] in self?.needsDisplay = true }
+        }) { [weak self] in
+            self?.animatesSelectionChange = true
+            self?.needsDisplay = true
+        }
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(isCurrent ? Motion.selectionFade : Motion.hoverFade)
@@ -153,6 +161,7 @@ final class SidebarRowView: NSTableRowView {
         isCurrent = false
         isDropTarget = false
         isPeekSource = false
+        animatesSelectionChange = false
         fillIndent = 0
     }
 }

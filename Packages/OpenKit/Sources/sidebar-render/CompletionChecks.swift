@@ -124,8 +124,9 @@ enum CompletionChecks {
             check(fill.frame == CGRect(x: 8, y: 2, width: 212, height: 36) && fill.cornerRadius == 10 && fill.shadowOpacity == 0,
                   "MS6 \(appearance) multi-fill uses row geometry, radius 10, no shadow")
             let currentFill = rowFill(pinned)!
-            check(currentFill.backgroundColor == (context.style(for: space).selectedFill(appearance)).cgColor,
-                  "MS6 \(appearance) current row keeps selected fill")
+            check(currentFill.backgroundColor == (context.style(for: space).selectedFill(appearance)).cgColor &&
+                  currentFill.shadowOpacity == Float(SidebarRole.rowSelectedShadow.resolved(appearance).alpha),
+                  "MS6 \(appearance) current row keeps selected fill and shadow")
             context.forcedHover = .row(other); pump()
             check(fill.backgroundColor == SidebarRole.rowMultiselected.cgColor(appearance), "MS6 hover keeps the multi-fill")
             context.forcedHover = nil
