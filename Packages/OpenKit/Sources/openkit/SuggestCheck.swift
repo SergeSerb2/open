@@ -418,6 +418,21 @@ func runSuggestCheck(args: [String]) async {
                 && added?.suggestions.contains { $0.tabID == fresh.id } == true && builds3 == builds2 + 1 && refolded == 1,
               "builds: \(builds0) → query \(builds1) → rename \(builds2) (patched \(patched)) → new tab \(builds3) (re-folded \(refolded))")
 
+    let gmail = fx.model.newTab(in: fx.work.id, url: URL(string: "https://mail.google.com/mail/#inbox")!,
+                                title: "Inbox (3) - accountneedle@example.invalid - Gmail")
+    let gmailResult = await lastSnapshot(engine, "accountneedle", fx.context(mode: .searchTabs))
+    gmail.title = "Inbox (4) - secondneedle@example.invalid - Gmail"
+    let updatedGmail = await lastSnapshot(engine, "secondneedle", fx.context(mode: .searchTabs))
+    fx.model.renameNode(id: gmail.id, title: "Named Inbox")
+    let customGmail = await lastSnapshot(engine, "Named Inbox", fx.context(mode: .searchTabs))
+    let hiddenRaw = await lastSnapshot(engine, "secondneedle", fx.context(mode: .searchTabs))
+    log.check("tidy Gmail matches raw title, displays Inbox, and patches raw/custom title changes",
+              gmailResult?.suggestions.contains { $0.tabID == gmail.id && $0.title == "Inbox" } == true
+                && updatedGmail?.suggestions.contains { $0.tabID == gmail.id && $0.title == "Inbox" } == true
+                && customGmail?.suggestions.contains { $0.tabID == gmail.id && $0.title == "Named Inbox" } == true
+                && hiddenRaw?.suggestions.contains { $0.tabID == gmail.id } == false,
+              "raw-only account text remains searchable until replaced by a custom title")
+
     // 21. Remote suggestions against a local HTTP server.
     await remoteChecks(log: log, fx: fx)
 
