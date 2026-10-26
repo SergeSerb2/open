@@ -19,7 +19,9 @@ OE_EXPORT @interface OEEngineConfiguration : NSObject <NSCopying>
 /// ~/Library/Application Support/Open.
 @property(nonatomic, copy) NSURL* userDataDirectory;
 
-/// Appended to the Chrome user agent product token, e.g. "Open/0.1".
+/// Replaces the "Chrome/<version>" product token of the User-Agent. Leave
+/// nil: without the Chrome token, sites and extensions (Bitwarden) treat the
+/// browser as Safari.
 @property(nonatomic, copy, nullable) NSString* userAgentProduct;
 
 /// UI locale such as "en-US". nil uses the system locale.

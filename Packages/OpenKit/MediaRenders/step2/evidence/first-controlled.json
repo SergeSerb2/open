@@ -1,0 +1,182 @@
+{
+  "baseline": "origin/main 005e065afa77bf188ab6fd820e6d0b0db8b8ae03\nOnly Bench.swift receives the same deterministic row-media fixture instrumentation as head.\n",
+  "bench_source_sha256": "cc7cfaf5fc53fa6c5948a3acc671e6da83d5f097919a0934d08837a8e23b6498",
+  "binary_sha256": {
+    "baseline": "0b4e07184a0a3badb704f95c9624f144f762369e7e071b71f4a040310a9663a7",
+    "head": "686f9580a156745749091d7d67b61fb7e455fa4c161df94164f64358cb06db75"
+  },
+  "records": [
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 2.09
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 1.79
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 2.09
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 2.47
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 1.94
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 2.23
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 1.47
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 1.6
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 1.48
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 2.54
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 2.2
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 3.28
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 3.55
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 5.16
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 5.44
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 4.01
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 2.49
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 3.21
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 2.83
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 2.52
+    }
+  ],
+  "summary": {
+    "plain": {
+      "baseline": {
+        "runs": [
+          2.09,
+          2.09,
+          1.94,
+          1.47,
+          1.48
+        ],
+        "median_p95_ms": 1.94,
+        "mean_p95_ms": 1.8139999999999998
+      },
+      "head": {
+        "runs": [
+          1.79,
+          2.47,
+          2.23,
+          1.6,
+          2.54
+        ],
+        "median_p95_ms": 2.23,
+        "mean_p95_ms": 2.126
+      },
+      "mean_delta_ms": 0.31200000000000006
+    },
+    "mixed": {
+      "baseline": {
+        "runs": [
+          2.2,
+          3.55,
+          5.44,
+          2.49,
+          2.83
+        ],
+        "median_p95_ms": 2.83,
+        "mean_p95_ms": 3.302
+      },
+      "head": {
+        "runs": [
+          3.28,
+          5.16,
+          4.01,
+          3.21,
+          2.52
+        ],
+        "median_p95_ms": 3.28,
+        "mean_p95_ms": 3.636
+      },
+      "mean_delta_ms": 0.3340000000000001
+    }
+  }
+}
