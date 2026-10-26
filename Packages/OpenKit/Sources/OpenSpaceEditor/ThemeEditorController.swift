@@ -56,7 +56,7 @@ public final class ThemeEditorController {
         panel.editorView.onAction = { [weak self] in self?.apply($0) }
         panel.onEscape = { [weak self] in self?.close() }
         panel.beforeUndo = { [weak self] in self?.finishBeforeExternalAction() }
-        panel.editorView.apply(state)
+        renderState()
         observeTheme()
     }
 
@@ -130,7 +130,7 @@ public final class ThemeEditorController {
         default: break
         }
         state.apply(action)
-        panel.editorView.apply(state)
+        renderState()
         let changed = previous != state.style
         switch action {
         case .beginKeyboardGesture, .dragKnob, .setIntensity(_, final: false), .setNoise(_, final: false):
@@ -164,6 +164,10 @@ public final class ThemeEditorController {
         panel.editorView.layoutSubtreeIfNeeded(); panel.displayIfNeeded()
     }
 
+    private func renderState() {
+        panel.applyAppearance(state.appearance)
+        panel.editorView.apply(state)
+    }
     private func captureBaseline() {
         baseline = model.flatMap { model in spaceID.flatMap { model.space(id: $0)?.theme } } ?? SpaceTheme(style: state.style)
     }
@@ -197,7 +201,7 @@ public final class ThemeEditorController {
     }
     private func finishBeforeExternalAction() {
         panel.editorView.finishGestures()
-        if state.isGestureInProgress { state.apply(.endDrag); panel.editorView.apply(state); pendingFinish = true }
+        if state.isGestureInProgress { state.apply(.endDrag); renderState(); pendingFinish = true }
         if pendingPreview || pendingFinish { flushPreviewFrame() }
     }
     private func observeTheme() {
@@ -216,12 +220,12 @@ public final class ThemeEditorController {
         pendingPreview = false; pendingFinish = false; lastWritten = theme; baseline = theme
         let page = state.presetPage
         state = ThemeEditorState(style: SpaceStyle.seed(from: theme)); state.presetPage = page
-        panel.editorView.apply(state)
+        renderState()
     }
     fileprivate func restoreDraft(_ style: SpaceStyle?) {
         pendingPreview = false; pendingFinish = false
         state = ThemeEditorState(style: style); baseline = SpaceTheme(style: style); lastWritten = baseline
-        panel.editorView.apply(state)
+        renderState()
     }
     private func announceCount() {
         NSAccessibility.post(element: panel.editorView.pad, notification: .announcementRequested,

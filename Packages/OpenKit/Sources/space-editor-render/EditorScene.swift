@@ -22,6 +22,7 @@ final class EditorScene {
     }
 
     init(style: SpaceStyle? = capturedStyle, scale: CGFloat = 1, light: Bool = false, ownerUndo: Bool = false) throws {
+        NSApp.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
         model = try RenderCLI.fixtureModel()
         model.spaces[0].theme = style.map { SpaceTheme(style: $0) } ?? SpaceTheme()
         owner = EditorOwnerWindow(contentRect: CGRect(x: -20000, y: -20000, width: 900, height: 700),
@@ -33,8 +34,7 @@ final class EditorScene {
         controller = ThemeEditorController(model: model, spaceID: model.spaces[0].id, window: owner,
                                             anchor: .sidebarTrailingEdge(sidebarFrameInWindow: CGRect(x: 0, y: 0, width: 228, height: 700)))
         panel.renderScale = scale; panel.colorSpace = .sRGB
-        panel.appearance = NSAppearance(named: light ? .aqua : .darkAqua)
-        panel.backdrop = RGBA(hex: light ? 0xECECEC : 0x797979)
+        panel.backdrop = RGBA(hex: light ? 0xFCFBFC : 0x2E3237)
         controller.show(); controller.prepareForSnapshot(); OffscreenRenderer.settle(view)
         // The captured editor has no keyboard focus ring. Checks focus controls explicitly.
         panel.makeFirstResponder(nil)

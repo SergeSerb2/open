@@ -25,7 +25,7 @@ enum EditorChecks {
             check(image.width == Int(382 * scale) && image.height == Int(534 * scale), "E1 real panel raster size at \(Int(scale))x")
             scene.controller.close()
         }
-        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows()
+        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows()
     }
     static func drag() throws {
         let scene = try EditorScene()
@@ -81,7 +81,8 @@ enum EditorChecks {
         scene.click(scene.view.remove); scene.click(scene.view.remove)
         let beforeEmpty = scene.space.theme
         scene.click(scene.view.remove)
-        check(scene.space.theme == SpaceTheme() && scene.view.remove.isHidden && scene.view.add.isHidden && !scene.view.pad.emptyLabel.isHidden,
+        check(scene.space.theme == SpaceTheme() && !scene.view.remove.isHidden && !scene.view.add.isHidden
+              && !scene.view.remove.enabled && !scene.view.add.enabled && !scene.view.pad.emptyLabel.isHidden,
               "E3 Remove clears the theme and shows the empty pad")
         scene.undo.undo(); scene.controller.prepareForSnapshot()
         check(scene.space.theme == beforeEmpty && scene.view.pad.emptyLabel.isHidden && scene.view.pad.primaryKnobCenter != nil,
@@ -154,7 +155,7 @@ enum EditorChecks {
 
         let empty = try EditorScene(style: nil)
         check(empty.view.pad.nextKeyView === empty.view.modes.buttons[0] && empty.view.remove.nextKeyView == nil && empty.view.add.nextKeyView == nil,
-              "E1 empty-state key chain excludes hidden buttons")
+              "E1 empty-state key chain excludes disabled buttons")
         empty.controller.close()
         let held = try EditorScene()
         held.sendKey(124, target: held.view.pad)
@@ -171,5 +172,49 @@ enum EditorChecks {
         check(held.view.remove.nextKeyView === held.view.modes.buttons[0] && held.view.add.nextKeyView == nil,
               "E1 key chain removes disabled Add at three colors")
         held.controller.close()
+    }
+    static func sessionTwoFlows() throws {
+        let scene = try EditorScene(), original = scene.space.theme
+        scene.click(scene.view.add)
+        let key = ThemeColorMath.toP3(scene.space.theme.style!.keyColor)
+        let h = ThemeColorMath.hsl(key).h
+        let hues = ThemeColorMath.harmony(key: key, count: 2, wheel: scene.space.theme.style!.wheel).map { ThemeColorMath.hsl($0).h }
+        let offset = ((hues[1] - h) * 360 + 360).truncatingRemainder(dividingBy: 360)
+        check(original.style?.wheel == .analogous && scene.space.theme.style?.wheel == .complementary && abs(offset - 180) < 0.01,
+              "E3 one-color analogous Add switches to complementary and places the second color at 180 degrees")
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(scene.space.theme == original && scene.space.theme.style?.colorCount == 1 && scene.space.theme.style?.wheel == .analogous,
+              "E3 one undo restores both one color and its original analogous mode")
+        let analogous = try EditorScene(style: SpaceStyle(keyColor: original.style!.keyColor, colorCount: 2, wheel: .analogous))
+        analogous.click(analogous.view.add)
+        check(analogous.space.theme.style?.colorCount == 3 && analogous.space.theme.style?.wheel == .analogous,
+              "E3 Add at two colors preserves the stored analogous mode")
+        check(analogous.view.pad.secondaryKnobFrames.count == 2 && analogous.view.pad.secondaryKnobFrames.allSatisfy { $0.size == CGSize(width: 27, height: 27) },
+              "E1 session-2 secondary knob rest frames are 27 pt")
+        analogous.controller.close()
+        let grey = SpaceStyle(keyColor: RGBAColor(red: 0.5, green: 0.5, blue: 0.5))
+        let greyOne = try EditorScene(style: grey)
+        var greyThree = grey; greyThree.colorCount = 3
+        let greyMany = try EditorScene(style: greyThree)
+        let oneImage = OffscreenRenderer().snapshot(greyOne.view.pad, scale: 1)
+        let manyImage = OffscreenRenderer().snapshot(greyMany.view.pad, scale: 1)
+        check((oneImage.dataProvider!.data! as Data) == (manyImage.dataProvider!.data! as Data),
+              "E3 coincident grey harmony knobs render identically with the primary on top")
+        greyOne.controller.close(); greyMany.controller.close()
+        scene.click(scene.view.modes.buttons[1])
+        check(scene.panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua,
+              "E5 forced Light changes the editor while the system is Dark")
+        scene.click(scene.view.modes.buttons[2])
+        check(scene.panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua,
+              "E5 forced Dark changes the editor live")
+        NSApp.appearance = NSAppearance(named: .aqua)
+        scene.click(scene.view.modes.buttons[0])
+        check(scene.panel.appearance == nil && scene.panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua,
+              "E5 Automatic inherits system appearance rather than the Space palette")
+        scene.controller.close()
+        let empty = try EditorScene(style: nil)
+        check(abs(empty.view.pad.emptyLabel.frame.midY - 170) < 0.01 && !empty.view.remove.isHidden && !empty.view.add.isHidden,
+              "E1 empty label is vertically centered and Add/Remove stay visible")
+        empty.controller.close()
     }
 }

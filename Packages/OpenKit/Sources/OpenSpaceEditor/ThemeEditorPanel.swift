@@ -17,6 +17,7 @@ public final class ThemeEditorPanel: NSPanel {
     public var backdrop: RGBA? { didSet { updateBackdrop() } }
     public let editorView = ThemeEditorContentView(frame: CGRect(origin: .zero, size: ThemeEditorMetrics.panelSize))
     private let material = NSVisualEffectView()
+    private var appliedMode: SpaceStyleAppearance?
 
     public init() {
         super.init(contentRect: CGRect(origin: CGPoint(x: -20000, y: -20000), size: ThemeEditorMetrics.panelSize),
@@ -34,6 +35,14 @@ public final class ThemeEditorPanel: NSPanel {
     }
     public override var canBecomeKey: Bool { true }
     public override var canBecomeMain: Bool { false }
+    public func applyAppearance(_ mode: SpaceStyleAppearance) {
+        guard appliedMode != mode else { return }; appliedMode = mode
+        switch mode {
+        case .automatic: appearance = nil
+        case .light: appearance = NSAppearance(named: .aqua)
+        case .dark: appearance = NSAppearance(named: .darkAqua)
+        }
+    }
     public override var backingScaleFactor: CGFloat { renderScale ?? super.backingScaleFactor }
     public override var undoManager: UndoManager? {
         if let undoProvider { return undoProvider() }
@@ -66,7 +75,7 @@ public final class ThemeEditorContentView: NSView {
     public let content: NSView = EditorFlippedView()
     public let pad = ColorPadView(frame: ThemeEditorMetrics.pad)
     public let modes = AppearanceModeBar(frame: ThemeEditorMetrics.modeBar)
-    public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color", pointSize: 16)
+    public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color", pointSize: 16, glyphOffset: CGSize(width: 0, height: 1))
     public let add = ThemeEditorButton(symbol: "plus", label: "Add color", pointSize: 16)
     private var keyViews: [NSView] = []
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
@@ -95,7 +104,7 @@ public final class ThemeEditorContentView: NSView {
     }
     public func apply(_ state: ThemeEditorState) {
         pad.apply(state); modes.mode = state.appearance
-        remove.isHidden = state.style == nil; add.isHidden = state.style == nil
+        remove.isHidden = false; add.isHidden = false
         remove.enabled = state.style != nil; add.enabled = state.style.map { $0.colorCount < 3 } ?? false
         configureKeyViews()
     }
