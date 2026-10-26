@@ -42,9 +42,15 @@ final class EditorScene {
         undo.removeAllActions()
     }
 
-    func click(_ button: ThemeEditorButton) {
+    func click(_ button: NSView) {
         mouse(.leftMouseDown, at: CGPoint(x: button.bounds.midX, y: button.bounds.midY), in: button)
         mouse(.leftMouseUp, at: CGPoint(x: button.bounds.midX, y: button.bounds.midY), in: button)
+    }
+    func scroll(_ target: NSView, x: Int32 = 0, y: Int32 = 0, phase: Int64 = 0, momentum: Int64 = 0) {
+        let event = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 2, wheel1: y, wheel2: x, wheel3: 0)!
+        event.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+        event.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum)
+        target.scrollWheel(with: NSEvent(cgEvent: event)!)
     }
     func mouse(_ type: NSEvent.EventType, at point: CGPoint, in target: NSView) {
         let event = NSEvent.mouseEvent(with: type, location: target.convert(point, to: nil), modifierFlags: [],
@@ -102,16 +108,28 @@ final class EditorScene {
         if let hex = RenderCLI.value(args, "--backdrop"), let color = UInt32(hex, radix: 16) { scene.backdropOverride = RGBA(hex: color) }
         if let page = RenderCLI.value(args, "--page").flatMap(Int.init) { scene.controller.apply(.setPresetPage(page)) }
         let buttons = ["automatic": scene.view.modes.buttons[0], "light": scene.view.modes.buttons[1],
-                       "dark": scene.view.modes.buttons[2], "remove": scene.view.remove, "add": scene.view.add]
+                       "dark": scene.view.modes.buttons[2], "remove": scene.view.remove, "add": scene.view.add,
+                       "previous": scene.view.presets.previous, "next": scene.view.presets.next]
         if let name = RenderCLI.value(args, "--hover"), let button = buttons[name] { button.forcedHover = true }
         if let name = RenderCLI.value(args, "--pressed"), let button = buttons[name] {
             scene.mouse(.leftMouseDown, at: CGPoint(x: 16, y: 16), in: button)
         }
         if let name = RenderCLI.value(args, "--focus") {
-            scene.panel.makeFirstResponder(name == "pad" ? scene.view.pad : buttons[name])
+            let controls: [String: NSView] = ["pad": scene.view.pad, "intensity": scene.view.intensity,
+                                            "noise": scene.view.noise, "texture": scene.view.noise.centerButton,
+                                            "swatch": scene.view.presets.visibleSwatches[0]]
+            scene.panel.makeFirstResponder(controls[name] ?? buttons[name])
         }
+        if RenderCLI.value(args, "--pressed") == "texture" { scene.mouse(.leftMouseDown, at: CGPoint(x: 20, y: 20), in: scene.view.noise.centerButton) }
+        if RenderCLI.value(args, "--pressed") == "swatch" { scene.mouse(.leftMouseDown, at: CGPoint(x: 12, y: 12), in: scene.view.presets.visibleSwatches[0]) }
         if RenderCLI.value(args, "--hover") == "knob", let point = scene.view.pad.primaryKnobCenter {
             scene.mouse(.mouseMoved, at: point, in: scene.view.pad)
+        }
+        if RenderCLI.value(args, "--hover") == "intensity" {
+            scene.mouse(.mouseMoved, at: CGPoint(x: scene.view.intensity.thumbFrame.midX, y: 28), in: scene.view.intensity)
+        }
+        if let name = RenderCLI.value(args, "--hover"), name.hasPrefix("swatch-"), let index = Int(name.dropFirst(7)), (0..<9).contains(index) {
+            scene.view.presets.visibleSwatches[index].forcedHover = true
         }
         let image = scene.snapshot()
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: output))

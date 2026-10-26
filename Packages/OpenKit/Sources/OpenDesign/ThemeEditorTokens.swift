@@ -18,6 +18,9 @@ public enum ThemeEditorColors {
     public static let thumb = DesignColor(.white(1))
     public static let dotUnlit = DesignColor(light: .black(0.15), dark: .white(0.15))
     public static let dotLit = DesignColor(light: .black(0.40), dark: .white(0.50))
+    /// Neutral fallback when a preview tile cannot be made.
+    public static let noisePreviewBase = RGBA(0.46, 0.46, 0.46)
+
 }
 
 public enum ThemeEditorMetrics {
@@ -34,4 +37,10 @@ public enum ThemeEditorMetrics {
     public static let swatches = CGRect(x: 48, y: 364, width: 260, height: 32)
     public static let intensity = CGRect(x: 18, y: 424, width: 224, height: 56)
     public static let noise = CGRect(x: 258, y: 412, width: 84, height: 80)
+    /// F0137/F0138 calibrated art positions; hit frames above stay AX-sized.
+    public static let intensityThumbStart: CGFloat = 7.8 // panel x = 13 + 18 + 7.8 = 38.8
+    public static let intensityTravel: CGFloat = 208.4
+    public static let noiseCenter = CGPoint(x: 40, y: 40) // content (298, 452)
+    public static let noiseRadius: CGFloat = 32.0
+    public static let noiseTickSize = CGSize(width: 8, height: 16)
 }

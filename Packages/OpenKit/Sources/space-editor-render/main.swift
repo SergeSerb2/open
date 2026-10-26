@@ -18,7 +18,8 @@ enum RenderCLI {
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
                                [--provisional-import-intensity]
     space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec editor|window|theme-window|session2-editor --out DIR
-                                [--state empty|light|dark]
+                                [--noise 0|0.45] [--state empty|light|dark]
+    space-editor-render fit-light-glyphs --capture-root SESSIONS --out .re/DIR [--inspect]
     space-editor-render check
     """
     static func value(_ args: [String], _ key: String) -> String? {
@@ -92,6 +93,7 @@ enum RenderCLI {
         guard let command = args.first else { throw CLIError(description: usage) }
         let rest = Array(args.dropFirst())
         switch command {
+        case "fit-light-glyphs": try LightGlyphFit.run(rest)
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
         case "window": try window(rest)
