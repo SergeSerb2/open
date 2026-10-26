@@ -18,6 +18,7 @@ Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 import argparse
 import base64
 import json
+import math
 import glob
 import re
 import os
@@ -774,6 +775,7 @@ def window_checks(app_factory, results, tmp, config):
         app.quit()
     startup_failure_checks(app_factory, results, tmp)
     window_flow_checks(app_factory, results, tmp)
+    window_chrome_checks(app_factory, results, tmp)
     static_window_comparison(app_factory, results, tmp, "window")
 
 
@@ -794,6 +796,41 @@ def check_page(app, tab, title):
             and state["engineURL"] == page["url"] and page["live"] and not page["hidden"])
 
 
+def state_when(app, predicate, timeout=5, step=0.05):
+    """Polls window-state until `predicate(state)` holds; returns that state or None."""
+    return wait_until(lambda: (lambda st: st if predicate(st) else None)(app.call("window-state")), timeout=timeout, step=step)
+
+
+def sidebar_hidden(app, timeout=3):
+    return state_when(app, lambda st: st["sidebarMode"] == "hidden" and not st["sidebarVisible"], timeout=timeout)
+
+
+def sidebar_anchored(app, timeout=3):
+    return state_when(app, lambda st: st["sidebarMode"] == "anchored" and st["sidebarVisible"] and st["panel"][0] > 10, timeout=timeout)
+
+
+def wait_card(app, shown, timeout=3.0, step=0.015):
+    """Waits for the hover-reveal card to settle instead of sleeping a fixed time.
+
+    shown: the card is revealed and its on-screen offset (the slide's presentation value)
+    stays within 0.5 pt of its place for three samples in a row. hidden: no card at all
+    (the slide-out finished). Returns {"elapsed", "samples"} or None on timeout."""
+    start = time.time()
+    samples, still = [], 0
+    while time.time() - start < timeout:
+        st = app.call("window-state")
+        r = st["reveal"]
+        samples.append([round(time.time() - start, 3), r["phase"], r["offset"]])
+        if shown:
+            still = still + 1 if st["revealed"] and r["offset"] is not None and abs(r["offset"]) <= 0.5 else 0
+            if still >= 3:
+                return {"elapsed": round(time.time() - start, 3), "samples": len(samples), "state": st}
+        elif not st["revealed"] and r["offset"] is None:
+            return {"elapsed": round(time.time() - start, 3), "samples": len(samples), "state": st}
+        time.sleep(step)
+    return None
+
+
 def window_flow_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
@@ -801,8 +838,9 @@ def window_flow_checks(factory, results, tmp):
         w1 = first["id"]
         results["native_window"] = {
             "ok": first["titled"] and first["hiddenTitle"] and not first["peekCreated"]
-                  and all(abs(x - target) <= 1 and abs(y - 16) <= 1
-                          for (x, y), target in zip(first["trafficLights"], [12, 35, 58]))
+                  and len(first["trafficLights"]) == 3
+                  and all(abs(x - target) <= 0.5 and abs(y - 24) <= 0.5
+                          for (x, y), target in zip(first["trafficLights"], [20, 43, 66]))
                   and first["sidebarClass"] == "OpenSidebar.SidebarView",
             "state": first}
         app.call("key", key="escape", route="app")
@@ -836,25 +874,31 @@ def window_flow_checks(factory, results, tmp):
         narrow = app.call("window-state")
         results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 228 and narrow["sidebarMode"] == "anchored"}
         app.call("mouse", **{"from": [228, 300], "to": [170, 300]})
-        wait_until(lambda: app.call("window-state")["sidebarMode"] == "hidden", timeout=3, step=0.1)
-        hidden = app.call("window-state")
-        app.call("mouse", action="move", x=4, y=300)
-        reveal = wait_until(lambda: app.call("window-state")["revealed"], timeout=3, step=0.05)
-        app.call("select", tab=b)
-        dismissed = not app.call("window-state")["revealed"]
-        selected = check_page(app, b, "Window B")
-        app.call("mouse", action="move", x=4, y=300)
-        wait_until(lambda: app.call("window-state")["revealed"], timeout=3, step=0.05)
+        hidden = sidebar_hidden(app) or app.call("window-state")
+        # The first reveal right after the hide: every wait below is a condition (the
+        # card settled or gone), never a fixed sleep.
         app.call("mouse", action="move", x=600, y=300)
-        left = wait_until(lambda: not app.call("window-state")["revealed"], timeout=3, step=0.05)
+        app.call("mouse", action="move", x=3, y=300)
+        reveal = wait_card(app, True)
+        app.call("select", tab=b)
+        dismissed = wait_card(app, False)
+        selected = check_page(app, b, "Window B")
+        # After a dismissal the pointer has to leave the edge before the card returns.
+        app.call("mouse", action="move", x=600, y=300)
+        app.call("mouse", action="move", x=3, y=300)
+        again = wait_card(app, True)
+        app.call("mouse", action="move", x=600, y=300)
+        left = wait_card(app, False)
         results["hide_reveal"] = {"ok": hidden["sidebarMode"] == "hidden" and hidden["panel"][0] == 10
-                                      and bool(reveal) and dismissed and selected and bool(left)}
+                                      and bool(reveal) and bool(dismissed) and selected and bool(again) and bool(left),
+                                  "hidden": hidden["sidebarMode"], "panel_x": hidden["panel"][0],
+                                  "revealed_s": reveal and reveal["elapsed"], "dismissed_s": dismissed and dismissed["elapsed"],
+                                  "selected": selected, "revealed_again_s": again and again["elapsed"], "left_s": left and left["elapsed"]}
         app.call("key", key="s", modifiers=["cmd"], route="app")
-        time.sleep(0.3)
-        results["toggle_sidebar"] = {"ok": app.call("window-state")["sidebarMode"] == "anchored"}
+        results["toggle_sidebar"] = {"ok": bool(sidebar_anchored(app))}
         app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
         app.call("key", key="s", modifiers=["cmd"], route="app")
-        time.sleep(0.3)
+        sidebar_hidden(app)
         app.call("key", key="n", modifiers=["cmd"], route="app")
         windows = app.call("shell-windows")
         second = app.call("window-state"); w2 = second["id"]
@@ -885,14 +929,14 @@ def window_flow_checks(factory, results, tmp):
             return state if state["fullscreen"] == on and not state["fullscreenTransition"] and state["fullscreenChanges"] >= changes else None
         entered = wait_until(lambda: finished_fullscreen(True, before["fullscreenChanges"] + 1), timeout=15, step=0.1)
         app.call("key", key="s", modifiers=["cmd"], route="app")
-        time.sleep(0.3)
-        full_hidden = app.call("window-state")
-        app.call("mouse", action="move", x=4, y=300)
-        full_reveal = wait_until(lambda: app.call("window-state")["revealed"], timeout=3, step=0.05)
+        full_hidden = sidebar_hidden(app) or app.call("window-state")
+        app.call("mouse", action="move", x=600, y=300)
+        app.call("mouse", action="move", x=3, y=300)
+        full_reveal = wait_card(app, True)
         app.call("select", tab=c)
-        full_dismiss = not app.call("window-state")["revealed"]
+        full_dismiss = wait_card(app, False)
         app.call("key", key="s", modifiers=["cmd"], route="app")
-        time.sleep(0.3)
+        sidebar_anchored(app)
         request = app.eval(c, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
         page_full = wait_until(lambda: app.call("window-state")["pageFullscreen"], timeout=5, step=0.1)
         page_state = app.call("window-state")
@@ -906,8 +950,9 @@ def window_flow_checks(factory, results, tmp):
         app.call("window-fullscreen")
         exited = wait_until(lambda: finished_fullscreen(False, before["fullscreenChanges"] + 2), timeout=15, step=0.1)
         results["fullscreen"] = {"ok": bool(entered) and bool(exited) and check_page(app, c, "Window C")}
-        results["fullscreen_hover_reveal"] = {"ok": bool(full_reveal) and full_dismiss,
-            "hidden_state": full_hidden, "revealed": bool(full_reveal), "dismissed_on_selection": full_dismiss}
+        results["fullscreen_hover_reveal"] = {"ok": full_hidden["sidebarMode"] == "hidden" and bool(full_reveal) and bool(full_dismiss),
+            "hidden": full_hidden["sidebarMode"], "revealed_s": full_reveal and full_reveal["elapsed"],
+            "dismissed_on_selection_s": full_dismiss and full_dismiss["elapsed"]}
         request = app.eval(c, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
         entered_page = wait_until(lambda: finished_fullscreen(True, before["fullscreenChanges"] + 3), timeout=15, step=0.1)
         page_state = app.call("window-state")
@@ -979,6 +1024,412 @@ def window_flow_checks(factory, results, tmp):
             "expected": last_expected, "restored": restored_state, "correct_page": restored_page}
     finally:
         app.quit()
+
+
+# ----------------------------------------------------------------------------
+# Window chrome (traffic lights, URL field and Space header, hover-reveal card).
+# Expected values: docs/design.md section 2.2, docs/re/interaction-states.md section 13.
+
+SRGB_PROFILE = "/System/Library/ColorSync/Profiles/sRGB Profile.icc"
+LIGHT_CENTERS = [[20, 24], [43, 24], [66, 24]]
+
+
+def read_image(path, srgb=False):
+    """(width, height, pixel(x, y) -> (r, g, b)) through sips; the stdlib has no PNG decoder."""
+    src = path
+    if srgb:
+        src = path + ".srgb.png"
+        subprocess.run(["sips", "-m", SRGB_PROFILE, path, "--out", src], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    bmp = path + ".bmp"
+    subprocess.run(["sips", "-s", "format", "bmp", src, "--out", bmp], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    data = open(bmp, "rb").read()
+    os.remove(bmp)
+    if srgb:
+        os.remove(src)
+    offset = struct.unpack_from("<I", data, 10)[0]
+    width, height = struct.unpack_from("<ii", data, 18)
+    bpp = struct.unpack_from("<H", data, 28)[0] // 8
+    stride = (width * bpp + 3) & ~3
+    top_down, height = height < 0, abs(height)
+
+    def pixel(x, y):
+        x = min(max(int(x), 0), width - 1)
+        y = min(max(int(y), 0), height - 1)
+        i = offset + (y if top_down else height - 1 - y) * stride + x * bpp
+        return data[i + 2], data[i + 1], data[i]
+    return width, height, pixel
+
+
+def luma(c):
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+
+
+def light_centers(st, dx=0, dy=0):
+    centers = [[f[0] + f[2] / 2, f[1] + f[3] / 2] for f in st["trafficLightFrames"]]
+    ok = len(centers) == 3 and all(abs(c[0] - e[0] - dx) <= 0.5 and abs(c[1] - e[1] - dy) <= 0.5 for c, e in zip(centers, LIGHT_CENTERS))
+    return ok, centers
+
+
+def drawn_light_center(png, scale, cx, cy):
+    """Center of the system-drawn circle near (cx, cy) points: contrast-weighted centroid of
+    the pixels that differ from the background between two buttons."""
+    _, _, px = read_image(png)
+    bg = px((cx + 11.5) * scale, cy * scale)
+    sx = sy = sw = 0.0
+    for y in range(int((cy - 9) * scale), int((cy + 9) * scale)):
+        for x in range(int((cx - 9) * scale), int((cx + 9) * scale)):
+            c = px(x, y)
+            d = max(abs(c[i] - bg[i]) for i in range(3))
+            if d > 24:
+                sx += (x + 0.5) * d; sy += (y + 0.5) * d; sw += d
+    return [round(sx / sw / scale, 2), round(sy / sw / scale, 2)] if sw else None
+
+
+def circular_corner_edges(r, n):
+    """x of a circular corner's edge at each pixel row center (corner at the origin, radius r)."""
+    return [r - max(r * r - (r - (j + 0.5)) ** 2, 0) ** 0.5 if j + 0.5 < r else 0.0 for j in range(n)]
+
+
+def continuous_corner_edges(r, n):
+    """x of a continuous rounded corner's edge at each pixel row center (corner at the origin,
+    radius r): the curve PaintCode published for iOS 7 rounded rects, sampled densely."""
+    k = [1.52866483, 1.08849323, 0.86840689, 0.63149399, 0.07491100, 0.37282392, 0.16905899]
+    segments = [((k[0], 0), (k[1], 0), (k[2], 0), (k[3], k[4])),
+                ((k[3], k[4]), (k[5], k[6]), (k[6], k[5]), (k[4], k[3])),
+                ((k[4], k[3]), (0, k[2]), (0, k[1]), (0, k[0]))]
+    points = []
+    for p0, p1, p2, p3 in segments:
+        for t in [i / 400 for i in range(401)]:
+            u = 1 - t
+            points.append(tuple(r * (u ** 3 * a + 3 * u * u * t * b + 3 * u * t * t * c + t ** 3 * d) for a, b, c, d in zip(p0, p1, p2, p3)))
+    edges = []
+    for j in range(n):
+        yc = j + 0.5
+        if yc >= k[0] * r:
+            edges.append(0.0)
+            continue
+        best = min(points, key=lambda p: abs(p[1] - yc))
+        edges.append(best[0])
+    return edges
+
+
+def card_edges(card_png, base_png, card, scale, page_right=True, tolerance=0.6, radius=12, curve="circle"):
+    """Pixel checks of the hover-reveal card edge against the same view without the card.
+
+    alpha = how much of a pixel is card (0 outside, 1 on the stroke). Corners: the extreme
+    corner pixel must be outside (no square corner), the 45-degree profile must rise through
+    an intermediate value (anti-aliased, not jagged), all four corners must match (mirrored),
+    and the edge must follow the card's corner (circular, radius 12: Arc's F0129 fits that). Edges: the boundary pixel is the
+    stroke (white 0.30 over the card fill) on all four sides, and the shadow darkens just
+    outside (7.5 % at 1 pt over a white page in Arc's F0129) and is gone by 9 pt.
+    `tolerance` (px along the edge's normal) is looser for themes with grain, whose noise
+    moves the measured edge where the curve is nearly flat."""
+    _, _, P = read_image(card_png)
+    _, _, B = read_image(base_png)
+    s = scale
+    x0, y0 = round(card[0] * s), round(card[1] * s)
+    x1, y1 = round((card[0] + card[2]) * s) - 1, round((card[1] + card[3]) * s) - 1
+    mx, my = (x0 + x1) // 2, (y0 + y1) // 2
+    sides = {}
+    for name, (bx, by, ix, iy, ox, oy) in {
+            "left": (x0, my, x0 + 3 * s, my, x0 - 1, my), "right": (x1, my, x1 - 3 * s, my, x1 + 1, my),
+            "top": (mx, y0, mx, y0 + 3 * s, mx, y0 - 1), "bottom": (mx, y1, mx, y1 - 3 * s, mx, y1 + 1)}.items():
+        fill = P(ix, iy)
+        expected = [f + 0.30 * (255 - f) for f in fill]
+        got = P(bx, by)
+        base_out, out = luma(B(ox, oy)), luma(P(ox, oy))
+        sides[name] = {"stroke": list(got), "expected": [round(e) for e in expected],
+                       "stroke_ok": max(abs(g - e) for g, e in zip(got, expected)) <= 10,
+                       "shadow_1px": round(out / max(base_out, 1), 3),
+                       "contrast": round(sum((a - b) ** 2 for a, b in zip(got, B(ox, oy))) ** 0.5, 1)}
+    # Shadow profile right of the card, one sample per point.
+    profile = [round(luma(P(x1 + 1 + int(k * s), my)) / max(luma(B(x1 + 1 + int(k * s), my)), 1), 3) for k in range(12)]
+    def alpha(x, y, stroke, outside=None):
+        # Projection of (pixel - outside) on (stroke - outside) in RGB: 0 outside, 1 on the
+        # stroke. RGB, not brightness: on light themes the stroke is close in brightness to
+        # the background. `outside` is the distance from the card edge in px; the outside
+        # reference then carries the card's shadow (black 0.17, Gaussian sigma 4 pt).
+        out = list(B(x, y))
+        if outside is not None and outside > 0:
+            out = [v * (1 - 0.17 * 0.5 * math.erfc(outside / (4 * s) / math.sqrt(2))) for v in out]
+        d = [a - b for a, b in zip(stroke, out)]
+        norm = sum(v * v for v in d)
+        if norm <= 64:
+            return None
+        return sum((a - b) * c for a, b, c in zip(P(x, y), out, d)) / norm
+
+    # Corners. Only the 1 pt stroke ring separates the card from the outside reliably (the
+    # fill can match the window background), so per row from the corner, find where alpha
+    # first rises through 0.4 coming from outside: the card's outer edge. Compare it with the
+    # corner's shape: a circle, or Apple's continuous corner (PaintCode's published curve).
+    r = radius * s
+    n = int(1.6 * r) + 1
+    reference = (circular_corner_edges if curve == "circle" else continuous_corner_edges)(r, n)
+    # Distance along the edge's normal per pixel of horizontal error: near the tangent the
+    # curve is flat, and a small brightness change moves a horizontal crossing a lot.
+    normal = [1 / (1 + ((reference[min(j + 1, n - 1)] - reference[max(j - 1, 0)]) / 2) ** 2) ** 0.5 for j in range(n)]
+    corners, curves = {}, {}
+    for name, (cx, cy, sx, sy) in {"top_left": (x0, y0, 1, 1), "top_right": (x1, y0, -1, 1),
+                                   "bottom_left": (x0, y1, 1, -1), "bottom_right": (x1, y1, -1, -1)}.items():
+        curve, soft, errors = [], 0, []
+        stroke_l = P(cx, cy + sy * (n + 3))  # the straight stroke right after this corner
+        for j in range(n):
+            row = [alpha(cx + sx * i, cy + sy * j, stroke_l, (reference[j] - (i + 0.5)) * normal[j]) for i in range(n + 2)]
+            k = next((i for i, a in enumerate(row) if a is not None and a >= 0.4), None)
+            if k is None or any(a is None for a in row[:k + 1]):
+                curve.append(None)
+                continue
+            before = row[k - 1] if k > 0 else 0.0
+            edge = (k - 1 + 0.5 + (0.4 - before) / max(row[k] - before, 1e-6)) if k > 0 else 0.0
+            curve.append(round(edge, 2))
+            errors.append(abs(edge - reference[j]) * normal[j])
+            soft += k > 0 and 0.1 < row[k - 1] < 0.9 or 0.1 < row[k] < 0.9
+        rows = [c for c in curve if c is not None]
+        corners[name] = {"corner_alpha": round(alpha(cx, cy, stroke_l) or 0, 3), "edge_by_row": curve,
+                         "reference": [round(v, 2) for v in reference],
+                         "monotonic": all(b <= a + max(0.35, tolerance - 0.25) for a, b in zip(rows, rows[1:])),
+                         "antialiased_rows": soft, "rows": len(rows),
+                         "max_error_px": round(max(errors, default=9), 2)}
+        curves[name] = curve
+    sym = max(((max(c[j] for c in curves.values()) - min(c[j] for c in curves.values())) * normal[j]
+               for j in range(n) if all(c[j] is not None for c in curves.values())), default=9)
+    # A stroke within ~20 levels of the background (light themes: white 0.30 over a light
+    # fill) is fainter than the shadow's own darkening; its edge cannot be located, so such
+    # cards check the stroke, the shadow, and the edges only.
+    low_contrast = min(v["contrast"] for v in sides.values()) < 20
+    ok = (all(v["stroke_ok"] for v in sides.values())
+          and (low_contrast or all(c["corner_alpha"] < 0.15 and c["monotonic"] and c["rows"] >= n - 1 and c["antialiased_rows"] >= r // 3
+                  and c["max_error_px"] <= tolerance for c in corners.values()) and sym <= tolerance)
+          and all(v["shadow_1px"] < 0.995 for v in sides.values())
+          and (not page_right or (0.88 <= profile[0] <= 0.96 and profile[9] >= 0.99)))
+    return {"ok": ok, "scale": s, "low_contrast": low_contrast, "sides": sides, "right_shadow_profile": profile, "corners": corners,
+            "corner_symmetry_max": round(sym, 3)}
+
+
+def white_fixture(name):
+    return "data:text/html,<title>%s</title><body style='margin:0;background:white'><h1 style='margin:40px'>%s</h1>" % (name, name)
+
+
+def place_away_from_cursor(app, width, height):
+    """Moves the window where the hardware pointer is not: tracking areas follow the real
+    pointer, so a pointer resting over the window would hover its controls during a check."""
+    for x, y in ((60, 60), (1240, 60), (60, 600), (1240, 600), (600, 300)):
+        app.call("window-frame", frame=[x, y, width, height])
+        st = state_when(app, lambda st: st["frame"][2:] == [width, height]) or app.call("window-state")
+        cx, cy = st["cursor"]
+        if not (-20 <= cx <= width + 20 and -20 <= cy <= height + 20):
+            return st
+    return app.call("window-state")
+
+
+def reveal_card_and_wait(app, x=3, y=400):
+    app.call("mouse", action="move", x=700, y=y)
+    app.call("mouse", action="move", x=x, y=y)
+    return wait_card(app, True)
+
+
+def card_pair(app, private, name):
+    """Snapshot with the card settled and the same view after it left: (card PNG, base PNG, card frame)."""
+    settled = reveal_card_and_wait(app)
+    if not settled:
+        return None
+    card = settled["state"]["reveal"]["card"]
+    png = os.path.join(private, name + ".png")
+    app.call("mouse", action="move", x=120, y=400)
+    app.call("snapshot", path=png)
+    app.call("mouse", action="move", x=700, y=400)
+    wait_card(app, False)
+    base = os.path.join(private, name + "-base.png")
+    app.call("snapshot", path=base)
+    return png, base, card
+
+
+def window_chrome_checks(factory, results, tmp):
+    private = os.path.join(ROOT, ".re", "e2e-window-chrome")
+    os.makedirs(private, exist_ok=True)
+    app = factory(urls=(white_fixture("Chrome A"),), fresh=True)
+    try:
+        wid = app.call("window-state")["id"]
+        app.call("window-focus", id=wid, activate=True)
+        st = place_away_from_cursor(app, 1280, 800)
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        # Traffic lights: launch (frames and drawn pixels), resize, a second window (the first
+        # is then not key), full-screen exit.
+        launch_ok, launch = light_centers(st)
+        shot_path = os.path.join(private, "lights.png")
+        app.call("snapshot", path=shot_path)
+        scale = read_image(shot_path)[0] / 1280.0
+        drawn = [drawn_light_center(shot_path, scale, cx, cy) for cx, cy in LIGHT_CENTERS]
+        drawn_ok = all(d and abs(d[0] - e[0]) <= 0.75 and abs(d[1] - e[1]) <= 0.75 for d, e in zip(drawn, LIGHT_CENTERS))
+        app.call("window-frame", frame=[90, 80, 1000, 640])
+        resized = state_when(app, lambda st: st["frame"][2:] == [1000, 640]) or app.call("window-state")
+        resized_ok, resized_c = light_centers(resized)
+        app.call("key", key="n", modifiers=["cmd"], route="app")
+        second = state_when(app, lambda st: st["id"] != wid) or app.call("window-state")
+        second_ok, second_c = light_centers(second)
+        background_ok, background_c = light_centers(app.call("window-state", id=wid))
+        app.call("window-close")
+        state_when(app, lambda st: st["id"] == wid)
+        app.call("window-focus", id=wid, activate=True)
+        before = app.call("window-state")
+        app.call("window-fullscreen")
+        state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"]
+                   and st["fullscreenChanges"] > before["fullscreenChanges"], timeout=15, step=0.1)
+        app.call("window-fullscreen")
+        exited = state_when(app, lambda st: not st["fullscreen"] and not st["fullscreenTransition"]
+                            and st["fullscreenChanges"] > before["fullscreenChanges"] + 1, timeout=15, step=0.1)
+        exited_ok, exited_c = light_centers(exited or app.call("window-state"))
+        results["traffic_lights"] = {"ok": launch_ok and drawn_ok and resized_ok and second_ok and background_ok and exited_ok
+                                     and not any(st["trafficLightsHidden"]),
+                                     "expected_centers": LIGHT_CENTERS, "launch": launch, "drawn_launch": drawn, "resized": resized_c,
+                                     "second_window_key": second_c, "first_window_not_key": background_c, "after_fullscreen_exit": exited_c}
+
+        # URL field and Space header, at rest and hovered (this profile has no favorites).
+        place_away_from_cursor(app, 1280, 800)
+        app.call("mouse", action="hover", x=900, y=500)
+        rest = app.call("window-state")["chrome"]
+        rest_png = os.path.join(private, "chrome-rest.png")
+        app.call("snapshot", path=rest_png)
+        app.call("mouse", action="hover", x=120, y=64)
+        url_hover = state_when(app, lambda st: st["chrome"]["urlFieldHovered"], timeout=2)
+        url_png = os.path.join(private, "chrome-url-hover.png")
+        app.call("snapshot", path=url_png)
+        app.call("mouse", action="hover", x=120, y=rest["header"][1] + 18)
+        header_hover = state_when(app, lambda st: st["chrome"]["headerHovered"], timeout=2)
+        header_png = os.path.join(private, "chrome-header-hover.png")
+        app.call("snapshot", path=header_png)
+        app.call("mouse", action="hover", x=900, y=500)
+        _, _, R = read_image(rest_png)
+        _, _, U = read_image(url_png)
+        _, _, Hh = read_image(header_png)
+        field_rest, field_hover = R(150 * scale, 50 * scale), U(150 * scale, 50 * scale)
+        band = rest["header"]
+        header_rest, header_fill = R(150 * scale, (band[1] + 3) * scale), Hh(150 * scale, (band[1] + 3) * scale)
+        gap = band[1] - (rest["urlField"][1] + rest["urlField"][3])
+        geometry_ok = (rest["urlField"] == [8, 46, 212, 36] and rest["favorites"][3] == 8 and band[1] == 90 and band[3] == 36
+                       and abs(rest["headerTitleBaseline"] - (band[1] + 23)) <= 0.01 and gap == 8)
+        hovered_ok = (bool(url_hover) and url_hover["chrome"]["urlField"] == rest["urlField"] and url_hover["chrome"]["header"] == band
+                      and bool(header_hover) and header_hover["chrome"]["header"] == band and header_hover["chrome"]["urlField"] == rest["urlField"])
+        pixels_ok = max(abs(a - b) for a, b in zip(field_rest, field_hover)) >= 3 and max(abs(a - b) for a, b in zip(header_rest, header_fill)) >= 3
+        results["space_header_url_field"] = {"ok": geometry_ok and hovered_ok and pixels_ok,
+                                             "rest": rest, "url_hovered": url_hover and url_hover["chrome"],
+                                             "header_hovered": header_hover and header_hover["chrome"],
+                                             "url_to_header_gap_pt": gap, "field_fill_rest": list(field_rest), "field_fill_hover": list(field_hover),
+                                             "header_fill_rest": list(header_rest), "header_fill_hover": list(header_fill)}
+
+        # Hover reveal: dwell, settle, no flicker along the edge, holds while hovered, hides after leaving.
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        hidden = sidebar_hidden(app) or app.call("window-state")
+        lights_hidden = all(hidden["trafficLightsHidden"])
+        app.call("mouse", action="move", x=700, y=400)
+        start = app.call("window-state")["reveal"]
+        app.call("mouse", action="move", x=3, y=50)
+        app.call("mouse", action="move", x=700, y=400)
+        time.sleep(0.4)
+        no_quick_reveal = app.call("window-state")["reveal"]["shows"] == start["shows"]
+        app.call("mouse", action="move", x=3, y=400)
+        settled = wait_card(app, True)
+        shown = app.call("window-state")
+        card = shown["reveal"]["card"]
+        dwell = shown["reveal"]["dwell"]
+        lights_card_ok, lights_card = light_centers(shown, 5, 5)
+        samples = []
+        for x, y in [(2, 100), (4, 160), (1, 220), (3, 280), (0, 340), (2, 400), (5, 460), (1, 520),
+                     (3, 580), (2, 640), (4, 700), (12, 700), (60, 650), (120, 400), (2, 300)]:
+            app.call("mouse", action="move", x=x, y=y)
+            time.sleep(0.03)
+            r = app.call("window-state")["reveal"]
+            samples.append([x, y, r["phase"], r["shows"], r["hides"]])
+        app.call("mouse", action="move", x=120, y=400)
+        time.sleep(0.8)
+        held = app.call("window-state")["reveal"]
+        no_flicker = all(p == "shown" for _, _, p, _, _ in samples) and held["phase"] == "shown" \
+            and held["shows"] == shown["reveal"]["shows"] and held["hides"] == shown["reveal"]["hides"]
+        card_png = os.path.join(private, "card.png")
+        app.call("snapshot", path=card_png)
+        t1 = time.time()
+        app.call("mouse", action="move", x=700, y=400)
+        leaving = state_when(app, lambda st: st["reveal"]["phase"] == "idle", timeout=2, step=0.01)
+        exit_s = round(time.time() - t1, 3)
+        gone = wait_card(app, False)
+        base_png = os.path.join(private, "card-base.png")
+        app.call("snapshot", path=base_png)
+        results["reveal_timing"] = {"ok": lights_hidden and no_quick_reveal and bool(settled) and 0.13 <= dwell <= 0.35
+                                    and lights_card_ok and no_flicker and bool(leaving) and 0.13 <= exit_s <= 0.6 and bool(gone),
+                                    "lights_hidden_while_hidden": lights_hidden, "pass_by_without_reveal": no_quick_reveal,
+                                    "dwell_s": round(dwell, 3), "settled_s": settled and settled["elapsed"],
+                                    "card": card, "lights_on_card": lights_card, "edge_walk": samples, "held": held,
+                                    "exit_to_idle_s": exit_s, "slide_out_s": gone and gone["elapsed"]}
+        results["card_edges_1x"] = card_edges(card_png, base_png, card, scale)
+        # Open's light and dark appearance (the default Space follows it).
+        rows = {}
+        for name in ("light", "dark"):
+            app.call("appearance", name=name)
+            time.sleep(0.3)
+            pair = card_pair(app, private, "card-" + name)
+            rows[name] = card_edges(*pair[:3], scale) if pair else {"ok": False, "error": "card did not settle"}
+        app.call("appearance", name="system")
+        results["card_edges_appearance"] = {"ok": all(v.get("ok") for v in rows.values()), "rows": rows}
+    finally:
+        app.quit()
+    themed_card_checks(factory, results, private)
+
+
+def themed_card_checks(factory, results, private):
+    """Card edges on our synthetic themed Spaces: in the real window, and in 1x and 2x
+    offscreen renders of the same SidebarView card and shadow (this display is 1x)."""
+    binary = os.path.join(ROOT, "Packages", "OpenKit", ".build", "release", "sidebar-render")
+    synth = os.path.join(private, "synth")
+    shutil.rmtree(synth, ignore_errors=True)
+    subprocess.run([binary, "synth", "--out", synth], check=True, stdout=subprocess.DEVNULL)
+    with open(os.path.join(synth, "State", "browser.json")) as stream:
+        data = json.load(stream)
+    for window in data["windows"]:
+        window.update(sidebarMode="hidden", sidebarWidth=228, frameX=60, frameY=60, frameWidth=1280, frameHeight=800)
+    fixture_path = os.path.join(private, "synth-hidden.json")
+    with open(fixture_path, "w") as stream:
+        json.dump(data, stream)
+    rows = {}
+    app = factory(urls=(), snapshot=fixture_path)
+    try:
+        app.call("window-focus", id=app.call("window-state")["id"], activate=True)
+        place_away_from_cursor(app, 1280, 800)
+        state_when(app, lambda st: st["sidebarMode"] == "hidden")
+        for index, space in enumerate(app.call("spaces")[:2]):
+            app.call("space", space=space["id"])
+            time.sleep(0.4)
+            pair = card_pair(app, private, "themed-%d" % index)
+            if not pair:
+                rows["space %d (window)" % (index + 1)] = {"ok": False, "error": "card did not settle"}
+                continue
+            scale = read_image(pair[0])[0] / 1280.0
+            rows["space %d (window, %gx)" % (index + 1, scale)] = card_edges(*pair, scale, page_right=False, tolerance=1.25)
+    finally:
+        app.quit()
+    for scale in (1, 2):
+        for space in (0, 1):
+            png = os.path.join(private, "render-card-%dx-%d.png" % (scale, space))
+            base = os.path.join(private, "render-base-%dx-%d.png" % (scale, space))
+            common = ["render", "--snapshot", synth, "--size", "1280x800", "--scale", str(scale), "--space", str(space), "--hidden", "--page"]
+            # Offscreen renders sometimes come back with garbage tiles (docs/design.md
+            # section 15.1, about one in four at 2x here). With --page the page area is
+            # opaque white, so a render with anything else there is drawn again.
+            # Away from the card (x >= 300 pt), the two renders must match pixel for pixel,
+            # the theme strip under the page included; a pair that does not is drawn again.
+            for attempts in range(1, 7):
+                subprocess.run([binary] + common + ["--reveal", "--out", png], check=True, stdout=subprocess.DEVNULL)
+                subprocess.run([binary] + common + ["--no-lights", "--out", base], check=True, stdout=subprocess.DEVNULL)
+                _, _, pc = read_image(png)
+                _, _, pb = read_image(base)
+                points = [(x, y) for y in list(range(20, 790, 30)) + [792, 795, 798] for x in range(300, 1270, 30)]
+                if all(min(pc(x * scale, y * scale)) >= 245 for x, y in points if y < 785) \
+                        and all(max(abs(a - b) for a, b in zip(pc(x * scale, y * scale), pb(x * scale, y * scale))) <= 6 for x, y in points):
+                    break
+            row = card_edges(png, base, [5, 5, 228, 790], scale, tolerance=1.0)
+            row["render_pairs"] = attempts
+            rows["space %d (offscreen render, %dx)" % (space + 1, scale)] = row
+    results["card_edges_themed"] = {"ok": all(v.get("ok") for v in rows.values()), "rows": rows}
+
 
 
 def peek_checks(factory, results, tmp):
@@ -1164,9 +1615,8 @@ def static_window_comparison(factory, results, tmp, suite):
     try:
         wid = app.call("window-state")["id"]
         app.call("window-focus", id=wid, activate=True)
-        app.call("window-frame", frame=[40, 40, 2216, 1394])
-        time.sleep(0.5)
-        live_state = app.call("window-state")
+        app.call("window-frame", frame=[40, 40, 2216, 1394], unconstrained=True)
+        live_state = state_when(app, lambda st: st["frame"][2:] == [2216, 1394]) or app.call("window-state")
         if live_state["frame"][2:] != [2216, 1394]:
             raise RuntimeError("capture-size window refused: %s" % live_state["frame"])
         raw = os.path.join(private, "open-live-2x.png")

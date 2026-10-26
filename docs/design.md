@@ -36,6 +36,8 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | Bottom plus | `GrayA11`; inactive 0.30 | white 0.62 (fitted) | F0001, F0079, inactive capture |
 | Home (our glyph) | black 0.52; inactive 0.26 (fitted for our shape) | guess | F0001, inactive capture |
 | URL field and tile fill | `SidebarItemBackground` (`#0E0F10` 0.05 P3) | `#FAFBFF` 0.10 | ΔE ≤ 0.61 on 7 elements |
+| URL field under the pointer | `SidebarItemHoveredBackground` (`#0E0F10` 0.10 P3) | `#FAFBFF` 0.15 | F0033 vs F0032 (§16) |
+| Hover-reveal card stroke | `SidebarBorderColor` white 0.30 | same | F0129 `#696875` over `#272739` (§16) |
 | Row hover, header hover, New Tab hover | `SidebarItemBackground` | same | F0013 ΔE 0.45, F0031 0.49, F0079 0.81 |
 | Button hover plate | black 0.07 `GrayA4` | `GrayA4` | F0024 ΔE 0.38, F0027 0.72 |
 | Selected row, selected tile, "New Tab" during Cmd+T | theme `light.background`, opaque | white 0.20 `TabCellBackgroundCurrent` | F0015 ΔE 1.05, F0016 1.15, F0063 2.00, F0066 2.03 |
@@ -56,11 +58,11 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 
 | Area | Value | Mark |
 |---|---|---|
-| Traffic lights | 12 pt circles centered in `[12/35/58, 16, 16, 16]` (system drawn) | measured |
+| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]`; the system draws 12 pt circles centered in them, at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden | measured (AX F0001, F0129, F0131; F0001 pixels) |
 | Toolbar buttons | 32×32 at y 7; toggle x 77; back / forward / reload at x `W − 106 / W − 72 / W − 38` (pitch 34, reload 6 pt from the edge); hover plate = button frame, radius 6 | measured |
-| URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]` | measured, text origin fitted |
-| Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (6 → 3 columns at width 228 and 500) | measured; rule for other counts guess |
-| Space header | 36 pt band; icon frame `[13, 5, 26, 26]`; title origin x 44, baseline 23; hover fill `[8, 0, W − 16, 36]`, chevron in place of the icon, "…" at the right | measured, text origin fitted |
+| URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]`; hover darkens the fill, same frame | measured, text origin fitted |
+| Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (6 → 3 columns at width 228 and 500); no favorites: an 8 pt section | measured; rule for other counts guess; empty section fitted (§16) |
+| Space header | 36 pt band; icon frame `[13, 5, 26, 26]`; title origin x 44, baseline 23; hover fill `[8, 0, W − 16, 36]`, chevron in place of the icon, "…" at the right. Without favorites the band starts at y 90, 8 pt below the URL field | measured, text origin fitted |
 | Tab list | 3 pt spacer row, then 41 pt rows; favicon `[17, y + 11, 18, 18]` (16 ink); title origin x 44, baseline y + 25; fill `[8 + indent, y + 2, W − 16 − indent, 36]`, radius 10 continuous | measured, baseline fitted (ink bottom at y + 24) |
 | Close / unload | `[W − 39, y + 7, 26, 26]`; the title then ends at its left edge | measured |
 | Folders | 16 pt indent per level; folder title 14 Semibold | measured |
@@ -72,7 +74,8 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 | Divider row | 17 pt; 1 pt line at y + 7 from x 18 to W − 18; with "Clear" the line ends at W − 66, arrow `[W − 58, y + 3, 12, 9]`, label x W − 46 | measured |
 | Bottom bar | 50 pt; Home `[8, 9, 32, 32]`; plus `[W − 40, 9, 32, 32]`; switcher items 36×34 at pitch 34, centered in `[42, 0, W − 84, 50]`; plate = item inset 1 | measured |
 | Web panel | `[W, 10, winW − W − 10, winH − 20]`, radius 6, shadow black 0.25 radius 3 offset 1; hidden sidebar `[10, 10, winW − 20, winH − 20]` | measured |
-| Hover-reveal card | 5 pt from the window edges, radius 10, 1 px stroke `SidebarBorderColor` (white 0.30; measured ≈ 0.25) | measured |
+| Hover-reveal card | `[5, 5, W, H − 10]`, radius 10 continuous; 1 pt stroke `SidebarBorderColor` (white 0.30) on the outermost pixels inside the card; shadow black 0.17, σ 4 pt, no offset | measured (F0129, F0130); shadow fitted against F0128 |
+| Hover-reveal zones | dwell 0.15 s (outer edge 0.16 s) in: the left edge (x 0…6, held −20…15), the strip left of the window (50 pt, held 250), the top-left corner (40 pt wide, −15…20), the traffic-light region (to y 50); the card stays while the pointer is on it or in a zone and hides 0.15 s after it leaves | decoded (§16); zone unit 10 and exit delay guess |
 | Sidebar width | default 228; 500 is the widest seen; minimum 180 | 500 guess as max; minimum guess |
 
 ### 2.3 Typography
@@ -106,6 +109,8 @@ Arc keeps its springs in compiled code. The capture has about 0.47 s between fra
 | Hover fade / selection fade | 0.08 s / 0.12 s | guess |
 | Row insert, remove, folder expand | 0.22 s, AppKit outline slide | measured "< 0.5 s" |
 | Tooltip fade | 0.12 s, delay 0.6 s | guess; fade-out seen (F0026) |
+| Hover-reveal card slide | spring, response 0.30 s, critically damped (`Motion.sidebarToggle`); transform of the card layer, its shadow, and the traffic lights only | guess: A0439 and A0440 are 1 s apart |
+| Hover-reveal dwell, exit | 0.15 s, 0.15 s | dwell decoded (§16); exit guess |
 
 ## 3. Space themes
 
@@ -210,10 +215,10 @@ The host window owns a `ThemeBackgroundView` behind the sidebar and the web pane
 | Split selected | the toolbar keeps only the sidebar toggle | F0081, F0082 |
 | Peek open | source row: badge with the Peek favicon (also while another row is selected); lighter fill while the Peek shows; URL field and toolbar follow the Peek page; toolbar row and bottom bar dimmed, URL field, Favorites, and list not dimmed | F0090, F0101 |
 | Space header hover | fill, chevron (collapses Pinned), "…" menu | A0413 |
-| URL field | placeholder with magnifier; with a page, the host; copy and Site Control buttons while the pointer is over the sidebar (guess) | F0015, F0016 |
+| URL field | placeholder with magnifier; with a page, the host; copy and Site Control buttons while the pointer is over the sidebar (guess); the fill darkens under the pointer | F0015, F0016, F0033 |
 | Inactive window | toolbar and bottom glyphs take the disabled tones; the theme underlay lightens | inactive capture |
 | Switcher | current Space in color, others gray at 0.55 | F0001 |
-| Hidden sidebar / hover-reveal | host hides the sidebar; `presentation = .floatingCard` draws the card with its own background | F0128–F0131 |
+| Hidden sidebar / hover-reveal | host hides the sidebar and the traffic lights; `presentation = .floatingCard` draws the card (rounded clip, stroke, its own prepared background); the host adds `RevealCardShadowView` below it, slides both, and moves the lights onto the card | F0128–F0131 |
 
 ### 5.4 Space pager and swipe
 
@@ -328,7 +333,7 @@ State elements (other frames): row hover fill 0.0 pt / 0.45; close × 0.0 / 1.39
 | Toggle, forward, copy ink boxes | 1 pt | SF Symbol shapes differ slightly from Arc's art. |
 | Folder glyph | shape | Arc's open folder has an outlined back and a lighter rim. Ours is a simpler two-tone shape in the same accent. |
 | Inactive switcher emoji | darkest pixels within 10 levels | Arc's desaturation method is not known; ours is luma at 0.55. |
-| Traffic lights | not compared | System drawn; the renders draw stand-ins and the comparison masks them. |
+| Traffic lights | not compared by `sidebar-render compare` | System drawn; the renders draw stand-ins and the comparison masks them. The real window's lights are checked separately (§16). |
 | Favicons | not compared | Masked; renders have no engine favicons. |
 | Light-mode default theme, dark tokens without a dark capture, motion numbers, favorites column rule for counts other than 6 | guesses | No capture yet (interaction-states §19). |
 
