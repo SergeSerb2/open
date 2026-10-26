@@ -70,7 +70,9 @@ class FocusTracker:
             # A background application is expected during socket/model/pointer
             # work. Only loss after native input's readiness grant interrupts.
             for event in events:
-                if event["uptime"] >= min(steps) and event.get("frontmostPID") not in (None, 0, app.pid):
+                resigned = event["event"] == "NSApplicationDidResignActiveNotification"
+                outside = event.get("frontmostPID") not in (None, 0, app.pid)
+                if event["uptime"] >= min(steps) and (resigned or outside):
                     interruptions.append(dict(event, openPID=app.pid))
         return interruptions
 
