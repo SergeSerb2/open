@@ -1154,12 +1154,12 @@ CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services")
 # Chrome items that must be gone, as letter-only fragments of their titles,
 # and items each target must still show.
 CONTEXT_MENU_DROPPED = ("cast", "readingmode", "qrcode", "withgoogle", "lens", "splitview", "incognito",
-                        "importpasswords", "languagesettings", "sendto", "readinglist", "translate")
+                        "importpasswords", "languagesettings", "sendto", "readinglist", "translate", "searchgoogle")
 CONTEXT_MENU_KEPT = {
     "page": ("Reload", "Save As…", "Print…", "View Page Source", "Inspect", "Tabs probe item"),
     "link": ("Open Link in New Tab", "Open Link in New Window", "Save Link As…", "Copy Link Address", "Inspect"),
     "image": ("Open Image in New Tab", "Save Image As…", "Copy Image", "Copy Image Address"),
-    "selection": ("Copy", "Search Google for", "Look Up"),
+    "selection": ("Copy", "Copy Link to Highlight", "Look Up"),
     "editable": ("Cut", "Copy", "Paste", "Paste and Match Style", "Select All"),
     "video": ("Loop", "Show All Controls", "Picture in Picture", "Save Video As…", "Copy Video Address"),
 }

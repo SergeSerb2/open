@@ -169,7 +169,7 @@ Kept (Chromium `IDC_*` ids):
 | Link | Open Link in New Tab, Open Link in New Window (both become Open tabs through P1), Open Link With (the page's protocol handlers), Save Link As…, Copy Link Address, Copy Link Text |
 | Image | Open Image in New Tab, Open Original Image in New Tab, Load Image, Save Image As…, Copy Image, Copy Image Address |
 | Audio, video, plugin | Loop, Show All Controls, Picture in Picture, Open Video/Audio in New Tab, Save Video/Audio As…, Copy Video/Audio Address, Video Frame (Copy, Save), Save plugin as, Rotate |
-| Selection | Copy, Search <engine> for “…” (current or new tab), Go to <URL>, Copy Link to Highlight, Remove Highlight, Reshare Highlight, Look Up |
+| Selection | Copy, Go to <URL>, Copy Link to Highlight, Remove Highlight, Reshare Highlight, Look Up |
 | Editable | Undo, Redo, Cut, Copy, Paste, Paste and Match Style, Delete, Select All, Emoji & Symbols, Start Dictation; spelling suggestions, Add to / Remove from Dictionary, No Suggestions, Spelling and Grammar (submenu) |
 | Passwords | Select Password, Use a Passkey from Another Device (Chromium's own fill UI stays: plans/passwords-autofill.md D-3) |
 | macOS | Speech and Writing Direction submenus |
@@ -189,9 +189,8 @@ Removed, and why (all seen in Open before this list, Chromium 156):
 | Send to Your Devices, Shared clipboard, Add to Reading List, Follow/Unfollow | Sync, sign-in and Chrome features Open does not have. |
 | Import Passwords, Suggest Strong Password, Show All Passwords | Chrome's password manager pages; generation is off (plans/passwords-autofill.md D-7). |
 | Language Settings, Protocol handler settings, Page Info | Chrome settings pages and bubbles. |
+| Search <engine> for “…” (current or new tab) | It uses Chromium's default search engine (Google), not the search engine of the page's profile. App-shell Step D adds Open's own "Search <engine> for “…”" item (`docs/followups.md`). |
 | Get Image Descriptions from Google, Live Caption, PDF OCR, Listen to This Page, Gemini, Ask Google, Compose, AI items | Google services and AI (out of v1 scope). |
-
-Note: "Search <engine> for" uses Chromium's default search engine, which is Google: Open's search engine setting (OpenSuggest) does not reach Chromium yet (`docs/followups.md`).
 
 ### Page background color
 

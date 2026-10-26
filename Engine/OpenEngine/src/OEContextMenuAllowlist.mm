@@ -59,10 +59,9 @@ bool IsAllowed(int command_id) {
     case IDC_CONTENT_CONTEXT_SAVEPLUGINAS:
     case IDC_CONTENT_CONTEXT_ROTATECW:
     case IDC_CONTENT_CONTEXT_ROTATECCW:
-    // Selection.
+    // Selection. Not Chromium's "Search <engine> for": it uses Chromium's
+    // default engine, not the profile's (app-shell Step D adds Open's own).
     case IDC_CONTENT_CONTEXT_COPY:
-    case IDC_CONTENT_CONTEXT_SEARCHWEBFOR:
-    case IDC_CONTENT_CONTEXT_SEARCHWEBFORNEWTAB:
     case IDC_CONTENT_CONTEXT_GOTOURL:
     case IDC_CONTENT_CONTEXT_COPYLINKTOTEXT:
     case IDC_CONTENT_CONTEXT_REMOVELINKTOTEXT:
