@@ -207,6 +207,21 @@ MediaCoordinator ──▶ AppVisibilityProvider (pipTabIDs, mediaControlTabIDs)
 
 Threading: everything above runs on the main actor. Engine media events
 arrive on the main thread (`OEWebContentDelegate` is `NS_SWIFT_UI_ACTOR`).
+Step 6 owns window teardown: stop the closing window's sidebar observations,
+then call `MediaSourceStore.removeWindow(windowID:)` after moving or removing
+its remaining sources. Empty window publications otherwise retain stable
+identity until that explicit teardown.
+
+Field-level observation contract (lead review round 2): Step 3 views must
+read only the fields they draw. In particular, do not observe video area,
+position, or a closed drawer's changing volume merely to build the card list.
+`WindowMediaSources.allSources` names the uncapped card candidates;
+`visibleSources(windowID:displayed:)` alone applies displayed exclusions and
+the three-card cap. Sleep `mediaControls` is exactly that shown-card set plus
+eligible non-controllable playing/paused sessions. Displayed, PiP-active,
+and fourth controllable sources get no extra mediaControls protection;
+OpenSleep's audible and PiP gates remain separate.
+
 No work happens on a timer except the one paused auto-dismiss check
 (§4.3), which is a single `DispatchWorkItem` for the earliest deadline.
 
@@ -227,11 +242,21 @@ Keep the existing slot logic in `TabCellView.layout()` (the button sits
 | Mute change animation | `NSImageView.setSymbolImage(_:contentTransition: .replace.magic(fallback: .replace))`, system duration (≈ 0.25 s). Reduce Motion: no transition. No looping effect while audio plays (D-11). Arc animates slash and waves on change (`SpeakerIcon{slashStart, waveIncrement, waveReappearStart}`); this is the closest system effect. |
 | Tooltip | "Mute tab" / "Unmute tab" (guess: Arc's text is a short inline string; its comments are "Tooltip; mutes the tab." / "Tooltip; unmutes the tab."). Placement beside the pointer, as row tooltips (interaction-states §5). Delay `TooltipMetrics.showDelay`. |
 | Click | `.toggleMute(tabID:)` (exists). The App sets `OEWebContent.muted` from `tab.isMuted` on every change (§7.2). The row does not select the tab. |
-| Recording indicator | Shown when `tab.live.isCapturing` (camera or microphone). 20×20 slot placed directly before the speaker slot (or at the speaker position when no speaker shows). Glyph: a 7 pt filled circle drawn in `SidebarRole.recordingIndicator` (new: light `#F53714`, dark `#F25E6B`, the `CommandBarColors.lockInsecure` pair; guess). Static; no pulse. Tooltip "This tab is using your camera or microphone" (Arc string, PP-19). No click action. |
+| Recording indicator | Shown when `tab.live.isCapturing` (camera or microphone). 14×20 slot placed directly before the speaker slot (or at the speaker position when no speaker shows). Glyph: a 7 pt filled circle drawn in `SidebarRole.recordingIndicator` (new: light `#F53714`, dark `#F25E6B`, the `CommandBarColors.lockInsecure` pair; guess). Static; no pulse. Tooltip "This tab is using your camera or microphone" (Arc string, PP-19). No click action. |
 | Build on demand | Both views are created only when first shown (keep the scroll budget, `docs/design.md` §11). |
 
 `RowMediaMetrics` (OpenDesign): `buttonSize 20`, `gapAfterTitle 2`,
-`y 10`, `recordingDot 7`.
+`y 10`, `recordingDot 7`, `recordingSlotWidth 14`, `glyphInsetX 2`.
+
+Lead review decisions (2026-10-26): speaker images share a left anchor at
+slot x + 2 pt on one fixed image-view frame in both states. Keep native
+replace outside a disable-actions transaction (lead clarification 2026-10-26).
+If the unwrapped native call is proven to start no symbol-effect animation,
+a finite 0.25 s Core Animation cross-fade is allowed as a fallback (lead
+clarification 2026-10-26; record the failed native run in the PR). Reduce
+Motion stays static.
+Use a 14×20 recording slot, and hide it before the speaker when width is
+limited. Keep recording placement in one function until S9 decides its side.
 
 ### 4.2 Sidebar media controls (mini player stack)
 
@@ -269,6 +294,16 @@ session in state playing or paused, or camera or microphone capture
    after 60 min: `components/global_media_controls/public/media_session_item_producer.cc:18`).
 5. `S` is among the 3 most recent sources of `X` (guess for Arc's
    `maxActiveMediaControls`, PP-18; Q2).
+
+Lead review decisions (2026-10-25): retain playing and paused sessions even
+when `isControllable` is false. They get no mini-player card, but their tab
+IDs feed sleep protection through `mediaControls`. A paused session expires
+at `max(pausedAt, lastInteractionAt) + 60 min` whether or not it is
+controllable or has a card. Sleep protection ends at that expiry; interaction
+restarts it. A playing session stays protected. Paused recording sources
+follow the same expiry. A user Close is separate: that card stays dismissed
+until the next transition to playing. A Peek is an auxiliary page with no
+tab ID (PK-9), and never gets a mini-player card.
 
 Order: most recent first, by the time the source last started playing or
 last got user interaction. Little Open and Peek windows have no sidebar,
@@ -355,10 +390,13 @@ of the title with the right fade.
 
 | Field | Type | From |
 |---|---|---|
-| `tabID` | `ItemID` | App |
+| `origin` | `.tab` / `.auxiliaryPage` | App; auxiliary sources never have cards (PK-9) |
+| `tabID` | `ItemID?` | App; nil for an auxiliary page |
+| `pageID` | `UUID?` | Runtime auxiliary-page identity; nil for a tab |
 | `windowID` | `WindowID` | the window whose `OEBrowser` holds the content |
 | `kind` | `.audioVideo` / `.recording` | `.recording` when capturing and no playing session (PP-15) |
 | `playback` | `.playing` / `.paused` / `.none` | `WebMediaState.playback` |
+| `isControllable` | `Bool` | engine; false suppresses the audio/video card, but not session sleep protection |
 | `hasVideo`, `largestVideoArea` | `Bool`, `Double` (CSS px²) | engine |
 | `actions` | `WebMediaActions` | engine |
 | `isMuted` | `Bool` | `tab.isMuted` |
@@ -371,10 +409,17 @@ of the title with the right fade.
 
 ```swift
 @MainActor @Observable public final class MediaSourceStore {
-    public init(clock: @escaping () -> Date = Date.init)
+    public init(clock: @escaping () -> Date = Date.init, scheduler: any MediaDismissScheduling = DispatchMediaDismissScheduler())
     public private(set) var sources: [ItemID: MediaSource]
     public func update(tabID: ItemID, windowID: WindowID, state: WebMediaState, isMuted: Bool, isCapturing: Bool)
     public func remove(tabID: ItemID)
+    public func move(tabID: ItemID, toWindow: WindowID)
+    public func removeWindow(windowID: WindowID)
+    public func updateAuxiliaryPage(pageID: UUID, windowID: WindowID, state: WebMediaState, isMuted: Bool, isCapturing: Bool)
+    public func removeAuxiliaryPage(pageID: UUID)
+    public func sourceList(windowID: WindowID) -> WindowMediaSources
+    public func sleepProtectedTabIDs(windowID: WindowID, displayed: Set<ItemID>) -> Set<ItemID>
+    public func dismiss(tabID: ItemID)
     public func noteInteraction(tabID: ItemID)
     public func setPiP(tabID: ItemID, _ pip: MediaSource.PiP)
     /// Rules 1–5 of §4.2.2, most recent first.
@@ -384,8 +429,17 @@ of the title with the right fade.
 }
 ```
 
-The store keeps one `DispatchWorkItem` for the earliest paused deadline
-and reschedules it on every change. Nothing else is timed.
+The default scheduler keeps one real `DispatchWorkItem` for the earliest
+paused deadline and reschedules it when deadlines change. `media-demo`
+injects the same dispatch scheduler with short wall-clock delays, advances
+the domain clock, and waits for actual dispatch delivery. Removing the
+`asyncAfter` call must fail MS5. Expiry republishes each affected window's
+list; it never sets the separate user-dismiss flag. A user-dismissed paused
+entry still has a deadline and is removed from the registry at expiry; the
+next playing event creates it again. Identical updates do
+not replace dictionary entries or publish a window list. A source move
+and a close/archive/crash are explicit events, with no final media update
+required. Nothing else is timed.
 
 ### 4.4 Picture in Picture window
 
@@ -526,6 +580,7 @@ moving focus between panes of a shown split, opening a Peek over `T`
 
 | # | Condition | Source |
 |---|---|---|
+| A0 | `T` has no requesting/active session of its own, and `WebMediaState.isPictureInPicture` is false. Same-tab re-requests are idempotent. | Lead review decision, 2026-10-25 |
 | A1 | `open.advanced.enablePictureInPictureOnLeave` is true. | PP-13 |
 | A2 | `T` has a playing video (`hasVideo`, `playback == .playing`, largest video area ≥ 160×90 CSS px). | PP-3 (`isMediaPlayerActive`); size floor is an Open choice against hidden or tiny videos |
 | A3 | `T` is audible (engine `audible`; a user-muted tab still counts, its sound is muted, not absent), or the site rule has `activatesWhenInaudible`. | PP-11, D-5 |
@@ -565,6 +620,13 @@ switch; evaluate after that.
   ]
 }
 ```
+
+Per-host user choices (lead review decision, 2026-10-25): lowercase the
+host and remove a leading `www.` before storage. A disabled host matches
+itself and its subdomains, using the same suffix boundary as site rules.
+Turning off on `www.example.com` covers `example.com`, `www.example.com`,
+and `video.example.com`; menus read that same state. Incognito choices
+use the same matching in their main-actor session list.
 
 Matching: a rule host matches the URL host or any subdomain of it
 (`www.`, `m.`). Arc's own rules match any TLD of the same second-level
@@ -645,6 +707,7 @@ Chromium's).
 |---|---|
 | Playing tab | Audible gate plus 60 s grace (exists). The App calls `tabAudioChanged` on every audible flip (`docs/sleep.md` hard contract). |
 | PiP tab (active or requesting) | In `pictureInPicture` of the snapshot (exists); protected even when its window is minimized. |
+| Playing or paused session without controls | Feed its tab ID through `mediaControls` even though no card shows. Playing stays protected; paused protection ends at `max(pausedAt, lastInteractionAt) + 60 min`, like a paused card (lead review decision, 2026-10-25). |
 | Tab with a shown mini player (including paused and minimized-PiP sources) | New `SleepVisibilitySnapshot.mediaControls`; the App feeds the tab IDs of every card currently shown in a visible window. Protected while shown; the 60 min paused dismiss bounds the cost. |
 | Recording tab | `isCapturing` gate (exists). |
 | Change delivery | Call the visibility hooks right after a card appears or leaves and after a PiP opens or closes (app-shell §4.7). |
@@ -1211,6 +1274,15 @@ Every PR: merge `origin/main`, run `tools/verify-all.sh`, paste the
 table (AGENTS.md rule 10). One library target per PR where the step says
 so.
 
+Lead performance decision (2026-10-26 01:44 America/Vancouver, Step 2
+review): rows that look the same as before must show no scroll-p95
+regression against main. The mixed audible/muted/capturing variant draws
+new views and instead has an absolute scroll-p95 budget of 4.2 ms (half
+a 120 Hz frame). Compare baseline and head interleaved in one session,
+at least five runs each, and report both the median and mean of their
+per-run p95 values. If mixed rows exceed 4.2 ms, profile and fix the hot
+spot before Step 3; otherwise proceed after the plain-row gate passes.
+
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
 | 0 | Screenshots S1–S12 from the user (§11), through the lead. Runs in parallel; Steps 1–5 do not wait. | — | Lead files them under `.re/runtime/` (git-ignored) and adds measured values to `docs/re/interaction-states.md`. |
@@ -1280,6 +1352,7 @@ stays in `.re/` and is never committed.
 | S7 | A video tab mini player after pressing Minimize in its PiP window. | Back-to-PiP button |
 | S8 | A paused mini player and a muted one. | State glyphs |
 | S9 | A tab row while audio plays, after muting it, and a Meet or camera tab row (recording indicator). Also a Favorite tile that plays audio. | §4.1, Q14 |
+| S9 review additions | A red-themed Space for recording-dot contrast; whether the dot is leading (`hasLeadingRecordingIndicator`); a playing Favorite tile (`musicIconAnimationView`/`recordingIndicatorView`); whether tint follows the title color; speaker tooltip exact text and case. | D1–D9 review questions; no asset or code extraction in this step |
 | S10 | A short screen recording (the user's own recorder) of: leaving a playing video tab (auto-PiP opens), returning (it closes), minimizing the window while a video plays, and switching to another app. | Timings, D-4/Q4 |
 | S11 | A Google Meet Document PiP window (if the user has a Meet call). | §4.6 top bar |
 | S12 | Settings ▸ Advanced, the PiP row. | Label and position |

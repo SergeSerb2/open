@@ -363,7 +363,7 @@ class OEDefaultClient : public CefClient,
       _configuration.keychainAccountName.UTF8String;
   // Enables Chrome policy lookup under our bundle id (managed preferences).
   CefString(&settings.chrome_policy_id) =
-      NSBundle.mainBundle.bundleIdentifier.UTF8String ?: "app.open.browser";
+      NSBundle.mainBundle.bundleIdentifier.UTF8String ?: "io.github.sergeserb2.open";
 
   NSArray<NSString*>* switches = _configuration.additionalSwitches;
   if (_configuration.useMockKeychain &&

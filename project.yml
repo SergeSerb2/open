@@ -3,7 +3,7 @@
 name: Open
 
 options:
-  bundleIdPrefix: app.open
+  bundleIdPrefix: io.github.sergeserb2
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
@@ -61,7 +61,7 @@ targetTemplates:
     settings:
       base:
         PRODUCT_NAME: "Open Helper${helper_suffix}"
-        PRODUCT_BUNDLE_IDENTIFIER: "app.open.browser.helper${bundle_suffix}"
+        PRODUCT_BUNDLE_IDENTIFIER: "io.github.sergeserb2.open.helper${bundle_suffix}"
         INFOPLIST_FILE: Helper/Info.plist
         CODE_SIGN_ENTITLEMENTS: "Helper/Entitlements/helper${bundle_suffix}.entitlements"
         LD_RUNPATH_SEARCH_PATHS: "@executable_path/../../.."
@@ -84,7 +84,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: OpenEngine
-        PRODUCT_BUNDLE_IDENTIFIER: app.open.engine
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.sergeserb2.open.engine
         GENERATE_INFOPLIST_FILE: YES
         DEFINES_MODULE: YES
         MODULEMAP_FILE: ""
@@ -161,7 +161,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Open
-        PRODUCT_BUNDLE_IDENTIFIER: app.open.browser
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.sergeserb2.open
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/Open.entitlements
         SWIFT_VERSION: "6.0"

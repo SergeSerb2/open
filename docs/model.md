@@ -644,9 +644,67 @@ public welcome page rather than Arc's native onboarding controller.
 2. `focusSpace` and `selectNode` register undo. Arc probably does not undo navigation. If not, Cmd-Z after a click would undo the click, not the last edit. Verify in Arc, then drop their undo.
 3. `closeTab` archives pinned tabs and favorites too. In Arc, closing a pinned tab or a favorite may only unload it (guess). The UI layer must pick the right command until this is verified.
 
+## Sidebar completion M1 (2026-10-26)
+
+The bulk commands `moveNodes`, `archiveNodes`, `setPinned`, and `duplicateNodes`
+use one undo step and per-node structural events. Bulk drop indexes count in the
+destination before removal; single-node `moveNode` keeps its existing contract.
+Selections skip duplicate IDs and descendants of selected containers. Split panes
+are refused by moves and close through the existing collapse primitive on archive.
+That primitive also emits a parent reload when a split collapses.
+
+`createFolder` accepts an insertion index. Space commands expand/collapse every
+folder, reset navigated pinned tabs, separate a navigated pin into Today, and turn
+a Space into a folder in another Space. Clear can keep selected nodes or their
+ancestors. Background tab creation and Move to Space support persisted unread
+flags; undo restores old flags. The model adds no UI action names.
+
+Release CLI verification: `commands-demo` 151/151; B1–B14 and unread/Clear flows
+PASS; `roundtrip` PASS on the sidebar fixture. The existing `openkit bench` move
+averages were 3.42 → 3.15 µs with undo and 2.29 → 2.08 µs without undo (within
+10%); undo restored the tree and index. No unit tests, App edits, or desktop input.
+The initial checkout did not yet have `iconOverride`; copies retain all fields
+present there. Final merged-main verification is recorded in the PR.
 Snapshot scheduling marks the live model dirty without preparing folders or
 building a DTO. The one-second debounce captures the DTO on the main actor,
 then queues the atomic file write. `saveNow(model:)` remains synchronous and
 cancels pending generations. `flush()` captures pending dirty state on the main
 actor before waiting for writes. Frame notifications only update window fields
 and schedule this save; they do not notify the engine factory or tab mirror.
+
+## Sidebar completion M2 (2026-10-26)
+
+Delete (`closeTab` on a folder, or a folder in `archiveNodes`) now archives one
+folder record with reason `folderDeleted`. `archiveFolder` provides the same model
+behavior. No Archive Folder menu or command is added. `ArchiveRecordKind` is
+explicit: old rows, including old `folderDeleted` rows, stay tabs. Mixed bulk
+archives use one sink batch and one SQLite transaction per Profile. Folder payloads
+retain nested folders, splits, original IDs, and customization. The optional
+`originalSection` payload key preserves Pinned/Today fallback after a parent is
+removed; the parent UUID alone cannot recover that information.
+
+The archive opens and adds `kind TEXT NOT NULL DEFAULT 'tab'` with schema version 1
+in one FULL-synchronous transaction. Repeat opens are inert. Diagnostic switch
+`OPENKIT_DEBUG_ARCHIVE_MIGRATION_CRASH=alter|version` exits 86 before commit so the
+real CLI runner can verify rollback and recovery. Existing row payloads are not
+rewritten. Folder restore skips live child IDs, uses the original parent or section,
+then a Today Space in the archived Profile (using the same fallback as tabs), and refreshes activity. One undo writes the folder row back.
+Library folder child counts are decoded once per loaded page and cached by row ID; reload clears them. The Library saves the sidebar snapshot before deleting the archive row and rolls
+back insertion on a save failure. It shows a folder glyph, a recursive tab count,
+and "Folder restored to <Space>. Click to view." with View.
+
+Release harness verification: `commands-demo` 166/166 including FA1–FA7 and the
+M1 checks; `settings-preview check --only library-folder-archive` PASS for L2/L3,
+View, durable save failure, and legacy row meaning. No unit tests or desktop input.
+App restore-last-closed dispatch by record kind remains App-lane wiring.
+
+### M2 Muse review corrections (2026-10-26)
+
+Merged main after M1's squash merge; the PR diff contains only the M2 files. Folder
+restore now preserves the archive Profile when the original Space is gone. FA3
+uses two Profiles with A visible and a surviving B Space. FA4 also keeps one
+archived split pane live in another split and checks the single-pane collapse.
+FA7 checks the snapshot roundtrip only; the unrelated ArchiveStore before/after
+comparison was removed. Library folder counts decode once per page load, cache
+by row ID, and clear on reload. A failed archive-row deletion after folder restore
+says "Folder restored", with a real SQLite delete-failure CLI scenario.
