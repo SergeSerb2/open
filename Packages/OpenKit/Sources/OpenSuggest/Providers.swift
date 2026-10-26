@@ -23,6 +23,7 @@ public struct SuggestInput: Sendable {
     public let typed: TypedInput
     public let context: SuggestContext
     public let searchEngine: SearchEngine
+    public var customSearchEngines: [SearchEngine] = []
     /// Active Site Search scope, if any.
     public let siteSearch: SiteSearch?
     public let currentTab: CurrentTabState?
