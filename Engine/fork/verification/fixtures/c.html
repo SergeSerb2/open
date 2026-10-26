@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Open history C</title>
+<style>body { min-height: 600vh; } output { position: fixed; right: 1rem; top: 1rem; background: white; }</style>
+<h1>Open history C</h1><label>Restore value <input id="q" type="text"></label>
+<p id="discarded"></p><output id="position"></output>
+<script>
+function report() {
+  document.querySelector('#discarded').textContent = 'document.wasDiscarded=' + document.wasDiscarded;
+  document.querySelector('#position').textContent = 'scrollY=' + scrollY + ' viewport=' + innerHeight;
+}
+addEventListener('pageshow', () => requestAnimationFrame(report));
+addEventListener('scroll', report, {passive: true});
+if (new URLSearchParams(location.search).get('unload') === '1') {
+  addEventListener('beforeunload', event => { event.preventDefault(); event.returnValue = ''; });
+}
+</script></html>
