@@ -68,6 +68,9 @@ enum CompletionChecks {
         click(pinned)
         for _ in 0..<3 { key(125, .shift) }
         check(context.selection.ids == Array(space.pinned.prefix(4).map(\.id)), "MS5 Shift+Down three times selects four rows")
+        let selectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.pinned[1].id.description)!, makeIfNecessary: true)!
+        let unselectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.today[0].id.description)!, makeIfNecessary: true)!
+        check(selectedRow.isAccessibilitySelected() && !unselectedRow.isAccessibilitySelected(), "MS5 accessibility exposes selected and unselected real rows")
         key(53)
         check(context.selection.isEmpty, "MS5 Escape clears selection")
         key(125, .shift); key(126)
@@ -84,6 +87,13 @@ enum CompletionChecks {
         click(child.id, .command)
         model.setExpanded(folderID: folder.id, expanded: false); pump()
         check(!context.selection.contains(child.id), "MS3 collapse prunes selected descendants")
+        model.setExpanded(folderID: folder.id, expanded: true); pump()
+        click(pinned); click(folder.id, .command); click(child.id, .command)
+        model.setExpanded(folderID: folder.id, expanded: false); pump()
+        check(context.selection.anchor == folder.id, "MS3 lost anchor moves to the nearest kept row")
+        key(125, .shift)
+        let next = order()[order().firstIndex(of: folder.id)! + 1]
+        check(context.selection.ids == [pinned, folder.id, next], "MS3 Shift+Down after anchor collapse extends from the nearest kept row")
         click(pinned); click(today, .shift)
         check(!context.selection.contains(child.id) && context.selection.contains(folder.id), "MS3 range skips collapsed children and includes the folder")
         model.setPinnedSectionCollapsed(spaceID: space.id, collapsed: true); pump()

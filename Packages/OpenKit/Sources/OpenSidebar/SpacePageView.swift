@@ -180,11 +180,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// True when the change touched this page.
     @discardableResult
     func apply(_ change: TreeChange) -> Bool {
-        defer { pruneSelection() }
         switch change {
         case .insert(let p, _, _), .remove(let p, _, _), .reload(let p):
-            return sync(parent: p)
+            let touched = sync(parent: p)
+            if touched { pruneSelection() }
+            return touched
         case .move(let from, _, let to, _, let nodeID):
+            defer { if displayedItem(for: from) != nil || displayedItem(for: to) != nil { pruneSelection() } }
             if from != to, let src = displayedItem(for: from), let dst = displayedItem(for: to),
                src.isFolder || dst.isFolder, moveDirect(nodeID: nodeID, from: src, to: dst) {
                 return true
@@ -383,7 +385,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func pruneSelection() {
         guard !applyingBulk, context.focusedSpace?.id == space.id, !context.selection.isEmpty else { return }
         let order = selectableOrder
-        context.selection.prune(keeping: Set(order))
+        context.selection.prune(keeping: Set(order), order: order)
         let ordered = order.filter { context.selection.contains($0) }
         if context.selection.ids != ordered { context.selection.select(ordered, anchor: context.selection.anchor) }
         syncSelectionIndexes()
@@ -749,9 +751,11 @@ final class SidebarOutlineView: NSOutlineView {
         case 125, 126: // Down, Up: focus only, leaving selection in the model.
             let extending = event.modifierFlags.contains(.shift)
             let selection = page.context.selection
+            let oldCount = selection.ids.count
             var from = current
             let candidates = extending ? rows.filter { itemID(of: item(atRow: $0)) != nil } : rows
             if extending {
+                if from < 0, let id = selection.anchor, let object = page.context.model.node(id: id)?.object { from = row(forItem: object) }
                 if from < 0, let id = page.context.selectedID(in: page.space.id), let object = page.context.model.node(id: id)?.object { from = row(forItem: object) }
                 if from < 0 { from = candidates.first ?? -1 }
                 if selection.isEmpty, let id = itemID(of: item(atRow: from)) { selection.select([id], anchor: id) }
@@ -759,6 +763,7 @@ final class SidebarOutlineView: NSOutlineView {
             let next = event.keyCode == 125 ? candidates.first(where: { $0 > from }) : candidates.last(where: { $0 < (from < 0 ? numberOfRows : from) })
             if let next { keyboardItem = item(atRow: next) as AnyObject?; scrollRowToVisible(next) }
             if extending, let id = itemID(of: keyboardItem) { selection.extend(to: id, order: page.selectableOrder) }
+            if extending, selection.ids.count != oldCount { NSAccessibility.post(element: self, notification: .selectedRowsChanged) }
         case 53: // Escape
             page.context.selection.clear()
         case 36, 49, 76: // Return, Space, keypad Enter

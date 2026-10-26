@@ -21,8 +21,9 @@ final class SidebarRowView: NSTableRowView {
     private let fill = CALayer()
     private var animatesSelectionChange = false
     private var keyboardRing: CAShapeLayer?
+    private var selectionState: SidebarRowSelectionState?
     weak var representedItem: AnyObject? {
-        didSet { if representedItem !== oldValue { needsDisplay = true } }
+        didSet { if representedItem !== oldValue { selectionState = nil; needsDisplay = true } }
     }
     var isKeyboardFocused = false {
         didSet {
@@ -104,7 +105,9 @@ final class SidebarRowView: NSTableRowView {
         let appearance = contentAppearance
         let multiselected = tracked({
             guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
-            return selection.rowState(for: id).isSelected
+            let state = selection.rowState(for: id)
+            selectionState = state
+            return state.isSelected
         }) { [weak self] in
             self?.animatesSelectionChange = true
             self?.needsDisplay = true
@@ -148,6 +151,10 @@ final class SidebarRowView: NSTableRowView {
         }
     }
     override func isAccessibilityFocused() -> Bool { isKeyboardFocused }
+    override func isAccessibilitySelected() -> Bool {
+        guard let id = itemID(of: representedItem) else { return false }
+        return page?.context.selection.contains(id) ?? false
+    }
     override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
     override func accessibilityPerformPress() -> Bool {
         guard let representedItem else { return false }
