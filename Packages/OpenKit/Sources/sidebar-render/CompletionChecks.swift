@@ -201,8 +201,8 @@ extension CompletionChecks {
         let frame = sidebar.rowFrame(nodeID: unread.id)!
         check(sidebar.unreadDotFrame(nodeID: unread.id) == CGRect(x: 199, y: frame.minY + 17, width: 6, height: 6), "UB1 unread dot is 6 pt at (W − 26, y + 20)")
         let originalTheme = space.theme, originalAppearance = context.systemAppearance
-        for appearance in [ContentAppearance.light, .dark] {
-            space.theme = appearance == .light ? originalTheme : SpaceTheme()
+        for (name, appearance, themed) in [("themed light", ContentAppearance.light, true), ("unthemed light", .light, false), ("unthemed dark", .dark, false)] {
+            space.theme = themed ? originalTheme : SpaceTheme()
             context.systemAppearance = appearance; pump()
             let dot = sidebar.unreadDotFrame(nodeID: unread.id)!
             let image = OffscreenRenderer().snapshot(scene, scale: 1)
@@ -215,7 +215,11 @@ extension CompletionChecks {
             let center = scene.convert(CGPoint(x: dot.midX, y: dot.midY), from: sidebar)
             let ink = luminance(center), base = luminance(CGPoint(x: center.x-8,y: center.y))
             let ratio = (max(ink,base)+0.05)/(min(ink,base)+0.05)
-            check(ratio >= 3, "UB1 \(appearance) actual unread dot contrast \(String(format: "%.2f",ratio)):1 ≥ 3:1 (guess pending C5)")
+            if !themed && appearance == .light {
+                let i = Int(center.y) * image.bytesPerRow + Int(center.x) * 4
+                check(bytes[i + 2] > bytes[i] + 40 && bytes[i + 2] > bytes[i + 1] + 40, "UB1 unthemed light dot keeps the passing blue Space accent in rendered ink")
+            }
+            check(ratio >= 3, "UB1 \(name) actual unread dot contrast \(String(format: "%.2f",ratio)):1 ≥ 3:1 (guess pending C5)")
         }
         space.theme = originalTheme; context.systemAppearance = originalAppearance; pump()
         let snapshotRoot = FileManager.default.temporaryDirectory.appendingPathComponent("unread-relaunch-\(UUID())")
