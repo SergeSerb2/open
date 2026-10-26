@@ -181,10 +181,6 @@ public final class SpaceManagerView: NSView {
                 context.suppressPreviews(.drag, true)
                 reorder = Reorder(id: space.id, start: start, origin: column.frame.minX, slot: startSlot)
                 column.layer?.zPosition = 1
-                column.layer?.shadowColor = NSColor.black.cgColor
-                column.layer?.shadowOpacity = 0.25
-                column.layer?.shadowRadius = 8
-                column.layer?.shadowOffset = CGSize(width: 0, height: 4)
                 column.setLifted(true)
                 context.haptics.endDrag()
             }
@@ -192,6 +188,7 @@ public final class SpaceManagerView: NSView {
             let m = SpaceManagerMetrics.self
             let origin = state.origin + x - state.start
             column.frame.origin.x = origin
+            column.setLifted(true)
             let others = context.model.spaces.map(\.id).filter { $0 != state.id }
             let slot = others.filter { id in
                 guard let i = context.model.spaces.firstIndex(where: { $0.id == id }) else { return false }
@@ -213,7 +210,7 @@ public final class SpaceManagerView: NSView {
         reorder = nil
         context.suppressPreviews(.drag, false)
         if let column = columns[state.id] {
-            column.layer?.zPosition = 0; column.layer?.shadowOpacity = 0
+            column.layer?.zPosition = 0
             column.setLifted(false)
         }
         if commit, context.model.spaces.firstIndex(where: { $0.id == state.id }) != state.slot {
@@ -249,11 +246,21 @@ private final class SpaceManagerColumn: NSView {
     private let content = SpaceManagerStrip()
     private var background: ThemeBackgroundView?
     private var loop: ObservationLoop?
+    private var lifted = false
+    private let liftShadow: NSShadow = {
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
+        shadow.shadowBlurRadius = 8
+        shadow.shadowOffset = CGSize(width: 0, height: -4)
+        return shadow
+    }()
     init(manager: SpaceManagerView, space: Space) {
         self.manager = manager; self.space = space
         controls = SpaceControlsView(context: manager.context, space: space)
         super.init(frame: .zero)
         wantsLayer = true
+        clipsToBounds = false
+        layer?.masksToBounds = false
         layer?.cornerRadius = 10; layer?.cornerCurve = .continuous
         content.wantsLayer = true; content.layer?.cornerRadius = 10; content.layer?.cornerCurve = .continuous; content.layer?.masksToBounds = true
         addSubview(content); content.addSubview(controls)
@@ -276,10 +283,26 @@ private final class SpaceManagerColumn: NSView {
         updateTheme(); needsLayout = true
     }
     func setLifted(_ lifted: Bool) {
+        if self.lifted != lifted {
+            self.lifted = lifted
+            shadow = lifted ? liftShadow : nil
+        }
         let scale: CGFloat = lifted ? 1.02 : 1
-        var transform = CATransform3DMakeTranslation(bounds.midX, bounds.midY, 0)
+        guard let layer else { return }
+        // Transform the complete column layer, including any AppKit-flattened
+        // fill, its rim and all content. Compensate for AppKit's layer anchor.
+        let center = CGPoint(x: (0.5 - layer.anchorPoint.x) * bounds.width,
+                             y: (0.5 - layer.anchorPoint.y) * bounds.height)
+        var transform = CATransform3DMakeTranslation(center.x, center.y, 0)
         transform = CATransform3DScale(transform, scale, scale, 1)
-        layer?.sublayerTransform = CATransform3DTranslate(transform, -bounds.midX, -bounds.midY, 0)
+        layer.transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowOpacity = lifted ? 0.25 : 0
+        layer.shadowRadius = 8
+        layer.shadowOffset = CGSize(width: 0, height: 4)
+        if layer.shadowPath?.boundingBoxOfPath != bounds {
+            layer.shadowPath = CGPath(roundedRect: bounds, cornerWidth: 10, cornerHeight: 10, transform: nil)
+        }
     }
     private func updateTheme() {
         let context = manager.context

@@ -155,6 +155,13 @@ final class SidebarRowView: NSTableRowView {
         guard let id = itemID(of: representedItem) else { return false }
         return page?.context.selection.contains(id) ?? false
     }
+    // Preserve AXSelected for attribute-based accessibility clients as well as
+    // the modern NSAccessibility protocol used above.
+    @available(macOS, deprecated: 10.10)
+    override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
+        if attribute == .selected { return MainActor.assumeIsolated { isAccessibilitySelected() } }
+        return super.accessibilityAttributeValue(attribute)
+    }
     override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
     override func accessibilityPerformPress() -> Bool {
         guard let representedItem else { return false }
