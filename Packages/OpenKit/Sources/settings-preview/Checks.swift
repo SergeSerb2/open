@@ -6,6 +6,8 @@ import OpenStore
 import OpenCommands
 import OpenRouting
 import OpenAdBlock
+import OpenSuggest
+import SQLite3
 
 struct CheckFailure: Error, CustomStringConvertible { let description: String }
 func require(_ condition: @autoclosure () throws -> Bool, _ message: String) throws { if try !condition() { throw CheckFailure(description: message) } }
@@ -28,7 +30,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         defaults = UserDefaults(suiteName: suite)!
         actions = PreviewActions()
         try FileManager.default.createDirectory(at: root.appendingPathComponent("State"), withIntermediateDirectories: true)
-        settings = SettingsViewModel(model: SyntheticData.model(), actions: actions, defaults: defaults, root: root)
+        settings = SettingsViewModel(model: SyntheticData.model(), actions: actions, defaults: defaults, root: root, snapshot: SnapshotStore(root: root))
         downloadFeed = PreviewDownloads(try SyntheticData.downloads(root: root, profiles: settings.model.profiles))
         captures = try FileCapturesProvider(root: root)
         libraryActions = PreviewLibraryActions(model: settings.model, downloads: downloadFeed, captures: captures, snapshot: settings.snapshot)
@@ -49,7 +51,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
     func prepareLibrary() async throws {
         try await SyntheticData.seedLibrary(root: root, model: settings.model, archives: archives, histories: histories)
         try captures.reload()
-        if let item = captures.captures.first { try await faviconStore.ingest(imageData: Data(contentsOf: captures.directory.appendingPathComponent(item.fileName)), iconURL: URL(string: "https://example.com/favicon.ico"), for: URL(string: "https://example.com/")!, pageSpecific: false) }
+        if let item=captures.captures.first {for domain in ["example.com","example.org","example.net"] {try await faviconStore.ingest(imageData:Data(contentsOf:captures.directory.appendingPathComponent(item.fileName)),iconURL:URL(string:"https://\(domain)/favicon.ico"),for:URL(string:"https://\(domain)/")!,pageSpecific:false)}}
         await library.reloadArchive(); await library.reloadHistory()
         for item in captures.captures { await library.loadThumbnail(item) }
     }
@@ -65,7 +67,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         try require(defaults.synchronize(), "UserDefaults synchronize failed")
         let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences/\(suite).plist")
         let expected = defaults.persistentDomain(forName: suite) ?? [:]
-        for _ in 0..<200 {
+        for _ in 0..<600 {
             defaults.synchronize()
             if let data = try? Data(contentsOf: url),
                let disk = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
@@ -81,12 +83,13 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
         let env = try PreviewEnvironment(); defer { env.close() }
         let vm = env.settings
+        let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
             case "general-toggles":
@@ -104,7 +107,6 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(env.actions.log == ["setAsDefaultBrowser"], "default action missing")
                 _ = try env.diskModel()
             case "profile-search":
-                let personal = vm.model.profiles[0].id, work = vm.model.profiles[1].id
                 vm.profiles.select(work); vm.profiles.searchEngineID = "bing"
                 var disk = try env.diskModel()
                 try require(disk.profile(id: work)?.settings.searchEngineID == "bing", "Work engine not saved")
@@ -115,11 +117,22 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 vm.profiles.searchEngineID = custom.id; vm.profiles.removeEngine(custom.id)
                 disk = try env.diskModel()
                 try require(disk.profile(id: work)?.settings.searchEngineID == "google" && disk.profile(id: personal)?.settings.searchEngineID == "google", "custom delete reset or scope failed")
+                var engine=OpenModel.SearchEngine(id:"edited-custom",name:"Before",keywords:["docs","reference"],searchURLTemplate:"https://example.com/?q=%s",suggestURLTemplate:"https://example.com/suggest?q=%s",suggestFormat:.googleChrome)
+                vm.profiles.update {$0.customSearchEngines.append(engine);$0.searchEngineID=engine.id}
+                try require(vm.profiles.saveEngine(id:engine.id,name:"After",keyword:"manual",template:"https://example.org/find?q=%s"), "edit failed")
+                engine=try env.diskModel().profile(id:work)!.settings.customSearchEngines.first{$0.id == engine.id}!
+                try require(engine.keywords == ["manual","reference"] && engine.suggestURLTemplate == "https://example.com/suggest?q=%s" && engine.suggestFormat == .googleChrome,"editing dropped endpoint/format/aliases")
+                let suggest=SuggestEngine(model:vm.model,fetcher:nil)
+                var searchURL:URL?
+                for await snapshot in suggest.query("example query",context:SuggestContext(mode:.newTab,profileID:work,allowsRemoteSuggestions:false)) {
+                    for row in snapshot.suggestions {if row.kind == .search {searchURL=row.url;break}}
+                }
+                try require(searchURL?.host() == "example.org","real suggestion consumer ignored custom default")
                 try require(env.actions.log.isEmpty, "search should be read at use")
             case "profile-archive-scope":
-                vm.profiles.proposeArchive(.twentyFourHours); vm.profiles.applyArchive(all: false)
+                vm.profiles.proposeArchive(.oneHour); vm.profiles.applyArchive(all: false)
                 var disk = try env.diskModel()
-                try require(disk.profiles.allSatisfy { $0.settings.autoArchiveAfter == .twentyFourHours }, "profile-only archive mismatch")
+                try require(disk.profile(id: personal)?.settings.autoArchiveAfter == .oneHour && disk.profile(id: work)?.settings.autoArchiveAfter == .twentyFourHours, "profile-only archive mismatch")
                 vm.profiles.proposeArchive(.sevenDays); vm.profiles.applyArchive(all: true)
                 disk = try env.diskModel()
                 try require(disk.profiles.allSatisfy { $0.settings.autoArchiveAfter == .sevenDays }, "all-profile archive mismatch")
@@ -176,10 +189,14 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 vm.set("site", for: "open.shortcuts.defaultPriority")
                 vm.shortcuts.record(.ctrl("t"), for: "new-tab")
                 try require(try KeyBindingStore.load(from: vm.shortcuts.fileURL).bindings["new-tab"]?.priority == nil, "new-binding default rewrote an existing priority")
+                let freshCommand = "new-window"
+                try require(vm.shortcuts.store.bindings[freshCommand] == nil, "priority check must start without a seeded override")
+                vm.shortcuts.record(.init(key:"p",modifiers:[.control,.option,.command]),for:freshCommand)
+                try require(try KeyBindingStore.load(from:vm.shortcuts.fileURL).bindings[freshCommand]?.priority?.rawValue == vm.string("open.shortcuts.defaultPriority"), "new override ignored picker priority")
                 vm.shortcuts.clear("zoom-in"); vm.shortcuts.priority(.siteFirst, for: "new-tab")
                 let disk = try KeyBindingStore.load(from: vm.shortcuts.fileURL)
                 try require(disk.effectiveShortcuts(for: CommandRegistry.byID["new-tab"]!) == [.ctrl("t")] && disk.bindings["zoom-in"]?.shortcuts == [] && disk.effectivePriority(for: CommandRegistry.byID["new-tab"]!) == .siteFirst, "key binding persistence/effective menu keys")
-                try require(env.actions.log.allSatisfy { $0 == "keyBindingsDidChange" } && env.actions.log.count == 3, "menu/hotkey notifications")
+                try require(env.actions.log.allSatisfy { $0 == "keyBindingsDidChange" } && env.actions.log.count == 4, "menu/hotkey notifications")
             case "shortcuts-conflict":
                 vm.shortcuts.record(.init(key: "y", modifiers: [.control, .option, .command]), for: "new-tab")
                 let before = try Data(contentsOf: vm.shortcuts.fileURL), beforeCalls = env.actions.log.count
@@ -221,16 +238,18 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 await wizard.refreshCounts()
                 try require(wizard.canContinue && wizard.counts["Spaces"] == 2 && wizard.counts["Pinned and Today tabs"] == 3 && wizard.counts["Skipped easels"] == 1 && wizard.counts["Passwords and cookies"] == 2, "fixture counts differ: \(wizard.counts)")
                 wizard.review(); await wizard.beginImport()
-                try require(wizard.outcome?.errorText == nil && wizard.outcome?.counts["Imported Spaces"] == 2 && env.actions.keychainReadCount == 0, "import/action consent")
+                try require(wizard.outcome?.errorText == nil && wizard.outcome?.counts["Imported Spaces"] == 2 && env.actions.importPlansWithConsent == 0, "wizard gate: unrequested passwords granted no consent")
+                let historyOnly = ImportWizardViewModel(root:vm,directory:source); await historyOnly.refreshCounts(); historyOnly.plan.history=true;historyOnly.review();await historyOnly.beginImport()
+                try require(historyOnly.step == .report, "History incorrectly showed the Passwords step")
                 var disk = try env.diskModel(); let itemCount = disk.index.count, spaceCount = disk.spaces.count
                 let repeatWizard = ImportWizardViewModel(root: vm, directory: source); await repeatWizard.refreshCounts(); repeatWizard.review(); await repeatWizard.beginImport()
                 disk = try env.diskModel(); try require(disk.index.count == itemCount && disk.spaces.count == spaceCount && repeatWizard.outcome?.counts["Imported items"] == 0, "re-import added rows")
                 let consent = ImportWizardViewModel(root: vm, directory: source); await consent.refreshCounts(); consent.plan.secretsRequested = true; consent.review()
                 let calls = env.actions.log.count; await consent.beginImport()
                 try require(consent.step == .consent && !consent.plan.secretsConsented && env.actions.log.count == calls, "consent did not gate import")
-                consent.finish(); try require(env.actions.keychainReadCount == 0 && env.actions.log.count == calls, "cancel consent touched Keychain")
-                let allowed = ImportWizardViewModel(root: vm, directory: source); await allowed.refreshCounts(); allowed.plan.secretsRequested = true; allowed.review(); await allowed.beginImport(); await allowed.allowAndImportSecrets()
-                try require(allowed.plan.secretsConsented && allowed.outcome?.counts["Secret copies"] == 0 && env.actions.keychainReadCount == 0, "consented Phase 2 read secrets")
+                consent.finish(); try require(env.actions.importPlansWithConsent == 0 && env.actions.log.count == calls, "wizard gate: cancel called import or granted consent")
+                let allowed = ImportWizardViewModel(root: vm, directory: source); await allowed.refreshCounts(); allowed.plan.secretsRequested = true; allowed.review(); await allowed.beginImport(); await allowed.allowAndImportSecrets(); try require(allowed.step == .consent && !allowed.plan.secretsConsented, "count-only capability allowed consent"); await allowed.skipSecrets()
+                try require(!allowed.plan.secretsConsented && allowed.outcome?.counts["Password and cookie copies"] == 0 && env.actions.importPlansWithConsent == 0, "wizard gate: count-only continuation must not grant consent")
                 let failed = ImportWizardViewModel(root: vm, directory: source); await failed.refreshCounts(); failed.review()
                 let before = try Data(contentsOf: vm.snapshot.fileURL)
                 try Data("{}".utf8).write(to: source.appendingPathComponent("StorableSidebar.json"))
@@ -290,6 +309,66 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                     try require(labels.contains(title), "empty label missing from hosted accessibility tree: \(title) — \(labels)")
                 }
                 let emptyCount = await countArchive(env.archives); try require(emptyCount == 0 && (try FileCapturesProvider(root: env.root)).captures.isEmpty, "empty stores not on disk")
+            case "archive-save-failure":
+                try await env.prepareLibrary();let library=env.library
+                let row=library.archiveRows[0];let before=try Data(contentsOf:vm.snapshot.fileURL)
+                let priorUndo=vm.model.undoManager?.canUndo
+                setenv("OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL","1",1)
+                await library.restore(id:row.id)
+                unsetenv("OPENKIT_DEBUG_SNAPSHOT_WRITE_FAIL")
+                let retained=await env.archives[row.profileID!]!.record(id:row.id)
+                try require(vm.model.tab(id:row.id) == nil && retained != nil,"failed snapshot left a live tab or lost archive")
+                try require(try Data(contentsOf:vm.snapshot.fileURL) == before,"failed restore changed durable snapshot")
+                try require(library.statusText.contains("Saving failed") && env.libraryActions.log.isEmpty && vm.model.undoManager?.canUndo == priorUndo,"failed restore published action/Undo")
+            case "archive-owner-partial":
+                try await env.prepareLibrary();let library=env.library
+                let personalStore=env.archives[personal]!,workStore=env.archives[work]!
+                let personalRows=library.archiveRows.filter{$0.profileID == personal},workRows=library.archiveRows.filter{$0.profileID == work}
+                try archiveDeleteTrigger(workStore.fileURL,enabled:true)
+                library.requestDeleteArchive([personalRows[0].id]);await library.deleteArchiveConfirmed()
+                try require(library.archiveResults.count == 1 && library.archiveResults[personal]?.hasPrefix("Deleted") == true,"delete touched an unrelated profile store")
+                let workCount=await workStore.count();try require(workCount == 3,"unowned rows changed")
+                library.requestDeleteArchive([personalRows[1].id,workRows[0].id]);await library.deleteArchiveConfirmed()
+                let kept=await workStore.record(id:workRows[0].id),removed=await personalStore.record(id:personalRows[1].id)
+                try require(removed == nil && kept != nil && library.archiveResults[work]?.hasPrefix("Failed:") == true,"partial deletion was not reported by owning profile")
+                library.requestClearArchive();await library.clearArchiveConfirmed()
+                let personalCount=await personalStore.count(),remaining=await workStore.count()
+                try require(personalCount == 0 && remaining == 3 && library.archiveResults[personal] == "Archive cleared." && library.archiveResults[work]?.hasPrefix("Failed:") == true && !env.libraryActions.log.contains("clearArchive"),"partial clear hid failures")
+                try archiveDeleteTrigger(workStore.fileURL,enabled:false)
+            case "adblock-profile-lifecycle":
+                try await env.prepareAdBlock();let ad=vm.adBlock!
+                let created=vm.profiles.create(name:"Example New Profile")!
+                await ad.openSelectedProfile();ad.setExcluded("example.org",excluded:true)
+                let file=ad.store.listDirectory(for:created.id).appendingPathComponent("exclusions.json")
+                try require(try JSONDecoder().decode([String].self,from:Data(contentsOf:file)).contains("example.org"),"new profile was not attached")
+                try ad.store.closeProfile(created.id);ad.setExcluded("example.net",excluded:true)
+                try require(ad.errorText.hasPrefix("Could not save allowed sites."),"store fault was mislabeled as invalid host")
+                await ad.openSelectedProfile();try require(vm.profiles.delete(id:created.id),"new profile delete failed")
+                do {try ad.store.setExcluded("example.com",excluded:true,profile:created.id);throw CheckFailure(description:"deleted profile state stayed open")}
+                catch let error as CheckFailure {throw error} catch {try require(String(describing:error).contains("profile is not open"),"wrong deletion failure")}
+                try require(try env.diskModel().profile(id:created.id) == nil,"deleted profile stayed on disk")
+                var closed: [ProfileID] = []
+                ad.store.onEngineEvent = { [weak ad] event in
+                    if case .closed(let id) = event { closed.append(id) }
+                    ad?.refresh()
+                }
+                let external = vm.profiles.create(name:"Example External Profile")!
+                await ad.openSelectedProfile()
+                try require(try vm.profiles.dataModel.deleteProfile(in:vm.model,id:external.id),"external owner delete failed")
+                vm.profiles.select(personal); ad.refresh()
+                try require(closed.filter{$0 == external.id}.count == 1,"reentrant store callback repeated external closure")
+                do {try ad.store.setExcluded("example.com",excluded:true,profile:external.id);throw CheckFailure(description:"externally deleted profile stayed open")}
+                catch let error as CheckFailure {throw error} catch {try require(String(describing:error).contains("profile is not open"),"wrong external close failure")}
+                try require(try env.diskModel().profile(id:external.id) == nil,"external deletion did not persist")
+            case "suggestion-notice":
+                vm.profiles.paneDidAppear()
+                try require(vm.profiles.suggestions && vm.profiles.showsSuggestNotice && !vm.profiles.allowsRemoteSuggestions,"fresh ON pane dead-ended without notice")
+                try require(!vm.profiles.prepareForRemoteSuggestions(profileID:personal),"app first query bypassed notice")
+                vm.profiles.dismissSuggestNotice()
+                let disk=try env.diskDefaults();try require(disk["open.general.searchSuggestNoticeDismissed"] as? Bool == true && vm.profiles.allowsRemoteSuggestions,"notice acknowledgement not persisted")
+                let reopened=SettingsViewModel(model:vm.model,actions:env.actions,defaults:UserDefaults(suiteName:env.suite)!,root:env.root,snapshot:vm.snapshot)
+                try require(reopened.profiles.prepareForRemoteSuggestions(profileID:personal) && !reopened.profiles.showsSuggestNotice,"notice repeated after restart")
+                vm.profiles.select(work);try require(!vm.profiles.prepareForRemoteSuggestions() && !vm.profiles.showsSuggestNotice,"OFF profile should not show notice or request")
             case "app-icon":
                 vm.appIcon.select(.openColor)
                 let disk = try env.diskDefaults()
@@ -333,4 +412,13 @@ server.serve_forever()
 
 @MainActor func countArchive(_ stores: [ProfileID: ArchiveStore]) async -> Int {
     var result = 0; for store in stores.values { result += await store.count() }; return result
+}
+
+/// Real SQLite trigger creates a durable per-profile deletion failure, without a fake store.
+func archiveDeleteTrigger(_ url:URL,enabled:Bool) throws {
+    var db:OpaquePointer?
+    guard sqlite3_open(url.path,&db) == SQLITE_OK else {throw CheckFailure(description:"cannot open synthetic archive")}
+    defer {sqlite3_close(db)}
+    let sql=enabled ? "CREATE TRIGGER review_block_delete BEFORE DELETE ON archived_tabs BEGIN SELECT RAISE(ABORT, 'synthetic deletion failure'); END;":"DROP TRIGGER review_block_delete;"
+    guard sqlite3_exec(db,sql,nil,nil,nil) == SQLITE_OK else {throw CheckFailure(description:"cannot configure real archive failure")}
 }

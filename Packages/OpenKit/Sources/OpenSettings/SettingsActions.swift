@@ -28,6 +28,7 @@ public struct ImportOutcome: Sendable {
 }
 
 @MainActor public protocol SettingsActions: AnyObject {
+    var canImportPasswordsAndCookies: Bool { get }
     func setAsDefaultBrowser() -> String?
     func isDefaultBrowser() -> Bool
     func checkForUpdates()
@@ -55,3 +56,5 @@ public struct ImportOutcome: Sendable {
     func copyText(_ text: String)
     func openLibrary()
 }
+
+public extension SettingsActions { var canImportPasswordsAndCookies: Bool { false } }

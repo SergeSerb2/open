@@ -1,69 +1,117 @@
 import AppKit
 import SwiftUI
 import OpenDesign
+import OpenModel
 
-public struct LibraryContent: View {
-    @Bindable var viewModel: LibraryViewModel
-    public init(viewModel: LibraryViewModel) { self.viewModel = viewModel }
-    public var body: some View {
-        HStack(spacing: 0) {
-            LibrarySidebar(viewModel: viewModel).frame(width: 180)
+public struct LibraryContent:View {
+    @Bindable var viewModel:LibraryViewModel
+    public init(viewModel:LibraryViewModel){self.viewModel=viewModel}
+    public var body:some View {HStack(spacing:0) {
+        LibrarySidebar(viewModel:viewModel).frame(width:180)
+        Divider()
+        VStack(spacing:0) {
+            VStack(spacing:8) {
+                Text(viewModel.section.title).font(.system(size:13,weight:.semibold)).frame(height:20)
+                LibraryToolbar(model:viewModel)
+            }.padding(.horizontal,18).padding(.top,4).padding(.bottom,12).background(.bar)
             Divider()
-            VStack(spacing: 18) {
-                TextField("Search \(viewModel.section.title)", text: $viewModel.query).textFieldStyle(.roundedBorder)
-                switch viewModel.section {
-                case .archive: ArchiveSection(model: viewModel)
-                case .downloads: DownloadsSection(model: viewModel)
-                case .captures, .media: CapturesSection(model: viewModel)
-                case .history: HistorySection(model: viewModel)
-                }
-                if !viewModel.statusText.isEmpty { HStack { Text(viewModel.statusText).font(.caption).foregroundStyle(.secondary); if let space = viewModel.restoredSpaceID { Button("View") { viewModel.actions.viewSpace(id: space) } }; Spacer() } }
-            }.padding(24)
-
-        }.font(Font(Typography.urlHost.font)).background(Color(nsColor: .windowBackgroundColor))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Library")
-        .task(id: viewModel.filterIdentity) { await viewModel.reload() }
-    }
-}
-private struct LibrarySidebar: NSViewRepresentable {
-    let viewModel: LibraryViewModel
-    func makeNSView(context: Context) -> NSStackView {
-        let stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
-        for section in LibrarySection.allCases {
-            let button = LibrarySectionButton(title: section.title, image: NSImage(systemSymbolName: section.symbol, accessibilityDescription: nil)!, target: context.coordinator, action: #selector(Coordinator.select(_:)))
-            button.setAccessibilityLabel(section.title); button.isBordered = false; button.heightAnchor.constraint(equalToConstant: 32).isActive = true; button.widthAnchor.constraint(equalToConstant: 144).isActive = true; button.setButtonType(.toggle); button.identifier = .init(section.rawValue); stack.addArrangedSubview(button)
+            Group {switch viewModel.section {
+            case .archive:ArchiveSection(model:viewModel)
+            case .downloads:DownloadsSection(model:viewModel)
+            case .captures,.media:CapturesSection(model:viewModel)
+            case .history:HistorySection(model:viewModel)
+            }}.padding(16).frame(maxWidth:.infinity,maxHeight:.infinity)
+            if !viewModel.statusText.isEmpty {HStack {Text(viewModel.statusText).font(.caption).foregroundStyle(.secondary);if let space=viewModel.restoredSpaceID {Button("View"){viewModel.actions.viewSpace(id:space)}};Spacer()}.padding(.horizontal,16).padding(.bottom,10)}
         }
-        stack.addArrangedSubview(NSView()); stack.edgeInsets = NSEdgeInsets(top: 24, left: 18, bottom: 24, right: 18)
-        return stack
+    }.font(Font(SettingsTokens.label.font)).controlSize(.small).background(Color(nsColor:SettingsTokens.content.nsColor)).ignoresSafeArea()
+    .accessibilityElement(children:.contain).accessibilityLabel("Library")
+    .task(id:viewModel.filterIdentity){await viewModel.reload()}
+    .background(WindowTitle(title:viewModel.section.title).frame(width:0,height:0))}
+}
+private struct WindowTitle:NSViewRepresentable {
+    let title:String
+    func makeNSView(context:Context)->NSView {NSView()}
+    func updateNSView(_ view:NSView,context:Context){view.window?.title=title}
+}
+private struct LibraryToolbar:View {
+    @Bindable var model:LibraryViewModel
+    var body:some View {HStack(spacing:8) {
+        switch model.section {
+        case .archive:
+            Picker("Space",selection:$model.archiveSpaceFilter){Text("All Spaces").tag(Optional<SpaceID>.none);ForEach(model.model.spaces,id:\.id){Text(model.model.displayTitle(for:$0)).tag(Optional($0.id))}}.labelsHidden()
+            Picker("Reason",selection:$model.archiveReasonFilter){Text("All Reasons").tag(Optional<ArchiveReason>.none);ForEach([ArchiveReason.closed,.autoArchived,.clearedToday,.folderDeleted],id:\.self){Text($0.libraryTitle).tag(Optional($0))}}.labelsHidden()
+            Picker("Origin",selection:$model.archiveOriginFilter){Text("All Origins").tag(OriginFilter.all);Text("Spaces").tag(OriginFilter.spaces);Text("Little Open").tag(OriginFilter.littleOpen)}.labelsHidden()
+        case .downloads:
+            Picker("Status",selection:$model.downloadStateFilter){Text("All Downloads").tag(Optional<DownloadState>.none);Text("In Progress").tag(Optional(DownloadState.inProgress));Text("Completed").tag(Optional(DownloadState.completed));Text("Failed").tag(Optional(DownloadState.failed))}.labelsHidden()
+            Picker("Profile",selection:$model.downloadProfileFilter){Text("All Profiles").tag(Optional<ProfileID>.none);ForEach(model.model.profiles,id:\.id){Text($0.name).tag(Optional($0.id))}}.labelsHidden()
+        case .captures,.media:
+            if model.section == .media {Picker("Kind",selection:$model.mediaKind){Text("All Media").tag("All");Text("Captures").tag("Captures");Text("Screenshots").tag("Screenshots")}.labelsHidden()}
+            Picker("Sort",selection:$model.captureSort){ForEach(["Newest","Oldest","Name"],id:\.self){Text($0).tag($0)}}.labelsHidden()
+        case .history:
+            Picker("Profile",selection:$model.historyProfileID){ForEach(model.model.profiles,id:\.id){Text($0.name).tag($0.id)}}.labelsHidden()
+        }
+        Spacer(minLength:0)
+        TextField("Search \(model.section.title)",text:$model.query).textFieldStyle(.roundedBorder).frame(width:180)
+    }.frame(height:24)}
+}
+private struct LibrarySidebar:NSViewRepresentable {
+    let viewModel:LibraryViewModel
+    func makeCoordinator()->Coordinator {Coordinator(viewModel)}
+    func makeNSView(context:Context)->SourceBackgroundView {
+        let effect=SourceBackgroundView()
+        let scroll=NSScrollView();scroll.drawsBackground=false;scroll.hasVerticalScroller=false
+        let table=NSTableView();table.headerView=nil;table.rowHeight=28;table.intercellSpacing = .zero;table.style = .sourceList;table.selectionHighlightStyle = .none;table.backgroundColor = .clear;table.allowsEmptySelection=false
+        table.addTableColumn(NSTableColumn(identifier:.init("section")));table.delegate=context.coordinator;table.dataSource=context.coordinator
+        context.coordinator.table=table;scroll.documentView=table;effect.addSubview(scroll);scroll.translatesAutoresizingMaskIntoConstraints=false
+        NSLayoutConstraint.activate([scroll.leadingAnchor.constraint(equalTo:effect.leadingAnchor),scroll.trailingAnchor.constraint(equalTo:effect.trailingAnchor),scroll.topAnchor.constraint(equalTo:effect.topAnchor,constant:40),scroll.bottomAnchor.constraint(equalTo:effect.bottomAnchor)])
+        return effect
     }
-    func updateNSView(_ stack: NSStackView, context: Context) { for case let b as NSButton in stack.arrangedSubviews { b.state = b.identifier?.rawValue == viewModel.section.rawValue ? .on : .off; b.needsDisplay = true } }
-    func makeCoordinator() -> Coordinator { Coordinator(viewModel) }
-    @MainActor final class Coordinator: NSObject {
-        let model: LibraryViewModel
-        init(_ model: LibraryViewModel) { self.model = model }
-        @objc func select(_ sender: NSButton) { model.section = LibrarySection(rawValue: sender.identifier!.rawValue)! }
+    func updateNSView(_ view:SourceBackgroundView,context:Context){if let row=LibrarySection.allCases.firstIndex(of:viewModel.section),context.coordinator.table?.selectedRow != row {context.coordinator.table?.selectRowIndexes(IndexSet(integer:row),byExtendingSelection:false)};context.coordinator.refreshCells()}
+    @MainActor final class Coordinator:NSObject,NSTableViewDataSource,NSTableViewDelegate {
+        let model:LibraryViewModel;weak var table:NSTableView?
+        init(_ model:LibraryViewModel){self.model=model}
+        func numberOfRows(in tableView:NSTableView)->Int {LibrarySection.allCases.count}
+        func tableView(_ tableView:NSTableView,viewFor tableColumn:NSTableColumn?,row:Int)->NSView? {
+            let section=LibrarySection.allCases[row];let cell=SourceCellView();let icon=NSImageView();icon.image=NSImage(systemSymbolName:section.symbol,accessibilityDescription:nil);icon.contentTintColor = .secondaryLabelColor;let text=NSTextField(labelWithString:section.title);text.font=SettingsTokens.label.font
+            cell.addSubview(icon);cell.addSubview(text);cell.imageView=icon;cell.textField=text;icon.translatesAutoresizingMaskIntoConstraints=false;text.translatesAutoresizingMaskIntoConstraints=false
+            NSLayoutConstraint.activate([icon.leadingAnchor.constraint(equalTo:cell.leadingAnchor),icon.widthAnchor.constraint(equalToConstant:16),icon.heightAnchor.constraint(equalToConstant:16),icon.centerYAnchor.constraint(equalTo:cell.centerYAnchor),text.leadingAnchor.constraint(equalTo:icon.trailingAnchor,constant:8),text.trailingAnchor.constraint(equalTo:cell.trailingAnchor,constant:-4),text.centerYAnchor.constraint(equalTo:cell.centerYAnchor)])
+            return cell
+        }
+        func tableViewSelectionDidChange(_ notification:Notification){guard let table,LibrarySection.allCases.indices.contains(table.selectedRow) else {return};model.section=LibrarySection.allCases[table.selectedRow];refreshCells()}
+        func refreshCells(){guard let table else{return};for row in 0..<table.numberOfRows {if let cell=table.view(atColumn:0,row:row,makeIfNecessary:true) as? SourceCellView {cell.selected=row == table.selectedRow;cell.needsDisplay=true}}}
     }
 }
 @MainActor public enum LibraryWindow {
-    public static func makeWindow(viewModel: LibraryViewModel) -> NSWindow {
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 960, height: 618), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.contentViewController = NSHostingController(rootView: LibraryContent(viewModel: viewModel)); window.title = "Library"; window.minSize = .init(width: 720, height: 480); window.isReleasedWhenClosed = false
-        window.setFrame(.init(x: 200, y: 200, width: 960, height: 640), display: false)
-        return window
+    public static func makeWindow(viewModel:LibraryViewModel)->NSWindow {
+        let window=NSWindow(contentRect:.init(x:0,y:0,width:960,height:640),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
+        window.titlebarAppearsTransparent=true;window.titleVisibility = .hidden
+        window.contentViewController=NSHostingController(rootView:LibraryContent(viewModel:viewModel));window.title=viewModel.section.title;window.minSize = .init(width:720,height:480);window.isReleasedWhenClosed=false
+        window.setFrame(.init(x:200,y:200,width:960,height:640),display:false);return window
     }
 }
-@MainActor public final class LibraryPresenter: NSObject, NSWindowDelegate {
-    public let viewModel: LibraryViewModel
-    public private(set) var window: NSWindow?
-    public init(viewModel: LibraryViewModel) { self.viewModel = viewModel; super.init() }
-    public func show(section: LibrarySection? = nil) { if let section { viewModel.section = section }; if window == nil { window = LibraryWindow.makeWindow(viewModel: viewModel); window?.delegate = self }; if window?.isKeyWindow == true { Task { await viewModel.refreshExternalState() } }; window?.makeKeyAndOrderFront(nil) }
-    public func windowDidBecomeKey(_ notification: Notification) { Task { await viewModel.refreshExternalState() } }
+@MainActor public final class LibraryPresenter:NSObject,NSWindowDelegate {
+    public let viewModel:LibraryViewModel;public private(set) var window:NSWindow?
+    public init(viewModel:LibraryViewModel){self.viewModel=viewModel;super.init()}
+    public func show(section:LibrarySection?=nil){if let section {viewModel.section=section};if window == nil {window=LibraryWindow.makeWindow(viewModel:viewModel);window?.delegate=self};Task {await viewModel.refreshExternalState()};window?.makeKeyAndOrderFront(nil)}
+    public func windowDidBecomeKey(_ notification:Notification){Task {await viewModel.refreshExternalState()}}
 }
 
-private final class LibrarySectionButton: NSButton {
-    override func draw(_ dirtyRect: NSRect) {
-        if state == .on { Core.focusRing.nsColor.withAlphaComponent(0.15).setFill(); NSBezierPath(roundedRect: bounds, xRadius: URLFieldMetrics.cornerRadius, yRadius: URLFieldMetrics.cornerRadius).fill() }
-        super.draw(dirtyRect)
+/// Native table selection and keyboard navigation, with system accent painting in the
+/// cell. This also renders without AppKit's GPU-only source-list selection material.
+private final class SourceCellView:NSTableCellView {
+    var selected=false
+    override var allowsVibrancy:Bool {false}
+    override func draw(_ dirtyRect:NSRect) {
+        if selected {
+            let active=window?.isKeyWindow == true
+            NSColor.controlAccentColor.withAlphaComponent(active ? 1:0.18).setFill()
+            NSBezierPath(roundedRect:bounds,xRadius:6,yRadius:6).fill()
+            textField?.textColor=active ? .alternateSelectedControlTextColor:.labelColor
+        } else {textField?.textColor = .labelColor}
+        imageView?.contentTintColor=textField?.textColor
     }
+}
+
+private final class SourceBackgroundView:NSView {
+    override func draw(_ dirtyRect:NSRect) {SettingsTokens.band.nsColor.setFill();dirtyRect.fill()}
 }

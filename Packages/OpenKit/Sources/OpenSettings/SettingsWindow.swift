@@ -1,86 +1,117 @@
 import AppKit
 import SwiftUI
 import OpenDesign
+import OpenModel
 
-/// Account, AI and internal panes are deliberately absent from v1.
 public struct SettingsContent: View {
     @Bindable var viewModel: SettingsViewModel
     let includesWindowTitle: Bool
     public init(viewModel: SettingsViewModel, includesWindowTitle: Bool = true) { self.viewModel = viewModel; self.includesWindowTitle = includesWindowTitle }
     public var body: some View {
         VStack(spacing: 0) {
-            if includesWindowTitle { PreviewWindowTitle(title: viewModel.selectedPane.title).frame(height: 22) }
-            SettingsTabBar(viewModel: viewModel).frame(height: 66)
-            Divider()
-            ScrollViewReader { proxy in ScrollView {
-                VStack(spacing: viewModel.selectedPane == .shortcuts ? 8 : 20) {
-                    switch viewModel.selectedPane {
-                    case .general: GeneralPane(model: viewModel.general)
-                    case .shortcuts: ShortcutsPane(model: viewModel.shortcuts)
-                    case .links: LinksPane(root: viewModel)
-                    case .profiles: ProfilesPane(model: viewModel.profiles)
-                    case .appIcon: AppIconPane(model: viewModel.appIcon)
-                    case .advanced: AdvancedPane(model: viewModel.advanced)
-                    }
-                }.padding(.horizontal, 54).padding(.vertical, viewModel.selectedPane == .shortcuts ? 10 : 24)
-            }.onAppear { if let target = viewModel.scrollTarget { proxy.scrollTo(target, anchor: .top) } }
-             .onChange(of: viewModel.scrollTarget) { _, target in if let target { proxy.scrollTo(target, anchor: .top) } }
+            ZStack(alignment: .top) {
+                Color(nsColor: SettingsTokens.band.nsColor)
+                if includesWindowTitle { Text(viewModel.selectedPane.title).font(Font(SettingsTokens.title.font)).foregroundStyle(.secondary).frame(height: SettingsTokens.titleHeight) }
+                SettingsTabBar(viewModel: viewModel).frame(height: SettingsTokens.bandHeight)
+            }.frame(height: SettingsTokens.bandHeight)
+            if viewModel.selectedPane == .shortcuts {
+                ShortcutsPane(model: viewModel.shortcuts).padding(.horizontal, SettingsTokens.contentInset).padding(.top, 19)
+            } else {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: SettingsTokens.groupGap) {
+                            switch viewModel.selectedPane {
+                            case .general: GeneralPane(model: viewModel.general)
+                            case .profiles: ProfilesPane(model: viewModel.profiles)
+                            case .links: LinksPane(root: viewModel)
+                            case .appIcon: AppIconPane(model: viewModel.appIcon)
+                            case .advanced: AdvancedPane(model: viewModel.advanced)
+                            case .shortcuts: EmptyView()
+                            }
+                        }.padding(.horizontal, SettingsTokens.contentInset).padding(.top, SettingsTokens.firstBoxGap).padding(.bottom, 20)
+                    }.onAppear { if let target = viewModel.scrollTarget { proxy.scrollTo(target, anchor: .top) } }
+                     .onChange(of: viewModel.scrollTarget) { _, target in if let target { proxy.scrollTo(target, anchor: .top) } }
+                }
             }
-
-        }.font(Font(Typography.urlHost.font)).background(Color(nsColor: .windowBackgroundColor))
+        }.font(Font(SettingsTokens.label.font)).controlSize(.small)
+        .background(Color(nsColor: SettingsTokens.content.nsColor)).buttonStyle(SettingsButtonStyle()).ignoresSafeArea()
         .onChange(of: viewModel.model.spaces.map { "\($0.id)|\($0.profileID)|\($0.title ?? "")" }) { _, _ in viewModel.refreshLinks(preserveDrafts: true); viewModel.profiles.refresh() }
-        .onChange(of: viewModel.model.profiles.map { "\($0.id)|\($0.name)" }) { _, _ in viewModel.profiles.refresh() }
+        .onChange(of: viewModel.model.profiles.map { "\($0.id)|\($0.name)" }) { _, _ in viewModel.profiles.refresh(); viewModel.adBlock?.refresh() }
         .sheet(isPresented: $viewModel.showsPreviews) { PreviewsSheet(model: viewModel.general) }
         .sheet(isPresented: $viewModel.showsSearchEngines) { SearchEnginesSheet(model: viewModel.profiles) }
         .sheet(isPresented: $viewModel.showsImport) { ImportWizard(root: viewModel) }
-
     }
 }
 private struct SettingsTabBar: NSViewRepresentable {
     let viewModel: SettingsViewModel
-    func makeNSView(context: Context) -> NSStackView {
-        let stack = NSStackView(); stack.orientation = .horizontal; stack.spacing = 8; stack.distribution = .fillEqually
+    func makeNSView(context: Context) -> TabBandView {
+        let band = TabBandView()
         for pane in PaneID.allCases {
-            let button = SettingsTabButton(title: pane.title, image: NSImage(systemSymbolName: pane.symbol, accessibilityDescription: pane.title)!, target: context.coordinator, action: #selector(Coordinator.select(_:)))
-            button.imagePosition = .imageAbove; button.isBordered = false; button.setButtonType(.toggle); button.identifier = .init(pane.rawValue)
-            button.font = Typography.tooltipSubtitle.font
-            button.image = button.image?.withSymbolConfiguration(.init(pointSize: Typography.commandBarInput.size, weight: .regular))
-            button.heightAnchor.constraint(equalToConstant: 52).isActive = true
-            button.setAccessibilityLabel(pane.title)
-            stack.addArrangedSubview(button)
+            let button = SettingsTabButton(title: pane.title, target: context.coordinator, action: #selector(Coordinator.select(_:)))
+            button.identifier = .init(pane.rawValue); button.symbol = pane.symbol
+            button.setButtonType(.toggle); button.isBordered = false
+            button.setAccessibilityLabel(pane.title); band.addSubview(button)
         }
-        stack.edgeInsets = NSEdgeInsets(top: 4, left: 66, bottom: 4, right: 66)
-        return stack
+        return band
     }
-    func updateNSView(_ stack: NSStackView, context: Context) {
-        for case let button as NSButton in stack.arrangedSubviews { button.state = button.identifier?.rawValue == viewModel.selectedPane.rawValue ? .on : .off; button.contentTintColor = button.state == .on ? Core.focusRing.nsColor : .secondaryLabelColor; button.attributedTitle = NSAttributedString(string: button.title, attributes: [.font: Typography.tooltipSubtitle.font, .foregroundColor: button.contentTintColor!]); button.needsDisplay = true }
-        stack.window?.title = viewModel.selectedPane.title
+    func updateNSView(_ band: TabBandView, context: Context) {
+        for case let button as SettingsTabButton in band.subviews {
+            button.state = button.identifier?.rawValue == viewModel.selectedPane.rawValue ? .on : .off; button.needsDisplay = true
+        }
+        band.window?.title = viewModel.selectedPane.title
     }
     func makeCoordinator() -> Coordinator { Coordinator(viewModel) }
     @MainActor final class Coordinator: NSObject {
         let model: SettingsViewModel
         init(_ model: SettingsViewModel) { self.model = model }
-        @objc func select(_ sender: NSButton) { if let pane = PaneID(rawValue: sender.identifier!.rawValue) { model.selectedPane = pane } }
+        @objc func select(_ sender: NSButton) { if let id = sender.identifier, let pane = PaneID(rawValue: id.rawValue) { model.selectedPane = pane } }
+    }
+}
+private final class TabBandView: NSView {
+    override var isFlipped: Bool { true }
+    override func layout() {
+        super.layout()
+        let widths = subviews.compactMap { ($0 as? NSButton).map { max(54, ($0.title as NSString).size(withAttributes: [.font: SettingsTokens.tabLabel.font]).width + 13) } }
+        var x = (bounds.width - widths.reduce(0,+) - CGFloat(max(0,widths.count-1))*3)/2
+        for (view,width) in zip(subviews,widths) { view.frame = .init(x:x,y:34,width:width,height:45); x += width+3 }
+    }
+}
+private final class SettingsTabButton: NSButton {
+    var symbol = "gearshape"
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        if state == .on { SettingsTokens.selectedTab.nsColor.setFill(); NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill() }
+        let color = state == .on ? SettingsTokens.link.nsColor : NSColor.secondaryLabelColor
+        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 20, weight: .regular))
+        if let image {
+            let tinted = NSImage(size:.init(width:20,height:20),flipped:false) { rect in
+                image.draw(in:rect);color.setFill();rect.fill(using:.sourceAtop);return true
+            }
+            tinted.draw(in:.init(x:(bounds.width-20)/2,y:4,width:20,height:20),from:.zero,operation:.sourceOver,fraction:1,respectFlipped:true,hints:nil)
+        }
+        let attrs: [NSAttributedString.Key: Any] = [.font: SettingsTokens.tabLabel.font, .foregroundColor: color]
+        let size = (title as NSString).size(withAttributes: attrs)
+        (title as NSString).draw(at: .init(x:(bounds.width-size.width)/2,y:34-size.height/2), withAttributes: attrs)
     }
 }
 @MainActor public enum SettingsWindow {
     public static func makeWindow(viewModel: SettingsViewModel) -> NSWindow {
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 684, height: 628), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
-        window.contentViewController = NSHostingController(rootView: SettingsContent(viewModel: viewModel, includesWindowTitle: false))
-        window.setFrame(.init(x: 200, y: 200, width: 684, height: 650), display: false)
-        window.title = viewModel.selectedPane.title; window.isReleasedWhenClosed = false
-        return window
+        let window = NSWindow(contentRect: .init(x:0,y:0,width:684,height:650), styleMask:[.titled,.closable,.miniaturizable,.fullSizeContentView], backing:.buffered,defer:false)
+        window.titlebarAppearsTransparent = true; window.titleVisibility = .visible
+        window.backgroundColor = SettingsTokens.band.nsColor
+        window.contentViewController = NSHostingController(rootView: SettingsContent(viewModel:viewModel,includesWindowTitle:false))
+        window.setFrame(.init(x:200,y:200,width:684,height:650),display:false)
+        window.title = viewModel.selectedPane.title; window.isReleasedWhenClosed = false; return window
     }
 }
 @MainActor public final class SettingsPresenter: NSObject, NSWindowDelegate {
     public let viewModel: SettingsViewModel
     public private(set) var window: NSWindow?
-    public init(viewModel: SettingsViewModel) { self.viewModel = viewModel; super.init() }
-    public func show(pane: PaneID? = nil) {
-        if let pane { viewModel.selectedPane = pane }
-        if window == nil { window = SettingsWindow.makeWindow(viewModel: viewModel); window?.delegate = self }
-        if window?.isKeyWindow == true { viewModel.refreshExternalState() }
-        window?.makeKeyAndOrderFront(nil)
+    public init(viewModel: SettingsViewModel) { self.viewModel=viewModel;super.init() }
+    public func show(pane: PaneID? = nil) { if let pane { viewModel.selectedPane=pane }; if window == nil { window=SettingsWindow.makeWindow(viewModel:viewModel);window?.delegate=self }; viewModel.refreshExternalState();window?.makeKeyAndOrderFront(nil) }
+    /// App calls before its first remote suggestion query. False means present and await the notice.
+    @discardableResult public func prepareForRemoteSuggestions(profileID: OpenModel.ProfileID) -> Bool {
+        if viewModel.profiles.prepareForRemoteSuggestions(profileID:profileID) { return true }; if viewModel.profiles.showsSuggestNotice { show(pane:.profiles) }; return false
     }
     public func windowDidBecomeKey(_ notification: Notification) { viewModel.refreshExternalState() }
 }
@@ -88,41 +119,39 @@ private struct SettingsTabBar: NSViewRepresentable {
 struct SettingsGroup<Content: View>: View {
     let title: String
     @ViewBuilder var content: Content
-    init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
-    var body: some View { VStack(alignment: .leading, spacing: 8) {
-        if !title.isEmpty { Text(title).font(Font(Typography.spaceTitle.font)).foregroundStyle(.secondary) }
-        VStack(alignment: .leading, spacing: 12) { content }.padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: Core.baseQuaternary.nsColor).opacity(0.3), in: RoundedRectangle(cornerRadius: URLFieldMetrics.cornerRadius))
-            .overlay(RoundedRectangle(cornerRadius: URLFieldMetrics.cornerRadius).stroke(Color(nsColor: Core.baseQuaternary.nsColor)))
+    init(_ title: String = "", @ViewBuilder content: () -> Content) { self.title=title;self.content=content() }
+    var body: some View { VStack(alignment:.leading,spacing:5) {
+        if !title.isEmpty { Text(title).font(Font(SettingsTokens.section.font)).foregroundStyle(.tertiary).padding(.leading,2) }
+        VStack(spacing:0) { content }.frame(maxWidth:.infinity,alignment:.leading)
+            .background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:SettingsTokens.radius))
+            .overlay(RoundedRectangle(cornerRadius:SettingsTokens.radius).stroke(Color(nsColor:SettingsTokens.border.nsColor),lineWidth:1))
     } }
 }
+struct SettingsRow<Content: View>: View {
+    var height: CGFloat = SettingsTokens.controlRowHeight
+    var divider = true
+    @ViewBuilder var content: Content
+    var body: some View {
+        content.frame(maxWidth:.infinity,alignment:.leading).frame(height:height).padding(.horizontal,10)
+            .overlay(alignment:.bottom) { if divider { Rectangle().fill(Color(nsColor:SettingsTokens.divider.nsColor)).frame(height:1).padding(.horizontal,10) } }
+    }
+}
 struct PreferenceToggle: View {
-    let title: String
-    let key: String
-    let root: SettingsViewModel
-    var body: some View { SettingsSwitch(title, isOn: Binding(get: { root.bool(key) }, set: { root.set($0, for: key) })) }
+    let title:String;let key:String;let root:SettingsViewModel
+    var body:some View { SettingsSwitch(title,isOn:Binding(get:{root.bool(key)},set:{root.set($0,for:key)})) }
 }
-struct SettingsError: View {
-    let text: String
-    var body: some View { if !text.isEmpty { Text(text).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).accessibilityLabel(text) } }
-}
-
-struct SettingsSwitch: View {
-    let title: String
-    @Binding var isOn: Bool
-    init(_ title: String, isOn: Binding<Bool>) { self.title = title; _isOn = isOn }
-    var body: some View { HStack { Text(title).fixedSize(horizontal: false, vertical: true); Spacer(minLength: 12); Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch).controlSize(.small) }.accessibilityElement(children: .contain) }
+struct SettingsError:View { let text:String;var body:some View { if !text.isEmpty { Text(text).foregroundStyle(.red).fixedSize(horizontal:false,vertical:true).accessibilityLabel(text) } } }
+struct SettingsSwitch:View {
+    let title:String;@Binding var isOn:Bool
+    init(_ title:String,isOn:Binding<Bool>) { self.title=title;_isOn=isOn }
+    var body:some View { HStack { Text(title).fixedSize(horizontal:false,vertical:true);Spacer(minLength:8);Toggle(title,isOn:$isOn).labelsHidden().toggleStyle(.switch).controlSize(.mini) }.accessibilityElement(children:.contain) }
 }
 
-private struct PreviewWindowTitle: NSViewRepresentable {
-    let title: String
-    func makeNSView(context: Context) -> NSTextField { let field = NSTextField(labelWithString: title); field.font = Typography.spaceTitle.font; field.alignment = .center; field.textColor = .secondaryLabelColor; return field }
-    func updateNSView(_ field: NSTextField, context: Context) { field.stringValue = title }
-}
-private final class SettingsTabButton: NSButton {
-    override func draw(_ dirtyRect: NSRect) {
-        if state == .on { Core.focusRing.nsColor.withAlphaComponent(0.15).setFill(); NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: URLFieldMetrics.cornerRadius, yRadius: URLFieldMetrics.cornerRadius).fill() }
-        super.draw(dirtyRect)
+struct SettingsButtonStyle:ButtonStyle {
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration:Configuration)->some View {
+        configuration.label.font(.system(size:11,weight:.medium)).padding(.horizontal,7).padding(.vertical,3)
+            .background(Color(nsColor:SettingsTokens.button.nsColor).opacity(configuration.isPressed ? 1.8:1),in:RoundedRectangle(cornerRadius:4))
+            .opacity(enabled ? 1:0.45)
     }
 }

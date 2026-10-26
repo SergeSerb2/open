@@ -18,30 +18,31 @@ public struct GeneralPane: View {
     @Bindable var model: GeneralViewModel
     public init(model: GeneralViewModel) { self.model = model }
     public var body: some View {
-        SettingsGroup("") {
-            SettingsSwitch("Automatically update Open", isOn: $model.updates).help("Open checks for updates in the background.")
-            Divider()
-            SettingsSwitch("Warn before quitting", isOn: $model.warn).accessibilityIdentifier("warnBeforeQuitPreference")
-        }.toggleStyle(.switch).controlSize(.small)
-        SettingsGroup("") {
-            PreferenceToggle(title: "Previews", key: "open.general.previewsEnabled", root: model.root)
-            HStack { Spacer(); Button("Previews Settings…") { model.openPreviews() } }
+        if !model.isDefault {
+            HStack(spacing: 8) {
+                Text("Open isn't your default browser.")
+                Button("Make Open your default") { model.setDefault() }
+            }.font(.system(size: 11)).padding(8).background(.quaternary,in:RoundedRectangle(cornerRadius:6)).frame(maxWidth:.infinity).padding(.bottom, 9)
         }
-        SettingsGroup("") {
-            Text("Manage your default search engine, Auto-Archive, and downloads in Profile Settings.").foregroundStyle(.secondary)
-            HStack { Spacer(); Button("Profile Settings…") { model.root.selectedPane = .profiles } }
+        SettingsError(text:model.errorText)
+        SettingsGroup {
+            SettingsRow(height:37) { SettingsSwitch("Automatically update Open ⓘ",isOn:$model.updates).help("Open checks for updates in the background.") }
+            SettingsRow(height:37,divider:false) { SettingsSwitch("Warn before quitting",isOn:$model.warn).accessibilityIdentifier("warnBeforeQuitPreference") }
         }
-        SettingsGroup("Default Browser") {
-            Text(model.isDefault ? "Open is your default browser." : "Open isn't your default browser.")
-            Button("Set as Default Browser") { model.setDefault() }.disabled(model.isDefault)
-            SettingsError(text: model.errorText)
+        SettingsGroup {
+            SettingsRow(height:37) { HStack { Text("Previews");Spacer();Button("Previews Settings…") { model.openPreviews() } } }
+            SettingsRow(height:54,divider:false) { HStack(spacing:10) {
+                Text("Manage your default search engine, Auto-Archive, and downloads in Profile Settings.").fixedSize(horizontal:false,vertical:true)
+                Spacer(minLength:0);Button("Profile Settings…") { model.root.selectedPane = .profiles }.fixedSize()
+            } }
         }
-        SettingsGroup("Import") { Button("Import from Arc…") { model.root.showsImport = true } }
+        SettingsGroup { SettingsRow(divider:false) { HStack { Text("Import from Arc");Spacer();Button("Import…") { model.root.showsImport=true } } } }
     }
 }
-struct PreviewsSheet: View {
+public struct PreviewsSheet: View {
     @Bindable var model: GeneralViewModel
-    var body: some View {
+    public init(model:GeneralViewModel) {self.model=model}
+    public var body: some View {
         VStack(alignment: .leading, spacing: 24) {
             Text("Previews").font(.title2)
             PreferenceToggle(title: "Previews", key: "open.general.previewsEnabled", root: model.root)

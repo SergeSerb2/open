@@ -8,28 +8,23 @@ public struct ArchiveSection: View {
     public init(model: LibraryViewModel) { self.model = model }
     public var body: some View {
         VStack(spacing: 12) {
-            HStack {
-                Picker("Space", selection: $model.archiveSpaceFilter) { Text("All Spaces").tag(Optional<SpaceID>.none); ForEach(model.model.spaces, id: \.id) { Text(model.model.displayTitle(for: $0)).tag(Optional($0.id)) } }
-                Picker("Reason", selection: $model.archiveReasonFilter) { Text("All reasons").tag(Optional<ArchiveReason>.none); ForEach([ArchiveReason.closed, .autoArchived, .clearedToday, .folderDeleted], id: \.self) { Text($0.libraryTitle).tag(Optional($0)) } }
-                Picker("Origin", selection: $model.archiveOriginFilter) { Text("All").tag(OriginFilter.all); Text("Spaces").tag(OriginFilter.spaces); Text("Little Open").tag(OriginFilter.littleOpen) }
-            }.controlSize(.small)
-            HStack { Text("Archive").font(.title2); Spacer(); Button("Delete Selected…", role: .destructive) { model.requestDeleteArchive(model.archiveRows.filter { model.selectedIDs.contains($0.id.description) }.map(\.id)) }.disabled(model.selectedIDs.isEmpty); Button("Clear Archive…") { model.requestClearArchive() } }
+            HStack { Spacer();Button("Delete Selected…",role:.destructive){model.requestDeleteArchive(model.archiveRows.filter{model.selectedIDs.contains($0.id.description)}.map(\.id))}.disabled(model.selectedIDs.isEmpty);Button("Clear Archive…"){model.requestClearArchive()}.disabled(model.archiveTotalCount == 0) }
             if model.archiveRows.isEmpty && !model.archiveLoading { LibraryEmptyState(title: "No archived tabs", message: "Tabs you close or auto-archive appear here.", symbol: "archivebox") }
             else {
                 List(selection: $model.selectedIDs) {
                     ForEach(model.archiveRows) { row in
                         let childCount = row.reason == .folderDeleted ? model.archivedChildCount(row) : 0
-                        HStack(spacing: 12) {
+                        ArchiveHoverRow { HStack(spacing: 12) {
                             if let data = model.favicons[row.id], let image = NSImage(data: data) { Image(nsImage: image).resizable().frame(width: 20, height: 20) }
                             else { Image(systemName: row.reason == .folderDeleted ? "folder" : "globe").frame(width: 20) }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(row.reason == .folderDeleted ? "Folder · \(childCount) \(childCount == 1 ? "tab" : "tabs") · \(row.title)" : row.title).lineLimit(1)
                                 Text("\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
                             }; Spacer()
-                            Text(row.archivedAt, style: .date).font(.caption).foregroundStyle(.secondary)
-                            Button("Restore") { Task { await model.restore(id: row.id) } }
-                            Button { model.requestDeleteArchive([row.id]) } label: { Image(systemName: "trash") }.help("Delete archived tab")
-                        }.padding(.vertical, 6).tag(row.id.description)
+                            Text(row.archivedAt.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
+                            Button("Restore") { Task { await model.restore(id: row.id) } }.modifier(ArchiveHoverAction())
+                            Button { model.requestDeleteArchive([row.id]) } label: { Image(systemName: "trash") }.help("Delete archived tab").modifier(ArchiveHoverAction())
+                        } }.padding(.vertical, 6).tag(row.id.description)
                         .onTapGesture(count: 2) { Task { await model.restore(id: row.id) } }
                         .contextMenu {
                             Button("Restore") { Task { await model.restore(id: row.id) } }
@@ -61,9 +56,20 @@ private struct NativeEmptyStateTitle: NSViewRepresentable {
     let title: String
     func makeNSView(context: Context) -> NSTextField {
         let label = NSTextField(labelWithString: title); label.alignment = .center
-        label.font = Typography.commandBarInput.font; label.setAccessibilityElement(true)
+        label.font = SettingsTokens.emptyTitle.font; label.setAccessibilityElement(true)
         label.setAccessibilityRole(.staticText); label.setAccessibilityLabel(title)
         return label
     }
     func updateNSView(_ label: NSTextField, context: Context) { label.stringValue = title; label.setAccessibilityLabel(title) }
+}
+
+private struct ArchiveHoverKey:EnvironmentKey {static let defaultValue=false}
+private extension EnvironmentValues {var archiveHover:Bool {get {self[ArchiveHoverKey.self]} set {self[ArchiveHoverKey.self]=newValue}}}
+private struct ArchiveHoverRow<Content:View>:View {
+    @State private var hover=false;@ViewBuilder var content:Content
+    var body:some View {content.environment(\.archiveHover,hover).contentShape(Rectangle()).onHover{hover=$0}}
+}
+private struct ArchiveHoverAction:ViewModifier {
+    @Environment(\.archiveHover) var hover
+    func body(content:Content)->some View {content.opacity(hover ? 1:0).accessibilityHidden(!hover)}
 }

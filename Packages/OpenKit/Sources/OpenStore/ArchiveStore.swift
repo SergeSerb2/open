@@ -266,6 +266,15 @@ public final class ArchiveStore: ArchiveSink {
         }
     }
 
+    /// Reads a row without removing it. The caller commits its sidebar snapshot before delete.
+    public func record(id: ItemID) async -> ArchivedTabRecord? {
+        await withCheckedContinuation { continuation in
+            queue.async { [weak self] in
+                continuation.resume(returning: self?.queryOnQueue(sql: "SELECT id,url,title,space_id,profile_id,archived_at,reason,original_location,payload FROM archived_tabs WHERE id = ?", limit: 1, likeText: nil, exactID: id.rawValue.uuidString).first)
+            }
+        }
+    }
+
     /// Returns the stored record for restore and deletes the row.
     public func restore(id: ItemID) async -> ArchivedTabRecord? {
         await withCheckedContinuation { continuation in

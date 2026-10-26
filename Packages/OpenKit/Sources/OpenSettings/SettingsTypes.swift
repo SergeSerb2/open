@@ -41,6 +41,7 @@ public struct DownloadItemSnapshot: Identifiable, Sendable {
     public var startedAt: Date
     public var profileID: ProfileID
     public var bytesPerSecond: Int64 = 0
+    public var errorDescription: String?
     public var progress: Double? { totalBytes.flatMap { $0 > 0 ? min(1, Double(receivedBytes) / Double($0)) : nil } }
     public init(id: String, fileName: String, sourceHost: String, receivedBytes: Int64, totalBytes: Int64?, state: DownloadState, filePath: String?, startedAt: Date, profileID: ProfileID) {
         self.id = id; self.fileName = fileName; self.sourceHost = sourceHost; self.receivedBytes = receivedBytes

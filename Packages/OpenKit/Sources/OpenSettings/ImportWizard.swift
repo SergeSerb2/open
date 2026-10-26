@@ -6,7 +6,7 @@ import OpenModel
 import OpenImport
 
 @MainActor @Observable public final class ImportWizardViewModel {
-    public enum Step: String, CaseIterable { case choose = "Choose", review = "Review", consent = "Secrets consent", progress = "Importing", report = "Report" }
+    public enum Step: String, CaseIterable { case choose = "Choose", review = "Review", consent = "Passwords", progress = "Importing", report = "Report" }
     unowned let root: SettingsViewModel
     public var plan: ImportPlan
     public var step: Step = .choose
@@ -32,7 +32,12 @@ import OpenImport
     public func refreshCounts() async {
         readable = false; busy = true; errorText = ""; defer { busy = false }
         do {
-            let result = try ArcImporter(arcDirectory: plan.directory).importAll()
+            let directory = plan.directory
+            let summary = try await Task.detached(priority: .utility) {
+                let parsed = try ArcImporter(arcDirectory: directory).readSidebar()
+                return parsed
+            }.value
+            let result = try ArcImporter(arcDirectory: directory).importAll(sidebar: summary)
             let report = result.report
             counts = ["Spaces": report.spaces, "Pinned and Today tabs": report.pinnedTabs + report.todayTabs,
                       "Favorites": report.favorites, "Folders": report.folders, "Archive": report.archiveImported,
@@ -62,13 +67,14 @@ import OpenImport
             readable = true
         } catch { counts = [:]; spaceMapping = []; errorText = "No readable import data found at \(plan.directory.path)." }
     }
+    public var canImportPasswordsAndCookies: Bool { root.actions.canImportPasswordsAndCookies }
     public func review() { guard canContinue else { return }; step = .review }
     public func beginImport() async {
         guard step == .review, canContinue else { return }
-        if (plan.secretsRequested || plan.history) && !consentWasDecided { step = .consent; return }
+        if plan.secretsRequested && !consentWasDecided { step = .consent; return }
         await execute()
     }
-    public func allowAndImportSecrets() async { guard step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.consentToSecrets(); await execute() }
+    public func allowAndImportSecrets() async { guard root.actions.canImportPasswordsAndCookies, step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.consentToSecrets(); await execute() }
     public func skipSecrets() async { guard step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.skipSecrets(); await execute() }
     private func execute() async {
         busy = true; step = .progress
@@ -86,39 +92,47 @@ public struct ImportWizard: View {
     public var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Import from Arc").font(.title2)
-            HStack { ForEach(ImportWizardViewModel.Step.allCases.filter { $0 != .progress }, id: \.self) { step in Text(step.rawValue).foregroundStyle(model.step == step ? .primary : .secondary); if step != .report { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } } }
+            HStack { ForEach(ImportWizardViewModel.Step.allCases.filter { $0 != .progress && ($0 != .consent || model.plan.secretsRequested || model.step == .consent) }, id: \.self) { step in Text(step.rawValue).foregroundStyle(model.step == step ? .primary : .secondary); if step != .report { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) } } }
             Divider()
             ScrollView { VStack(alignment: .leading, spacing: 14) {
                 switch model.step {
                 case .choose:
-                    HStack { Text(model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
+                    HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
                     option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested)
                     Text("Search settings imports your engine choice only.").font(.caption).foregroundStyle(.secondary)
                 case .review:
                     ForEach(model.spaceMapping, id: \.self) { Text($0) }
                     Text("Profiles found: \(model.counts["Profiles", default: 0]) · Routing rules found: \(model.counts["Routing rules", default: 0])")
-                    Text("Skipped: \(model.counts["Skipped easels", default: 0]) easels, \(model.counts["Skipped notes", default: 0]) notes, \(model.counts["Skipped unknown", default: 0]) unknown items.")
+                    Text("Skipped: \(model.counts["Skipped easels", default: 0]) \(model.counts["Skipped easels"] == 1 ? "easel" : "easels"), \(model.counts["Skipped notes", default: 0]) \(model.counts["Skipped notes"] == 1 ? "note" : "notes"), \(model.counts["Skipped unknown", default: 0]) unknown items.")
                     Text("Easels and Notes do not import. Open has no Easels or Notes.").foregroundStyle(.secondary)
                 case .consent:
-                    Text("Passwords, cookies, addresses, and cards").font(.headline)
-                    Text("macOS will show a Keychain prompt. Choose Allow to continue.")
-                    Text("Secret import needs the browser engine. Your counts are ready. Nothing was copied.").foregroundStyle(.secondary)
-                    Text("This build imports counts only, including after consent.").font(.caption).foregroundStyle(.secondary)
+                    if model.canImportPasswordsAndCookies {
+                        Text("Import passwords and cookies from Arc?").font(.headline)
+                        Text("Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else.")
+                    } else {
+                        Text("Passwords and cookies can't be imported yet.").font(.headline)
+                        Text("Open found \(model.counts["Passwords and cookies", default:0]) saved items in Arc. Open didn't read or copy them.")
+                    }
                 case .progress: ProgressView(); Text("Importing selected data…")
                 case .report:
                     ForEach((model.outcome?.counts ?? [:]).keys.sorted(), id: \.self) { name in HStack { Text(name); Spacer(); Text("\(model.outcome!.counts[name]!)").monospacedDigit() } }
-                    if model.plan.secretsRequested || model.consentWasDecided { Text("Secret import needs the browser engine. Your counts are ready. Nothing was copied.").foregroundStyle(.secondary) }
+                    if model.plan.secretsRequested || model.consentWasDecided { Text("Passwords and cookies were not imported.").foregroundStyle(.secondary) }
                 }
                 SettingsError(text: model.errorText)
             }.frame(maxWidth: .infinity, alignment: .leading) }
             if model.busy { ProgressView() }
             HStack {
-                Button(model.step == .report ? "Done" : "Cancel") { model.finish() }.disabled(model.busy)
+                if model.step == .report { Button("Done") { model.finish() }.keyboardShortcut(.defaultAction) }
+                else { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
-                case .choose: Button("Next") { model.review() }.disabled(!model.canContinue)
-                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.disabled(!model.canContinue)
-                case .consent: Button("Skip Secrets") { Task { await model.skipSecrets() } }; Button("Allow and Import Secrets") { Task { await model.allowAndImportSecrets() } }
+                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
+                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
+                case .consent:
+                    if model.canImportPasswordsAndCookies {
+                        Button("Continue Without Passwords") { Task { await model.skipSecrets() } }
+                        Button("Import Passwords and Cookies") { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction)
+                    } else { Button("Continue Without Passwords") { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction) }
                 case .progress: EmptyView()
                 case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } }
                 }

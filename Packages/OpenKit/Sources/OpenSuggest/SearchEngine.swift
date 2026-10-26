@@ -45,6 +45,13 @@ public enum SearchEngines {
     public static let all: [SearchEngine] = [google, duckDuckGo, bing, brave, ecosia, kagi, perplexity, yahoo]
     public static let defaultID = google.id
 
+    @MainActor public static func resolve(id: String? = nil, profile: Profile?, in engines: [SearchEngine] = all) -> SearchEngine {
+        resolve(id: id ?? profile?.settings.searchEngineID, custom: profile?.settings.customSearchEngines ?? [], in: engines)
+    }
+    public static func resolve(id: String?, custom: [SearchEngine] = [], in engines: [SearchEngine] = all) -> SearchEngine {
+        let engines = engines + custom.filter { candidate in !engines.contains { $0.id == candidate.id } }
+        return engine(id: id, in: engines)
+    }
     public static func engine(id: String?, in engines: [SearchEngine] = all) -> SearchEngine {
         guard let id else { return engines.first(where: { $0.id == defaultID }) ?? google }
         return engines.first(where: { $0.id == id }) ?? engines.first(where: { $0.id == defaultID }) ?? google

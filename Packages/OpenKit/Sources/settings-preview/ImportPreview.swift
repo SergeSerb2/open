@@ -7,7 +7,9 @@ import OpenImport
 /// Preview action adapter uses the real importer and snapshot store. Secrets remain counts only.
 @MainActor func applySyntheticImport(_ plan: ImportPlan, settings: SettingsViewModel) async -> ImportOutcome {
     do {
-        let source = try ArcImporter(arcDirectory: plan.directory).importAll()
+        let directory=plan.directory
+        let parsed=try await Task.detached(priority:.utility) {try ArcImporter(arcDirectory:directory).readSidebar()}.value
+        let source = try ArcImporter(arcDirectory:directory).importAll(sidebar:parsed)
         let candidate = SnapshotMapper.model(from: SnapshotMapper.dto(from: settings.model))
         let beforeSpaces = candidate.spaces.count, beforeTabs = candidate.index.count
         var importedProfiles: [ProfileID: Profile] = [:]
@@ -70,6 +72,6 @@ import OpenImport
                                       "Duplicates": duplicates + archiveDuplicates, "Imported Archive": archiveInserted,
                                       "Skipped easels": source.report.skippedEasels, "Skipped notes": source.report.skippedNotes,
                                       "Skipped unknown": source.report.skippedUnknown, "Archive accounted": source.report.archiveAccounted,
-                                      "Archive total": source.report.archiveTotal, "Secret copies": 0])
+                                      "Archive total": source.report.archiveTotal, "Password and cookie copies": 0])
     } catch { return ImportOutcome(errorText: "Import failed. The previous snapshot is unchanged.") }
 }

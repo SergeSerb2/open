@@ -51,11 +51,12 @@ PASS profile-archive-scope
 PASS profile-downloads
 ACTION clearBrowsingData 10000000-0000-0000-0000-000000000001 kinds=3 range=All time
 PASS clear-data
-ACTION deleteProfileData 4342AA99-B727-495B-979C-74AA0BB14646
+ACTION deleteProfileData 4D59C647-63D9-4F35-9125-C9E18D3F7248
 PASS profile-guards
 PASS links-rules
 ACTION keyBindingsDidChange
 PASS links-toggles
+ACTION keyBindingsDidChange
 ACTION keyBindingsDidChange
 ACTION keyBindingsDidChange
 ACTION keyBindingsDidChange
@@ -75,7 +76,8 @@ ACTION setApplicationIcon openColor
 PASS app-icon
 ACTION runImport consent=false
 ACTION runImport consent=false
-ACTION runImport consent=true
+ACTION runImport consent=false
+ACTION runImport consent=false
 ACTION runImport consent=false
 PASS import-counts
 ACTION restoreArchived 50000000-0000-0000-0000-000000000001
@@ -90,8 +92,16 @@ ACTION deleteCapture 60000000-0000-0000-0000-000000000001
 ACTION openHistoryItem
 ACTION openHistoryItem
 PASS library-captures-history
-PNG empty-archive.png 960x640 37684 bytes sha256=ff6355c294f375f37d4d3086c29e36a5606ed80e348d37bbb1b1426713e90c44
-PNG empty-downloads.png 960x640 34226 bytes sha256=c48df90e888df627bafb3784f02983225bea6dab8b61fafe5e2eb4398644b7cd
-PNG empty-captures.png 960x640 32578 bytes sha256=d9d2fb00db360aa2caef682968b6d90886c0e272dc417f0bd5705ba018f591c4
+PNG empty-archive.png 960x640 34967 bytes sha256=79dd20848f7c30a756b6347a6adc64b4716cfa96eb284a3d9bb0360faf3a183c
+PNG empty-downloads.png 960x640 32856 bytes sha256=ef59ae9033913a1331b1fab1b3d2de4c5d0132229c8d16a7b561cf5bc015a886
+PNG empty-captures.png 960x640 31777 bytes sha256=f19020c0de7af7f88690728ac4bfc99699298bf6e881c4fb89c4111e44756a11
 PASS empty-states
-SUMMARY 19 checks passed, 0 failed
+PASS archive-save-failure
+ACTION deleteArchived 50000000-0000-0000-0000-000000000001
+ACTION deleteArchived 50000000-0000-0000-0000-000000000003
+PASS archive-owner-partial
+ACTION setAdBlockExcludedDomains example.org 5BDDAE2F-ECCB-44EF-90A6-93F7CFA5DB3A
+ACTION deleteProfileData 5BDDAE2F-ECCB-44EF-90A6-93F7CFA5DB3A
+PASS adblock-profile-lifecycle
+PASS suggestion-notice
+SUMMARY 23 checks passed, 0 failed

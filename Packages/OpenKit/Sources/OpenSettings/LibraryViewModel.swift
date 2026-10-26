@@ -19,6 +19,7 @@ import OpenStore
     public var archiveOriginFilter: OriginFilter = .all
     public var selectedIDs: Set<String> = []
     public var statusText = ""
+    public private(set) var archiveTotalCount = 0
     public private(set) var archiveRows: [ArchivedTabRecord] = []
     public private(set) var archiveHasMore = true
     public private(set) var archiveLoading = false
@@ -32,6 +33,7 @@ import OpenStore
     public var mediaKind = "All"
     public var historyProfileID: ProfileID
     public private(set) var historyRows: [HistoryMatch] = []
+    public private(set) var historyFavicons: [URL: Data] = [:]
     public private(set) var thumbnails: [UUID: Data] = [:]
     public private(set) var favicons: [ItemID: Data] = [:]
     public let defaults: UserDefaults
@@ -69,7 +71,7 @@ import OpenStore
         await reload()
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
-    public func reloadArchive() async { generation = UUID(); cursors = [:]; archiveOwners = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
+    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation
         defer { if request == generation { archiveLoading = false } }
@@ -86,17 +88,18 @@ import OpenStore
     }
     public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
-        guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.restore(id: id) else { statusText = "This archived tab is no longer available."; return }
+        guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }
         if let spaceID { record.spaceID = spaceID; record.originalLocation = "today:\(spaceID)" }
-        let tab = model.restoreArchivedTab(record)
-        do { try snapshot.saveNow(model: model) }
-        catch {
-            // Keep a durable recovery copy when the sidebar snapshot cannot commit.
-            (model.archiveSink as? ProfileArchiveSink)?.flushAll()
-            _ = await store.importRecords([record])
+        let tab: Tab
+        do {
+            tab = try model.restoreArchivedTab(record, saving: { try snapshot.saveNow(model: model) })
+        } catch {
             statusText = "Saving failed. The Archive entry was kept. Try Restore again."
             await reloadArchive(); return
         }
+        guard model.tab(id: id) != nil else { statusText = "Choose a Space before restoring this tab."; return }
+        do { try await store.delete(id: id) }
+        catch { statusText = "Tab restored, but its Archive entry could not be removed. \(error.localizedDescription)"; await reloadArchive(); return }
         actions.restoreArchived(id: id)
         restoredSpaceID = owningSpace(of: tab.id) ?? spaceID ?? record.spaceID
         let title = restoredSpaceID.flatMap { model.space(id: $0) }.map { model.displayTitle(for: $0) } ?? "Today"
@@ -118,16 +121,34 @@ import OpenStore
         return (payload["children"] as? [Any])?.count ?? 1
     }
     public func requestDeleteArchive(_ ids: [ItemID]) { pendingArchiveDeletes = ids }
+    public private(set) var archiveResults: [ProfileID: String] = [:]
     public func deleteArchiveConfirmed() async {
-        let ids = pendingArchiveDeletes; pendingArchiveDeletes = []
-        do { for store in archives.values { try await store.delete(ids: ids) }; for id in ids { actions.deleteArchived(id: id) }; statusText = "Deleted."; await reloadArchive() }
-        catch { statusText = "Could not delete the archived tabs. \(error.localizedDescription)" }
+        let ids = pendingArchiveDeletes; pendingArchiveDeletes = []; archiveResults = [:]
+        let grouped = Dictionary(grouping: ids, by: { archiveOwners[$0] })
+        for (owner, ownedIDs) in grouped {
+            guard let owner, let store = archives[owner] else { continue }
+            do {
+                try await store.delete(ids: ownedIDs)
+                for id in ownedIDs { actions.deleteArchived(id: id) }
+                archiveResults[owner] = "Deleted \(ownedIDs.count)."
+            } catch { archiveResults[owner] = "Failed: \(error.localizedDescription)" }
+        }
+        statusText = archiveResultText(); await reloadArchive()
     }
     public func requestClearArchive() { confirmsClear = true }
     public func clearArchiveConfirmed() async {
-        confirmsClear = false
-        do { for store in archives.values { try await store.deleteAll() }; actions.clearArchive(); statusText = "Archive cleared."; await reloadArchive() }
-        catch { statusText = "Could not clear the Archive. \(error.localizedDescription)" }
+        confirmsClear = false; archiveResults = [:]
+        for (owner, store) in archives {
+            do { try await store.deleteAll(); archiveResults[owner] = "Archive cleared." }
+            catch { archiveResults[owner] = "Failed: \(error.localizedDescription)" }
+        }
+        if !archiveResults.values.contains(where: { $0.hasPrefix("Failed:") }) { actions.clearArchive() }
+        statusText = archiveResultText(); await reloadArchive()
+    }
+    private func archiveResultText() -> String {
+        archiveResults.sorted { $0.key.description < $1.key.description }.map { owner, result in
+            "\(model.profile(id: owner)?.name ?? "Retired Profile"): \(result)"
+        }.joined(separator: " · ")
     }
     public var downloadItems: [DownloadItemSnapshot] { downloads.downloads.filter { item in
         (downloadStateFilter == nil || item.state == downloadStateFilter || (downloadStateFilter == .inProgress && item.state == .paused)) && (downloadProfileFilter == nil || item.profileID == downloadProfileFilter) && (query.isEmpty || item.fileName.localizedCaseInsensitiveContains(query) || item.sourceHost.localizedCaseInsensitiveContains(query))
@@ -167,5 +188,5 @@ import OpenStore
         catch { statusText = "Could not delete the capture. \(error.localizedDescription)" }
     }
     public func saveCapture(_ item: CaptureItemSnapshot, to url: URL) { statusText = actions.saveCapture(id: item.id, to: url) ?? "Saved." }
-    public func reloadHistory() async { let profile = historyProfileID, text = query; let rows = await histories[profile]?.search(text, limit: 100) ?? []; guard profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows }
+    public func reloadHistory() async { let profile = historyProfileID, text = query; let rows = await histories[profile]?.search(text, limit: 100) ?? []; guard profile == historyProfileID, text == query, !Task.isCancelled else { return }; historyRows = rows; historyFavicons = [:]; if let faviconStore { for row in rows { let data = await faviconStore.icon(for: row.url)?.png32; guard profile == historyProfileID, text == query, !Task.isCancelled else {return}; historyFavicons[row.url] = data } } }
 }

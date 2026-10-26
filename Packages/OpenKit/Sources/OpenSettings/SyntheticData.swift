@@ -64,12 +64,14 @@ extension SyntheticData {
     public static func downloads(root: URL, profiles: [Profile]) throws -> [DownloadItemSnapshot] {
         let completed = root.appendingPathComponent("Example Guide.pdf")
         try Data("%PDF-1.4\n% Example synthetic download\n".utf8).write(to: completed)
-        return [
+        var items: [DownloadItemSnapshot] = [
             .init(id: "download-active", fileName: "Example Video.zip", sourceHost: "example.com", receivedBytes: 4_000_000, totalBytes: 10_000_000, state: .inProgress, filePath: nil, startedAt: fixtureDate, profileID: profiles[0].id),
             .init(id: "download-paused", fileName: "Example Images.zip", sourceHost: "example.org", receivedBytes: 1_000_000, totalBytes: 5_000_000, state: .paused, filePath: nil, startedAt: fixtureDate, profileID: profiles[1].id),
             .init(id: "download-done", fileName: "Example Guide.pdf", sourceHost: "example.net", receivedBytes: 20_000, totalBytes: 20_000, state: .completed, filePath: completed.path, startedAt: fixtureDate, profileID: profiles[0].id),
             .init(id: "download-failed", fileName: "Example Document.pdf", sourceHost: "example.com", receivedBytes: 0, totalBytes: nil, state: .failed, filePath: nil, startedAt: fixtureDate, profileID: profiles[1].id)
         ]
+        items[0].bytesPerSecond=33_333;items[3].errorDescription="Network error"
+        return items
     }
     public static func seedLibrary(root: URL, model: BrowserModel, archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore]) async throws {
         for i in 0..<6 {

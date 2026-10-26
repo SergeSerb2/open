@@ -4,6 +4,8 @@ import SwiftUI
 import AppKit
 import OpenModel
 import OpenStore
+import OpenDesign
+import OpenCommands
 
 @MainActor @Observable public final class AdvancedViewModel {
     unowned let root: SettingsViewModel
@@ -26,76 +28,86 @@ import OpenStore
     }
 }
 public struct AdvancedPane: View {
-    @Bindable var model: AdvancedViewModel
-    public init(model: AdvancedViewModel) { self.model = model }
-    public var body: some View {
-        SettingsGroup("Browsing") {
-            PreferenceToggle(title: "When opening Open, restore windows from previous session", key: "open.advanced.restoreWindowsOnLaunch", root: model.root)
-            Divider()
-            PreferenceToggle(title: "Enable Picture in Picture when you leave a video tab", key: "open.advanced.enablePictureInPictureOnLeave", root: model.root)
+    @Bindable var model:AdvancedViewModel
+    @State private var showsAdBlock=false
+    public init(model:AdvancedViewModel) { self.model=model }
+    public var body:some View {
+        SettingsGroup {
+            tile("Play Open sound effects",key:"playSoundEffects",symbol:"speaker.wave.2.fill",color:.blue)
+            tile("Haptic feedback when reordering tabs",key:"hapticOnTabReorder",symbol:"hand.tap.fill",color:.blue,last:true)
         }
-        SettingsGroup("Appearance and Input") {
-            PreferenceToggle(title: "Allow window dragging from the top of webpages", key: "open.advanced.allowWindowDraggingFromWebTop", root: model.root)
-            PreferenceToggle(title: "Show full URL when Toolbar is enabled", key: "open.advanced.showFullURLWithToolbar", root: model.root)
-            PreferenceToggle(title: "Allow websites to get your theme data", key: "open.advanced.allowSitesThemeData", root: model.root)
-            PreferenceToggle(title: "Play Open sound effects", key: "open.advanced.playSoundEffects", root: model.root)
-            PreferenceToggle(title: "Haptic feedback when reordering tabs", key: "open.advanced.hapticOnTabReorder", root: model.root)
+        SettingsGroup {
+            tile("When opening Open, restore windows from previous session",key:"restoreWindowsOnLaunch",symbol:"macwindow",color:.green)
+            tile("Allow window dragging from the top of webpages",key:"allowWindowDraggingFromWebTop",symbol:"rectangle.topthird.inset.filled",color:.green)
+            tile("Show full URL when Toolbar is enabled",key:"showFullURLWithToolbar",symbol:"link",color:.red)
+            tile("Enable Shared Quotes when highlighting text",key:"enableSharedQuotes",symbol:"quote.bubble.fill",color:.red,last:true,subtitle:"If disabled, you can still copy URL as a quote using \(quoteShortcut).")
         }
-        SettingsGroup("Features") {
-            PreferenceToggle(title: "Enable Boosts on websites you visit", key: "open.advanced.enableBoosts", root: model.root)
-            PreferenceToggle(title: "Enable Shared Quotes when highlighting text", key: "open.advanced.enableSharedQuotes", root: model.root)
+        SettingsGroup {
+            tile("Enable Picture in Picture when you leave a video tab",key:"enablePictureInPictureOnLeave",symbol:"pip",color:.purple)
+            tile("Allow websites to get your theme data",key:"allowSitesThemeData",symbol:"paintpalette.fill",color:.purple)
+            tile("Enable Boosts on websites you visit",key:"enableBoosts",symbol:"paintbrush.pointed.fill",color:.purple,last:true)
         }
-        SettingsGroup("Search") { Text("Search engine for \(model.root.profiles.profile?.name ?? "Profile"): \(model.root.profiles.engines.first(where: { $0.id == model.root.profiles.searchEngineID })?.name ?? "Google")"); Button("Manage Search Engines…") { model.root.selectedPane = .profiles; model.root.showsSearchEngines = true } }
-        if let adBlock = model.root.adBlock { AdBlockControls(model: adBlock).id("advanced-adblock") }
-        else { SettingsGroup("Ad Blocking") { Text("Loading ad blocking…").foregroundStyle(.secondary) } }
-        SettingsGroup("Tab Sleeping") {
-            Picker("Mode", selection: $model.sleepMode) { ForEach(TabSleepMode.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) } }
-            Text("Sleep inactive tabs to save memory").foregroundStyle(.secondary)
-            Text("Automatic: 5 min · Conservative: 15 min · Aggressive: 2 min. Pinned tabs freeze but never discard.").font(.caption).foregroundStyle(.secondary)
+        dataButtons
+        SettingsGroup {
+            SettingsRow(height:44,divider:false) { HStack { Text("Search engine");Text("\(model.root.profiles.engines.first(where:{$0.id == model.root.profiles.searchEngineID})?.name ?? "Google") (\(model.root.profiles.profile?.name ?? "Profile"))").foregroundStyle(.secondary);Spacer();Button("Manage…") { model.root.showsSearchEngines=true } } }
         }
-        .id("advanced-sleep")
-        SettingsGroup("Data and Developer") {
-            HStack { Button("More Settings…") { model.root.actions.openMoreSettings() }; Button("Reset Translated-site Prompts") { model.resetTranslate() } }
-            Button("Export Data…") {
-                let panel = NSSavePanel(); panel.nameFieldStringValue = "Open-export.json"
-                if panel.runModal() == .OK, let url = panel.url { Task { await model.export(to: url) } }
-            }
-            HStack { Button("Show Data Folder") { model.root.actions.revealOpenDataFolder() }; Button("Copy Open Info") { model.root.actions.copyOpenInfoToPasteboard() } }
-            Text(model.statusText).foregroundStyle(.secondary)
+        if let ad=model.root.adBlock {
+            SettingsGroup {
+                SettingsRow(height:36) { SettingsSwitch("Block ads, trackers, and popups",isOn:Binding(get:{ad.enabled},set:{ad.setEnabled($0)})) }
+                SettingsRow(height:44,divider:ad.hasOtherBlocker) { HStack { Text("Block lists");Text(ad.enabledIDs.joined(separator:", ")).foregroundStyle(.secondary).lineLimit(1);Spacer();Button("Ad Block Settings…") { showsAdBlock=true } } }
+                if ad.hasOtherBlocker { SettingsRow(height:44,divider:false) { Text("More than one ad blocker is on. Blocking may break sites.").foregroundStyle(.orange) } }
+            }.id("advanced-adblock").sheet(isPresented:$showsAdBlock) { AdBlockSettingsSheet(model:ad,onDone:{showsAdBlock=false}) }
         }
+        SettingsGroup {
+            SettingsRow(height:64,divider:false) { VStack(alignment:.leading,spacing:5) {
+                HStack { Text("Sleep inactive tabs");Spacer();Picker("Sleep inactive tabs",selection:$model.sleepMode) { ForEach(TabSleepMode.allCases,id:\.self) { Text($0.rawValue.capitalized).tag($0) } }.labelsHidden().frame(width:150) }
+                Text(sleepDescription).font(.system(size:11)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            } }
+        }.id("advanced-sleep")
+        if !model.statusText.isEmpty { Text(model.statusText).font(.system(size:11)).foregroundStyle(.secondary) }
+    }
+    private var dataButtons:some View { HStack(spacing:8) {
+        Button("More Settings…") {model.root.actions.openMoreSettings()};Button("Reset Translated-site Prompts") {model.resetTranslate()};Spacer(minLength:0)
+        Button("Export Data") {let panel=NSSavePanel();panel.nameFieldStringValue="Open-export.json";if panel.runModal() == .OK,let url=panel.url {Task {await model.export(to:url)}}}
+        Menu {Button("Show Data Folder") {model.root.actions.revealOpenDataFolder()};Button("Copy Open Info") {model.root.actions.copyOpenInfoToPasteboard()}} label:{Image(systemName:"ellipsis")}.menuStyle(.borderlessButton).fixedSize()
+    }.controlSize(.mini).padding(.vertical,1) }
+    private var quoteShortcut:String { CommandRegistry.byID["copy-url-quote"].flatMap {model.root.shortcutsStore.effectiveShortcuts(for:$0).first?.symbolDisplay} ?? "---" }
+    private var sleepDescription:String { switch model.sleepMode {
+    case .automatic:"Tabs you haven't viewed for 5 minutes sleep to save memory. Pinned tabs pause but stay loaded."
+    case .conservative:"Tabs you haven't viewed for 15 minutes sleep to save memory. Pinned tabs pause but stay loaded."
+    case .aggressive:"Tabs you haven't viewed for 2 minutes sleep to save memory. Pinned tabs pause but stay loaded."
+    case .never:"Tabs stay awake until you close them. This uses more memory."
+    } }
+    private func tile(_ title:String,key:String,symbol:String,color:Color,last:Bool=false,subtitle:String?=nil)->some View {
+        SettingsRow(height:40,divider:!last) { HStack(spacing:8) {
+            Image(systemName:symbol).font(.system(size:12)).foregroundStyle(.white).frame(width:20,height:20).background(color,in:RoundedRectangle(cornerRadius:3))
+            VStack(alignment:.leading,spacing:1) {Text(title).font(.system(size:12));if let subtitle {Text(subtitle).font(.system(size:9)).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}}
+            Spacer(minLength:0);Toggle(title,isOn:Binding(get:{model.root.bool("open.advanced."+key)},set:{model.root.set($0,for:"open.advanced."+key)})).labelsHidden().toggleStyle(.switch).controlSize(.mini)
+        } }
     }
 }
-
-private struct AdBlockControls: View {
-    @Bindable var model: AdBlockSettingsModel
-    @State private var expanded: Set<String> = ["generic"]
-    private var categories: [String] { ["generic", "cookies", "privacy", "regional", "bcny"] }
-    var body: some View {
-        SettingsGroup("Ad Blocking") {
-            Picker("Profile", selection: Binding(get: { model.root.selectedProfileID }, set: { model.root.selectedProfileID = $0 })) { ForEach(model.root.model.profiles, id: \.id) { Text($0.name).tag($0.id) } }.disabled(model.busy)
-            SettingsSwitch("Block ads, trackers, and popups", isOn: Binding(get: { model.enabled }, set: { model.setEnabled($0) })).disabled(model.busy)
-            Text("The master switch applies to all Profiles. List choices and allowed sites belong to the selected Profile.").font(.caption).foregroundStyle(.secondary)
-            TextField("Search block lists", text: $model.query)
-            ForEach(categories, id: \.self) { category in
-                let lists = model.lists.filter { $0.category.lowercased() == category }
-                if !lists.isEmpty {
-                    DisclosureGroup(isExpanded: Binding(get: { expanded.contains(category) || !model.query.isEmpty }, set: { if $0 { expanded.insert(category) } else { expanded.remove(category) } })) {
-                        ForEach(lists) { list in HStack {
-                            Toggle(list.displayName, isOn: Binding(get: { model.enabledIDs.contains(list.id) }, set: { value in Task { await model.setList(list.id, enabled: value) } })).disabled(model.busy || list.urls.isEmpty)
-                            Spacer(); Text(model.listStatus(list)).font(.caption).foregroundStyle(.secondary)
-                            Button { model.openInfo(list) } label: { Image(systemName: "info.circle") }.buttonStyle(.link).help(list.unavailableReason ?? "About this list")
-                        } }
-                    } label: { Text("\(category == "bcny" ? "Open additions" : category.capitalized) (\(lists.count))") }
-                }
+public struct AdBlockSettingsSheet:View {
+    @Bindable var model:AdBlockSettingsModel
+    let onDone:()->Void
+    @State private var expanded:Set<String>=["generic"]
+    public init(model:AdBlockSettingsModel,onDone:@escaping ()->Void={}) {self.model=model;self.onDone=onDone}
+    public var body:some View { VStack(alignment:.leading,spacing:14) {
+        Text("Ad Block Settings").font(.title2)
+        Picker("Profile",selection:Binding(get:{model.root.selectedProfileID},set:{model.root.selectedProfileID=$0})){ForEach(model.root.model.profiles,id:\.id){Text($0.name).tag($0.id)}}.disabled(model.busy)
+        Text("List choices and allowed sites belong to this Profile. The main switch applies to all Profiles.").font(.caption).foregroundStyle(.secondary)
+        TextField("Search block lists",text:$model.query).textFieldStyle(.roundedBorder)
+        ScrollView { VStack(alignment:.leading,spacing:12) {
+            ForEach(["generic","cookies","privacy","regional"],id:\.self) {category in
+                let lists=model.lists.filter{$0.category.lowercased() == category && !$0.urls.isEmpty}
+                if !lists.isEmpty {DisclosureGroup(isExpanded:Binding(get:{expanded.contains(category) || !model.query.isEmpty},set:{if $0 {expanded.insert(category)} else {expanded.remove(category)}})) {
+                    ForEach(lists){list in HStack {Toggle(list.displayName,isOn:Binding(get:{model.enabledIDs.contains(list.id)},set:{on in Task {await model.setList(list.id,enabled:on)}})).disabled(model.busy);Spacer();Text(model.listStatus(list)).font(.caption).foregroundStyle(.secondary);Button {model.openInfo(list)} label:{Image(systemName:"info.circle")}.buttonStyle(.plain)}}
+                } label:{Text(category.capitalized)} }
             }
-            if model.busy { ProgressView() }
-            SettingsError(text: model.errorText)
-            if let error = model.lastError { SettingsError(text: error) }
-            Divider(); Text("Don't block on these sites")
-            ForEach(model.domains, id: \.self) { host in HStack { Text(host); Spacer(); Button("Remove") { model.setExcluded(host, excluded: false) } } }
-            HStack { TextField("example.com", text: $model.hostDraft).onSubmit { model.setExcluded(model.hostDraft, excluded: true) }; Button("Add") { model.setExcluded(model.hostDraft, excluded: true) }.disabled(model.hostDraft.isEmpty || model.busy) }
-            HStack { Button("Copy Ad Block Debug Info") { model.copyDebug() }; Button("Reset List Choices") { Task { await model.reset() } }.disabled(model.busy) }
-            if model.hasOtherBlocker { Text("More than one ad blocker is on. Blocking may double-block or break sites.").foregroundStyle(.orange) }
-        }
-    }
+            Divider();Text("Don't block on these sites")
+            ForEach(model.domains,id:\.self){host in HStack {Text(host);Spacer();Button("Remove"){model.setExcluded(host,excluded:false)}}}
+            HStack {TextField("example.com",text:$model.hostDraft);Button("Add"){model.setExcluded(model.hostDraft,excluded:true)}.disabled(model.hostDraft.isEmpty || model.busy)}
+        }.frame(maxWidth:.infinity,alignment:.leading) }
+        if model.busy {ProgressView()};SettingsError(text:model.errorText);if let error=model.lastError {SettingsError(text:error)}
+        HStack {Button("Copy Debug Info"){model.copyDebug()};Button("Reset List Choices"){Task {await model.reset()}}.disabled(model.busy);Spacer();Button("Done",action:onDone).keyboardShortcut(.defaultAction)}
+    }.padding(24).frame(width:600,height:560).task {await model.openSelectedProfile()} }
 }

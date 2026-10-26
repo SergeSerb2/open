@@ -10,7 +10,7 @@ import CryptoKit
     var log: [String] = []
     var defaultError: String?
     var importHandler: (@MainActor (ImportPlan) async -> ImportOutcome)?
-    var keychainReadCount = 0
+    var importPlansWithConsent = 0
     func record(_ text: String) { log.append(text); print("ACTION \(text)") }
     func setAsDefaultBrowser() -> String? { record("setAsDefaultBrowser"); defer { defaultError = nil }; return defaultError }
     func isDefaultBrowser() -> Bool { false }
@@ -24,7 +24,7 @@ import CryptoKit
     func openProfileSubpage(profileID: ProfileID, page: ProfilePage) { record("openProfileSubpage \(profileID) \(page.rawValue)") }
     func openPreviewsSettings() { record("openPreviewsSettings") }
     func keyBindingsDidChange(store: KeyBindingStore) { record("keyBindingsDidChange") }
-    func runImport(plan: ImportPlan) async -> ImportOutcome { record("runImport consent=\(plan.secretsConsented)"); return await importHandler?(plan) ?? ImportOutcome(errorText: "Import adapter unavailable.") }
+    func runImport(plan: ImportPlan) async -> ImportOutcome { if plan.secretsConsented {importPlansWithConsent += 1}; record("runImport consent=\(plan.secretsConsented)"); return await importHandler?(plan) ?? ImportOutcome(errorText: "Import adapter unavailable.") }
     func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { record("setAdBlockEnabled \(on) \(profileID)") }
     func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { record("setEnabledBlockLists \(ids.joined(separator: ",")) \(profileID)") }
     func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { record("setAdBlockExcludedDomains \(domains.joined(separator: ",")) \(profileID)") }
@@ -76,6 +76,7 @@ import CryptoKit
     if args[0] == "render" {
         guard let out = value("--out") else { throw NSError(domain: "--out required", code: 2) }
         let output = URL(fileURLWithPath: out); try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        settings.set(true,for:"open.general.searchSuggestNoticeDismissed") // render an acknowledged synthetic Profile
         let rawScale = value("--scale") ?? "both"
         guard ["1", "2", "both"].contains(rawScale) else { throw NSError(domain: "invalid scale", code: 2) }
         let scales = rawScale == "both" ? [1,2] : [Int(rawScale)!]
@@ -88,6 +89,7 @@ import CryptoKit
             for scale in scales { try render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: scale, dark: i % 2 == 0, to: output.appendingPathComponent("library-\(section.rawValue)@\(scale)x.png")) }
         }
         for pane in [PaneID.general, .profiles] { settings.selectedPane = pane; for dark in [false,true] { for scale in scales { try render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: dark, to: output.appendingPathComponent("\(pane.rawValue)-\(dark ? "dark" : "light")@\(scale)x.png")) } } }
+        settings.links.testURLString="example.com/x";settings.links.runTest()
         // Tall panes have additional viewport captures, using the same view and scroll entry point.
         for (pane, target, name) in [(PaneID.links, "links-rules", "links-rules"), (.links, "links-test", "links-test"), (.advanced, "advanced-adblock", "advanced-adblock"), (.advanced, "advanced-sleep", "advanced-sleep-data")] {
             settings.selectedPane = pane; settings.scrollTarget = target
@@ -96,15 +98,51 @@ import CryptoKit
         settings.scrollTarget = nil; settings.selectedPane = .shortcuts; settings.shortcuts.query = "New Tab"
         for scale in scales { try render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: false, to: output.appendingPathComponent("shortcuts-custom@\(scale)x.png")) }
         settings.shortcuts.query = ""
+        let originalBindings=try Data(contentsOf:settings.shortcuts.fileURL)
+        settings.shortcuts.selectedCommandID="go-to-tab-1";settings.shortcuts.basics=false
+        settings.shortcuts.query="Go to Tab"
+        for scale in scales {try render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-tab-controls@\(scale)x.png"))}
+        settings.shortcuts.query="New Window";settings.shortcuts.beginRecording("new-window")
+        for scale in scales {try render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-recording@\(scale)x.png"))}
+        settings.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:"new-tab")
+        settings.shortcuts.record(.init(key:"y",modifiers:[.control,.option,.command]),for:"new-window")
+        for scale in scales {try render(SettingsContent(viewModel:settings),size:CGSize(width:684,height:650),scale:scale,dark:false,to:output.appendingPathComponent("shortcuts-conflict@\(scale)x.png"))}
+        settings.shortcuts.revert();settings.shortcuts.reset("new-tab");settings.shortcuts.query=""
+        try originalBindings.write(to:settings.shortcuts.fileURL,options:.atomic)
+        for scale in scales {
+            try render(PreviewsSheet(model:settings.general),size:CGSize(width:480,height:320),scale:scale,dark:false,to:output.appendingPathComponent("sheet-previews@\(scale)x.png"))
+            settings.profiles.select(settings.model.profiles[1].id)
+            try render(SearchEnginesSheet(model:settings.profiles),size:CGSize(width:520,height:420),scale:scale,dark:false,to:output.appendingPathComponent("sheet-search-engines@\(scale)x.png"))
+            try render(ClearBrowsingDataSheet(model:settings.profiles),size:CGSize(width:460,height:360),scale:scale,dark:false,to:output.appendingPathComponent("sheet-clear-data@\(scale)x.png"))
+            try render(AdBlockSettingsSheet(model:settings.adBlock!),size:CGSize(width:600,height:560),scale:scale,dark:true,to:output.appendingPathComponent("sheet-adblock@\(scale)x.png"))
+            try render(LinkRuleSheet(root:settings,draft:settings.links.drafts[1]),size:CGSize(width:520,height:340),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule@\(scale)x.png"))
+            settings.profiles.nameDraft="Example New Profile"
+            try render(ProfileNameSheet(model:settings.profiles,create:true),size:CGSize(width:440,height:330),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-create@\(scale)x.png"))
+            settings.profiles.nameDraft="Example Work"
+            try render(ProfileNameSheet(model:settings.profiles,create:false),size:CGSize(width:440,height:180),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-rename@\(scale)x.png"))
+            settings.profiles.proposeArchive(.oneHour)
+            try render(ArchiveScopeSheet(model:settings.profiles),size:CGSize(width:500,height:160),scale:scale,dark:false,to:output.appendingPathComponent("sheet-archive-scope@\(scale)x.png"));settings.profiles.cancelArchive()
+        }
+        settings.profiles.select(settings.model.profiles[0].id)
+        let empty=try PreviewEnvironment();defer {empty.close()};empty.downloadFeed.downloads=[]
+        for section in [LibrarySection.archive,.downloads,.captures,.history] {
+            empty.library.section=section;await empty.library.reload()
+            for scale in scales {try render(LibraryContent(viewModel:empty.library),size:CGSize(width:960,height:640),scale:scale,dark:true,to:output.appendingPathComponent("library-\(section.rawValue)-empty@\(scale)x.png"))}
+        }
         let wizardEnvironment = try PreviewEnvironment(); defer { wizardEnvironment.close() }
         let source = wizardEnvironment.root.appendingPathComponent("Example Import")
         try SyntheticData.writeImportFixture(to: source)
         let wizard = ImportWizardViewModel(root: wizardEnvironment.settings, directory: source)
         await wizard.refreshCounts()
         for scale in scales { try render(ImportWizard(model: wizard), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-choose@\(scale)x.png")) }
-        wizard.plan.secretsRequested = true; wizard.review(); await wizard.beginImport()
-        try require(wizard.step == .consent && wizardEnvironment.actions.keychainReadCount == 0 && wizardEnvironment.actions.log.isEmpty, "wizard rendering must stop at consent")
+        wizard.plan.secretsRequested=true;wizard.review()
+        for scale in scales {try render(ImportWizard(model:wizard),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-review@\(scale)x.png"))}
+        await wizard.beginImport()
+        try require(wizard.step == .consent && wizardEnvironment.actions.importPlansWithConsent == 0 && wizardEnvironment.actions.log.isEmpty, "wizard rendering must stop at consent")
         for scale in scales { try render(ImportWizard(model: wizard), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-consent@\(scale)x.png")) }
+        await wizard.skipSecrets()
+        try require(wizard.step == .report && wizard.outcome?.errorText == nil && wizardEnvironment.actions.importPlansWithConsent == 0,"count-only wizard report")
+        for scale in scales {try render(ImportWizard(model:wizard),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-report@\(scale)x.png"))}
         // Retain the synthetic caller fixture so dump-keys can independently inspect every store.
         try settings.flush(); _ = try env.diskDefaults()
         let fixture = output.appendingPathComponent("fixture")

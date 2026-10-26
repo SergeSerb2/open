@@ -4,6 +4,7 @@ import SwiftUI
 import AppKit
 import OpenModel
 import OpenSuggest
+import OpenDesign
 
 @MainActor @Observable public final class ProfilesViewModel {
     unowned let root: SettingsViewModel
@@ -27,19 +28,28 @@ import OpenSuggest
     public init(root: SettingsViewModel) { self.root = root; dataModel = ProfilesSettingsModel(model: root.model) }
     public var profile: Profile? { root.model.profile(id: root.selectedProfileID) }
     public var engines: [SearchEngine] { SearchEngines.all + (profile?.settings.customSearchEngines ?? []) }
-    public var searchEngineID: String { get { SearchEngines.engine(id: profile?.settings.searchEngineID, in: engines).id } set { update { $0.searchEngineID = newValue } } }
+    public var searchEngineID: String { get { SearchEngines.resolve(profile: profile).id } set { update { $0.searchEngineID = newValue } } }
     public var suggestions: Bool { get { profile?.settings.searchSuggestEnabled ?? true } set {
         update { $0.searchSuggestEnabled = newValue }
         if newValue && !root.bool("open.general.searchSuggestNoticeDismissed") { showsSuggestNotice = true }
     } }
     /// The app uses this when building SuggestContext; no request while the notice is open.
     public var allowsRemoteSuggestions: Bool { suggestions && root.bool("open.general.searchSuggestNoticeDismissed") && !showsSuggestNotice }
+    /// App calls this before its first remote query and presents Settings on Profiles when false.
+    /// This uses the same notice state as pane appearance; the request must wait for dismissal.
+    @discardableResult public func prepareForRemoteSuggestions(profileID: ProfileID? = nil) -> Bool {
+        if let profileID { root.selectedProfileID = profileID }
+        if !suggestions { showsSuggestNotice = false }
+        if suggestions && !root.bool("open.general.searchSuggestNoticeDismissed") { showsSuggestNotice = true }
+        return allowsRemoteSuggestions
+    }
+    public func paneDidAppear() { refresh(); _ = prepareForRemoteSuggestions() }
     public func dismissSuggestNotice() { root.set(true, for: "open.general.searchSuggestNoticeDismissed"); showsSuggestNotice = false }
     public var downloadDirectory: String { get { profile?.settings.downloadDirectory ?? "~/Downloads" } set { update { $0.downloadDirectory = newValue } } }
     public var askWhereToSave: Bool { get { profile?.settings.askWhereToSaveEachFile ?? false } set { update { $0.askWhereToSaveEachFile = newValue } } }
     public func nextDownloadSettings() -> (directory: String, ask: Bool) { (downloadDirectory.isEmpty ? "~/Downloads" : downloadDirectory, askWhereToSave) }
     public func refresh() { dataModel.refresh(from: root.model) }
-    public func select(_ id: ProfileID) { root.selectedProfileID = id; refresh() }
+    public func select(_ id: ProfileID) { root.selectedProfileID = id; refresh(); _ = prepareForRemoteSuggestions() }
     public func update(_ change: (inout ProfileSettings) -> Void) {
         guard let profile else { return }; var settings = profile.settings; change(&settings)
         dataModel.updateSettings(in: root.model, id: profile.id, settings: settings); root.save()
@@ -53,7 +63,7 @@ import OpenSuggest
     @discardableResult public func create(name: String, spaces: Set<SpaceID> = []) -> Profile? {
         guard nameIsValid(name), let created = dataModel.createProfile(in: root.model, name: name) else { return nil }
         for id in spaces { _ = root.model.moveSpace(id: id, toProfile: created.id) }
-        root.selectedProfileID = created.id; refresh(); root.save(); root.refreshLinks(); showsCreate = false; return created
+        root.selectedProfileID = created.id; root.adBlock?.refresh(); refresh(); root.save(); root.refreshLinks(); showsCreate = false; return created
     }
     public func rename(to name: String) {
         guard let profile, nameIsValid(name, excluding: profile.id) else { return }
@@ -63,12 +73,14 @@ import OpenSuggest
     public var unusedIDs: [ProfileID] { root.model.profiles.filter { root.model.deleteBlockReason(for: $0.id) == nil }.map(\.id) }
     @discardableResult public func delete(id: ProfileID) -> Bool {
         if let block = root.model.deleteBlockReason(for: id) { errorText = block.message; return false }
-        if let error = root.actions.deleteProfileData(profileID: id) { errorText = error; return false }
+        do { try root.adBlock?.closeProfile(id) }
+        catch { errorText = "Could not close this Profile's ad block settings. \(error.localizedDescription)"; return false }
+        if let error = root.actions.deleteProfileData(profileID: id) { root.adBlock?.refresh(); errorText = error; return false }
         do {
             guard try dataModel.deleteProfile(in: root.model, id: id) else { return false }
             if root.selectedProfileID == id, let first = root.model.defaultProfile { root.selectedProfileID = first.id }
             root.save(); root.refreshLinks(); errorText = ""; return true
-        } catch { errorText = "Could not delete this Profile. \(error.localizedDescription)"; return false }
+        } catch { root.adBlock?.refresh(); errorText = "Could not delete this Profile. \(error.localizedDescription)"; return false }
     }
     public func deleteUnused() { for id in unusedIDs { if !delete(id: id) { break } } }
     public func proposeArchive(_ interval: AutoArchiveInterval) { archiveProfileID = root.selectedProfileID; pendingArchive = interval }
@@ -98,7 +110,10 @@ import OpenSuggest
     @discardableResult public func saveEngine(id: String? = nil, name: String, keyword: String, template: String) -> Bool {
         if let issue = engineIssue(name: name, keyword: keyword, template: template) { errorText = issue; return false }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let engine = SearchEngine(id: id ?? "custom-\(UUID().uuidString.lowercased())", name: name, keywords: [keyword], searchURLTemplate: template, suggestURLTemplate: nil)
+        let existing = profile?.settings.customSearchEngines.first { $0.id == id }
+        var keywords = existing?.keywords ?? []
+        if keywords.isEmpty { keywords = [keyword] } else { keywords[0] = keyword }
+        let engine = SearchEngine(id: id ?? "custom-\(UUID().uuidString.lowercased())", name: name, keywords: keywords, searchURLTemplate: template, suggestURLTemplate: existing?.suggestURLTemplate, suggestFormat: existing?.suggestFormat ?? .openSearch)
         guard !SearchEngines.all.contains(where: { $0.id == engine.id }) else { errorText = "Built-in engines cannot be replaced."; return false }
         update { settings in if let index = settings.customSearchEngines.firstIndex(where: { $0.id == engine.id }) { settings.customSearchEngines[index] = engine } else { settings.customSearchEngines.append(engine) } }
         errorText = ""; return true
@@ -110,79 +125,117 @@ import OpenSuggest
 
 public struct ProfilesPane: View {
     @Bindable var model: ProfilesViewModel
-    public init(model: ProfilesViewModel) { self.model = model }
+    public init(model: ProfilesViewModel) { self.model=model }
     public var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Profiles keep your data separate across Spaces — like history, logins, cookies, and extensions. You can use any Profile across one or more Spaces. [Learn more.](open-help://profiles)")
-                .environment(\.openURL, OpenURLAction { _ in model.root.actions.openHelp(topic: "profiles"); return .handled })
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Your Profiles").font(.caption).foregroundStyle(.secondary)
-                    ForEach(model.dataModel.rows) { row in
-                        Button { model.select(row.id) } label: { VStack(alignment: .leading, spacing: 4) { Text(row.name); Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.caption).foregroundStyle(.secondary) }.frame(maxWidth: .infinity, alignment: .leading).padding(8).background(row.id == model.root.selectedProfileID ? Color.accentColor.opacity(0.15) : .clear, in: RoundedRectangle(cornerRadius: 6)) }.buttonStyle(.plain)
-                    }
-                    Spacer(minLength: 100)
-                    HStack { Button { model.nameDraft = ""; model.assignedSpaces = []; model.showsCreate = true } label: { Image(systemName: "plus") }.help("Create Profile")
-                        Button { model.confirmsDelete = true } label: { Image(systemName: "minus") }.disabled(!model.canDelete).help("Delete Profile")
-                        Button { model.nameDraft = model.profile?.name ?? ""; model.showsRename = true } label: { Image(systemName: "pencil") }.help("Rename Profile")
-                    }
-                    Button { model.confirmsUnused = true } label: { Text("Delete unused Profiles").font(.caption).lineLimit(2).fixedSize(horizontal: false, vertical: true) }.buttonStyle(.plain).disabled(model.unusedIDs.isEmpty)
-                }.padding(10).frame(width: 145).background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
-                VStack(spacing: 16) {
-                    SettingsGroup("") {
-                        HStack { Text("Search engine"); Spacer(); Picker("Search engine", selection: $model.searchEngineID) { ForEach(model.engines) { Text($0.name).tag($0.id) } }.labelsHidden().fixedSize() }
-                        HStack { Text("Manage search"); Spacer(); Button("Search Settings…") { model.root.showsSearchEngines = true } }
-                        SettingsSwitch("Include search engine suggestions", isOn: $model.suggestions)
-                    }
-                    SettingsGroup("") {
-                        Picker("Archive tabs after", selection: Binding(get: { model.pendingArchive ?? model.profile?.settings.autoArchiveAfter ?? .twelveHours }, set: { model.proposeArchive($0) })) { ForEach(AutoArchiveInterval.allCases, id: \.self) { Text($0.settingsTitle + ($0 == .twelveHours ? " (default)" : "")).tag($0) } }
-                        VStack(alignment: .leading) {
-                            HStack { Text("Download location"); Spacer(); Button("Choose…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let url = panel.url { model.downloadDirectory = url.path } } }
-                            Text(model.downloadDirectory.isEmpty ? "~/Downloads" : model.downloadDirectory).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+        VStack(alignment:.leading,spacing:14) {
+            Text(introduction).fixedSize(horizontal:false,vertical:true)
+
+            HStack(alignment:.top,spacing:11) {
+                VStack(spacing:8) {
+                    VStack(spacing:0) {
+                        Text("Your Profiles").font(Font(SettingsTokens.section.font)).foregroundStyle(.tertiary).frame(maxWidth:.infinity,alignment:.leading).padding(.horizontal,10).frame(height:27)
+                        Divider()
+                        ForEach(model.dataModel.rows) { row in
+                            Button { model.select(row.id) } label: {
+                                HStack(spacing:4) { Text(row.name).lineLimit(1);Spacer(minLength:2);Text("\(row.spaceCount) \(row.spaceCount == 1 ? "Space" : "Spaces")").font(.system(size:11)).foregroundStyle(.secondary) }
+                                    .padding(.horizontal,10).frame(height:31).background(row.id == model.root.selectedProfileID ? Color(nsColor:SettingsTokens.selectedProfile.nsColor) : .clear)
+                            }.buttonStyle(.plain)
                         }
-                        SettingsSwitch("Ask where to save each file", isOn: $model.askWhereToSave)
+                        Spacer(minLength:0)
+                        Divider()
+                        HStack(spacing:0) {
+                            profileTool("plus",help:"Create Profile") { model.nameDraft="";model.assignedSpaces=[];model.showsCreate=true }
+                            Divider().frame(height:15)
+                            profileTool("minus",help:"Delete Profile") { model.confirmsDelete=true }.disabled(!model.canDelete)
+                            Divider().frame(height:15)
+                            profileTool("pencil",help:"Rename Profile") { model.nameDraft=model.profile?.name ?? "";model.showsRename=true }
+                            Spacer(minLength:0)
+                        }.frame(height:31)
+                    }.frame(height:446).background(Color(nsColor:SettingsTokens.fill.nsColor),in:RoundedRectangle(cornerRadius:8)).overlay(RoundedRectangle(cornerRadius:8).stroke(Color(nsColor:SettingsTokens.border.nsColor)))
+                    if !model.unusedIDs.isEmpty { Button("Delete unused Profiles") { model.confirmsUnused=true }.buttonStyle(.plain).font(.system(size:11)) }
+                }.frame(width:205)
+                VStack(spacing:10) {
+                    SettingsGroup {
+                        SettingsRow(height:36) { HStack { Text("Search engine");Spacer();Picker("Search engine",selection:$model.searchEngineID) { ForEach(model.engines) { Text($0.name).tag($0.id) } }.labelsHidden().frame(width:143) } }
+                        SettingsRow(height:36) { HStack { Text("Manage search");Spacer();Button("Search Settings…") { model.root.showsSearchEngines=true } } }
+                        SettingsRow(height:36,divider:false) { SettingsSwitch("Include search engine suggestions",isOn:$model.suggestions) }
+                    }
+                    SettingsGroup {
+                        SettingsRow(height:44) {
+                            HStack(spacing:4) { Text("Archive tabs after");Image(systemName:"info.circle").font(.system(size:11)).foregroundStyle(.secondary);Spacer(minLength:2)
+                                Picker("Archive tabs after",selection:Binding(get:{model.pendingArchive ?? model.profile?.settings.autoArchiveAfter ?? .twelveHours},set:{model.proposeArchive($0)})) { ForEach(AutoArchiveInterval.allCases,id:\.self) { Text($0.settingsTitle + ($0 == .twelveHours ? " (default)" : "")).tag($0) } }.labelsHidden().frame(width:147)
+                            }
+                        }
+                        SettingsRow(height:44,divider:false) { HStack { Text("Download location");Spacer(minLength:2);Menu {
+                            Button { model.askWhereToSave=false } label: { Label(downloadName,systemImage:"folder.fill") }
+                            Button("Ask for each download") { model.askWhereToSave=true }
+                            Divider();Button("Other…") { chooseDownloads() }
+                        } label: { Label(model.askWhereToSave ? "Ask for each download" : downloadName,systemImage:"folder.fill").lineLimit(1) }.frame(width:160) } }
                     }
                     SettingsGroup("Your Data and Settings") {
-                        page("Privacy and Security", .privacy); page("Passwords", .passwords); page("Payment Methods", .paymentMethods); page("Notifications", .notifications)
-                        Button("Clear Browsing Data…", role: .destructive) { model.showClear() }
+                        page("Privacy and Security",symbol:"lock.fill",color:.blue,page:.privacy)
+                        page("Passwords",symbol:"key.fill",color:.green,page:.passwords)
+                        page("Credit Cards",symbol:"creditcard.fill",color:.yellow,page:.paymentMethods)
+                        page("Notifications",symbol:"bell.fill",color:.orange,page:.notifications)
+                        dataRow("Clear Browsing Data",symbol:"trash.fill",color:.red,divider:false) { model.showClear() }
                     }
-                }.frame(maxWidth: .infinity)
+                }.frame(width:340)
             }
-            SettingsError(text: model.errorText)
-        }.onAppear { model.refresh() }
-        .sheet(isPresented: $model.showsCreate) { nameSheet(create: true) }
-        .sheet(isPresented: $model.showsRename) { nameSheet(create: false) }
-        .sheet(isPresented: Binding(get: { model.pendingArchive != nil }, set: { if !$0 { model.cancelArchive() } })) {
-            VStack(spacing: 24) { Text(model.pendingArchive == .never ? "Open will never auto-archive your tabs." : "Open will now archive your tabs after \(model.pendingArchive?.settingsTitle ?? "").")
-                HStack { Button("Cancel") { model.cancelArchive() }; Button("All Profiles") { model.applyArchive(all: true) }; Button("This Profile Only") { model.applyArchive(all: false) }.keyboardShortcut(.defaultAction) }
-            }.padding(24).frame(width: 500)
+            SettingsError(text:model.errorText)
+        }.environment(\.openURL,OpenURLAction { _ in model.root.actions.openHelp(topic:"profiles");return .handled })
+        .onAppear { model.paneDidAppear() }
+        .sheet(isPresented:$model.showsCreate) { ProfileNameSheet(model:model,create:true) }
+        .sheet(isPresented:$model.showsRename) { ProfileNameSheet(model:model,create:false) }
+        .sheet(isPresented:Binding(get:{model.pendingArchive != nil},set:{if !$0 {model.cancelArchive()}})) { ArchiveScopeSheet(model:model) }
+        .sheet(isPresented:$model.showsSuggestNotice) { SuggestNoticeSheet(model:model) }
+        .sheet(isPresented:$model.showsClear) { ClearBrowsingDataSheet(model:model) }
+        .confirmationDialog("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to it.",isPresented:$model.confirmsDelete) { Button("Delete Profile",role:.destructive) { _=model.delete(id:model.root.selectedProfileID) } }
+        .confirmationDialog("Deleting unused Profiles will permanently remove any cookies, history, preferences, and logins that belong to those Profiles.",isPresented:$model.confirmsUnused) { Button("Delete unused Profiles",role:.destructive) { model.deleteUnused() } }
+    }
+    private var introduction:AttributedString {
+        var text=AttributedString("Profiles help keep your data separate across Spaces — like history, logins, cookies, and extensions. You can use any Profile across one or more Spaces. ")
+        var link=AttributedString("Learn more.");link.link=URL(string:"open-help://profiles");link.underlineStyle = .single;link.foregroundColor=Color(nsColor:SettingsTokens.link.nsColor);text.append(link);return text
+    }
+    private var downloadName:String { URL(fileURLWithPath:(model.downloadDirectory as NSString).expandingTildeInPath).lastPathComponent }
+    private func chooseDownloads() { let panel=NSOpenPanel();panel.canChooseDirectories=true;panel.canChooseFiles=false;if panel.runModal() == .OK,let url=panel.url { model.downloadDirectory=url.path;model.askWhereToSave=false } }
+    private func profileTool(_ symbol:String,help:String,action:@escaping ()->Void)->some View { Button(action:action) { Image(systemName:symbol).frame(width:32,height:31) }.buttonStyle(.plain).help(help) }
+    private func page(_ title:String,symbol:String,color:Color,page:ProfilePage)->some View { dataRow(title,symbol:symbol,color:color) { model.open(page) } }
+    private func dataRow(_ title:String,symbol:String,color:Color,divider:Bool=true,action:@escaping ()->Void)->some View {
+        SettingsRow(height:34,divider:divider) { Button(action:action) { HStack(spacing:8) { Image(systemName:symbol).font(.system(size:13)).foregroundStyle(.white).frame(width:24,height:24).background(color,in:RoundedRectangle(cornerRadius:4));Text(title);Spacer();Text("→").foregroundStyle(Color(nsColor:SettingsTokens.link.nsColor)) } }.buttonStyle(.plain) }
+    }
+}
+public struct ProfileNameSheet:View {
+    @Bindable var model:ProfilesViewModel;let create:Bool
+    public init(model:ProfilesViewModel,create:Bool) { self.model=model;self.create=create }
+    public var body:some View { VStack(alignment:.leading,spacing:20) {
+        Text(create ? "What do you want to call this Profile?" : "Rename Profile").font(.title3)
+        TextField("Name",text:$model.nameDraft)
+        if create { Text("Which Spaces should use this Profile?");Text("These Spaces will start fresh in your brand new Profile").foregroundStyle(.secondary)
+            ForEach(model.root.model.spaces,id:\.id) { space in Toggle(model.root.model.displayTitle(for:space),isOn:Binding(get:{model.assignedSpaces.contains(space.id)},set:{if $0 {model.assignedSpaces.insert(space.id)} else {model.assignedSpaces.remove(space.id)}})) }
         }
-        .sheet(isPresented: $model.showsSuggestNotice) { VStack(spacing: 24) { Text("We talk to your search engine to help us suggest results."); Button("Got it") { model.dismissSuggestNotice() } }.padding(32).frame(width: 400) }
-        .sheet(isPresented: $model.showsClear) { clearSheet }
-        .confirmationDialog("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to it.", isPresented: $model.confirmsDelete) { Button("Delete Profile", role: .destructive) { _ = model.delete(id: model.root.selectedProfileID) } }
-        .confirmationDialog("Deleting unused Profiles will permanently remove any cookies, history, preferences, and logins that belong to those Profiles.", isPresented: $model.confirmsUnused) { Button("Delete unused Profiles", role: .destructive) { model.deleteUnused() } }
-    }
-    private func page(_ title: String, _ page: ProfilePage) -> some View { Button { model.open(page) } label: { HStack { Text(title); Spacer(); Image(systemName: "chevron.right") } }.buttonStyle(.plain) }
-    private func nameSheet(create: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(create ? "What do you want to call this Profile?" : "Rename Profile").font(.title3)
-            TextField("Name", text: $model.nameDraft)
-            if create { Text("Which Spaces should use this Profile?"); Text("These Spaces will start fresh in your brand new Profile").foregroundStyle(.secondary)
-                ForEach(model.root.model.spaces, id: \.id) { space in Toggle(model.root.model.displayTitle(for: space), isOn: Binding(get: { model.assignedSpaces.contains(space.id) }, set: { if $0 { model.assignedSpaces.insert(space.id) } else { model.assignedSpaces.remove(space.id) } })) }
-            }
-            SettingsError(text: model.errorText)
-            HStack { Button("Cancel") { model.showsCreate = false; model.showsRename = false }; Spacer(); Button(create ? "Create Profile" : "Save") { if create { _ = model.create(name: model.nameDraft, spaces: model.assignedSpaces) } else { model.rename(to: model.nameDraft) } }.keyboardShortcut(.defaultAction) }
-        }.padding(24).frame(width: 440)
-    }
-    private var clearSheet: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Clear Browsing Data").font(.title2)
-            ForEach([(ClearDataKinds.history, "Browsing history"), (.cookies, "Cookies and site data"), (.cache, "Cached files"), (.downloads, "Download history")], id: \.0.rawValue) { kind, title in
-                Toggle(title, isOn: Binding(get: { model.clearKinds.contains(kind) }, set: { if $0 { model.clearKinds.insert(kind) } else { model.clearKinds.remove(kind) } }))
-            }
-            Picker("Time range", selection: $model.clearRange) { ForEach(ClearDataRange.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-            if model.clearing { ProgressView() }; Text(model.clearStatus)
-            Spacer(); HStack { Button(model.clearStatus == "Done" ? "Done" : "Cancel") { model.showsClear = false }.disabled(model.clearing); Spacer(); Button("Clear Data", role: .destructive) { Task { await model.clear() } }.disabled(model.clearing || model.clearKinds.isEmpty) }
-        }.padding(24).frame(width: 460, height: 360)
-    }
+        SettingsError(text:model.errorText);Spacer()
+        HStack { Button("Cancel") { model.showsCreate=false;model.showsRename=false }.keyboardShortcut(.cancelAction);Spacer();Button(create ? "Create Profile" : "Save") { if create {_=model.create(name:model.nameDraft,spaces:model.assignedSpaces)} else {model.rename(to:model.nameDraft)} }.keyboardShortcut(.defaultAction) }
+    }.padding(24).frame(width:440,height:create ? 330:180) }
+}
+public struct ArchiveScopeSheet:View {
+    @Bindable var model:ProfilesViewModel
+    public init(model:ProfilesViewModel) { self.model=model }
+    public var body:some View { VStack(spacing:24) { Text(model.pendingArchive == .never ? "Open will never auto-archive your tabs." : "Open will now archive your tabs after \(model.pendingArchive?.settingsTitle ?? "").")
+        HStack { Button("Cancel") { model.cancelArchive() }.keyboardShortcut(.cancelAction);Button("All Profiles") { model.applyArchive(all:true) };Button("This Profile Only") { model.applyArchive(all:false) }.keyboardShortcut(.defaultAction) }
+    }.padding(24).frame(width:500,height:160) }
+}
+public struct SuggestNoticeSheet:View {
+    @Bindable var model:ProfilesViewModel
+    public init(model:ProfilesViewModel) { self.model=model }
+    public var body:some View { VStack(spacing:24) { Text("We talk to your search engine to help us suggest results.");Button("Got it") { model.dismissSuggestNotice() }.keyboardShortcut(.defaultAction) }.padding(32).frame(width:400,height:180) }
+}
+public struct ClearBrowsingDataSheet:View {
+    @Bindable var model:ProfilesViewModel
+    public init(model:ProfilesViewModel) { self.model=model }
+    public var body:some View { VStack(alignment:.leading,spacing:20) { Text("Clear Browsing Data").font(.title2)
+        ForEach([(ClearDataKinds.history,"Browsing history"),(.cookies,"Cookies and site data"),(.cache,"Cached files"),(.downloads,"Download history")],id:\.0.rawValue) { kind,title in Toggle(title,isOn:Binding(get:{model.clearKinds.contains(kind)},set:{if $0 {model.clearKinds.insert(kind)} else {model.clearKinds.remove(kind)}})) }
+        Picker("Time range",selection:$model.clearRange) { ForEach(ClearDataRange.allCases,id:\.self) { Text($0.rawValue).tag($0) } }
+        if model.clearing { ProgressView() };if !model.clearStatus.isEmpty {Text(model.clearStatus)};Spacer()
+        HStack { Button(model.clearStatus == "Done" ? "Done":"Cancel") { model.showsClear=false }.keyboardShortcut(.cancelAction).disabled(model.clearing);Spacer();Button("Clear Data",role:.destructive) { Task {await model.clear()} }.keyboardShortcut(.defaultAction).disabled(model.clearing || model.clearKinds.isEmpty) }
+    }.padding(24).frame(width:460,height:360) }
 }
