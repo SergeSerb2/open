@@ -27,6 +27,7 @@ import OpenModel
         }
     }
     @discardableResult public func request(tabID: ItemID, automatic: Bool) -> Effect? {
+        guard activeSource?.tabID != tabID else { return nil }
         let replaced = activeSource.map { Effect(tabID: $0.tabID, reason: .replaced, pause: false) }
         state = .requesting(tabID: tabID, automatic: automatic)
         return replaced
@@ -36,7 +37,9 @@ import OpenModel
         state = .active(tabID: id, automatic: automatic)
     }
     @discardableResult public func close(_ reason: Reason) -> Effect? {
-        guard let source = activeSource else { return nil }
+        let minimizedSource: (tabID: ItemID, automatic: Bool)?
+        if case .minimized(let id) = state { minimizedSource = (id, false) } else { minimizedSource = nil }
+        guard let source = activeSource ?? minimizedSource else { return nil }
         let pause = reason == .userClosed
         if source.automatic && (reason == .userClosed || reason == .minimized) { snoozed.insert(source.tabID) }
         if reason == .minimized { state = .minimized(tabID: source.tabID) }

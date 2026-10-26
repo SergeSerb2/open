@@ -22,7 +22,7 @@ public struct PiPSiteRules: Sendable, Decodable {
     }
     public func isDisallowed(_ url: URL) -> Bool { disallow.contains { Self.matches(url.host, rule: $0) } }
     public func configuration(for url: URL) -> Site? { sites.first { $0.hosts.contains { Self.matches(url.host, rule: $0) } } }
-    private static func matches(_ host: String?, rule: String) -> Bool {
+    public static func matches(_ host: String?, rule: String) -> Bool {
         guard let host = host?.lowercased() else { return false }
         let rule = rule.lowercased()
         return host == rule || host.hasSuffix("." + rule)

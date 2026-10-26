@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import OpenModel
 import OpenMedia
 import OpenWeb
@@ -40,9 +41,21 @@ import OpenWeb
     _ = session.displayed(tabID: tab); check("AP7 displayed clears", decision() == .open)
     session.request(tabID: other, automatic: false); session.didEnter(tabID: other)
     check("AP8 manual blocks", decision() == .manualPiP)
-    let replacement = session.request(tabID: other, automatic: true); session.didEnter(tabID: other)
-    check("AP8 automatic replaces", decision() == .open && replacement?.reason == .replaced && replacement?.pause == false)
     _ = session.close(.sourceGone)
+    session.request(tabID: other, automatic: true); session.didEnter(tabID: other)
+    check("AP8 automatic can be replaced", decision() == .open)
+    let replacement = session.request(tabID: tab, automatic: true)
+    check("AP8 replacement names A, session names T", replacement?.tabID == other && replacement?.reason == .replaced && replacement?.pause == false && session.state == .requesting(tabID: tab, automatic: true))
+    let requesting = session.state
+    check("same-tab requesting policy blocks", decision() == .alreadyInPictureInPicture)
+    check("same-tab requesting is idempotent", session.request(tabID: tab, automatic: true) == nil && session.state == requesting)
+    session.didEnter(tabID: tab)
+    let active = session.state
+    check("same-tab active policy blocks", decision() == .alreadyInPictureInPicture)
+    check("same-tab active is idempotent", session.request(tabID: tab, automatic: false) == nil && session.state == active)
+    _ = session.close(.sourceGone)
+    var enginePiP = video; enginePiP.isPictureInPicture = true
+    check("engine PiP policy blocks", decision("https://example.com", enginePiP) == .alreadyInPictureInPicture)
     check("AP9 disablePictureInPicture", decision(disabled: true) == .videoDisabled)
     for event: AutoPiPPolicy.LeaveEvent in [.minimize, .occlusion, .appHide, .appSwitch, .close, .splitFocus, .peek] {
         check("AP10 no leave \(event)", decision(event: event) == .notLeave)
@@ -68,18 +81,19 @@ import OpenWeb
     let displayed = ItemID(), split = ItemID(), peek = ItemID(), pip = ItemID(), minimized = ItemID()
     for id in [displayed, split, peek, pip, minimized] { store.update(tabID: id, windowID: window, state: video, isMuted: false, isCapturing: false) }
     store.setPiP(tabID: pip, .active(auto: true)); store.setPiP(tabID: minimized, .minimized)
-    check("MS1 displayed, split, peek and PiP excluded", store.visibleSources(windowID: window, displayed: [displayed, split, peek]).map(\.tabID) == [minimized])
+    check("MS1 displayed, split, peek and PiP excluded", store.visibleSources(windowID: window, displayed: [displayed, split, peek]).compactMap(\.tabID) == [minimized])
     store.update(tabID: other, windowID: WindowID(), state: video, isMuted: false, isCapturing: false)
     check("MS2 other window excluded; same window Space included", !store.visibleSources(windowID: window, displayed: []).contains { $0.tabID == other } && store.visibleSources(windowID: window, displayed: []).contains { $0.tabID == minimized })
     let ordering = MediaSourceStore(clock: { now }), ids = (0..<4).map { _ in ItemID() }
     for id in ids { ordering.update(tabID: id, windowID: window, state: video, isMuted: false, isCapturing: false) }
-    check("MS3 newest three", ordering.visibleSources(windowID: window, displayed: []).map(\.tabID) == Array(ids.reversed().prefix(3)))
+    check("MS3 newest three", ordering.visibleSources(windowID: window, displayed: []).compactMap(\.tabID) == Array(ids.reversed().prefix(3)))
     ordering.noteInteraction(tabID: ids[0])
     check("MS3 interaction promotes", ordering.visibleSources(windowID: window, displayed: []).first?.tabID == ids[0])
-    let pausedStore = MediaSourceStore(clock: { now })
+    let scheduled = MediaDemoScheduler()
+    let pausedStore = MediaSourceStore(clock: { now }, scheduler: scheduled)
     var paused = video; paused.playback = .paused
     pausedStore.update(tabID: tab, windowID: window, state: paused, isMuted: false, isCapturing: false)
-    check("MS5 one paused work item", pausedStore.pendingWorkItemCount == 1 && pausedStore.pendingDismissDeadline == now.addingTimeInterval(3600))
+    check("MS5 one paused work item", pausedStore.pendingWorkItemCount == 1 && scheduled.pendingCount == 1 && pausedStore.pendingDismissDeadline == now.addingTimeInterval(3600))
     now.addTimeInterval(59 * 60)
     check("MS4 59 min visible", pausedStore.visibleSources(windowID: window, displayed: []).count == 1)
     pausedStore.noteInteraction(tabID: tab)
@@ -87,10 +101,15 @@ import OpenWeb
     now.addTimeInterval(60)
     check("MS4 interaction restarts deadline", pausedStore.visibleSources(windowID: window, displayed: []).count == 1 && pausedStore.pendingDismissDeadline == extendedDeadline)
     now.addTimeInterval(59 * 60)
+    await scheduled.waitForFire()
+    check("MS5 real scheduled callback fired", scheduled.firedCount == 1 && scheduled.pendingCount == 0 && pausedStore.pendingWorkItemCount == 0)
     check("MS4 60 min hidden", pausedStore.visibleSources(windowID: window, displayed: []).isEmpty)
+    pausedStore.noteInteraction(tabID: tab)
+    check("expired source interaction restores card", pausedStore.visibleSources(windowID: window, displayed: []).count == 1 && pausedStore.sleepProtectedTabIDs(windowID: window).contains(tab))
     pausedStore.update(tabID: tab, windowID: window, state: video, isMuted: false, isCapturing: false)
     check("MS5 no paused work item", pausedStore.pendingWorkItemCount == 0)
     pausedStore.dismiss(tabID: tab); pausedStore.update(tabID: tab, windowID: window, state: paused, isMuted: false, isCapturing: false)
+    pausedStore.noteInteraction(tabID: tab)
     check("dismissed until next play", pausedStore.visibleSources(windowID: window, displayed: []).isEmpty)
     pausedStore.update(tabID: tab, windowID: window, state: video, isMuted: false, isCapturing: false)
     check("replay restores card", pausedStore.visibleSources(windowID: window, displayed: []).count == 1)
@@ -100,6 +119,106 @@ import OpenWeb
     check("SR1 suffix attack rejected", rules.configuration(for: URL(string: "https://twitch.tv.evil.com")!) == nil)
     check("MN1 hostless menu", PiPMenuEntry.entries(url: URL(string: "about:blank"), muted: false, keepOnTop: true, disabledHosts: []).map(\.title) == ["Keep Window on Top", "", "Mute"])
     check("MN1 host menu order", PiPMenuEntry.entries(url: URL(string: "https://example.com/path"), muted: true, keepOnTop: false, disabledHosts: ["example.com"]).map(\.title) == ["Keep Window on Top", "", "Picture-in-picture on example.com:", "Open automatically", "Turn off", "", "Copy URL", "Unmute"])
+    // Store honors the engine PiP bit independently of shell session events.
+    pausedStore.update(tabID: tab, windowID: window, state: enginePiP, isMuted: false, isCapturing: false)
+    check("engine PiP source has no card", pausedStore.visibleSources(windowID: window, displayed: []).isEmpty)
+
+    let auxiliary = MediaSourceStore(clock: { now }), peekPageID = UUID()
+    auxiliary.updateAuxiliaryPage(pageID: peekPageID, windowID: window, state: video, isMuted: false, isCapturing: false)
+    check("PK-9 auxiliary page has no tab identity or card", auxiliary.sources.isEmpty && auxiliary.auxiliarySources[peekPageID]?.origin == .auxiliaryPage && auxiliary.auxiliarySources[peekPageID]?.tabID == nil && auxiliary.visibleSources(windowID: window, displayed: []).isEmpty)
+
+    let closingScheduler = MediaDemoScheduler(), closing = MediaSourceStore(clock: { now }, scheduler: closingScheduler)
+    closing.update(tabID: tab, windowID: window, state: paused, isMuted: false, isCapturing: false)
+    check("close fixture has scheduled paused source", closingScheduler.pendingCount == 1)
+    closing.remove(tabID: tab)
+    check("close without final update clears source and deadline", closing.sources[tab] == nil && closing.visibleSources(windowID: window, displayed: []).isEmpty && closing.pendingDismissDeadline == nil && closing.pendingWorkItemCount == 0 && closingScheduler.pendingCount == 0)
+    let movedWindow = WindowID()
+    closing.update(tabID: tab, windowID: window, state: video, isMuted: false, isCapturing: false)
+    closing.move(tabID: tab, toWindow: movedWindow)
+    check("window move without media update", closing.visibleSources(windowID: window, displayed: []).isEmpty && closing.visibleSources(windowID: movedWindow, displayed: []).first?.tabID == tab)
+
+    let observationStore = MediaSourceStore(clock: { now }), windowB = WindowID()
+    observationStore.update(tabID: tab, windowID: window, state: video, isMuted: false, isCapturing: false)
+    observationStore.update(tabID: other, windowID: windowB, state: video, isMuted: false, isCapturing: false)
+    let invalidationsA = MediaDemoInvalidations(), invalidationsB = MediaDemoInvalidations(), dictionaryInvalidations = MediaDemoInvalidations()
+    withObservationTracking { _ = observationStore.visibleSources(windowID: window, displayed: []).map(\.playback) } onChange: { invalidationsA.note() }
+    withObservationTracking { _ = observationStore.visibleSources(windowID: windowB, displayed: []).map(\.playback) } onChange: { invalidationsB.note() }
+    withObservationTracking { _ = observationStore.sources.count } onChange: { dictionaryInvalidations.note() }
+    observationStore.update(tabID: tab, windowID: window, state: video, isMuted: false, isCapturing: false)
+    check("identical update has no invalidation", invalidationsA.count == 0 && invalidationsB.count == 0 && dictionaryInvalidations.count == 0)
+    observationStore.update(tabID: tab, windowID: window, state: paused, isMuted: false, isCapturing: false)
+    check("window A update does not invalidate window B", invalidationsA.count == 1 && invalidationsB.count == 0 && dictionaryInvalidations.count == 0)
+
+    let protectionScheduler = MediaDemoScheduler(), protection = MediaSourceStore(clock: { now }, scheduler: protectionScheduler)
+    var uncontrollable = video; uncontrollable.isControllable = false
+    protection.update(tabID: tab, windowID: window, state: uncontrollable, isMuted: false, isCapturing: false)
+    check("uncontrollable playing protected without card", protection.sources[tab] != nil && protection.visibleSources(windowID: window, displayed: []).isEmpty && protection.sleepProtectedTabIDs(windowID: window) == [tab])
+    now.addTimeInterval(7200)
+    check("uncontrollable playing remains protected", protection.sleepProtectedTabIDs(windowID: window) == [tab])
+    uncontrollable.playback = .paused
+    protection.update(tabID: tab, windowID: window, state: uncontrollable, isMuted: false, isCapturing: false)
+    check("uncontrollable paused protected before expiry", protection.sleepProtectedTabIDs(windowID: window) == [tab])
+    now.addTimeInterval(3600); await protectionScheduler.waitForFire()
+    check("uncontrollable paused expires at 60 min", protectionScheduler.firedCount == 1 && protection.sleepProtectedTabIDs(windowID: window).isEmpty && protection.visibleSources(windowID: window, displayed: []).isEmpty)
+
+    let earliestScheduler = MediaDemoScheduler(), earliestStore = MediaSourceStore(clock: { now }, scheduler: earliestScheduler)
+    let firstDeadline = now.addingTimeInterval(3600)
+    earliestStore.update(tabID: tab, windowID: window, state: paused, isMuted: false, isCapturing: false)
+    now.addTimeInterval(10)
+    earliestStore.update(tabID: other, windowID: window, state: paused, isMuted: false, isCapturing: false)
+    check("MS5 only earliest of two paused deadlines scheduled", earliestScheduler.pendingCount == 1 && earliestStore.pendingWorkItemCount == 1 && earliestStore.pendingDismissDeadline == firstDeadline)
+    now = firstDeadline; await earliestScheduler.waitForFire()
+    check("MS5 callback hides only expired source and schedules next", earliestScheduler.firedCount == 1 && earliestStore.visibleSources(windowID: window, displayed: []).compactMap(\.tabID) == [other] && earliestScheduler.pendingCount == 1 && earliestStore.pendingDismissDeadline == firstDeadline.addingTimeInterval(10))
+    earliestStore.remove(tabID: tab); earliestStore.remove(tabID: other)
+    check("MS5 final removal cancels real pending item", earliestScheduler.pendingCount == 0)
+
+    let recordingScheduler = MediaDemoScheduler(), recordingStore = MediaSourceStore(clock: { now }, scheduler: recordingScheduler)
+    recordingStore.update(tabID: tab, windowID: window, state: paused, isMuted: false, isCapturing: true)
+    check("paused recording visible before expiry", recordingStore.visibleSources(windowID: window, displayed: []).first?.kind == .recording)
+    now.addTimeInterval(3600); await recordingScheduler.waitForFire()
+    check("paused recording expires at 60 min", recordingScheduler.firedCount == 1 && recordingStore.visibleSources(windowID: window, displayed: []).isEmpty)
+
+    let minimizedSession = PiPSession(); minimizedSession.request(tabID: tab, automatic: true); minimizedSession.didEnter(tabID: tab)
+    _ = minimizedSession.close(.minimized)
+    let gone = minimizedSession.close(.sourceGone)
+    check("minimized sourceGone ends without pause", gone?.tabID == tab && gone?.reason == .sourceGone && gone?.pause == false && minimizedSession.state == .closed(tabID: tab, reason: .sourceGone))
+    settings.setAutomatic(false, host: "WWW.Example.COM")
+    check("host choice canonicalized", settings.autoDisabledHosts == ["example.com"])
+    check("host choice covers root and subdomains", settings.isAutoDisabled(host: "example.com") && settings.isAutoDisabled(host: "www.example.com") && settings.isAutoDisabled(host: "video.example.com") && !settings.isAutoDisabled(host: "example.com.evil.com"))
+    check("www menu retains source host in header", PiPMenuEntry.entries(url: URL(string: "https://www.example.com"), muted: false, keepOnTop: true, disabledHosts: settings.autoDisabledHosts).contains { $0.title == "Picture-in-picture on www.example.com:" })
+    let hostMenu = PiPMenuEntry.entries(url: URL(string: "https://video.example.com"), muted: false, keepOnTop: true, disabledHosts: settings.autoDisabledHosts)
+    check("subdomain menu shows same disabled state", hostMenu.first { $0.action == .turnOff }?.checked == true && hostMenu.first { $0.action == .openAutomatically }?.checked == false)
+    check("subdomain policy uses site choice", decision("https://video.example.com") == .hostDisabled)
+    settings.setAutomatic(true, host: "video.example.com")
+    check("subdomain menu can re-enable matching site", settings.autoDisabledHosts.isEmpty)
+
     print("media-demo OK: \(passed) checks passed, \(failed) failed")
     if failed != 0 { throw NSError(domain: "media-demo", code: failed) }
+}
+
+
+/// Uses the production DispatchWorkItem delivery path with short wall-clock delays.
+/// The clock still advances in domain time; only actual dispatch can fire these callbacks.
+@MainActor private final class MediaDemoScheduler: MediaDismissScheduling {
+    private let dispatch = DispatchMediaDismissScheduler(delay: { _ in 0.01 })
+    private var scheduled: [any MediaDismissTask] = []
+    private(set) var firedCount = 0
+    var pendingCount: Int { scheduled.filter(\.isPending).count }
+    func schedule(after delay: TimeInterval, action: @escaping @MainActor () -> Void) -> any MediaDismissTask {
+        let task = dispatch.schedule(after: delay) { [weak self] in self?.firedCount += 1; action() }
+        scheduled.append(task); return task
+    }
+    func waitForFire() async {
+        for _ in 0..<100 {
+            if firedCount > 0 { return }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
+}
+
+private final class MediaDemoInvalidations: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+    func note() { lock.lock(); defer { lock.unlock() }; value += 1 }
 }
