@@ -1,13 +1,13 @@
-SiteControl: snapshot or geometry unavailable for tab A1BB03B1-CB4C-4649-A52F-40D61AA087A7
-SiteControl: snapshot or geometry unavailable for tab 27C11870-1D86-46C7-AB37-2D4F6ED6D0EE
-SiteControl: snapshot or geometry unavailable for tab 94548CC6-4A53-4BFD-ACC6-79316880E154
-SiteControl: snapshot or geometry unavailable for tab CEDC6DEB-1221-4923-A654-FFD44088ABEF
-SiteControl: snapshot or geometry unavailable for tab CEDC6DEB-1221-4923-A654-FFD44088ABEF
-SiteControl: snapshot or geometry unavailable for tab E57514BB-DEFD-478C-846C-3553D8490D39
-Panel first draw: main-thread CPU p95 7.147 ms; wall p95 7.284 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
-CPU samples ms: 6.924, 6.638, 6.931, 6.563, 6.961, 6.843, 7.147, 6.773, 6.773, 7.194, 6.912, 6.886, 6.919, 6.961, 6.840, 6.777, 7.122, 6.487, 6.603, 6.390, 6.897, 6.648, 6.762, 7.071, 6.795, 6.855, 6.762, 6.640, 6.525, 6.720
-Wall samples ms: 6.946, 6.664, 7.027, 6.612, 7.070, 6.948, 7.160, 6.892, 6.861, 7.407, 7.016, 6.924, 7.034, 7.041, 7.011, 6.980, 7.284, 6.501, 6.611, 6.426, 6.936, 6.712, 6.791, 7.175, 6.830, 6.871, 6.816, 6.662, 6.597, 6.778
-CPU parts mean (init/attach/present/display): 0.507, 0.097, 3.188, 3.019
+SiteControl: snapshot or geometry unavailable for tab EB064861-3B5E-43EB-834F-DF4E57A01DE8
+SiteControl: snapshot or geometry unavailable for tab 0F3229E2-4A5B-476A-ABC1-6126C73767AB
+SiteControl: snapshot or geometry unavailable for tab BED748FB-12C6-4551-AD8B-D7C6C9563C7A
+SiteControl: snapshot or geometry unavailable for tab 6D23E482-90B4-4B75-9BCA-3BE399D525AC
+SiteControl: snapshot or geometry unavailable for tab 6D23E482-90B4-4B75-9BCA-3BE399D525AC
+SiteControl: snapshot or geometry unavailable for tab 1AF5EFC7-5B7B-469D-81BA-C8718100E934
+Panel first draw: main-thread CPU p95 11.072 ms; wall p95 12.380 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
+CPU samples ms: 9.730, 7.763, 8.405, 9.363, 9.157, 8.996, 10.593, 10.631, 8.791, 11.072, 10.174, 8.718, 11.810, 8.943, 10.404, 9.493, 10.274, 10.368, 9.626, 9.876, 10.412, 9.518, 9.548, 8.914, 8.215, 9.792, 7.393, 7.864, 9.074, 8.272
+Wall samples ms: 10.783, 8.205, 9.187, 10.080, 9.718, 9.515, 11.613, 11.465, 9.131, 12.380, 10.738, 9.007, 12.655, 9.618, 11.368, 10.228, 11.587, 11.572, 10.349, 11.215, 11.797, 10.220, 9.873, 10.432, 8.476, 10.410, 7.535, 8.048, 9.197, 8.352
+CPU parts mean (init/attach/present/display): 0.738, 0.131, 4.476, 4.095
 | Result | Check |
 |---|---|
 | PASS | F1 anchor presents |
@@ -694,7 +694,8 @@ CPU parts mean (init/attach/present/display): 0.507, 0.097, 3.188, 3.019
 | PASS | motion committed SHA256 shrink-080ms.png |
 | PASS | motion committed SHA256 shrink-260ms.png |
 | PASS | complete motion render receipts |
-| PASS | panel build/layout/first draw main-thread CPU p95 < 8 ms |
-| PASS | native click to first draw wall p95 < 8 ms |
+| FAIL | panel build/layout/first draw main-thread CPU p95 < 8 ms |
+| FAIL | native click to first draw wall p95 < 8 ms |
 
-686/686 passed
+684/686 passed
+FAIL: command sitecontrol-render exited 1; expected 0
