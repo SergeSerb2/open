@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 
 FORK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -7,6 +8,7 @@ export REPO_ROOT
 export LC_ALL=C GIT_OPTIONAL_LOCKS=0
 # Help and check paths must not create logs, locks, or directories.
 OPEN_ENGINE_READ_ONLY=${OPEN_ENGINE_READ_ONLY:-0}
+OPEN_ENGINE_RELEASE_LOCK=0
 for _open_arg in "$@"; do
     case "$_open_arg" in --help|-h|--dry-run|--check) OPEN_ENGINE_READ_ONLY=1 ;; esac
 done
@@ -70,26 +72,48 @@ require_no_build_running() {
     done <<< "$running"
 }
 
+release_lock() {
+    [[ "$OPEN_ENGINE_RELEASE_LOCK" == 1 ]] || return 0
+    rm -f "$STATE_DIR/lock-writer/owner"
+    rmdir "$STATE_DIR/lock-$OPEN_ENGINE_LOCK_NAME" "$STATE_DIR/lock-writer"
+    OPEN_ENGINE_RELEASE_LOCK=0
+}
+
 acquire_lock() {
-    local name=$1 lock="$STATE_DIR/lock-writer"
+    local name=$1 lock="$STATE_DIR/lock-writer" owner named_lock
     [[ "$OPEN_ENGINE_READ_ONLY" != 1 ]] || die "read-only mode cannot acquire a writer lock"
-    # Child bootstrap/apply commands in a rebase share the parent's lock.
+    # Nested commands share the parent's lock. Only a detached build takes
+    # responsibility for releasing it after the spawning parent exits.
     if [[ -n "${OPEN_ENGINE_LOCK_OWNER:-}" && -f "$lock/owner" ]] &&
         [[ "$(cat "$lock/owner")" == "$OPEN_ENGINE_LOCK_OWNER" ]]; then
+        if [[ "${OPEN_ENGINE_LOCK_HANDOFF:-}" == "$OPEN_ENGINE_LOCK_OWNER" ]]; then
+            OPEN_ENGINE_LOCK_NAME=$name
+            OPEN_ENGINE_RELEASE_LOCK=1
+            unset OPEN_ENGINE_LOCK_HANDOFF
+            trap release_lock EXIT
+        fi
         return
     fi
     mkdir -p "$STATE_DIR"
-    mkdir "$lock" 2>/dev/null || die "another $name operation holds the lock (if stale, remove $lock by hand)"
+    if ! mkdir "$lock" 2>/dev/null; then
+        owner=$(cat "$lock/owner" 2>/dev/null || true)
+        case "${owner##*:}" in
+            apply|refresh|build|distrib|sync|rebase) named_lock="$STATE_DIR/lock-${owner##*:}" ;;
+            *) named_lock="$STATE_DIR/lock-<operation>" ;;
+        esac
+        die "another writer operation holds the lock (requested $name; if stale, remove both $lock and $named_lock by hand after its owner stops)"
+    fi
     export OPEN_ENGINE_LOCK_OWNER="$$:$name"
     printf '%s\n' "$OPEN_ENGINE_LOCK_OWNER" > "$lock/owner"
     if ! mkdir "$STATE_DIR/lock-$name" 2>/dev/null; then
         rm "$lock/owner"
         rmdir "$lock"
-        die "another $name operation holds the lock (if stale, remove $STATE_DIR/lock-$name by hand)"
+        die "another $name operation holds the lock (if stale, inspect/remove both $lock and $STATE_DIR/lock-$name by hand)"
     fi
     # Paths are evaluated at exit, rather than interpolated into shell code.
     OPEN_ENGINE_LOCK_NAME=$name
-    trap 'rm -f "$STATE_DIR/lock-writer/owner"; rmdir "$STATE_DIR/lock-$OPEN_ENGINE_LOCK_NAME" "$STATE_DIR/lock-writer"' EXIT
+    OPEN_ENGINE_RELEASE_LOCK=1
+    trap release_lock EXIT
 }
 
 export_engine_env() {

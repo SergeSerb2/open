@@ -126,7 +126,7 @@ def main():
             print("\t".join((kind, series, name, line)))
         return 0
     pins = versions()
-    root = Path(os.environ.get("OPEN_ENGINE_ROOT", str(Path.home() / pins["ENGINE_ROOT_DEFAULT"]))).resolve()
+    root = Path((os.environ.get("OPEN_ENGINE_ROOT") or str(Path.home() / pins["ENGINE_ROOT_DEFAULT"]))).resolve()
     src = root / pins["CHROMIUM_SRC_SUBDIR"]
     state = root / ".open-engine-state"
     checks = []

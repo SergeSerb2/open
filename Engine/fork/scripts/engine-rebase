@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -48,9 +49,6 @@ if [[ $dry == 1 ]]; then
     log "dry-run: would verify applied state, snapshot $STATE_DIR/pre-rebase-tree.diff, resolve pins into scratch VERSIONS, sync, and stop for documented CEF update review"
     exit 0
 fi
-printf 'Type the new Chromium tag to confirm: '
-IFS= read -r confirmation
-[[ "$confirmation" == "$tag" ]] || die 'tag confirmation did not match'
 require_no_build_running
 # Same-pin rehearsal must be read-only, including logs and locks.
 if [[ "$tag" == "$CHROMIUM_TAG" && "$branch" == "$CEF_BRANCH" && "${commit:-$CEF_COMMIT}" == "$CEF_COMMIT" ]]; then
@@ -58,6 +56,9 @@ if [[ "$tag" == "$CHROMIUM_TAG" && "$branch" == "$CEF_BRANCH" && "${commit:-$CEF
     printf 'same pins: verified applied state; no tree or VERSIONS changes\n'
     exit 0
 fi
+printf 'Type the new Chromium tag to confirm: '
+IFS= read -r confirmation
+[[ "$confirmation" == "$tag" ]] || die 'tag confirmation did not match'
 acquire_lock rebase
 export_engine_env
 "$SCRIPT_DIR/engine-status" || die 'rebase needs a fully applied tree; run engine-apply first'

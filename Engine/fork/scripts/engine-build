@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -43,28 +44,37 @@ if [[ $dry == 1 ]]; then
 fi
 require_macos_arm64
 require_no_build_running
+acquire_lock build
 if [[ $detach == 1 && "${OPEN_ENGINE_DETACHED:-0}" != 1 ]]; then
     mkdir -p "$LOG_DIR"
     args=(--config "$config" --target "$target" --jobs "$jobs")
     [[ $regen == 0 ]] || args+=(--regen)
-    OPEN_ENGINE_DETACHED=1 python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
-        "$SCRIPT_DIR/engine-build" "${args[@]}" </dev/null >> "$LOG_DIR/build-$config-detached.log" 2>&1 &
-    log "detached build started: log $LOG_DIR/build-$config-detached.log"
+    child_pid=$(OPEN_ENGINE_DETACHED=1 OPEN_ENGINE_LOCK_HANDOFF="$OPEN_ENGINE_LOCK_OWNER" \
+        python3 - "$LOG_DIR/build-$config-detached.log" "$SCRIPT_DIR/engine-build" ${args[@]+"${args[@]}"} <<'PY'
+import subprocess, sys
+with open(sys.argv[1], 'ab') as log, open('/dev/null', 'rb') as null:
+    child = subprocess.Popen(sys.argv[2:], stdin=null, stdout=log, stderr=log, start_new_session=True)
+print(child.pid)
+PY
+    )
+    # The child inherits the already-held lock and installs its exit cleanup.
+    trap - EXIT
+    log "detached build started: pid $child_pid; log $LOG_DIR/build-$config-detached.log"
     printf 'tail -f %q\n' "$LOG_DIR/build-$config-detached.log"
     exit 0
 fi
-acquire_lock build
 if [[ "$config" == release ]] && grep -Eq '^chrome_pgo_phase[[:space:]]*=[[:space:]]*2' "$FORK_DIR/gn/release.args.gn"; then
     # Use Chromium's own revision-specific filename, not any stale .profdata file.
     if ! python3 - "$SRC_DIR" <<'PY'
-import pathlib, sys
+import ast, pathlib, sys
 src = pathlib.Path(sys.argv[1])
-scope = {}
 try:
-    exec(compile((src.parent / '.gclient').read_text(), '.gclient', 'exec'), {'__builtins__': {}}, scope)
-except (OSError, SyntaxError, ValueError, NameError):
+    tree = ast.parse((src.parent / '.gclient').read_text())
+    solutions = [ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == 'solutions' for t in n.targets)][-1]
+except (OSError, SyntaxError, ValueError, IndexError):
     sys.exit(1)
-enabled = any(s.get('name') == 'src' and s.get('custom_vars', {}).get('checkout_pgo_profiles') is True for s in scope.get('solutions', []))
+enabled = any(s.get('name') == 'src' and s.get('custom_vars', {}).get('checkout_pgo_profiles') is True for s in solutions)
 name = src / 'chrome/build/mac-arm.pgo.txt'
 valid = enabled and name.is_file() and (src / 'chrome/build/pgo_profiles' / name.read_text().strip()).is_file()
 sys.exit(0 if valid else 1)
@@ -92,7 +102,9 @@ else
     log 'args.gn exists: trusting ninja regeneration; args unchanged'
 fi
 mkdir -p "$LOG_DIR"
-build_log=$(mktemp "$LOG_DIR/build-$config-$(date +%Y%m%d-%H%M%S)-XXXXXX.log")
+build_log=$(mktemp "$LOG_DIR/build-$config-$(date +%Y%m%d-%H%M%S)-XXXXXX")
+mv "$build_log" "$build_log.log"
+build_log+=.log
 start=$(date +%s)
 set +e
 (cd "$SRC_DIR" && caffeinate -dimsu nice -n 10 autoninja -C "$out" "$target" -j "$jobs") 2>&1 | tee "$build_log"

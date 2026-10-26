@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -39,6 +40,8 @@ if [[ $dry == 0 ]]; then
 fi
 if [[ $dry == 1 ]]; then
     log 'dry-run: CEF patch step skipped'
+elif [[ "$only" == overlay ]]; then
+    log 'CEF patch step skipped: overlay-only selection'
 else
     if ! cef_output=$(cd "$SRC_DIR/cef" && python3 tools/patcher.py 2>&1); then
         log "$cef_output"
@@ -60,18 +63,18 @@ while IFS=$'\t' read -r kind series name line; do
     patch="$FORK_DIR/patches/$series/$name"
     git_apply=(git -C "$SRC_DIR" apply -p1)
     [[ "$series" != cef ]] || git_apply=(git -C "$SRC_DIR/cef" apply -p2)
-    if "${git_apply[@]}" --reverse --check "$patch" >/dev/null 2>&1; then
+    if ${git_apply[@]+"${git_apply[@]}"} --reverse --check "$patch" >/dev/null 2>&1; then
         log "already applied: $name"
         already=$((already + 1))
         outcomes+="$series/$name"$'\t''already-applied'$'\n'
         continue
     fi
     if [[ $dry == 1 ]]; then
-        "${git_apply[@]}" --check "$patch" || die "dry-run: patch cannot apply directly: $series/$name (no 3-way writes attempted)"
+        ${git_apply[@]+"${git_apply[@]}"} --check "$patch" || die "dry-run: patch cannot apply directly: $series/$name (no 3-way writes attempted)"
         log "dry-run: would apply --3way --whitespace=nowarn $patch"
         continue
     fi
-    if output=$("${git_apply[@]}" --3way --whitespace=nowarn "$patch" 2>&1); then
+    if output=$(${git_apply[@]+"${git_apply[@]}"} --3way --whitespace=nowarn "$patch" 2>&1); then
         log "applied: $name"
         applied=$((applied + 1))
         outcomes+="$series/$name"$'\t''applied'$'\n'
@@ -117,8 +120,20 @@ else
     python3 - "$STATE_DIR/applied.json" "$CHROMIUM_COMMIT" "$CEF_COMMIT" "$overlays" "$outcomes" "$only" <<'PY'
 import datetime, json, os, sys, tempfile
 path, chromium, cef, count, outcomes, scope = sys.argv[1:]
-state = dict(chromium=chromium, cef=cef, patches=dict(line.split('\t') for line in outcomes.splitlines()),
-             overlay_files=int(count), scope=scope, applied_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+state = {}
+if scope != 'all' and os.path.exists(path):
+    with open(path) as stream:
+        state = json.load(stream)
+    if state.get('chromium') != chromium or state.get('cef') != cef:
+        raise SystemExit('applied.json pins differ; run engine-apply --all before a partial apply')
+patches = state.setdefault('patches', {})
+patches.update(dict(line.split('\t') for line in outcomes.splitlines()))
+if scope in ('all', 'overlay'):
+    state['overlay_files'] = int(count)
+else:
+    state.setdefault('overlay_files', 0)
+state.update(chromium=chromium, cef=cef, scope=scope,
+             applied_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
 fd, temp = tempfile.mkstemp(dir=os.path.dirname(path), prefix='applied-', suffix='.tmp')
 with os.fdopen(fd, 'w') as stream:
     json.dump(state, stream, indent=2)

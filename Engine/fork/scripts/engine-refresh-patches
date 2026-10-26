@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -32,6 +33,20 @@ if [[ $dry == 0 ]]; then
     require_no_build_running
     acquire_lock refresh
 fi
+rust_staged=0
+unstage_rust_paths() {
+    if [[ $rust_staged == 1 ]]; then
+        ${git_cmd[@]+"${git_cmd[@]}"} reset --quiet HEAD -- ${paths[@]+"${paths[@]}"}
+        rust_staged=0
+    fi
+}
+cleanup_refresh() {
+    local rc=$?
+    unstage_rust_paths || rc=1
+    release_lock
+    return "$rc"
+}
+[[ $dry == 1 ]] || trap cleanup_refresh EXIT
 count=0
 while IFS=$'\t' read -r kind series name path_text; do
     [[ "$kind" == active && "$selected" == *" $series "* ]] || continue
@@ -42,13 +57,13 @@ while IFS=$'\t' read -r kind series name path_text; do
     if [[ "$series" == cef ]]; then
         git_cmd=(git -C "$SRC_DIR/cef")
         prefixes=(--src-prefix=a/cef/ --dst-prefix=b/cef/)
-        for i in "${!paths[@]}"; do paths[i]=${paths[i]#cef/}; done
+        for ((i=0; i<${#paths[@]}; i++)); do paths[i]=${paths[i]#cef/}; done
     fi
     if [[ "$series" != rust ]]; then
         while IFS= read -r -d '' untracked; do
             [[ "$series" != cef ]] || untracked="cef/$untracked"
             [[ -f "$FORK_DIR/src/$untracked" ]] || die "untracked file $untracked is not in the overlay; copy it to Engine/fork/src/$untracked (new files are overlay, §3.2)"
-        done < <("${git_cmd[@]}" ls-files --others --exclude-standard -z -- "${paths[@]}")
+        done < <(${git_cmd[@]+"${git_cmd[@]}"} ls-files --others --exclude-standard -z -- ${paths[@]+"${paths[@]}"})
     fi
     patch="$FORK_DIR/patches/$series/$name"
     if [[ $dry == 1 ]]; then
@@ -56,17 +71,19 @@ while IFS=$'\t' read -r kind series name path_text; do
         [[ "$series" != rust ]] || log "dry-run: would git add -f -- $path_text before staged capture"
     else
         if [[ "$series" == rust ]]; then
-            "${git_cmd[@]}" add -f -- "${paths[@]}"
-            "${git_cmd[@]}" diff --cached --no-color --binary "${prefixes[@]}" -- "${paths[@]}" > "$patch.tmp"
+            # Also clean the index if add/diff fails or the patch is empty.
+            rust_staged=1
+            ${git_cmd[@]+"${git_cmd[@]}"} add -f -- ${paths[@]+"${paths[@]}"}
+            ${git_cmd[@]+"${git_cmd[@]}"} diff --cached --no-color --binary ${prefixes[@]+"${prefixes[@]}"} -- ${paths[@]+"${paths[@]}"} > "$patch.tmp"
         else
-            "${git_cmd[@]}" diff --no-color --binary "${prefixes[@]}" -- "${paths[@]}" > "$patch.tmp"
-            "${git_cmd[@]}" diff --cached --no-color --binary "${prefixes[@]}" -- "${paths[@]}" >> "$patch.tmp"
+            ${git_cmd[@]+"${git_cmd[@]}"} diff HEAD --no-color --binary ${prefixes[@]+"${prefixes[@]}"} -- ${paths[@]+"${paths[@]}"} > "$patch.tmp"
         fi
         if [[ ! -s "$patch.tmp" ]]; then
             rm "$patch.tmp"
             die "patch $name is now empty; remove its series line and the file, or restore the change"
         fi
         mv "$patch.tmp" "$patch"
+        unstage_rust_paths
         log "refreshed: $series/$name"
     fi
     count=$((count + 1))

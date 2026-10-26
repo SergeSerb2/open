@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -34,9 +35,9 @@ if [[ $dry == 1 ]]; then
     exit 0
 fi
 require_no_build_running
+acquire_lock distrib
 [[ $skip == 1 ]] || "$SCRIPT_DIR/engine-build" --config "$config"
 require_no_build_running
-acquire_lock distrib
 export_engine_env
 [[ -f "$ENGINE_ROOT/automate/automate-git.py" ]] || die "missing $ENGINE_ROOT/automate/automate-git.py; stop and report the path mismatch"
 # The live automate/make_distrib flow hard-codes Release_GN_arm64.

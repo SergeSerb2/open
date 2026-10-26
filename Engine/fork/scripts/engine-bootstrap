@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
@@ -6,20 +7,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/common.sh"
 usage() {
     cat <<'EOF'
-engine-bootstrap [--skip-sync] [--skip-hooks] [--dry-run] [--run]
+engine-bootstrap [--skip-sync] [--skip-hooks] [--yes-discard-local-changes] [--dry-run] [--run]
 Env: OPEN_ENGINE_ROOT (default ~/Developer/open-engine), JOBS (default 10)
 No arguments: show help. Use --run for all phases.
 Engine/fork/scripts/engine-bootstrap --run
 EOF
 }
 [[ $# -gt 0 ]] || { usage; exit 0; }
-skip_sync=0 skip_hooks=0 dry=0
+skip_sync=0 skip_hooks=0 discard=0 dry=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --help|-h) usage; exit 0 ;;
         --run) shift ;;
         --skip-sync) skip_sync=1; shift ;;
         --skip-hooks) skip_hooks=1; shift ;;
+        --yes-discard-local-changes) discard=1; shift ;;
         --dry-run) dry=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
@@ -29,6 +31,7 @@ if [[ $dry == 1 ]]; then
     log "dry-run: phase 1 clone/fetch/checkout depot_tools $DEPOT_TOOLS_COMMIT if needed"
     log "dry-run: phase 2 require a warm cache at $ENGINE_ROOT/git_cache"
     log "dry-run: phase 3 (skip=$skip_sync) require 150 GB free; fetch/checkout $CHROMIUM_TAG; .gclient checkout_pgo_profiles=True; gclient sync --nohooks --with_branch_heads --force --reset -D -j 12; CEF automate --branch=$CEF_BRANCH --checkout=$CEF_COMMIT --no-chromium-update --no-depot-tools-update --no-build --no-distrib --arm64-build --with-pgo-profiles"
+    log 'dry-run: before checkout/reset sync, show git status counts + first 20 paths; dirty repositories require --yes-discard-local-changes'
     log "dry-run: phase 4 (skip=$skip_hooks) gclient runhooks -j 12"
     log "dry-run: phase 5 engine-status; stamps $STATE_DIR/bootstrap-<phase>.done; logs $LOG_DIR"
     exit 0
@@ -37,6 +40,44 @@ require_no_build_running
 require_macos_arm64
 acquire_lock sync
 export_engine_env
+check_local_changes() {
+    local action=$1 repo
+    shift
+    for repo in "$@"; do
+        [[ -d "$repo/.git" || -f "$repo/.git" ]] || continue
+        if ! python3 - "$repo" "$action" "$discard" <<'PY'
+import collections, subprocess, sys
+repo, action, allowed = sys.argv[1:]
+raw = subprocess.check_output(['git', '-C', repo, 'status', '--porcelain', '-z'])
+fields = iter(raw.decode(errors='replace').split('\0'))
+records = []
+for entry in fields:
+    if not entry:
+        continue
+    records.append(entry)
+    if entry[0] in 'RC' or entry[1] in 'RC':
+        next(fields, None)  # A rename/copy has a second path in -z format.
+counts = collections.Counter()
+for entry in records:
+    if entry[:2] == '??':
+        counts['untracked'] += 1
+    else:
+        counts['staged'] += entry[0] != ' '
+        counts['unstaged'] += entry[1] != ' '
+print(f'{action}: git status --porcelain: {repo}: {len(records)} paths; '
+      f'{counts["staged"]} staged, {counts["unstaged"]} unstaged, {counts["untracked"]} untracked')
+for entry in records[:20]:
+    print('  ' + repr(entry))
+if len(records) > 20:
+    print(f'  ... {len(records) - 20} more paths')
+if records and allowed != '1':
+    raise SystemExit('dirty tree: preserve changes or pass --yes-discard-local-changes before ' + action)
+PY
+        then
+            die "local-change safety check refused $action in $repo"
+        fi
+    done
+}
 trap 'log "ERROR: bootstrap failed (exit $?), command: $BASH_COMMAND" >&2' ERR
 fingerprint=$(shasum -a 256 "${OPEN_ENGINE_VERSIONS:-$FORK_DIR/VERSIONS}" | awk '{print $1}')
 downstream_changed=0
@@ -52,12 +93,12 @@ log 'phase 1 start: depot_tools'
 if [[ ! -d "$ENGINE_ROOT/depot_tools/.git" ]]; then
     git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$ENGINE_ROOT/depot_tools"
 fi
-[[ -z "$(git -C "$ENGINE_ROOT/depot_tools" status --porcelain)" ]] || die 'depot_tools is dirty; preserve your changes before bootstrap'
 if phase_matches 1 && [[ "$(git -C "$ENGINE_ROOT/depot_tools" rev-parse HEAD)" == "$DEPOT_TOOLS_COMMIT" ]]; then
     log 'phase 1 already up to date (stamp + HEAD)'
 else
     if [[ "$(git -C "$ENGINE_ROOT/depot_tools" rev-parse HEAD)" != "$DEPOT_TOOLS_COMMIT" ]]; then
         git -C "$ENGINE_ROOT/depot_tools" fetch --quiet
+        check_local_changes 'depot_tools checkout' "$ENGINE_ROOT/depot_tools"
         git -C "$ENGINE_ROOT/depot_tools" checkout --quiet "$DEPOT_TOOLS_COMMIT"
     fi
     downstream_changed=1
@@ -85,23 +126,34 @@ else
     fi
     git -C "$SRC_DIR" fetch --no-tags origin "+refs/tags/$CHROMIUM_TAG:refs/tags/$CHROMIUM_TAG"
     [[ "$(git -C "$SRC_DIR" rev-parse "$CHROMIUM_TAG^{commit}")" == "$CHROMIUM_COMMIT" ]] || die 'Chromium tag does not match CHROMIUM_COMMIT'
+    check_local_changes 'Chromium checkout' "$SRC_DIR" "$SRC_DIR/cef"
     git -C "$SRC_DIR" checkout --quiet "$CHROMIUM_TAG"
     python3 - "$SRC_DIR/../.gclient" <<'PY'
 import ast, pathlib, sys
 p = pathlib.Path(sys.argv[1])
-if p.exists():
-    scope = {}
-    exec(compile(p.read_text(), str(p), 'exec'), {'__builtins__': {}}, scope)
-    solutions = scope['solutions']
+text = p.read_text() if p.exists() else ''
+tree = ast.parse(text, filename=str(p))
+assignments = [n for n in tree.body if isinstance(n, ast.Assign)
+               and any(isinstance(t, ast.Name) and t.id == 'solutions' for t in n.targets)]
+if any(len(n.targets) != 1 or n.col_offset != 0 for n in assignments):
+    raise SystemExit('unsupported .gclient solutions assignment; use a standalone literal assignment')
+if assignments:
+    solutions = ast.literal_eval(assignments[-1].value)
 else:
     solutions = [dict(name='src', managed=False, url='https://chromium.googlesource.com/chromium/src.git', deps_file='DEPS')]
 solution = next(s for s in solutions if s['name'] == 'src')
 solution.setdefault('custom_vars', {})['checkout_pgo_profiles'] = True
-# Preserve any other existing gclient assignments.
-text = p.read_text() if p.exists() else ''
-text += '\nsolutions = ' + repr(solutions) + '\n'
-p.write_text(text)
+# Replace in place and collapse old duplicate solutions assignments. Preserve
+# other configuration without executing any of it.
+replacement = 'solutions = ' + repr(solutions) + '\n'
+lines = text.splitlines(keepends=True)
+for node in reversed(assignments):
+    lines[node.lineno - 1:node.end_lineno] = [replacement] if node is assignments[0] else []
+if not assignments:
+    lines.append(('\n' if text and not text.endswith('\n') else '') + replacement)
+p.write_text(''.join(lines))
 PY
+    check_local_changes 'gclient sync --force --reset -D' "$SRC_DIR" "$SRC_DIR/cef"
     (cd "$SRC_DIR/.." && gclient sync --nohooks --with_branch_heads --force --reset -D -j 12)
     python3 "$ENGINE_ROOT/automate/automate-git.py" --download-dir="$ENGINE_ROOT/chromium_git" \
         --depot-tools-dir="$ENGINE_ROOT/depot_tools" --branch="$CEF_BRANCH" --checkout="$CEF_COMMIT" \

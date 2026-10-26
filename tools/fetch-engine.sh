@@ -1,4 +1,5 @@
 #!/bin/bash
+# Target shell: /bin/bash 3.2 (macOS). Guard empty arrays under set -u.
 set -euo pipefail
 # Standalone: tools/ does not source the fork scripts' common library.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +40,48 @@ STATE_FILE="$ENGINE_ROOT/.open-engine-state/distrib.txt"
 DEST="$REPO_ROOT/Vendor/cef"
 [[ -f "$STATE_FILE" ]] || die 'no distrib recorded; run Engine/fork/scripts/engine-distrib first'
 SRC=$(cat "$STATE_FILE")
+SRC=$(python3 - "$ENGINE_ROOT/$CHROMIUM_SRC_SUBDIR/cef/binary_distrib" "$SRC" <<'PY'
+import pathlib, sys
+base = pathlib.Path(sys.argv[1]).resolve(strict=True)
+source = pathlib.Path(sys.argv[2]).resolve(strict=True)
+if source == base or not source.is_relative_to(base):
+    raise SystemExit('recorded distrib must resolve under ' + str(base) + ': ' + str(source))
+print(source)
+PY
+)
 [[ -d "$SRC" || -f "$SRC" && "$SRC" == *.tar.bz2 ]] || die "recorded distrib $SRC does not exist or is not a directory/.tar.bz2"
+require_framework() {
+    python3 - "$1" <<'PY'
+import pathlib, sys
+base = pathlib.Path(sys.argv[1]).resolve(strict=True)
+frameworks = base.rglob('Chromium Embedded Framework.framework/Chromium Embedded Framework')
+if not any(p.is_file() and p.resolve().is_relative_to(base) for p in frameworks):
+    raise SystemExit('distribution has no expected framework binary: ' + str(base))
+PY
+}
+if [[ -d "$SRC" ]]; then
+    require_framework "$SRC"
+else
+    # Check archive shape and framework presence even in read-only dry-run.
+    python3 - "$SRC" <<'PY'
+import pathlib, sys, tarfile
+with tarfile.open(sys.argv[1], 'r:bz2') as archive:
+    roots = set()
+    framework = False
+    for member in archive.getmembers():
+        path = pathlib.PurePosixPath(member.name)
+        if path.is_absolute() or '..' in path.parts or not (member.isdir() or member.isfile() or member.issym() or member.islnk()):
+            raise SystemExit('unsafe archive member: ' + member.name)
+        if path.parts:
+            roots.add(path.parts[0])
+        if member.isfile() and path.name == 'Chromium Embedded Framework' and 'Chromium Embedded Framework.framework' in path.parts[:-1]:
+            framework = True
+    if len(roots) != 1:
+        raise SystemExit('archive needs a single top-level directory')
+    if not framework:
+        raise SystemExit('archive has no expected framework binary')
+PY
+fi
 if [[ $dry == 1 ]]; then
     [[ ! -f "$SRC" ]] || log "dry-run: would extract $SRC into a temporary directory (single top-level directory required)"
     if [[ -f "$SRC" ]]; then
@@ -91,6 +133,7 @@ PY
     entries=("$temp"/*)
     [[ ${#entries[@]} == 1 && -d "${entries[0]}" ]] || die 'archive needs a single top-level directory'
     SRC=${entries[0]}
+    require_framework "$SRC"
 fi
 mkdir -p "$DEST"
 rsync -a --delete "$SRC/" "$DEST/"
