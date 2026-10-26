@@ -34,8 +34,8 @@ enum EditorChecks {
             let frames = scene.view.controlFrames
             let expected: [String: CGRect] = ["previous": CGRect(x: 9, y: 364, width: 32, height: 32),
                 "next": CGRect(x: 315, y: 364, width: 32, height: 32), "swatches": CGRect(x: 48, y: 364, width: 260, height: 32),
-                "intensity": CGRect(x: 18, y: 424, width: 224, height: 56), "thumb": CGRect(x: 178, y: 424, width: 24, height: 56),
-                "noise": CGRect(x: 258, y: 412, width: 84, height: 80), "noise-center": CGRect(x: 280, y: 432, width: 40, height: 40)]
+                "intensity": CGRect(x: 18, y: 424, width: 224, height: 56), "thumb": CGRect(x: 180, y: 424, width: 24, height: 56),
+                "noise": CGRect(x: 258, y: 412, width: 84, height: 80), "noise-center": CGRect(x: 278, y: 432, width: 40, height: 40)]
             check(expected.allSatisfy { frames[$0.key] == $0.value } && (0..<9).allSatisfy {
                 frames["swatch-\($0)"] == CGRect(x: 48 + 29.5 * Double($0), y: 368, width: 24, height: 24)
             }, "E1 remaining control frames and nine swatches at \(Int(scale))x")
@@ -75,22 +75,37 @@ enum EditorChecks {
               "E4 paging has no model write or undo step")
         scene.controller.close()
         try sliderAndDial()
+        let empty = try EditorScene(style: nil)
+        empty.mouse(.leftMouseDown, at: CGPoint(x: 114, y: 28), in: empty.view.intensity)
+        empty.mouse(.leftMouseUp, at: CGPoint(x: 114, y: 28), in: empty.view.intensity)
+        check(empty.space.theme == SpaceTheme() && !empty.view.noise.centerButton.accessibilityPerformPress() && !empty.undo.canUndo,
+              "E6 empty theme disables slider and texture input without a write or undo")
+        empty.click(empty.view.presets.next); empty.click(empty.view.presets.visibleSwatches[0])
+        check(empty.space.theme.style?.colorCount == 3 && empty.undo.canUndo, "E4 preset creates a theme from the empty state")
+        empty.undo.undo(); empty.controller.prepareForSnapshot()
+        check(empty.space.theme == SpaceTheme() && !empty.view.pad.emptyLabel.isHidden, "E4 undo of empty-state preset restores empty theme")
+        empty.controller.close()
     }
     static func sliderAndDial() throws {
         let scene = try EditorScene(), slider = scene.view.intensity, dial = scene.view.noise
         let original = scene.space.theme, before = scene.controller.previewCount
         let layouts = (slider.layoutPassCount, dial.layoutPassCount, scene.view.layoutPassCount)
-        scene.mouse(.leftMouseDown, at: CGPoint(x: 12, y: 28), in: slider)
-        for x in stride(from: 22.0, through: 112, by: 10) { scene.mouse(.leftMouseDragged, at: CGPoint(x: x, y: 28), in: slider) }
-        check(slider.value == 0.5 && slider.thumbFrame.midX == 112 && scene.controller.previewCount == before, "E6 slider value maps to 200 pt travel and queues pointer previews")
+        scene.mouse(.leftMouseDown, at: CGPoint(x: 14, y: 28), in: slider)
+        for x in stride(from: 24.0, through: 114, by: 10) { scene.mouse(.leftMouseDragged, at: CGPoint(x: x, y: 28), in: slider) }
+        check(slider.value == 0.5 && slider.thumbFrame.midX == 114 && scene.controller.previewCount == before, "E6 slider value maps to calibrated 200 pt travel and queues pointer previews")
         scene.controller.flushPreviewFrame(); OffscreenRenderer.settle(scene.view)
-        scene.mouse(.leftMouseUp, at: CGPoint(x: 112, y: 28), in: slider); scene.controller.flushPreviewFrame()
+        scene.mouse(.leftMouseUp, at: CGPoint(x: 114, y: 28), in: slider); scene.controller.flushPreviewFrame()
         check(scene.space.theme.style?.intensityFactor == 0.5 && scene.controller.commitCount == 1,
               "E6 slider drag previews once per frame and commits once")
         check(slider.layoutPassCount == layouts.0 && dial.layoutPassCount == layouts.1 && scene.view.layoutPassCount == layouts.2,
               "E6 slider and dial use layer updates without per-frame view layout")
         scene.undo.undo(); scene.controller.prepareForSnapshot()
         check(scene.space.theme == original && slider.value == 0.8, "E6 slider undo restores full value and thumb")
+        let noOpCommits = scene.controller.commitCount
+        scene.mouse(.leftMouseDown, at: CGPoint(x: slider.thumbFrame.midX, y: 28), in: slider)
+        scene.mouse(.leftMouseUp, at: CGPoint(x: slider.thumbFrame.midX, y: 28), in: slider); scene.controller.flushPreviewFrame()
+        check(slider.value == 0.8 && scene.controller.commitCount == noOpCommits,
+              "E6 calibrated thumb center click keeps its value without a jump or undo")
         scene.scroll(slider, y: 1); scene.controller.flushPreviewFrame()
         check(abs(slider.value - 0.82) < 1e-9, "E6 intensity scroll changes 0.02 per line")
         scene.key(123, target: slider); scene.controller.flushPreviewFrame()
@@ -125,6 +140,23 @@ enum EditorChecks {
               && scene.view.presets.next.nextKeyView === slider && slider.nextKeyView === dial.centerButton
               && dial.centerButton.nextKeyView === dial, "E1 complete keyboard focus order")
         scene.controller.close()
+        let endpoints = try EditorScene()
+        var mapping = true
+        for value in [0.0, 0.5, 1.0] {
+            let x = 14 + 200 * value
+            endpoints.mouse(.leftMouseDown, at: CGPoint(x: x, y: 28), in: endpoints.view.intensity)
+            endpoints.mouse(.leftMouseUp, at: CGPoint(x: x, y: 28), in: endpoints.view.intensity); endpoints.controller.flushPreviewFrame()
+            mapping = mapping && abs(endpoints.view.intensity.value - value) < 1e-9
+                && abs(endpoints.view.controlFrames["thumb"]!.midX - (32 + 200 * value)) < 0.001
+        }
+        check(mapping, "E6 calibrated slider input and art agree at zero, midpoint, and one")
+        endpoints.mouse(.leftMouseDown, at: CGPoint(x: -10, y: 28), in: endpoints.view.intensity)
+        endpoints.mouse(.leftMouseUp, at: CGPoint(x: -10, y: 28), in: endpoints.view.intensity); endpoints.controller.flushPreviewFrame()
+        let zero = endpoints.view.intensity.value == 0
+        endpoints.mouse(.leftMouseDown, at: CGPoint(x: 250, y: 28), in: endpoints.view.intensity)
+        endpoints.mouse(.leftMouseUp, at: CGPoint(x: 250, y: 28), in: endpoints.view.intensity); endpoints.controller.flushPreviewFrame()
+        check(zero && endpoints.view.intensity.value == 1, "E6 slider input clamps beyond both ends")
+        endpoints.controller.close()
     }
     static func drag() throws {
         let scene = try EditorScene()

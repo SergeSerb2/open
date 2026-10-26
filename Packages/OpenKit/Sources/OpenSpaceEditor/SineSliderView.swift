@@ -7,7 +7,10 @@ public final class SineSliderView: NSView {
     public var enabled = true
     public private(set) var value: Double = 0.8
     public private(set) var layoutPassCount = 0
-    public var thumbFrame: CGRect { CGRect(x: 200 * value, y: 0, width: 24, height: 56) }
+    public var thumbFrame: CGRect {
+        CGRect(x: ThemeEditorMetrics.intensityThumbStart + ThemeEditorMetrics.intensityTravel * value - 12,
+               y: 0, width: ThemeEditorMetrics.intensityThumbSize.width, height: ThemeEditorMetrics.intensityThumbSize.height)
+    }
     private let track = CAShapeLayer(), inactive = CAShapeLayer(), active = CAShapeLayer(), thumb = CAShapeLayer()
     private let activeMask = CALayer()
 
@@ -62,7 +65,7 @@ public final class SineSliderView: NSView {
     }
     private func drag(_ event: NSEvent, final: Bool) {
         guard enabled else { return }; let point = convert(event.locationInWindow, from: nil)
-        onChange?(min(1, max(0, (point.x - 12) / 200)), final)
+        onChange?(min(1, max(0, (point.x - ThemeEditorMetrics.intensityThumbStart) / ThemeEditorMetrics.intensityTravel)), final)
     }
     public override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self); drag(event, final: false) }
     public override func mouseDragged(with event: NSEvent) { drag(event, final: false) }

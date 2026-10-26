@@ -5,7 +5,7 @@ import OpenModel
 @MainActor
 public final class NoiseDialView: NSView {
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
-    public let centerButton = NoiseTextureButton(frame: CGRect(x: 22, y: 20, width: 40, height: 40))
+    public let centerButton = NoiseTextureButton(frame: CGRect(x: ThemeEditorMetrics.noiseCenter.x - 20, y: ThemeEditorMetrics.noiseCenter.y - 20, width: 40, height: 40))
     public private(set) var value = 0.0
     public private(set) var texture: SpaceStyleTexture = .grain
     public var enabled = true
@@ -17,7 +17,7 @@ public final class NoiseDialView: NSView {
     private let dots = (0..<20).map { _ in CAShapeLayer() }
     private let tick = CAShapeLayer()
     private var previewKey: String?
-    private let center = CGPoint(x: 42, y: 40)
+    private let center = ThemeEditorMetrics.noiseCenter
     private var pressed = false
 
     public override init(frame: NSRect) {
@@ -39,7 +39,7 @@ public final class NoiseDialView: NSView {
         refresh(); updatePreview()
     }
     public func ringPoint(angle: Double) -> CGPoint {
-        CGPoint(x: center.x + 32.5 * sin(angle * .pi / 180), y: center.y - 32.5 * cos(angle * .pi / 180))
+        CGPoint(x: center.x + ThemeEditorMetrics.noiseRadius * sin(angle * .pi / 180), y: center.y - ThemeEditorMetrics.noiseRadius * cos(angle * .pi / 180))
     }
     private func hidden(_ index: Int) -> Bool { index == Int((value * 20).rounded()) % 20 }
     private func refresh() {
@@ -56,7 +56,7 @@ public final class NoiseDialView: NSView {
             dot.strokeColor = ThemeEditorColors.glyph.cgColor(contentAppearance)
         }
         if tick.path == nil {
-            tick.bounds = CGRect(x: 0, y: 0, width: 7.5, height: 15.5)
+            tick.bounds = CGRect(origin: .zero, size: ThemeEditorMetrics.noiseTickSize)
             tick.path = CGPath(roundedRect: tick.bounds, cornerWidth: 3.75, cornerHeight: 3.75, transform: nil)
         }
         tick.position = tickCenter; tick.transform = CATransform3DMakeRotation(value * 2 * .pi, 0, 0, 1)

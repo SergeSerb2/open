@@ -31,6 +31,7 @@ enum EditorCompare {
         // These outputs contain capture pixels; callers must use the ignored .re directory.
         guard directory.standardizedFileURL.path.contains("/.re/") else { throw CLIError(description: "capture comparisons must be written under .re") }
         var rows: [Compare.Result] = []
+        let noise = Double(RenderCLI.value(args, "--noise") ?? "0") ?? 0
         let center = CGPoint(x: 13 + 178 + 170 * ThemeColorMath.knob(for: ThemeColorMath.toP3(EditorScene.capturedStyle.keyColor), range: 0.01...0.97).x,
                              y: 13 + 178 + 170 * ThemeColorMath.knob(for: ThemeColorMath.toP3(EditorScene.capturedStyle.keyColor), range: 0.01...0.97).y)
         func fill(_ name: String, _ rect: CGRect, limit: Double) {
@@ -74,6 +75,7 @@ enum EditorCompare {
                              ("Dark glyph", CGRect(x: 219, y: 49, width: 24, height: 25)),
                              ("Remove glyph", CGRect(x: 160, y: 319, width: 22, height: 22)),
                              ("Add glyph", CGRect(x: 200, y: 319, width: 22, height: 22))] {
+            if name == "Automatic glyph" && noise == 0.45 { continue } // F0138 is mid-animation; F0137 is the reference.
             var row = Compare.measure(.init(name: name, region: rect, kind: .ink), arc: arc, ours: ours, scale: 1)
             if let a = row.arcBox, let o = row.oursBox {
                 row.positionError = max(abs(a.midX - o.midX), abs(a.midY - o.midY), abs(a.height - o.height))
@@ -134,15 +136,20 @@ enum EditorCompare {
             var row = Compare.measure(.init(name: name, region: region, kind: .ink), arc: arc, ours: ours, scale: 1)
             row.positionError = nil; row.note = "color ΔE00 ≤ 3"; rows.append(row)
         }
-        let noise = Double(RenderCLI.value(args, "--noise") ?? "0") ?? 0
-        let dialCenter = CGPoint(x: 313, y: 465)
+        let dialCenter = CGPoint(x: 311, y: 465)
         var tick = Compare.Result(name: "dial tick")
         let dialRegion = CGRect(x: 269, y: 423, width: 88, height: 84)
         tick.arcBox = whiteBox(arc, in: dialRegion); tick.oursBox = whiteBox(ours, in: dialRegion)
         if let a = tick.arcBox, let o = tick.oursBox {
             tick.positionError = zip([a.minX, a.maxX, a.minY, a.maxY], [o.minX, o.maxX, o.minY, o.maxY]).map { abs($0 - $1) }.max()
         }
-        tick.note = "edge ≤ 1 pt"; rows.append(tick)
+        if let a = tick.arcBox, let o = tick.oursBox {
+            tick.arcColor = median(arc, rect: CGRect(x: a.midX - 1, y: a.midY - 1, width: 2, height: 2))
+            tick.oursColor = median(ours, rect: CGRect(x: o.midX - 1, y: o.midY - 1, width: 2, height: 2))
+            tick.deltaE = ColorMath.deltaE2000(tick.arcColor!, tick.oursColor!)
+        }
+        tick.note = "edge ≤ 1 pt; ΔE00 ≤ 2"; rows.append(tick)
+        if noise > 0 { fill("dial center fill", CGRect(x: 305, y: 459, width: 12, height: 12), limit: 2) }
         func whiteCentroid(_ image: Bitmap) -> CGPoint? {
             let (x0, y0, x1, y1) = image.clamp(dialRegion); var xSum = 0.0, ySum = 0.0, count = 0.0
             for y in y0..<y1 { for x in x0..<x1 where image.pixel(x, y).min()! > 220 {
@@ -178,18 +185,19 @@ enum EditorCompare {
         for (name, a, o) in [("dial unlit dots", aDots.unlit, oDots.unlit), ("dial lit dots", aDots.lit, oDots.lit)] where !a.isEmpty || !o.isEmpty {
             var row = Compare.Result(name: name); row.arcColor = average(a); row.oursColor = average(o)
             row.deltaE = ColorMath.deltaE2000(row.arcColor!, row.oursColor!)
-            row.note = "ΔE00 ≤ 3"; rows.append(row)
+            row.note = "ΔE00 ≤ 2"; rows.append(row)
         }
         print("dial lit dots Arc=\(aDots.litCount), Open=\(oDots.litCount)")
         if noise == 0.45 && (aDots.litCount != 9 || oDots.litCount != 9) { extraFailures.append("nine lit dots") }
-        let table = Compare.markdown(rows, title: RenderCLI.value(args, "--title") ?? "Theme editor — \(noise == 0 ? "F0137" : "F0138")")
+        let exclusion = noise == 0.45 ? "\nAutomatic glyph excluded: F0138 is mid-animation. F0137 remains its calibration reference.\n" : ""
+        let table = Compare.markdown(rows, title: RenderCLI.value(args, "--title") ?? "Theme editor — \(noise == 0 ? "F0137" : "F0138")") + exclusion
         try table.write(to: directory.appendingPathComponent("table.md"), atomically: true, encoding: .utf8)
         arc.write(to: directory.appendingPathComponent("capture-panel.png")); ours.write(to: directory.appendingPathComponent("ours-panel.png"))
         print(table)
         let failed = rows.filter { row in
             if let error = row.positionError, error > 1 { return true }
             if row.name == "knob outer frame" && row.positionError == nil { return true }
-            if let delta = row.deltaE { return delta > (row.name == "knob disc" || row.name == "knob ring" || row.name.hasSuffix("glyph") || row.name.hasPrefix("swatch") || row.name == "intensity thumb" ? 2 : 3) }
+            if let delta = row.deltaE { return delta > (row.name == "knob disc" || row.name == "knob ring" || row.name.hasSuffix("glyph") || row.name.hasPrefix("swatch") || row.name == "intensity thumb" || row.name.hasPrefix("dial") ? 2 : 3) }
             return row.arcBox == nil || row.oursBox == nil
         }
         if !failed.isEmpty || !extraFailures.isEmpty { throw CLIError(description: "editor comparison failed: \((failed.map(\.name) + extraFailures).joined(separator: ", "))") }

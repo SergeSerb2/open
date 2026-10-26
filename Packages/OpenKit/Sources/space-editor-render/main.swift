@@ -17,6 +17,7 @@ enum RenderCLI {
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
                                [--provisional-import-intensity]
     space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec editor|window --out DIR
+                                [--noise 0|0.45]  # editor capture state: F0137 or F0138
     space-editor-render check
     """
     static func value(_ args: [String], _ key: String) -> String? {

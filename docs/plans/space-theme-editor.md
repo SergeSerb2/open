@@ -419,7 +419,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Swatch viewport | `(48, 364, 260, 32)`, clips; swatch `i` of page `p` at x = `48 + 265.5·(p − page) + 29.5·i`, y 368, 24 × 24 | constants 24, 5.5, 260, 265.5 |
 | Next page | `(315, 364, 32, 32)` | |
 | Intensity slider | hit `(18, 424, 224, 56)`; track capsule `(18, 444, 224, 16)` | |
-| Noise dial | hit `(258, 412, 84, 80)`; center `(300, 452)` (pixels give `(298, 452)`; use the AX center) | AX button + slider stacked |
+| Noise dial | hit `(258, 412, 84, 80)`; art center `(298, 452)` | F0137/F0138 calibration; unchanged AX hit frame |
 
 ### 5.3 Pad and knobs
 
@@ -493,12 +493,25 @@ state (**guess**). Each click is one commit.
 | Track | capsule 224 × 16, `ThemeEditorColors.trackFill` (white ≈ 0.08) |
 | Wave | sine, wavelength 37.5 pt, amplitude 13.75 pt, stroke 4.5 pt round caps, from x 30 to x 230; left of the thumb `waveActive` (white ≈ 0.53), right `waveInactive` (white ≈ 0.15) |
 | Thumb | white capsule 24 × 56 (radius 12), shadow black 0.2 / radius 2 / y 1 (**guess**) |
-| Value | 0…1; thumb center x = 30 + 200·value |
+| Value | 0…1; thumb center x = 32 + 200·value; input uses the same mapping |
 | Interaction | mouse down on the track jumps the thumb, then drags; scroll wheel ± 0.02 per line; keys ←/→ ± 0.05 |
 | Label / tooltip | "Intensity" |
 | Live | preview per frame; commit on mouse up |
 
+Lead calibration decision (2026-10-26 01:43:21 and 01:43:54
+America/Vancouver): F0137 and F0138 place the 24 × 56 pt thumb at panel
+`(193,437)`, hence content center x = 192 at value 0.8. The earlier
+`30 + 200·value` mapping was a guess and drew it 2 pt too far left.
+Use `32 + 200·value` for drawing and input. Keep the 200 pt travel,
+thumb size, track capsule, and AX hit frame.
+
 ### 5.8 Noise dial
+
+F0137/F0138 calibration, per the same lead decision: draw the dial around
+content `(298,452)` inside the unchanged `(258,412,84,80)` AX hit frame.
+The earlier `(300,452)` art center was a guess based on the AX center;
+it drew the tick 2 pt too far right. Ring, tick, center preview, and angle
+input all use the calibrated art center.
 
 | Property | Value |
 |---|---|
@@ -995,8 +1008,8 @@ from the capture at AX `[500, 35, 382, 534]`.
 | Element | Target | Note |
 |---|---|---|
 | Control frames (mode buttons, pad, knob, Remove / Add, arrows, 9 swatches, slider thumb, dial tick) | ≤ 1 pt | from AX and ink bounds |
-| Knob disc, knob ring, swatch fills, thumb | ΔE00 ≤ 2 | opaque elements |
-| Pad plate, mode plate, dots, wave, dial dots | ΔE00 ≤ 3 | translucent over material; the 3 is stated in the PR |
+| Knob disc, knob ring, swatch fills, thumb, dial tick, dial center fill, dial dots | ΔE00 ≤ 2 | controls; dial uses the stricter limit per the Step 4 lead decision |
+| Pad plate, mode plate, dot grid, wave | ΔE00 ≤ 3 | translucent over material; the 3 is stated in the PR |
 | Dial tick angle (F0138) | ± 2° | 162° expected |
 | Lit dot count (F0138) | exact (9) | |
 | Window background + sidebar after edit (F0139 / F0141) | `docs/design.md` §8 targets (≤ 1 pt, ΔE00 ≤ 2) | via `space-editor-render window` with the stored style |
@@ -1014,6 +1027,34 @@ until each ink bounding-box center and height are within 1 pt of F0137.
 Compare core ink color at ΔE00 ≤ 2, changing the token when needed and citing
 the capture. Report old and new tokens and measured errors in the Step 3
 PR. Button frames, plates, and fills retain their normal limits.
+
+Lead Step 4 amendment, user messages **2026-10-26 01:43:21** and
+**01:43:54 America/Vancouver**: the thumb and dial are controls, so their
+frames and opaque fills retain ≤ 1 pt / ΔE00 ≤ 2 limits. Calibrate their
+geometry tokens to F0137 and F0138, using our own art, and report old and
+new tokens and measured errors. The approved mappings are in §5.7 and
+§5.8. Exclude the Automatic glyph from the F0138 comparison because that
+capture catches it mid-animation; F0137 remains its glyph calibration
+reference. All other F0138 controls remain compared.
+
+Step 4 calibration, measured by `space-editor-render compare --spec editor`
+against the local F0137/F0138 captures (own art only):
+
+| Token | Old | New | F0137 error old → new | F0138 error old → new |
+|---|---|---|---|---|
+| Thumb center x, content pt | `30 + 200·value` | `32 + 200·value`; matching input mapping | 2 → 0 pt | 2 → 0 pt |
+| Thumb start inset inside the hit frame | 12 pt | 14 pt | same thumb measurement | same thumb measurement |
+| Dial art center, content pt | `(300,452)` | `(298,452)`; AX hit frame unchanged | tick 2 → 1 pt | tick 2 → 1 pt |
+| Dial preview base, sRGB gray | 0.78 (guess) | 0.46 | no fill at noise 0 | core ΔE00 19.89 → 1.16 |
+
+Thumb size remains 24 × 56 pt and travel 200 pt; dial tick remains
+7.5 × 15.5 pt. Thumb and tick core ΔE00 are 0.00 in both frames. F0138's
+tick angle is 162.04° in the capture and 161.92° in Open, with exactly nine
+lit dots in each. Previous/Next glyphs use 16 pt Medium instead of 13 pt:
+height error 3 → 0 pt, center error ≤ 1 pt, F0137 core ΔE00 1.07 / 0.58.
+The procedural preview base changes only the dial art, not Space textures
+or their mean-darkness/cache rules. All remaining translucent colors use
+the stated ΔE00 ≤ 3 bound (largest: active wave 2.13).
 
 F0137 calibration (Step 3; sizes are SF point sizes, all Medium):
 
@@ -1113,7 +1154,7 @@ on both pages; the same editor in macOS Light.
 | 1 | 2026-10-26 | PR #68, review round 1 fixes: commands-demo 163/163; roundtrip PASS; sidebar-render 125/125. Automated `space-legacy` gate: all original snapshot semantic fields unchanged (only main's additive `keepAliveSites: []` default is added), encoded DTO roundtrip byte-identical, all 3 committed pre-change PNGs byte-identical. Metal readback synchronization fixed; 24/24 repeated renders match the unchanged baselines. Full verify-all after merging `origin/main` at `bfef13c`: 17 PASS, no SKIP. |
 | 2 | 2026-10-26 | M1–M5 and P1: 36/36. Four private stored themes: primary and semantic max error 0.000000. F0069 final PNG/table and 13 sidebar scene PNGs byte-identical to Step 1 head `2eedbfc`; sidebar-render output unchanged at 125/125. Provisional imported opacity 0.80 worsened worst ΔE00 2.38 → 2.93, so §4.5's imported 0.64 fallback stays. Lead's §4.4 base-alpha rule recorded above. Merged main at `005e065`, retaining media targets/checks and Space editor targets/checks; full verify-all 19 PASS, no SKIP; commands-demo 199/199. Main's new duplication path now preserves typed tab/folder/pane icon overrides. |
 | 3 | 2026-10-26 | M1–M5, P1, E1 (shell), E2, E3, E5: 64/64. F0137: pad/mode plate/knob frames 0 pt error; glyph center/height ≤ 1 pt and core ΔE00 ≤ 1.20 under the lead's §12.3 amendment; disc 0.72, ring 0.00, translucent max 1.90. Main merged at `4ef33e9`; full verify-all 18 PASS plus opt-in `import-arc` PASS (19 checks, no SKIP). Five Open-only renders attached; designer review pending with the lead. |
-| 4 (in progress) | 2026-10-26 | Harness 86/86 including all E1, E4, E6. Comparisons are not accepted: the specified intensity law draws the thumb 2 pt left of F0137/F0138; the mandated AX dial center draws the tick 2 pt right. F0138's animated Automatic glyph also has a different ink center from F0137. Lead decision requested before changing fixed geometry or comparison requirements. Previous/Next glyphs calibrated 13 → 16 pt Medium under the existing glyph amendment: center error 1 pt, height error 0, core ΔE00 1.07 / 0.58 on F0137. |
+| 4 (verification in progress) | 2026-10-26 | Harness 92/92 including all E1, E4, E6. Lead geometry decision recorded in §5.7/§5.8/§12.3. Both F0137 and F0138 compare PASS: thumb frame error 0 pt; dial tick error 1 pt; controls ΔE00 ≤ 1.20; remaining translucent max 2.13. F0138 Automatic is excluded as mid-animation; F0137 remains its reference. Complete verify-all after the main merge is pending. |
 | 3 | | |
 | 4 | | |
 | 5 | | |

@@ -35,7 +35,7 @@ public enum ThemeTexture {
         let context = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 4,
                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-        context.setFillColor(CGColor(gray: 0.78, alpha: 1))
+        context.setFillColor(ThemeEditorColors.noisePreviewBase.cgColor)
         context.fill(CGRect(x: 0, y: 0, width: px, height: px))
         // Our own enlarged pattern preview, clipped to a disc by the editor view.
         context.draw(tile, in: CGRect(x: 0, y: 0, width: tile.width, height: tile.height))
