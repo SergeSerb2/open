@@ -7,15 +7,19 @@ Implements Steps 1–4 of [routing-little-open.md](plans/routing-little-open.md)
 `OpenRouting` depends only on `OpenModel`. It imports no AppKit, stores, importer, suggestions, or commands code.
 
 - `RoutingSource` carries a trimmed, lowercase bundle id, optional PID, and display name. An empty bundle id is unknown. Source identity is normalized again at evaluator entry.
-- `RoutingRequest` carries the URL, source, and receipt time. `parseURL(_:)` is the shared CLI/Settings input parser: a bare dotted host gains `https://`; explicit schemes reach the evaluator.
+- `RoutingRequest` carries the URL, source, and receipt time. `parseURL(_:)` is the shared CLI/Settings input parser: a bare dotted host or `host:digits[/path]` authority gains `https://` (including `localhost:3000/x`); other explicit schemes reach the evaluator.
 - `RoutingSnapshot` is a value copy of Spaces, frontmost-first windows, ordered rules, default destination, and the external-links toggle. Callers copy live model values on the main actor. The App must use its managed windows in actual front-to-back order. The CLI uses standard windows first in stored order, which the report states. `--most-recent` moves a matching standard window first, or supplies a synthetic one.
-- `RoutingEvaluator.evaluate(_:in:)` never throws. It rejects non-HTTP(S) schemes, checks source before URL, and selects the first matching rule. A matching rule with a deleted target Space is traced and skipped. A later valid rule can win. If no rule resolves, it resolves the default. Missing targets are explained by `fallbackMissingSpace`; no usable Space gives `noSpaces`, unless Little Open can open with a nil profile hint.
+- `RoutingEvaluator.evaluate(_:in:)` never throws. It rejects non-HTTP(S) schemes, checks source before URL, and selects the first matching rule. A matching rule with a deleted target Space is traced and skipped. A later valid rule can win. If no rule resolves, it resolves the default. A missing default Space that requires most-recent fallback sets `fallbackMissingSpace`. Skipped stale rules keep their trace without replacing the normal rule/default/toggle `via`; no usable Space gives `noSpaces`, unless Little Open can open with a nil profile hint.
 - `ResolvedDestination` is a concrete Space/profile pair or Little Open with an optional profile hint. The hint comes from the most recent valid standard window's Space, falling back to the first Space. Duplicate Space ids use their first occurrence.
 - `RoutingDecision` carries the request, normalized host, considered traces, reason (`via`), concrete target (`resolved`), and the injected receipt time as `evaluatedAt`. Human rule numbers are one-based; JSON indices are zero-based.
 - `RoutingDecisionFormatter.oneLine(_:spaceTitles:)` and `.report(_:spaces:)` serve the log, CLI, and Settings. Unknown Space names use an eight-character UUID. Profile hints use an eight-character profile UUID because the supplied snapshot has no profile names.
 - `RoutingDecisionLog` stores the last 200 complete decisions, oldest first, behind an `NSLock`. It is memory-only and safe across threads. Clicked URLs and source identities have history-entry sensitivity. It stores no fetched page content, cookies, or page titles.
 
-Host equality lowercases, strips ports and trailing dots, and removes one leading `www.` from each side. It does not match subdomains. Host containment is a literal substring test: `google.com` also matches `notgoogle.com`. URL prefixes are literal and case-sensitive in path/query and keep `www.`. Canonical request URLs and explicit-scheme patterns drop fragments and remove default ports. Scheme-less prefixes match HTTP and HTTPS and keep the supplied remainder verbatim, including an empty path or fragment. Unicode host patterns are not converted to punycode; callers should use the URL's ASCII host spelling. No network or file access occurs during evaluation.
+Hosts use a shared canonical form: percent-decoded UTF-8, Unicode NFC, and lowercase. `xn--` labels decode to Unicode through a local decoder for [RFC 3492 sections 6.1–6.2](https://www.rfc-editor.org/rfc/rfc3492#section-6); invalid input leaves the label unchanged. The same form applies to host-equality/containment patterns and URL-prefix authorities. Thus Unicode, percent-encoded, and Punycode spellings compare equally.
+
+Host equality strips authority ports and trailing dots and removes one leading `www.` from each side. It does not match subdomains. Host containment is a literal substring test: `google.com` also matches `notgoogle.com`. URL hosts and ports come from separate `URLComponents` fields. IPv6 hosts lose their brackets but retain every address component in reports; IPv6 requests never match `hostEquals` or `hostContains` rules.
+
+URL prefixes are literal and case-sensitive in path/query and keep `www.`. Canonical request URLs and explicit-scheme patterns drop fragments and remove default ports. Scheme-less prefixes match HTTP and HTTPS and keep the supplied remainder verbatim, including an empty path or fragment. Their authority port is removed only when it is the request scheme's default (`:80` for HTTP, `:443` for HTTPS); a non-default port such as `:8443` stays significant. No network or file access occurs during evaluation.
 
 A rule that explicitly selects Little Open still wins when the external-links toggle is off. Only a Little Open **default** is suppressed by that toggle.
 
@@ -40,6 +44,8 @@ Persistence ownership remains:
 The model reads the two shortcut toggles and uses the snapshot's external-links toggle. It does not write UserDefaults. The CLI reads the same external-links key with the same fallback. Phase B owns defaults registration and App save wiring.
 
 ## Snapshot compatibility
+
+This is a **ONE-WAY migration** from `littleArc` to `littleOpen`. New snapshots do not load in builds before this PR. This is acceptable because Open has no released users. `schemaVersion` stays **1**.
 
 The four live/DTO routing destination enums accept legacy `littleArc` and new `littleOpen`, and encode only the new spelling. Unknown keys and multiple destination keys throw. String-passthrough coding keys keep unknown keys visible to this validation.
 
@@ -86,6 +92,12 @@ For A1–A10, each routing case used a copy of that import with only its routing
 | A9 | Deleted Space target first, valid matching rule second | `target Space missing — skipped`; rule #2 → Space X; exit 0 | PASS |
 | A10 | A1 inputs with `--json` | Valid JSON; `via.defaultDestination` and `resolved.littleOpen` agree with text; exit 0 | PASS |
 | A11 | `roundtrip DIR`, then `commands-demo DIR` on a copy of the pre-change import | `roundtrip OK`; 66 checks passed, 0 failed; both exit 0 | PASS |
+| A12 | Host-equality/containment rules for bracketed/unbracketed IPv6; URLs `https://[2001:db8::1]/docs` and `https://[2001:db8::99]/docs`, with/without `:8443`; literal IPv6 prefix checks | Both full addresses stay distinct in `normalizedHost`; neither host rule matches; prefix distinguishes addresses and ports; 35 CLI decisions, exit 0 | PASS |
+| A13 | Both `hostEquals(münchen.de)` and `hostEquals(xn--mnchen-3ya.de)` against both URL spellings at `/x`; `urlPrefix(xn--mnchen-3ya.de/docs)` against `https://münchen.de/docs/a` | Every required match selects Space X. Host containment, percent-encoded/NFD/uppercase inputs, explicit prefixes, other scripts, malformed Punycode patterns, and negative cases also pass; 48 CLI decisions, exit 0 | PASS |
+| A14 | Load a legacy `littleArc` fixture with `route`, run `roundtrip`, then route the saved snapshot; review compatibility text in this file and `model.md` | Old input loads; new output uses only `littleOpen`, retains schema 1, and reloads; 3 CLI invocations, exit 0. Both docs state ONE-WAY migration and pre-PR build incompatibility; Open has no released users | PASS |
+| A15 | Scheme-less prefixes `example.com:443/docs`, `example.com:80/docs`, and `example.com:8443/docs`; matching/mismatching HTTP(S) URLs | HTTPS `:443` and HTTP `:80` match omitted defaults; `:8443` and opposite-scheme ports stay significant; combined IDN/default-port case also passes; 11 CLI decisions, exit 0 | PASS |
+| A16 | `route DIR example.com:8080/docs` and `route DIR localhost:3000/x`, plus each authority ending after its port | Request URLs gain `https://`, keep their ports, and match their host rules; 4 CLI decisions, exit 0 | PASS |
+| A17 | Skipped stale rule with valid Space, most-recent, Little Open on/off, or missing-Space defaults; zero-Space case | Normal default/toggle `via` survives skipped rules. Only an actually missing default target sets `fallbackMissingSpace`, naming that target rather than the skipped rule's id. Empty state uses `noSpaces`; 6 CLI decisions, exit 0 | PASS |
 
 | Existing CLI / required probe | Result |
 |---|---|
@@ -100,6 +112,10 @@ For A1–A10, each routing case used a copy of that import with only its routing
 
 The Settings probe used the Swift interpreter against already-built release objects linked into a temporary library. No probe or test target was added to the repo.
 
+PR #20 review-fix verification reran A1–A11 and added A12–A17 through the prebuilt release CLI. Both review-fix builds used the exact build command above, in separate process sessions, and completed with zero warnings and zero errors. Temporary fixtures, drivers, and raw receipts are under `/tmp/open-routing-pr20-review-y3qys9wz`; no test target was added. The immutable pre-change snapshot retained SHA-256 `ef91d400f25c7aa8500d800610b4ff2783891d7862b779af90d164d3721ad4cb`.
+
+The review-fix regression pass also ran `import-arc` read-only against the live Arc data directory, `roundtrip` on that new import, `commands-demo` on a copy of the import and on a fresh directory (66/66 each), `suggest-check` (31/31), and `commands-dump` (exit 0). All passed. No pre-PR build was run against the migrated output; A14 verifies forward load/save/reload and the required compatibility documentation.
+
 Additional real CLI checks passed: missing snapshot (1), invalid arguments/URL/Space override (2), expectation mismatch after printing (1), bare-host scheme convenience, source mismatch, title and UUID most-recent overrides, zero Spaces with Little Open on/off and a Space default, stale-rule fallback, literal prefix boundaries, scheme-less prefixes (including a bare host and verbatim fragment), path/query case and escaping, fragments, default/nondefault ports, empty patterns, and unknown or mixed destination keys. Compatibility roundtrips also passed for legacy rule destinations/window styles, explicit old thresholds, new-key precedence, missing-key six-hour fallback, and normalized source persistence.
 
 ## Plan differences and clarifications
@@ -108,6 +124,7 @@ Additional real CLI checks passed: missing snapshot (1), invalid arguments/URL/S
 - The plan's decision fields omit information required by its exact shared report signature. Each trace therefore carries its rule value; decisions carry standard-window count and optional most-recent override id, and snapshots carry that optional report context. Evaluation semantics and the specified formatter call signatures are unchanged. The profile hint prints its UUID because profile names are not supplied by the planned API.
 - `RuleDraft.makeRule()` has no Space-list parameter. It validates errors available from the draft itself. `LinksSettingsModel.issues()` and `currentRouting()` additionally validate against the current Space list, so deleted targets remain visible and cannot enter the evaluator/save output.
 - The single `BrowserModel` initializer default and importer missing-default fallback also change to Little Open to honor the lead's Q3 override. Explicit saved destinations still win.
+- The review fixes supersede the plan's Unicode-pattern limitation (§5.1/Q5) and stale-rule `via` override (§5.5 R7). Host spellings now share Unicode NFC, and only an actually missing default Space causes `fallbackMissingSpace`.
 - The plan's broad `Little Arc` grep also finds its required legacy menu-title allowlist and existing search aliases. These are intentional compatibility/evidence/alias strings allowed by the repository rules. Product titles and routing output use Little Open.
 
 No unit tests, desktop automation, Arc launch, Chromium build/sync, or Phase B implementation ran.

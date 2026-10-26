@@ -50,7 +50,7 @@ Link routing: `RoutingRule { id, match, destination, sourceBundleID? }`. See [ro
 Match: `.hostContains`, `.hostEquals`, `.urlPrefix`.
 Destination: `.space(SpaceID)`, `.littleOpen`, `.mostRecentSpace`. A rule can target the most recent Space, as Arc rules do.
 `defaultDestination`: `.mostRecentSpace`, `.littleOpen`, `.space(id)`.
-The snapshot DTOs stay at `schemaVersion` 1. Live and DTO routing destinations decode both `littleOpen` and legacy `littleArc`, and encode only `littleOpen`. The window mapper accepts the old style string. Live and DTO profile settings read the new auto-archive key, then the legacy key, then default to 6h. Explicit stored values are preserved. `RoutingRule.sourceBundleID` is optional; old snapshots decode it as nil. The mapper normalizes bundle ids to trimmed lowercase and writes no empty string. Fresh models default to `.littleOpen`; stored defaults are preserved.
+The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` snapshot change is a **ONE-WAY migration**: new snapshots do not load in builds before this PR. This is acceptable because Open has no released users. Live and DTO routing destinations decode both `littleOpen` and legacy `littleArc`, and encode only `littleOpen`. The window mapper accepts the old style string. Live and DTO profile settings read the new auto-archive key, then the legacy key, then default to 6h. Explicit stored values are preserved. `RoutingRule.sourceBundleID` is optional; old snapshots decode it as nil. The mapper normalizes bundle ids to trimmed lowercase and writes no empty string. Fresh models default to `.littleOpen`; stored defaults are preserved.
 
 ### Commands
 

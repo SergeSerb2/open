@@ -34,7 +34,19 @@ public struct RoutingRequest: Hashable, Sendable, Codable {
     public static func parseURL(_ text: String) -> URL? {
         var input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty, !input.contains(where: \.isWhitespace) else { return nil }
-        if URLComponents(string: input)?.scheme == nil, input.contains(".") {
+        let parsedScheme = URLComponents(string: input)?.scheme
+        // Foundation reads example.com:8080/path and localhost:3000/path as
+        // schemes. A digits-only port followed by '/' or end is a bare authority.
+        let hasBarePort: Bool
+        if parsedScheme != nil, let colon = input.firstIndex(of: ":") {
+            let remainder = input[input.index(after: colon)...]
+            let end = remainder.firstIndex(of: "/") ?? remainder.endIndex
+            let port = remainder[..<end]
+            hasBarePort = !port.isEmpty && port.allSatisfy { $0.isASCII && $0.isNumber }
+        } else {
+            hasBarePort = false
+        }
+        if (parsedScheme == nil && input.contains(".")) || hasBarePort {
             input = "https://" + input
         }
         guard let url = URL(string: input), let scheme = url.scheme, !scheme.isEmpty else { return nil }

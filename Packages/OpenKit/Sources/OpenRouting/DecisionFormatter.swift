@@ -74,7 +74,7 @@ public enum RoutingDecisionFormatter {
         switch value {
         case .rule(let index, _): return "rule #\(index + 1)"
         case .defaultDestination: return "default destination"
-        case .fallbackMissingSpace: return "fallback (rule's Space is gone)"
+        case .fallbackMissingSpace: return "fallback (target Space is gone)"
         case .defaultSuppressedByToggle: return "default (Little Open off → most recent Space)"
         case .noSpaces: return "no Spaces"
         case .rejectedNonHTTP: return "rejected (not http/https)"

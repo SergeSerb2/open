@@ -25,7 +25,6 @@ public struct RoutingEvaluator: Sendable {
         }
         let mostRecent = mostRecentSpace(in: snapshot)
         var traces: [RuleTrace] = []
-        var requestedMissing: SpaceID?
         for (index, original) in snapshot.rules.enumerated() {
             var rule = original
             rule.sourceBundleID = RoutingSource(bundleID: rule.sourceBundleID).bundleID
@@ -38,7 +37,6 @@ public struct RoutingEvaluator: Sendable {
             }
             guard matches(rule.match, url: request.url, host: host) else { traces.append(trace(.hostMismatch)); continue }
             if case .space(let id) = rule.destination, space(id, in: snapshot) == nil {
-                if requestedMissing == nil { requestedMissing = id }
                 traces.append(trace(.targetSpaceMissing))
                 continue
             }
@@ -53,8 +51,10 @@ public struct RoutingEvaluator: Sendable {
             if let destination = space(id, in: snapshot) {
                 target = resolvedSpace(destination)
             } else {
-                if requestedMissing == nil { requestedMissing = id }
                 target = mostRecent.map(resolvedSpace)
+                // This missing default target actually requires a fallback.
+                // Skipped stale rules explain themselves in their traces.
+                via = .fallbackMissingSpace(requested: id)
             }
         case .mostRecentSpace:
             target = mostRecent.map(resolvedSpace)
@@ -66,7 +66,6 @@ public struct RoutingEvaluator: Sendable {
                 via = .defaultSuppressedByToggle
             }
         }
-        if let requestedMissing { via = .fallbackMissingSpace(requested: requestedMissing) }
         if target == nil { via = .noSpaces }
         return finish(via, target, traces)
     }
@@ -99,14 +98,15 @@ private func resolve(_ destination: RoutingDestination, in snapshot: RoutingSnap
 private func matches(_ match: RoutingMatch, url: URL, host: String?) -> Bool {
     switch match {
     case .hostContains(let raw):
+        // IPv6 stays intact in reports but is outside host-rule matching.
         let pattern = HostNormalizer.canonicalPattern(raw)
-        return !pattern.isEmpty && host?.contains(pattern) == true
+        return !pattern.isEmpty && host?.contains(":") == false && host?.contains(pattern) == true
     case .hostEquals(let raw):
         let pattern = HostNormalizer.canonicalPattern(raw)
-        return !pattern.isEmpty && host == pattern
+        return !pattern.isEmpty && host?.contains(":") == false && host == pattern
     case .urlPrefix(let raw):
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
-        let pattern = HostNormalizer.canonicalPrefixPattern(raw)
+        let pattern = HostNormalizer.canonicalPrefixPattern(raw, scheme: url.scheme)
         var candidate = HostNormalizer.canonicalURLString(url)
         if !raw.contains("://"), let separator = candidate.range(of: "://") {
             candidate = String(candidate[separator.upperBound...])
