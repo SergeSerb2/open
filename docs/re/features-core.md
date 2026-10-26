@@ -81,8 +81,11 @@ Rules:
    switcher, "+" (new item) button, then utility buttons for Downloads,
    Library, and Media/PiP. Proven parts: `spaceSwitcher`, `sidebarPlusButton`
    (+ `ARC_SidebarPlusButton.bundle`), `downloadsMenu`, `sidebarArchivesButton`
-   (Archive entry), Library via `Window ▸ View Library`. Media/PiP button
-   internals belong to the media agent; keep a slot. Verify order at runtime.
+   (Archive entry), Library via `Window ▸ View Library`. Verify order at runtime.
+   Update (media/PiP pass, 2026-10-25): there is no Media/PiP button. The
+   measured bottom bar is Home, switcher, plus (runtime-observations §1.1),
+   and media controls live in their own `mediaControlsContainer` above it
+   (features-advanced PP-20).
 7. The top of the sidebar is the window chrome: traffic-light area, then the
    command-bar placeholder (URL pill) for the current tab (see §8.4). Evidence:
    `CommandBarPlaceholderView`, `commandBarPlaceholderTextField`,
@@ -105,7 +108,18 @@ Rules:
     `sidebarTabCellMuteButton`, fields `isMuted`, `savedMuteStatus`, tooltips
     "mutes the tab" / "unmutes the tab" (`strings:113977-113978`). Global
     actions "Mute all tabs" / "Unmute all tabs" also exist
-    (`muteAllTabs`, `unmuteAllTabs`).
+    (`muteAllTabs`, `unmuteAllTabs`). The icon is a SwiftUI view
+    `SpeakerIcon{isMuted, speedup, slashStart, waveIncrement, waveReappearStart}`
+    inside `SidebarCellSpeakerIconWrapperView{isMuted, foregroundTintColor}`
+    (fields, `.re/media/swift-fields.tsv`): the slash and the waves animate
+    when the mute state changes, and the tint follows the row's text color.
+    Guess: no looping animation while audio plays. A row of a tab that uses
+    the camera or microphone also shows a recording indicator
+    (`isRecording`, `hasLeadingRecordingIndicator`; tooltip "This tab is using
+    your camera or microphone"). Arc persists the mute flag per tab as
+    `savedMuteStatus` = "allowAudio" | "mute" (66 of 66 tabs in the live
+    sidebar are "allowAudio"; values only, no personal data read).
+    Details: features-advanced §8 (PP-19, PP-21).
 11. Hovering a row reveals a close (×) button. Activating close **archives**
     the tab (removes it from the sidebar and writes an archive record); it does
     not permanently delete it. Evidence: tooltip "closes the tab the user is
@@ -288,7 +302,7 @@ verification with two Spaces and nested folders.
     New Window… — **Guess** menu contents; evidence `sidebarPlusButton` +
     `ARC_SidebarPlusButton.bundle`), Archive (`sidebarArchivesButton`),
     Downloads (opens Downloads in Library; menu Window ▸ "View Downloads"),
-    Library (Window ▸ "View Library"), Media/PiP indicator (media agent).
+    Library (Window ▸ "View Library"). No Media/PiP button: see rule 6.
     Downloads/Library open the Library overlay (`LibraryData`,
     `StorableLibrary.json`); badge the Downloads button while a download runs
     (**Guess**).
@@ -1027,7 +1041,7 @@ purpose.
 | Option | Type | Default | Scope | Evidence |
 |---|---|---|---|---|
 | Restore windows on previous session ("When opening Arc, restore windows from previous session") | Bool | **Guess** ON | App | `strings:132555`, §3.7 |
-| Enable Picture in Picture when you leave a video tab | Bool | **Unknown** | App | Advanced strings near 132548 (PiP agent) |
+| Enable Picture in Picture when you leave a video tab | Bool | ON (key `autoPipGloballyDisabled` is the inverse and is absent from the live defaults) | App | features-advanced PP-13 |
 | Allow window dragging from the top of webpages | Bool | **Unknown** | App | `contentWindowDraggingEnabled`, `onToggleContentWindowDraggingEnabled` |
 | Show full URL when Toolbar is enabled | Bool | **Unknown** | App | Advanced string near 132554 |
 | Enable Boosts on websites you visit | Bool | n/a | App | SKIP detail (Boosts agent); row exists |
