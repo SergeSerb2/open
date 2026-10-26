@@ -35,6 +35,7 @@ public class ThemeEditorButton: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { enabled }
+    public override func acceptsFirstMouse(for event: NSEvent?) -> Bool { enabled }
     public override var focusRingMaskBounds: NSRect { bounds }
     public override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8).fill() }
     public override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
@@ -65,7 +66,7 @@ public class ThemeEditorButton: NSView {
         if enabled && bounds.contains(convert(event.locationInWindow, from: nil)) { onPress?() }
     }
     public override func keyDown(with event: NSEvent) {
-        if event.keyCode == 36 || event.keyCode == 49 { if enabled { onPress?() }; return }
+        if event.keyCode == 36 || event.keyCode == 49 { if enabled && !event.isARepeat { onPress?() }; return }
         super.keyDown(with: event)
     }
     public override func accessibilityPerformPress() -> Bool { guard enabled else { return false }; onPress?(); return true }

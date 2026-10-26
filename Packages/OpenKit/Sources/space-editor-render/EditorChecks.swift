@@ -25,7 +25,7 @@ enum EditorChecks {
             check(image.width == Int(382 * scale) && image.height == Int(534 * scale), "E1 real panel raster size at \(Int(scale))x")
             scene.controller.close()
         }
-        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility()
+        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows()
     }
     static func drag() throws {
         let scene = try EditorScene()
@@ -117,7 +117,7 @@ enum EditorChecks {
         check(abs((next - start) * 360 - 5) < 0.01 && scene.controller.commitCount == 1, "E2 keyboard hue commits five degrees")
         let oldRadius = hypot(scene.controller.state.knob!.x, scene.controller.state.knob!.y)
         scene.key(126, target: pad, flags: .shift)
-        check(abs(hypot(scene.controller.state.knob!.x, scene.controller.state.knob!.y) - min(0.99, oldRadius + 0.099)) < 0.001,
+        check(abs(hypot(scene.controller.state.knob!.x, scene.controller.state.knob!.y) - min(0.99, oldRadius + 0.1)) < 0.001,
               "E2 Shift+Up changes radius by 0.1 of the available range")
         check(scene.panel.accessibilityRole() == .popover && scene.panel.accessibilityLabel() == "Edit Theme"
               && pad.accessibilityRole() == .slider && pad.accessibilityLabel() == "Color"
@@ -132,5 +132,44 @@ enum EditorChecks {
         scene.mouse(.leftMouseDown, at: CGPoint(x: 200, y: 180), in: pad)
         scene.key(53, target: scene.panel)
         check(scene.controller.isClosed && scene.controller.commitCount == before + 1, "E2 Escape during a drag commits before closing")
+    }
+    static func reviewedFlows() throws {
+        let scene = try EditorScene(ownerUndo: true)
+        scene.panel.setFrameOrigin(CGPoint(x: -20000, y: -20000))
+        scene.panel.orderBack(nil)
+        let original = scene.space.theme
+        check(scene.undo.groupsByEvent && scene.panel.undoManager === scene.model.undoManager && scene.undo === scene.owner.undoManager,
+              "E2 panel, model, and owner share one default-grouping undo manager")
+        scene.clickContent(CGPoint(x: 218, y: 48))
+        check(scene.controller.state.appearance == .dark && scene.controller.commitCount == 1
+              && NSScreen.screens.allSatisfy { !$0.frame.intersects(scene.panel.frame) },
+              "E1 panel.sendEvent hit-tests the mode button over the pad in an offscreen window")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.025))
+        check(scene.undo.undoActionName == "Update Theme", "E2 default-grouping manager names the actual theme undo group")
+        scene.key(6, target: scene.panel, flags: .command, characters: "z"); scene.controller.prepareForSnapshot()
+        check(scene.space.theme == original && !scene.undo.canUndo, "E2 default-grouping owner manager undoes the complete gesture")
+        scene.clickContent(CGPoint(x: 198, y: 316))
+        check(scene.controller.state.style?.colorCount == 2, "E1 panel.sendEvent routes Add to its button rather than the pad")
+        scene.panel.orderOut(nil); scene.controller.close()
+
+        let empty = try EditorScene(style: nil)
+        check(empty.view.pad.nextKeyView === empty.view.modes.buttons[0] && empty.view.remove.nextKeyView == nil && empty.view.add.nextKeyView == nil,
+              "E1 empty-state key chain excludes hidden buttons")
+        empty.controller.close()
+        let held = try EditorScene()
+        held.sendKey(124, target: held.view.pad)
+        for _ in 0..<8 { held.sendKey(124, target: held.view.pad, repeatKey: true) }
+        held.controller.flushPreviewFrame()
+        check(held.controller.commitCount == 0, "E2 repeated pad arrows preview without minting undo steps")
+        held.sendKey(124, target: held.view.pad, type: .keyUp); held.controller.flushPreviewFrame()
+        check(held.controller.commitCount == 1, "E2 arrow key up commits one held-key gesture")
+        let count = held.controller.state.style?.colorCount
+        held.sendKey(49, target: held.view.add, repeatKey: true)
+        check(held.controller.state.style?.colorCount == count, "E1 repeated button activation is ignored")
+        check(!(held.view.pad.accessibilityValue() as? String ?? "").contains(" %"), "E1 AX lightness uses a percent without a space")
+        held.click(held.view.add); held.click(held.view.add)
+        check(held.view.remove.nextKeyView === held.view.modes.buttons[0] && held.view.add.nextKeyView == nil,
+              "E1 key chain removes disabled Add at three colors")
+        held.controller.close()
     }
 }

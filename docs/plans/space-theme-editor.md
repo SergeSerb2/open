@@ -411,7 +411,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Property | Value | Evidence |
 |---|---|---|
 | Type | `ThemeEditorPanel: NSPanel`, borderless, `isFloatingPanel = false`, child of the browser window (`addChildWindow(_:ordered: .above)`), `canBecomeKey = true`, `hasShadow = true`, clear background | D-4 |
-| Material | `NSVisualEffectView`, `.popover` material, `.behindWindow`, `state = .active`, corner radius 16 (**guess**, visual ≈ 14–16) | F0137 crop; `#797979` over a white page in macOS Dark |
+| Material | `NSVisualEffectView`, `.popover`, `.behindWindow`, `.active`, only in body `(13,13,356,508)`, continuous corner radius 20; outer 13 pt band transparent | Opus R1 F0137 corner fit SSE 0.009; replaces the full-frame radius-16 guess |
 | Outer size | 382 × 534 pt | §14 AX |
 | Content inset | 13 pt each side → content 356 × 508 | §14 AX |
 | Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp inside the screen's `visibleFrame` with 8 pt margins; if clamped horizontally, keep it fully on screen. | §14 (x 500 = sidebar width, y 35) |
@@ -421,6 +421,13 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Close triggers | Esc; mouse down in any app window outside the panel (local event monitor); the app deactivates (`NSApplication.didResignActiveNotification`); the browser window closes or switches Space; the edited Space is deleted | Arc `didKeyDownEscape`; transient popover behavior |
 
 ### 5.2 Layout (content coordinates, origin top-left, pt)
+
+R1: screen clamping keeps the material **body** 8 pt inside `visibleFrame`,
+not the transparent outer band. Model-backed editor sessions use the model's
+single undo manager (defaulting to the owner's manager when unassigned).
+Remove/Add both use 16 pt Medium and `glyph`; the cool `addGlyph` token is
+removed. Light `glyphSelected` is black 0.45. Empty copy stays exactly
+"Tap to pick a color for this space"; AX percentages have no space.
 
 | Element | Frame | Notes |
 |---|---|---|
@@ -827,7 +834,7 @@ from `docs/model.md` apply to every refusal.
 ```swift
 @MainActor public final class ThemeEditorController {
     public init(model: BrowserModel, spaceID: SpaceID, window: NSWindow,
-                anchor: ThemeEditorAnchor, undoManager: UndoManager?)
+                anchor: ThemeEditorAnchor)
     public init(draft: SpaceStyle?, window: NSWindow, anchor: ThemeEditorAnchor,
                 onChange: @escaping @MainActor (SpaceStyle?) -> Void)   // creation form
     public func show()
@@ -993,6 +1000,10 @@ space-editor-render bench    # B1
 | E6 | Slider and dial: value ↔ geometry, texture cycle order, dot-click snap to 0.05 steps, no wrap past the ends, scroll steps. |
 | E7 | Live propagation: 2 window scenes on the same Space and 1 on another; a drag changes both same-Space backgrounds and sidebar title colors in the same frame; the third is unchanged; no cross-fade animation during the drag; one cross-fade on a preset click. |
 | E8 | Close triggers: Esc, outside click, Space switch, Space delete. Esc mid-drag commits. |
+
+**Step 5 hard gate:** do not ship `edit-theme` wiring until E8 verifies
+outside click, app deactivation, Space switch, and Space delete all close
+the panel. These triggers remain deferred here, not waived.
 | C1 | Form at widths 180 / 200 / 228 / 300 / 500: width class, card frames, submit placement. Return creates (title, icon, style, Profile, focus); Esc cancels with no model change and no undo step; undo of create removes the Space. "Move to ▸ New Space…" moves the tab; "Turn into Space" moves children and removes the folder in one step. |
 | I1 | Picker: pages, search filter, a pick stores `.emoji` / `.named`, "Remove icon" stores nil, folder default page Icons. |
 | P1 | Persistence: snapshot round trip with `style` and `iconOverride`; a fixture snapshot written before Step 1 decodes and renders byte-identical PNGs (`window` scene) before and after this plan. |
@@ -1034,6 +1045,16 @@ until each ink bounding-box center and height are within 1 pt of F0137.
 Compare core ink color at ΔE00 ≤ 2, changing the token when needed and citing
 the capture. Report old and new tokens and measured errors in the Step 3
 PR. Button frames, plates, and fills retain their normal limits.
+
+R1 design correction: the body is `(13,13,356,508)` with continuous radius
+20 and a transparent outer band. The editor comparison now includes body
+edges and four corner contours (normal distance, not horizontal distance
+near a tangent). F0137 body edges are exact; corner normal error is 0.4 pt.
+Remove/Add share 16 pt Medium and `glyph`, with no Add-specific tint.
+Glyph core ΔE compensates the local captured material before comparison
+with the fixed gray harness backdrop, because the blue tint behind Add in
+F0137 belongs to the blur, not the glyph. Raw cores stay listed in the
+table. Add's raw ΔE is 2.02; material-compensated ΔE is 0.36.
 
 F0137 calibration (Step 3; sizes are SF point sizes, all Medium):
 

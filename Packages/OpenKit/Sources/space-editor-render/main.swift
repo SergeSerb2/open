@@ -13,6 +13,7 @@ enum RenderCLI {
     space-editor-render math [--arc-json FILE]
     space-editor-render editor --out FILE.png [--scale 1|2] [--appearance dark|light]
                                [--style JSON] [--page N] [--hover CONTROL] [--backdrop RRGGBB] [--empty]
+                               [--pressed CONTROL] [--focus CONTROL]
     space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
                                [--provisional-import-intensity]
