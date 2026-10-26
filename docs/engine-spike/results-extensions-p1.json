@@ -4,13 +4,13 @@
     "chrome_extensions_page": {
       "items": 4,
       "ok": true,
-      "screenshot": "p1-chrome-extensions.png"
+      "screenshot": "p1-ext-chrome-extensions.png"
     },
     "chrome_extensions_page_url": "chrome://extensions/",
     "content_scripts": {
       "darkreader": {
         "mode": "dynamic",
-        "styles": 29
+        "styles": 26
       },
       "isolated_worlds": [
         "1Password \u2013 Password Manager",
@@ -19,7 +19,7 @@
         "uBlock Origin Lite"
       ],
       "ok": true,
-      "screenshot": "p1-content-script-darkreader.png"
+      "screenshot": "p1-ext-content-script-darkreader.png"
     },
     "dnr_blocking": {
       "ok": true,
@@ -55,7 +55,7 @@
           "title": "Dark Reader"
         },
         {
-          "badge": null,
+          "badge": "4",
           "enabled": true,
           "icon": 2159,
           "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
@@ -105,7 +105,7 @@
         "Dark Reader": {
           "elements": 425,
           "ok": true,
-          "screenshot": "p1-options-darkreader.png",
+          "screenshot": "p1-ext-options-darkreader.png",
           "title": "Dark Reader settings",
           "url": "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/ui/popup/index.html"
         },
@@ -122,7 +122,7 @@
         "1password": {
           "console_errors": [],
           "ok": true,
-          "screenshot": "p1-popup-1password.png",
+          "screenshot": "p1-ext-popup-1password.png",
           "state": {
             "elements": 40,
             "h": 450,
@@ -139,14 +139,14 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1063988185,
+            "current": 1349253241,
             "windows": 1
           }
         },
         "bitwarden": {
           "console_errors": [],
           "ok": true,
-          "screenshot": "p1-popup-bitwarden.png",
+          "screenshot": "p1-ext-popup-bitwarden.png",
           "state": {
             "elements": 124,
             "h": 600,
@@ -163,7 +163,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1063988185,
+            "current": 1349253241,
             "windows": 1
           }
         },
@@ -172,7 +172,7 @@
             "Unrecognized Content-Security-Policy directive 'navigate-to'."
           ],
           "ok": true,
-          "screenshot": "p1-popup-darkreader.png",
+          "screenshot": "p1-ext-popup-darkreader.png",
           "state": {
             "elements": 392,
             "h": 580,
@@ -189,14 +189,14 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1063988185,
+            "current": 1349253241,
             "windows": 1
           }
         },
         "ublock": {
           "console_errors": [],
           "ok": true,
-          "screenshot": "p1-popup-ublock.png",
+          "screenshot": "p1-ext-popup-ublock.png",
           "state": {
             "elements": 65,
             "h": 374,
@@ -213,7 +213,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1063988185,
+            "current": 1349253241,
             "windows": 1
           }
         }
@@ -256,7 +256,7 @@
           "frame": "{{1056, 910}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 12562,
+          "number": 14389,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -264,8 +264,8 @@
         }
       ],
       "ok": true,
-      "screenshot_dialog": "p1-webstore-dialog.png",
-      "screenshot_store": "p1-webstore-page.png",
+      "screenshot_dialog": "p1-ext-webstore-dialog.png",
+      "screenshot_store": "p1-ext-webstore-page.png",
       "windows_after": [
         [
           "NSWindow",
@@ -286,10 +286,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 79104,
+    "pid": 22768,
     "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome/Profiles"
   },
-  "started": "2026-10-25 21:18:08",
+  "started": "2026-10-25 21:40:08",
   "style": "chrome"
 }

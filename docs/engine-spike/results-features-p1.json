@@ -175,8 +175,8 @@
         "cookie": "",
         "storage": null
       },
-      "work_space": "C1945A20-273B-4C7E-A414-12CCB5D66462",
-      "work_tab_context": "Profile-6BF95B16"
+      "work_space": "C443DC66-AEA3-49FB-80A5-B3B4A69AF86C",
+      "work_tab_context": "Profile-92848D72"
     },
     "request_filter": {
       "ok": true,
@@ -199,17 +199,10 @@
       "unmatched_site": "undefined"
     },
     "widevine": {
-      "cdm_versions": [
-        "4.10.3112.0"
-      ],
-      "eme": "available: com.widevine.alpha",
-      "ok": true,
-      "playback": {
-        "currentTime": 4.95491,
-        "frames": 123,
-        "keySystem": "com.widevine.alpha",
-        "track": "vp09.00.41.08"
-      }
+      "cdm_versions": null,
+      "eme": "unavailable: NotSupportedError Unsupported keySystem or supportedConfigurations.",
+      "ok": false,
+      "playback": null
     },
     "zoom": {
       "innerWidth_100": 1084,
@@ -221,10 +214,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 66847,
+    "pid": 87190,
     "root": "/Users/serge/Library/Application Support/Open-E2E-features-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-features-chrome/Profiles"
   },
-  "started": "2026-10-25 21:13:22",
+  "started": "2026-10-25 21:37:48",
   "style": "chrome"
 }
