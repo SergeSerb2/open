@@ -7,8 +7,9 @@ import OpenStore
 
 @MainActor final class PreviewActions: SettingsActions {
     var log: [String] = []
+    var defaultError: String?
     func record(_ text: String) { log.append(text); print("ACTION \(text)") }
-    func setAsDefaultBrowser() -> String? { record("setAsDefaultBrowser"); return nil }
+    func setAsDefaultBrowser() -> String? { record("setAsDefaultBrowser"); return defaultError }
     func isDefaultBrowser() -> Bool { false }
     func checkForUpdates() { record("checkForUpdates") }
     func openMoreSettings() { record("openMoreSettings") }
@@ -49,14 +50,10 @@ import OpenStore
     let args = Array(CommandLine.arguments.dropFirst())
     if args.isEmpty || args.contains("--help") { print("settings-preview render --out DIR [--scale 1|2|both]\nsettings-preview check [--only NAME]\nsettings-preview dump-keys --root DIR"); return }
     func value(_ flag: String) -> String? { args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0+1] : nil } }
-    let root = FileManager.default.temporaryDirectory.appendingPathComponent("open-settings-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: root) }
-    let suite = "open.settings.preview.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defer { defaults.removePersistentDomain(forName: suite) }
-    let settings = SettingsViewModel(model: SyntheticData.model(), actions: PreviewActions(), defaults: defaults, root: root)
-    let library = LibraryViewModel(defaults: defaults)
+    if args[0] == "check" { try await runChecks(only: value("--only")); return }
+    let env = try PreviewEnvironment(); defer { env.close() }
+    let settings = env.settings
+    let library = env.library
     if args[0] == "render" {
         guard let out = value("--out") else { throw NSError(domain: "--out required", code: 2) }
         let output = URL(fileURLWithPath: out); try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)

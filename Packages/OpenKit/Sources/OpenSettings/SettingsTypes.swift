@@ -64,3 +64,24 @@ public extension AutoArchiveInterval {
     case .twentyFourHours: "24 hours"; case .sevenDays: "7 days"; case .thirtyDays: "30 days"
     } }
 }
+
+/// Complete app registry, including additions in §§5.1.1, 5.2 and 5.4.2.
+@MainActor public enum SettingsDefaults {
+    public static let values: [String: Any] = [
+        "open.settings.lastPane": "general", "open.general.automaticallyUpdate": true,
+        "open.general.warnBeforeQuitting": true, "open.general.previewsEnabled": true,
+        "open.general.previewsOnHover": true, "open.general.previewsDelaySeconds": 0.5,
+        "open.general.searchSuggestNoticeDismissed": false,
+        "open.links.externalInLittleOpen": true, "open.links.littleOpenHotkeyEnabled": true,
+        "open.links.optionCommandClickLittleOpen": true, "open.links.openPeekOtherSites": true,
+        "open.links.openPeekShiftClick": true, "open.advanced.restoreWindowsOnLaunch": true,
+        "open.advanced.enablePictureInPictureOnLeave": true, "open.advanced.allowWindowDraggingFromWebTop": false,
+        "open.advanced.showFullURLWithToolbar": false, "open.advanced.enableBoosts": true,
+        "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,
+        "open.advanced.playSoundEffects": false, "open.advanced.hapticOnTabReorder": true,
+        "open.advanced.tabSleepMode": "automatic", "open.appIcon.selectedID": "openDefault",
+        "open.library.lastSection": "archive", "open.shortcuts.defaultPriority": "browser",
+        "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": true,
+    ]
+    public static func register(in defaults: UserDefaults) { defaults.register(defaults: values) }
+}

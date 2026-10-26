@@ -10,8 +10,21 @@ public struct SettingsContent: View {
         VStack(spacing: 0) {
             SettingsTabBar(viewModel: viewModel).frame(height: 82)
             Divider()
-            ScrollView { GroupBox(viewModel.selectedPane.title) { Text("Settings").frame(maxWidth: .infinity, minHeight: 80) }.padding(40) }
+            ScrollView {
+                VStack(spacing: 20) {
+                    switch viewModel.selectedPane {
+                    case .general: GeneralPane(model: viewModel.general)
+                    case .appIcon: AppIconPane(model: viewModel.appIcon)
+                    case .advanced: AdvancedPane(model: viewModel.advanced)
+                    default: GroupBox(viewModel.selectedPane.title) { Text("Settings").frame(maxWidth: .infinity, minHeight: 80) }
+                    }
+                }.padding(.horizontal, 54).padding(.vertical, 24)
+            }
+
         }.font(Font(Typography.urlHost.font)).background(Color(nsColor: .windowBackgroundColor))
+        .sheet(isPresented: $viewModel.showsPreviews) { PreviewsSheet(model: viewModel.general) }
+        .sheet(isPresented: $viewModel.showsImport) { ImportWizard(root: viewModel) }
+
     }
 }
 private struct SettingsTabBar: NSViewRepresentable {
@@ -56,4 +69,27 @@ private struct SettingsTabBar: NSViewRepresentable {
         if window == nil { window = SettingsWindow.makeWindow(viewModel: viewModel) }
         window?.makeKeyAndOrderFront(nil)
     }
+}
+
+struct SettingsGroup<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    init(_ title: String, @ViewBuilder content: () -> Content) { self.title = title; self.content = content() }
+    var body: some View { VStack(alignment: .leading, spacing: 8) {
+        if !title.isEmpty { Text(title).font(Font(Typography.spaceTitle.font)).foregroundStyle(.secondary) }
+        VStack(alignment: .leading, spacing: 12) { content }.padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(nsColor: Core.baseQuaternary.nsColor).opacity(0.3), in: RoundedRectangle(cornerRadius: URLFieldMetrics.cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: URLFieldMetrics.cornerRadius).stroke(Color(nsColor: Core.baseQuaternary.nsColor)))
+    } }
+}
+struct PreferenceToggle: View {
+    let title: String
+    let key: String
+    let root: SettingsViewModel
+    var body: some View { Toggle(title, isOn: Binding(get: { root.bool(key) }, set: { root.set($0, for: key) })).toggleStyle(.switch).controlSize(.small).fixedSize(horizontal: false, vertical: true) }
+}
+struct SettingsError: View {
+    let text: String
+    var body: some View { if !text.isEmpty { Text(text).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true).accessibilityLabel(text) } }
 }

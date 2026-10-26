@@ -14,7 +14,19 @@ import OpenStore
     public let snapshot: SnapshotStore
     public var links: LinksSettingsModel
     public var statusText = ""
+    public var preferenceRevision = 0
+    public var showsPreviews = false
+    public var showsImport = false
+    public var showsSearchEngines = false
+    @ObservationIgnored public lazy var general = GeneralViewModel(root: self)
+    @ObservationIgnored public lazy var advanced = AdvancedViewModel(root: self)
+    @ObservationIgnored public lazy var appIcon = AppIconViewModel(root: self)
+    public func bool(_ key: String) -> Bool { _ = preferenceRevision; return defaults.object(forKey: key) as? Bool ?? (SettingsDefaults.values[key] as? Bool ?? false) }
+    public func string(_ key: String) -> String { _ = preferenceRevision; return defaults.string(forKey: key) ?? (SettingsDefaults.values[key] as? String ?? "") }
+    public func set(_ value: Any, for key: String) { defaults.set(value, forKey: key); preferenceRevision &+= 1 }
+
     public init(model: BrowserModel, actions: any SettingsActions, defaults: UserDefaults, root: URL, snapshot: SnapshotStore? = nil) {
+        SettingsDefaults.register(in: defaults)
         self.model = model; self.actions = actions; self.defaults = defaults; self.root = root
         self.snapshot = snapshot ?? SnapshotStore(root: root)
         selectedPane = PaneID(rawValue: defaults.string(forKey: "open.settings.lastPane") ?? "") ?? .general
