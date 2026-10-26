@@ -623,7 +623,7 @@ bar/navigation intents, native text/find responders, and the Library download
 notification. Engine code and engine project settings remain with the lead.
 
 
-## Step C final audit P0 verification — 2026-10-26
+## Step C audit P0 complete suite run — 2026-10-26
 
 The PR targets main directly, after #45 and #52 merged. The tested main base is
 `b62935e96fd8a5ff062b525a1eeda32dafd3ecd8`; it includes the bundle-ID and entitlement
@@ -631,7 +631,8 @@ updates. Both app builds pass under Swift 6. The Release socket build uses
 `OPEN_AUTOMATION=1`. The default **fork** distribution was refreshed with
 `tools/fetch-engine.sh --run`; no Chromium build, sync, or CDN fallback was used.
 
-All final rows below used matching embedded/vendor UUID
+The last complete suite run below, before the final model-only main merge, used
+matching embedded/vendor UUID
 `4C4C44B8-5555-3144-A161-028377002F35`. The exact source stamp and both UUIDs are in every
 receipt. Earlier receipts retain their different fork UUIDs and measurements.
 
@@ -725,3 +726,47 @@ reference assets, Arc launch, or desktop input were used.
 | sidebar-render | PASS | 17 |
 | commandbar-render | PASS | 15 |
 | boosts | PASS | 3 |
+
+
+### Post-merge repeat on main 005e065
+
+Main subsequently added Sidebar M1 model commands (`005e065afa77bf188ab6fd820e6d0b0db8b8ae03`).
+That merge is included in this PR. Debug and Release rebuilds passed on the refreshed
+fork UUID `4C4C4479-5555-3144-A13D-8D658E72FFF9`, stamp suffix `1793001051`.
+The last complete run above remains separate evidence; the repeat did not reproduce
+all of its passes:
+
+| Latest repeat / fork | Debug | Release | Evidence |
+|---|---|---|---|
+| commandbar | 1 PASS, suite FAIL before opening the bar | 1 PASS, suite FAIL before opening the bar | [Debug](engine-spike/results-commandbar-step-c-post-main-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-post-main-fork-release.json) |
+| sidebar | 17 PASS, suite FAIL at comparison setup; durable storage BLOCKED | 17 PASS, suite FAIL at comparison setup; durable storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-post-main-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-post-main-fork-release.json) |
+
+The command-bar check could not obtain a key window (`keyWindow=0`) after activating
+its own Open window. The sidebar comparison could not obtain the required
+2216×1394 pt frame: AppKit clamped it to 2216×1050. A read-only `NSScreen.screens`
+query reported a single 1920×1080 screen during this attempt. The cause of the key
+window failure is not confirmed. No window setup, activation policy, hover or
+layout code was changed to bypass these failures. All apps launched by the suites
+were closed. These latest rows are failures, not replaced with the earlier passes.
+
+Post-merge `tools/verify-all.sh`: **16 PASS, no SKIP**. Both app builds pass.
+`features-render check`: **147/147 PASS**; sidebar-render: **125/125 PASS**.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 58 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 0 |
+| sleep-demo | PASS | 1 |
+| adblock-perf | PASS | 0 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 53 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 16 |
+| boosts | PASS | 4 |
