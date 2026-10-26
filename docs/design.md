@@ -437,7 +437,27 @@ Split-row menu: see §5.6.
 
 ### 15.1 No regression on the matched states
 
-The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktree. It is re-derived from the frames in `.re/vf/run-states.sh` (same snapshots, sizes, forced states). The table runs it with release builds of `origin/main` (`33aade1`) and of this branch, one state per process. All 13 PNGs and tables are byte-identical between the two builds.
+The historical M4 cohort used release builds of `origin/main` (`33aade1`) and
+its branch, one state per process. Its 13 PNGs and tables were byte-identical.
+The table below records the Arc worst-value limits and element counts for the
+current gate. The lost ignored runner is now committed as
+`tools/verification/sidebar-compare-states.sh` (details in §17.1).
+
+**Lead gate, 2026-10-26 (supersedes table-byte and SHA identity):**
+
+1. Every compared element's position error and both Arc/Open ink boxes must be
+   identical between main and branch. There is no geometry tolerance.
+2. Each element's color metric may differ from main by at most **0.15 ΔE00**.
+   This includes the background mean and sampled maximum. RGB strings and table
+   bytes can differ because text anti-aliasing differs between builds.
+3. Both main and branch must stay within each state's recorded worst position
+   and ΔE00 limits below, with the same compared elements and sampling counts.
+4. Combined table SHA-256 values are reported for information only. They do not
+   gate acceptance.
+
+The runner retains at most three paired attempts per state, as before; every
+failed attempt and its reason stays in the receipt and private output folder.
+It never changes masks, inputs, or limits to make a state pass.
 
 | State | Frame | Elements | Worst position (pt) | Worst ΔE00 | Main vs branch |
 |---|---|---|---|---|---|
@@ -590,7 +610,8 @@ tools/verification/sidebar-compare-states.sh \
 The runner resolves `origin/main` to an immutable commit, exports its package
 source into `/tmp`, and makes a release build. `--baseline-renderer` can reuse an
 existing release binary built from `--baseline-ref`. It renders and compares both
-binaries sequentially and requires every state's table to be byte-identical.
+binaries sequentially and applies the exact-geometry / 0.15 ΔE00 color-metric /
+recorded-Arc-limits gate in §15.1. Table and SHA identity are informational.
 Known offscreen nondeterminism (§15.1) permits at most three paired attempts per
 state; every attempt is retained and the receipt lists the count. It never
 changes or removes table rows to hide a main-versus-branch difference. Outputs
@@ -603,7 +624,8 @@ All 13 per-state worst values and element counts reproduce §15.1, and all 13
 main-versus-S1 tables are byte-identical. **Baseline SHA re-derived:**
 `f820361b0b4baa3ad4e24b723ca807462f1b195d2f2391997815445ec77455e1`.
 The historical `2e7974…a278448` is still printed for comparison. Its original
-runner is unavailable, so main-versus-branch identity is the acceptance gate.
+runner is unavailable. This was the S1 byte-identity gate; the lead replaced it
+with the numeric gate in §15.1 on 2026-10-26.
 `tools/verify-all.sh` includes `sidebar-compare`: it runs where the private inputs
 exist and SKIPs only when those inputs are absent. `SIDEBAR_CAPTURE_ROOT` selects
 a different private input root; `SIDEBAR_BASELINE_RENDERER` supplies a prebuilt
@@ -759,3 +781,14 @@ events for SM1–SM6 and HG1–HG4. Haptic feel needs human review.
 Library view with neutral synthetic data. `--snapshot` uses an existing snapshot
 read-only; `--columns N --rows N --scroll-x X` exercises lazy columns. All
 evidence stays outside the repository. No unit tests or App source changes.
+
+S4's renderer dependency is Media Step 3 #92 (`OffscreenRenderer.swift` at
+`35c0c41`): CARenderer and read-back share one Metal queue, and CATextLayer is
+cloned as text. A scratch main with only that file ported is
+`687843162552c6e4f6801930f968b48722c72221`. Two independent release builds were
+warning/error-free. Their first comparison had 11/13 byte-identical tables;
+static-active and selected-pinned differed only in row-title color metrics, with
+identical positions and ink boxes. Full evidence is under
+`/tmp/open-sidebar-s4/fixed-main`. That result prompted the lead gate above.
+`verify-all` accepts `SIDEBAR_BASELINE_REF` and `SIDEBAR_BASELINE_RENDERER` to
+name this renderer-only main dependency explicitly until #92 merges.

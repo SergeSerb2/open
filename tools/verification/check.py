@@ -472,10 +472,12 @@ def main():
             args.append(os.environ["SIDEBAR_CAPTURE_ROOT"])
         if os.environ.get("SIDEBAR_BASELINE_RENDERER"):
             args += ["--baseline-renderer", os.environ["SIDEBAR_BASELINE_RENDERER"]]
+        if os.environ.get("SIDEBAR_BASELINE_REF"):
+            args += ["--baseline-ref", os.environ["SIDEBAR_BASELINE_REF"]]
         # Renders can contain private titles. Keep them out of the normal log
         # directory (which may be an artifact upload directory).
         text = run(*args, timeout=1800)
-        matches(r"^tables identical: 13/13;", text)
+        matches(r"^states passed: 13/13;", text)
     elif name == "boosts":
         boosts(root)
     elif name == "import-arc":
