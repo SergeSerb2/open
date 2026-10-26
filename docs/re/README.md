@@ -29,3 +29,4 @@ All files here are our own written findings. Raw output stays in `.re/` (git-ign
 | `runtime-observations.md` | Live data from the signed-in Arc: files, preferences, measured layout |
 | `interaction-states.md` | States captured during a user-driven session: hover/selected fills, command bar, Space switch, Split View, Peek, menus, sidebar hide/resize, settings |
 | `arccore-engine.md` | ArcCore API surface, Chromium changes, extension UI hosting |
+| `sidebar-completion.md` | Delete alerts copy, Space Manager, multi-select, Clear variants, pinned reset, folder archive, hover previews, tidy-title schema, unread dot, banner, first-hide hint (measured), haptics, sounds, gesture hide |
