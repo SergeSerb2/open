@@ -104,6 +104,11 @@ public enum FavoritesMetrics {
 
 /// Space header and the tab list. Row offsets are relative to the row top.
 public enum SpaceListMetrics {
+    /// Sidebar completion §2.7: guessed geometry until a capture is available.
+    public static let unreadDotSize: CGFloat = 6
+    public static let unreadDotTrailingCenter: CGFloat = 26
+    public static let unreadDotCenterY: CGFloat = 20
+    public static func resetGlyphPlate(indent: CGFloat) -> CGRect { CGRect(x: 16 + indent, y: 10, width: 20, height: 20) }
     /// Header band 36 pt: icon `[13, 5, 26, 26]`, title `[41, 9, W − 58, 18]`.
     public static let headerHeight: CGFloat = 36
     public static let headerIconFrame = CGRect(x: 13, y: 5, width: 26, height: 26)
@@ -300,4 +305,38 @@ public enum TooltipMetrics {
     public static let shadowMargin: CGFloat = 33
     /// guess: hover delay before a tooltip shows.
     public static let showDelay: Double = 0.6
+}
+
+/// Space Manager Library columns. All values are guesses from completion §3.2.
+public enum SpaceManagerMetrics {
+    public static let inset: CGFloat = 16
+    public static let gap: CGFloat = 12
+    public static let columnWidth: CGFloat = 244
+    public static let headerHeight: CGFloat = 44
+    public static let pitch = columnWidth + gap
+}
+
+/// Hover preview geometry (completion §3.6; guesses pending capture C4).
+public enum HoverPreviewMetrics {
+    public static let pageWidth: CGFloat = 420
+    public static let pageMaxHeight: CGFloat = 560
+    public static let windowInset: CGFloat = 10
+    public static let folderWidth: CGFloat = 300
+    public static let rowHeight: CGFloat = 32
+    public static let headerHeight: CGFloat = 36
+    public static let sidebarGap: CGFloat = 8
+    public static let radius: CGFloat = 10
+    public static let shadowOpacity: Float = 0.25
+    public static let shadowRadius: CGFloat = 12
+    public static let shadowOffsetY: CGFloat = 4
+}
+/// Auto-archive education geometry (completion §3.11; guesses).
+public enum BannerMetrics {
+    public static let inset: CGFloat = 8
+    public static let padding: CGFloat = 12
+    public static let radius: CGFloat = 10
+    public static let titleSize: CGFloat = 13
+    public static let messageSize: CGFloat = 12
+    public static let lineHeight: CGFloat = 15
+    public static let buttonHeight: CGFloat = 24
 }

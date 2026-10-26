@@ -1296,7 +1296,7 @@ Each lane records its results in its own doc (§7). The lead fills this table wi
 - Q13 No hint when the first hide was Cmd+S.
 - Q14 ⌥ shows "Clear unselected".
 - Q15 The alert title for deleting several folders is "Are you sure?".
-- Q16 "Archive Tabs Below / Above" is deferred until a capture shows how Arc reaches them.
+- Q16 answered by capture session 2: `.re/runtime/sessions/20261026-102027-08-folder-preview`, frame 0050 and `s2-notes.txt` “FINDING item 8”. A single Today row has “Archive Tab” followed by the normal “Archive Tabs Below” item (not an Option alternate). It archives all later Today rows in one undo step; the item stays visible but disabled on the last row (lead decision). Multi-selection keeps “Archive Items” (guess: not captured). “Archive Other Tabs” stays an Option alternate (guess). “Archive Tabs Above” remains deferred.
 - Captures C1–C10 go into the user's single combined Arc capture session.
 
 ## Appendix — Lead decisions (2026-10-26, capture session 2)

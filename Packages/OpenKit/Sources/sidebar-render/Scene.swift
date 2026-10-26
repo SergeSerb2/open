@@ -14,6 +14,7 @@ final class RenderScene: NSView {
         var trafficLights = true
         /// Panel without a page: white 10 % (Arc's empty state). Otherwise opaque white.
         var emptyPanel = true
+        var previewFolderID: ItemID?
     }
 
     let background: ThemeBackgroundView
@@ -23,11 +24,13 @@ final class RenderScene: NSView {
     let lights = TrafficLightsView()
     let cardShadow = RevealCardShadowView()
     let options: Options
+    let folderPreview: FolderPreviewView?
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
         self.options = options
         background = ThemeBackgroundView(frame: CGRect(origin: .zero, size: options.size))
         sidebar = SidebarView(context: context)
+        folderPreview = options.previewFolderID.flatMap { context.model.node(id: $0)?.folder }.map { FolderPreviewView(context: context, folder: $0) }
         super.init(frame: CGRect(origin: .zero, size: options.size))
         wantsLayer = true
         sidebar.delegate = delegate
@@ -39,6 +42,9 @@ final class RenderScene: NSView {
         addSubview(panelHost)
         if options.revealCard { sidebar.presentation = .floatingCard; addSubview(cardShadow) }
         if !options.sidebarHidden || options.revealCard { addSubview(sidebar) }
+        if let folderPreview {
+            addSubview(folderPreview)
+        }
         if options.trafficLights && !(options.sidebarHidden && !options.revealCard) {
             if options.revealCard { sidebar.addSubview(lights) } else { addSubview(lights) }
         }
@@ -64,6 +70,13 @@ final class RenderScene: NSView {
             sidebar.frame = CGRect(x: 0, y: 0, width: w, height: bounds.height)
             lights.frame = CGRect(x: 0, y: 0, width: 80, height: 40)
         }
+        if let folderPreview {
+            sidebar.layoutSubtreeIfNeeded()
+            let height = min(folderPreview.fittingSize.height, bounds.height - 20)
+            let anchor = sidebar.rowFrame(nodeID: folderPreview.folder.id)?.minY ?? 100
+            folderPreview.frame = CGRect(x: w + HoverPreviewMetrics.sidebarGap, y: min(max(10, anchor - 10), bounds.height - 10 - height), width: HoverPreviewMetrics.folderWidth, height: height)
+        }
+
     }
 }
 

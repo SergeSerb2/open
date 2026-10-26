@@ -30,6 +30,9 @@ public struct SpringToken: Sendable, Hashable {
 /// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
 /// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
 public enum Motion {
+    /// Sidebar completion guesses until unread motion is captured.
+    public static let unreadAppear = SpringToken(response: 0.2, dampingFraction: 0.8)
+    public static let unreadClearFade: CFTimeInterval = 0.12
     /// Space page slide after a click or shortcut. Visible part ≈ 0.2–0.35 s; the
     /// slide leads the background fade (A0222: slide 0.65, fade 0.53).
     public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)
@@ -78,5 +81,10 @@ extension Motion {
     public static let pipPresent = SpringToken(response: 0.3, dampingFraction: 1)
     public static let pipFade: CFTimeInterval = 0.15
     public static let pipControlsHide: CFTimeInterval = 0.3
+    public static let previewIn: CFTimeInterval = 0.15
+    public static let previewOut: CFTimeInterval = 0.10
+    public static let previewSwap: CFTimeInterval = 0.10
+    public static let bannerIn: CFTimeInterval = 0.22
+    public static let bannerOut: CFTimeInterval = 0.18
     public static let pipBackToTab: CFTimeInterval = 0.25
 }
