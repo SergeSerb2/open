@@ -1,6 +1,6 @@
 # App shell — replace the plain M1 shell with the real Arc window
 
-Status: plan, not implemented. This file is the complete brief for the coding agents that implement it. Those agents have no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
+Status: Steps A and B implemented; acceptance and limits are in [docs/app-shell.md](../app-shell.md). Steps C–I remain planned. This file is the complete brief for the coding agents that implement it. Those agents have no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
 
 User-visible name rule: never use the Arc brand in UI text. "Little Arc" is "Little Open" in Open. The only exception is "Import from Arc". Search aliases may keep old names (`docs/commands.md`).
 

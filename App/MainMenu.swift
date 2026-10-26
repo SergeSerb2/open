@@ -8,6 +8,16 @@ import AppKit
 enum MainMenu {
   static let reservedTag = 1
 
+  static func targetWindowCommands(_ target: EngineWebContentHostFactory?) {
+    func visit(_ menu: NSMenu) {
+      for item in menu.items {
+        if let submenu = item.submenu { visit(submenu) }
+        if let action = item.action, target?.responds(to: action) == true { item.target = target }
+      }
+    }
+    if let menu = NSApp.mainMenu { visit(menu) }
+  }
+
   static func build() -> NSMenu {
     let main = NSMenu()
     func submenu(_ title: String, _ items: [NSMenuItem]) {
@@ -27,7 +37,7 @@ enum MainMenu {
       return i
     }
     func arrow(_ code: Int) -> String { String(Character(UnicodeScalar(code)!)) }
-    typealias W = BrowserWindowController
+    typealias W = EngineWebContentHostFactory
 
     submenu(
       "Open",
@@ -40,6 +50,7 @@ enum MainMenu {
     submenu(
       "File",
       [
+        item("New Window", #selector(W.newWindow(_:)), "n", reserved: true),
         item("New Tab", #selector(W.newTab(_:)), "t", reserved: true),
         item("Open Location", #selector(W.focusAddressBar(_:)), "l", reserved: true),
         item("Archive Tab", #selector(W.closeTab(_:)), "w", reserved: true),
@@ -112,7 +123,7 @@ enum MainMenu {
     guard event.type == .keyDown, let menu = NSApp.mainMenu,
       let item = reservedItem(in: menu, for: event), let action = item.action
     else { return false }
-    let fallback = (NSApp.delegate as? AppDelegate)?.frontWindowController
+    let fallback = (NSApp.delegate as? AppDelegate)?.frontWindowController.flatMap { (NSApp.delegate as? AppDelegate)?.hostFactories[$0.windowID] }
     let target =
       item.target ?? NSApp.target(forAction: action, to: nil, from: item) as AnyObject? ?? fallback
     guard let target, target.responds(to: action) else { return false }

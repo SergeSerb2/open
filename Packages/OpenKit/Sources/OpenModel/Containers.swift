@@ -39,8 +39,9 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
     public var customSearchEngines: [SearchEngine]
     public var searchEngineID: String
     public var sleepMode: SleepMode
+    public var keepAliveSites: [String]
 
-    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "google", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = []) {
+    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "google", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = [], keepAliveSites: [String] = []) {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchSuggestEnabled = searchSuggestEnabled
@@ -49,10 +50,11 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         self.customSearchEngines = customSearchEngines
         self.searchEngineID = searchEngineID
         self.sleepMode = sleepMode
+        self.keepAliveSites = keepAliveSites
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, keepAliveSites
         case searchSuggestEnabled, downloadDirectory, askWhereToSaveEachFile, customSearchEngines
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
@@ -69,6 +71,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         askWhereToSaveEachFile = try container.decodeIfPresent(Bool.self, forKey: .askWhereToSaveEachFile) ?? false
         customSearchEngines = try container.decodeIfPresent([SearchEngine].self, forKey: .customSearchEngines) ?? []
         sleepMode = try container.decodeIfPresent(SleepMode.self, forKey: .sleepMode) ?? .balanced
+        keepAliveSites = try container.decodeIfPresent([String].self, forKey: .keepAliveSites) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -81,6 +84,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         try container.encode(askWhereToSaveEachFile, forKey: .askWhereToSaveEachFile)
         try container.encode(customSearchEngines, forKey: .customSearchEngines)
         try container.encode(sleepMode, forKey: .sleepMode)
+        try container.encode(keepAliveSites, forKey: .keepAliveSites)
     }
 }
 
