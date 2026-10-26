@@ -48,7 +48,7 @@
         "hasPopup": true,
         "icon": {
           "bytes": 292,
-          "hash": 4867471209432073558,
+          "hash": 8083657103300457312,
           "width": 16
         },
         "id": "jihnllejimhgcmfmcnchbekapeajboik",
@@ -60,7 +60,7 @@
         "title": "Action probe",
         "toolbarImage": {
           "bytes": 384,
-          "hash": 4023447010085592982,
+          "hash": 3541469537752315754,
           "width": 28
         },
         "tooltip": "Action probe",
@@ -91,7 +91,7 @@
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 1592166086
+        "lastClickTab": 1984525594
       }
     },
     "open_popup_api": {
@@ -164,10 +164,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 83282,
+    "pid": 16454,
     "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome/Profiles"
   },
-  "started": "2026-10-26 02:36:12",
+  "started": "2026-10-26 02:38:20",
   "style": "chrome"
 }

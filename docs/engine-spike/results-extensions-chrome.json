@@ -149,7 +149,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 283823014,
+            "current": 284285932,
             "windows": 1
           }
         },
@@ -173,7 +173,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 283823014,
+            "current": 284285932,
             "windows": 1
           }
         },
@@ -197,7 +197,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 283823014,
+            "current": 284285932,
             "windows": 1
           }
         }
@@ -240,7 +240,7 @@
           "frame": "{{736, 640}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 53747,
+          "number": 53778,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -253,7 +253,7 @@
       "screenshot_store": "chrome-webstore-page.png",
       "windows_after": [
         [
-          "NSWindow",
+          "BrowserWindow",
           "{{80, 60}, {1360, 860}}"
         ],
         [
@@ -271,10 +271,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 83500,
+    "pid": 16747,
     "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome/Profiles"
   },
-  "started": "2026-10-26 02:36:26",
+  "started": "2026-10-26 02:38:36",
   "style": "chrome"
 }
