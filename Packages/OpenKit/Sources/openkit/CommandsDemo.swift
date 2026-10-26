@@ -515,6 +515,7 @@ func runCommandsDemo(args: [String]) async throws {
     space.title = savedTitle; space.icon = savedIcon
     try snapshots.saveNow(model: model)
     runTidyTitlesDemo(check: check)
+    runTidyRenameDemo(check: check)
     try await runFolderArchiveDemo(root: root.appendingPathComponent("FolderArchive"), check: check)
     try await runSidebarCommandsDemo(root: root.appendingPathComponent("SidebarCommands"), check: check)
     composite.flushAll()

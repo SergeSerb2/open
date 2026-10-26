@@ -478,8 +478,9 @@ public final class BrowserModel {
     }
 
     /// One archive entry per tab under `node`, each with the tab's direct parent.
-    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date()) -> [ArchiveEntry] {
-        let owning = owner(of: parent)
+    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date(),
+                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil) -> [ArchiveEntry] {
+        let owning = ownership ?? owner(of: parent)
         var entries: [ArchiveEntry] = []
         func collect(_ node: SidebarNode, _ parent: NodeParent) {
             switch node {
@@ -1103,25 +1104,29 @@ public final class BrowserModel {
             (groups[parent] ?? []).sorted { (positions[parent]?[$0] ?? 0) > (positions[parent]?[$1] ?? 0) }
         }
         let now = Date()
-        // Capture direct parents before collapsing any selected panes.
-        let entries = ordered.flatMap { id -> [ArchiveEntry] in
-            guard let node = index[id], node.folder == nil, let parent = parentByID[id] else { return [] }
-            return archiveEntries(for: node, in: parent, reason: node.folder == nil ? .closed : .folderDeleted, at: now)
-        }
-        let folders = ordered.compactMap { id -> ArchiveFolderEntry? in
-            guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
-            return folderEntry(folder, parent: parent, archivedAt: now)
-        }
+        let ownership = Dictionary(uniqueKeysWithValues: parents.map { ($0, owner(of: $0)) })
+        var entries: [ArchiveEntry] = []
+        var folders: [ArchiveFolderEntry] = []
         var reverts: [Revert] = []
         for id in ordered {
+            guard let node = index[id], let originalParent = sources[id] else { continue }
+            // Preserve the original location before a pane collapse, but publish
+            // archive records only after this node actually leaves the tree.
+            let nodeEntries = node.folder == nil ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now, ownership: ownership[originalParent]) : []
+            let folder = node.folder.map { folderEntry($0, parent: originalParent, archivedAt: now) }
+            let revert: Revert?
             if case .splitPane(let splitID)? = parentByID[id], let split = index[splitID]?.split,
-               let revert = takePane(id, from: split) { reverts.append(revert) }
+               let taken = takePane(id, from: split) { revert = taken }
             else {
                 let slot = sources[id].flatMap { parent in parentByID[id] == parent ? positions[parent]?[id] : nil }
                 if let removed = detach(id, at: slot) {
-                    reverts.append { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
-                }
+                    revert = { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+                } else { revert = nil }
             }
+            guard let revert else { continue }
+            reverts.append(revert)
+            entries.append(contentsOf: nodeEntries)
+            if let folder { folders.append(folder) }
         }
         guard let structural = Self.combined(reverts) else { return (0, nil) }
         archiveSink?.archive(entries, folders: folders)
@@ -1334,6 +1339,7 @@ public final class BrowserModel {
         if let tab = tab(id: id) {
             let old = tab.customTitle
             let new = title.isEmpty ? nil : title
+            guard title != (old ?? tab.title), new != old else { return }
             tab.customTitle = new
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
         } else if let folder = index[id]?.folder {

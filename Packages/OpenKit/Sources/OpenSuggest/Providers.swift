@@ -133,9 +133,10 @@ public struct TabsProvider: SuggestProvider {
         }
         return top.rows.map { (i, detail) in
             let e = index.entries[i]
+            let displayTitle = e.tab.displayTitle
             var row = Suggestion(
                 id: "tab:\(e.tab.id.rawValue.uuidString)", kind: .switchToTab,
-                title: e.title.isEmpty ? TextMatching.matchableURL(e.url) : e.title, subtitle: e.host,
+                title: displayTitle.isEmpty ? TextMatching.matchableURL(e.url) : displayTitle, subtitle: e.host,
                 url: e.url, icon: Self.icon(e), tabID: e.tab.id, tabLocation: e.location,
                 spaceID: e.spaceID, spaceTitle: e.spaceTitle, provider: id, scoreDetail: detail)
             row.canBeTopHit = detail.quality >= MatchQuality.prefix && input.query.bytes.count >= 2
