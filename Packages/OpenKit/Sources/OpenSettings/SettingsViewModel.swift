@@ -4,6 +4,7 @@ import OpenModel
 import OpenRouting
 import OpenStore
 import OpenCommands
+import OpenAdBlock
 
 @MainActor @Observable public final class SettingsViewModel {
     public var selectedPane: PaneID { didSet { defaults.set(selectedPane.rawValue, forKey: "open.settings.lastPane") } }
@@ -16,6 +17,9 @@ import OpenCommands
     public var links: LinksSettingsModel
     public var statusText = ""
     public var preferenceRevision = 0
+    public var adBlock: AdBlockSettingsModel?
+    @ObservationIgnored public lazy var shortcuts = ShortcutsViewModel(root: self)
+    public func attach(adBlockStore: AdBlockStore) { adBlock = AdBlockSettingsModel(root: self, store: adBlockStore) }
     public var showsPreviews = false
     public var showsImport = false
     public var showsSearchEngines = false
@@ -25,7 +29,7 @@ import OpenCommands
     @ObservationIgnored public lazy var appIcon = AppIconViewModel(root: self)
     public func bool(_ key: String) -> Bool { _ = preferenceRevision; return defaults.object(forKey: key) as? Bool ?? (SettingsDefaults.values[key] as? Bool ?? false) }
     public func string(_ key: String) -> String { _ = preferenceRevision; return defaults.string(forKey: key) ?? (SettingsDefaults.values[key] as? String ?? "") }
-    public func set(_ value: Any, for key: String) { defaults.set(value, forKey: key); preferenceRevision &+= 1 }
+    public func set(_ value: Any, for key: String) { defaults.set(value, forKey: key); defaults.synchronize(); preferenceRevision &+= 1 }
 
     public init(model: BrowserModel, actions: any SettingsActions, defaults: UserDefaults, root: URL, snapshot: SnapshotStore? = nil) {
         SettingsDefaults.register(in: defaults)

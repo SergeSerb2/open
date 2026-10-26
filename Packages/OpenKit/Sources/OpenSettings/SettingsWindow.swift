@@ -14,11 +14,11 @@ public struct SettingsContent: View {
                 VStack(spacing: 20) {
                     switch viewModel.selectedPane {
                     case .general: GeneralPane(model: viewModel.general)
+                    case .shortcuts: ShortcutsPane(model: viewModel.shortcuts)
                     case .links: LinksPane(root: viewModel)
                     case .profiles: ProfilesPane(model: viewModel.profiles)
                     case .appIcon: AppIconPane(model: viewModel.appIcon)
                     case .advanced: AdvancedPane(model: viewModel.advanced)
-                    default: GroupBox(viewModel.selectedPane.title) { Text("Settings").frame(maxWidth: .infinity, minHeight: 80) }
                     }
                 }.padding(.horizontal, 54).padding(.vertical, 24)
             }

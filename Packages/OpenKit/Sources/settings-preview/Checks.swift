@@ -4,6 +4,7 @@ import OpenModel
 import OpenStore
 import OpenCommands
 import OpenRouting
+import OpenAdBlock
 
 struct CheckFailure: Error, CustomStringConvertible { let description: String }
 func require(_ condition: @autoclosure () throws -> Bool, _ message: String) throws { if try !condition() { throw CheckFailure(description: message) } }
@@ -22,8 +23,14 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         try FileManager.default.createDirectory(at: root.appendingPathComponent("State"), withIntermediateDirectories: true)
         settings = SettingsViewModel(model: SyntheticData.model(), actions: actions, defaults: defaults, root: root)
         library = LibraryViewModel(defaults: defaults)
+        try SyntheticData.seedSettings(root: root, model: settings.model)
         try settings.flush()
         try Data("synthetic-settings-v1".utf8).write(to: root.appendingPathComponent("State/settings-preview.marker"))
+    }
+    func prepareAdBlock() async throws {
+        let store = try AdBlockStore(root: root)
+        for profile in settings.model.profiles { try await store.openProfile(profile.id, scheduleUpdates: false) }
+        settings.attach(adBlockStore: store)
     }
     func close() { defaults.removePersistentDomain(forName: suite); defaults.synchronize(); try? FileManager.default.removeItem(at: root) }
     /// Read the real CFPreferences file after synchronize, not a second cached defaults object.
@@ -47,7 +54,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "advanced-toggles", "app-icon"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -56,7 +63,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         do {
             switch name {
             case "general-toggles":
-                vm.general.warn = false; vm.general.updates = false
+                vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()
                 try require(disk["open.general.warnBeforeQuitting"] as? Bool == false && disk["open.general.automaticallyUpdate"] as? Bool == false, "toggles not on disk: \(disk)")
                 let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: env.suite)!, root: env.root, snapshot: vm.snapshot)
@@ -136,10 +143,44 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 vm.links.testURLString = "https://example.net/a"; vm.links.runTest()
                 if case .littleOpen = vm.links.testDecision?.resolved {} else { throw CheckFailure(description: "explicit Little Open route lost with external OFF") }
                 _ = try env.diskModel()
+            case "shortcuts-save":
+                vm.shortcuts.record(.ctrl("t"), for: "new-tab"); vm.shortcuts.clear("zoom-in"); vm.shortcuts.priority(.siteFirst, for: "new-tab")
+                let disk = try KeyBindingStore.load(from: vm.shortcuts.fileURL)
+                try require(disk.effectiveShortcuts(for: CommandRegistry.byID["new-tab"]!) == [.ctrl("t")] && disk.bindings["zoom-in"]?.shortcuts == [] && disk.effectivePriority(for: CommandRegistry.byID["new-tab"]!) == .siteFirst, "key binding persistence/effective menu keys")
+                try require(env.actions.log.allSatisfy { $0 == "keyBindingsDidChange" } && env.actions.log.count == 3, "menu/hotkey notifications")
+            case "shortcuts-conflict":
+                vm.shortcuts.record(.init(key: "y", modifiers: [.control, .option, .command]), for: "new-tab")
+                let before = try Data(contentsOf: vm.shortcuts.fileURL), beforeCalls = env.actions.log.count
+                vm.shortcuts.record(.init(key: "y", modifiers: [.control, .option, .command]), for: "new-window")
+                try require(!vm.shortcuts.unexpected.isEmpty && vm.shortcuts.banner.contains("New Tab") && vm.shortcuts.banner.contains("New Window"), "conflict banner lacks owners")
+                try require(try Data(contentsOf: vm.shortcuts.fileURL) == before && env.actions.log.count == beforeCalls, "conflicted draft wrote/called action")
+                vm.shortcuts.revert(); try require(vm.shortcuts.unexpected.isEmpty, "revert did not restore saved draft")
+                vm.shortcuts.resetAll(confirmed: false); try require(vm.shortcuts.confirmsReset, "reset needs confirm")
+                vm.shortcuts.resetAll(confirmed: true); try require(try KeyBindingStore.load(from: vm.shortcuts.fileURL).bindings.isEmpty, "reset not saved")
+            case "adblock":
+                let server = try SyntheticListServer(); defer { server.stop() }
+                try await env.prepareAdBlock(); let ad = vm.adBlock!
+                ad.setEnabled(false)
+                let regional = ad.store.catalog.lists.first { $0.category == "regional" && !$0.urls.isEmpty }!
+                await ad.setList(regional.id, enabled: true)
+                try require(ad.errorText.isEmpty, "regional list failed: \(ad.errorText)")
+                let directory = ad.store.listDirectory(for: vm.selectedProfileID)
+                let catalog = try JSONDecoder().decode(AdBlockProfileState.self, from: Data(contentsOf: directory.appendingPathComponent("catalog-state.json")))
+                try require(catalog.enabledBlockLists.contains(regional.id), "regional choice not on disk")
+                let allowFile = directory.appendingPathComponent("exclusions.json"), before = try Data(contentsOf: allowFile)
+                ad.setExcluded("https://x/path", excluded: true)
+                try require(!ad.errorText.isEmpty && (try Data(contentsOf: allowFile)) == before, "bad host changed file")
+                ad.setExcluded("example.org", excluded: true)
+                let domains = try JSONDecoder().decode([String].self, from: Data(contentsOf: allowFile))
+                try require(domains.contains("example.org"), "host not on disk")
+                let global = try JSONSerialization.jsonObject(with: Data(contentsOf: env.root.appendingPathComponent("adblock-settings.json"))) as! [String: Any]
+                try require(global["nativeAdBlockEnabled"] as? Bool == false && env.actions.log.contains { $0.hasPrefix("setAdBlockEnabled false") } && env.actions.log.contains { $0.hasPrefix("setEnabledBlockLists") && $0.contains(regional.id) }, "adblock master/action persistence")
+                await ad.reset(); try require(ad.errorText.isEmpty && Set(ad.enabledIDs) == Set(["EasyList", "EasyPrivacy"]), "reset choices failed")
             case "advanced-toggles":
-                vm.set(true, for: "open.advanced.allowWindowDraggingFromWebTop"); vm.advanced.sleepMode = .aggressive
+                vm.set(true, for: "open.advanced.allowWindowDraggingFromWebTop"); _ = try env.diskDefaults(); vm.advanced.sleepMode = .aggressive
                 let disk = try env.diskDefaults()
                 try require(disk["open.advanced.allowWindowDraggingFromWebTop"] as? Bool == true && disk["open.advanced.tabSleepMode"] as? String == "aggressive", "advanced persistence")
+                try require(env.actions.log == ["setTabSleepMode aggressive"], "sleep action missing")
             case "app-icon":
                 vm.appIcon.select(.openColor)
                 let disk = try env.diskDefaults()
@@ -151,4 +192,32 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         } catch { print("FAIL \(name): \(error)"); throw error }
     }
     print("SUMMARY \(passed) passed, 0 failed")
+}
+
+/// A real loopback HTTP server feeds synthetic filter text through URLSession and generation IO.
+/// It exercises the existing explicit debug-source override; no store or downloader is replaced.
+@MainActor final class SyntheticListServer {
+    let process = Process()
+    private let previous = ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SOURCE_ROOT"]
+    init() throws {
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = ["-u", "-c", """
+import http.server
+class Handler(http.server.BaseHTTPRequestHandler):
+ def do_GET(self):
+  data=b'[Adblock Plus 2.0]\\n! Example synthetic regional list\\n||example.org/ad^\\n'
+  self.send_response(200); self.send_header('Content-Type','text/plain'); self.send_header('ETag','synthetic-v1'); self.send_header('Content-Length',str(len(data))); self.end_headers(); self.wfile.write(data)
+ def log_message(self,*args): pass
+server=http.server.HTTPServer(('127.0.0.1',0),Handler)
+print(server.server_port,flush=True)
+server.serve_forever()
+"""]
+        let output = Pipe(); process.standardOutput = output; process.standardError = FileHandle.nullDevice
+        try process.run()
+        var line = Data()
+        while let byte = try output.fileHandleForReading.read(upToCount: 1), !byte.isEmpty, byte != Data([10]) { line.append(byte) }
+        guard let port = Int(String(decoding: line, as: UTF8.self)) else { process.terminate(); throw CheckFailure(description: "could not start synthetic list server") }
+        setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", "http://127.0.0.1:\(port)", 1)
+    }
+    func stop() { if process.isRunning { process.terminate(); process.waitUntilExit() }; if let previous { setenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT", previous, 1) } else { unsetenv("OPEN_ADBLOCK_DEBUG_SOURCE_ROOT") } }
 }

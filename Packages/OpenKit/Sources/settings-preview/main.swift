@@ -54,6 +54,7 @@ import OpenStore
     let env = try PreviewEnvironment(); defer { env.close() }
     let settings = env.settings
     let library = env.library
+    try await env.prepareAdBlock()
     if args[0] == "render" {
         guard let out = value("--out") else { throw NSError(domain: "--out required", code: 2) }
         let output = URL(fileURLWithPath: out); try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
