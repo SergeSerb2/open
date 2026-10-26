@@ -42,6 +42,13 @@ enum SessionTwoCompare {
         var results = elements.map { Compare.measure($0, arc: arc, ours: ours, scale: 1) }
         for i in results.indices {
             if case .ink = elements[i].kind {
+                if elements[i].name != "empty label" {
+                    let a = GlyphInk.sample(arc, rect: elements[i].region)
+                    let o = GlyphInk.sample(ours, rect: elements[i].region)
+                    results[i].arcColor = a.color; results[i].oursColor = o.color
+                    results[i].deltaE = ColorMath.deltaE2000(a.color, o.color(over: a.background))
+                    results[i].note = String(format: "dot lattice masked; median stroke interior; raw ΔE00 %.2f; contrast Arc %.3f / Open %.3f", ColorMath.deltaE2000(a.color, o.color), a.contrast, o.contrast)
+                } else {
                 // Compare the opaque ink plateau, not a shape-dependent mixture
                 // of solid and antialiased SF/Arc pixels.
                 func core(_ image: Bitmap) -> [Double] {
@@ -60,6 +67,7 @@ enum SessionTwoCompare {
                 results[i].arcColor = core(arc); results[i].oursColor = core(ours)
                 results[i].deltaE = ColorMath.deltaE2000(results[i].arcColor!, results[i].oursColor!)
                 results[i].note = "opaque core ≥99% peak contrast from median background; symbol shape exempt"
+                }
             }
             if let a = results[i].arcBox, let o = results[i].oursBox {
                 // Symbol shape is exempt; tokens still have center/height limits.
