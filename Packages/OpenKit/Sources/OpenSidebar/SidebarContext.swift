@@ -120,7 +120,10 @@ public final class SidebarContext {
 
     @discardableResult
     func send(_ intent: SidebarIntent) -> Bool {
-        if case .select = intent { selection.clear() }
+        switch intent {
+        case .select, .selectFavorite: selection.clear()
+        default: break
+        }
         guard let sidebar, let delegate = sidebar.delegate else { return false }
         return delegate.sidebar(sidebar, didRequest: intent)
     }

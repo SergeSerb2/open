@@ -148,5 +148,9 @@ enum CompletionChecks {
               "MS6 indented multi-selected split uses one fill and keeps its pane cells hidden")
         model.moveNode(id: split.id, to: .spacePinned(night.id), at: 0); pump()
         check(context.selection.ids == [split.id, group.id], "MS3 a structural move keeps selected IDs in display order")
+        let favorite = sidebar.favoritesCollection.item(at: IndexPath(item: 0, section: 0))!.view
+        _ = favorite.accessibilityPerformPress(); pump()
+        check(context.selection.isEmpty && state.selectedNodeBySpace[night.id] == model.profiles[0].favorites[0].id,
+              "MS4 plain Favorite activation clears the row selection and selects the actual tab")
     }
 }
