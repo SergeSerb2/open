@@ -79,7 +79,8 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
     let expectedRemovals = [a.id] + source.today.reversed().filter { $0.id == nested.id || $0.id == c.id }.map(\.id)
     let count = model.archiveNodes(ids: [a.id, nested.id, c.id])
     let batch = sink.lastBatch
-    check(count == 3 && sink.archiveCalls == calls + 1 && batch.contains { $0.tab.id == b.id && $0.reason == .folderDeleted }
+    let folderBatch = sink.lastFolders
+    check(count == 3 && sink.archiveCalls == calls + 1 && folderBatch.contains { $0.folder.id == nested.id && $0.reason == .folderDeleted }
           && batch.contains { $0.tab.id == a.id && $0.reason == .closed } && removals() == expectedRemovals, "B4 archive uses one sink batch and highest-index-first removal IDs per parent")
     receipt("B4")
     undo.undo(); composite.flushAll()

@@ -71,7 +71,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
 | `type` | `tab`, `text` | Insert text in the focused page field |
 | `key` | `key`, `modifiers`, `route` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `text` sends plain characters to the first responder. |
-| `mouse` | `window`, `x`, `y`; `action=move`; or `from` / `to` point pairs | Own-window click, queued hover motion, or native resize drag; system cursor stays unchanged |
+| `mouse` | `window`, `x`, `y`; `action=move` or `action=hover`; or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point (tracking areas follow the hardware pointer) and returns the owners it found |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
@@ -81,20 +81,24 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `popup-close` | — | Close the open popup |
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
-| `window-state` | — | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count |
+| `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
 | `window-focus` | `id`, `activate` | Make that own window key; optional own-app activation |
+| `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
 | `window-close` | — | Native close for the current standard window; model tabs stay |
 | `window-reopen` | — | Real application reopen handler, including after the last window closes |
 | `window-fullscreen` | — | Native full-screen toggle; wait for completed transition count before testing the result |
 | `sidebar-move` | `tab`, `section` or `folder`, `index` | Production SidebarDelegate move intent; model and engine strip share the resulting order |
 | `folder-create` / `folder-toggle` | `title` / `folder` | Create fixture folder through the model; production sidebar expand/collapse intent |
+| `folder` | `tabs`, `section` (`today`/`pinned`), `title`, `at` | Folder in the focused Space holding `tabs` in order, moved to index `at` |
+| `favorite` | `tab` | Move a tab to its profile's Favorites |
+| `dismiss` | — | End what a Chromium command opened: a modal panel (Print), sheets (Save As), Chromium's own Views windows (DevTools, Chrome windows). Returns what it closed |
 | `sidebar-clear` | — | Production sidebar Clear Today intent |
 | `archive` | — | Recent real archive rows for the focused profile |
-| `window-frame` | `frame` `[x, y, w, h]` | Move/resize the main window |
+| `window-frame` | `frame` `[x, y, w, h]`, `unconstrained` | Move/resize the main window; `unconstrained: true` keeps the exact frame even past the screen (capture-size comparisons on a smaller display) |
 | `snapshot` | `path`, `window` or `tab` | PNG of one of Open's windows (default: the main window), or of one page |
-| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus, keep the window size on page fullscreen |
+| `policy` | `dialogs`, `prompt`, `permissions`, `contextMenu`, `fullscreen` | Answer JS dialogs (`accept`/`dismiss`/`hold`), permissions (`grant`/`deny`), record context menus (`record`: the event lists `items` and `commands` with ids, titles, submenus) or run one command (`run:<id>`, after the right click returns), keep the window size on page fullscreen |
 | `dialog` | `accept`, `text` | Complete a held dialog |
-| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup` |
+| `events` | — | Drain the event log: `change`, `load`, `loadError`, `open`, `dialog`, `permission`, `contextMenu`, `fullscreen`, `download`, `console`, `devtools`, `extensionPopup`, `tab-request` and `window-request` (P1 requests from Chromium, with `refused` when the shell said no) |
 | `script-add` / `script-remove` | `id`, `source`, `css`, `end`, `matches`, `allFrames` | Boost-style user scripts (through the OpenWeb `WebProfile` protocol) |
 | `filter` / `filter-stats` | `block` (substrings) | Request filter (ad-block hook) and its counters |
 | `permission` | `origin`, `kind`, `state` | Read or set a site permission |
@@ -112,7 +116,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 `snapshot` captures only Open's windows, from inside Open, so it needs no Screen Recording permission:
 
 1. `CGWindowListCreateImageFromArray` with Open's window and its child windows (Chrome-style pages live in child windows). If that returns an empty image, AppKit draws the window's views instead.
-2. The window server leaves out the layers that Chromium's GPU process draws into our window, so each visible page is pasted in from a DevTools `Page.captureScreenshot` at its frame.
+2. The window server leaves out the layers that Chromium's GPU process draws into our window. So each visible page's DevTools `Page.captureScreenshot` goes into a temporary layer right above that page's view while the window server captures. Whatever AppKit draws over a page (the hover-reveal card and its shadow, Peek controls, toasts) then composites over real page pixels, as on screen. Pages that cannot get such a layer are pasted in at their frames.
 
 `tools/e2e/engine_e2e.py` uses `snapshot` for the main window and `screencapture -l <Open's window number>` for panels and Chromium dialogs. `screencapture -l` captures that one window only.
 
@@ -127,11 +131,12 @@ tools/e2e/engine_e2e.py --only peek                        # promotion identity,
 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
+tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
 OPEN_AUTOMATION=1 tools/build.sh Release
 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame

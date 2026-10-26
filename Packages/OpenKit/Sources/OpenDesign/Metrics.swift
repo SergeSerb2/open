@@ -7,12 +7,15 @@ import CoreGraphics
 
 /// Window chrome above the Space list.
 public enum ChromeMetrics {
-    /// Traffic lights: 16 pt frames at x 12 / 35 / 58, y 16 (the system draws 12 pt circles).
+    /// Traffic lights: 16 pt button frames at x 12 / 35 / 58, y 16 (Arc AX, F0001 and F0131:
+    /// close `[348, 54, 16, 16]` with the window at `[336, 38]`). The system draws 12 pt
+    /// circles centered in them, so the centers are x 20 / 43 / 66, y 24 (F0001 pixels).
     public static let trafficLightFrames: [CGRect] = [
         CGRect(x: 12, y: 16, width: 16, height: 16),
         CGRect(x: 35, y: 16, width: 16, height: 16),
         CGRect(x: 58, y: 16, width: 16, height: 16),
     ]
+    public static var trafficLightCenters: [CGPoint] { trafficLightFrames.map { CGPoint(x: $0.midX, y: $0.midY) } }
     public static let trafficLightDiameter: CGFloat = 12
     /// Toolbar buttons are 32×32 at y 7.
     public static let toolbarButtonSize = CGSize(width: 32, height: 32)
@@ -86,9 +89,13 @@ public enum FavoritesMetrics {
         (sidebarWidth - 2 * inset - CGFloat(columns - 1) * columnGap) / CGFloat(columns)
     }
 
-    /// Section height: the grid plus 8 pt above and below. Zero without favorites (guess).
+    /// Section height: the grid plus 8 pt above and below. Without favorites, 8 pt: the
+    /// Space header then keeps the 8 pt gap Arc keeps between the URL field, the tiles, and
+    /// the header's hover fill (F0001, A0413). Fitted: Arc shows a favorites empty-state card
+    /// here (`sidebarFavoritesEmptyStateDismissButton`, not captured); its window-only sidebar
+    /// (A0361, a different header with no Favorites section) starts its list 1–3 pt lower.
     public static func sectionHeight(count: Int, sidebarWidth: CGFloat) -> CGFloat {
-        guard count > 0 else { return 0 }
+        guard count > 0 else { return inset }
         let cols = columns(count: count, sidebarWidth: sidebarWidth)
         let rows = (count + cols - 1) / cols
         return 2 * inset + CGFloat(rows) * tileHeight + CGFloat(rows - 1) * rowGap
@@ -227,9 +234,55 @@ public enum WindowMetrics {
     public static let minSidebarWidth: CGFloat = 180
     /// System window corner: continuous, about 16 pt.
     public static let cornerRadius: CGFloat = 16
-    /// Hover-reveal card when the sidebar is hidden: 5 pt from the window edges, radius 10, white 0.25 stroke.
+    /// Hover-reveal card when the sidebar is hidden: `[5, 5, S, H − 10]` (F0129, F0130). The
+    /// traffic lights move with it (AX close `[17, 21, 16, 16]`).
     public static let revealCardInset: CGFloat = 5
-    public static let revealCardRadius: CGFloat = 10
+    /// Corner: circular, radius 12. The card edge per pixel row at all four corners of F0129
+    /// fits a circle of radius 11.75 (RMS 0.08 px) better than a continuous corner (11.5,
+    /// RMS 0.22 px); the earlier "≈ 10" was a visual estimate.
+    public static let revealCardRadius: CGFloat = 12
+    /// Card stroke: the outermost 1 px inside the card, `SidebarBorderColor` (white 0.30; F0129
+    /// stroke `#696875` over the card fill `#272739`).
+    public static let revealCardStrokeWidth: CGFloat = 1
+    /// Card shadow: black, no offset, the same on all four sides. F0129 against F0128 (the same
+    /// view without the card): 7.5 % darker at 0.5 pt, 4.3 % at 2.5, 2.0 % at 4.5, 0.4 % at 7.5,
+    /// none at 8.5. A Gaussian edge with σ ≈ 4 and peak 0.17 fits.
+    public static let revealCardShadowOpacity: Float = 0.17
+    public static let revealCardShadowRadius: CGFloat = 4
+
+    /// Card frame for a window of `size` and sidebar width `width`.
+    public static func revealCardFrame(windowSize size: CGSize, sidebarWidth width: CGFloat) -> CGRect {
+        CGRect(x: revealCardInset, y: revealCardInset, width: width, height: max(0, size.height - 2 * revealCardInset))
+    }
+}
+
+/// Hover reveal while the sidebar is hidden. Arc registers named zones with a hover
+/// tracker (`WindowHoverTracker`, regions "InnerLeftEdge", "OuterLeftEdge",
+/// "WindowTrafficLightRegion", "ArcSidebar", "ArcWindow"); a zone counts as hovered after
+/// its dwell delay (registration at `0x100030670` in Arc 1.170.0). See docs/re/interaction-states.md §13.
+public enum RevealMetrics {
+    /// Dwell before a zone counts: 0.15 s (`0x3fc3333333333333` for the inner edge, the
+    /// traffic-light region, the sidebar, and the window); 0.16 s for the outer edge.
+    public static let dwell: Double = 0.15
+    public static let outerEdgeDwell: Double = 0.16
+    /// The card hides once the pointer has been out of every hold zone this long. guess: the
+    /// same 0.15 s debounce as the sidebar zone.
+    public static let exitDelay: Double = 0.15
+    /// Arc scales its edge zones by one length read from the window view store (two doubles,
+    /// top then left). guess: the 10 pt content inset.
+    public static let zoneUnit: CGFloat = 10
+    /// Inner left edge: x 0 … 0.6 u; once the pointer is in it (or outside the window), x −2 u … 1.5 u.
+    public static var innerEdgeWidth: CGFloat { 0.6 * zoneUnit }
+    public static var innerEdgeHeldRange: ClosedRange<CGFloat> { (-2 * zoneUnit)...(1.5 * zoneUnit) }
+    /// Outer left edge (left of the window): 250 pt while the pointer is in the window or the
+    /// zone, 50 pt when it comes from elsewhere (`0x1000301f8`).
+    public static let outerEdgeHeld: CGFloat = 250
+    public static let outerEdgeApproach: CGFloat = 50
+    /// Top-left corner: 40 pt wide, 1.5 u above the top edge to 2 u below it (`0x10002ff7c`, `0x10002fed0`).
+    public static let topLeftWidth: CGFloat = 40
+    public static var topLeftRange: ClosedRange<CGFloat> { (-1.5 * zoneUnit)...(2 * zoneUnit) }
+    /// Traffic-light region: the three buttons down to 50 pt below the window top (`0x100030390`).
+    public static let trafficLightRegionHeight: CGFloat = 50
 }
 
 /// Arc-style tooltip: a capsule window (docs/re/interaction-states.md §5).

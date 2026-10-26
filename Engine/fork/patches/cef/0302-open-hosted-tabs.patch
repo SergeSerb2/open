@@ -1,0 +1,247 @@
+diff --git a/cef/BUILD.gn b/cef/BUILD.gn
+index dd0a558c0..156cccf7f 100644
+--- a/cef/BUILD.gn
++++ b/cef/BUILD.gn
+@@ -115,6 +115,9 @@ import("//tools/grit/grit_rule.gni")
+ import("//tools/v8_context_snapshot/v8_context_snapshot.gni")
+ import("//ui/gl/features.gni")
+ import("//v8/gni/v8.gni")
++
++# Open: engine sources compiled into libcef_static (docs/engine-patches.md).
++import("//open/open_libcef_sources.gni")
+ if (is_clang) {
+   import("//build/config/clang/clang.gni")
+ }
+@@ -1096,6 +1099,8 @@ source_set("libcef_static") {
+   }
+ 
+   if (is_mac) {
++    # Open: hidden tab-strip Browsers and hosted tabs.
++    sources += open_libcef_mac_sources
+     sources += includes_mac + [
+       "libcef/browser/chrome/chrome_content_browser_client_cef_mac.mm",
+       "libcef/browser/chrome/chrome_web_contents_view_delegate_cef_mac.mm",
+diff --git a/cef/libcef/browser/browser_host_base.h b/cef/libcef/browser/browser_host_base.h
+index f984a1542..d17d09883 100644
+--- a/cef/libcef/browser/browser_host_base.h
++++ b/cef/libcef/browser/browser_host_base.h
+@@ -49,6 +49,7 @@ struct CefBrowserCreateParams {
+                          /*allow_chrome_style=*/true);
+     }
+     browser_view = that.browser_view;
++    open_tab_strip_id = that.open_tab_strip_id;
+     return *this;
+   }
+ 
+@@ -103,6 +104,10 @@ struct CefBrowserCreateParams {
+   // Extra information that will be passed to
+   // CefRenderProcessHandler::OnBrowserCreated.
+   CefRefPtr<CefDictionaryValue> extra_info;
++
++  // Open: non-zero for a Chrome style tab hosted by open_engine::OpenTabStrip
++  // (the strip id). See cef/include/cef_tab_strip.h.
++  int open_tab_strip_id = 0;
+ };
+ 
+ // Base class for CefBrowserHost implementations. Includes functionality that is
+diff --git a/cef/libcef/browser/browser_info_manager.cc b/cef/libcef/browser/browser_info_manager.cc
+index 8b077f071..cede5d3fa 100644
+--- a/cef/libcef/browser/browser_info_manager.cc
++++ b/cef/libcef/browser/browser_info_manager.cc
+@@ -9,6 +9,7 @@
+ #include "base/command_line.h"
+ #include "base/logging.h"
+ #include "base/task/sequenced_task_runner.h"
++#include "build/build_config.h"
+ #include "cef/libcef/browser/browser_guest_util.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/browser_platform_delegate.h"
+@@ -27,6 +28,10 @@
+ #include "content/public/browser/web_ui_controller.h"
+ #include "content/public/common/url_constants.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/open_tab_strip.h"
++#endif
++
+ namespace {
+ 
+ // Timeout delay for new browser info responses.
+@@ -232,6 +237,14 @@ bool CefBrowserInfoManager::CanCreateWindow(
+     create_params.client = pending_popup->client;
+     create_params.extra_info = pending_popup->extra_info;
+ 
++#if BUILDFLAG(IS_MAC)
++    // Open: a Chrome style popup of a hosted tab is a tab of the same strip.
++    if (create_params.IsChromeStyle()) {
++      create_params.open_tab_strip_id =
++          open_engine::OpenTabStrip::IdForHost(browser.get());
++    }
++#endif
++
+     pending_popup->platform_delegate =
+         CefBrowserPlatformDelegate::Create(create_params);
+     CHECK(pending_popup->platform_delegate.get());
+diff --git a/cef/libcef/browser/browser_platform_delegate_create.cc b/cef/libcef/browser/browser_platform_delegate_create.cc
+index b2f30ae0a..1f4e475a1 100644
+--- a/cef/libcef/browser/browser_platform_delegate_create.cc
++++ b/cef/libcef/browser/browser_platform_delegate_create.cc
+@@ -21,6 +21,7 @@
+ #elif BUILDFLAG(IS_MAC)
+ #include "cef/libcef/browser/native/browser_platform_delegate_native_mac.h"
+ #include "cef/libcef/browser/osr/browser_platform_delegate_osr_mac.h"
++#include "open/browser/tab_strip/open_tab_strip.h"
+ #elif BUILDFLAG(IS_LINUX)
+ #include "cef/libcef/browser/native/browser_platform_delegate_native_linux.h"
+ #include "cef/libcef/browser/osr/browser_platform_delegate_osr_linux.h"
+@@ -79,6 +80,15 @@ std::unique_ptr<CefBrowserPlatformDelegate> CefBrowserPlatformDelegate::Create(
+     std::unique_ptr<CefBrowserPlatformDelegateNative> native_delegate =
+         CreateNativeDelegate(window_info, background_color);
+ 
++#if BUILDFLAG(IS_MAC)
++    // Open: a tab of an open_engine::OpenTabStrip, hosted in the embedder's
++    // view.
++    if (auto hosted = open_engine::OpenTabStrip::MaybeCreatePlatformDelegate(
++            create_params, native_delegate)) {
++      return hosted;
++    }
++#endif
++
+     if (create_params.window_info) {
+       // CefWindowInfo should only be set if a parent handle was specified.
+       DCHECK(chrome_child_window::HasParentHandle(window_info));
+diff --git a/cef/libcef/browser/chrome/chrome_browser_delegate.cc b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+index 3c4eead6f..974f1ccbf 100644
+--- a/cef/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/cef/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -6,6 +6,7 @@
+ 
+ #include <memory>
+ 
++#include "build/build_config.h"
+ #include "cef/libcef/browser/browser_contents_delegate.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/browser_info_manager.h"
+@@ -26,6 +27,9 @@
+ #include "chrome/browser/ui/browser_web_contents_delegate/browser_web_contents_delegate.h"
+ #include "chrome/browser/ui/window_feature_controller/window_feature_controller.h"
+ #include "content/public/browser/global_routing_id.h"
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/open_tab_strip.h"
++#endif
+ #include "third_party/blink/public/mojom/page/draggable_region.mojom.h"
+ 
+ ChromeBrowserDelegate::ChromeBrowserDelegate(
+@@ -253,7 +257,15 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+   // CreateDevToolsBrowser should have already created the browser host.
+   DCHECK(!is_devtools_popup || !opener_host_);
+ 
+-  auto platform_delegate = CefBrowserPlatformDelegate::Create(create_params_);
++  // Open: each tab of an open_engine::OpenTabStrip Browser has its own client.
++  CefBrowserCreateParams create_params = create_params_;
++#if BUILDFLAG(IS_MAC)
++  if (auto* strip = open_engine::OpenTabStrip::FromBrowser(browser_)) {
++    strip->GetCreateParamsForNewTab(web_contents, create_params);
++  }
++#endif
++
++  auto platform_delegate = CefBrowserPlatformDelegate::Create(create_params);
+   CHECK(platform_delegate);
+ 
+   // Expect runtime style to match.
+@@ -261,14 +273,14 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+ 
+   auto browser_info = CefBrowserInfoManager::GetInstance()->CreateBrowserInfo(
+       is_devtools_popup, platform_delegate->GetBrowserConfig(),
+-      create_params_.extra_info);
++      create_params.extra_info);
+ 
+   auto request_context_impl =
+       CefRequestContextImpl::GetOrCreateForRequestContext(
+-          create_params_.request_context);
++          create_params.request_context);
+ 
+-  CreateBrowserHost(browser_, web_contents, create_params_.settings,
+-                    create_params_.client, std::move(platform_delegate),
++  CreateBrowserHost(browser_, web_contents, create_params.settings,
++                    create_params.client, std::move(platform_delegate),
+                     browser_info, is_devtools_popup, /*opener=*/nullptr,
+                     request_context_impl);
+ }
+diff --git a/cef/libcef/browser/chrome/chrome_browser_host_impl.cc b/cef/libcef/browser/chrome/chrome_browser_host_impl.cc
+index 8f0c3140a..4694576a0 100644
+--- a/cef/libcef/browser/chrome/chrome_browser_host_impl.cc
++++ b/cef/libcef/browser/chrome/chrome_browser_host_impl.cc
+@@ -6,6 +6,7 @@
+ 
+ #include "base/logging.h"
+ #include "base/notimplemented.h"
++#include "build/build_config.h"
+ #include "cef/libcef/browser/browser_platform_delegate.h"
+ #include "cef/libcef/browser/chrome/browser_platform_delegate_chrome.h"
+ #include "cef/libcef/browser/chrome/browser_util.h"
+@@ -24,6 +25,10 @@
+ #include "chrome/browser/ui/views/frame/multi_contents_view.h"
+ #include "chrome/common/pref_names.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/open_tab_strip.h"
++#endif
++
+ // static
+ CefRefPtr<ChromeBrowserHostImpl> ChromeBrowserHostImpl::Create(
+     const CefBrowserCreateParams& params) {
+@@ -120,6 +125,16 @@ void ChromeBrowserHostImpl::AddNewContents(
+   // We should already be associated with the WebContents.
+   DCHECK_EQ(GetWebContents(), contents.get());
+ 
++#if BUILDFLAG(IS_MAC)
++  // Open: a popup of a hosted tab joins its opener's tab strip.
++  if (auto* strip = open_engine::OpenTabStrip::FromId(
++          open_engine::OpenTabStrip::IdForHost(this))) {
++    if (strip->AddPopupContents(contents)) {
++      return;
++    }
++  }
++#endif
++
+   CefBrowserCreateParams params;
+   params.request_context = request_context();
+   params.browser_view = GetBrowserView();
+@@ -164,7 +179,13 @@ void ChromeBrowserHostImpl::OnSetFocus(cef_focus_source_t source) {
+     platform_delegate_->SetFocus(true);
+   }
+ 
+-  if (browser_) {
++  // Open: the embedder chooses the active tab of a hosted tab strip.
++#if BUILDFLAG(IS_MAC)
++  const bool open_hosted = open_engine::OpenTabStrip::IdForHost(this) != 0;
++#else
++  const bool open_hosted = false;
++#endif
++  if (browser_ && !open_hosted) {
+     const int tab_index = GetCurrentTabIndex();
+     if (tab_index != TabStripModel::kNoTab) {
+       chrome::SelectNumberedTab(browser_, tab_index);
+@@ -238,6 +259,21 @@ void ChromeBrowserHostImpl::WasResized() {
+ }
+ 
+ void ChromeBrowserHostImpl::WasHidden(bool hidden) {
++#if BUILDFLAG(IS_MAC)
++  // Open: the embedder shows and hides hosted tabs, as a BrowserView does
++  // for its active tab.
++  if (open_engine::OpenTabStrip::IdForHost(this)) {
++    if (!CEF_CURRENTLY_ON_UIT()) {
++      CEF_POST_TASK(CEF_UIT, base::BindOnce(&ChromeBrowserHostImpl::WasHidden,
++                                            this, hidden));
++      return;
++    }
++    if (platform_delegate_) {
++      platform_delegate_->WasHidden(hidden);
++    }
++    return;
++  }
++#endif
+   NOTIMPLEMENTED();
+ }
+ 

@@ -692,3 +692,39 @@ event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
 Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
 500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
 new target, dependency, timer, App edit, or desktop input was added.
+## Sidebar completion M2 (2026-10-26)
+
+Delete (`closeTab` on a folder, or a folder in `archiveNodes`) now archives one
+folder record with reason `folderDeleted`. `archiveFolder` provides the same model
+behavior. No Archive Folder menu or command is added. `ArchiveRecordKind` is
+explicit: old rows, including old `folderDeleted` rows, stay tabs. Mixed bulk
+archives use one sink batch and one SQLite transaction per Profile. Folder payloads
+retain nested folders, splits, original IDs, and customization. The optional
+`originalSection` payload key preserves Pinned/Today fallback after a parent is
+removed; the parent UUID alone cannot recover that information.
+
+The archive opens and adds `kind TEXT NOT NULL DEFAULT 'tab'` with schema version 1
+in one FULL-synchronous transaction. Repeat opens are inert. Diagnostic switch
+`OPENKIT_DEBUG_ARCHIVE_MIGRATION_CRASH=alter|version` exits 86 before commit so the
+real CLI runner can verify rollback and recovery. Existing row payloads are not
+rewritten. Folder restore skips live child IDs, uses the original parent or section,
+then a Today Space in the archived Profile (using the same fallback as tabs), and refreshes activity. One undo writes the folder row back.
+Library folder child counts are decoded once per loaded page and cached by row ID; reload clears them. The Library saves the sidebar snapshot before deleting the archive row and rolls
+back insertion on a save failure. It shows a folder glyph, a recursive tab count,
+and "Folder restored to <Space>. Click to view." with View.
+
+Release harness verification: `commands-demo` 166/166 including FA1–FA7 and the
+M1 checks; `settings-preview check --only library-folder-archive` PASS for L2/L3,
+View, durable save failure, and legacy row meaning. No unit tests or desktop input.
+App restore-last-closed dispatch by record kind remains App-lane wiring.
+
+### M2 Muse review corrections (2026-10-26)
+
+Merged main after M1's squash merge; the PR diff contains only the M2 files. Folder
+restore now preserves the archive Profile when the original Space is gone. FA3
+uses two Profiles with A visible and a surviving B Space. FA4 also keeps one
+archived split pane live in another split and checks the single-pane collapse.
+FA7 checks the snapshot roundtrip only; the unrelated ArchiveStore before/after
+comparison was removed. Library folder counts decode once per page load, cache
+by row ID, and clear on reload. A failed archive-row deletion after folder restore
+says "Folder restored", with a real SQLite delete-failure CLI scenario.
