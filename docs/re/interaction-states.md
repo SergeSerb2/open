@@ -679,7 +679,8 @@ Site Control Center (S2 09/0010 without a Boost, 11/0005 with one; body x 83…3
 | Arrow | Tip at the URL field's bottom edge (y 82 = `URLFieldMetrics.y + height`), base at the body top (y 91), base ≈ 28, centered on the Site Control button's center x (201 at width 228). Rounded tip (≈ 10 px wide on its first row). | S2 09/0010 diff against 0004 |
 | Open motion | The popover window grows from the button: 38 x 47 at the button's center x during the open (`windows.tsv` in S2 09/0008); 266 x 405 (+1.5 %) one frame before 262 x 398 (S2 11/0003, 0004). | `windows.tsv` |
 | Window stays active | The sidebar keeps its active color (#252538 at (20, 500) in both 09/0004 and 09/0010). | pixel probe |
-| Boost row icon | Its sparkles change between frames while the pointer is elsewhere (an idle animation; 18 x 18 pt diff inside the icon). | S2 11/0004–0010 diffs |
+| Boost row icon | Three 4-point sparkles (top-left, top-right, bottom-right of the wand glyph) fade in and out one by one while the pointer is elsewhere (an idle animation; 18 x 18 pt diff inside the icon). Period, fade duration, and curve are not measurable: the item 10 and 11 recorders give frame pairs 0.03–0.2 s apart with 1.6–2.5 s gaps, and `21-motion.mov` does not show the panel. | S2 11/0004–0017 and 10/0095–0108 (file times) |
+| Site Control button sparkles | The three sparkles around the button also come and go from frame to frame, with the panel open and after it closed (10:27:44). Not measurable for the same reason. | S2 11/0011–0031 |
 | ⋯ menu position | The native menu's top-left sat at the ⋯ center, where the synthetic click was (menu window 160 x 211 at screen (738, 654); ⋯ center (738, 660)). | S2 11/0011 `windows.tsv` |
 
 Boost editor (editor-window points; S2 10/0030 unless noted):

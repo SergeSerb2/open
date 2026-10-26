@@ -24,7 +24,9 @@ from the URL field with a top arrow, has no header, is 236 pt wide and transluce
 buttons, and orders its sections Extensions, Boosts, Settings as rows (not tiles). The Boost editor
 is a light 183 × 588 window with a square color pad (not a hue wheel), an advanced-colors popover,
 a 5 × 4 font grid, and Size / Case / Zap / Code buttons. §12 says what changes in open PRs #69, #96
-and #103.
+and #103. Lead rulings of 2026-10-26 on this revision (Appendix C): Boost colors move to an
+engine-level color remap after #103 (Step 4R; Q4 superseded), and both sparkle animations stay
+static because their motion is not measurable.
 
 ## Goal
 
@@ -76,9 +78,9 @@ engine extension state. This plan adds no second store for any of those values (
 
 - Boost sharing, install links, the online Boost Gallery, "Report Boost", preview images, Boost
   authors (BO-6; accounts are out of v1 scope). `boost-gallery` stays disabled.
-- Arc's palette-remap color engine. Open keeps the CSS-filter runtime (`ColorAdjustment`, lead
-  decision Q4). §4.4.4 records what the capture shows about Arc's remap and Q12 asks the lead to
-  revisit Q4 with that evidence.
+- The design of the engine color remap. It is a v1 step with its own RE study and engine plan
+  (Step 4R, Q12 ruling). This plan only fixes its place in the order and its gates. #103 ships the
+  existing CSS-filter runtime as an interim.
 - A certificate viewer of our own. The security pill opens the system certificate panel once the
   engine reports the chain (E3). Until then it shows the state only.
 - A cookie browser or a site-data size display (SC-8: no evidence in Arc).
@@ -99,7 +101,7 @@ engine extension state. This plan adds no second store for any of those values (
 | D-4 | **Kept, amended 2026-10-26.** The Boost editor is a child `NSPanel` of the browser window: `.borderless`, `.nonactivatingPanel`, `becomesKeyOnlyIfNeeded = true`, always light (`NSAppearance(named: .aqua)`), system shadow, 12 pt corners. It becomes key only for text input (rename field, code editors). Placement in §4.2. | Arc's editor is its own window (AX id `boostsEditor`, subrole `AXSystemDialog`, layer 3, 183 x 588) and is light in macOS Dark (S2 10/0018). It is not key while simple controls are used and becomes key after a click into the code view (AX `focused,main` from S2 10/0079). Corner ≈ 12 (IS §20.15). |
 | D-5 | Data owners do not change. Permissions: `WebProfile.permission(_:origin:)` / `setPermission(_:for:origin:)` (OpenWeb). Ad blocking: `AdBlockStore.setExcluded(_:excluded:profile:)` and `siteSnapshot(for:)`. Boosts: `BoostStore`. Global Boosts switch: `UserDefaults` `open.advanced.enableBoosts` (settings plan §2.1 A-5). The panel and the editor never write files themselves. | `docs/plans/settings-library.md` D-5: no second store for one value. |
 | D-6 | Live preview goes through the App's `BoostEngineAdapter` (`docs/plans/app-shell.md` §4.5): store mutation → matcher rebuild → `BoostInjectionPlanner.plan` → `boost:apply` to each live page whose URL matches. During a drag, only the editor's own page gets frames (≤ 60 Hz); the store and other pages get the value on drag end. | BO-8, BO-13, BO-14, BO-15. |
-| D-7 | **Amended 2026-10-26.** The pad maps a screen point to `BoostColorWheel` inputs (§4.4.2); the runtime math (`BoostColorWheel.adjustment`, CSS filters) does not change. `colorAdjustment` stays the runtime value and is derived from `colorWheel` when `colorWheel` is set. | Q4 (filters only). One derivation function, one writer (§5.2). |
+| D-7 | **Amended 2026-10-26.** The pad maps a screen point to `BoostColorWheel` inputs (§4.4.2). Interim runtime (#103): the CSS-filter math (`BoostColorWheel.adjustment`) does not change; `colorAdjustment` is derived from `colorWheel` when it is set. v1 target: an engine-level color remap applied at paint time, with images, video, and canvas untouched (Step 4R). | Q12 ruling 2026-10-26 (Q4 superseded). One derivation function, one writer (§5.2). |
 | D-8 | **Amended 2026-10-26.** Zap keeps the existing in-page picker (`zap-picker.js`, closed shadow overlay). Its bar and popup take Arc's look (§4.8). The list of Zaps lives in the page bar ("Click to reveal"); the editor shows only the count on the Zap button. | Arc: bar, popup, and count measured (S2 10/0058, 0060, 0067; IS §20.6). Supersedes Q10. |
 | D-9 | Code editors are `NSTextView` with a small regex highlighter and an `NSRulerView` gutter. No dependency. | Arc's code body is an internal web page that was disabled on the capture machine (S2 10/0071), so its look is not known; the native path keeps memory and cold start low. |
 | D-10 | Boost editing and creation are disabled in incognito windows. Existing Boosts still apply there. | BO-10; lead Q6. |
@@ -316,7 +318,7 @@ Row (one per matching Boost, matcher order) — the shared `SiteControlRow` (§3
 | Title | Boost name (or the site domain when empty), x 50, 13 pt Semibold, #DFDFE2, one line, tail "…" | S2 11/0005 |
 | Subtitle | "Enabled" / "Disabled", 12 pt Regular, #9F9EA9 | S2 11/0005 (SC-13) |
 | Hover | Row plate white 0.06, corner 8; `chevron.right` 11 pt Semibold, white 0.6, at x `236 − 10 − 11` | chevron measured (notes 10:47:57); style guess |
-| Sparkle animation | Arc animates the glyph's sparkles while the panel is open. Open draws them static (idle CPU near zero, Q15). | IS §20.15; Open choice |
+| Sparkles | Three 4-point sparkles at the glyph's top-left, top-right, and bottom-right, drawn static at full opacity. Arc fades them in and out one by one while the panel is open, but the motion is **not measurable** from session 2: the two recorders give frame pairs 0.03–0.2 s apart with 1.6–2.5 s gaps, and the video does not show the panel. Q15 ruling: static until a capture measures it (`docs/followups.md`). | IS §20.15; Q15 |
 | Global off | `open.advanced.enableBoosts` false: rows draw at 50 % alpha, circles do nothing, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." | Open choice |
 | Incognito | Circle and row actions disabled; tooltip "Boosts can't be edited in a private window." | D-10 |
 
@@ -405,7 +407,7 @@ tab and closes the panel. The panel never reloads on its own (Q7).
 |---|---|---|
 | Rest | Today's outline glyph `slider.horizontal.2.square`. | main |
 | Panel open | Filled variant: white rounded square, dark sliders (`slider.horizontal.2.square.fill` tinted, or our own drawing). Shown while the panel is open even when the pointer leaves the sidebar. | S2 11/0011 |
-| Site has an enabled matching Boost | Three small 4-point sparkles at the glyph's top-left, top-right, and bottom-right corners, white 0.8, ≈ 4 pt (our own drawing). | S2 11/0016 (meaning guess) |
+| Site has an enabled matching Boost | Three small 4-point sparkles at the glyph's top-left, top-right, and bottom-right corners, white 0.8, ≈ 4 pt (our own drawing), drawn static. Arc fades them in and out (also after the panel closes); the motion is not measurable (same reason as §3.7, Q15). | S2 11/0016, 11/0011–0031 (meaning guess) |
 | ⌥-click | Does not open the panel (S2-10). Open: no other effect (the small dot Arc showed afterwards is unexplained, §13). | notes 10:28:02 |
 
 ### 3.11 States and motion
@@ -595,14 +597,16 @@ Move the reusable part of `OpenSpaceEditor/ColorPadView.swift` (PR #86) into
 | Radius meaning | One sample: at t ≈ 0.70 the primary fill is HSB(253.6°, 0.70, 0.78). Two points cannot tell saturation from intensity or lightness. The theme pad's law (radius → lightness 0.01 … 0.97) predicts HSL L 0.68; measured 0.51, so the Boost knob does not follow the theme's lightness law with the theme's ranges (derived). | `t` = intensity (§4.4.2). |
 | Pad radius `R` | The drag reached 46 pt; the rim was not tested. | `R = 66.5` (theme rule). |
 | Secondary knob | Always +45° on the same radius in both samples; darker fill. BO-17 names analogous and complementary scheme assets, but no scheme control is visible in the captured editor. Whether the offset can change, or the knob can be dragged, is unknown. | Fixed +45°, not draggable. |
-| Page remap | One color recolored white to a pale tint of the primary's hue and near-black to a saturated tint of the secondary's hue; images kept their colors (S2-22). Open's filters rotate hues and cannot tint white or grey (R-2). | Filters (Q4); Q12 asks the lead. |
+| Page remap | One color recolored white to a pale tint of the primary's hue and near-black to a saturated tint of the secondary's hue; images kept their colors (S2-22). Arc does this inside the engine (`arc.mojom.EffectsAgent`, "Boosts effects via `EffectsAgent`", `docs/re/arccore-engine.md`). Open's filters rotate hues and cannot tint white or grey (R-2). | Interim: filters (#103). v1: engine remap (Step 4R, Q12 ruling). |
 | Invert lightness, sliders | Effects not measured. Sliders sit at 50 = neutral. | Map 0…100 → brightness and contrast 0.5…1.5 and original saturation 0…2 (50 → 1). |
 | Theme pad law | Still being decoded in the Space editor lane; this plan reuses its geometry and angle law only. | Revisit both laws together. |
 
-#### 4.4.5 Runtime math (unchanged) and notes
+#### 4.4.5 Interim runtime math (unchanged until Step 4R) and notes
 
-`BoostColorWheel.adjustment` (OpenBoosts) keeps the first version's normative math. `θ` is the
-stored `hue` and `ρ` the stored `intensity`; only the screen mapping (§4.4.2) changed:
+`BoostColorWheel.adjustment` (OpenBoosts) keeps the first version's normative math for #103. `θ` is
+the stored `hue` and `ρ` the stored `intensity`; only the screen mapping (§4.4.2) changed. Step 4R
+replaces this runtime; the engine plan decides how the stored pad inputs map to the remap and how
+existing `colorAdjustment` values migrate.
 
 ```text
 inputs:  hue θ ∈ [0, 360), intensity ρ ∈ [0, 1], baseHue h0 ∈ [0, 360) or nil,
@@ -1066,6 +1070,9 @@ pages.
 The lead's 2026-10-26 timing exception for a loaded machine still applies to review runs; rerun the
 budgets before merge.
 
+Step 4R (engine color remap) has its own gates: zero added paint cost with no Boost color, and
+scroll p95 and paint time on three heavy pages within the budget its engine plan sets.
+
 ---
 
 ## 8. Verification (no unit tests)
@@ -1208,8 +1215,9 @@ Interim behaviors are stated per row in §3 and are listed in the PR of the step
 
 ## 10. Implementation order
 
-Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary (`AGENTS.md` rule 10).
-Steps 1, 2, and 4 are open PRs that are reworked in place (§12).
+Each PR: merge `origin/main`, run `tools/verify-all.sh` through `~/Library/Caches/OpenRE/scripts/heavy.sh`,
+paste the summary (`AGENTS.md` rule 10). Steps 1, 2, and 4 are open PRs that are reworked in place
+(§12). Step 4R is a v1 step in the engine lane (Q12 ruling).
 
 | Step | PR | Work | Acceptance |
 |---|---|---|---|
@@ -1217,6 +1225,7 @@ Steps 1, 2, and 4 are open PRs that are reworked in place (§12).
 | 2 | #96 (rework) | Sections: label rows, `SiteControlRow` for Boosts and Settings, Extensions "+" tile, reload row, ⋯ menu (always with Boost items), keyboard, picker mode, AX, height animation | F3–F9, F20–F22 PASS; all `scc-*` states; height probes 297 / 372 |
 | 3 | new (App) | App data source and actions; URL field and pane anchors; URL field button states (§3.10); intents and commands; automation; e2e `sitecontrol` | S1–S9, S11 PASS (S10 blocked) |
 | 4 | #103 (rework) | `BoostColorWheel` (as is); `OpenDesign/ColorPad.swift` (§12.4); editor window, placement, header, name menu with scope submenu, pad, color buttons, advanced popover, font grid, Size/Case/Zap/Code (Zap and Code disabled), first-run card, banners | F10–F12, F14–F16, F19, F24 PASS; `editor-*` simple states; `boosts` harness 26/26 |
+| 4R | new (engine lane) | **Boost color remap (engine)**, Q12 ruling. Starts after #103 merges; runs beside Steps 5–7. (a) RE study of ArcCore's `EffectsAgent` (a separate task; findings land in `docs/re/`). (b) An engine plan (`docs/plans/`) for a paint-time color remap in our fork, the same kind of mechanism as Chromium's auto dark mode (`DarkModeFilter`, which classifies images separately): page colors remap toward the pad's two knob colors, while images, video, and canvas stay untouched. (c) Implementation in the fork, then the App switches Boost colors from filters to the remap. | No Boost color: zero added paint cost (measured). One Boost color: scroll p95 and paint time on three heavy pages within the budget the engine plan sets. B2 rewritten to probe a white background and an image pixel (tinted vs. unchanged). |
 | 5 | new (App) | App editor host (placement frame, preview/refresh), Boost commands, Library Boosts section | B1–B3, B6–B10 PASS; `settings-preview check` PASS |
 | 6 | new | Zap: picker restyle (frame, bar, popup, "Click to reveal"), count on the button, picker events | F13 PASS; `boosts` harness PASS; B4 after P7 |
 | 7 | new | Code mode (480 × 588 window, header, code view, bottom bar, CSS live, JS refresh, devtools, size persistence) | F17, F18, B5 PASS |
@@ -1232,7 +1241,7 @@ Steps 1, 2, and 4 are open PRs that are reworked in place (§12).
 | # | Risk | Mitigation |
 |---|---|---|
 | R-1 | Several values are still guesses (§13): Light appearance, 2x shapes, tooltips, the shadow, the pane anchor, Size/Case behavior, the pad's radius law. | Every value is one token; §13 lists what a future capture must cover. |
-| R-2 | CSS filters cannot tint white or grey pages; Arc's pad does (S2-22). Boosts on white sites look weak compared with Arc. | Q12. The neutral-page hint points to Invert lightness. |
+| R-2 | **Interim only (#103 → Step 4R).** CSS filters cannot tint white or grey pages; Arc's remap does (S2-22). Boosts on white sites look weak until the engine remap lands. | Step 4R replaces the filter runtime in v1 (Q12 ruling). Until then the neutral-page hint points to Invert lightness. |
 | R-3 | Live preview through `evaluateJavaScript` per frame could cost the renderer. | ≤ 60 Hz, bound page only, small plans; drop to 30 Hz if page frame time grows > 4 ms. |
 | R-4 | Main-world picker and applier before P7 leak Boost state to page scripts. | Zap stays disabled until P7. |
 | R-5 | Users lose a Boost by closing a new one quickly. | Only an unchanged new Boost is deleted (F16). |
@@ -1242,14 +1251,15 @@ Steps 1, 2, and 4 are open PRs that are reworked in place (§12).
 
 ### 11.2 Open questions (need a lead decision; recommendation first)
 
-Q1–Q11 are answered (Appendix C). New:
+Q1–Q15 are answered (Appendix C). The questions this revision raised, with the lead's rulings of
+2026-10-26:
 
-| # | Question | Recommendation |
+| # | Question | Ruling (2026-10-26) |
 |---|---|---|
-| Q12 | The capture shows Arc's pad remaps page colors: white → a pale tint of the primary hue, dark → a saturated tint of the secondary hue, images untouched (S2-22). Keep Q4 (filters only) for v1? | Keep filters for the first editor release (no runtime change in #103). Then plan a "duotone" runtime step in OpenBoosts: CSS custom-property overrides for `background-color` and `color` on computed light and dark colors, measured against a scroll-performance gate. Filters cannot reach Arc's look. |
-| Q13 | Arc showed no "Block Ads & Trackers" row on the test Profile (its blocker state was not recorded). Hide the row when the master switch is off? | Keep the `unavailable` row (lead decision Q5 context) until a capture with the blocker on; it explains why ads show. |
-| Q14 | Arc shows "Developer Mode — Off" in Settings by default. Q2 hides it. Keep? | Keep hidden (Q2) until `page-platform.md` defines Developer Mode. |
-| Q15 | Arc animates the Boost icon's sparkles while the panel is open. Build it? | No (idle CPU budget). Static sparkles. |
+| Q12 | The capture shows Arc remaps page colors: white → a pale tint of the primary hue, dark → a saturated tint of the secondary hue, images untouched (S2-22). Keep Q4 (filters only) for v1? | **Q4 superseded.** Arc recolors inside the engine (`EffectsAgent`, `docs/re/arccore-engine.md`); a page-wide filter cannot match. #103 ships the filter runtime as an interim with no runtime change. v1 adds Step 4R, "Boost color remap (engine)": RE study, engine plan, fork implementation, with the gates in §10. R-2 is interim only. |
+| Q13 | Arc showed no "Block Ads & Trackers" row on the test Profile (its blocker state was not recorded). Hide the row when the master switch is off? | **Accepted:** keep the `unavailable` row. A future capture with Arc's blocker on must check the row (§13). |
+| Q14 | Arc shows "Developer Mode — Off" in Settings by default. Q2 hides it. Keep? | **Accepted:** keep Developer Mode hidden (Q2). |
+| Q15 | Arc animates the Boost icon's sparkles. Build it? | Build it only if it is pure Core Animation (no timers, no main-thread work per frame, running only while the panel is open, removed on close) **and** its motion is measurable from session 2. The motion is not measurable (§3.7), so the sparkles are static, with a `docs/followups.md` entry. |
 
 ---
 
@@ -1275,8 +1285,10 @@ this docs PR → main
       ▼
 #103 rework (editor + OpenDesign/ColorPad.swift) ──merge──► main
       │
+      ├──► #86 (Space editor shell) adopts OpenDesign/ColorPad.swift on its next merge of main (§12.4)
+      │
       ▼
-#86 (Space editor shell) adopts OpenDesign/ColorPad.swift on its next merge of main (§12.4)
+Step 4R, Boost color remap (engine): EffectsAgent RE study → engine plan → fork implementation
 ```
 
 #69 and #96 can be reworked in parallel if #96 merges #69 again before its review. #103's
@@ -1342,6 +1354,8 @@ non-pad work (window, header, grid, buttons) can start at once; its pad work wai
 | Rename alert look; the Delete alert's exact layout | System alert sheet (Open choice). |
 | "Click to reveal" list layout | Chips (guess). |
 | Insecure and certificate states; Clear Cache / Clear Cookies feedback | Open's rules. |
+| The "Block Ads & Trackers" row with Arc's ad blocker on, and with it off (Q13) | `unavailable` row kept. |
+| Sparkle motion on the Boost row icon and the Site Control button (period, fade curve, phase per sparkle) | Static sparkles (Q15); needs video at ≥ 30 fps with the panel open on a Boosted site. |
 | Close animation of the Site Control Center | Theme popover timing reused. |
 | Whether the editor position is remembered | Not persisted (Open choice). |
 
@@ -1485,7 +1499,7 @@ sharing banner, and "Report Boost…".
 | Q1 The panel is an in-window view, not a system popover (Arc's look, window stays key). | Kept (D-3 amended: arrow, material). |
 | Q2 Developer Mode row hidden until `page-platform.md` defines Developer Mode. | Kept (Q14 notes Arc shows it). |
 | Q3 Preview row hidden until Previews stores per-site state. | Kept. |
-| Q4 Colors use CSS filters only in v1; tint later behind a scroll-performance check. | Kept; Q12 adds the capture evidence. |
+| Q4 Colors use CSS filters only in v1; tint later behind a scroll-performance check. | **Superseded** 2026-10-26 by the Q12 ruling: filters are the #103 interim; v1 uses an engine color remap (Step 4R). |
 | Q5 The ad-block row shows On/Off only. | Kept. |
 | Q6 Boost editing is disabled in private windows. | Kept. |
 | Q7 A "Reload" row after a setting change; never reload automatically. | Kept. |
@@ -1539,11 +1553,19 @@ The lead instructed that the Site Control Center and Boost editor follow Arc as 
    editor header and dark variants, the hue-ring wheel with a disc pad and puck, the inline advanced
    sliders, the font strip, the four colored tool tiles, the "Original" case label, and the default
    code window size 560 × 640.
-2. Kept: decision C, Q1–Q9 and Q11, D-1, D-2, D-5, D-6, D-9, D-10, the security-scheme rule, the
+2. Kept: decision C, Q1–Q3, Q5–Q9 and Q11, D-1, D-2, D-5, D-6, D-9, D-10, the security-scheme rule, the
    observer and dismissal decisions, scope labels and IP rules, legacy filters, the Zap / Code
    tooltips, banners, coalescing, `saveNow`, and the review timing exception.
 3. Amended: D-3 (in-window view with arrow and material), D-4 (light, placement, system shadow),
    D-7 (pad law), D-8 (Zap UI and list placement). New: D-12 (shared pad core).
-4. Open for the lead: Q12 (color runtime), Q13 (ad-block row with the master off), Q14 (Developer
-   Mode row), Q15 (sparkle animation).
+4. Questions raised by this revision: Q12–Q15, ruled on below.
 5. Migration: rework #69, #96, and #103 in place in that order (§12).
+
+### 2026-10-26 — lead rulings on PR #107 (head db3c360)
+
+| # | Ruling | Where applied |
+|---|---|---|
+| Q12 | Q4 is superseded. Evidence: S2-22 (white and dark areas tinted, images unchanged: not a page-wide filter) and `docs/re/arccore-engine.md` ("Boosts effects via `EffectsAgent`" in ArcCore: Arc recolors inside the engine). The v1 target is Arc's model: an engine-level color remap applied at paint time, with images, video, and canvas untouched, like Chromium's auto dark mode (`DarkModeFilter`). #103 ships the existing filter runtime as an interim, with no runtime change and its scope as written. A v1 step "Boost color remap (engine)" follows #103: RE study of `EffectsAgent` (separate task; findings in `docs/re/`), then an engine plan, then the fork implementation. Gates: zero added paint cost with no Boost color (measured); with one, scroll p95 and paint time on three heavy pages within the engine plan's budget. R-2 is interim only. | Non-goals, D-7, §4.4.4, §4.4.5, §10 Step 4R, R-2, §11.2 |
+| Q13 | Accepted: keep the `unavailable` ad-block row; list it for a future capture with Arc's blocker on. | §3.8, §11.2, §13 |
+| Q14 | Accepted: keep the Developer Mode row hidden (Q2). | §3.8, §11.2 |
+| Q15 | Build the sparkle animation only if it is pure Core Animation on layers (no timers, no main-thread work per frame, running only while the panel is open, stopped and removed on close) and its motion is measurable from session 2. Result: not measurable (frame pairs with 1.6–2.5 s gaps, no video of the panel), so the sparkles are static and `docs/followups.md` has an entry. | §3.7, §3.10, §13, `docs/followups.md` |
