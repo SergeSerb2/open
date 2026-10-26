@@ -863,6 +863,8 @@ final class SpaceHeaderView: NSView {
         if let forced = context.forcedHover { return forced == .header }
         return pointerInside
     }
+    var isHeaderHovered: Bool { isHovered }
+    var titleLabel: TextLabel { title }
 
     override func updateLayer() {
         let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true; self?.needsLayout = true }

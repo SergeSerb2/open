@@ -129,9 +129,18 @@ final class URLFieldView: NSView {
     /// frames (F0015, F0016, F0019, F0035, F0123).
     private var showsButtons: Bool { context.forcedHover != nil || context.pointerInSidebar || pointerInside }
 
+    /// The pointer is over the field (or a render forces it). Arc darkens the field to
+    /// `SidebarItemHoveredBackground` on hover (F0033 vs F0032: `#CF8B6F` vs `#D99273` at the
+    /// same frame); the field does not move or grow.
+    var isHovered: Bool { context.forcedHover == .urlField || pointerInside }
+
     override func updateLayer() {
         let appearance = contentAppearance
-        fill.backgroundColor = SidebarRole.fieldFill.cgColor(appearance)
+        let hovered = tracked({ isHovered }) { [weak self] in self?.needsDisplay = true }
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(Motion.hoverFade)
+        fill.backgroundColor = (hovered ? SidebarRole.fieldHover : SidebarRole.fieldFill).cgColor(appearance)
+        CATransaction.commit()
     }
 
     override func layout() {
@@ -161,7 +170,10 @@ final class URLFieldView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        // The field's own bounds, not `.inVisibleRect`: views that do not clip to their
+        // bounds (the default since macOS 14) report a visible rect larger than the field,
+        // and the hover fill must not show for a pointer elsewhere in the sidebar.
+        let t = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
         addTrackingArea(t)
         tracking = t
     }
