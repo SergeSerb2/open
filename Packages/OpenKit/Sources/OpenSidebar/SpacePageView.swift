@@ -136,6 +136,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             self.forEachLoadedFolder { _ = $0.isExpanded; _ = $0.children.count }
         }) { [weak self] in
             guard let self else { return }
+            guard self.context.manager?.deferHiddenUpdates() != true else { return }
             self.syncRoot()
             self.syncExpansion(animated: self.animatesSidebarChanges)
         })
@@ -244,6 +245,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         updateRowStates(animated: false)
         pruneSelection()
         syncSelectionIndexes()
+    }
+
+    /// Reconcile a hidden Manager once on visibility, without reloadData or an event backlog.
+    func resyncAfterVisibility() {
+        var changes: [TreeChange] = [.reload(parent: .spacePinned(space.id)), .reload(parent: .spaceToday(space.id))]
+        forEachLoadedFolder { changes.append(.reload(parent: .folder($0.id))) }
+        applyBulk(changes)
     }
 
     private enum Displayed {

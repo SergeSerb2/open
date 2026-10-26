@@ -803,3 +803,13 @@ identical positions and ink boxes. Full evidence is under
 `/tmp/open-sidebar-s4/fixed-main`. That result prompted the lead gate above.
 `verify-all` accepts `SIDEBAR_BASELINE_REF` and `SIDEBAR_BASELINE_RENDERER` to
 name this renderer-only main dependency explicitly until #92 merges.
+
+S4 review R1: the grabber uses the shared capsule tooltip. Header icon/title align
+with the sidebar (13/41 pt), with the grabber at W−58. Lift transforms the content
+about the column center; `--lift-column` captures an actual tracking frame.
+Manager renders use LibraryContent’s `SettingsTokens.content` background in both
+appearances. Dark columns have a 1 pt white 0.30 rim (guess pending C2).
+Hidden Managers keep one dirty flag; visibility reconciles cached final parent
+lists in one bulk native update, without reloadData or a queued event history.
+The earlier SM6 number means **36 ms to first layout**, excluding GPU snapshot
+and real favicon loading. C2/C5/C7 values remain guesses until capture session 2.
