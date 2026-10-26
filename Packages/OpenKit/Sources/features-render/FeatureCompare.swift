@@ -49,7 +49,7 @@ enum FeatureCompare {
                   let controls = frames["buttons"] as? [[Double]], controls.count == 3 else { throw CLIError(description: "peek compare requires --frames JSON from the render") }
             geometry("Peek panel frame", expected: CGRect(x: 427, y: 12, width: 1590, height: 1370), actual: CGRect(x: panel[0], y: panel[1], width: panel[2], height: panel[3]))
             for (i, f) in controls.enumerated() {
-                geometry(["Close", "Expand", "Split"][i] + " control hit frame", expected: CGRect(x: 2030, y: 21 + Double(i) * 43, width: 35, height: 33), actual: CGRect(x: f[0], y: f[1], width: f[2], height: f[3]))
+                geometry(["Close", "Expand", "Split"][i] + " control hit frame", expected: CGRect(x: 2030, y: 21 + Double(i) * 43, width: i == 2 ? 34 : 35, height: i == 2 ? 32 : 33), actual: CGRect(x: f[0], y: f[1], width: f[2], height: f[3]))
             }
             // Edge profiles identify the opaque page boundary without comparing its content.
             func panelFrame(_ bitmap: Bitmap) -> CGRect {

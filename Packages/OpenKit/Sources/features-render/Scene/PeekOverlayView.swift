@@ -46,7 +46,7 @@ public final class PeekOverlayView: NSView {
     func layoutPanel() {
         pageClip.frame = panel.bounds
         pageClip.subviews.forEach { $0.frame = pageClip.bounds }
-        panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: 6, cornerHeight: 6, transform: nil)
+        panel.layer?.shadowPath = CGPath(roundedRect: panel.bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
     }
     func showHost(_ host: any WebContentHost) {
         pageClip.subviews.forEach { $0.removeFromSuperview() }
