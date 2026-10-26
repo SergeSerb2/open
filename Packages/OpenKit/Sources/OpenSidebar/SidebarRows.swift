@@ -1,4 +1,5 @@
 import AppKit
+import Symbols
 import OpenDesign
 import OpenModel
 
@@ -249,7 +250,8 @@ final class TabCellView: SidebarCellView {
     let title = TextLabel()
     /// Built on first use: most rows never show them, and every extra layer-backed
     /// subview costs time when a row scrolls into view.
-    private var audio: PlateButton?
+    private var audio: RowSpeakerButton?
+    private var recording: RowRecordingView?
     private(set) var accessory: PlateButton?
     private(set) var peekBadge: PeekBadgeView?
     private var slash: CALayer?
@@ -292,10 +294,14 @@ final class TabCellView: SidebarCellView {
         return b
     }
 
-    private func makeAudio() -> PlateButton {
+    private func makeAudio() -> RowSpeakerButton {
         if let audio { return audio }
-        let b = PlateButton(glyph: .audioPlaying)
+        let b = RowSpeakerButton(glyph: .audioPlaying)
         b.accessibleTitle = { [weak self] in self?.tab?.isMuted == true ? "Unmute tab" : "Mute tab" }
+        b.tooltip = { [weak self] in
+            guard let self, let context = self.context, let space = context.focusedSpace else { return nil }
+            return Tooltip(title: self.tab?.isMuted == true ? "Unmute tab" : "Mute tab", placement: .beside, style: context.style(for: space))
+        }
         b.showsHoverPlate = false
         b.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
         b.action = { [weak self] in
@@ -342,7 +348,7 @@ final class TabCellView: SidebarCellView {
         let m = SpaceListMetrics.self
         let x0 = indent
         // Observation-tracked reads: audio and pinned-URL state.
-        let (audible, muted, leftPinned) = tracked({ (tab?.live.isAudible ?? false, tab?.isMuted ?? false, tab?.hasLeftPinnedURL ?? false) }) {
+        let (audible, muted, leftPinned, capturing) = tracked({ (tab?.live.isAudible ?? false, tab?.isMuted ?? false, tab?.hasLeftPinnedURL ?? false, tab?.live.isCapturing ?? false) }) {
             [weak self] in self?.needsLayout = true
         }
         favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
@@ -379,14 +385,25 @@ final class TabCellView: SidebarCellView {
         }
         let showAudio = audible || muted
         audio?.isHidden = !showAudio
-        if showAudio {
-            let b = makeAudio()
-            b.isHidden = false
-            b.glyphView.glyph = muted ? .audioMuted : .audioPlaying
-            let w: CGFloat = 20
-            let titleW = min(title.textWidth, titleRight - titleX - w - 2)
-            b.frame = CGRect(x: titleX + max(titleW, 0) + 2, y: 10, width: w, height: 20)
-            titleRight = min(titleRight, b.frame.minX)
+        recording?.isHidden = !capturing
+        let mMedia = RowMediaMetrics.self
+        let slotCount = (showAudio ? 1 : 0) + (capturing ? 1 : 0)
+        if slotCount > 0 {
+            let slotsWidth = CGFloat(slotCount) * mMedia.buttonSize
+            let titleW = min(title.textWidth, max(0, titleRight - titleX - slotsWidth - mMedia.gapAfterTitle))
+            var x = titleX + titleW + mMedia.gapAfterTitle
+            titleRight = min(titleRight, x)
+            if capturing {
+                let v = recording ?? { let v = RowRecordingView(frame: .zero); addSubview(v); recording = v; return v }()
+                v.context = context; v.isHidden = false
+                v.frame = CGRect(x: x, y: mMedia.y, width: mMedia.buttonSize, height: mMedia.buttonSize)
+                x += mMedia.buttonSize
+            }
+            if showAudio {
+                let b = makeAudio(); b.isHidden = false; b.context = context
+                b.update(tabID: tab?.id, muted: muted)
+                b.frame = CGRect(x: x, y: mMedia.y, width: mMedia.buttonSize, height: mMedia.buttonSize)
+            }
         }
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
     }
@@ -694,4 +711,98 @@ final class DividerCellView: SidebarCellView {
         guard showsClear, clearRect.contains(convert(event.locationInWindow, from: nil)), let page else { return }
         page.context.send(.clearToday(space: page.space.id))
     }
+}
+
+
+extension SidebarDiagnostics {
+    /// Harness receipt: one discrete transition per mute change, never a looping effect.
+    public static var rowMediaSymbolTransitions = 0
+    public static var mediaReduceMotionOverride: Bool?
+    public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+}
+
+@MainActor private final class RowSpeakerImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// System symbol replacement approximates the slash/wave change (PP-19; features-core rule 10).
+@MainActor private final class RowSpeakerButton: PlateButton {
+    private var symbol: RowSpeakerImageView?
+    private var representedID: ItemID?
+    private var lastMuted: Bool?
+    override init(glyph: Glyph?) {
+        super.init(glyph: glyph)
+        glyphView.isHidden = true
+
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        symbol?.frame = bounds
+        CATransaction.commit()
+    }
+    func update(tabID: ItemID?, muted: Bool) {
+        let glyph: Glyph = muted ? .audioMuted : .audioPlaying
+        guard let image = glyph.image else { return }
+        let changed = representedID == tabID && lastMuted != nil && lastMuted != muted
+        if SidebarDiagnostics.mediaReducesMotion {
+            // RBSymbolLayer installs geometry animations even for plain image changes.
+            // Use the existing static glyph renderer under Reduce Motion, with no symbol layer.
+            symbol?.removeFromSuperview(); symbol = nil; glyphView.isHidden = false
+        } else {
+            let view: RowSpeakerImageView
+            if let symbol { view = symbol }
+            else {
+                view = RowSpeakerImageView(frame: bounds)
+                view.wantsLayer = true; view.imageScaling = .scaleNone
+                if let lastMuted { view.image = (lastMuted ? Glyph.audioMuted : Glyph.audioPlaying).image }
+                addSubview(view); symbol = view
+            }
+            glyphView.isHidden = true
+            view.contentTintColor = SidebarRole.rowAccessory.nsColor
+            if changed {
+                view.setSymbolImage(image, contentTransition: .replace.magic(fallback: .replace))
+                SidebarDiagnostics.rowMediaSymbolTransitions += 1
+            } else if lastMuted != muted || representedID != tabID {
+                CATransaction.begin(); CATransaction.setDisableActions(true)
+                view.image = image
+                CATransaction.commit()
+            }
+        }
+        glyphView.glyph = glyph
+        representedID = tabID; lastMuted = muted
+    }
+    override func accessibilityHelp() -> String? { accessibleTitle?() }
+}
+
+/// Lazy, static recording indicator (PP-19). Its tooltip is an exact Arc string.
+@MainActor private final class RowRecordingView: NSView {
+    static let label = "This tab is using your camera or microphone"
+    weak var context: SidebarContext?
+    private var tracking: NSTrackingArea?
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        SidebarRole.recordingIndicator.nsColor.setFill()
+        let size = RowMediaMetrics.recordingDot
+        NSBezierPath(ovalIn: CGRect(x: bounds.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        addTrackingArea(area); tracking = area
+    }
+    override func mouseEntered(with event: NSEvent) {
+        guard let context, let space = context.focusedSpace else { return }
+        TooltipController.shared.schedule(Tooltip(title: Self.label, placement: .beside, style: context.style(for: space)), for: self)
+    }
+    override func mouseExited(with event: NSEvent) { TooltipController.shared.cancel(for: self) }
+    override func accessibilityRole() -> NSAccessibility.Role? { .image }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityLabel() -> String? { Self.label }
+    override func accessibilityHelp() -> String? { Self.label }
 }

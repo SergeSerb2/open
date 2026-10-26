@@ -63,3 +63,18 @@ public enum Motion {
         return 1 - exp(-zeta * omega * t) * (cos(wd * t) + zeta * omega / wd * sin(wd * t))
     }
 }
+
+extension Motion {
+    /// Guesses centralized per media plan §4.2.7 and §4.4.7; reduce motion uses fades.
+    public static let miniPlayerStack = SpringToken(response: 0.3, dampingFraction: 1)
+    public static let miniPlayerResize: CFTimeInterval = 0.2
+    public static let miniPlayerTitle: CFTimeInterval = 0.12
+    public static let miniPlayerReveal: CFTimeInterval = 0.15
+    public static let miniPlayerAppearDelay: CFTimeInterval = 0.05
+    public static let miniPlayerDisappear: CFTimeInterval = 0.12
+    public static let reducedMedia: CFTimeInterval = 0.1
+    public static let pipPresent = SpringToken(response: 0.3, dampingFraction: 1)
+    public static let pipFade: CFTimeInterval = 0.15
+    public static let pipControlsHide: CFTimeInterval = 0.3
+    public static let pipBackToTab: CFTimeInterval = 0.25
+}
