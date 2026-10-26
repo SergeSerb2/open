@@ -2014,7 +2014,8 @@ def traffic_light_look_checks(app, results, private, scale, wid):
                       and not first["trafficLightsHovered"] and first["trafficLightsDimmed"] and notkey_ok
                       and all(hidden["trafficLightsHidden"]) and bool(card) and card_ok and card_state["trafficLightsDimmed"],
                       "rest_alpha": alpha, "ax": ax, "rest_look": look, "key_during_rest": rest["key"],
-                      "hover": {"key": hover_key, "alpha": hover_alpha, "hue": hue},
+                      "hover": {"key": hover_key, "alpha": hover_alpha, "hue": hue,
+                                "reason": None if hover_key else "window not key: macOS refused to activate Open (someone is using another app)"},
                       "dimmed_after_leaving": bool(left), "controls_reject": {"rest_as_colored": control_hue, "rings_as_not_key": control_ring},
                       "not_key": {"key": first["key"], "dimmed": first["trafficLightsDimmed"], "look": notkey},
                       "hidden_with_sidebar": hidden["trafficLightsHidden"], "card_look": card_look}
