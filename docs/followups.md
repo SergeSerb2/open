@@ -34,3 +34,6 @@ Small items found during review and verification. Each line: area — issue — 
 - Shell (P1) — add a tabstrip check that `navigator.userAgent` has the `Chrome/156` token and no `Open/0.1`. — PR #53 shell review 10, 2026-10-26
 - Shell — `--style=<typo>` silently selects Chrome; accept only `chrome` and `alloy`, Chrome when the flag is missing. — PR #53 shell review 11, 2026-10-26
 
+- Media D8 (2026-10-26): decode the inline speaker-tooltip string and the
+  `SpeakerIcon` timing values from the shared read-only RE snapshots. Cite
+  the symbol/string evidence and confirm the tooltip text/case with S9.
