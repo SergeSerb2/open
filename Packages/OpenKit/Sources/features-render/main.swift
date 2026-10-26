@@ -46,6 +46,21 @@ enum FeatureCLI {
         if args.contains("--sidebar-hidden") { window.sidebarMode = .hidden }
         if args.contains("--untitled") { model.space(id: window.focusedSpaceID)?.title = "" }
         guard let space = model.space(id: window.focusedSpaceID) else { throw CLIError(description: "no Space") }
+        // Render-only state for captured frames. Values come from the run script in .re/.
+        if let w = RenderCLI.value(args, "--width").flatMap(Double.init) { window.sidebarWidth = w }
+        if args.contains("--keep-titles") { FakeWebContentHost.reportsTitles = false }
+        for spec in RenderCLI.values(args, "--page-color") {
+            let parts = spec.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let rgb = Int(parts[1], radix: 16) else { throw CLIError(description: "--page-color HOST=RRGGBB") }
+            FakeWebContentHost.pageColors[parts[0]] = NSColor(srgbRed: CGFloat(rgb >> 16 & 255) / 255, green: CGFloat(rgb >> 8 & 255) / 255, blue: CGFloat(rgb & 255) / 255, alpha: 1)
+        }
+        if let spec = RenderCLI.value(args, "--seed-today-split") {
+            // "URL=TITLE": a new Today tab after the first one, split with it (a split made during the capture session).
+            let parts = spec.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2, let url = URL(string: parts[0]), let first = space.today.first?.tab else { throw CLIError(description: "--seed-today-split URL=TITLE needs a Today tab") }
+            let tab = model.newTab(in: space.id, url: url, title: parts[1], at: 1)
+            guard model.makeSplit(tabIDs: [first.id, tab.id]) != nil else { throw CLIError(description: "cannot seed split") }
+        }
         func tabs(_ nodes: [SidebarNode]) -> [Tab] { nodes.flatMap { node in switch node { case .tab(let t): [t]; case .split(let s): s.panes; case .folder(let f): tabs(f.children) } } }
         let all = tabs(space.pinned + space.today)
         for tab in all { tab.live.sleepPhase = .live }

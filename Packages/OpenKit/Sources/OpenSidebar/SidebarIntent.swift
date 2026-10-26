@@ -55,6 +55,12 @@ public enum SidebarIntent: Equatable, Sendable {
     case openInSplitView(tabID: ItemID)
     case addSplitView(tabID: ItemID)
     case separateSplit(splitID: ItemID)
+    /// Split row menu: "Separate from Split View" for one pane.
+    case separatePane(splitID: ItemID, tabID: ItemID)
+    /// Split row menu: "Convert to Horizontal/Vertical Split View".
+    case setSplitOrientation(splitID: ItemID, orientation: SplitOrientation)
+    /// Split row menu: "Add Tab…". The App adds an empty pane and opens the command bar.
+    case addTabToSplit(splitID: ItemID)
     case newNestedFolder(parentFolderID: ItemID)
     case turnFolderIntoSpace(folderID: ItemID)
     case deleteFolder(folderID: ItemID)
