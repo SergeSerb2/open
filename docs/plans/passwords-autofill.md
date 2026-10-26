@@ -531,21 +531,21 @@ Text (Arc's, PW-2):
 
 Arc writes the password and card bodies without a final period; keep that. `<displayHost>` is `OESavePrompt.displayHost` (scheme removed, `www.` kept as Chromium formats it). The username and card number are not shown (Arc shows neither).
 
-Keyboard: Return = "Save". Esc and Cmd-. = "No" / "Not Now" / "No Thanks". Tab and Shift-Tab move between buttons when Full Keyboard Access is on; Space presses the focused button. "Never on this site" has no shortcut. Closing the window or quitting answers `dismiss`.
+Keyboard: Return = "Save". Esc and Cmd-. = "No" / "Not Now" / "No Thanks". Tab and Shift-Tab move between buttons when Full Keyboard Access is on; Space presses the focused button. "Never on this site" has no shortcut. Closing the window or quitting releases the prompt unanswered, so the engine answers "ignored". It is not a "No": Chromium counts "No" toward hiding future prompts (`SaveUpdateBubbleController::IsMaxDismissalCountReached`).
 
 Accessibility: the panel has role `AXSheet`, label = title text. The title is `AXHeading`. The default button has `AXDefaultButton`; the dismiss button `AXCancelButton`. On show, post `NSAccessibility.Notification.announcementRequested` with title and body (VoiceOver moves into the sheet). With Reduce Motion, the sheet appears without the slide.
 
 Queue rules (`Packages/OpenKit/Sources/OpenFeatures/SavePromptPresenter.swift`, one per window):
 
 1. Show at once when the prompt's page is the focused pane of a visible window and no sheet is open on that window.
-2. Else queue it (FIFO, at most 3 per window; a new prompt for the same page replaces the older one, which is answered `dismiss`). Show it when its page becomes the focused pane.
+2. Else queue it (FIFO, at most 3 per window; a new prompt for the same page replaces the older one, which the engine has already withdrawn; a fourth prompt drops the oldest unanswered, which the engine then answers "ignored" on release). Show it when its page becomes the focused pane.
 3. Peek pages attach to the window that shows the Peek; Little Open pages to the Little Open window.
 4. `withdrawSavePrompt` removes the prompt from the queue or closes the sheet without an answer.
 5. A page in a Space of another window, or in a background Space, waits until shown. A page that closes drops its prompt.
 6. No timeout: Arc's sheet waits for an answer (PW-2).
 7. After "Save", show no confirmation (Arc shows none we know of; screenshot S-3).
 
-Renders: `features-render` draws the four sheets offscreen in light and dark at 1x and 2x (`docs/features/save-sheet-*.png`), with fixture hosts only.
+Renders: a new `features-render save-sheet --kind password|update|card|address --out FILE [--scale 1|2] [--appearance light|dark]` draws the four sheets offscreen (`docs/m4/save-sheet-*.png` next to the other feature renders), with fixture hosts only. `features-render check` asserts each sheet's frame and button order.
 
 ### 6.2 Fill dropdown (Chromium's)
 
@@ -675,6 +675,11 @@ public struct SecretsWriteResult: Sendable { public var added, existing, failed:
     /// its Open profile (profiles.md §8.1 mapping). Returns counts only.
     public func run(key: [UInt8], consent: SecretsImportConsent,
                     sinks: [String: SecretsImportSink]) async throws -> ArcSecretsImportReport
+    /// e2e only (§9.3). Builds its own two-profile fixture from the known mock
+    /// password and reads it through the existing internal
+    /// `SecretsReadAccess.synthetic` path. Takes no path, key, or ciphertext
+    /// (model.md PR #24 rule), so it cannot reach real Arc data.
+    public static func runSyntheticFixture(sinks: [String: SecretsImportSink]) async throws -> ArcSecretsImportReport
 }
 ```
 
@@ -757,7 +762,7 @@ Automation additions (`docs/automation.md`; App automation only, which the app e
 | `policy` | `savePrompt`: `record` / `save` / `never` / `dismiss` / `hold` | Answer save sheets automatically or hold them |
 | `save-prompt` | `answer` | Answer the held sheet through the real sheet buttons |
 | `credentials` | `profile` | `OECredentialCounts` |
-| `import-secrets-fixture` | `profiles` (default `["Default", "Profile 1"]`) | Builds the §9.3 synthetic Arc data, runs `ArcSecretsImporter` with the real App sinks, returns counts; refuses unless the build is Debug or `--open-e2e` is set |
+| `import-secrets-fixture` | `map`: fixture Arc directory → Open profile name (default `{"Default": "Default", "Profile 1": "Work"}`) | Runs `ArcSecretsImporter.runSyntheticFixture` (§8.1) with the real App sinks, returns counts; refuses unless the build is Debug or `--open-e2e` is set |
 | `events` | — | Adds `savePrompt` (`kind`, `displayHost`, `answer`) and `autofillPage` events |
 
 ### 9.2 Suite `--only passwords` (`tools/e2e/engine_e2e.py`, `--style chrome`, `--open-allow-mock-keychain-secrets`)
