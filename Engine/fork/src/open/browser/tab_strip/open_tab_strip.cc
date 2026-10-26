@@ -25,6 +25,9 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/extension_action.h"
+#include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_registry.h"
 #include "open/browser/tab_strip/hidden_browser.h"
 #include "open/browser/tab_strip/open_browser_window.h"
 #include "open/browser/tab_strip/open_hosted_platform_delegate.h"
@@ -48,6 +51,12 @@ OpenTabStrip::OpenTabStrip(CefRefPtr<CefRequestContextImpl> request_context,
       request_context_(request_context),
       handler_(handler) {
   Strips()[id_] = this;
+  if (Profile* profile = CefRequestContextImpl::GetProfile(request_context_)) {
+    if (auto* dispatcher =
+            extensions::ExtensionActionDispatcher::Get(profile)) {
+      action_observation_.Observe(dispatcher);
+    }
+  }
 }
 
 OpenTabStrip::~OpenTabStrip() {
@@ -255,6 +264,91 @@ CefRefPtr<CefBrowser> OpenTabStrip::GetTabAt(int index) {
 int OpenTabStrip::GetActiveIndex() {
   CEF_REQUIRE_UIT_RETURN(-1);
   return browser_ ? browser_->tab_strip_model()->active_index() : -1;
+}
+
+extensions::ExtensionAction* OpenTabStrip::ActionFor(
+    const CefString& extension_id,
+    int* tab_id) {
+  Profile* profile = CefRequestContextImpl::GetProfile(request_context_);
+  if (!profile) {
+    return nullptr;
+  }
+  const extensions::Extension* extension =
+      extensions::ExtensionRegistry::Get(profile)
+          ->enabled_extensions()
+          .GetByID(extension_id.ToString());
+  if (!extension) {
+    return nullptr;
+  }
+  content::WebContents* active =
+      browser_ ? browser_->tab_strip_model()->GetActiveWebContents() : nullptr;
+  *tab_id = active ? sessions::SessionTabHelper::IdForTab(active).id()
+                   : extensions::ExtensionAction::kDefaultTabId;
+  return extensions::ExtensionActionManager::Get(profile)->GetExtensionAction(
+      *extension);
+}
+
+CefString OpenTabStrip::GetExtensionActionBadgeText(
+    const CefString& extension_id) {
+  CEF_REQUIRE_UIT_RETURN(CefString());
+  int tab_id;
+  auto* action = ActionFor(extension_id, &tab_id);
+  return action ? action->GetDisplayBadgeText(tab_id) : std::string();
+}
+
+cef_color_t OpenTabStrip::GetExtensionActionBadgeColor(
+    const CefString& extension_id) {
+  CEF_REQUIRE_UIT_RETURN(0);
+  int tab_id;
+  auto* action = ActionFor(extension_id, &tab_id);
+  return action ? action->GetBadgeBackgroundColor(tab_id) : 0;
+}
+
+CefString OpenTabStrip::GetExtensionActionTitle(
+    const CefString& extension_id) {
+  CEF_REQUIRE_UIT_RETURN(CefString());
+  int tab_id;
+  auto* action = ActionFor(extension_id, &tab_id);
+  return action ? action->GetTitle(tab_id) : std::string();
+}
+
+bool OpenTabStrip::IsExtensionActionEnabled(const CefString& extension_id) {
+  CEF_REQUIRE_UIT_RETURN(false);
+  int tab_id;
+  auto* action = ActionFor(extension_id, &tab_id);
+  return action && action->GetIsVisible(tab_id);
+}
+
+void OpenTabStrip::OnExtensionActionUpdated(
+    extensions::ExtensionAction* extension_action,
+    content::WebContents* web_contents,
+    content::BrowserContext* browser_context) {
+  Profile* profile = CefRequestContextImpl::GetProfile(request_context_);
+  if (!handler_ || closed_ || !extension_action || !profile ||
+      Profile::FromBrowserContext(browser_context)->GetOriginalProfile() !=
+          profile->GetOriginalProfile()) {
+    return;
+  }
+  // A change for one tab only matters if it is one of this strip's tabs.
+  if (web_contents && (!browser_ || browser_->tab_strip_model()
+                                           ->GetIndexOfWebContents(
+                                               web_contents) ==
+                                       TabStripModel::kNoTab)) {
+    return;
+  }
+  CEF_POST_TASK(CEF_UIT, base::BindOnce(&OpenTabStrip::DeliverActionUpdate,
+                                        weak_ptr_factory_.GetWeakPtr(),
+                                        extension_action->extension_id()));
+}
+
+void OpenTabStrip::OnShuttingDown() {
+  action_observation_.Reset();
+}
+
+void OpenTabStrip::DeliverActionUpdate(const std::string& extension_id) {
+  if (handler_ && !closed_) {
+    handler_->OnExtensionActionUpdated(this, extension_id);
+  }
 }
 
 void OpenTabStrip::Close() {

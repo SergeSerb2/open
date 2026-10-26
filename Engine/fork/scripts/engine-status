@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 
 FORK = Path(__file__).resolve().parents[1]
 SERIES = ("chromium", "cef", "rust")
@@ -98,6 +99,57 @@ def overlay_files():
                   if p.is_file() and p.name != ".gitkeep" and p.suffix != ".open")
 
 
+def cef_patch_status(src):
+    """Checks CEF's patch.cfg patches the way CEF's patcher does
+    (cef/tools/git_util.py: git apply -p0 --ignore-whitespace --reverse
+    --check in the patch dir), under Open's Chromium layer: files that Open's
+    active Chromium patches also change are checked in a scratch copy with
+    Open's hunks undone. Read-only. Returns (total, missing, unapplied,
+    skipped)."""
+    cfg = src / "cef/patch/patch.cfg"
+    tree = ast.parse(cfg.read_text())
+    patches = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == "patches" for t in n.targets))
+    open_patches = [FORK / "patches/chromium" / name for kind, series, name, _ in patch_plan()
+                    if kind == "active" and series == "chromium"]
+    open_files = {}
+    for patch in open_patches:
+        for path in re.findall(r"^\+\+\+ b/(\S+)", patch.read_text(), re.M):
+            open_files.setdefault(path, []).append(patch)
+    missing, unapplied, skipped = [], [], 0
+    with tempfile.TemporaryDirectory(prefix="open-cef-status-") as scratch:
+        base = Path(scratch)
+        for path in open_files:
+            dest = base / path
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes((src / path).read_bytes())
+        for patch in reversed(open_patches):
+            files = [f for f, owners in open_files.items() if patch in owners]
+            # Fails (no change) if this Open patch is not applied in the tree.
+            run("git", "apply", "-p1", "-R", *("--include=" + f for f in files), str(patch), cwd=base)
+        for entry in patches:
+            path = cfg.parent / "patches" / (entry["name"] + ".patch")
+            pdir = entry.get("path", "")
+            target = src / pdir
+            if not path.is_file():
+                missing.append(entry["name"])
+                continue
+            if ("condition" in entry and entry["condition"] not in os.environ) or not target.is_dir():
+                skipped += 1  # The patcher skips these too.
+                continue
+            text = path.read_text(errors="replace")
+            rels = [f[len(pdir) + 1:] if pdir else f for f in open_files
+                    if (not pdir or f.startswith(pdir + "/"))]
+            rels = [r for r in rels if re.search(r"^\+\+\+ (b/)?%s(\t|$)" % re.escape(r), text, re.M)]
+            check = ["git", "apply", "-p0", "--ignore-whitespace", "--reverse", "--check", "--allow-empty"]
+            results = [run(*check, *("--exclude=" + r for r in rels), str(path), cwd=target)]
+            if rels:
+                results.append(run(*check, *("--include=" + r for r in rels), str(path), cwd=base / pdir))
+            if any(r.returncode or "error:" in r.stderr for r in results):
+                unapplied.append(entry["name"])
+    return len(patches), missing, unapplied, skipped
+
+
 def gn_args(path):
     result = {}
     for line in path.read_text().splitlines():
@@ -114,7 +166,15 @@ def main():
     parser.add_argument("--strict", action="store_true")
     parser.add_argument("--patch-plan", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--refresh-plan", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--cef-applied", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.cef_applied:
+        # engine-apply: exit 0 when CEF's patcher has nothing left to apply.
+        pins = versions()
+        root = Path((os.environ.get("OPEN_ENGINE_ROOT") or str(Path.home() / pins["ENGINE_ROOT_DEFAULT"]))).resolve()
+        total, missing, unapplied, skipped = cef_patch_status(root / pins["CHROMIUM_SRC_SUBDIR"])
+        print(f"cef patches: {total} total, {len(unapplied)} not applied {unapplied}, {len(missing)} missing, {skipped} skipped")
+        return int(bool(missing or unapplied))
     if args.patch_plan or args.refresh_plan:
         records = patch_plan()
         manifests = {s: manifest(s) for s in SERIES} if args.refresh_plan else {}
@@ -145,33 +205,14 @@ def main():
             differences.append(f"{key}: expected {pins[key]}, actual {actual}")
     add("FAIL" if differences else "PASS", "S-1 Pins", "; ".join(differences) or "Chromium, CEF, depot_tools and tag match VERSIONS")
 
-    # CEF patcher has no dry-run option. Read its declarative config without
-    # executing it, then run the patcher's own read-only "already applied"
-    # test per patch (cef/tools/git_util.py git_apply_patch_file:
-    # git apply -p0 --ignore-whitespace --reverse --check in the patch dir).
+    # CEF patcher has no dry-run option: run its own read-only applied test
+    # per patch, under Open's Chromium layer (cef_patch_status).
     try:
-        cfg = src / "cef/patch/patch.cfg"
-        tree = ast.parse(cfg.read_text())
-        patches = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
-                       and any(isinstance(t, ast.Name) and t.id == "patches" for t in n.targets))
-        missing, unapplied, skipped = [], [], 0
-        for patch in patches:
-            path = cfg.parent / "patches" / (patch["name"] + ".patch")
-            target = src / patch.get("path", "")
-            if not path.is_file():
-                missing.append(patch["name"])
-            elif ("condition" in patch and patch["condition"] not in os.environ) or not target.is_dir():
-                skipped += 1  # The patcher skips these too.
-            else:
-                check = subprocess.run(["git", "apply", "-p0", "--ignore-whitespace", "--reverse", "--check"],
-                                       cwd=target, input=path.read_bytes(), stdout=subprocess.PIPE,
-                                       stderr=subprocess.PIPE, check=False)
-                if b"error:" in check.stderr or check.returncode:
-                    unapplied.append(patch["name"])
+        total, missing, unapplied, skipped = cef_patch_status(src)
         if missing or unapplied:
             add("FAIL", "S-2 CEF patches", f"missing patch files: {missing}; not applied: {unapplied}")
         else:
-            add("PASS", "S-2 CEF patches", f"{len(patches) - skipped} of {len(patches)} patch.cfg patches applied (reverse check); {skipped} skipped by condition or missing directory")
+            add("PASS", "S-2 CEF patches", f"{total - skipped} of {total} patch.cfg patches applied (reverse check, under Open's Chromium patches); {skipped} skipped by condition or missing directory")
     except (OSError, ValueError, SyntaxError, StopIteration) as error:
         add("FAIL", "S-2 CEF patches", str(error))
 

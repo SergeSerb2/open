@@ -111,6 +111,15 @@ class CefTabStripHandler : public virtual CefBaseRefCounted {
   virtual void OnTabPinRequested(CefRefPtr<CefTabStrip> tab_strip,
                                  CefRefPtr<CefBrowser> browser,
                                  bool pinned) {}
+
+  ///
+  /// The toolbar action of |extension_id| changed for this window's tabs
+  /// (chrome.action.setBadgeText, setTitle, enable, and so on). Read its state
+  /// with the CefTabStrip GetExtensionAction* methods.
+  ///
+  /*--cef()--*/
+  virtual void OnExtensionActionUpdated(CefRefPtr<CefTabStrip> tab_strip,
+                                        const CefString& extension_id) {}
 };
 
 ///
@@ -205,6 +214,36 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   ///
   /*--cef()--*/
   virtual int GetActiveIndex() = 0;
+
+  ///
+  /// Returns the badge text of |extension_id|'s toolbar action for the active
+  /// tab, or an empty string.
+  ///
+  /*--cef()--*/
+  virtual CefString GetExtensionActionBadgeText(
+      const CefString& extension_id) = 0;
+
+  ///
+  /// Returns the badge background color of |extension_id|'s toolbar action
+  /// for the active tab, or 0 if the extension set none.
+  ///
+  /*--cef()--*/
+  virtual cef_color_t GetExtensionActionBadgeColor(
+      const CefString& extension_id) = 0;
+
+  ///
+  /// Returns the title (tooltip) of |extension_id|'s toolbar action for the
+  /// active tab, or an empty string.
+  ///
+  /*--cef()--*/
+  virtual CefString GetExtensionActionTitle(const CefString& extension_id) = 0;
+
+  ///
+  /// Returns true if |extension_id|'s toolbar action is enabled for the
+  /// active tab.
+  ///
+  /*--cef()--*/
+  virtual bool IsExtensionActionEnabled(const CefString& extension_id) = 0;
 
   ///
   /// Closes the remaining tabs and the hidden window. The object is invalid

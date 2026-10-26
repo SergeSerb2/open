@@ -495,8 +495,12 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
       _oe_hostBrowser) {
     NSView* host = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
     if (_oe_hostBrowser && host && host.superview != _view) {
-      // A hosted tab's window handle is its WebContents view (P1).
+      // A hosted tab's window handle is its WebContents view (P1). Chromium
+      // hides that view itself when the tab starts in the background, and
+      // only Views unhides it (ViewsHostableSetVisible); here our view's
+      // hidden state and the window's occlusion decide, as for Alloy.
       [_view addSubview:host];
+      host.hidden = NO;
     }
     host.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     [self oe_layoutBrowserView];

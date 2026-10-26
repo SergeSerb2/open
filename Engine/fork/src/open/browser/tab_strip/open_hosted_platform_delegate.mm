@@ -66,13 +66,12 @@ void OpenHostedPlatformDelegate::WasHidden(bool hidden) {
   // reports visible only when its window is not occluded. The embedder calls
   // this when it shows or hides the page's view; occlusion still applies
   // afterwards (WebContentsViewCocoa).
-  if (!web_contents_) {
-    return;
-  }
-  if (hidden) {
-    web_contents_->WasHidden();
-  } else {
-    web_contents_->WasShown();
+  // UpdateWebContentsVisibility, not WasShown/WasHidden: a direct WasShown()
+  // leaves the "first set visible" state unset, and WebContents then ignores
+  // every later HIDDEN from its view (background tabs kept rendering).
+  if (web_contents_) {
+    web_contents_->UpdateWebContentsVisibility(
+        hidden ? content::Visibility::HIDDEN : content::Visibility::VISIBLE);
   }
 }
 

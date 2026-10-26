@@ -791,11 +791,12 @@ def tabstrip_checks(app, results):
     results["events_seen"] = sorted({e["type"] for e in ev})
     app.call("popup-close")
 
-    # Badge text set by the probe's service worker (needs patch P2).
+    # Badge text set by the probe's service worker reaches the toolbar
+    # action snapshot (Chrome's action model through the tab strip).
     actions = app.call("extensions")["actions"]
     probe_action = [x for x in actions if x["id"] == PROBE]
     results["badge_text"] = {"ok": bool(probe_action) and probe_action[0].get("badge") == "P1",
-                             "action": probe_action, "note": "needs patch P2 (action model)"}
+                             "action": probe_action}
 
     # Bitwarden's popup leaves its loading state (its first step asks for
     # the current tab).

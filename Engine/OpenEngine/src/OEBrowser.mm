@@ -68,6 +68,10 @@ class OETabStripHandler : public CefTabStripHandler {
                          bool pinned) override {
     [browser_ oe_pinRequested:browser pinned:pinned];
   }
+  void OnExtensionActionUpdated(CefRefPtr<CefTabStrip> tab_strip,
+                                const CefString& extension_id) override {
+    [browser_ oe_extensionsChanged];
+  }
 
  private:
   __weak OEBrowser* browser_;
@@ -199,6 +203,10 @@ class OETabStripHandler : public CefTabStripHandler {
   }
   _activeWebContent = activeWebContent;
   [self oe_setNeedsTabStripSync];
+  if (_strip) {
+    // Action state (badge, title) is per tab.
+    [self oe_extensionsChanged];
+  }
 }
 
 - (void)oe_webContentClosed:(OEWebContent*)webContent {
@@ -381,8 +389,27 @@ class OETabStripHandler : public CefTabStripHandler {
     NSMutableArray* actions = [NSMutableArray array];
     for (OEExtension* extension in _context.extensions.installedExtensions) {
       if (extension.enabled && extension.oe_hasAction) {
-        [actions addObject:[[OEExtensionAction alloc]
-                               initOEWithExtension:extension]];
+        OEExtensionAction* action =
+            [[OEExtensionAction alloc] initOEWithExtension:extension];
+        if (_strip) {
+          // Live state from Chrome's action model for the active tab (P1).
+          CefString identifier = OECef(extension.identifier);
+          cef_color_t color = _strip->GetExtensionActionBadgeColor(identifier);
+          NSColor* badgeColor =
+              CefColorGetA(color)
+                  ? [NSColor colorWithSRGBRed:CefColorGetR(color) / 255.0
+                                        green:CefColorGetG(color) / 255.0
+                                         blue:CefColorGetB(color) / 255.0
+                                        alpha:CefColorGetA(color) / 255.0]
+                  : nil;
+          [action
+              oe_applyBadgeText:OEString(
+                                    _strip->GetExtensionActionBadgeText(identifier))
+                     badgeColor:badgeColor
+                          title:OEString(_strip->GetExtensionActionTitle(identifier))
+                        enabled:_strip->IsExtensionActionEnabled(identifier)];
+        }
+        [actions addObject:action];
       }
     }
     _actions = actions;

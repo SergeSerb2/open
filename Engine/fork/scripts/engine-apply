@@ -42,7 +42,23 @@ if [[ $dry == 1 ]]; then
     log 'dry-run: CEF patch step skipped'
 elif [[ "$only" == overlay ]]; then
     log 'CEF patch step skipped: overlay-only selection'
+elif cef_status=$("$SCRIPT_DIR/engine-status" --cef-applied 2>&1); then
+    # Open's Chromium patches may change lines that CEF's own patches added,
+    # so CEF's patcher would no longer see those as applied. Check CEF's layer
+    # under Open's (engine-status --cef-applied) and skip the patcher when it
+    # has nothing to do.
+    log "CEF patch step skipped: $cef_status"
 else
+    log "$cef_status"
+    # Peel Open's Chromium layer (applied patches, reverse order) so CEF's
+    # patcher sees its own layer; the series loop below re-applies it.
+    while IFS=$'\t' read -r kind series name line; do
+        [[ "$kind" == active && "$series" == chromium ]] || continue
+        if git -C "$SRC_DIR" apply -p1 --reverse --check "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1; then
+            git -C "$SRC_DIR" apply -p1 --reverse "$FORK_DIR/patches/chromium/$name"
+            log "peeled for CEF's patcher: chromium/$name"
+        fi
+    done < <(printf '%s\n' "$plan" | tail -r)
     if ! cef_output=$(cd "$SRC_DIR/cef" && python3 tools/patcher.py 2>&1); then
         log "$cef_output"
         die "CEF patcher failed; see $LOG_DIR/engine-apply.log"
@@ -74,7 +90,13 @@ while IFS=$'\t' read -r kind series name line; do
         log "dry-run: would apply --3way --whitespace=nowarn $patch"
         continue
     fi
-    if output=$(${git_apply[@]+"${git_apply[@]}"} --3way --whitespace=nowarn "$patch" 2>&1); then
+    # --3way needs the index to match the working file; files that CEF's
+    # patches changed never do ("does not match index"). Those apply directly
+    # when the direct check passes.
+    if output=$(${git_apply[@]+"${git_apply[@]}"} --3way --whitespace=nowarn "$patch" 2>&1) ||
+        { [[ "$output" == *"does not match index"* ]] &&
+          ${git_apply[@]+"${git_apply[@]}"} --check --whitespace=nowarn "$patch" >/dev/null 2>&1 &&
+          output=$(${git_apply[@]+"${git_apply[@]}"} --whitespace=nowarn "$patch" 2>&1); }; then
         log "applied: $name"
         applied=$((applied + 1))
         outcomes+="$series/$name"$'\t''applied'$'\n'

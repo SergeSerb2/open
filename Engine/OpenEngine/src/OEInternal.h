@@ -144,6 +144,12 @@ class OEClient;
 
 @interface OEExtensionAction ()
 - (instancetype)initOEWithExtension:(OEExtension*)extension;
+/// Live action state for the window's active tab (fork patch P1's tab
+/// strip; CefTabStrip::GetExtensionAction*).
+- (void)oe_applyBadgeText:(nullable NSString*)badgeText
+               badgeColor:(nullable NSColor*)badgeColor
+                    title:(nullable NSString*)title
+                  enabled:(BOOL)enabled;
 @end
 
 @interface OEExtension ()
