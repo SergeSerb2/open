@@ -1236,7 +1236,7 @@ until capture session 2; F0137 supplies geometry only.
 Round-2 editor clarifications (lead review, 2026-10-26; all layout values remain guesses until capture session 2):
 - Child-window shadow padding is 30 pt at the sides, 24 pt above, and 36 pt below; body anchoring stays 12 pt from the web content's top-right.
 - Header name and scope draw at Core Text x 40. Header glyph alpha is 0.9; scope uses the secondary token's alpha.
-- Interstitial title/body use the primary/secondary theme colors; the footer label keeps #2E2740 on #CEDBFC in both themes.
+- Dark interstitial title/body use the primary/secondary theme colors; light keeps #2E2740; the footer label keeps #2E2740 on #CEDBFC in both themes.
 - Banners have 14 pt text insets, 7 pt vertical padding, 11 pt Medium primary text, and 28/42 pt heights for one/two lines. Controls below move by the actual height.
 - Advanced sliders start at x 124, width 130; the dark track is white 0.12. Focus rings follow the control's shape, outset 2 pt, and show only for keyboard focus.
 - Slider and wheel keyboard/AX repeats coalesce for 1 s and commit on focus loss. Each control owns its interaction; starting a different control ends the preceding group.

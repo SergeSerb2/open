@@ -50,7 +50,7 @@ final class EditorButton: SiteControlButton {
     override func mouseEntered(with event: NSEvent) { editorHovered = true; super.mouseEntered(with: event); needsDisplay = true }
     override func mouseExited(with event: NSEvent) { editorHovered = false; super.mouseExited(with: event); needsDisplay = true }
     var activationModifiers: NSEvent.ModifierFlags = []
-    override func mouseDown(with event: NSEvent) { pressed = true; super.mouseDown(with: event); needsDisplay = true }
+    override func mouseDown(with event: NSEvent) { guard isEnabled else { return }; pressed = true; super.mouseDown(with: event); needsDisplay = true }
     override func mouseUp(with event: NSEvent) { pressed = false; activationModifiers = event.modifierFlags; super.mouseUp(with: event); needsDisplay = true }
     override func keyDown(with event: NSEvent) { activationModifiers = event.modifierFlags; super.keyDown(with: event) }
     override var needsPanelToBecomeKey: Bool { isEnabled }
@@ -537,11 +537,11 @@ private final class EditorInterstitial: NSView {
         accent.nsColor.setFill(); NSBezierPath(ovalIn: CGRect(x: 99,y: 32,width: 70,height: 70)).fill()
         SiteControlDrawing.glyph("paintbrush.pointed.fill",in: CGRect(x: 99,y: 32,width: 70,height: 70),size: 32,color: .white)
         let wave = NSBezierPath(); wave.move(to: CGPoint(x: 104,y: 112)); wave.curve(to: CGPoint(x: 164,y: 112),controlPoint1: CGPoint(x: 124,y: 96),controlPoint2: CGPoint(x: 144,y: 128)); wave.lineWidth = 3; accent.nsColor.setStroke(); wave.stroke()
-        let fg = Core.foregroundPrimary.resolved(contentAppearance).nsColor
+        let fg = (contentAppearance == .dark ? Core.foregroundPrimary : BoostEditorColors.interstitialForeground).resolved(contentAppearance).nsColor
         SiteControlDrawing.text("Edit the Internet with Boosts",x: 22,baseline: 155,width: 224,font: .systemFont(ofSize: 16,weight: .bold),color: fg,alignment: .center)
         let body = "Change colors, fonts, and text on any site, hide parts of a page, or add your own CSS."
         let style = NSMutableParagraphStyle(); style.alignment = .center
-        (body as NSString).draw(in: CGRect(x: 26,y: 178,width: 216,height: 64),withAttributes: [.font: NSFont.systemFont(ofSize: 12),.foregroundColor: Core.foregroundSecondary.resolved(contentAppearance).nsColor,.paragraphStyle: style])
+        (body as NSString).draw(in: CGRect(x: 26,y: 178,width: 216,height: 64),withAttributes: [.font: NSFont.systemFont(ofSize: 12),.foregroundColor: (contentAppearance == .dark ? Core.foregroundSecondary : BoostEditorColors.interstitialForeground).resolved(contentAppearance).nsColor,.paragraphStyle: style])
         BoostEditorColors.interstitialFooter.nsColor.setFill(); CGRect(x: 0,y: bounds.height-64,width: bounds.width,height: 64).fill()
     }
 }
