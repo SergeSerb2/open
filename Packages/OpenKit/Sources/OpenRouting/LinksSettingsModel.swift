@@ -122,7 +122,7 @@ public final class LinksSettingsModel {
     /// Stable identity for the synthetic default-destination validation draft.
     public static let defaultDestinationIssueID = RuleID(uuidString: "00000000-0000-0000-0000-000000000000")
 
-    public init(snapshot: RoutingSnapshot, spaces: [SpaceOption], isDefaultBrowser: Bool) {
+    public init(snapshot: RoutingSnapshot, spaces: [SpaceOption], isDefaultBrowser: Bool, defaults: UserDefaults = .standard) {
         drafts = snapshot.rules.map(RuleDraft.init)
         switch snapshot.defaultDestination {
         case .space(let id): defaultDestinationKind = .space; defaultSpaceID = id
@@ -130,8 +130,8 @@ public final class LinksSettingsModel {
         case .littleOpen: defaultDestinationKind = .littleOpen; defaultSpaceID = nil
         }
         externalLinksInLittleOpen = snapshot.externalLinksInLittleOpen
-        littleOpenHotkeyEnabled = UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true
-        optionCommandClickLittleOpen = UserDefaults.standard.object(forKey: "open.links.optionCommandClickLittleOpen") as? Bool ?? true
+        littleOpenHotkeyEnabled = defaults.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true
+        optionCommandClickLittleOpen = defaults.object(forKey: "open.links.optionCommandClickLittleOpen") as? Bool ?? true
         littleOpenAutoArchiveAfter = .sixHours
         self.spaces = spaces
         self.isDefaultBrowser = isDefaultBrowser

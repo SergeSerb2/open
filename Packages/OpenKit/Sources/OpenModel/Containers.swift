@@ -33,20 +33,27 @@ public enum SleepMode: String, Codable, CaseIterable, Sendable {
 public struct ProfileSettings: Codable, Hashable, Sendable {
     public var autoArchiveAfter: AutoArchiveInterval
     public var littleOpenAutoArchiveAfter: AutoArchiveInterval
+    public var searchSuggestEnabled: Bool
+    public var downloadDirectory: String
+    public var askWhereToSaveEachFile: Bool
+    public var customSearchEngines: [SearchEngine]
     public var searchEngineID: String
     public var sleepMode: SleepMode
-    public var searchSuggestEnabled: Bool
 
-    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "duckduckgo", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true) {
+    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "google", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true, downloadDirectory: String = "~/Downloads", askWhereToSaveEachFile: Bool = false, customSearchEngines: [SearchEngine] = []) {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
+        self.searchSuggestEnabled = searchSuggestEnabled
+        self.downloadDirectory = downloadDirectory
+        self.askWhereToSaveEachFile = askWhereToSaveEachFile
+        self.customSearchEngines = customSearchEngines
         self.searchEngineID = searchEngineID
         self.sleepMode = sleepMode
-        self.searchSuggestEnabled = searchSuggestEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, searchSuggestEnabled
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode
+        case searchSuggestEnabled, downloadDirectory, askWhereToSaveEachFile, customSearchEngines
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
 
@@ -56,9 +63,12 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         littleOpenAutoArchiveAfter = try container.decodeIfPresent(AutoArchiveInterval.self, forKey: .littleOpenAutoArchiveAfter)
             ?? container.decodeIfPresent(AutoArchiveInterval.self, forKey: .littleArcAutoArchiveAfter)
             ?? .sixHours
-        searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
-        sleepMode = try container.decodeIfPresent(SleepMode.self, forKey: .sleepMode) ?? .balanced
+        searchEngineID = try container.decodeIfPresent(String.self, forKey: .searchEngineID) ?? "google"
         searchSuggestEnabled = try container.decodeIfPresent(Bool.self, forKey: .searchSuggestEnabled) ?? true
+        downloadDirectory = try container.decodeIfPresent(String.self, forKey: .downloadDirectory) ?? "~/Downloads"
+        askWhereToSaveEachFile = try container.decodeIfPresent(Bool.self, forKey: .askWhereToSaveEachFile) ?? false
+        customSearchEngines = try container.decodeIfPresent([SearchEngine].self, forKey: .customSearchEngines) ?? []
+        sleepMode = try container.decodeIfPresent(SleepMode.self, forKey: .sleepMode) ?? .balanced
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -66,8 +76,11 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         try container.encode(autoArchiveAfter, forKey: .autoArchiveAfter)
         try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
         try container.encode(searchEngineID, forKey: .searchEngineID)
-        try container.encode(sleepMode, forKey: .sleepMode)
         try container.encode(searchSuggestEnabled, forKey: .searchSuggestEnabled)
+        try container.encode(downloadDirectory, forKey: .downloadDirectory)
+        try container.encode(askWhereToSaveEachFile, forKey: .askWhereToSaveEachFile)
+        try container.encode(customSearchEngines, forKey: .customSearchEngines)
+        try container.encode(sleepMode, forKey: .sleepMode)
     }
 }
 
