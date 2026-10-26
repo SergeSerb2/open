@@ -3273,7 +3273,7 @@ def commandbar_checks(factory, results, tmp, config):
         press('s', modifiers=['cmd','shift'])
         save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
         results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
-        if save: press('escape', window=save['number'])
+        if save: app.call('dismiss')  # AppKit sheet cancel; remote system key input is not covered
         assert wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
         app.call('dismiss')  # close any remaining owned native panel before the next flow
         capture = os.path.join(tmp, 'saved-command-page.mhtml')
