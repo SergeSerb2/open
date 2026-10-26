@@ -85,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "first-run-flows", "first-run-probe"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -100,12 +100,12 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let started=DispatchTime.now().uptimeNanoseconds
                 let probe=await ArcProbe(arcDirectory:directory).run()
                 let seconds=Double(DispatchTime.now().uptimeNanoseconds-started)/1_000_000_000
-                try require(probe.sidebarFound && probe.spaces == 2 && probe.sidebarItems == 4 && probe.archiveItems == 3 && probe.historyVisits == 3 && probe.secretRows == 4 && probe.savedItems == 4 && probe.settingsCounts["Profiles"] == 1 && probe.settingsCounts["Search settings"] == 1,"probe fixture counts differ")
+                try require(probe.sidebarFound && probe.spaces == 2 && probe.sidebarItems == 4 && probe.archiveItems == 2 && probe.rawArchiveItems == 3 && probe.historyVisits == 3 && probe.secretRows == 4 && probe.savedItems == 4 && probe.settingsCounts["Profiles"] == 1 && probe.settingsCounts["Search settings"] == 1,"probe fixture counts differ")
                 try require(seconds < 1,"small fixture probe exceeded one second")
                 let receipt=String(decoding:try JSONEncoder().encode(probe),as:UTF8.self)
                 try require(!receipt.contains("example.com") && !receipt.contains("Example History"),"probe returned source URLs or titles")
                 let shared=ImportWizardViewModel(root:vm,directory:directory);await shared.refreshCounts()
-                try require(shared.counts == probe.settingsCounts && shared.probe?.historyVisits == 3,"wizard retained a second counter")
+                try require(shared.counts == probe.settingsCounts && shared.probe?.historyVisits == 3 && shared.canContinue && shared.spaceMapping.count == 2,"wizard retained a second counter")
                 let actions=PreviewFirstRunActions(),first=FirstRunViewModel(settings:vm,actions:actions,directory:directory)
                 await first.refreshProbe();try require(first.probe?.settingsCounts == shared.counts,"first run differs from the shared probe")
                 let empty=env.root.appendingPathComponent("Empty Probe");try FileManager.default.createDirectory(at:empty,withIntermediateDirectories:true)
@@ -150,18 +150,22 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let locked=await ArcProbe(arcDirectory:directory).run()
                 try require(locked.historyVisits == 4 && locked.secretRows == 4,"WAL-locked source lost committed rows or read uncommitted rows")
                 try require(try Data(contentsOf:history) == dbBefore && Data(contentsOf:walURL) == walBefore,"probe changed its source")
-                print("PROBE fixture spaces=2 items=4 archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=\(seconds)")
-            case "first-run-flows":
+                print("PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=\(seconds)")
+            case "first-run-actions-and-adapter-gate":
                 let (flow,actions)=try await firstRunPreview(env)
                 let bytes=try Data(contentsOf:vm.snapshot.fileURL)
                 try require(flow.step == .welcome && flow.includeSpacesAndTabs && flow.includeArchive && !flow.includeHistory && !flow.includeSecrets && actions.events.isEmpty,"first-run defaults performed an action")
                 flow.startFresh();try require(actions.events == ["finishFirstRun imported=false"],"fresh path performed import or default-browser work")
-                actions.events=[];flow.showImport();flow.includeSecrets=true;await flow.continueImport()
+                actions.events=[];flow.showImport();flow.includeSpacesAndTabs=false;flow.includeArchive=false;flow.includeSecrets=true
+                try require(!flow.hasSelection,"OFF passwords must not enable an empty import")
+                await flow.continueImport();try require(actions.plans.isEmpty && flow.step == .importChoices,"OFF passwords navigated to consent")
+                flow.includeSpacesAndTabs=true;flow.includeArchive=true;actions.canImportPasswordsAndCookies=true
+                await flow.continueImport()
                 try require(flow.step == .secretsConsent && actions.plans.isEmpty,"consent did not stop import")
                 flow.cancelPasswords();try require(flow.step == .importChoices && actions.plans.isEmpty,"consent cancel ran an action")
-                await flow.continueImport();await flow.allowPasswords()
+                await flow.continueImport();actions.canImportPasswordsAndCookies=false;await flow.allowPasswords()
                 try require(flow.step == .secretsConsent && actions.plans.isEmpty,"unavailable capability granted consent")
-                await flow.skipPasswords()
+                actions.canImportPasswordsAndCookies=true;await flow.skipPasswords()
                 try require(flow.step == .report && actions.plans.count == 1 && !actions.plans[0].secretsConsented && actions.simulatedKeychainRequests == 0,"skip path requested passwords")
                 try require(try Data(contentsOf:vm.snapshot.fileURL) == bytes && vm.defaults.object(forKey:"open.firstRun.completed") == nil,"preview flow wrote completion or snapshot")
                 flow.enterDefaultBrowser();try require(!flow.isDefaultBrowser && !actions.events.contains("setAsDefaultBrowser"),"default step prompted on entry")
@@ -169,9 +173,55 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 actions.defaultError=nil;actions.declineDefault=true;flow.makeDefault();try require(flow.defaultWasAttempted && !flow.isDefaultBrowser && flow.errorText == nil,"declined default was not shown")
                 actions.declineDefault=false;flow.makeDefault();try require(flow.isDefaultBrowser,"default success not refreshed")
                 flow.finish();try require(actions.events.last == "finishFirstRun imported=true","finish lost the imported state")
+                actions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.tabs:3]);flow.showImport();flow.includeSecrets=false;await flow.continueImport();flow.finish()
+                try require(flow.wizard.hasImportedData && flow.wizard.reportCount("Imported tabs") == 3 && actions.events.last == "finishFirstRun imported=true","canonical adapter keys lost the imported finish flag")
+                try require(flow.reportValue("History") == "Not selected","unselected History showed zero")
                 actions.nextOutcome=ImportOutcome(errorText:"Open could not read your Arc data.");flow.showImport();flow.includeSecrets=false;await flow.continueImport()
                 try require(flow.step == .failed,"failed import did not reach retry")
                 flow.skipImport();flow.finish();try require(actions.events.last == "finishFirstRun imported=false","failed import finished as imported")
+            case "first-run-count-parity":
+                let directory=env.root.appendingPathComponent("Parity Source")
+                try SyntheticData.writeProbeFixture(to:directory)
+                let archiveURL=directory.appendingPathComponent("StorableArchiveItems.json")
+                var archive=try JSONSerialization.jsonObject(with:Data(contentsOf:archiveURL)) as! [String:Any]
+                var items=archive["items"] as! [Any]
+                let valid=items[1] as! [String:Any]
+                items += ["duplicate",valid]
+                for (id,change) in [("bad-reason",0),("bad-source",1),("bad-url",2),("example-tab-0",3)] {
+                    var row=valid
+                    var sidebar=row["sidebarItem"] as! [String:Any];sidebar["id"]=id
+                    if change == 0 {row["reason"]="unknown"}
+                    if change == 1 {row["source"]=["unknown":[:]]}
+                    if change == 2 {sidebar["data"]=["tab":["savedURL":"http://[invalid"]]}
+                    row["sidebarItem"]=sidebar;items += [id,row]
+                }
+                archive["items"]=items;try JSONSerialization.data(withJSONObject:archive).write(to:archiveURL)
+                // An unused named Default is distinct from the real default, and its unreadable
+                // databases must not hide successful counts from the default profile.
+                try JSONSerialization.data(withJSONObject:["profiles":["Default",["id":"Default","name":"Example Named Default","directoryBasename":"Example-Named"]]]).write(to:directory.appendingPathComponent("StorableProfiles.json"))
+                let bad=directory.appendingPathComponent("User Data/Example-Named")
+                try FileManager.default.createDirectory(at:bad,withIntermediateDirectories:true)
+                try FileManager.default.copyItem(at:directory.appendingPathComponent("User Data/Default/History"),to:bad.appendingPathComponent("History"))
+                var database:OpaquePointer?
+                try require(sqlite3_open(bad.appendingPathComponent("History").path,&database) == SQLITE_OK,"partial fixture open")
+                let updated=sqlite3_exec(database,"UPDATE meta SET value='80' WHERE key='version';",nil,nil,nil);sqlite3_close(database)
+                try require(updated == SQLITE_OK,"partial fixture schema")
+                try Data("invalid database".utf8).write(to:bad.appendingPathComponent("Cookies"))
+                let probe=await ArcProbe(arcDirectory:directory).run()
+                let parsed=try await Task.detached(priority:.utility) {try ArcImporter(arcDirectory:directory).readSidebar()}.value
+                let imported=try ArcImporter(arcDirectory:directory).importAll(sidebar:parsed)
+                try require(probe.archiveItems == imported.report.archiveImported && probe.archiveItems == imported.archiveRecords.count && probe.archiveItems == 2,"probe Archive differs from actual importer filters")
+                try require(imported.report.archiveDuplicatesInFile == 1 && imported.report.archiveAlreadyLive == 1 && imported.report.archiveSkippedUnknownReason == 1 && imported.report.archiveSkippedUnknownSource == 1 && imported.report.archiveSkippedMalformed == 1,"parity fixture did not exercise Archive filters")
+                try require(probe.settingsCounts["Profiles"] == imported.report.profiles && imported.report.profiles == 2 && probe.settingsCounts["Search settings"] == 2,"unused metadata profile or engine count differs from importer")
+                try require(imported.model.profiles.contains{$0.name == "Example Named Default" && $0.dataDirectoryName == "Example-Named"},"named Default collapsed")
+                try require(probe.historyVisits == 3 && probe.secretRows == 4 && probe.savedItems == 4 && probe.historyPartial && probe.savedItemsPartial && probe.profileCounts.count == 2,"bad profile erased successful counts")
+                let wizard=ImportWizardViewModel(root:vm,directory:directory);await wizard.refreshCounts()
+                try require(wizard.canContinue && wizard.spaceMapping.count == 2 && wizard.countLabel("History") == "Found: 3 (partial)" && wizard.countLabel("Passwords and cookies") == "Found: 4 (partial)","partial counts or mapping not ready before Review")
+                print("PARITY actual-import archive=2 profiles=2 engines=2 history=3(partial) saved=4(partial)")
+            case "probe-cancel-mid-copy":
+                let receipt=try await ArcProbe.verifyCopyCancellation()
+                try require(receipt.cancelled && receipt.copyStarted && receipt.copyWasPartial && receipt.privateModes && receipt.temporaryCopyRemoved && receipt.sourceUnchanged,"cancelled partial copy leaked files, changed its source, or bypassed cancellation")
+                print("COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchanged=true")
             case "general-toggles":
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()
@@ -324,11 +374,15 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 var disk = try env.diskModel(); let itemCount = disk.index.count, spaceCount = disk.spaces.count
                 let repeatWizard = ImportWizardViewModel(root: vm, directory: source); await repeatWizard.refreshCounts(); repeatWizard.review(); await repeatWizard.beginImport()
                 disk = try env.diskModel(); try require(disk.index.count == itemCount && disk.spaces.count == spaceCount && repeatWizard.outcome?.counts["Imported items"] == 0, "re-import added rows")
+                let off = ImportWizardViewModel(root:vm,directory:source);await off.refreshCounts()
+                off.plan.spaces=false;off.plan.tabs=false;off.plan.favorites=false;off.plan.folders=false;off.plan.archive=false;off.plan.searchSettings=false;off.plan.secretsRequested=true
+                try require(!off.canContinue,"OFF Passwords enabled an empty Settings import")
+                env.actions.canImportPasswordsAndCookies=true
                 let consent = ImportWizardViewModel(root: vm, directory: source); await consent.refreshCounts(); consent.plan.secretsRequested = true; consent.review()
                 let calls = env.actions.log.count; await consent.beginImport()
                 try require(consent.step == .consent && !consent.plan.secretsConsented && env.actions.log.count == calls, "consent did not gate import")
                 consent.finish(); try require(env.actions.importPlansWithConsent == 0 && env.actions.log.count == calls, "wizard gate: cancel called import or granted consent")
-                let allowed = ImportWizardViewModel(root: vm, directory: source); await allowed.refreshCounts(); allowed.plan.secretsRequested = true; allowed.review(); await allowed.beginImport(); await allowed.allowAndImportSecrets(); try require(allowed.step == .consent && !allowed.plan.secretsConsented, "count-only capability allowed consent"); await allowed.skipSecrets()
+                let allowed = ImportWizardViewModel(root: vm, directory: source); await allowed.refreshCounts(); allowed.plan.secretsRequested = true; allowed.review(); await allowed.beginImport(); env.actions.canImportPasswordsAndCookies=false; await allowed.allowAndImportSecrets(); try require(allowed.step == .consent && !allowed.plan.secretsConsented, "count-only capability allowed consent"); await allowed.skipSecrets()
                 try require(!allowed.plan.secretsConsented && allowed.outcome?.counts["Password and cookie copies"] == 0 && env.actions.importPlansWithConsent == 0, "wizard gate: count-only continuation must not grant consent")
                 let failed = ImportWizardViewModel(root: vm, directory: source); await failed.refreshCounts(); failed.review()
                 let before = try Data(contentsOf: vm.snapshot.fileURL)

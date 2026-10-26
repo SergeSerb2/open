@@ -32,7 +32,7 @@ import OpenImport
         if path.hasPrefix(root.root.path + "/") { return "Open Data/" + String(path.dropFirst(root.root.path.count + 1)) }
         return (path as NSString).abbreviatingWithTildeInPath
     }
-    public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || plan.secretsRequested) }
+    public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies)) }
     public func choose(directory: URL) async { plan.directory = directory; await refreshCounts() }
     public func refreshCounts() async {
         let request=UUID();countRequest=request
@@ -40,31 +40,25 @@ import OpenImport
         let directory=plan.directory
         let result=await ArcProbe(arcDirectory:directory).run()
         guard !Task.isCancelled,request == countRequest,directory == plan.directory else {if request == countRequest {counting=false};return}
-        probe=result;counts=result.settingsCounts
+        let labels=await Task.detached(priority:.utility) {(try? ArcImporter(arcDirectory:directory).spaceMappingLabels()) ?? []}.value
+        guard !Task.isCancelled,request == countRequest,directory == plan.directory else {if request == countRequest {counting=false};return}
+        probe=result;counts=result.settingsCounts;spaceMapping=labels
         readable=result.sidebarFound && result.spaces != nil
-        spaceMapping=[];counting=false
+        counting=false
         if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
     }
-    private func prepareSpaceMapping() {
-        let directory=plan.directory
-        Task { [weak self] in
-            let labels=await Task.detached(priority:.utility) {(try? ArcImporter(arcDirectory:directory).spaceMappingLabels()) ?? []}.value
-            guard let self,self.plan.directory == directory else {return};self.spaceMapping=labels
-        }
-    }
     public func countLabel(_ category:String)->String {
-        if let count=counts[category] {return "Found: \(count)"}
+        if let count=counts[category] {let partial=category == "History" ? probe?.historyPartial == true:category == "Passwords and cookies" && probe?.savedItemsPartial == true;return "Found: \(count)"+(partial ? " (partial)":"")}
         guard let probe else {return "Counting…"}
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
     public var reportSummary:String {
-        let result=outcome?.counts ?? [:],spaces=result["Spaces"] ?? result["Imported Spaces",default:0]
-        let tabs=result["Imported tabs"] ?? result["Pinned and Today tabs",default:0]+result["Favorites",default:0]
+        let spaces=reportCount("Spaces"),tabs=reportCount("Imported tabs")
         return "Imported \(spaces) \(spaces == 1 ? "Space":"Spaces") and \(tabs) \(tabs == 1 ? "tab":"tabs")."
     }
-    public func reportCount(_ category:String)->Int {outcome?.counts[category] ?? 0}
+    public func reportCount(_ category:String)->Int {outcome?.importedCount(category) ?? 0}
     public var reportSkipped:String {
         let result=outcome?.counts ?? [:]
         var parts:[String]=[]
@@ -73,21 +67,22 @@ import OpenImport
         }
         return parts.isEmpty ? "":"Skipped: " + parts.joined(separator:", ")
     }
+    public var hasImportedData:Bool {outcome?.didImportAnything ?? false}
     public var passwordsWereNotImported:Bool {!plan.secretsConsented}
     public var canImportPasswordsAndCookies: Bool { importActions.canImportPasswordsAndCookies }
-    public func review() { guard canContinue else { return }; prepareSpaceMapping();step = .review }
+    public func review() { guard canContinue else { return }; step = .review }
     public func beginImport() async {
         guard step == .review, canContinue else { return }
         await requestImport()
     }
     /// First run can start while its estimate is still pending; the shared action reports read errors.
     public func beginImport(plan: ImportPlan) async {
-        guard !isImporting, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || plan.secretsRequested else { return }
-        self.plan=plan; consentWasDecided=false; outcome=nil; errorText=""; step = .review
+        guard !isImporting, plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || (plan.secretsRequested && canImportPasswordsAndCookies) else { return }
+        self.plan=plan; if !canImportPasswordsAndCookies {self.plan.skipSecrets()}; consentWasDecided=false; outcome=nil; errorText=""; step = .review
         await requestImport()
     }
     private func requestImport() async {
-        if plan.secretsRequested && !consentWasDecided { step = .consent; return }
+        if plan.secretsRequested && canImportPasswordsAndCookies && !consentWasDecided { step = .consent; return }
         await execute()
     }
     public func allowAndImportSecrets() async { guard importActions.canImportPasswordsAndCookies, step == .consent, !consentWasDecided else { return }; consentWasDecided = true; plan.consentToSecrets(); await execute() }
@@ -114,7 +109,7 @@ public struct ImportWizard: View {
                 switch model.step {
                 case .choose:
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
-                    option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested)
+                    option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
                     Text("Search settings imports your engine choice only.").font(.caption).foregroundStyle(.secondary)
                 case .review:
                     ForEach(model.spaceMapping, id: \.self) { Text($0) }
@@ -127,7 +122,7 @@ public struct ImportWizard: View {
                     Text(copy.body)
                 case .progress: ProgressView(); Text("Importing selected data…")
                 case .report:
-                    if model.outcome?.errorText == nil {
+                    if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
                         ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(name);Spacer();Text("\(model.reportCount(name))").monospacedDigit()}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
@@ -141,15 +136,15 @@ public struct ImportWizard: View {
                 if model.step != .report { Button("Cancel") { model.finish() }.keyboardShortcut(.cancelAction).disabled(model.busy) }
                 Spacer()
                 switch model.step {
-                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
-                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).disabled(!model.canContinue)
+                case .choose: Button("Next") { model.review() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!model.canContinue)
+                case .review: Button("Back") { model.step = .choose }; Button("Import") { Task { await model.beginImport() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!model.canContinue)
                 case .consent:
                     if model.canImportPasswordsAndCookies {
                         Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }
-                        Button(PasswordsImportCopy.allowButton) { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction)
-                    } else { Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction) }
+                        Button(PasswordsImportCopy.allowButton) { Task { await model.allowAndImportSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
+                    } else { Button(PasswordsImportCopy.skipButton) { Task { await model.skipSecrets() } }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
                 case .progress: EmptyView()
-                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction)
+                case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } };Button("Done") { model.finish() }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true))
                 }
             }
         }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)

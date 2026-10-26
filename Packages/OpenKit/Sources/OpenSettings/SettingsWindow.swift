@@ -157,10 +157,15 @@ struct SettingsSwitch:View {
 }
 
 struct SettingsButtonStyle:ButtonStyle {
+    var prominent=false
+    var height:CGFloat=24
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.controlActiveState) private var activeState
+    private var highlighted:Bool {prominent && activeState == .key && enabled}
     func makeBody(configuration:Configuration)->some View {
-        configuration.label.font(.system(size:13,weight:.regular)).padding(.horizontal,12).frame(height:24)
-            .background(Color(nsColor:SettingsTokens.button.nsColor).opacity(configuration.isPressed ? 1.8:1),in:RoundedRectangle(cornerRadius:6))
+        configuration.label.font(.system(size:13,weight:.regular)).padding(.horizontal,12).frame(height:height)
+            .foregroundStyle(highlighted ? Color.white:Color.primary)
+            .background((highlighted ? Color(nsColor:.controlAccentColor):Color(nsColor:SettingsTokens.button.nsColor)).opacity(configuration.isPressed ? 0.8:1),in:RoundedRectangle(cornerRadius:6))
             .opacity(enabled ? 1:0.45)
     }
 }

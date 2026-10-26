@@ -1,4 +1,12 @@
 import Foundation
+import SQLite3
+
+public struct ArcProfileProbeCounts:Sendable,Codable {
+    public var historyFound=false, savedItemsFound=false
+    public var historyVisits:Int?,secretRows:Int?,savedItems:Int?
+    public var historyFailed=false,savedItemsFailed=false
+    public init() {}
+}
 
 /// Count estimates only. No URLs, titles, secret values, or live model objects cross tasks.
 public struct ArcProbeResult: Sendable, Codable {
@@ -7,6 +15,9 @@ public struct ArcProbeResult: Sendable, Codable {
     public var spaces: Int?
     public var sidebarItems: Int?
     public var archiveItems: Int?
+    public var rawArchiveItems:Int?
+    public var profileCounts:[String:ArcProfileProbeCounts]=[:]
+    public var historyPartial=false,savedItemsPartial=false,cancelled=false
     public var historyVisits: Int?
     /// Login and cookie rows. The extra Settings counts include addresses and cards too.
     public var secretRows: Int?
@@ -26,8 +37,10 @@ public struct ArcProbe:Sendable {
         self.arcDirectory=arcDirectory ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc")
     }
     public func run() async -> ArcProbeResult {
-        let work=Task.detached(priority:.utility) {await self.count()}
-        return await withTaskCancellationHandler {await work.value} onCancel:{work.cancel()}
+        let observer=ArcCopyAudit.observer
+        let work=Task.detached(priority:.utility) {await ArcCopyAudit.$observer.withValue(observer) {await self.count()}}
+        var result=await withTaskCancellationHandler {await work.value} onCancel:{work.cancel()}
+        result.cancelled=work.isCancelled;return result
     }
     private func count() async -> ArcProbeResult {
         var result=ArcProbeResult()
@@ -36,6 +49,8 @@ public struct ArcProbe:Sendable {
         result.arcDirectoryExists=fm.fileExists(atPath:arcDirectory.path,isDirectory:&directory) && directory.boolValue
         result.sidebarFound=result.arcDirectoryExists && fm.fileExists(atPath:arcDirectory.appendingPathComponent("StorableSidebar.json").path)
         guard result.sidebarFound,!Task.isCancelled else {return result}
+        var sourceDirectories:[(id:String,directory:String)]=[]
+        var liveArcIDs:Set<String>=[]
         // Read the importer's immutable parse, never a BrowserModel. The walk stays on this worker.
         if let parsed=try? ArcImporter(arcDirectory:arcDirectory).readSidebar(),
            let sidebar=parsed.root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,
@@ -63,11 +78,11 @@ public struct ArcProbe:Sendable {
                 default:counts["Skipped unknown",default:0] += 1
                 }
             }
-            let profiles=Set(spaces.map {entry in
-                let key=ArcImporter.profileReferenceKey(entry.1["profile"])
-                return key == "Default" ? "default":key // estimate only; model import keeps its metadata rules
-            })
-            counts["Profiles"]=max(1,profiles.count);counts["Search settings"]=max(1,profiles.count)
+            var profileReport=ImportReport()
+            let layout=ArcImporter(arcDirectory:arcDirectory).sourceProfiles(spacesRaw:spaces,holder:holder,itemsByID:itemMap,report:&profileReport)
+            counts["Profiles"]=layout.profiles.count;counts["Search settings"]=layout.profiles.count
+            sourceDirectories=layout.profiles.map {($0.id.description,$0.sourceDirectory)}
+            liveArcIDs=Set(items.filter {ArcImporter.buildsSidebarNode($0.1)}.map(\.0))
             if let routes=json("StorableLinkRouting.json") as? [String:Any],let rules=routes["rules"] as? [Any] {counts["Routing rules"]=rules.count}
             else {counts["Routing rules"]=0}
             result.settingsCounts=counts
@@ -75,33 +90,48 @@ public struct ArcProbe:Sendable {
         guard !Task.isCancelled else {return result}
         let archiveURL=arcDirectory.appendingPathComponent("StorableArchiveItems.json")
         result.archiveFound=fm.fileExists(atPath:archiveURL.path)
-        if let object=json("StorableArchiveItems.json") as? [String:Any],let items=object["items"] as? [Any] {result.archiveItems=items.count/2;result.settingsCounts["Archive"]=result.archiveItems}
-        var history=0,secrets=0,saved=0,historyFailed=false,secretsFailed=false
-        for name in profileDirectories() {
+        if let object=json("StorableArchiveItems.json") as? [String:Any],let items=object["items"] as? [Any] {
+            var report=ImportReport()
+            result.rawArchiveItems=items.count/2
+            result.archiveItems=ArcImporter.archiveCandidates(items,liveArcIDs:liveArcIDs,report:&report).count
+            result.settingsCounts["Archive"]=result.archiveItems
+        }
+        // A malformed sidebar still permits counts from named source metadata.
+        if sourceDirectories.isEmpty {
+            var report=ImportReport()
+            let layout=ArcImporter(arcDirectory:arcDirectory).sourceProfiles(spacesRaw:[],holder:[:],itemsByID:[:],report:&report)
+            sourceDirectories=layout.profiles.map {($0.id.description,$0.sourceDirectory)}
+        }
+        var seenDirectories:Set<String>=[]
+        for source in sourceDirectories {
             guard !Task.isCancelled else {return result}
+            let name=source.directory
+            guard !name.isEmpty,name != ".",name != "..",!name.contains("/"),!name.contains("\\"),!name.contains(":"),seenDirectories.insert(name).inserted else {continue}
+            var counts=ArcProfileProbeCounts()
             let profile=arcDirectory.appendingPathComponent("User Data").appendingPathComponent(name)
             let historyURL=profile.appendingPathComponent("History")
             if fm.fileExists(atPath:historyURL.path) {
-                result.historyFound=true
-                do {
-                    // Kept rows, not the unfiltered visits table. This shares the reader's
-                    // schema, scheme, transition and timestamp rules (§10 F2).
-                    let report=try await ArcHistoryReader(historyFileURL:historyURL).readBatches(consume:{_ in})
-                    history += report.keptVisits
-                } catch {historyFailed=true}
+                counts.historyFound=true;result.historyFound=true
+                do {counts.historyVisits=try await ArcHistoryReader(historyFileURL:historyURL).readBatches(consume:{_ in}).keptVisits}
+                catch {counts.historyFailed=true}
             }
-            guard !Task.isCancelled else {return result}
-            if ["Login Data","Cookies","Web Data"].contains(where:{fm.fileExists(atPath:profile.appendingPathComponent($0).path)}) {
-                result.secretsFound=true
+            if !Task.isCancelled && ["Login Data","Cookies","Web Data"].contains(where:{fm.fileExists(atPath:profile.appendingPathComponent($0).path)}) {
+                counts.savedItemsFound=true;result.secretsFound=true
                 do {
                     let report=try ArcSecretsReader(profileDirectory:profile).countOnly()
-                    secrets += report.loginRows+report.cookieRows
-                    saved += report.loginRows+report.cookieRows+report.addressRows+report.cardRows
-                } catch {secretsFailed=true}
+                    counts.secretRows=report.loginRows+report.cookieRows
+                    counts.savedItems=report.loginRows+report.cookieRows+report.addressRows+report.cardRows
+                } catch {counts.savedItemsFailed=true}
             }
+            result.profileCounts[source.id]=counts
         }
-        if result.historyFound && !historyFailed {result.historyVisits=history;result.settingsCounts["History"]=history}
-        if result.secretsFound && !secretsFailed {result.secretRows=secrets;result.savedItems=saved;result.settingsCounts["Passwords and cookies"]=saved}
+        let histories=result.profileCounts.values.compactMap(\.historyVisits)
+        let secrets=result.profileCounts.values.compactMap(\.secretRows)
+        let saved=result.profileCounts.values.compactMap(\.savedItems)
+        if !histories.isEmpty {result.historyVisits=histories.reduce(0,+);result.settingsCounts["History"]=result.historyVisits}
+        if !saved.isEmpty {result.secretRows=secrets.reduce(0,+);result.savedItems=saved.reduce(0,+);result.settingsCounts["Passwords and cookies"]=result.savedItems}
+        result.historyPartial = !histories.isEmpty && result.profileCounts.values.contains{ $0.historyFailed }
+        result.savedItemsPartial = !saved.isEmpty && result.profileCounts.values.contains{ $0.savedItemsFailed }
         return result
     }
     private func json(_ path:String)->Any? {
@@ -114,20 +144,43 @@ public struct ArcProbe:Sendable {
         }
     }
     private func kind(_ item:[String:Any])->String {(item["data"] as? [String:Any])?.keys.first ?? "unknown"}
-    private func profileDirectories()->[String] {
-        // Named metadata only; no scan of unrelated user files or profile directories.
-        var names:Set<String>=["Default"]
-        if let root=json("User Data/Local State") as? [String:Any],let profile=root["profile"] as? [String:Any],let cache=profile["info_cache"] as? [String:Any] {names.formUnion(cache.keys)}
-        for file in ["StorableProfiles.json","StorableProfileContainers.json"] {
-            func visit(_ raw:Any) {
-                if let array=raw as? [Any] {for value in array {if value is [String:Any] {visit(value)}}}
-                else if let object=raw as? [String:Any] {
-                    for key in ["profileDirectoryBasename","directoryBasename","directory"] {if let name=object[key] as? String {names.insert(name)}}
-                    for value in object.values where value is [String:Any] || value is [Any] {visit(value)}
-                }
-            }
-            if let root=json(file) {visit(root)}
+}
+
+public struct ArcProbeCancellationReceipt:Sendable {
+    public let cancelled:Bool,copyStarted:Bool,copyWasPartial:Bool,privateModes:Bool,temporaryCopyRemoved:Bool,sourceUnchanged:Bool
+}
+
+private final class ProbeCopyReceipt:@unchecked Sendable {
+    let lock=NSLock();var directory:URL?;var bytes=0;var modes=false
+    func observe(_ directory:URL,_ bytes:Int) {
+        lock.lock();defer {lock.unlock()}
+        self.directory=directory;self.bytes=bytes
+        let fm=FileManager.default
+        let dir=(try? fm.attributesOfItem(atPath:directory.path)[.posixPermissions] as? NSNumber)?.intValue
+        let file=(try? fm.attributesOfItem(atPath:directory.appendingPathComponent("History").path)[.posixPermissions] as? NSNumber)?.intValue
+        modes=dir == 0o700 && file == 0o600
+        withUnsafeCurrentTask {$0?.cancel()}
+    }
+}
+
+public extension ArcProbe {
+    /// Real copy/cancellation/cleanup through the public probe. The caller cannot supply user data.
+    static func verifyCopyCancellation() async throws -> ArcProbeCancellationReceipt {
+        let work=Task.detached(priority:.utility) {() async throws -> ArcProbeCancellationReceipt in
+            let fm=FileManager.default,root=fm.temporaryDirectory.appendingPathComponent("open-probe-cancel-"+UUID().uuidString)
+            try fm.createDirectory(at:root.appendingPathComponent("User Data/Default"),withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
+            defer {try? fm.removeItem(at:root)}
+            try JSONSerialization.data(withJSONObject:["sidebar":["containers":["fixture",["items":[],"spaces":[]]]]]).write(to:root.appendingPathComponent("StorableSidebar.json"))
+            let history=root.appendingPathComponent("User Data/Default/History")
+            var db:OpaquePointer?
+            guard sqlite3_open(history.path,&db) == SQLITE_OK else {sqlite3_close(db);throw ArcHistoryImportError.openFailed}
+            let status=sqlite3_exec(db,"CREATE TABLE payload(value BLOB); INSERT INTO payload VALUES(zeroblob(8*1024*1024));",nil,nil,nil)
+            sqlite3_close(db);guard status == SQLITE_OK else {throw ArcHistoryImportError.copyFailed}
+            let before=try Data(contentsOf:history),audit=ProbeCopyReceipt()
+            let result=await ArcCopyAudit.$observer.withValue({audit.observe($0,$1)}) {await ArcProbe(arcDirectory:root).run()}
+            let directory=audit.directory
+            return ArcProbeCancellationReceipt(cancelled:result.cancelled,copyStarted:audit.bytes>0,copyWasPartial:audit.bytes<before.count,privateModes:audit.modes,temporaryCopyRemoved:directory.map{!fm.fileExists(atPath:$0.path)} ?? false,sourceUnchanged:try Data(contentsOf:history) == before)
         }
-        return names.filter {!$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("/") && !$0.contains("\\") && !$0.contains(":")}.sorted()
+        return try await work.value
     }
 }

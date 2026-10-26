@@ -163,40 +163,9 @@ public struct ArcImporter {
             return name+" → "+name
         }
     }
-    @MainActor
-    public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
-        let root = try (parsed ?? readSidebar()).root
-        guard let sidebar = root["sidebar"] as? [String: Any],
-              let containers = sidebar["containers"] as? [Any], containers.count >= 2,
-              let holder = containers[1] as? [String: Any],
-              let itemsArr = holder["items"] as? [Any],
-              let spacesArr = holder["spaces"] as? [Any] else {
-            throw ImportError.malformedSidebar
-        }
-
-        var report = ImportReport()
-
-        // Parse alternating arrays.
-        var itemsByID: [String: [String: Any]] = [:]
-        var i = 0
-        while i + 1 < itemsArr.count {
-            if let id = itemsArr[i] as? String, let obj = itemsArr[i + 1] as? [String: Any] {
-                itemsByID[id] = obj
-            }
-            i += 2
-        }
-        report.totalItems = itemsByID.count
-        report.containers = itemsByID.values.filter { (($0["data"] as? [String: Any])?.keys.first) == "itemContainer" }.count
-
-        var spacesRaw: [(id: String, obj: [String: Any])] = []
-        i = 0
-        while i + 1 < spacesArr.count {
-            if let id = spacesArr[i] as? String, let obj = spacesArr[i + 1] as? [String: Any] {
-                spacesRaw.append((id, obj))
-            }
-            i += 2
-        }
-
+    struct ArcSourceProfile {let id:ProfileID;let name:String;let dataDirectoryName:String;let sourceDirectory:String}
+    struct ArcSourceProfiles {let profiles:[ArcSourceProfile];let spaceOwners:[String:ProfileID];let refOwners:[String:ProfileID];let defaultID:ProfileID}
+    func sourceProfiles(spacesRaw:[(id:String,obj:[String:Any])],holder:[String:Any],itemsByID:[String:[String:Any]],directoryNamesToAvoid:Set<String>=[],existingDirectories:[ProfileID:String]=[:],report:inout ImportReport)->ArcSourceProfiles {
         // Multi-Profile Storable field shapes remain inferred. Unknown shapes are ignored.
         struct ProfileMetadata {
             var name: String?
@@ -281,7 +250,7 @@ public struct ArcImporter {
             return metadata[key]
         }
         var profileIDByKey: [String: ProfileID] = [:]
-        var profiles: [Profile] = []
+        var profiles: [ArcSourceProfile] = []
         func profileID(for raw: Any?) -> ProfileID {
             let key = canonicalKey(refKey(raw))
             if let existing = profileIDByKey[key] { return existing }
@@ -302,7 +271,7 @@ public struct ArcImporter {
                     && existingDirectories[pid]?.caseInsensitiveCompare(directory) != .orderedSame) {
                 directory = "\(stem)-\(suffix)"; suffix += 1
             }
-            profiles.append(Profile(id: pid, name: found?.name ?? (key == "default" ? "Default" : "Profile"), dataDirectoryName: directory))
+            profiles.append(ArcSourceProfile(id:pid,name:found?.name ?? (key == "default" ? "Default":"Profile"),dataDirectoryName:directory,sourceDirectory:found?.directory ?? directory))
             if key != "default", found?.name == nil && found?.directory == nil { report.profilesGuessed += 1 }
             return pid
         }
@@ -310,8 +279,120 @@ public struct ArcImporter {
         for (id, object) in spacesRaw { _ = profileID(for: object["profile"] ?? profileRefBySpace[id]) }
         for key in metadataOrder { _ = profileID(for: key) }
         _ = profileID(for: ["default": true])
-        let defaultProfileID = profiles.first(where: { $0.dataDirectoryName == "Default" })?.id ?? profiles[0].id
+        if let topApps=holder["topAppsContainerIDs"] as? [Any] {
+            for index in stride(from:0,to:max(0,topApps.count-1),by:2) {
+                if let id=topApps[index+1] as? String,itemsByID[id] != nil {_ = profileID(for:topApps[index])}
+            }
+        }
+        var resolvedSpaces:[String:ProfileID]=[:]
+        for (id,object) in spacesRaw {resolvedSpaces[id]=profileID(for:object["profile"] ?? profileRefBySpace[id])}
+        var resolvedRefs:[String:ProfileID]=[:]
+        for key in metadataOrder+["default"] {resolvedRefs[key]=profileID(for:key)}
+        if let topApps=holder["topAppsContainerIDs"] as? [Any] {
+            for index in stride(from:0,to:max(0,topApps.count-1),by:2) {
+                if let id=topApps[index+1] as? String,itemsByID[id] != nil {resolvedRefs[refKey(topApps[index])]=profileID(for:topApps[index])}
+            }
+        }
+        return ArcSourceProfiles(profiles:profiles,spaceOwners:resolvedSpaces,refOwners:resolvedRefs,defaultID:profileID(for:["default":true]))
+    }
+    static func buildsSidebarNode(_ item:[String:Any])->Bool {
+        guard let data=item["data"] as? [String:Any],let kind=data.keys.first else {return false}
+        switch kind {case "tab","welcomeToArc":return data[kind] is [String:Any];case "list","splitView":return true;default:return false}
+    }
+    struct ArcArchiveCandidate {let entry:[String:Any];let item:[String:Any];let data:[String:Any];let kind:String;let arcID:String;let spaceID:String;let url:URL;let reason:ArchiveReason}
+    static func archiveCandidates(_ flat:[Any],liveArcIDs:Set<String>,report:inout ImportReport)->[ArcArchiveCandidate] {
+                report.archiveTotal = flat.count / 2
+                if flat.count % 2 != 0 { report.archiveSkippedMalformed += 1 }
+                var seenArcIDs: Set<String> = []
+                var candidates:[ArcArchiveCandidate]=[]
+                var idx = 0
+                while idx + 1 < flat.count {
+                    defer { idx += 2 }
+                    guard let key = flat[idx] as? String, let entry = flat[idx + 1] as? [String: Any] else {
+                        report.archiveSkippedMalformed += 1
+                        continue
+                    }
+                    guard let sidebarItem = entry["sidebarItem"] as? [String: Any] else {
+                        report.archiveSkippedMalformed += 1
+                        continue
+                    }
+                    let arcID = (sidebarItem["id"] as? String) ?? key
+                    if seenArcIDs.contains(arcID) { report.archiveDuplicatesInFile += 1; continue }
+                    seenArcIDs.insert(arcID)
+                    guard let dataDict = sidebarItem["data"] as? [String: Any], let kind = dataDict.keys.first else {
+                        report.archiveSkippedUnknownKind += 1
+                        continue
+                    }
+                    switch kind {
+                    case "tab", "welcomeToArc": break
+                    case "easel": report.archiveSkippedEasels += 1; continue
+                    case "note": report.archiveSkippedNotes += 1; continue
+                    default: report.archiveSkippedUnknownKind += 1; continue
+                    }
+                    let reason: ArchiveReason
+                    switch entry["reason"] as? String {
+                    case "manual": reason = .closed
+                    case "auto": reason = .autoArchived
+                    case "clearButton", "clearTabGroup": reason = .clearedToday
+                    default: report.archiveSkippedUnknownReason += 1; continue
+                    }
+                    guard let source = entry["source"] as? [String: Any],
+                          let spaceSource = source["space"] as? [String: Any],
+                          let arcSpaceID = spaceSource["_0"] as? String else {
+                        report.archiveSkippedUnknownSource += 1
+                        continue
+                    }
+                    if liveArcIDs.contains(arcID) {
+                        report.archiveAlreadyLive += 1
+                        continue
+                    }
+                    guard let td = dataDict[kind] as? [String: Any],
+                          let urlString = kind == "welcomeToArc" ? Self.welcomeURL.absoluteString : td["savedURL"] as? String,
+                          let url = URL(string: urlString) else {
+                        report.archiveSkippedMalformed += 1
+                        continue
+                    }
+                    candidates.append(ArcArchiveCandidate(entry:entry,item:sidebarItem,data:td,kind:kind,arcID:arcID,spaceID:arcSpaceID,url:url,reason:reason))
+                }
+                return candidates
+    }
+    @MainActor
+    public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
+        let root = try (parsed ?? readSidebar()).root
+        guard let sidebar = root["sidebar"] as? [String: Any],
+              let containers = sidebar["containers"] as? [Any], containers.count >= 2,
+              let holder = containers[1] as? [String: Any],
+              let itemsArr = holder["items"] as? [Any],
+              let spacesArr = holder["spaces"] as? [Any] else {
+            throw ImportError.malformedSidebar
+        }
 
+        var report = ImportReport()
+
+        // Parse alternating arrays.
+        var itemsByID: [String: [String: Any]] = [:]
+        var i = 0
+        while i + 1 < itemsArr.count {
+            if let id = itemsArr[i] as? String, let obj = itemsArr[i + 1] as? [String: Any] {
+                itemsByID[id] = obj
+            }
+            i += 2
+        }
+        report.totalItems = itemsByID.count
+        report.containers = itemsByID.values.filter { (($0["data"] as? [String: Any])?.keys.first) == "itemContainer" }.count
+
+        var spacesRaw: [(id: String, obj: [String: Any])] = []
+        i = 0
+        while i + 1 < spacesArr.count {
+            if let id = spacesArr[i] as? String, let obj = spacesArr[i + 1] as? [String: Any] {
+                spacesRaw.append((id, obj))
+            }
+            i += 2
+        }
+
+        let sourceProfiles=sourceProfiles(spacesRaw:spacesRaw,holder:holder,itemsByID:itemsByID,directoryNamesToAvoid:directoryNamesToAvoid,existingDirectories:existingDirectories,report:&report)
+        let profiles=sourceProfiles.profiles.map {Profile(id:$0.id,name:$0.name,dataDirectoryName:$0.dataDirectoryName)}
+        let defaultProfileID=sourceProfiles.defaultID
         // Icon / theme helpers.
         func spaceIcon(from customInfo: [String: Any]?) -> SpaceIcon? {
             guard let info = customInfo, let iconType = info["iconType"] as? [String: Any] else { return nil }
@@ -389,7 +470,7 @@ public struct ArcImporter {
             let payload = dataDict[kind]
             switch kind {
             case "tab":
-                guard let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
+                guard Self.buildsSidebarNode(item),let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
                 let urlString = td["savedURL"] as? String ?? "about:blank"
                 let url = URL(string: urlString) ?? URL(string: "about:blank")!
                 let savedTitle = td["savedTitle"] as? String ?? ""
@@ -455,7 +536,7 @@ public struct ArcImporter {
                 countSkip(arcID) { report.skippedNotes += 1 }
                 return nil
             case "welcomeToArc":
-                guard let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
+                guard Self.buildsSidebarNode(item),let td = payload as? [String: Any] else { countSkip(arcID) { report.skippedUnknown += 1 }; return nil }
                 let tab = Tab(id: Self.itemID(forArcID: arcID), url: Self.welcomeURL,
                               title: item["title"] as? String ?? "Getting Started",
                               createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
@@ -508,7 +589,7 @@ public struct ArcImporter {
         var spaces: [Space] = []
         var reachedArcIDs: Set<String> = []
         for (spaceArcID, obj) in spacesRaw {
-            let pid = profileID(for: obj["profile"] ?? profileRefBySpace[spaceArcID])
+            let pid = sourceProfiles.spaceOwners[spaceArcID] ?? defaultProfileID
             let info = obj["customInfo"] as? [String: Any]
             let title = (obj["title"] as? String).flatMap { $0.isEmpty ? nil : $0 }
             if title == nil { report.untitledSpaces += 1 }
@@ -536,7 +617,7 @@ public struct ArcImporter {
             while offset + 1 < topApps.count {
                 defer { offset += 2 }
                 guard let containerID = topApps[offset + 1] as? String, let container = itemsByID[containerID] else { continue }
-                let owner = profileID(for: topApps[offset])
+                let owner = sourceProfiles.refOwners[Self.profileReferenceKey(topApps[offset])] ?? defaultProfileID
                 reachedArcIDs.insert(containerID)
                 for childID in (container["childrenIds"] as? [String]) ?? [] {
                     reachedArcIDs.insert(childID)
@@ -692,56 +773,8 @@ public struct ArcImporter {
             if let archiveData = try? Data(contentsOf: archiveURL),
                let archiveRoot = try? JSONSerialization.jsonObject(with: archiveData) as? [String: Any],
                let flat = archiveRoot["items"] as? [Any] {
-                report.archiveTotal = flat.count / 2
-                if flat.count % 2 != 0 { report.archiveSkippedMalformed += 1 }
-                var seenArcIDs: Set<String> = []
-                var idx = 0
-                while idx + 1 < flat.count {
-                    defer { idx += 2 }
-                    guard let key = flat[idx] as? String, let entry = flat[idx + 1] as? [String: Any] else {
-                        report.archiveSkippedMalformed += 1
-                        continue
-                    }
-                    guard let sidebarItem = entry["sidebarItem"] as? [String: Any] else {
-                        report.archiveSkippedMalformed += 1
-                        continue
-                    }
-                    let arcID = (sidebarItem["id"] as? String) ?? key
-                    if seenArcIDs.contains(arcID) { report.archiveDuplicatesInFile += 1; continue }
-                    seenArcIDs.insert(arcID)
-                    guard let dataDict = sidebarItem["data"] as? [String: Any], let kind = dataDict.keys.first else {
-                        report.archiveSkippedUnknownKind += 1
-                        continue
-                    }
-                    switch kind {
-                    case "tab", "welcomeToArc": break
-                    case "easel": report.archiveSkippedEasels += 1; continue
-                    case "note": report.archiveSkippedNotes += 1; continue
-                    default: report.archiveSkippedUnknownKind += 1; continue
-                    }
-                    let reason: ArchiveReason
-                    switch entry["reason"] as? String {
-                    case "manual": reason = .closed
-                    case "auto": reason = .autoArchived
-                    case "clearButton", "clearTabGroup": reason = .clearedToday
-                    default: report.archiveSkippedUnknownReason += 1; continue
-                    }
-                    guard let source = entry["source"] as? [String: Any],
-                          let spaceSource = source["space"] as? [String: Any],
-                          let arcSpaceID = spaceSource["_0"] as? String else {
-                        report.archiveSkippedUnknownSource += 1
-                        continue
-                    }
-                    if nodeByArcID[arcID] != nil {
-                        report.archiveAlreadyLive += 1
-                        continue
-                    }
-                    guard let td = dataDict[kind] as? [String: Any],
-                          let urlString = kind == "welcomeToArc" ? Self.welcomeURL.absoluteString : td["savedURL"] as? String,
-                          let url = URL(string: urlString) else {
-                        report.archiveSkippedMalformed += 1
-                        continue
-                    }
+                for candidate in Self.archiveCandidates(flat,liveArcIDs:Set(nodeByArcID.keys),report:&report) {
+                    let entry=candidate.entry,sidebarItem=candidate.item,td=candidate.data,kind=candidate.kind,arcID=candidate.arcID,arcSpaceID=candidate.spaceID,url=candidate.url,reason=candidate.reason
                     let openSpaceID = arcSpaceIDToOpen[arcSpaceID] ?? spaces[0].id
                     let ownerSpace = spaces.first(where: { $0.id == openSpaceID }) ?? spaces[0]
                     let savedTitle = td["savedTitle"] as? String ?? (kind == "welcomeToArc" ? (sidebarItem["title"] as? String ?? "Getting Started") : "")

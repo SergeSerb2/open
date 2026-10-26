@@ -29,6 +29,19 @@ public struct ImportOutcome: Sendable {
 }
 
 /// One import action and capability shared by Settings and first run.
+/// Canonical adapter keys. Legacy display keys remain accepted at the one outcome boundary.
+public enum ImportOutcomeKeys {
+    public static let spaces="Imported Spaces",tabs="Imported items",archive="Imported Archive",history="Imported History"
+    public static let imported=[spaces,tabs,archive,history,"Spaces","Imported tabs","Archive","History","Favorites","Folders","Search settings","Passwords and cookies"]
+}
+public extension ImportOutcome {
+    func importedCount(_ category:String)->Int {
+        let aliases:[String:[String]]=["Spaces":[ImportOutcomeKeys.spaces,"Spaces"],"Imported tabs":["Imported tabs",ImportOutcomeKeys.tabs,"Pinned and Today tabs"],"Pinned and Today tabs":["Pinned and Today tabs",ImportOutcomeKeys.tabs],"Archive":[ImportOutcomeKeys.archive,"Archive"],"History":[ImportOutcomeKeys.history,"History"]]
+        return (aliases[category] ?? [category]).compactMap{counts[$0]}.first ?? 0
+    }
+    var didImportAnything:Bool {ImportOutcomeKeys.imported.contains {counts[$0,default:0] > 0}}
+}
+
 @MainActor public protocol ImportActions: AnyObject {
     var canImportPasswordsAndCookies: Bool { get }
     func runImport(plan: ImportPlan) async -> ImportOutcome

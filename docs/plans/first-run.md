@@ -10,15 +10,15 @@ Where this plan and a library doc disagree on that library's own API, the librar
 
 ## Goal
 
-On the first launch of Open (no Open data root yet), show a short, calm three-step flow in its own window — Welcome, Import, Default browser — then land in the real browser window. The import reuses the Settings import wizard's view models and the existing `OpenImport` readers end to end: no second importer, no second consent path, no second default-browser call. A "Start fresh" path skips the import and lands in the same real window with one default Space. Open replaces Arc's account sign-in with nothing: no sign-in screen, no account step, no "sign in later" text, anywhere in this flow.
+On the first launch of Open (no Open data root yet), show a short, calm three-step flow in its own window — Welcome, Import, Default browser — then land in the real browser window. The import reuses the Settings import wizard's view models and the existing `OpenImport` readers end to end: no second importer, no second consent path, no second default-browser call. A "Start Fresh" path skips the import and lands in the same real window with one default Space. Open replaces Arc's account sign-in with nothing: no sign-in screen, no account step, no "sign in later" text, anywhere in this flow.
 
 ## Success criteria
 
 1. On a temp data root with no `State/browser.json`, the first window the user sees is the first-run window (§3), shown within the cold-launch budget: sidebar-equivalent first content ≤ 250 ms from process start on an idle M5 Pro release build (`docs/architecture.md`). Detection (§2) never blocks that window.
-2. Welcome shows Open's own identity in one sentence and offers exactly two paths: "Import from Arc" and "Start fresh". No other brand text, no sign-in, no account language. A `grep` gate (§12) proves it.
+2. Welcome shows Open's own identity in one sentence and offers exactly two paths: "Import from Arc" and "Start Fresh". No other brand text, no sign-in, no account language. A `grep` gate (§12) proves it.
 3. The Import step shows live counts from the §2 probe and three checkboxes — Spaces & tabs, Archive, History — plus Passwords & cookies as a separate row that starts OFF. Turning that row on opens a separate consent step (§5.4) that names the macOS Keychain prompt before any Keychain call and states the import can be done later from Settings. With consent not granted, the code touches no Keychain item (proven by the existing `SecretsImportConsent` token rule in `docs/model.md`, PR #24 corrections).
 4. Import runs off the main thread where the readers allow it (§8). The progress UI names the current phase. The user lands in the real window as soon as sidebar + archive finish; history keeps importing in the background and the window stays fully usable (§5.5).
-5. The Default browser step offers one button that runs the existing `SettingsActions.setAsDefaultBrowser()` path (`NSWorkspace`, routing plan §8.4). It never runs at launch, never runs without a click, and never blocks finishing. Already-default, declined, and failed outcomes each show their §6 state and still allow "Open Open" (the finish action) / "Not now".
+5. The Default browser step offers one button that runs the existing `SettingsActions.setAsDefaultBrowser()` path (`NSWorkspace`, routing plan §8.4). It never runs at launch, never runs without a click, and never blocks finishing. Already-default, declined, and failed outcomes each show their §6 state and still allow "Start Browsing" (the finish action) / "Not Now".
 6. After finish, the real window shows the imported Spaces (or one default Space after Start fresh), the focused Space is the first imported Space (or the default Space), and exactly one tab is selected per restored window state, matching `ArcImporter`'s session mapping where it applied one.
 7. Re-running the same import later from Settings (Settings → General → "Import from Arc…") adds zero duplicate Spaces, tabs, archive rows, and history visits (§7). The e2e suite proves this by running the import twice and comparing counts.
 8. Every §6 error and empty state is reachable and matches its copy: no Arc data, Arc running with locked files, sidebar parse failure, partial import failure, Keychain denial, default-browser failure, snapshot save failure. A failed import never destroys the pre-import model (§6.4 rollback).
@@ -205,12 +205,12 @@ public protocol FirstRunActions: AnyObject {
 ```text
 Welcome ──"Import from Arc"──▶ Import (checkboxes) ──[secrets ON]──▶ Secrets consent ──▶ Importing (progress) ──▶ Report ──▶ Default browser ──▶ real window
    │                                │──[secrets OFF]──────────────────────────────────────▶ Importing ──▶ Report ──▶ Default browser ──▶ real window
-   └──"Start fresh"────────────────────────────────────────────────────────────────────────────────────────────────────────────▶ real window (default Space)
-Import ──"Not now"──▶ Default browser ──▶ real window (default Space)
+   └──"Start Fresh"────────────────────────────────────────────────────────────────────────────────────────────────────────────▶ real window (default Space)
+Import ──"Not Now"──▶ Default browser ──▶ real window (default Space)
 Any step ──window closed / app quit──▶ nothing saved; next launch repeats first run (D3)
 Secrets consent ──"Skip Secrets"──▶ Importing (without secrets)      ──"Cancel"──▶ back to Import
 Importing ──sidebar import fails──▶ Failed (§6.3) ──"Try Again"──▶ Importing      ──"Start Fresh Instead"──▶ real window
-Default browser ──"Not now"──▶ real window (no system prompt, no state change)
+Default browser ──"Not Now"──▶ real window (no system prompt, no state change)
 ```
 
 Rules that hold on every step: one window, no sheets except the failure alert in §6.3 if the design pass prefers it (default: inline, no sheet); the close button stays enabled and quitting mid-flow is always safe (D3); Escape does nothing (this is not a dismissible panel); no step ever shows a spinner without phase text after 0.5 s.
@@ -218,7 +218,7 @@ Rules that hold on every step: one window, no sheets except the failure alert in
 ### 3.1 Window
 
 - One `NSWindow` owned by `App/FirstRun/FirstRunWindowController.swift`, created once by `AppDelegate` when `isFirstRun` is true. Style: `[.titled, .closable, .miniaturizable, .fullSizeContentView]`, `titlebarAppearsTransparent = true`, `titleVisibility = .hidden`, title `"Open"` (accessibility and automation), `isRestorable = false`, `tabbingMode = .disallowed`, centered on the main screen at first show. Content: one `NSHostingController` hosting `FirstRunView` (SwiftUI is allowed here — low-frequency panel, `docs/architecture.md`).
-- Size: 560 × 460 pt, not resizable. Rationale: it must hold the longest §4 strings without truncation at the system font and stay clearly a welcome surface, not a browser window. The Opus design pass (§3.7) may adjust the size once; code reads it from one constant `FirstRunWindow.size` so the change is one line.
+- Size: 560 × 520 pt, not resizable. Rationale: it must hold the longest §4 strings without truncation at the system font and stay clearly a welcome surface, not a browser window. The Opus design pass (§3.7) may adjust the size once; code reads it from one constant `FirstRunWindow.size` so the change is one line.
 - It is the key window on show. It never becomes a browser window, never appears in `BrowserModel.windows`, and is excluded from the snapshot and from `windows` automation output for standard windows (it reports its own class so §10 can assert it is gone after finish).
 - Show order: §5.1. The window is built and shown before `CefInitialize` returns (app-shell T2 rule), with the Welcome step already rendered and the probe running.
 
@@ -228,9 +228,9 @@ Content, top to bottom: Open app icon (our own artwork, `NSApp.applicationIconIm
 
 - Identity sentence (§4 W-2): one sentence, Open's own identity, no Arc brand, no feature list, no sign-in.
 - Primary button: "Import from Arc". It is enabled even before the probe finishes and even when the probe later reports no data — the §6.1 state lives on the Import step, so the user always gets a clear explanation instead of a dead button on Welcome.
-- Secondary button: "Start fresh". One click, no confirmation: builds the default model (D6), saves, closes this window, opens the real window. If the save fails, stay on Welcome and show the §6.5 save error inline.
+- Secondary button: "Start Fresh". One click, no confirmation: builds the default model (D6), saves, closes this window, opens the real window. If the save fails, stay on Welcome and show the §6.5 save error inline.
 - Counting line: while `probe == nil`, show the §4 counting text in the secondary text style; when the probe lands, replace it with the found-summary (§4 W-3/W-4) or the no-data line (W-5). The line is informational only; it never gates the buttons.
-- If no Arc data exists at all (`sidebarFound == false`), Welcome still shows both buttons ("Import from Arc" leads to the §6.1 explanation with its own "Start fresh" and "Choose Folder…" exits). Do not hide the import path based on a probe guess.
+- If no Arc data exists at all (`sidebarFound == false`), Welcome still shows both buttons ("Import from Arc" leads to the §6.1 explanation with its own "Start Fresh" and "Choose Folder…" exits). Do not hide the import path based on a probe guess.
 
 ### 3.3 Step 2 — Import (checkboxes)
 
@@ -239,8 +239,8 @@ Shown when the user chooses "Import from Arc". Content: heading, the Arc-running
 - Each checkbox row: checkbox, label (§4), and a found-count line from the probe (`"Found: N Spaces"`, `"Found: N archived tabs"`, `"Found: N visits"`; `"Counting…"` while that field is `nil`; `"Not found"` when the backing file is absent). Counts are estimates (§2.2) and are labeled as found counts, never as promises.
 - Rows: Spaces & tabs (spaces, pinned and today tabs, favorites, folders, routing rules — the importer's sidebar unit; it cannot be split further, and the help text says so), Archive, History. History's help text states it can be imported later from Settings, so an unchecked History is never a dead end.
 - Secrets row: separate from the three, visually grouped under its own subheading (§4 I-6). It is a checkbox that starts OFF. Checking it does not enable anything by itself: on "Continue" the flow goes to §3.4 first. Unchecking it after consent returns to the plain path. The row's help text names passwords and cookies and says macOS will ask for permission on the next step.
-- Footer: "Back" (to Welcome), "Not now" (skip import entirely → §3.5 with the default model), "Continue" (primary; disabled until at least one checkbox including secrets is on). "Continue" with secrets OFF goes straight to §3.6 progress; with secrets ON goes to §3.4.
-- No Arc data (`sidebarFound == false`): replace the checkbox area with the §6.1 empty state (explanation + "Choose Folder…" + "Start fresh"). "Choose Folder…" opens an `NSOpenPanel` (folders only) and re-runs the probe against the chosen folder; a good folder restores the checkbox state. This is the same folder override the wizard uses (`open.import.lastArcDir` stores the path only; never log titles).
+- Footer: "Back" (to Welcome), "Not Now" (skip import entirely → §3.5 with the default model), "Continue" (primary; disabled until at least one checkbox including secrets is on). "Continue" with secrets OFF goes straight to §3.6 progress; with secrets ON goes to §3.4.
+- No Arc data (`sidebarFound == false`): replace the checkbox area with the §6.1 empty state (explanation + "Choose Folder…" + "Start Fresh"). "Choose Folder…" opens an `NSOpenPanel` (folders only) and re-runs the probe against the chosen folder; a good folder restores the checkbox state. This is the same folder override the wizard uses (`open.import.lastArcDir` stores the path only; never log titles).
 - If the sidebar file exists but did not parse into counts (`spaces == nil` with `sidebarFound == true`), keep the checkboxes enabled and show the §6.3 parse-hint line. The real error, if any, comes from the import attempt, where it can be reported precisely.
 
 ### 3.4 Step 3 — Secrets consent (only when the secrets row is on)
@@ -253,11 +253,11 @@ A separate step, never a dialog bolted onto the checkbox. Content: heading, what
 
 ### 3.5 Step 5 — Make Open your default browser
 
-Shown after the import report (or directly after "Not now" / Start-fresh-with-import-skipped paths that still want the offer — exactly: shown on every path that reaches the end of the flow except a mid-flow quit). Content: heading, one sentence on what "default" means (links from other apps open in Open; Little Open routing note from routing LA-11 kept to one line), the state line, and the buttons.
+Shown after the import report (or directly after "Not Now" / Start-fresh-with-import-skipped paths that still want the offer — exactly: shown on every path that reaches the end of the flow except a mid-flow quit). Content: heading, one sentence on what "default" means (links from other apps open in Open; Little Open routing note from routing LA-11 kept to one line), the state line, and the buttons.
 
-- On entry, set `isDefaultBrowser = actions.isDefaultBrowser()`. If already default, show the already-default line (§4 B-3) and make the primary button "Open Open" (finish); no system call is made.
-- Primary button "Make Open My Default Browser": calls `actions.setAsDefaultBrowser()` once. Non-nil return → show the error text inline (§6.7) and keep both buttons live. Nil return → re-read `isDefaultBrowser()`; if now default, show B-3 and switch the primary button to "Open Open"; if still not default (user declined the system prompt), show the declined line (§4 B-4) once — do not loop the system prompt.
-- Secondary button "Not now": finish with no call and no state change. Either finish path calls `finishFirstRun(imported:)` (§5.6), which saves and opens the real window. This step is an offer, never a gate: no path through this step can fail the first run.
+- On entry, set `isDefaultBrowser = actions.isDefaultBrowser()`. If already default, show the already-default line (§4 B-3) and make the primary button "Start Browsing" (finish); no system call is made.
+- Primary button "Make Open your default": calls `actions.setAsDefaultBrowser()` once. Non-nil return → show the error text inline (§6.7) and keep both buttons live. Nil return → re-read `isDefaultBrowser()`; if now default, show B-3 and switch the primary button to "Start Browsing"; if still not default (user declined the system prompt), show the declined line (§4 B-4) once — do not loop the system prompt.
+- Secondary button "Not Now": finish with no call and no state change. Either finish path calls `finishFirstRun(imported:)` (§5.6), which saves and opens the real window. This step is an offer, never a gate: no path through this step can fail the first run.
 
 ### 3.6 Importing (progress) and Report
 
@@ -267,31 +267,34 @@ One progress view serves the import and, after it, a report view summarizes the 
 - Landing gate: when sidebar + archive complete, the model swap and snapshot save happen (§5.5) and the real window opens behind this window; the first-run window stays front with the progress view until history (and the secrets check, if consented) finishes or fails. The user can click into the real window at once — sidebar, tabs, search, and navigation all work; only History results grow as batches land.
 - Report: counts per kind from `ImportOutcome` (imported, duplicates, skipped by kind, the archive accounted check), plus one line per failed kind (§6). Buttons: "Continue" (to §3.5). If everything failed, the primary button is "Try Again" (back to §3.3 with choices intact) and "Continue" becomes the secondary (to §3.5 on the default model). Never show titles, URLs, usernames, or secret values in the report — counts and hosts only is the project rule; this view shows counts only, not even hosts.
 
-### 3.7 Layout and design tokens (for the Opus design review)
+### 3.7 Layout and design tokens (review round 1)
 
-Structure only; all values are `OpenDesign` tokens or system defaults (D10). The designer reviews `settings-preview` PNGs of these screens (§11 Step A) plus the real window (§10) before merge.
+All roles and metrics come from the OpenDesign Settings group and Settings controls. These are Open layout choices, not measurements of source-browser onboarding.
 
-- Vertical stack, one column, `Metrics` spacing: icon 64 pt, then wordmark (title style), 8 pt, identity sentence (body, centered, max width 380 pt, wraps to at most 3 lines), 24 pt, button stack (primary then secondary, each 240 pt wide, centered), 16 pt, status line (secondary label style, centered). Content insets: `WindowMetrics` card margins — 32 pt horizontal, 28 pt vertical — inside the 560 × 460 window.
-- Steps 2–5 use the grouped-form structure of the Settings panes (settings plan §1: grouped rounded boxes, label left, control right) so first run and Settings read as one product. Checkbox rows are one grouped box; the secrets row is its own grouped box with the subheading above it. Footer buttons sit in one horizontal stack, right-aligned, primary last: Back / Not now / Continue.
-- Progress view: phase text (headline), bar (full content width), then the landing note (§4 P-5) in secondary style once the real window is open behind. Report view: one grouped box of count rows (label left, count right, `Metrics` row padding), then the footer.
-- Motion: step changes cross-fade at the `docs/design.md` §2.4 hover/selection fade tokens (0.08–0.12 s); respect `accessibilityDisplayShouldReduceMotion` by cutting, not fading (app-shell §3.3 rule). No other animation. No sound.
-- Accessibility: every control has an accessibility label equal to its §4 string; the progress bar exposes `accessibilityValue` as the phase text; the full flow is keyboard-only completable (Tab order: content controls, then footer left-to-right; Return triggers the primary button; the secrets buttons are reachable and labeled distinctly).
+- Window: 560 × 520 pt. Horizontal inset 32 pt; bottom 28 pt. Welcome top inset 28 pt; steps 2–6 top inset 36 pt. Step C must verify title-bar clearance in a real-window capture.
+- Welcome: 80 pt icon frame (about 64 pt ink for the application icon), 16 pt gap, `firstRunWordmark` (28 pt semibold), 8 pt gap, centered identity (380 pt maximum), 24 pt gap, two centered 240 × 28 pt buttons with an 8 pt gap, 16 pt gap, centered status. Save error is centered at a maximum width of 380 pt.
+- Default buttons use the prominent SettingsButtonStyle: control accent fill and white label while key, normal gray while inactive. Other buttons use the normal style. Height 24 pt, radius 6 pt; Welcome alone uses 28 pt height.
+- Import and Report are top-left forms. Pin the heading and footer; scroll only the middle, with automatic indicators. The separate Passwords box has no repeated subheading. Back stays on the left; primary stays on the right. The failed footer is Back / Start Fresh Instead … Try Again.
+- Sparse Passwords, Default browser, Failed and Progress steps center their content above the footer, text maximum width 400 pt. Use a 64 pt app icon for Default browser/Progress or a 40 pt secondary SF Symbol for Passwords/Failed. Visual-to-heading gap 16 pt, heading-to-body and body-to-note gaps 8 pt. Progress bar is 320 pt wide, centered; landing note gap 12 pt.
+- Report rows show failures in red in the count column, as `Could not be read`. History not requested is `Not selected`. There is one summary note: error or skipped kinds, without a duplicate Passwords footnote.
+- Section text uses `SettingsTokens.section`; secondary text uses `SettingsTokens.secondary`. Step changes cross-fade at `Motion.selectionFade`, or cut with Reduce Motion. No sound.
+- Controls use their copy as accessibility labels. Return triggers the default button; the progress bar exposes phase text. Verify real-window keyboard order and key/inactive styling in Step C.
 
 ## 4. Copy — final English strings
 
-Use these strings exactly (D9). Short and plain. "You" is the user. No string contains the Arc brand except I-1's button (the allowed exception). No string mentions accounts, signing in, or sync. Counts use `%d` with the probe/outcome value; when a count is unknown the string is the "Counting…" or "Not found" variant, never a guessed number.
+Use these strings exactly (D9). Short and plain. "You" is the user. The source-browser name is allowed in “Import from Arc” and inside the import flow. Welcome status contains no other brand. No string mentions accounts, signing in, or sync. Counts use `%d` with the probe/outcome value; when a count is unknown the string is the "Counting…" or "Not found" variant, never a guessed number.
 
 ### 4.1 Welcome
 
 | ID | String |
 |---|---|
 | W-1 | `Open` (wordmark and window title) |
-| W-2 | `Open is a fast, private browser that keeps your spaces, tabs, and history on this Mac.` |
-| W-3 | `Found data to import: %d spaces, about %d tabs.` (probe landed, `sidebarFound == true`) |
+| W-2 | `Open is a fast, private browser that keeps your Spaces, tabs, and history on this Mac.` |
+| W-3 | `Found data to import: %d Spaces, about %d tabs.` (probe landed, `sidebarFound == true`) |
 | W-4 | `Checking for data to import…` (probe running) |
 | W-5 | `No data found to import on this Mac.` (probe landed, `sidebarFound == false`) |
 | W-6 | `Import from Arc` (primary button) |
-| W-7 | `Start fresh` (secondary button) |
+| W-7 | `Start Fresh` (secondary button) |
 
 ### 4.2 Import step
 
@@ -299,19 +302,19 @@ Use these strings exactly (D9). Short and plain. "You" is the user. No string co
 |---|---|
 | I-1 | `Import from Arc` (heading) |
 | I-2 | `Choose what to bring into Open. You can import again later from Settings. Nothing here changes your Arc data.` |
-| I-3 | `Spaces & tabs` (checkbox) — help: `Spaces, pinned and today tabs, favorites, and folders. These come together.` — found: `Found: %d spaces` |
+| I-3 | `Spaces & tabs` (checkbox) — help: `Spaces, pinned and today tabs, favorites, and folders. These come together.` — found: `Found: %d Spaces` |
 | I-4 | `Archive` (checkbox) — help: `Tabs you closed or archived.` — found: `Found: %d archived tabs` |
 | I-5 | `History` (checkbox) — help: `Pages you visited. This can take a little longer. You can also do this later from Settings.` — found: `Found: %d visits` |
-| I-6 | `Passwords and cookies` (secrets subheading + checkbox) — help: `Saved passwords, cookies, addresses, and cards. macOS will ask for permission on the next step. You can also do this later from Settings.` — found: `Found: %d saved items` |
+| I-6 | `Passwords and cookies` (separate checkbox, disabled while capability is OFF) — help: `Saved passwords, cookies, addresses, and cards. macOS will ask for approval on the next step. You can also do this later from Settings.` — found: `Found: %d saved items` |
 | I-7 | `Arc is open right now. Open can still import. If anything is missing, quit Arc and import again from Settings.` (only when `arcIsRunning`) |
-| I-8 | `Back` / `Not now` / `Continue` (footer buttons) |
+| I-8 | `Back` / `Not Now` / `Continue` (footer buttons) |
 | I-9 | `Counting…` (a found line while its count is `nil` and the probe is running) |
 | I-10 | `Not found` (a found line when the backing file is absent) |
-| I-11 | `No Arc data found at %@.` (empty state; `%@` is the folder path) — body: `Open looked for the files Arc keeps on this Mac and did not find them. You can pick a different folder, or start fresh.` — buttons: `Choose Folder…`, `Start fresh` |
+| I-11 | `No Arc data found at %@.` (empty state; `%@` is the folder path) — body: `Open looked for the files Arc keeps on this Mac and did not find them. You can pick a different folder, or start fresh.` — buttons: `Choose Folder…`, `Start Fresh` |
 
 ### 4.3 Passwords consent step
 
-These strings come from the shared `PasswordsImportCopy` used by the Settings import wizard. The capability is OFF in this build. First run does not keep a second copy.
+These strings, S-5, and both I-6 help variants come from the shared `PasswordsImportCopy` used by the Settings import wizard. The capability is OFF in this build. Its checkbox is disabled and excluded from selection; the OFF consent screen is rendered only as a copy reference. First run does not keep a second copy.
 
 | ID | String |
 |---|---|
@@ -330,15 +333,15 @@ Unknown-count Passwords body (shared with the wizard): `Open didn't read or copy
 
 | ID | String |
 |---|---|
-| P-1 | `Importing your spaces and tabs…` |
+| P-1 | `Importing your Spaces and tabs…` |
 | P-2 | `Importing your archive…` |
 | P-3 | `Importing your history…` |
 | P-4 | `Checking passwords and cookies…` |
 | P-5 | `Your browser is ready. History is still importing in the background.` (once the real window is open behind) |
 | R-1 | `Import complete` (heading) |
-| R-2 | `%d spaces, %d tabs, %d archived tabs imported.` |
+| R-2 | `%d Spaces, %d tabs, %d archived tabs imported.` |
 | R-3 | `%d items were already in Open and were not copied again.` (duplicates line; shown only when > 0) |
-| R-4 | `Continue` (primary) / `Try Again` (only in the all-failed state, §3.6) |
+| R-4 | `Continue` (report primary); all-failed footer: `Back`, `Start Fresh Instead`, `Try Again` |
 
 ### 4.5 Default browser step
 
@@ -348,18 +351,20 @@ Unknown-count Passwords body (shared with the wizard): `Open didn't read or copy
 | B-2 | `Links from other apps will open in Open. You can change this any time in Settings.` |
 | B-3 | `Open is your default browser.` (already default, or after a successful set) |
 | B-4 | `Open is not your default browser yet. You can set it later in Settings.` (declined or still not default after the call) |
-| B-5 | `Make Open My Default Browser` (primary) / `Not now` / `Open Open` (finish, shown once B-3 applies) |
+| B-5 | `Make Open your default` (primary) / `Not Now` / `Start Browsing` (finish, shown once B-3 applies) |
 
 ### 4.6 Errors and empty states (full text in §6)
 
 | ID | String |
 |---|---|
-| E-1 | `Open could not read your Arc data.` — body: `The import stopped before it changed anything in Open. You can try again, or start fresh.` — buttons: `Try Again`, `Start Fresh Instead` |
-| E-2 | `Your spaces and tabs are in. %d history visits could not be read. You can import history later from Settings.` (partial: history failed after landing) |
+| E-1 | `Open could not read your Arc data.` — body: `The import stopped before it changed anything in Open. You can try again, or start fresh.` — buttons: `Back`, `Start Fresh Instead`, `Try Again` |
+| E-2 | `Your Spaces and tabs are in. %d history visits could not be read. You can import history later from Settings.` (partial: history failed after landing) |
 | E-3 | `Keychain access was not granted. No passwords or cookies were read. You can try again later from Settings.` |
 | E-4 | `Open could not be set as your default browser. You can try again in Settings.` |
-| E-5 | `Open could not save your data. Your imported items are still open in this window. Try again.` |
-| E-6 | `Some items could not be imported and were skipped: %d.` (skipped-by-kind summary; the report lists counts per kind next to it) |
+| E-5 | `Open could not save your data. Your imported items are still open in this window. Try again.` (imported path); `Open could not save your data. Try Start Fresh again.` (fresh path) |
+| E-6 | `Skipped: 2 Easels` (example); combines nonzero kinds in order: `%d Easels`, `%d Notes`, `%d unsupported items` |
+
+Report row labels, in order: `Spaces`, `Pinned and Today tabs`, `Favorites`, `Folders`, `Archive`, `History`, `Search engine`, `Passwords and cookies`. Values: the imported count, `Not selected`, `Not imported`, or red `Could not be read`. Partial found totals append ` (partial)` when at least one source profile could not be counted. Only one report note appears (E-2, E-3, E-5 or E-6).
 
 ## 5. How the flow runs
 
@@ -380,7 +385,7 @@ Quit order is unchanged (app-shell §5.3). If the user quits during first run, `
 
 ### 5.2 Welcome → Import
 
-`FirstRunWindowController` hosts the view; `FirstRunViewModel.step` drives which step view shows. Choosing "Import from Arc" sets `step = .importChoices`. Choosing "Start fresh" calls `actions.finishFirstRun(imported: false)` directly (§5.6). The probe result may land at any point; views observe `probe` and update found lines without rebuilding the step.
+`FirstRunWindowController` hosts the view; `FirstRunViewModel.step` drives which step view shows. Choosing "Import from Arc" sets `step = .importChoices`. Choosing "Start Fresh" calls `actions.finishFirstRun(imported: false)` directly (§5.6). The probe result may land at any point; views observe `probe` and update found lines without rebuilding the step.
 
 ### 5.3 Building the ImportPlan
 
@@ -419,7 +424,7 @@ One App-side method ends every path:
 
 - `imported: true` (import landed): the swap + save of §5.5 already ran; this method closes the first-run window and ensures the real window is key.
 - `imported: false` (Start fresh, Not now, all-failed Continue): ensure the model is the default model (D6 — it already is, unless a partial model swap somehow ran; assert, do not rebuild user state), `saveNow`, set the completed bool, clear the save guard, close the first-run window, build the real window.
-- Default-browser finish (B-5 "Open Open" / "Not now"): same as above with whichever `imported` value the earlier phases produced.
+- Default-browser finish (B-5 "Start Browsing" / "Not Now"): same as above with whichever `imported` value the earlier phases produced.
 
 After the real window shows, flush any queued cold-launch external URLs through the routing intake (app-shell §4.4) and start the T5 lazy systems. The first-run window controller is released; reopening Open never shows it again (D2).
 
@@ -429,7 +434,7 @@ Every state below is reachable from the flow and has an automated check in §10 
 
 | # | State | When | UI (copy from §4.6) | Recovery |
 |---|---|---|---|---|
-| 6.1 | No Arc data | Probe: Arc directory or `StorableSidebar.json` absent; also after "Choose Folder…" picks a folder without the sidebar file | Import step empty state (I-11) with the looked-in path | "Choose Folder…" re-probes a picked folder. "Start fresh" finishes on the default model. Welcome's W-5 line sets expectations before the step. |
+| 6.1 | No Arc data | Probe: Arc directory or `StorableSidebar.json` absent; also after "Choose Folder…" picks a folder without the sidebar file | Import step empty state (I-11) with the looked-in path | "Choose Folder…" re-probes a picked folder. "Start Fresh" finishes on the default model. Welcome's W-5 line sets expectations before the step. |
 | 6.2 | Arc running / locked files | `arcIsRunning`, or a copied SQLite DB fails `quick_check` twice | I-7 hint when running (import proceeds). If History (or a secrets DB) still cannot be read from the copy: that kind reports failed; history case shows E-2 in the report | Proceed with the kinds that read. Quit Arc and re-import the failed kind later from Settings. Never ask the user to quit Arc before trying — the copy path exists for this case. |
 | 6.3 | Sidebar parse failure | `importAll` throws `missingSidebar` / `malformedSidebar`, or the snapshot accounted check fails | Failed step (E-1): "The import stopped before it changed anything in Open." Primary "Try Again", secondary "Start Fresh Instead" | Nothing was swapped or saved, so Try Again re-runs from the same choices (for example after choosing a different folder on the Import step). Start Fresh finishes on the default model. |
 | 6.4 | Partial import failure | Sidebar landed; archive store, history, or secrets phase failed | Report (R-1) with the failed kind named by its E-2/E-3/E-6 line and its count of skipped items; successful kinds keep their counts | Continue to §3.5. Each failed kind is re-runnable alone from Settings (same `ImportPlan` with only that toggle on). Rollback rule: a failed phase never rolls back a landed phase, and a failed import never deletes or rewrites the pre-import snapshot — on the Settings path the old snapshot stays authoritative until a new `saveNow` succeeds (§7). |
@@ -518,8 +523,8 @@ Launch wiring: the suite starts the app with `--user-data-dir=<temp root> --arc-
 | F3 | Import with Spaces & tabs + Archive on, History off, Secrets off → report counts match the fixture; `spaces` shows Alpha/Beta; `tabs` shows the imported tabs with the session selection; easel counted skipped, welcome item present as a tab | §5.4, §5.5, success criteria 6 |
 | F4 | Continue → default-browser step: with the stubbed action (pre-Step-E builds log-and-succeed) assert the step shows B-3 after the call, or B-2 + buttons before it; finish → `first-run` `active: false`; real window present; `quit` + relaunch same root → `first-run` `active: false`, imported Spaces still present | §3.5, §5.6, D2/D3 |
 | F5 | Second run of the same import from the model level: invoke Settings-path `runImport` again (or relaunch with a wiped `open.firstRun.completed` but the same populated root — use whichever seam the implementation exposes; the counts are the assertion): new archive rows 0, new history visits 0, duplicate counts equal the first run's imported counts, no duplicate tab IDs in `tabs` | §7 |
-| F6 | Start-fresh path: new temp root, Welcome → "Start fresh" → real window with exactly 1 Space (the default), 0 imported tabs; relaunch does not repeat the flow | §3.2, D6 |
-| F7 | No-data path: `--arc-dir` points at an empty folder → Import step shows I-11; "Start fresh" finishes; no crash; stderr contains no titles | §6.1 |
+| F6 | Start-fresh path: new temp root, Welcome → "Start Fresh" → real window with exactly 1 Space (the default), 0 imported tabs; relaunch does not repeat the flow | §3.2, D6 |
+| F7 | No-data path: `--arc-dir` points at an empty folder → Import step shows I-11; "Start Fresh" finishes; no crash; stderr contains no titles | §6.1 |
 | F8 | Locked-file path: fixture History held open by a background writer (the phase-2 WAL technique) during import → sidebar lands, history either imports from the copy or reports E-2; the app stays responsive (`ping` answers during import) | §6.2, §8 |
 | F9 | History landing: 5,000-visit fixture, History on → real window accepts `open url=https://example.org` and `wait` succeeds before history progress completes; after completion, a command-bar history query (existing `open` + suggest surface, or `first-run` outcome counts) shows the imported visits counted once | §5.5, D8 |
 | F10 | Secrets path: checking Passwords & cookies routes to the consent step (step name asserted); "Skip Secrets" imports the rest; a fake-keychain counter in the preview harness (Step A) proves zero Keychain calls without consent. On the real app, do not grant real Keychain access in automation; the consent-then-counts path is covered by the existing `verify-secrets-fixture` CLI check staying green | §3.4, D7 |
@@ -566,9 +571,9 @@ These do not block Step A. Each names its default. Implementers: build the state
 | Q1 | Has `OpenSettings` (with `ImportWizardViewModel`, `ImportPlan`, `ImportOutcome`) landed when this work starts? | No on this checkout. §11 Step A is a hard gate: land the wizard view model under the settings plan first. | Step A |
 | Q2 | `ArcImporter.importAll` is `@MainActor`. On a very large profile (thousands of items), could the main-actor parse hitch the progress window? | Accept for v1: the parse runs after the progress view is interactive, real profiles are small, and the model build must be on the main actor anyway. If F12 or manual testing shows a hitch, the fix is a lenient background pre-parse in `OpenImport`, proposed as its own change — never a copied parser in the App. | Step D |
 | Q3 | macOS 26 SDK shape for `setDefaultApplication(at:toOpenURLsWithScheme:)` (routing Q1). | Read the SDK headers at Step F; use what they declare. Until then the action logs and succeeds (settings plan stub rule) and §3.5 still shows its states against the stub. | Step F |
-| Q4 | Window size 560 × 460 and the one-sentence identity (W-2) are Open choices, not measured Arc values (Arc's onboarding is not being cloned; §1). | Ship them; the Opus design review (§3.7) may change the size once via `FirstRunWindow.size` and may re-word W-2 within the §4 rules (one sentence, no brand except the button, no sign-in). Any change updates §4 in the same PR. | Step A review |
+| Q4 | Window size 560 × 520 and the one-sentence identity (W-2) are Open choices, not measured Arc values (Arc's onboarding is not being cloned; §1). | Ship them; the Opus design review (§3.7) may change the size once via `FirstRunWindow.size` and may re-word W-2 within the §4 rules (one sentence, no brand except the button, no sign-in). Any change updates §4 in the same PR. | Step A review |
 | Q5 | When the engine secret store lands, the secrets step's S-4 line ("copies nothing") becomes false. | That milestone updates S-4 and the §5.4 phase-4 body to store through the engine APIs (never Chromium SQLite directly, import-phase2 decision) and adds a stored-count line to the report. This plan's consent flow does not change. | Engine secret-store milestone |
-| Q6 | Should "Not now" (skip import) still show the default-browser step? | Yes (§3.5: every completed path shows it once). It is one extra click, it is the only moment most users will ever be asked, and Settings remains the retry path. | Step F review |
+| Q6 | Should "Not Now" (skip import) still show the default-browser step? | Yes (§3.5: every completed path shows it once). It is one extra click, it is the only moment most users will ever be asked, and Settings remains the retry path. | Step F review |
 | Q7 | Profile mapping when the Arc folder holds multiple Chromium profiles (`User Data/<dir>`) but the sidebar maps to one Open profile set. | Follow `docs/model.md`: one Open profile per distinct `Space.profile` value (observed data: one). History/secrets phases iterate the Arc profile directories that the sidebar mapping names; an Arc profile with no Space is counted in the report's profile lines and its history is offered on the Settings re-import, not silently merged into the default profile. If the landed importer already resolves this differently, the importer wins and this row is deleted. | Step D |
 
 ## Appendix — evidence index (for reviewers; implementers do not need to re-derive)
@@ -590,3 +595,7 @@ These do not block Step A. Each names its default. Implementers: build the state
 ### Execution decisions (2026-10-25 user brief)
 
 Implement Steps A and B now, then stop. The designer reviews all six screen pairs before Step C. This overrides the earlier Step-A design gate before B and the app-shell prerequisite for A/B. Build only with `nice -n 10 swift build -c release -j 6` in Packages/OpenKit. The user's naming rule removes the source-browser name from Welcome status lines; it remains allowed inside the import flow. The shared Settings Passwords copy and capability gate override the older S-strings and button names above. No real data or Keychain access is needed for A/B. Steps C–F, real-window automation and launch timing remain pending.
+
+### Review round 1 decisions (2026-10-26)
+
+The user approved the round-1 copy changes in §4 and the 560 × 520 pt size. The unavailable Passwords checkbox is disabled in both flows. Capability-ON consent still requires an explicit allow action; previews never invoke it. Both flows share the importer’s Archive filters and complete profile metadata merge. Readable per-profile History and saved-item counts survive another profile’s failure, marked partial. These corrections override the older raw-Archive count and secrets-only navigation instructions above. The utility probe remains model-free; Steps C–F remain outside this PR.

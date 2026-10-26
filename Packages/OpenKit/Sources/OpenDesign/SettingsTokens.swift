@@ -4,10 +4,13 @@ import AppKit
 /// ±1.5 pt), and ARC_PreferencesFeature Assets.car color facts. See docs/settings.md.
 public enum SettingsTokens {
     // First-run plan §3.7. Open layout choices, pending the designer's review.
-    public static let firstRunSize = CGSize(width:560,height:460)
+    public static let firstRunSize = CGSize(width:560,height:520)
+    public static let firstRunWordmark = FontToken(28, .semibold)
+    public static let firstRunStepTopInset:CGFloat = 36
+    public static let firstRunSparseTextWidth:CGFloat = 400
     public static let firstRunHorizontalInset: CGFloat = 32
     public static let firstRunVerticalInset: CGFloat = 28
-    public static let firstRunIconSize: CGFloat = 64
+    public static let firstRunIconSize: CGFloat = 80
     public static let firstRunIdentityWidth: CGFloat = 380
     public static let firstRunButtonWidth: CGFloat = 240
     public static let contentInset: CGFloat = 64

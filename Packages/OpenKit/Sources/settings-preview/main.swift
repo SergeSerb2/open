@@ -40,12 +40,12 @@ import CryptoKit
     func openLibrary() { record("openLibrary") }
 }
 
-@discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, to url: URL) async throws -> [String] {
+@discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, active:Bool=true, to url: URL) async throws -> [String] {
     let previousAppearance=NSApp.appearance
     let appearance=NSAppearance(named:dark ? .darkAqua:.aqua)!
     NSApp.appearance=appearance
     defer {NSApp.appearance=previousAppearance}
-    let host = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light).frame(width: size.width, height: size.height).background(Color(nsColor: .windowBackgroundColor)))
+    let host = NSHostingView(rootView: view.environment(\.colorScheme, dark ? .dark : .light).environment(\.controlActiveState,active ? .key:.inactive).frame(width: size.width, height: size.height).background(Color(nsColor: .windowBackgroundColor)))
     host.appearance=appearance
     host.frame = CGRect(origin: .zero, size: size)
     let window = RenderWindow(contentRect: CGRect(x: -20000, y: -20000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
@@ -165,9 +165,9 @@ import CryptoKit
         let wizard = ImportWizardViewModel(root: wizardEnvironment.settings, directory: source)
         await wizard.refreshCounts()
         for scale in scales { try await render(ImportWizard(model: wizard), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-choose@\(scale)x.png")) }
-        wizard.plan.secretsRequested=true;wizard.review()
+        wizard.plan.secretsRequested=false;wizard.review()
         for scale in scales {try await render(ImportWizard(model:wizard),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-review@\(scale)x.png"))}
-        await wizard.beginImport()
+        wizard.step = .consent // Capability-OFF copy reference; the disabled checkbox cannot navigate here.
         try require(wizard.step == .consent && wizardEnvironment.actions.importPlansWithConsent == 0 && wizardEnvironment.actions.log.isEmpty, "wizard rendering must stop at consent")
         for scale in scales { try await render(ImportWizard(model: wizard), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-consent@\(scale)x.png")) }
         await wizard.skipSecrets()
@@ -221,6 +221,7 @@ app.run()
 
 /// Deliberate preview-only action boundary. It never calls Keychain or a browser service.
 @MainActor final class PreviewFirstRunActions:FirstRunActions {
+    var canImportPasswordsAndCookies=false
     var plans:[ImportPlan]=[]
     var events:[String]=[]
     var simulatedKeychainRequests=0
@@ -237,9 +238,9 @@ app.run()
         if plan.secretsConsented {simulatedKeychainRequests += 1}
         if holdImport {await withCheckedContinuation {pending=$0}}
         var result=nextOutcome
-        if !plan.spaces {for key in ["Spaces","Pinned and Today tabs","Imported tabs","Favorites","Folders","Search settings"] {result.counts[key]=0}}
-        if !plan.archive {result.counts["Archive"]=0}
-        if !plan.history {result.counts["History"]=0}
+        if !plan.spaces {for key in [ImportOutcomeKeys.spaces,ImportOutcomeKeys.tabs,"Spaces","Pinned and Today tabs","Imported tabs","Favorites","Folders","Search settings"] {result.counts[key]=0}}
+        if !plan.archive {result.counts["Archive"]=0;result.counts[ImportOutcomeKeys.archive]=0}
+        if !plan.history {result.counts["History"]=0;result.counts[ImportOutcomeKeys.history]=0}
         result.counts["Passwords and cookies"]=0
         return result
     }
@@ -259,29 +260,69 @@ app.run()
     let imported=try ArcImporter(arcDirectory:directory).importAll(sidebar:parsed)
     let r=imported.report
     // Canned preview action, derived from this small synthetic fixture's actual import report.
-    actions.nextOutcome=ImportOutcome(counts:["Spaces":r.spaces,"Pinned and Today tabs":r.pinnedTabs+r.todayTabs,"Favorites":r.favorites,"Folders":r.folders,"Archive":imported.archiveRecords.count,"History":model.probe?.historyVisits ?? 0,"Search settings":r.profiles,"Passwords and cookies":0,"Imported tabs":r.importedTabNodes,"Skipped easels":r.skippedEasels+r.archiveSkippedEasels,"Skipped notes":r.skippedNotes+r.archiveSkippedNotes])
+    actions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.spaces:r.spaces,"Pinned and Today tabs":r.pinnedTabs+r.todayTabs,"Favorites":r.favorites,"Folders":r.folders,"Archive":imported.archiveRecords.count,"History":model.probe?.historyVisits ?? 0,"Search settings":r.profiles,"Passwords and cookies":0,ImportOutcomeKeys.tabs:r.importedTabNodes,"Skipped easels":r.skippedEasels+r.archiveSkippedEasels,"Skipped notes":r.skippedNotes+r.archiveSkippedNotes])
     return (model,actions)
 }
 
 @MainActor func renderFirstRunScreens(output:URL,scales:[Int]) async throws {
     let env=try PreviewEnvironment();defer {env.close()}
-    let (model,actions)=try await firstRunPreview(env)
-    func capture(_ name:String) async throws {
-        for scale in scales {try await render(FirstRunView(model:model),size:FirstRunWindow.size,scale:scale,dark:true,to:output.appendingPathComponent("first-run-\(name)@\(scale)x.png"))}
+    let (base,baseActions)=try await firstRunPreview(env)
+    let good=base.probe
+    func capture(_ model:FirstRunViewModel,_ name:String,active:Bool=true) async throws {
+        for dark in [true,false] {for scale in scales {
+            let suffix=dark ? "":"-light"
+            try await render(FirstRunView(model:model,startsProbe:false),size:FirstRunWindow.size,scale:scale,dark:dark,active:active,to:output.appendingPathComponent("first-run-\(name)\(suffix)@\(scale)x.png"))
+        }}
     }
-    try await capture("welcome")
-    model.showImport();try await capture("import")
-    model.includeSecrets=true;await model.continueImport()
-    try require(model.step == .secretsConsent && actions.plans.isEmpty,"first-run consent did not gate the import")
-    try await capture("secrets")
-    actions.holdImport=true
-    let importing=Task {await model.skipPasswords()}
-    while actions.pending == nil {await Task.yield()}
-    try await capture("progress")
-    actions.releaseImport();await importing.value
-    try require(model.step == .report,"first-run report missing")
-    try await capture("report")
-    model.enterDefaultBrowser();try await capture("default-browser")
-    try require(actions.plans.count == 1 && actions.plans.allSatisfy{!$0.secretsConsented} && actions.simulatedKeychainRequests == 0,"preview crossed the consent gate")
+    func fresh(_ actions:PreviewFirstRunActions=PreviewFirstRunActions())->FirstRunViewModel {
+        let model=FirstRunViewModel(settings:env.settings,actions:actions,directory:base.wizard.plan.directory)
+        model.probe=good;return model
+    }
+    try await capture(base,"welcome")
+    try await capture(base,"welcome-inactive",active:false)
+    base.showImport();try await capture(base,"import")
+    // OFF reference is intentionally unreachable. Verify the disabled row separately in check.
+    base.includeSecrets=true;base.step = .secretsConsent
+    try await capture(base,"secrets")
+    baseActions.canImportPasswordsAndCookies=true;base.showImport();await base.continueImport()
+    try require(base.step == .secretsConsent && baseActions.plans.isEmpty,"first-run adapter gate did not stop import")
+    try await capture(base,"secrets-on")
+    base.step = .importChoices;try await capture(base,"import-capability-on");base.step = .secretsConsent
+    baseActions.holdImport=true
+    let importing=Task {await base.skipPasswords()}
+    while baseActions.pending == nil {await Task.yield()}
+    try await capture(base,"progress")
+    base.phaseText="Importing your history…";base.progress=0.42;base.browserHasLanded=true
+    try await capture(base,"progress-history-landed")
+    baseActions.releaseImport();await importing.value
+    try require(base.step == .report,"first-run report missing")
+    try await capture(base,"report")
+    base.enterDefaultBrowser();try await capture(base,"default-browser")
+
+    let m=fresh();m.probe=nil;try await capture(m,"welcome-counting")
+    var none=ArcProbeResult();none.sidebarFound=false;m.probe=none;try await capture(m,"welcome-nodata")
+    m.probe=good;m.reportSaveFailure(imported:false);try await capture(m,"welcome-saveerror")
+    m.showImport();m.arcIsRunning=true;try await capture(m,"import-arcrunning")
+    m.arcIsRunning=false;m.probe=nil;try await capture(m,"import-counting")
+    m.probe=none;try await capture(m,"import-nodata")
+    var parse=good!;parse.spaces=nil;parse.sidebarItems=nil;m.probe=parse
+    try await capture(m,"import-parsehint")
+    m.arcIsRunning=true;try await capture(m,"import-parsehint-running")
+    var partial=good!;partial.historyPartial=true;partial.savedItemsPartial=true;m.probe=partial;m.arcIsRunning=false
+    try await capture(m,"import-partial")
+
+    let worstActions=PreviewFirstRunActions();worstActions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.spaces:120,ImportOutcomeKeys.tabs:12000,"Pinned and Today tabs":11000,"Favorites":1000,"Folders":240,"Search settings":30,"Skipped easels":2,"Skipped notes":1,"Skipped unknown":4,"Duplicates":500],errorText:"Your Spaces and tabs are in. 120 history visits could not be read. You can import history later from Settings.",failures:["History":"Could not read the history database.","Archive":"3 items could not be stored."])
+    let worst=fresh(worstActions);worst.showImport();worst.includeHistory=true;await worst.continueImport()
+    try await capture(worst,"report-worst")
+    worst.reportSaveFailure(imported:true);try await capture(worst,"report-saveerror")
+    let failedActions=PreviewFirstRunActions();failedActions.nextOutcome=ImportOutcome(errorText:"Open could not read your Arc data.")
+    let failed=fresh(failedActions);failed.showImport();await failed.continueImport();try await capture(failed,"failed")
+    let declinedActions=PreviewFirstRunActions();declinedActions.declineDefault=true
+    let declined=fresh(declinedActions);declined.enterDefaultBrowser();declined.makeDefault();try await capture(declined,"default-declined")
+    let errorActions=PreviewFirstRunActions();errorActions.defaultError="synthetic failure"
+    let error=fresh(errorActions);error.enterDefaultBrowser();error.makeDefault();try await capture(error,"default-error")
+    let alreadyActions=PreviewFirstRunActions();alreadyActions.defaultBrowser=true
+    let already=fresh(alreadyActions);already.enterDefaultBrowser();try await capture(already,"default-already")
+    try require(baseActions.plans.count == 1 && baseActions.plans.allSatisfy{!$0.secretsConsented} && baseActions.simulatedKeychainRequests == 0,"preview crossed the adapter consent gate")
     print("GATE first-run consent-bearing-plans=0 simulated-keychain-requests=0 (preview adapter only)")
 }

@@ -22,7 +22,7 @@ public struct GeneralPane: View {
         if !model.isDefault {
             HStack(spacing: 8) {
                 Text("Open isn't your default browser.")
-                Button("Make Open your default") { model.setDefault() }
+                Button("Make Open your default") { model.setDefault() }.buttonStyle(SettingsButtonStyle(prominent:true))
             }.font(.system(size: 13)).padding(8).background(.quaternary,in:RoundedRectangle(cornerRadius:6)).frame(maxWidth:.infinity).padding(.bottom, 9)
         }
         SettingsError(text:model.errorText)
