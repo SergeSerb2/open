@@ -331,3 +331,135 @@ for a non-default profile. The sidebar suite proves switching to the correct
 live page and wrapper context, not durable non-default engine storage. That
 engine-owned follow-up is recorded in docs/followups.md. No Engine/ changes are
 added in B beyond inheriting A's approved null guard.
+
+
+## Step C — registry menus, keys, command bar, real Settings and Library
+
+The command bar uses the merged `OpenCommandBar` delegate API. Its one lazy
+controller per window shares the app's profile-scoped Suggest/History backend.
+Typed opens, current-page edits, cross-Space switches, calculator copy, and
+registry actions reach the model and real engine. Command-Return creates a
+background host without selecting it. Both key layers reuse the controller's
+one router; native menu validation and command-bar actions share enabled state.
+Key overrides are validated before menus and the Carbon registration change.
+Invalid files fall back to defaults with a plain diagnostic.
+
+Duplicate creates a tab immediately after its source, a whole split, or a folder
+subtree, with new IDs and no web hosts. One model undo removes the entire copy.
+The container remains the guarded writer of live tab state.
+
+`OpenSettings` from main (`dc62e65`) replaces the placeholder. Cmd+, uses the
+shared Settings presenter. Cmd+Shift+L, Downloads, Archive, and History use the
+shared Library presenter and select its section. Both receive the app's one
+`SnapshotStore`. Archive/History stores are shared, including when profiles are
+added. Library owns restore/delete transactions; the App callbacks do not
+repeat those writes. Downloads come from the real engine contexts and Captures
+use the shared file index. History opens into `library.historyProfileID`.
+Custom search engines resolve through `SearchEngines.resolve`. The pure remote
+query notice gate never opens a Settings window or changes its selected profile.
+
+### Engine and end-to-end evidence
+
+Engine: **fork**, Chromium 156.0.8078.48 / CEF 156.0.14. The fork distribution
+was fetched with `tools/fetch-engine.sh --run`; no engine build or source sync
+was run. Embedded and vendor Mach-O UUIDs match:
+`4C4C44FE-5555-3144-A175-7398C5A1D4B4`. Every phase-named JSON below records the
+source stamp and both UUIDs. The earlier A/B CDN receipts remain separate.
+
+| Suite | Debug / fork | Release / fork | Evidence |
+|---|---|---|---|
+| `commandbar` | 35/35 PASS | 35/35 PASS | [Debug](engine-spike/results-commandbar-step-c-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-fork-release.json) |
+| `window` | 38/38 PASS; 2 named timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-c-fork-debug.json), [Release](engine-spike/results-window-step-c-fork-release.json) |
+| `sidebar` | 18/18 PASS; durable engine profile storage BLOCKED | 18/18 PASS; durable engine profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-fork-release.json) |
+| `peek` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-c-fork-debug.json), [Release](engine-spike/results-peek-step-c-fork-release.json) |
+| `shell` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-c-fork-debug.json), [Release](engine-spike/results-shell-step-c-fork-release.json) |
+
+The command-bar suite uses a real loopback HTTP page that prevents default keys,
+the actual field editor and native menu targets. It checks Cmd+T/L/W/S through
+the app/window paths, profile isolation, Pin/Unpin actions, lazy duplicate trees,
+Archive restore, custom-engine navigation, and Settings persistence. Global
+Carbon registration and disable/re-register are checked; no OS-wide key is sent.
+All app windows close after each run. No unit tests or mocked engines were added.
+
+### Timing (milliseconds, fork)
+
+| Mark | Debug | Release | Budget |
+|---|---:|---:|---|
+| First command-bar open, including construction | 33.97 | 31.55 | ≤50; PASS |
+| Repeat command-bar open | 22.58 | 18.50 | ≤50; PASS |
+| Cold profile; median of 5: confirmed sidebar drawn | — | 245 | ≤250; PASS |
+| Cold profile; median of 5: first contentful paint | — | 482 | ≤700; PASS |
+| Warm profile; median of 5: confirmed sidebar drawn | — | 245 | ≤250; PASS |
+| Warm profile; median of 5: first contentful paint | — | 491 | ≤700; PASS |
+
+Host load average was [6.72705078125, 10.06103515625, 13.02001953125] on 18 CPUs. These are
+observed timings under shared-machine load, not controlled idle measurements.
+Kernel process-start marks are confirmed in all ten Release launches. Debug
+launch-budget rows are explicit SKIPs. The forced no-display-link path still
+starts the engine and loads the page after the real three-second timeout.
+
+### Live static comparison
+
+| Capture / scope | Elements | Worst position | Worst ΔE00 | Result |
+|---|---:|---:|---:|---|
+| F0001 real sidebar/window, Debug + Release / fork | 31 | 1 pt | 1.61 | PASS |
+| Empty panel, same live capture | 11 fill samples | native frame assertions pass | max 1.05 | PASS |
+| Command bar / Settings / Library | real app images below | reviewed visually | no new live Arc metric claimed | library render checks below |
+
+Method: docs/design.md §7, existing color-space conversion, element masks, and
+same frozen private capture. Raw personal inputs stay in `.re/`; no reference
+assets or private URLs/titles enter the repo. The command-bar library's existing
+comparison limits (Cmd+L selection and split-row presentation) remain documented
+in docs/commandbar.md; this PR does not relabel them as a new pixel match.
+
+Own-window screenshots: [command bar](engine-spike/commandbar-live-release.png),
+[Settings](engine-spike/settings-live-release.png),
+[Library](engine-spike/library-live-release.png),
+[standard window](engine-spike/step-c-window-startup.png).
+
+### Limits
+
+- Little Open remains the required Step C stub until Step E. Incognito and
+  Peek Email remain disabled. Unsupported later-step actions stay disabled.
+- Save Page uses OpenEngine's `Page.captureSnapshot` MHTML plus a native Save
+  panel: today's public API cannot initiate an OEDownload for saving a page.
+- Settings protocols are wired to the real UI. Durable import, ad-block engine
+  filtering, sleep lifecycle binding, and application icon switching remain
+  later integration work. Their adapters report that state; they do not claim
+  those operations completed. Update checks report the missing update feed.
+- Data clearing supports all-time cookies/cache together. Other ranges, History,
+  and Downloads clearing return a plain error before mutation. Profile deletion
+  refuses an open engine context. Translation prompt reset has no engine API.
+- Continuous page-theme events are still missing; the host color callback uses
+  the guarded post-load renderer query. Durable non-default engine storage stays
+  BLOCKED on the `root_cache_path` follow-up in docs/followups.md.
+- Drag reorder exercises the production SidebarDelegate intent; it does not
+  automate a native cross-window mouse drag. No desktop input was sent.
+
+### Step C repository verification
+
+Merged `origin/main` through `dc62e65`. Both app builds are clean under Swift 6.
+The fork Release socket build uses `OPEN_AUTOMATION=1`; normal Release keeps it off.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 10 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 1 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 2 |
+| favicons | PASS | 2 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 42 |
+| sidebar-render | PASS | 19 |
+| commandbar-render | PASS | 14 |
+| boosts | PASS | 2 |
+
+`features-render check`: 147/147 PASS after preserving sibling selection only
+when a larger split remains. The first pass exposed this case (146/147); the
+failed log is retained under `.re/c-final-features-render-before-split-guard.log`.
+`sidebar-render check`: 125/125 PASS. No reference app was launched.
