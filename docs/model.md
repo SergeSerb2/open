@@ -54,6 +54,43 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 
 ### Commands
 
+Space editor inputs live in `SpaceTheme.style: SpaceStyle?`. A style stores
+only its key color, count, wheel, appearance, noise, texture, intensity, and
+`mathVersion` (currently 1). Derived palettes are not persisted. Count is
+clamped to 1–3, noise and intensity to 0–1, and key alpha to 1 on decode and
+on writes. Unknown wheel, appearance, and texture strings decode to
+analogous, automatic, and grain. The math version is preserved. Missing
+style and icon override keys decode as nil; schemaVersion remains 1.
+
+`Tab.iconOverride` and `Folder.iconOverride` are typed `SpaceIcon?` values.
+Rows resolve that value before legacy `customIcon`, then use the favicon or
+folder glyph. `setNodeIcon` writes the override and clears `customIcon` in
+one undo step; undo restores both. New Arc imports write typed overrides.
+Existing legacy strings keep their meaning (SF Symbol if available, else
+emoji). Import keeps the raw Arc theme and never writes editor inputs.
+
+`previewSpaceTheme` changes only the live theme, without undo or TreeChange.
+`commitSpaceTheme(id:from:)` commits the entire preview gesture as one undo
+step, or returns false for an equal value or missing Space. The caller owns
+the save after commit. `setSpaceIcon` and `renameSpace` are single property
+undo steps; whitespace-only Space titles become nil. Same-value commands
+register no undo.
+
+`createSpace(...at:moving:) -> Space?` validates the entire moving list
+(existing nodes, no split panes or duplicate IDs, and valid placement) and
+an explicit index in `0...spaces.count` before any write. A refusal returns
+nil with no mutation, event, undo, or save. Success inserts the Space and
+moves the nodes into Pinned, in order, as one undo step. Folder children,
+object identities, source positions, and pinned URLs restore on undo. The
+original nonoptional overload forwards with an append index and no moves,
+which cannot fail. Step 7's move-to-new-Space and folder conversion callers
+must likewise return false or nil on refusal without partial changes.
+
+Editor writes use `SpaceTheme(style:)`, clearing legacy theme fields. Older
+builds ignore the additive style key and lose that edited appearance. This
+is accepted because Open has no released users. Values written before the
+editor retain their original decoding and render path.
+
 State changes only through named commands on `BrowserModel`:
 `newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `setPinnedSectionCollapsed(spaceID:collapsed:)`, `setMuted(tabID:muted:)`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
 Query: `isPinned(tabID:)`. `newTab` without an explicit index inserts at the top of Today. Collapse and mute are property-only undo steps. Same-value or missing-target commands register no undo and send no event.

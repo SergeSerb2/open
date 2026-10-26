@@ -342,14 +342,14 @@ public struct ArcImporter {
             return theme
         }
 
-        func tabCustomIcon(from tabData: [String: Any]) -> String? {
+        func tabCustomIcon(from tabData: [String: Any]) -> SpaceIcon? {
             guard let customInfo = tabData["customInfo"] as? [String: Any],
                   let iconType = customInfo["iconType"] as? [String: Any] else { return nil }
-            if let emojiV2 = iconType["emoji_v2"] as? String { return emojiV2 }
+            if let emojiV2 = iconType["emoji_v2"] as? String { return .emoji(emojiV2) }
             if let scalar = iconType["emoji"] as? NSNumber, let s = UnicodeScalar(scalar.intValue) {
-                return String(Character(s))
+                return .emoji(String(Character(s)))
             }
-            if let named = iconType["icon"] as? String { return named }
+            if let named = iconType["icon"] as? String { return .named(named) }
             return nil
         }
 
@@ -386,7 +386,7 @@ public struct ArcImporter {
                 let tab = Tab(
                     id: Self.itemID(forArcID: arcID),
                     url: url, title: savedTitle, customTitle: customTitle,
-                    customIcon: tabCustomIcon(from: td),
+                    iconOverride: tabCustomIcon(from: td),
                     createdAt: Self.date(from2001: (item["createdAt"] as? NSNumber)?.doubleValue),
                     lastActiveAt: Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (item["createdAt"] as? NSNumber)?.doubleValue),
                     isMuted: (td["savedMuteStatus"] as? String) == "mute",
@@ -737,7 +737,7 @@ public struct ArcImporter {
                     let tab = Tab(
                         id: Self.itemID(forArcID: arcID),
                         url: url, title: savedTitle, customTitle: customTitle,
-                        customIcon: tabCustomIcon(from: td),
+                        iconOverride: tabCustomIcon(from: td),
                         createdAt: Self.date(from2001: (sidebarItem["createdAt"] as? NSNumber)?.doubleValue),
                         lastActiveAt: Self.date(from2001: (td["timeLastActiveAt"] as? NSNumber)?.doubleValue ?? (sidebarItem["createdAt"] as? NSNumber)?.doubleValue),
                         isMuted: (td["savedMuteStatus"] as? String) == "mute",
@@ -754,7 +754,9 @@ public struct ArcImporter {
                         "isUnread": tab.isUnread,
                     ]
                     if let customTitle { payload["customTitle"] = customTitle }
-                    if let icon = tab.customIcon { payload["customIcon"] = icon }
+                    if let icon = tab.iconOverride {
+                        payload["iconOverride"] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(icon))
+                    }
                     let payloadData = (try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])) ?? Data()
                     let payloadJSON = String(data: payloadData, encoding: .utf8) ?? "{}"
                     let location = "today:\(openSpaceID.rawValue.uuidString)"

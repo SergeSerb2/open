@@ -748,12 +748,28 @@ public func renameSpace(id: SpaceID, title: String)
 /// Extends createSpace: insertion index (nil = end) and nodes moved into the new Space's
 /// pinned section in order (folders keep their children). One undo step for all of it.
 @discardableResult public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?,
-    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space
+    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space?
 ```
 
-The existing `createSpace(title:profileID:icon:theme:)` forwards with
-`at: nil, moving: []`. Model rules from `docs/model.md` apply (refused
-commands change nothing and register no undo).
+Lead amendment (2026-10-25): creation with moves is all or nothing. Before
+any mutation, validate that every moving node exists, is not a split pane,
+occurs only once, and satisfies the placement rules in `docs/model.md`
+(including no move into its own descendant). An explicit insertion index
+must be in `0...spaces.count`. On any refusal return nil: no Space, moves,
+undo, TreeChange, or snapshot dirty state. After validation, create and move
+the nodes as one undo step. An empty moving list with a valid index never
+fails.
+
+The existing nonoptional `createSpace(title:profileID:icon:theme:)` forwards
+with `at: nil, moving: []`; it may force-unwrap with a comment explaining
+that this path cannot fail. Its callers do not change. Step 7's
+`moveToNewSpace` and `turnFolderIntoSpace` likewise return false or nil on
+refusal and change nothing.
+
+Step 1 acceptance adds refused create-with-moves rows to
+`openkit commands-demo`: both a split pane and a missing ID leave the
+snapshot byte-identical and the undo stack depth unchanged. Model rules
+from `docs/model.md` apply to every refusal.
 
 ### 10.2 `OpenSpaceEditor` (new library)
 
@@ -874,7 +890,8 @@ executable `space-editor-render` → `OpenModel`, `OpenStore`, `OpenDesign`,
 `ThemeBackgroundView.swift`, `Motion.swift`, `OpenModel/NamedSpaceIcons.swift`
 (`order` array), `OpenSidebar/SidebarView.swift`,
 `SpacePagerView.swift`, `SidebarContext.swift`, `Controls.swift` (icon
-precedence), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
+precedence), `SidebarRows.swift` (Step 1: folder and tab icon resolution;
+lead-approved addition), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
 (`change-space-icon`), `SuggestAdapter.swift` (its symbol `face.smiling`),
 `OpenFeatures/BrowserWindowController.swift`,
 `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`,
@@ -1023,7 +1040,7 @@ on both pages; the same editor in macOS Light.
 
 | Step | Date | Result |
 |---|---|---|
-| 1 | | |
+| 1 | 2026-10-25 | Implemented; commands-demo 149/149, roundtrip PASS, sidebar-render 125/125 and its output unchanged. Frozen synthetic schema-1 PNG byte-identical before/after (SHA-256 `4a275632fc96d590060566c3cf47aadd5dacf31ec81b111d4f43ac192808d7a9`). Full verify-all: 16 PASS, no SKIP. PR pending. |
 | 2 | | |
 | 3 | | |
 | 4 | | |

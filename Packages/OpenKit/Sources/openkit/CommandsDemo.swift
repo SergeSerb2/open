@@ -506,6 +506,133 @@ func runCommandsDemo(args: [String]) async throws {
     check(reloaded?.tab(id: one.id)?.live.hasWebContent == false,
           "live web content is absent after snapshot reload")
     space.title = savedTitle; space.icon = savedIcon
+
+    step("Space editor: create with moves is one atomic undo step")
+    undo.removeAllActions()
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    func snapshotBytes() throws -> Data { try encoder.encode(SnapshotMapper.dto(from: model)) }
+    // Measure the actual public undo stack by executing it and replaying it. This
+    // section starts with an empty stack, so it has no stale auto-archive steps.
+    func undoDepth() -> Int {
+        var depth = 0
+        while undo.canUndo { undo.undo(); depth += 1 }
+        for _ in 0..<depth { undo.redo() }
+        return depth
+    }
+    let movingTab = model.newTab(in: sid, url: url("space-moving"), title: "Moving tab")
+    let folderTab = model.newTab(in: sid, url: url("space-folder"), title: "Folder child")
+    guard let movingFolder = model.createFolder(in: .spaceToday(sid), title: "Moving folder", withNodes: [folderTab.id]) else { exit(1) }
+    let beforeCreate = try snapshotBytes()
+    let depthBeforeCreate = undoDepth()
+    guard let created = model.createSpace(title: "Created with moves", profileID: pid, icon: .named("planet"),
+                                         theme: SpaceTheme(), at: 0, moving: [movingTab.id, movingFolder.id]) else { exit(1) }
+    check(model.spaces.first === created && created.pinned.map(\.id) == [movingTab.id, movingFolder.id]
+          && movingFolder.children.map(\.id) == [folderTab.id] && [movingTab, folderTab].allSatisfy { $0.pinnedURL == $0.url },
+          "create inserts at index 0 and moves the same tab and folder with pinned ancestry")
+    check(undoDepth() == depthBeforeCreate + 1, "create with all moves adds exactly one undo step")
+    undo.undo()
+    check(try snapshotBytes() == beforeCreate, "one undo restores the entire pre-create snapshot byte for byte")
+    undo.redo()
+    check(model.space(id: created.id) === created && indexMatchesRebuild(model), "redo restores the same Space, nodes and index")
+
+    step("Space editor: refused creation has no writes, event or undo")
+    let refusalA = model.newTab(in: sid, url: url("refusal-a"))
+    let refusalB = model.newTab(in: sid, url: url("refusal-b"))
+    guard let refusalSplit = model.makeSplit(tabIDs: [refusalA.id, refusalB.id]) else { exit(1) }
+    for (label, ids, insertion) in [
+        ("split pane", [movingTab.id, refusalA.id], Optional<Int>.none),
+        ("missing ID", [movingTab.id, ItemID()], nil),
+        ("duplicate ID", [movingTab.id, movingTab.id], nil),
+        ("negative index", [movingTab.id], -1),
+        ("index past end", [movingTab.id], model.spaces.count + 1),
+    ] {
+        let depth = undoDepth()
+        let before = try snapshotBytes()
+        events.removeAll()
+        let result = model.createSpace(title: "Refused", profileID: pid, icon: nil, theme: SpaceTheme(), at: insertion, moving: ids)
+        let noEvents = events.isEmpty
+        let after = try snapshotBytes()
+        check(result == nil && noEvents && after == before,
+              "refused create (\(label)) leaves the snapshot byte-identical and emits no TreeChange")
+        let afterDepth = undoDepth()
+        let afterReplay = try snapshotBytes()
+        check(afterDepth == depth && afterReplay == before,
+              "refused create (\(label)) leaves the actual undo stack depth unchanged")
+    }
+    check(model.node(id: refusalSplit.id)?.split === refusalSplit, "refusals preserve the original split")
+
+    step("Space editor: previews, commit and icons")
+    let originalTheme = space.theme
+    let style = SpaceStyle(keyColor: RGBAColor(red: 1, green: 0.52, blue: 0.345), colorCount: 3,
+                           wheel: .complementary, appearance: .dark, noiseFactor: 0.45, texture: .denim)
+    let edited = SpaceTheme(style: style)
+    let previewDepth = undoDepth()
+    events.removeAll()
+    model.previewSpaceTheme(id: sid, theme: SpaceTheme(style: SpaceStyle(keyColor: RGBAColor(red: 0.2, green: 0.4, blue: 0.8))))
+    model.previewSpaceTheme(id: sid, theme: edited)
+    check(space.theme == edited && events.isEmpty, "multiple previews update the real theme without TreeChange")
+    // Replaying earlier structural commands does not touch the previewed theme.
+    check(undoDepth() == previewDepth, "previews register no undo")
+    check(model.commitSpaceTheme(id: sid, from: originalTheme), "commit accepts the previewed theme")
+    check(undoDepth() == previewDepth + 1, "all previews commit as exactly one undo step")
+    undo.undo(); check(space.theme == originalTheme, "theme undo restores the full legacy value")
+    undo.redo(); check(space.theme == edited, "theme redo restores the full editor value")
+    let themeDepth = undoDepth()
+    check(!model.commitSpaceTheme(id: sid, from: edited) && !model.commitSpaceTheme(id: SpaceID(), from: originalTheme)
+          && undoDepth() == themeDepth, "equal and missing theme commits register no undo")
+    movingTab.customIcon = "star"
+    let iconDepth = undoDepth()
+    check(model.setNodeIcon(id: movingTab.id, icon: .emoji("🧭")) && movingTab.customIcon == nil,
+          "tab icon writes the typed override and clears the legacy icon")
+    check(undoDepth() == iconDepth + 1, "tab icon adds one undo step")
+    undo.undo(); check(movingTab.iconOverride == nil && movingTab.customIcon == "star", "tab icon undo restores both fields")
+    undo.redo()
+    movingFolder.customIcon = "folder.fill"
+    check(model.setNodeIcon(id: movingFolder.id, icon: .named("planet")) && movingFolder.customIcon == nil,
+          "folder icon uses the same typed command")
+    undo.undo(); check(movingFolder.iconOverride == nil && movingFolder.customIcon == "folder.fill", "folder icon undo restores both fields")
+    undo.redo()
+    let refusalsDepth = undoDepth()
+    check(!model.setNodeIcon(id: movingTab.id, icon: .emoji("🧭")) && !model.setNodeIcon(id: refusalSplit.id, icon: .named("planet"))
+          && !model.setNodeIcon(id: ItemID(), icon: nil) && undoDepth() == refusalsDepth, "same, split and missing node icon commands register no undo")
+    let originalIcon = space.icon
+    model.setSpaceIcon(id: sid, icon: .emoji("🎨"))
+    undo.undo(); check(space.icon == originalIcon, "Space icon is one undo step")
+    undo.redo()
+    let oldName = space.title
+    model.renameSpace(id: sid, title: " \n ")
+    check(space.title == nil, "whitespace-only rename stores an untitled Space")
+    undo.undo(); check(space.title == oldName, "rename undo restores the exact old title")
+    undo.redo()
+
+    step("Space editor: real snapshot store round trip")
+    try snapshots.saveNow(model: model)
+    guard let editorReload = try snapshots.load() else { exit(1) }
+    check(SnapshotMapper.structurallyEqual(model, editorReload) && editorReload.space(id: sid)?.theme.style == style
+          && editorReload.tab(id: movingTab.id)?.iconOverride == .emoji("🧭")
+          && editorReload.node(id: movingFolder.id)?.folder?.iconOverride == .named("planet"),
+          "style, math version, and tab/folder iconOverride survive save and reload at schema 1")
+    // Exercise lenient input through the actual persisted file and load path.
+    let file = root.appendingPathComponent("State/browser.json")
+    var decoded = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as! [String: Any]
+    var spaces = decoded["spaces"] as! [[String: Any]]
+    let current = spaces.firstIndex { $0["id"] as? String == sid.description }!
+    var theme = spaces[current]["theme"] as! [String: Any]
+    var inputs = theme["style"] as! [String: Any]
+    inputs["wheel"] = "future-wheel"; inputs["appearance"] = "future-appearance"; inputs["texture"] = "future-texture"
+    inputs["colorCount"] = 20; inputs["noiseFactor"] = -2; inputs["intensityFactor"] = 8; inputs["mathVersion"] = 17
+    var color = inputs["keyColor"] as! [String: Any]; color["alpha"] = 0.2; inputs["keyColor"] = color
+    theme["style"] = inputs; spaces[current]["theme"] = theme; decoded["spaces"] = spaces
+    try JSONSerialization.data(withJSONObject: decoded, options: [.sortedKeys]).write(to: file)
+    guard let lenient = try snapshots.load(), let normalized = lenient.space(id: sid)?.theme.style else { exit(1) }
+    check(normalized.wheel == .analogous && normalized.appearance == .automatic && normalized.texture == .grain
+          && normalized.colorCount == 3 && normalized.noiseFactor == 0 && normalized.intensityFactor == 1
+          && normalized.keyColor.alpha == 1 && normalized.mathVersion == 17,
+          "snapshot decode defaults unknown enum strings, clamps inputs, and preserves mathVersion")
+    try snapshots.saveNow(model: lenient)
+    guard let normalizedReload = try snapshots.load() else { exit(1) }
+    check(SnapshotMapper.structurallyEqual(lenient, normalizedReload), "normalized snapshot writes defaults and round trips unchanged")
     try snapshots.saveNow(model: model)
     composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")

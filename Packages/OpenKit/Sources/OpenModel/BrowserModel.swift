@@ -688,6 +688,7 @@ public final class BrowserModel {
         var customTitle: String?
         var pinnedURL: String?
         var customIcon: String?
+        var iconOverride: SpaceIcon?
         var createdAt: Double?
         var lastActiveAt: Double?
         var isMuted: Bool?
@@ -704,6 +705,7 @@ public final class BrowserModel {
                    customTitle: payload?.customTitle,
                    pinnedURL: payload?.pinnedURL.flatMap { URL(string: $0) },
                    customIcon: payload?.customIcon,
+                   iconOverride: payload?.iconOverride,
                    createdAt: payload?.createdAt.map { Date(timeIntervalSince1970: $0) } ?? record.archivedAt,
                    lastActiveAt: payload?.lastActiveAt.map { Date(timeIntervalSince1970: $0) } ?? record.archivedAt,
                    isMuted: payload?.isMuted ?? false,
@@ -950,16 +952,100 @@ public final class BrowserModel {
 
     @discardableResult
     public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon? = nil, theme: SpaceTheme = SpaceTheme()) -> Space {
+        // An empty moving list and the default append index cannot fail validation.
+        createSpace(title: title, profileID: profileID, icon: icon, theme: theme, at: nil, moving: [])!
+    }
+
+    /// Validates the whole command before creating anything. A refusal has no observable writes.
+    @discardableResult
+    public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?, theme: SpaceTheme,
+                            at index: Int?, moving nodeIDs: [ItemID]) -> Space? {
+        guard validSpaceCreation(index: index, moving: nodeIDs) else { return nil }
         let resolvedProfile = profile(id: profileID)?.id ?? defaultProfile?.id ?? profileID
         let space = Space(title: title, icon: icon, theme: theme, profileID: resolvedProfile)
-        let i = spaces.count
-        insertSpace(space, at: i)
-        emit(.reload(parent: .spaceToday(space.id)))
-        registerUndo({ model in model.removeSpace(space.id); return true }, reapply: { model in
-            model.insertSpace(space, at: i)
-            return { model in model.removeSpace(space.id); return true }
-        })
+        let i = index ?? spaces.count
+        guard let revert = insertSpaceMoving(space, at: i, moving: nodeIDs) else { return nil }
+        registerUndo(revert, reapply: { $0.insertSpaceMoving(space, at: i, moving: nodeIDs) ?? Self.noRevert })
         return space
+    }
+
+    private func validSpaceCreation(index insertion: Int?, moving ids: [ItemID]) -> Bool {
+        guard insertion.map({ (0...spaces.count).contains($0) }) ?? true,
+              Set(ids).count == ids.count else { return false }
+        // The destination is a fresh Space, so it cannot be a source node's descendant.
+        for id in ids {
+            guard index[id] != nil, let parent = parentByID[id], position(of: id, in: parent) != nil else { return false }
+            if case .splitPane = parent { return false }
+        }
+        return true
+    }
+
+    private func insertSpaceMoving(_ space: Space, at i: Int, moving ids: [ItemID]) -> Revert? {
+        guard self.space(id: space.id) == nil, validSpaceCreation(index: i, moving: ids) else { return nil }
+        insertSpace(space, at: i)
+        var moves: [Revert] = []
+        for id in ids {
+            // Every source was validated before the first mutation. The fresh pinned
+            // section accepts tabs, folders (with children), and whole splits.
+            if let revert = relocate(id, to: .spacePinned(space.id), at: nil) { moves.append(revert) }
+        }
+        emit(.reload(parent: .spaceToday(space.id)))
+        let reverts = moves
+        return { model in
+            guard model.space(id: space.id) != nil else { return false }
+            for revert in reverts.reversed() { _ = revert(model) }
+            model.removeSpace(space.id)
+            model.emit(.reload(parent: .spaceToday(space.id)))
+            return true
+        }
+    }
+
+    /// Live preview deliberately registers neither undo nor a structural event.
+    public func previewSpaceTheme(id: SpaceID, theme: SpaceTheme) {
+        guard let space = space(id: id), space.theme != theme else { return }
+        space.theme = theme
+    }
+
+    @discardableResult
+    public func commitSpaceTheme(id: SpaceID, from baseline: SpaceTheme) -> Bool {
+        guard let space = space(id: id), space.theme != baseline else { return false }
+        let current = space.theme
+        registerChange(undo: { space.theme = baseline }, redo: { space.theme = current })
+        return true
+    }
+
+    public func setSpaceIcon(id: SpaceID, icon: SpaceIcon?) {
+        guard let space = space(id: id), space.icon != icon else { return }
+        let old = space.icon
+        space.icon = icon
+        registerChange(undo: { space.icon = old }, redo: { space.icon = icon })
+    }
+
+    @discardableResult
+    public func setNodeIcon(id: ItemID, icon: SpaceIcon?) -> Bool {
+        if let tab = index[id]?.tab {
+            guard tab.iconOverride != icon || tab.customIcon != nil else { return false }
+            let old = tab.iconOverride, legacy = tab.customIcon
+            tab.iconOverride = icon; tab.customIcon = nil
+            registerChange(undo: { tab.iconOverride = old; tab.customIcon = legacy },
+                           redo: { tab.iconOverride = icon; tab.customIcon = nil })
+        } else if let folder = index[id]?.folder {
+            guard folder.iconOverride != icon || folder.customIcon != nil else { return false }
+            let old = folder.iconOverride, legacy = folder.customIcon
+            folder.iconOverride = icon; folder.customIcon = nil
+            registerChange(undo: { folder.iconOverride = old; folder.customIcon = legacy },
+                           redo: { folder.iconOverride = icon; folder.customIcon = nil })
+        } else { return false }
+        return true
+    }
+
+    public func renameSpace(id: SpaceID, title: String) {
+        guard let space = space(id: id) else { return }
+        let value: String? = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : title
+        guard space.title != value else { return }
+        let old = space.title
+        space.title = value
+        registerChange(undo: { space.title = old }, redo: { space.title = value })
     }
 
     public func updateSpace(id: SpaceID, title: String? = nil, icon: SpaceIcon?? = nil, theme: SpaceTheme? = nil, profileID: ProfileID? = nil) {
