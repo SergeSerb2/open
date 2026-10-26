@@ -56,6 +56,13 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 
 State changes only through named commands on `BrowserModel`:
 `newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `setPinnedSectionCollapsed(spaceID:collapsed:)`, `setMuted(tabID:muted:)`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
+Window commands: `createWindow(focusedSpaceID:)`, `closeWindow(windowID:)`,
+`setSidebarWidth(windowID:width:)`, and `setSidebarMode(windowID:mode:)`.
+They register property/window undo steps and emit no `TreeChange`: windows are
+not sidebar structure. Creation refuses an unknown Space. Width refuses
+non-finite input and clamps to 228–500. The App supplies window lifecycle and
+snapshot scheduling; the model has no AppKit or engine dependency.
+
 Query: `isPinned(tabID:)`. `newTab` without an explicit index inserts at the top of Today. Collapse and mute are property-only undo steps. Same-value or missing-target commands register no undo and send no event.
 
 Untitled Spaces store `title == nil`; schema-1 snapshots accept both missing/null and existing string titles. `displayTitle(for:)` uses “Space N” for the current 1-based position when the title is nil or empty. `SpaceIcon.named` retains the imported identifier across snapshot save/load. [NamedSpaceIcons.swift](../Packages/OpenKit/Sources/OpenModel/NamedSpaceIcons.swift) supplies the checked SF Symbol mapping and neutral fallback. Older builds cannot decode the new named-icon enum case.
@@ -636,3 +643,10 @@ public welcome page rather than Arc's native onboarding controller.
 1. Restore position. A restored tab goes to the top of its parent, because the record stores the parent but not the index. Arc's exact position is not verified.
 2. `focusSpace` and `selectNode` register undo. Arc probably does not undo navigation. If not, Cmd-Z after a click would undo the click, not the last edit. Verify in Arc, then drop their undo.
 3. `closeTab` archives pinned tabs and favorites too. In Arc, closing a pinned tab or a favorite may only unload it (guess). The UI layer must pick the right command until this is verified.
+
+Snapshot scheduling marks the live model dirty without preparing folders or
+building a DTO. The one-second debounce captures the DTO on the main actor,
+then queues the atomic file write. `saveNow(model:)` remains synchronous and
+cancels pending generations. `flush()` captures pending dirty state on the main
+actor before waiting for writes. Frame notifications only update window fields
+and schedule this save; they do not notify the engine factory or tab mirror.
