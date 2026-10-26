@@ -221,6 +221,12 @@ default case (write a custom `init(from:)` for the three enums; synthesized
 has no released users; `docs/model.md` precedent). Add `style: SpaceStyle? = nil`
 to `SpaceTheme.init`.
 
+Lead review amendment (2026-10-26, Step 1 round 1): fields inside `style`
+decode with `decodeIfPresent` and their documented defaults. Wrongly typed
+optional inputs also use those defaults. An unusable optional style (no
+valid key color or invalid object shape) is nil, so it cannot fail the
+whole snapshot. The legacy theme fields keep their original decode rules.
+
 ### 3.2 Rendering precedence and write rules
 
 `SpaceThemeStyle(theme:system:)` resolves, in order:
@@ -748,12 +754,43 @@ public func renameSpace(id: SpaceID, title: String)
 /// Extends createSpace: insertion index (nil = end) and nodes moved into the new Space's
 /// pinned section in order (folders keep their children). One undo step for all of it.
 @discardableResult public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?,
-    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space
+    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space?
 ```
 
-The existing `createSpace(title:profileID:icon:theme:)` forwards with
-`at: nil, moving: []`. Model rules from `docs/model.md` apply (refused
-commands change nothing and register no undo).
+Lead amendment (2026-10-25): creation with moves is all or nothing. Before
+any mutation, validate that every moving node exists, is not a split pane,
+occurs only once, and satisfies the placement rules in `docs/model.md`
+(including no move into its own descendant). An explicit insertion index
+must be in `0...spaces.count`. On any refusal return nil: no Space, moves,
+undo, TreeChange, or snapshot dirty state. After validation, create and move
+the nodes as one undo step. An empty moving list with a valid index and a
+live Profile ID never fails.
+
+Lead review amendment (2026-10-26, Step 1 round 1): refuse a moving list
+that includes both an ancestor and its descendant. If any relocation fails
+after insertion, reverse the earlier moves and remove the inserted Space,
+then return nil. Buffer structural events until success, so a rollback emits
+none. The real CLI exercises a forced late failure and checks snapshot
+bytes, undo depth, and the index. Success emits one `.move` per node, no
+source-parent reload, and has byte-identical undo and redo snapshots.
+
+Lead review decision (2026-10-26 09:36 America/Vancouver): unknown Profile
+IDs refuse the failable overload before any mutation, undo, event, or save.
+The existing nonoptional `createSpace(title:profileID:icon:theme:)` requires
+a live Profile ID, delegates with `at: nil, moving: []`, and treats nil as
+a programmer error with a precondition naming the bad ID. Data/import/
+automation/restored-state callers use the failable overload. The caller
+audit changed the Settings selector, profiles CLI, and automation boundary;
+the remaining callers obtain IDs from live model objects or synthetic
+fixtures. Rollback fault injection is DEBUG-only, absent in production.
+Step 7's
+`moveToNewSpace` and `turnFolderIntoSpace` likewise return false or nil on
+refusal and change nothing.
+
+Step 1 acceptance adds refused create-with-moves rows to
+`openkit commands-demo`: both a split pane and a missing ID leave the
+snapshot byte-identical and the undo stack depth unchanged. Model rules
+from `docs/model.md` apply to every refusal.
 
 ### 10.2 `OpenSpaceEditor` (new library)
 
@@ -874,12 +911,19 @@ executable `space-editor-render` → `OpenModel`, `OpenStore`, `OpenDesign`,
 `ThemeBackgroundView.swift`, `Motion.swift`, `OpenModel/NamedSpaceIcons.swift`
 (`order` array), `OpenSidebar/SidebarView.swift`,
 `SpacePagerView.swift`, `SidebarContext.swift`, `Controls.swift` (icon
-precedence), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
+precedence), `SidebarRows.swift` (Step 1: folder and tab icon resolution;
+lead-approved addition), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
 (`change-space-icon`), `SuggestAdapter.swift` (its symbol `face.smiling`),
 `OpenFeatures/BrowserWindowController.swift`,
 `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`,
 `tools/verify-all.sh` (add `space-editor`), `docs/release/licenses.md` (emoji data row, Step 6), `docs/model.md`,
 `docs/design.md` (new §: editor), `docs/commands.md`.
+
+Step 1 review additions: `sidebar-render/OffscreenRenderer.swift` synchronizes
+render and readback on one Metal queue for P1. `Fixtures/space-schema1/`
+holds the frozen synthetic schema-1 snapshot and its three pre-change PNGs;
+the `space-legacy` entry in `tools/verify-all.sh` and
+`tools/verification/check.py` gate their round trip and byte equality.
 
 ## 12. Verification (no unit tests)
 
@@ -1023,7 +1067,7 @@ on both pages; the same editor in macOS Light.
 
 | Step | Date | Result |
 |---|---|---|
-| 1 | | |
+| 1 | 2026-10-26 | PR #68, review round 1 fixes: commands-demo 163/163; roundtrip PASS; sidebar-render 125/125. Automated `space-legacy` gate: all original snapshot semantic fields unchanged (only main's additive `keepAliveSites: []` default is added), encoded DTO roundtrip byte-identical, all 3 committed pre-change PNGs byte-identical. Metal readback synchronization fixed; 24/24 repeated renders match the unchanged baselines. Full verify-all after merging `origin/main` at `bfef13c`: 17 PASS, no SKIP. |
 | 2 | | |
 | 3 | | |
 | 4 | | |

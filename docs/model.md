@@ -54,6 +54,75 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 
 ### Commands
 
+Space editor inputs live in `SpaceTheme.style: SpaceStyle?`. A style stores
+only its key color, count, wheel, appearance, noise, texture, intensity, and
+`mathVersion` (currently 1). Derived palettes are not persisted. Count is
+clamped to 1–3, noise and intensity to 0–1, and key alpha to 1 on decode and
+on writes. Unknown wheel, appearance, and texture strings decode to
+analogous, automatic, and grain. The math version is preserved. Missing
+style and icon override keys decode as nil; schemaVersion remains 1.
+
+`Tab.iconOverride` and `Folder.iconOverride` are typed `SpaceIcon?` values.
+Rows resolve that value before legacy `customIcon`, then use the favicon or
+folder glyph. `setNodeIcon` writes the override and clears `customIcon` in
+one undo step; undo restores both. New Arc imports write typed overrides.
+Existing legacy strings keep their meaning (SF Symbol if available, else
+emoji). Import keeps the raw Arc theme and never writes editor inputs.
+Folders now draw a legacy `customIcon` through that precedence rule. Before
+this step the folder renderer ignored that field, and no current writer
+sets it. This is an intentional rendering change required by plan §3.3.
+Empty imported tab emoji strings are absent; named tab icons share the
+known/unknown counters used for Space icons.
+
+Style fields other than the required key color use their documented
+defaults when absent, null, or the wrong type. A style with no usable key
+color (or an invalid object shape) decodes as nil on `SpaceTheme`, preserving
+the rest of the snapshot and its legacy theme. Present valid key colors and
+math versions keep their stored values.
+
+`previewSpaceTheme` changes only the live theme, without undo or TreeChange.
+`commitSpaceTheme(id:from:)` commits the entire preview gesture as one undo
+step, or returns false for an equal value or missing Space. The caller owns
+the save after commit. `setSpaceIcon` and `renameSpace` are single property
+undo steps; whitespace-only Space titles become nil. Same-value commands
+register no undo.
+
+`createSpace(...at:moving:) -> Space?` validates the entire moving list
+(existing nodes, no split panes, duplicate IDs, or ancestor/descendant pairs,
+and valid placement) and an explicit index in `0...spaces.count` before any
+write. A refusal returns
+nil with no mutation, event, undo, or save. Success inserts the Space and
+moves the nodes into Pinned, in order, as one undo step. Folder children,
+object identities, source positions, and pinned URLs restore on undo. The
+model buffers TreeChange events until every relocation succeeds. A late
+failure reverses all earlier moves and removes the inserted Space, then
+discards the events and registers no undo. A DEBUG-only CLI seam exercises
+the rollback code; the seam does not exist in production builds.
+Successful moves emit one `.move` per node and no source-parent reload.
+An unknown Profile ID likewise refuses with no changes. The original
+nonoptional overload requires a live Profile ID and delegates with an append
+index and no moves; nil is a programmer error and its precondition names the
+bad ID. Data/import/automation/restored IDs must use the failable overload.
+Step 7's move-to-new-Space and folder conversion callers
+must likewise return false or nil on refusal without partial changes.
+
+Editor writes use `SpaceTheme(style:)`, clearing legacy theme fields. Older
+builds ignore the additive style key and lose that edited appearance. This
+is accepted because Open has no released users. Values written before the
+editor retain their original decoding and render path.
+
+`tools/verify-all.sh` runs the `space-legacy` gate. It copies the frozen
+pre-Step-1 synthetic fixture, runs `openkit roundtrip` (byte-comparing its
+encoded DTOs before and after save/load), compares all original semantic
+fields, and renders all three Spaces against committed pre-change PNGs
+byte for byte. The raw fixture can gain only `keepAliveSites: []`, an
+additive default from the later main-branch keep-alive change. The source
+fixture and its PNGs never change during verification.
+The sidebar offscreen renderer supplies its Metal command queue to
+`CARenderer` and synchronizes readback on that same queue. This prevents a
+read-before-render race exposed by P1; 24 consecutive renders matched the
+unchanged baseline PNGs after the fix.
+
 State changes only through named commands on `BrowserModel`:
 `newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `setPinnedSectionCollapsed(spaceID:collapsed:)`, `setMuted(tabID:muted:)`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
 Window commands: `createWindow(focusedSpaceID:)`, `closeWindow(windowID:)`,
