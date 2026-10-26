@@ -88,12 +88,18 @@ public extension AutoArchiveInterval {
         "open.shortcuts.includeFavoritesInTabNumbering": true, "open.shortcuts.switchToNinthEnabled": true,
     ]
     public static func register(in defaults: UserDefaults) {
-        // Seed before registration so the new fallback values do not hide
-        // missing stored keys. Existing per-source choices always win.
+        // Registration fallbacks can already exist from another Settings or
+        // Library instance. Inspect stored choices without those two fallbacks;
+        // this synchronous main-actor operation never removes persistent values.
         if let legacy = defaults.object(forKey: "open.general.previewsOnHover") as? Bool {
-            for key in ["open.general.previewsFolders", "open.general.previewsPages"] where defaults.object(forKey: key) == nil {
-                defaults.set(legacy, forKey: key)
-            }
+            let keys = ["open.general.previewsFolders", "open.general.previewsPages"]
+            let registered = defaults.volatileDomain(forName: UserDefaults.registrationDomain)
+            var inspection = registered
+            for key in keys { inspection.removeValue(forKey: key) }
+            defaults.setVolatileDomain(inspection, forName: UserDefaults.registrationDomain)
+            let missing = keys.filter { defaults.object(forKey: $0) == nil }
+            defaults.setVolatileDomain(registered, forName: UserDefaults.registrationDomain)
+            for key in missing { defaults.set(legacy, forKey: key) }
         }
         defaults.register(defaults: values)
     }
