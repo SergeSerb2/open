@@ -242,11 +242,21 @@ Keep the existing slot logic in `TabCellView.layout()` (the button sits
 | Mute change animation | `NSImageView.setSymbolImage(_:contentTransition: .replace.magic(fallback: .replace))`, system duration (≈ 0.25 s). Reduce Motion: no transition. No looping effect while audio plays (D-11). Arc animates slash and waves on change (`SpeakerIcon{slashStart, waveIncrement, waveReappearStart}`); this is the closest system effect. |
 | Tooltip | "Mute tab" / "Unmute tab" (guess: Arc's text is a short inline string; its comments are "Tooltip; mutes the tab." / "Tooltip; unmutes the tab."). Placement beside the pointer, as row tooltips (interaction-states §5). Delay `TooltipMetrics.showDelay`. |
 | Click | `.toggleMute(tabID:)` (exists). The App sets `OEWebContent.muted` from `tab.isMuted` on every change (§7.2). The row does not select the tab. |
-| Recording indicator | Shown when `tab.live.isCapturing` (camera or microphone). 20×20 slot placed directly before the speaker slot (or at the speaker position when no speaker shows). Glyph: a 7 pt filled circle drawn in `SidebarRole.recordingIndicator` (new: light `#F53714`, dark `#F25E6B`, the `CommandBarColors.lockInsecure` pair; guess). Static; no pulse. Tooltip "This tab is using your camera or microphone" (Arc string, PP-19). No click action. |
+| Recording indicator | Shown when `tab.live.isCapturing` (camera or microphone). 14×20 slot placed directly before the speaker slot (or at the speaker position when no speaker shows). Glyph: a 7 pt filled circle drawn in `SidebarRole.recordingIndicator` (new: light `#F53714`, dark `#F25E6B`, the `CommandBarColors.lockInsecure` pair; guess). Static; no pulse. Tooltip "This tab is using your camera or microphone" (Arc string, PP-19). No click action. |
 | Build on demand | Both views are created only when first shown (keep the scroll budget, `docs/design.md` §11). |
 
 `RowMediaMetrics` (OpenDesign): `buttonSize 20`, `gapAfterTitle 2`,
-`y 10`, `recordingDot 7`.
+`y 10`, `recordingDot 7`, `recordingSlotWidth 14`, `glyphInsetX 2`.
+
+Lead review decisions (2026-10-26): speaker images share a left anchor at
+slot x + 2 pt on one fixed image-view frame in both states. Keep native
+replace outside a disable-actions transaction (lead clarification 2026-10-26).
+If the unwrapped native call is proven to start no symbol-effect animation,
+a finite 0.25 s Core Animation cross-fade is allowed as a fallback (lead
+clarification 2026-10-26; record the failed native run in the PR). Reduce
+Motion stays static.
+Use a 14×20 recording slot, and hide it before the speaker when width is
+limited. Keep recording placement in one function until S9 decides its side.
 
 ### 4.2 Sidebar media controls (mini player stack)
 
@@ -1264,6 +1274,15 @@ Every PR: merge `origin/main`, run `tools/verify-all.sh`, paste the
 table (AGENTS.md rule 10). One library target per PR where the step says
 so.
 
+Lead performance decision (2026-10-26 01:44 America/Vancouver, Step 2
+review): rows that look the same as before must show no scroll-p95
+regression against main. The mixed audible/muted/capturing variant draws
+new views and instead has an absolute scroll-p95 budget of 4.2 ms (half
+a 120 Hz frame). Compare baseline and head interleaved in one session,
+at least five runs each, and report both the median and mean of their
+per-run p95 values. If mixed rows exceed 4.2 ms, profile and fix the hot
+spot before Step 3; otherwise proceed after the plain-row gate passes.
+
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
 | 0 | Screenshots S1–S12 from the user (§11), through the lead. Runs in parallel; Steps 1–5 do not wait. | — | Lead files them under `.re/runtime/` (git-ignored) and adds measured values to `docs/re/interaction-states.md`. |
@@ -1333,6 +1352,7 @@ stays in `.re/` and is never committed.
 | S7 | A video tab mini player after pressing Minimize in its PiP window. | Back-to-PiP button |
 | S8 | A paused mini player and a muted one. | State glyphs |
 | S9 | A tab row while audio plays, after muting it, and a Meet or camera tab row (recording indicator). Also a Favorite tile that plays audio. | §4.1, Q14 |
+| S9 review additions | A red-themed Space for recording-dot contrast; whether the dot is leading (`hasLeadingRecordingIndicator`); a playing Favorite tile (`musicIconAnimationView`/`recordingIndicatorView`); whether tint follows the title color; speaker tooltip exact text and case. | D1–D9 review questions; no asset or code extraction in this step |
 | S10 | A short screen recording (the user's own recorder) of: leaving a playing video tab (auto-PiP opens), returning (it closes), minimizing the window while a video plays, and switching to another app. | Timings, D-4/Q4 |
 | S11 | A Google Meet Document PiP window (if the user has a Meet call). | §4.6 top bar |
 | S12 | Settings ▸ Advanced, the PiP row. | Label and position |
