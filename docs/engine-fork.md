@@ -267,3 +267,49 @@ Fixes found on the way:
 
 The app now builds against the fork by default (`tools/fetch-cef.sh`,
 `CEF_SOURCE=fork`). `CEF_SOURCE=cdn` stays for comparisons only.
+
+## Open patch series and the CEF layer (P1, 2026-10-25)
+
+| Series | Patch | Size | Files |
+|---|---|---|---|
+| chromium | `0301-open-headless-browser-window.patch` | +14/−8 | `chrome/browser/ui/browser_window/internal/browser_window_features.cc` |
+| chromium | `0302-open-hidden-browser-ui.patch` | +12/−3 | `read_anything_side_panel_controller.cc`, `tabs/tab_features.cc`, `toasts/toast_controller.cc` |
+| chromium | `0303-open-hosted-tab-lifecycle.patch` | +43/−0 | `extensions/api/tabs/tabs_api.cc`, `resource_coordinator/tab_lifecycle_unit.cc` |
+| cef | `0302-open-hosted-tabs.patch` | +79/−6 | `BUILD.gn`, `browser_host_base.h`, `browser_info_manager.cc`, `browser_platform_delegate_create.cc`, `chrome/chrome_browser_delegate.cc`, `chrome/chrome_browser_host_impl.cc` |
+| cef | `0303-open-context-menu-submenu-commands.patch` | +15/−1 | `chrome/chrome_context_menu_handler.cc` |
+
+Overlay: `open/browser/tab_strip/*` and `open/open_libcef_sources.gni`
+(about 1,600 lines, compiled into `libcef_static`), and the API header
+`cef/include/cef_tab_strip.h`. What each part does:
+[engine-patches.md](engine-patches.md), P1 status.
+
+Open's Chromium patches can change lines that CEF's own patches added
+(`browser_window_features.cc` is one). Three tool changes follow from that:
+
+- `engine-refresh-patches` writes Chromium patches against the CEF-patched
+  baseline (`scripts/lib/cef_baseline_diff.py`: the HEAD blob plus each CEF
+  patch's hunks for that file, in `patch.cfg` order), so a patch holds only
+  Open's hunks. The baseline blob goes into the object store for `--3way`.
+- `engine-status` S-2 and `engine-apply` check CEF's patches "under" Open's
+  layer: files that both touch are checked in a scratch copy with Open's
+  hunks undone. Apply skips CEF's patcher when its layer is complete; when it
+  is not, apply peels Open's applied Chromium patches (reverse order), runs
+  the patcher, and re-applies them.
+- `git apply --3way` refuses files whose working copy differs from the index
+  ("does not match index"), which is every file CEF patched. Apply falls back
+  to a direct apply when the direct check passes; other failures still stop
+  with a conflict report.
+
+When an overlay header under `cef/include/` changes, `engine-apply` runs
+`cef/tools/version_manager.py -u --fast-check` (CEF's own gclient-hook
+command), which regenerates the C API, the wrapper sources, and the
+untracked API hashes. None of the generated files are tracked by CEF or this
+repo.
+
+Round-trip proof on the real tree: `views_textfield_5399416` (a one-file CEF
+patch) and Open's three patches reversed by hand, then `engine-apply --all`:
+CEF's patcher `1 applied, 116 skipped`, Open `3 applied`; all 10 touched
+files byte-identical to before; a second run `0 applied, 3 already applied`
+with the patcher skipped. With only the CEF patch reversed, apply peeled both
+Open Chromium patches, ran the patcher, and re-applied them (same 10 files
+identical).

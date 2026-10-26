@@ -42,7 +42,39 @@ if [[ $dry == 1 ]]; then
     log 'dry-run: CEF patch step skipped'
 elif [[ "$only" == overlay ]]; then
     log 'CEF patch step skipped: overlay-only selection'
+elif cef_status=$("$SCRIPT_DIR/engine-status" --cef-applied 2>&1); then
+    # Open's Chromium patches may change lines that CEF's own patches added,
+    # so CEF's patcher would no longer see those as applied. Check CEF's layer
+    # under Open's (engine-status --cef-applied) and skip the patcher when it
+    # has nothing to do.
+    log "CEF patch step skipped: $cef_status"
 else
+    log "$cef_status"
+    # Peel Open's Chromium layer (applied patches, reverse order) so CEF's
+    # patcher sees its own layer. The series loop below re-applies it for
+    # --only all|chromium; the EXIT trap re-applies whatever is still peeled
+    # in every other case, including errors (--only cef, a failed patcher).
+    peeled=()
+    restore_peeled() {
+        local name
+        for name in ${peeled[@]+"${peeled[@]}"}; do
+            git -C "$SRC_DIR" apply -p1 --reverse --check "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1 && continue
+            if git -C "$SRC_DIR" apply -p1 --whitespace=nowarn "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1; then
+                log "re-applied peeled patch: chromium/$name"
+            else
+                printf 'engine-apply: could not re-apply peeled patch chromium/%s; run engine-apply --only chromium\n' "$name" >&2
+            fi
+        done
+    }
+    trap 'restore_peeled; release_lock' EXIT
+    while IFS=$'\t' read -r kind series name line; do
+        [[ "$kind" == active && "$series" == chromium ]] || continue
+        if git -C "$SRC_DIR" apply -p1 --reverse --check "$FORK_DIR/patches/chromium/$name" >/dev/null 2>&1; then
+            git -C "$SRC_DIR" apply -p1 --reverse "$FORK_DIR/patches/chromium/$name"
+            peeled=("$name" ${peeled[@]+"${peeled[@]}"})
+            log "peeled for CEF's patcher: chromium/$name"
+        fi
+    done < <(printf '%s\n' "$plan" | tail -r)
     if ! cef_output=$(cd "$SRC_DIR/cef" && python3 tools/patcher.py 2>&1); then
         log "$cef_output"
         die "CEF patcher failed; see $LOG_DIR/engine-apply.log"
@@ -50,7 +82,7 @@ else
     log "$cef_output"
     [[ "$cef_output" =~ [1-9][0-9]*\ failed ]] && die "CEF patches failed; see $LOG_DIR/engine-apply.log"
 fi
-applied=0 already=0 disabled=0 copied=0 overlays=0 outcomes=
+applied=0 already=0 disabled=0 copied=0 overlays=0 api_headers=0 outcomes=''
 while IFS=$'\t' read -r kind series name line; do
     [[ -n "$kind" ]] || continue
     [[ "$only" == all || "$only" == "$series" ]] || continue
@@ -74,7 +106,13 @@ while IFS=$'\t' read -r kind series name line; do
         log "dry-run: would apply --3way --whitespace=nowarn $patch"
         continue
     fi
-    if output=$(${git_apply[@]+"${git_apply[@]}"} --3way --whitespace=nowarn "$patch" 2>&1); then
+    # --3way needs the index to match the working file; files that CEF's
+    # patches changed never do ("does not match index"). Those apply directly
+    # when the direct check passes.
+    if output=$(${git_apply[@]+"${git_apply[@]}"} --3way --whitespace=nowarn "$patch" 2>&1) ||
+        { [[ "$output" == *"does not match index"* ]] &&
+          ${git_apply[@]+"${git_apply[@]}"} --check --whitespace=nowarn "$patch" >/dev/null 2>&1 &&
+          output=$(${git_apply[@]+"${git_apply[@]}"} --whitespace=nowarn "$patch" 2>&1); }; then
         log "applied: $name"
         applied=$((applied + 1))
         outcomes+="$series/$name"$'\t''applied'$'\n'
@@ -109,9 +147,22 @@ if [[ "$only" == all || "$only" == overlay ]]; then
                 cp "$file" "$dest"
                 log "copied overlay: $relative"
                 copied=$((copied + 1))
+                [[ "$relative" != cef/include/* ]] || api_headers=$((api_headers + 1))
             fi
         fi
     done < <(find "$FORK_DIR/src" -type f ! -name '*.open' ! -name .gitkeep -print0)
+fi
+# New or changed CEF API headers: regenerate the C API and wrappers. These are
+# untracked build inputs in CEF (cef_api_untracked.json); CEF's own gclient
+# hook runs the same command.
+if [[ $api_headers -gt 0 ]]; then
+    if ! api_output=$(cd "$SRC_DIR/cef" && python3 tools/version_manager.py -u --fast-check 2>&1); then
+        log "$api_output"
+        die "CEF API regeneration failed; see $LOG_DIR/engine-apply.log"
+    fi
+    log "regenerated CEF API for $api_headers changed header(s): $(printf '%s\n' "$api_output" | tail -n 1)"
+elif [[ $dry == 1 ]]; then
+    log 'dry-run: would run cef/tools/version_manager.py -u --fast-check if a cef/include overlay header changes'
 fi
 if [[ $dry == 1 ]]; then
     log "dry-run: would atomically write $STATE_DIR/applied.json"

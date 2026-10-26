@@ -21,6 +21,25 @@ public struct ArchiveEntry: Sendable {
     }
 }
 
+public enum ArchiveRecordKind: String, Codable, Sendable { case tab, folder }
+
+/// A folder removed by Delete. Section preserves the fallback when its parent disappears.
+public struct ArchiveFolderEntry: Sendable {
+    public let folder: Folder
+    public let originalLocation: String
+    public let spaceID: SpaceID?
+    public let profileID: ProfileID?
+    public let archivedAt: Date
+    public let originalSection: String?
+    public let reason: ArchiveReason
+
+    public init(folder: Folder, originalLocation: String, spaceID: SpaceID?, profileID: ProfileID?, archivedAt: Date,
+                originalSection: String? = nil, reason: ArchiveReason = .folderDeleted) {
+        self.folder = folder; self.originalLocation = originalLocation; self.spaceID = spaceID
+        self.profileID = profileID; self.archivedAt = archivedAt; self.originalSection = originalSection; self.reason = reason
+    }
+}
+
 /// One stored archive row. Defined in OpenModel so `BrowserModel` can restore it
 /// without depending on OpenStore. OpenStore's ArchiveStore produces these.
 public struct ArchivedTabRecord: Sendable, Identifiable {
@@ -33,13 +52,14 @@ public struct ArchivedTabRecord: Sendable, Identifiable {
     public var reason: ArchiveReason
     public var originalLocation: String
     /// The tab JSON that ArchiveStore writes (OpenStore's `TabDTO`).
+    public var kind: ArchiveRecordKind
     public var payloadJSON: String
 
-    public init(id: ItemID, url: URL, title: String, spaceID: SpaceID? = nil, profileID: ProfileID? = nil, archivedAt: Date, reason: ArchiveReason, originalLocation: String, payloadJSON: String) {
+    public init(id: ItemID, url: URL, title: String, spaceID: SpaceID? = nil, profileID: ProfileID? = nil, archivedAt: Date, reason: ArchiveReason, originalLocation: String, payloadJSON: String, kind: ArchiveRecordKind = .tab) {
         self.id = id; self.url = url; self.title = title
         self.spaceID = spaceID; self.profileID = profileID
         self.archivedAt = archivedAt; self.reason = reason
-        self.originalLocation = originalLocation; self.payloadJSON = payloadJSON
+        self.originalLocation = originalLocation; self.payloadJSON = payloadJSON; self.kind = kind
     }
 }
 
@@ -49,6 +69,9 @@ public struct ArchivedTabRecord: Sendable, Identifiable {
 @MainActor
 public protocol ArchiveSink: AnyObject {
     /// Stores tabs that left the sidebar. A bulk command passes all of its tabs in one call.
+    func archiveFolder(_ entry: ArchiveFolderEntry)
+    /// One command batch, including folder deletions. Stores override this for one transaction.
+    func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry])
     func archive(_ entries: [ArchiveEntry])
     /// Waits for durable archive commit; a failure must leave the model unchanged.
     func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws
@@ -60,6 +83,12 @@ public protocol ArchiveSink: AnyObject {
 public enum ProfileArchiveError: Error { case confirmationUnavailable }
 
 public extension ArchiveSink {
+    func archiveFolder(_ entry: ArchiveFolderEntry) {}
+    func archive(_ entries: [ArchiveEntry], folders: [ArchiveFolderEntry]) {
+        if !entries.isEmpty { archive(entries) }
+        for entry in folders { archiveFolder(entry) }
+    }
+
     func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
         throw ProfileArchiveError.confirmationUnavailable
     }
@@ -547,6 +576,7 @@ public final class BrowserModel {
     }
 
     private func closeNode(_ id: ItemID) -> Revert? {
+        if index[id]?.folder != nil { return archiveFolderNode(id) }
         guard let node = index[id], let parent = parentByID[id] else { return nil }
         let entries = archiveEntries(for: node, in: parent, reason: node.folder != nil ? .folderDeleted : .closed)
         guard let removed = detach(id) else { return nil }
@@ -687,6 +717,7 @@ public final class BrowserModel {
 
     /// Keys of the payload JSON (OpenStore's `TabDTO`). All optional, so a partial payload still restores.
     private struct ArchivedTabPayload: Decodable {
+        var id: String?
         var url: String?
         var title: String?
         var customTitle: String?
@@ -715,6 +746,158 @@ public final class BrowserModel {
                    isMuted: payload?.isMuted ?? false,
                    openerID: payload?.openerID.flatMap { UUID(uuidString: $0) }.map { ItemID(rawValue: $0) },
                    isUnread: payload?.isUnread ?? false)
+    }
+
+    // MARK: Folder archive (Delete retains the subtree as one record)
+
+    private func folderEntry(_ folder: Folder, parent: NodeParent, archivedAt: Date = Date()) -> ArchiveFolderEntry {
+        let owner = owner(of: parent)
+        return ArchiveFolderEntry(folder: folder, originalLocation: parent.archiveLocation,
+                                  spaceID: owner.space, profileID: owner.profile, archivedAt: archivedAt,
+                                  originalSection: section(of: parent)?.archiveLocation)
+    }
+
+    @discardableResult
+    public func archiveFolder(id: ItemID) -> Bool {
+        guard let revert = archiveFolderNode(id) else { return false }
+        registerUndo(revert, reapply: { $0.archiveFolderNode(id) ?? Self.noRevert })
+        return true
+    }
+
+    private func archiveFolderNode(_ id: ItemID) -> Revert? {
+        guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
+        let entry = folderEntry(folder, parent: parent)
+        guard let removed = detach(id) else { return nil }
+        archiveSink?.archiveFolder(entry)
+        return { model in
+            guard model.attach(removed.node, to: removed.parent, at: removed.index) != nil else { return false }
+            model.archiveSink?.discardArchived(ids: [id])
+            return true
+        }
+    }
+
+    /// Mirrors SnapshotDTOs' enum envelope and keys. Only folder records enter this path.
+    private indirect enum ArchivedNodePayload: Decodable {
+        case tab(ArchivedTabPayload), folder(ArchivedFolderPayload), split(ArchivedSplitPayload)
+    }
+    private struct ArchivedFolderPayload: Decodable {
+        var kind: ArchiveRecordKind?
+        var id: String
+        var title: String
+        var isExpanded: Bool
+        var customIcon: String?
+        var children: [ArchivedNodePayload]
+        var originalSection: String?
+    }
+    private struct ArchivedSplitPayload: Decodable {
+        var id: String
+        var orientation: SplitOrientation
+        var fractions: [Double]
+        var panes: [ArchivedTabPayload]
+        var focusedPaneID: String?
+    }
+
+    private func decodedFolder(_ record: ArchivedTabRecord) -> (Folder, String?)? {
+        guard record.kind == .folder, index[record.id] == nil,
+              let data = record.payloadJSON.data(using: .utf8),
+              let payload = try? JSONDecoder().decode(ArchivedFolderPayload.self, from: data),
+              payload.kind == .folder, UUID(uuidString: payload.id) == record.id.rawValue else { return nil }
+        var used = Set(index.keys)
+        func identity(_ raw: String?) -> ItemID? {
+            guard let raw, let uuid = UUID(uuidString: raw) else { return nil }
+            let id = ItemID(rawValue: uuid)
+            return used.insert(id).inserted ? id : nil
+        }
+        func tab(_ payload: ArchivedTabPayload) -> Tab? {
+            guard let id = identity(payload.id) else { return nil }
+            return Tab(id: id, url: payload.url.flatMap(URL.init(string:)) ?? URL(string: "about:blank")!,
+                       title: payload.title ?? "", customTitle: payload.customTitle,
+                       pinnedURL: payload.pinnedURL.flatMap(URL.init(string:)), customIcon: payload.customIcon,
+                       createdAt: payload.createdAt.map(Date.init(timeIntervalSince1970:)) ?? record.archivedAt,
+                       lastActiveAt: Date(), isMuted: payload.isMuted ?? false,
+                       openerID: payload.openerID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) },
+                       isUnread: payload.isUnread ?? false)
+        }
+        func folder(_ payload: ArchivedFolderPayload) -> Folder? {
+            guard let id = identity(payload.id) else { return nil }
+            return Folder(id: id, title: payload.title, isExpanded: payload.isExpanded, customIcon: payload.customIcon,
+                          children: payload.children.compactMap(node))
+        }
+        func node(_ payload: ArchivedNodePayload) -> SidebarNode? {
+            switch payload {
+            case .tab(let payload): return tab(payload).map(SidebarNode.tab)
+            case .folder(let payload): return folder(payload).map(SidebarNode.folder)
+            case .split(let payload):
+                guard let id = identity(payload.id) else { return nil }
+                let panes = payload.panes.compactMap(tab)
+                if panes.count == 1 { return .tab(panes[0]) }
+                guard (2...4).contains(panes.count) else { return nil }
+                let shares = panes.map { pane in
+                    payload.panes.firstIndex { $0.id.flatMap(UUID.init(uuidString:)) == pane.id.rawValue }
+                        .flatMap { payload.fractions.indices.contains($0) ? payload.fractions[$0] : nil } ?? 0
+                }
+                let sum = shares.reduce(0, +)
+                let fractions = shares.allSatisfy { $0.isFinite && $0 >= 0 } && sum.isFinite && sum > 0
+                    ? shares.map { $0 / sum } : Array(repeating: 1 / Double(panes.count), count: panes.count)
+                let focused = payload.focusedPaneID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
+                return .split(Split(id: id, orientation: payload.orientation, fractions: fractions, panes: panes,
+                                    focusedPaneID: panes.first { $0.id == focused }?.id ?? panes.first?.id))
+            }
+        }
+        guard let result = folder(payload) else { return nil }
+        return (result, payload.originalSection)
+    }
+
+    private func folderRestoreDestination(_ record: ArchivedTabRecord, section originalSection: String?) -> NodeParent? {
+        if let original = NodeParent(archiveLocation: record.originalLocation), parentExists(original) {
+            switch original {
+            case .spacePinned, .spaceToday, .folder: return original
+            case .favorites, .splitPane: break
+            }
+        }
+        if let spaceID = record.spaceID, space(id: spaceID) != nil {
+            if let originalSection, case .spacePinned? = NodeParent(archiveLocation: originalSection) { return .spacePinned(spaceID) }
+            if case .spacePinned? = NodeParent(archiveLocation: record.originalLocation) { return .spacePinned(spaceID) }
+            return .spaceToday(spaceID)
+        }
+        return targetSpace(forProfile: record.profileID).map(NodeParent.spaceToday)
+    }
+
+    @discardableResult
+    public func restoreArchivedFolder(_ record: ArchivedTabRecord) -> Folder? {
+        // This overload has no I/O; the Library uses the durable-save overload below.
+        try? restoreArchivedFolder(record, saving: {}, discardArchive: true)
+    }
+
+    @discardableResult
+    public func restoreArchivedFolder(_ record: ArchivedTabRecord, saving: () throws -> Void) throws -> Folder? {
+        try restoreArchivedFolder(record, saving: saving, discardArchive: false)
+    }
+
+    private func restoreArchivedFolder(_ record: ArchivedTabRecord, saving: () throws -> Void, discardArchive: Bool) throws -> Folder? {
+        guard let (folder, originalSection) = decodedFolder(record),
+              let destination = folderRestoreDestination(record, section: originalSection) else { return nil }
+        func place(_ model: BrowserModel, discard: Bool) -> Revert? {
+            guard model.index[folder.id] == nil, model.parentExists(destination) else { return nil }
+            let prior = model.applyPinnedRule(to: .folder(folder), from: .spacePinned(record.spaceID ?? SpaceID()),
+                                              to: model.section(of: destination))
+            for tab in model.tabs(under: .folder(folder)) { tab.lastActiveAt = Date() }
+            guard model.attach(.folder(folder), to: destination, at: 0) != nil else { Self.restore(prior); return nil }
+            if discard { model.archiveSink?.discardArchived(ids: [folder.id]) }
+            return { model in
+                guard model.detach(folder.id) != nil else { return false }
+                Self.restore(prior)
+                model.archiveSink?.archiveFolder(ArchiveFolderEntry(folder: folder, originalLocation: record.originalLocation,
+                    spaceID: record.spaceID, profileID: record.profileID, archivedAt: record.archivedAt, originalSection: originalSection,
+                    reason: record.reason))
+                return true
+            }
+        }
+        guard let revert = place(self, discard: false) else { return nil }
+        do { try saving() } catch { _ = detach(folder.id); throw error }
+        if discardArchive { archiveSink?.discardArchived(ids: [folder.id]) }
+        registerUndo(revert, reapply: { place($0, discard: true) ?? Self.noRevert })
+        return folder
     }
 
     // MARK: move / folders / rename / expand
@@ -879,8 +1062,12 @@ public final class BrowserModel {
         let now = Date()
         // Capture direct parents before collapsing any selected panes.
         let entries = ordered.flatMap { id -> [ArchiveEntry] in
-            guard let node = index[id], let parent = parentByID[id] else { return [] }
+            guard let node = index[id], node.folder == nil, let parent = parentByID[id] else { return [] }
             return archiveEntries(for: node, in: parent, reason: node.folder == nil ? .closed : .folderDeleted, at: now)
+        }
+        let folders = ordered.compactMap { id -> ArchiveFolderEntry? in
+            guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
+            return folderEntry(folder, parent: parent, archivedAt: now)
         }
         var reverts: [Revert] = []
         for id in ordered {
@@ -891,10 +1078,10 @@ public final class BrowserModel {
             }
         }
         guard let structural = Self.combined(reverts) else { return (0, nil) }
-        archive(entries)
+        archiveSink?.archive(entries, folders: folders)
         return (reverts.count, { model in
             guard structural(model) else { return false }
-            model.archiveSink?.discardArchived(ids: entries.map { $0.tab.id }.filter { model.index[$0] != nil })
+            model.archiveSink?.discardArchived(ids: (entries.map { $0.tab.id } + folders.map { $0.folder.id }).filter { model.index[$0] != nil })
             return true
         })
     }

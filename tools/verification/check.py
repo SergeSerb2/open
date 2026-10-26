@@ -9,6 +9,7 @@ import runpy
 import select
 import shutil
 import signal
+import sqlite3
 import struct
 import subprocess
 import sys
@@ -312,6 +313,37 @@ def adblock_catalog(cli, root):
     print("catalog 46/46; categories 3/2/5/35/1; defaults verified")
 
 
+def archive_migration(cli):
+    for boundary in ("alter", "version"):
+        root = Path("archive-migration-" + boundary).resolve()
+        file = root / "Profiles/Default/State/archive.sqlite3"
+        file.parent.mkdir(parents=True)
+        with sqlite3.connect(file) as db:
+            db.executescript("""
+                CREATE TABLE archived_tabs(id TEXT PRIMARY KEY,url TEXT NOT NULL,title TEXT NOT NULL,
+                  space_id TEXT,profile_id TEXT,archived_at REAL NOT NULL,reason TEXT NOT NULL,
+                  original_location TEXT NOT NULL,payload TEXT NOT NULL);
+                INSERT INTO archived_tabs VALUES('00000000-0000-0000-0000-000000000001',
+                  'https://example.invalid/legacy','Legacy tab',NULL,NULL,1,'folderDeleted','today:legacy','{}');
+            """)
+            original = db.execute("SELECT * FROM archived_tabs").fetchall()
+        environment = dict(os.environ, OPENKIT_DEBUG_ARCHIVE_MIGRATION_CRASH=boundary)
+        run(cli, "archive-list", str(root), expected=86, env=environment)
+        with sqlite3.connect(file) as db:
+            require("kind" not in [row[1] for row in db.execute("PRAGMA table_info(archived_tabs)")], "crash published partial kind column")
+            require(db.execute("PRAGMA user_version").fetchone()[0] == 0, "crash published schema version")
+            require(db.execute("SELECT * FROM archived_tabs").fetchall() == original, "crash changed old rows")
+            require(db.execute("PRAGMA quick_check").fetchone()[0] == "ok", "crashed archive is corrupt")
+        for _ in range(2):
+            text = run(cli, "archive-list", str(root))
+            matches(r"archive rows total=1 showing=1", text)
+            matches(r"kind=tab reason=folderDeleted", text)
+        with sqlite3.connect(file) as db:
+            require(db.execute("PRAGMA user_version").fetchone()[0] == 1, "migration version not committed")
+            require(db.execute("SELECT kind FROM archived_tabs").fetchall() == [("tab",)], "legacy row kind changed")
+        print("FA6 crash recovery and repeated migration passed: " + boundary)
+
+
 def profiles(cli):
     directory = str(Path("data").resolve())
     def command(*args, expected=0):
@@ -411,6 +443,7 @@ def main():
         text = run(cli, name, str(directory))
         matches(r"commands-demo OK: [1-9]\d* checks passed, 0 failed", text)
         shutil.copytree(directory, seed, dirs_exist_ok=True)
+        archive_migration(cli)
     elif name == "space-legacy":
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
