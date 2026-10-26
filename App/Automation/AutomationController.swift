@@ -236,7 +236,9 @@
             ?? model.createProfile(name: name)
         else { throw Failure(message: "cannot create profile \(name)") }
         try app.directories.ensureProfileDirectories(for: profile)
-        let space = model.createSpace(title: a["title"] as? String ?? name, profileID: profile.id)
+        guard let space = model.createSpace(title: a["title"] as? String ?? name, profileID: profile.id,
+                                           icon: nil, theme: SpaceTheme(), at: nil, moving: [])
+        else { throw Failure(message: "cannot create Space for profile \(profile.id)") }
         w.focus(space: space)
         return space.id.description
       case "favorite":
