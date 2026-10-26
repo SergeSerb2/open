@@ -750,3 +750,26 @@ event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
 Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
 500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
 new target, dependency, timer, App edit, or desktop input was added.
+
+## Sidebar completion M4 (2026-10-26)
+
+Open's two sounds are generated from fixed-seed PCM with the Python standard
+library and converted by afconvert. `tools/generate-sounds.py --check` regenerates
+both files and compares their pinned SHA-256 and committed bytes. `SoundEffects`
+loads AVAudioPlayer lazily, reads `open.advanced.playSoundEffects` at each use, and
+loads/plays nothing when it is absent or false. The default remains false; there
+is no production caller for the general event effect (lead Q6). The license
+inventory records these assets as Open's own work, with no recorded reference audio.
+
+The existing SettingsDefaults registry now owns the three sidebar hint/banner keys.
+The lead Q3 Previews sources use `open.general.previewsFolders` and
+`open.general.previewsPages` in the same UserDefaults store. ProfileSettings is
+unchanged. The Previews sheet replaces its former hovering-links switch with
+Folders and Pinned tabs and Favorites. The registry in settings-library.md records
+the exact keys; no second settings store is introduced.
+
+The release `features-render check` passes 150/150: SE1 loads the real bundled CAFs
+at 0.450 s / -6.000 dBFS and 1.100 s / -8.000 dBFS; SE2 proves absent and false
+preferences neither load nor play. The Settings CLI verifies defaults, disk writes,
+and reload through the existing store. `features-render` and sound regeneration now
+run in verify-all. No audio playback, unit tests, App edits, or desktop input.

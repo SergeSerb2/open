@@ -85,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -236,6 +236,44 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let receipt=try await ArcProbe.verifyCopyCancellation()
                 try require(receipt.cancelled && receipt.copyStarted && receipt.copyWasPartial && receipt.privateModes && receipt.temporaryCopyRemoved && receipt.sourceUnchanged,"cancelled partial copy leaked files, changed its source, or bypassed cancellation")
                 print("COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchanged=true")
+            case "previews-legacy-migration":
+                let cases: [(legacy: Bool, folders: Bool?)] = [(false, nil), (true, false), (false, true)]
+                for (legacy, storedFolders) in cases {
+                    let expectedFolders = storedFolders ?? legacy
+                    let suite = "open.previews.migration.\(UUID().uuidString)"
+                    let defaults = UserDefaults(suiteName: suite)!
+                    defer { defaults.removePersistentDomain(forName: suite) }
+                    defaults.set(legacy, forKey: "open.general.previewsOnHover")
+                    if let storedFolders { defaults.set(storedFolders, forKey: "open.general.previewsFolders") }
+                    let migrated = SettingsViewModel(model: vm.model, actions: env.actions, defaults: defaults, root: env.root, snapshot: vm.snapshot)
+                    try require(migrated.bool("open.general.previewsFolders") == expectedFolders && migrated.bool("open.general.previewsPages") == legacy,
+                                "legacy preview source choices were reset or an explicit new choice was overwritten")
+                    try require(defaults.synchronize(), "migration did not flush to the existing defaults store")
+                    let disk = defaults.persistentDomain(forName: suite)!
+                    try require(disk["open.general.previewsFolders"] as? Bool == expectedFolders && disk["open.general.previewsPages"] as? Bool == legacy,
+                                "preview migration did not persist the source keys")
+                    defaults.set(true, forKey: "open.general.previewsPages")
+                    defaults.set(false, forKey: "open.general.previewsOnHover")
+                    let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: suite)!, root: env.root, snapshot: vm.snapshot)
+                    try require(reloaded.bool("open.general.previewsFolders") == expectedFolders && reloaded.bool("open.general.previewsPages"),
+                                "repeat registration overwrote a later per-source choice")
+                }
+                print("Legacy preview false/true, missing keys, explicit choices, disk writes, and repeat startup passed")
+            case "sidebar-defaults":
+                try require(!vm.bool("open.sidebar.hideHintShown") && !vm.bool("open.sidebar.autoArchiveBannerDismissed")
+                            && vm.bool("open.sidebar.autoArchiveBannerEligible") && !vm.bool("open.advanced.playSoundEffects")
+                            && vm.bool("open.general.previewsFolders") && vm.bool("open.general.previewsPages"), "sidebar app defaults differ")
+                vm.set(true, for: "open.sidebar.hideHintShown")
+                vm.set(true, for: "open.sidebar.autoArchiveBannerDismissed")
+                vm.set(false, for: "open.sidebar.autoArchiveBannerEligible")
+                vm.set(false, for: "open.general.previewsFolders")
+                vm.set(false, for: "open.general.previewsPages")
+                let disk = try env.diskDefaults()
+                try require(disk["open.sidebar.hideHintShown"] as? Bool == true && disk["open.sidebar.autoArchiveBannerDismissed"] as? Bool == true
+                            && disk["open.sidebar.autoArchiveBannerEligible"] as? Bool == false && disk["open.general.previewsFolders"] as? Bool == false
+                            && disk["open.general.previewsPages"] as? Bool == false, "sidebar settings did not reach the existing UserDefaults store")
+                let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: env.suite)!, root: env.root, snapshot: vm.snapshot)
+                try require(reloaded.bool("open.sidebar.hideHintShown") && !reloaded.bool("open.general.previewsPages"), "sidebar settings did not survive reload")
             case "general-toggles":
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()
