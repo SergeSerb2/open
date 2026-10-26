@@ -137,12 +137,17 @@ public struct ArcImporter {
         return (result.model, result.report)
     }
 
+    /// JSONSerialization produces immutable containers. Their contents are private and read-only;
+    /// only the model construction that consumes them runs on the main actor.
+    public struct ParsedSidebar: @unchecked Sendable { fileprivate let root: [String: Any] }
+    public func readSidebar() throws -> ParsedSidebar {
+        let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
+        guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
+        return ParsedSidebar(root: root)
+    }
     @MainActor
-    public func importAll(directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
-        let sidebarURL = arcDirectory.appendingPathComponent("StorableSidebar.json")
-        guard let data = try? Data(contentsOf: sidebarURL), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw ImportError.missingSidebar
-        }
+    public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
+        let root = try (parsed ?? readSidebar()).root
         guard let sidebar = root["sidebar"] as? [String: Any],
               let containers = sidebar["containers"] as? [Any], containers.count >= 2,
               let holder = containers[1] as? [String: Any],
