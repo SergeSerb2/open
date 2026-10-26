@@ -1,0 +1,16 @@
+build                  PASS   1
+commands-demo          PASS   1
+roundtrip              PASS   0
+suggest-check          PASS   14
+commands-dump          PASS   0
+route                  PASS   3
+favicons               PASS   1
+media-demo             PASS   1
+sleep-demo             PASS   0
+adblock-perf           PASS   1
+adblock-catalog        PASS   0
+profiles               PASS   2
+settings-preview       PASS   68
+sidebar-render         PASS   22
+commandbar-render      PASS   16
+boosts                 PASS   4

@@ -1,0 +1,13 @@
+{
+  "state": "held-by-lead",
+  "requestedLocal": "2026-10-26 09:58 America/Vancouver",
+  "estimatedThrough": "11:15",
+  "resume": "Explicit lead instruction required; time alone is not approval",
+  "sourceHead": "f1f5746b30610042eacfa7bf9a4017079550c302",
+  "allOwnOpenProcessesClosed": true,
+  "completedThreePassMatrix": false,
+  "pushed": false,
+  "interrupted": "Debug features run interrupted when supervisor stopped; no completed receipt for that run",
+  "next": "After explicit resume: exercise exact-PID activator and rerun all five suites three times in Debug and Release; retain every failed attempt.",
+  "appBuildHead": "aeda68ad0d9ce39f875b60f045078861d399f7f6"
+}

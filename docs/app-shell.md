@@ -246,11 +246,13 @@ Main's M4 visual finish (`39fb0ed`) is merged with both sides' behavior kept.
 | M4 selection / binding | Model owns collapse selection; all visible split panes bind on refresh; one-pane duplicate refresh stays removed | features-render check 147/147 |
 | Lazy Peek | Passive key and navigation checks use existing Peek storage | Escape with no Peek keeps it unconstructed; native startup check passes |
 
-The all-Spaces strip order is intentional (locked engine decision, 2026-10-25):
-favorites first, then Spaces in model order, each in sidebar order (pinned then
-Today, folders and split panes flattened). Each window/profile strip contains
-its own loaded subset. Space focus does not change that order. Peek hosts stay
-outside the strip until promotion.
+Step B originally used favorites followed by each Space's pinned and Today rows.
+The merged P1 port (#53) supersedes that strip order with Chromium's pinned prefix:
+favorites, then every Space's pinned rows, then every Space's Today rows. Spaces
+retain model order within each part; folders and split panes are flattened in
+sidebar order. Each window/profile strip contains its own loaded subset. Space
+focus does not change that order. Peek hosts remain outside the strip; promoting
+an Alloy Peek into a Chrome tab recreates the host, as documented by P1.
 
 The initial Step B review evidence below used **CDN CEF**. The current fork
 refresh is recorded separately below.
@@ -816,3 +818,85 @@ app builds pass. `features-render check`: **147/147 PASS**; sidebar-render
 | sidebar-render | PASS | 18 |
 | commandbar-render | PASS | 15 |
 | boosts | PASS | 3 |
+
+
+## Step C main merge and display hold — 2026-10-26
+
+Merged `e44b40d` (P1 #53, first run #66, sidebar #77, chrome #90), then main
+through `15e261e` (Release metadata and Sparkle pin). No rebase or force-push.
+The P1 host structure, TabStripMirror, ExtensionTabRequests and factory
+OEBrowserDelegate remain as main implements them. Step C keyboard/undo behavior
+is reapplied above them. Chrome geometry, traffic-light placement, spacing and
+reveal behavior remain from #90. Package.swift and verify-all retain every target
+and row from main.
+
+### Failure causes and changes
+
+| Failure / defect | Evidence | Change / current limit |
+|---|---|---|
+| Launch focus | Same Debug app, raw executable in Alloy and Chrome: visible but appActive=false/key=0 after five seconds. Bundle launch: active/key and native page Copy succeeds. | Normal suites launch the exact bundle through LaunchServices. Input waits for native focus. A helper renews activation only for a verified PID/executable, without resolving another Open instance by bundle ID. The new PID helper compiles; its real-app path awaits resume. |
+| Focus after command-bar navigation | Native RenderWidget responder and key app, but the committed page reported document.hasFocus=false for five seconds. | Restore focus after loading, only while that same page remains selected, the window is key and the command bar is closed. The resulting five native editing rows and all 45 action checks passed in a diagnostic. |
+| Capture size | Old run: 1394 pt request clipped to 1050 on a 1080 pt screen. Morning negative control on a 1440 pt screen: 1800 pt clipped to 1410, exact-frame mode kept 1800. | Keep #90's unconstrained capture mode and wait for the exact dimensions. Position/color tolerances are unchanged. Morning sidebar/window comparisons passed. |
+| Hover readiness | First leave/enter moves were queued without native-dequeue acknowledgement; NSEvent.h documents that movement coalescing is enabled by default. | Each synthetic motion now has a request tag and waits for native monitor + tracker delivery. Production reveal code and dwell budgets stay unchanged. This alone did not clear the next attempt: hide/reveal failed again alongside inactive/key=0 failures. Final stability is unverified. |
+| Save fixture | After creating a custom-search tab, the fixture tried to focus the older background cross-Space tab. | Select/load it before focusing. Save sheet and relaunch rows passed in the 45/45 diagnostic. |
+| Worktree/process isolation | Suite roots used shared Application Support paths. Stopping subprocess.run's supervisor also left two own Open processes alive. | Use worktree-private .re data roots. Wait for the actual app PID on cleanup, not only open -W. The next supervisor records stop requests and finishes its current child. Both orphan processes were identified by socket PID and closed. |
+
+[Controlled native-state evidence](engine-spike/step-c-main-recheck/focus-capture-causes.json).
+The isolation issue is an additional defect, not proof that every prior focus
+failure had that cause. Foreground contention remained in the interrupted run.
+
+### Diagnostic results, not a completed acceptance matrix
+
+| Debug / default fork / Chrome | Result |
+|---|---|
+| Actions after navigation focus fix | 45/45 PASS |
+| First matrix window runs | 43 PASS + hide_reveal FAIL; then 44/44 PASS; both have two named timing SKIPs |
+| First matrix sidebar runs | 18/18 PASS twice; durable storage BLOCKED |
+| First matrix shell runs | 6/6 PASS twice |
+| First matrix features run | 19/19 PASS |
+| First matrix actions run | 45/45 PASS |
+| Later window attempt | 23 PASS; hide_reveal and suite FAIL; incomplete |
+| Later sidebar attempt | 18/18 PASS; durable storage BLOCKED |
+| Later shell attempt | 2 PASS; suite FAIL on native key-focus readiness; incomplete |
+| Active features attempt at hold | Interrupted; no complete receipt |
+| Required final three-pass matrix | NOT COMPLETE; Debug and Release all five suites remain to rerun |
+
+All files and the exact failed rows are retained in
+[step-c-main-recheck](engine-spike/step-c-main-recheck/README.md). The last helper,
+cleanup and hold changes are not credited with runtime acceptance. Default fork
+runtime receipts embed UUID `4C4C44F5-5555-3144-A143-53034578039A`, matching the vendor
+UUID, source-stamp suffix `1793006546`. No CDN comparison or engine build/sync.
+Debug launch numbers do not close Release budgets; the final Release medians are
+pending the resumed matrix. Earlier misses remain recorded above.
+
+### Offscreen/build checks complete before hold
+
+Debug build PASS (18.77 s), Release automation build PASS (58.29 s).
+`features-render`: 147/147 PASS; `sidebar-render`: 147/147 PASS. Full verify-all:
+16 PASS, no SKIP. The exact-PID Swift helper compiles with Swift 6 and Python
+compilation/CLI help passes; no unit checks replace the remaining real-app flows.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 1 |
+| commands-demo | PASS | 1 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 14 |
+| commands-dump | PASS | 0 |
+| route | PASS | 3 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 2 |
+| settings-preview | PASS | 68 |
+| sidebar-render | PASS | 22 |
+| commandbar-render | PASS | 16 |
+| boosts | PASS | 4 |
+
+The lead requested a display hold at 09:58 America/Vancouver. All own Open
+processes are closed and `.re/hold-on-screen` prevents new launches. The estimated
+11:15 end is not authorization to resume. The required three repetitions of
+window/sidebar/shell/features/actions in Debug and Release, the final PR body,
+and push remain pending the lead's explicit resume.
