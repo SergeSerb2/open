@@ -105,7 +105,7 @@ Ship Arc's extension UI on Open's own views:
 - System `NSMenu` for every menu (`features-advanced.md` AM-1 allows it).
 - AppKit for every view in this plan. No SwiftUI.
 
-## 1. Current state (merged tree `42bba0b`, P1 branch `a03d2a5`; re-verify before you edit)
+## 1. Current state (merged tree `dc62e65`, P1 branch `a03d2a5`; re-verify before you edit)
 
 | Area | What exists | File |
 |---|---|---|
@@ -119,6 +119,7 @@ Ship Arc's extension UI on Open's own views:
 | Little Open | Toolbar 40 pt; right buttons Profile, Downloads, Open in Space at `x = w − 100 + 32k`, 30×28 | `Packages/OpenKit/Sources/OpenFeatures/LittleOpenWindowController.swift` |
 | Commands | `manage-extensions`, `add-extension` (Extensions menu); `use-selection-to-find` has Cmd+E | `Packages/OpenKit/Sources/OpenCommands/CommandRegistry.swift` |
 | Automation | `extensions`, `popup`, `popup-close` | `App/Automation/AutomationController.swift`, `docs/automation.md` |
+| Settings | Shortcuts pane with a "…" menu (Revert Unsaved Changes, Shortcut Help); no Extension Shortcuts item | `Packages/OpenKit/Sources/OpenSettings/ShortcutsPane.swift` (PR #51) |
 | App shell | Steps A+B in progress (PRs #45, #52) replace the M1 window; §4.12 keeps the M1 extension behavior until this plan lands | `docs/plans/app-shell.md` |
 
 ## 2. Arc facts this plan uses
@@ -594,10 +595,13 @@ Behavior:
 - `add-extension`: open `https://chromewebstore.google.com/category/extensions`
   (the URL string in Arc's binary, `.re/extensions-ui/ext-strings.txt`)
   as a new selected Today tab.
-- "Extension Shortcuts" (Settings › Shortcuts, owned by
-  `settings-library.md` §5.4): open `chrome://extensions/shortcuts` with
-  the singleton rule. This plan adds the command
-  `extension-shortcuts` (no menu, code only) for that row.
+- "Extension Shortcuts": Settings › Shortcuts
+  (`Packages/OpenKit/Sources/OpenSettings/ShortcutsPane.swift`, merged in
+  #51) gets a menu item "Extension Shortcuts" in the pane's "…" menu,
+  after "Shortcut Help" (Arc also has it as a menu item there). It calls `SettingsActions.openURL(chrome://extensions/shortcuts,
+  profileID: <selected profile>)`; the App's `openURL` applies the
+  singleton rule for `chrome://extensions*` URLs (EX-11). The code-only command
+  `extension-shortcuts` does the same from the command bar.
 - Page context menu: append "Manage Extensions" (EX-18) after the last
   extension-contributed item when the page menu has any; otherwise do not
   add it (guess: §12 S-9). Owner: the page context-menu builder
@@ -1077,6 +1081,7 @@ text right edge), `OpenSidebar/SidebarContext.swift` (an
 `OpenFeatures/PaneChromeView.swift` (pane strip, host right limit),
 `OpenFeatures/LittleOpenWindowController.swift` (§3.4),
 `OpenCommands/CommandRegistry.swift` and `MenuBuilder.swift` (§6.1),
+`OpenSettings/ShortcutsPane.swift` (§3.12 menu item),
 `OpenWeb/OpenWeb.swift` (§8.2), `OpenDesign/Typography.swift` (tokens).
 
 ### 8.2 OpenWeb changes (OpenKit's view of the engine)
