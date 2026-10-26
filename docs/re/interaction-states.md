@@ -93,12 +93,14 @@ Frames: rows are `[0, y, W, 41]` and the button is `[0, y, W, 40]` (`runtime-obs
 
 | State | Fill frame (pt) | Fill | Radius | Evidence |
 |---|---|---|---|---|
-| Hover, light-content Space (Space 1) | `[8, y+2, W−16, 36]` | black, a ≈ 0.048 (C/B = 0.951/0.954/0.952 on R/G/B) | ≈ 12 circular fit (row insets 6.3, 4.8, 3.6, 2.7, 2.0, 1.4, 1.0, 0.6) | F0013 vs F0012, F0031 vs F0030 (New Tab row, same values) |
+| Hover, light-content Space (Space 1) | `[8, y+2, W−16, 36]` | black, a ≈ 0.048 (C/B = 0.951/0.954/0.952 on R/G/B) | 12 continuous. Row insets 6.3, 4.8, 3.6, 2.7, 2.0, 1.4, 1.0, 0.6 match the 12 continuous curve from row 1 (6.21, 4.65, 3.50, 2.61, 1.90, 1.36, 0.92, 0.64). Corrected 2026-10-26: see the corner note below this table | F0013 vs F0012, F0031 vs F0030 (New Tab row, same values) |
 | Hover, dark Space (Space 4, no theme) | `[24, y+2, 196, 36]` for a folder child (indent 16) | white, a ≈ 0.10 (`#3B3A4C` on `#262538`) | same shape | F0079 |
 | Selected, light-content Space | `[8, y+2, W−16, 36]` | `#F6EBE7` opaque look. Closest token: the Space's `light.background` `#F6EAE4` (guess). Not a white overlay: a white fit gives a = 0.62 / 0.81 / 0.82 per channel. | same as hover | F0014, Today row F0066 |
 | Selected shadow (light) | below the fill | darkening 14% at 1 px below, 5.5% at 2 px, 2% at 3 px. 1% at 1 px above. 1–2 levels at the sides. guess: black ≈ 0.2, blur ≈ 1.5, y +1. | | F0014 rows 240, 277–279 |
 | Selected, dark Space | `[8, y+2, 212, 36]` | white, a ≈ 0.20 (`#51505F` on `#272538`) | | F0084 (Today row) |
 | Selected, dark-content theme (olive, grain) | `[16, y+2, …]` | white, a ≈ 0.20 (noisy because of grain) | | F0161 |
+
+Corner note (2026-10-26): selected-row corners were re-measured against Core Animation renders (`CALayer` at 1x, `cornerCurve .continuous` and `.circular`) and per-row edge profiles. Session 2 (default dark theme): 14b/0014 fits 12 continuous with coverage RMS 0.046 (11: 0.075; 10: 0.128; 12 circular: 0.056); 03/0001 gives 0.024 (11: 0.070; 10: 0.127); 16/0004 gives 0.045. Session 1 gives the same result: F0015 and F0066 (themed light content) 0.029, and F0084 (dark Space) 0.024, with 11 at 0.070–0.091 and 10 at 0.127–0.143. Edge profiles agree (RMS 0.04–0.20 px for 12 continuous; 0.39–0.51 px for 11; 0.75–0.86 px for 10). Session 2 item 20 (default theme in macOS Light, low contrast, shadow under the fill) is weaker: 12 continuous 0.116 and 13 continuous 0.113, both better than 11 (0.150) and 10 (0.177). The two sessions do not disagree: both ran on the same AW2726DM display at backing scale 1.0 (`displays.tsv`), and session 1 frames fit 12 when the corners alone are measured. The earlier "radius 10 continuous" in `docs/design.md` §2.2 came from the sidebar comparison loop, which samples element centers and does not isolate corner pixels (derived). The row-by-row insets recorded here before this note ("≈ 12 circular fit") already pointed at 12; only the curve label changes. Method notes and scripts stay in `.re/tooltip-radius/` (local only).
 
 Row controls:
 
@@ -136,13 +138,15 @@ guess: dark Spaces use white at a similar alpha (rows use 0.10).
 |---|---|---|
 | Shape | Capsule. Ends are full half-circles (radius = height / 2). | F0029 corner coverage |
 | Height | 27 pt for one line. 42 pt with a second line. | F0025, F0029, F0033; F0021 |
-| Fill | The Space's `light.title` color, opaque (`#320E00` in Space 1, exact match) | F0021, F0025, F0029, F0033 |
+| Fill | The Space's `light.title` color, opaque (`#320E00` in themed Space 1, exact match). Default theme (no stored palette): `#0A0D4F` in the dark theme (measured 2026-10-26; see the fill note below) | F0021, F0025, F0029, F0033; S2 14b/0024, 03/0010, 03/0014, 19/0025 |
 | Text | Light, tinted. About 13 pt (AX text frames 15 pt tall). guess: Medium. | `ax.json` of the tooltip windows |
 | Second line | "Double-click to rename" on tab rows, dimmer, 14 pt frame | F0021 |
 | Shortcut | Keycaps after the label, e.g. "⌘" + "[" or "⌃" + "2". Each key is its own text (13 pt frame) on a small rounded cap tinted with the Space color. | F0025, F0026, F0029 |
 | Window | Capsule plus 33 pt of shadow margin on each side (window 93 pt tall for a 27 pt capsule). Shadow: soft, wide. | `windows.tsv`, F0029 |
 | Placement | Toolbar tooltips below the button. Bottom-bar tooltips above the bar. Row tooltips beside the pointer. | F0025, F0029, F0021 |
 | Animation | Fade out seen (F0026 is half transparent) | F0026 |
+
+Fill note (2026-10-26): the fill follows the Space theme, not a fixed color. Session 1 themed Space 1 (sidebar `#E59878`): the capsule interior's main color, converted from the embedded display profile to sRGB, is `#320E00` in F0021, F0025, F0029, and F0033. That equals the Space's stored `light.title` (`runtime-observations.md` §3.3). Session 2 default dark theme (sidebar `#252538` at the toolbar, `#272538` below; both test Spaces had no `windowTheme`, §20.0): the same method gives `#0A0D4F` exact in 14b/0024 ("Adjust Tab Volume"), 03/0010 ("Go back"), 03/0014 ("Reload this page"), and 19/0025 (Little Arc window). Fading frames do not give the fill: F0026 is half transparent (above), and S2 03/0015 reads `#1D1D5A` in between. The value agrees with the link status bubble in the same default dark theme (`#0A0D4F`, S2 04/0021 and 0033; 4,910 exact pixels in each frame, re-counted 2026-10-26). It also fits the decoded palette math: `light.title` is `shadedDark` @0.30 over black and `dark.backgroundExtra` is the same color @0.15 over black (`design-tokens.md` §6.5), so the second role is half of the first; the mini player card fill in the same frame 14b/0024 reads `#050627`, half of `#0A0D4F` within one level per channel (derived). No tooltip window exists in session 2 item 20 (default theme in macOS Light) or in item 17 (the one themed session 2 Space), and no other themed Space has a tooltip capture, so the same fill in macOS Light is a guess from the `light.title` role. Confidence: fact for the default dark theme and for themed Space 1; the `light.title` rule for other themes is derived from those two cases. Scripts stay in `.re/tooltip-radius/` (local only).
 
 ## 6. Today section
 
