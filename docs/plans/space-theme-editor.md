@@ -1248,3 +1248,49 @@ measurement. Half-peak boxes still report center/height. Disabled glyphs
 sit among brighter grid dots; their table samples fixed core coordinates
 instead of treating grid dots as symbol bounds. The light moon uses 17 pt
 (16 pt in dark) to retain the captured height in item 20 frame 0027.
+
+### N7 light glyph fit — lead decision and result (2026-10-26 12:46)
+
+Capture evidence overrides the earlier black-alpha 0.55–0.60 guess. The lead
+allows a lower shared alpha only after fitting the median of **all session-2
+light glyph core samples**, with per-glyph fits within ±0.05 and a shared
+fit ≥0.45. No other light comparison may cross its gate. If any condition
+fails, keep 0.55 and report the residual.
+
+The compare harness `fit-light-glyphs` uses the same frozen ≥99%-of-peak
+core method as the N7 residual report, after embedded-profile conversion to
+sRGB. It includes item 20 (`20261026-103516-20-light-mode`) frames
+**0027–0034**, and item 17 (`20261026-104045-17-theme-editor`) frames
+**0158–0159**: 10 frames × 7 glyph roles = **70 instances, 298 core pixels**.
+AX flags match the enabled/disabled action controls; each glyph's measured
+background and native coverage normalize its alpha estimate. The recorder's
+`.same` markers reuse the preceding image of the same window. No capture
+pixels are committed.
+
+The shared median is **0.50850**. Per-role medians span **0.46890–0.53754**;
+per-instance medians span **0.46471–0.54239**, with largest absolute offset
+**0.04379** from the shared median. Thus the statistical conditions pass.
+However, an actual native render at that one alpha makes the Light glyph in
+item 17 frame 0159 cross its core-color gate: **ΔE00 1.75 → 4.36**. The same
+glyph reaches 5.05 in 0158. The fit is **refused**, and `glyph` and
+`glyphSelected` stay **black 0.55**. These raw residuals remain explicit;
+this is not a claim of complete session-2 glyph-color parity.
+
+| Glyph | Core pixels | Median fitted alpha | Offset from shared fit | Core ΔE00 at 0.55 | Core ΔE00 at candidate 0.50850 |
+|---|---|---|---|---|---|
+| Automatic | 25 | 0.53754 | +0.02904 | 1.45–5.88 | 1.49–2.80 |
+| Light | 11 | 0.52729 | +0.01878 | 1.75–2.64 | 1.66–5.05 |
+| Dark | 10 | 0.50941 | +0.00091 | 4.62–4.86 | 1.34–1.76 |
+| Remove | 84 | 0.49967 | −0.00883 | 3.47–6.04 | 2.15–3.16 |
+| Add | 10 | 0.53538 | +0.02688 | 1.93–4.40 | 1.11–1.68 |
+| Previous | 38 | 0.46890 | −0.03960 | 2.02–2.25 | 1.17–1.49 |
+| Next | 120 | 0.51224 | +0.00374 | 2.97–4.70 | 0.63–1.76 |
+
+The candidate is confined to offscreen native glyph tinting in the compare
+harness; production tokens are never changed during fitting. Other light
+text and controls retain their authored tokens. The complete numeric
+per-frame table stays in ignored `.re/theme-r3/light-fit/fit.md`; its command
+and the table above make the refusal reproducible without exporting private
+images. The corpus harness lands in Step 4 because it also measures the
+real preset chevrons introduced there; this Step 3 entry owns the token
+contract and records the lead's required fallback.
