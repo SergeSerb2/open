@@ -1,10 +1,10 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
-    "embeddedUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "distributionUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
+    "embeddedUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792999269"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001810"
   },
   "features": {
     "adblock_control": {
@@ -37,12 +37,17 @@
     },
     "context_menu": {
       "items": [
+        "Look Up \u201con\u201d",
+        "",
         "Copy",
         "Copy Link to Highlight",
+        "Search Google for \u201con\u201d",
         "Print\u2026",
         "Open in Reading Mode",
         "",
-        "Inspect"
+        "Inspect",
+        "",
+        "Speech"
       ],
       "ok": true
     },
@@ -147,7 +152,7 @@
         ],
         [
           "NativeWidgetMacFramelessNSWindow",
-          "{{2027, 32}, {501, 282}}"
+          "{{1523, 24}, {373, 210}}"
         ]
       ]
     },
@@ -164,7 +169,7 @@
       ]
     },
     "print_to_pdf": {
-      "bytes": 435321,
+      "bytes": 439510,
       "ok": true
     },
     "profiles": {
@@ -174,8 +179,8 @@
         "cookie": "",
         "storage": null
       },
-      "work_space": "0589260B-A733-4C9D-B5EF-EAAFD703A6FD",
-      "work_tab_context": "Profile-10CD9125"
+      "work_space": "50150791-9F41-454F-9328-31221EDB0D5F",
+      "work_tab_context": "Profile-83542AA8"
     },
     "request_filter": {
       "ok": true,
@@ -204,7 +209,7 @@
       "eme": "available: com.widevine.alpha",
       "ok": true,
       "playback": {
-        "currentTime": 4.953084,
+        "currentTime": 4.954213,
         "frames": 123,
         "keySystem": "com.widevine.alpha",
         "track": "vp09.00.41.08"
@@ -220,10 +225,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 61946,
+    "pid": 20681,
     "root": "/Users/serge/Library/Application Support/Open-E2E-features-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-features-chrome/Profiles"
   },
-  "started": "2026-10-26 00:24:26",
+  "started": "2026-10-26 01:09:42",
   "style": "chrome"
 }

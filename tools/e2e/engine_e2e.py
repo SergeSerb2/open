@@ -915,20 +915,49 @@ def tabstrip_checks(app, results):
     create_with_tab = ext_call(pop, "chrome.windows.create({tabId: %d}).then(w => w.id)" % some)
     other = ext_call(pop, "chrome.windows.create({url: 'about:blank', focused: false})"
                           ".then(w => ({id: w.id, tab: w.tabs[0].id}))")
-    out_move = into_move = None
+    out_move = into_move = group_here = other_group = group_move_in = None
+    strip_before = strip_ids(pop)
     if "ok" in other:
         out_move = ext_call(pop, "chrome.tabs.move(%d, {windowId: %d, index: -1}).then(t => t.windowId)"
                             % (some, other["ok"]["id"]))
         into_move = ext_call(pop, "chrome.tabs.move(%d, {windowId: %d, index: -1}).then(t => t.windowId)"
                              % (other["ok"]["tab"], open_window))
+        # Tab groups: none in an Open window, and a group of another window
+        # cannot move its tabs into one.
+        group_here = ext_call(pop, "chrome.tabs.group({tabIds: [%d]})" % some)
+        other_group = ext_call(pop, "chrome.tabs.group({tabIds: [%d]})" % other["ok"]["tab"])
+        if "ok" in other_group:
+            group_move_in = ext_call(pop, "chrome.tabGroups.move(%d, {windowId: %d, index: -1}).then(g => g.windowId)"
+                                     % (other_group["ok"], open_window))
         ext_call(pop, "chrome.windows.remove(%d)" % other["ok"]["id"])
         app.call("dismiss")
     time.sleep(1)
     results["no_cross_window_moves"] = {
         "ok": "error" in create_with_tab and "ok" in other and "error" in out_move and "error" in into_move
-              and bool(row(b)) and row(b)["loaded"] and strip_matches_rows(pop),
+              and "error" in group_here
+              and ("error" in other_group or (bool(group_move_in) and "error" in group_move_in))
+              and bool(row(b)) and row(b)["loaded"] and strip_matches_rows(pop) and strip_ids(pop) == strip_before,
         "windows_create_with_tab": create_with_tab, "chrome_window": other,
-        "move_out": out_move, "move_in": into_move}
+        "move_out": out_move, "move_in": into_move, "group_in_open_window": group_here,
+        "group_in_chrome_window": other_group, "group_move_in": group_move_in,
+        "note": "No window of this build can hold a tab group (Chrome windows from windows.create refuse grouping"
+                " too), so tabGroups.move has no group to carry; if one can be made, the move must fail."}
+
+    # The close button of a window.open popup panel closes the page: it
+    # leaves chrome.tabs and the opener sees popup.closed.
+    app.call("select", tab=first)
+    app.eval(first, 'window.__oePopup = window.open("https://example.com/?panel", "oepanel", "width=420,height=320"); 1')
+    panel_page = wait_until(lambda: [x for x in app.call("pages") if "?panel" in x["url"] and x["kind"] == "popup"
+                                     and x["live"]], timeout=15)
+    panel_cid = panel_page[0]["chromeTabId"] if panel_page else -1
+    listed_before = panel_cid in strip_ids(pop)
+    if panel_page:
+        app.call("panel-close", page=panel_page[0]["identifier"])
+    gone = wait_until(lambda: panel_cid not in strip_ids(pop)
+                      and not [x for x in app.call("pages") if "?panel" in x["url"]], timeout=10)
+    closed_in_opener = wait_until(lambda: app.eval(first, "window.__oePopup ? window.__oePopup.closed : null"), timeout=5)
+    results["popup_panel_close"] = {"ok": bool(panel_page) and listed_before and bool(gone) and closed_in_opener is True,
+                                    "listed_before": listed_before, "gone": bool(gone), "opener_sees_closed": closed_in_opener}
 
     # chrome.windows.remove on an Open window is a request; v1 refuses it.
     app.call("events")
@@ -977,6 +1006,37 @@ def tabstrip_checks(app, results):
     peek_page = wait_until(lambda: [x for x in app.call("pages") if "?peek" in x["url"]], timeout=15)
     all_tabs = ext_eval(pop, "chrome.tabs.query({}).then(ts => ts.map(t => t.url || t.pendingUrl))")
     after = strip_ids(pop)
+    peek_id = peek_page[0]["identifier"] if peek_page else 0
+    # A link with target=_blank in the Peek page opens an ordinary Chrome tab.
+    from_peek = None
+    if peek_id:
+        app.eval(peek_id, '(() => { const a = document.createElement("a"); a.href = "https://example.com/?from-peek";'
+                          ' a.target = "_blank"; a.id = "oe-peek-blank"; a.textContent = "blank";'
+                          ' a.style = "position:fixed;top:10px;left:10px;z-index:99999;background:yellow";'
+                          ' document.body.appendChild(a); return 1; })()')
+        app.call("click", tab=peek_id, selector="#oe-peek-blank")
+        from_peek = wait_until(lambda: [t for t in app.call("tabs") if "?from-peek" in t["url"]
+                                        and t.get("page") and t["page"]["live"]], timeout=15)
+    from_peek_page = from_peek[0]["page"] if from_peek else {}
+    results["peek_link_opens_chrome_tab"] = {
+        "ok": bool(from_peek) and from_peek_page.get("style") == "chrome" and from_peek_page.get("chromeTabId", -1) > 0
+              and from_peek_page.get("chromeTabId") in strip_ids(pop),
+        "tab": from_peek_page and {k: from_peek_page[k] for k in ("style", "chromeTabId", "url")}}
+    app.call("select", tab=first)
+    time.sleep(0.5)
+    # Expanding a Peek makes it a sidebar tab: a Chrome tab, active in chrome.tabs.
+    app.call("peek-open", tab=first, url="https://example.com/?peek-expand")
+    wait_until(lambda: [x for x in app.call("pages") if "?peek-expand" in x["url"] and x["live"]], timeout=15)
+    app.call("peek-expand")
+    promoted = wait_until(lambda: [t for t in app.call("tabs") if "?peek-expand" in t["url"] and t.get("page")
+                                   and t["page"]["live"] and t["page"]["style"] == "chrome"], timeout=15)
+    active = ext_eval(pop, "chrome.tabs.query({active: true, currentWindow: true}).then(ts => ts.map(t => t.url))")
+    results["peek_promoted_is_tab"] = {
+        "ok": bool(promoted) and promoted[0]["selected"] and promoted[0]["page"]["chromeTabId"] in strip_ids(pop)
+              and len(active) == 1 and "?peek-expand" in active[0],
+        "promoted": promoted and {k: promoted[0]["page"][k] for k in ("style", "chromeTabId", "url")},
+        "active_in_chrome_tabs": active}
+    app.call("select", tab=first)
     app.call("peek-close")
     results["peek_not_a_tab"] = {
         "ok": bool(peek_page) and peek_page[0]["style"] == "alloy" and after == before
@@ -1032,6 +1092,56 @@ def tabstrip_checks(app, results):
     results["bitwarden_popup"] = info
     results["window_screenshot"] = shot(app, "p1-window.png")
     context_menu_commands(app, results)
+    new_window_outlives_opener(app, results)
+
+
+def new_window_outlives_opener(app, results):
+    """Open Link in New Window from a hosted tab, close the first window:
+    the page in the new window stays live and is a tab of that window."""
+    windows = [x["id"] for x in app.call("shell-windows")]
+    t = new_tab(app, "https://example.com/?opener")
+    app.eval(t, '(() => { const a = document.createElement("a"); a.href = "https://example.com/?new-window";'
+                ' a.id = "oe-nw"; a.textContent = "new window"; a.style = "position:fixed;top:40px;left:40px;z-index:99999";'
+                ' document.body.appendChild(a); return 1; })()')
+    point = app.eval(t, '(() => { const r = document.getElementById("oe-nw").getBoundingClientRect();'
+                        ' return {x: r.x + r.width / 2, y: r.y + r.height / 2}; })()')
+    app.call("policy", contextMenu="record")
+    app.call("events")
+    app.call("rightclick", tab=t, x=point["x"], y=point["y"])
+    menu = wait_until(lambda: [e for e in app.call("events") if e["type"] == "contextMenu"], timeout=5)
+    command = [c for c in (menu[0].get("commands", []) if menu else []) if menu_key(c["title"]) == menu_key("Open Link in New Window")]
+    info = {"command_found": bool(command)}
+    if command:
+        app.call("policy", contextMenu="run:%d" % command[0]["id"])
+        app.call("rightclick", tab=t, x=point["x"], y=point["y"])
+        new = wait_until(lambda: [x["id"] for x in app.call("shell-windows") if x["id"] not in windows], timeout=10)
+        app.call("policy", contextMenu="record")
+        if new:
+            app.call("window-focus", id=new[0])
+            page_tab = wait_until(lambda: [x for x in app.call("tabs") if "?new-window" in x["url"] and x.get("page")
+                                           and x["page"]["live"]], timeout=15)
+            app.call("window-focus", id=windows[0])
+            app.call("window-close")
+            time.sleep(2)
+            app.call("window-focus", id=new[0])
+            after = [x for x in app.call("tabs") if "?new-window" in x["url"]]
+            page = after[0].get("page") if after else None
+            seen = None
+            if page:
+                wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
+                pop = app.call("popup", extension=PROBE)["identifier"]
+                wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
+                seen = app.eval(pop, "chrome.tabs.query({currentWindow: true}).then(ts => ts.map(t => ({id: t.id,"
+                                     " windowId: t.windowId, url: t.url})))")
+                app.call("popup-close")
+            info.update({"new_window": new[0], "page_before_close": bool(page_tab),
+                         "page_after_close": page and {k: page[k] for k in ("live", "style", "chromeTabId", "chromeWindowId", "url")},
+                         "new_window_tabs": seen})
+            info["ok"] = (bool(page_tab) and bool(page) and page["live"] and page["style"] == "chrome"
+                          and any(x["id"] == page["chromeTabId"] and x["windowId"] == page["chromeWindowId"]
+                                  and "?new-window" in x["url"] for x in (seen or [])))
+    info.setdefault("ok", False)
+    results["new_window_outlives_opener"] = info
 
 
 # Commands not run: they only open system UI outside Open's code paths
@@ -1039,6 +1149,11 @@ def tabstrip_checks(app, results):
 # panel). Everything else Chromium puts in the menu runs.
 CONTEXT_MENU_SKIP_TITLES = ("Emoji & Symbols", "Show Spelling and Grammar")
 CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services")
+
+
+def menu_key(title):
+    """Titles compared by letters only: AppKit drops "&" ("Emoji  Symbols")."""
+    return "".join(ch for ch in title.lower() if ch.isalnum())
 
 
 def context_menu_commands(app, results):
@@ -1156,8 +1271,8 @@ def context_menu_commands(app, results):
             ran = []
             for command in commands:
                 label = (command["submenu"] + " > " if command["submenu"] else "") + command["title"]
-                if (not command["enabled"] or command["title"] in CONTEXT_MENU_SKIP_TITLES
-                        or command["submenu"] in CONTEXT_MENU_SKIP_SUBMENUS):
+                if (not command["enabled"] or menu_key(command["title"]) in {menu_key(x) for x in CONTEXT_MENU_SKIP_TITLES}
+                        or menu_key(command["submenu"]) in {menu_key(x) for x in CONTEXT_MENU_SKIP_SUBMENUS}):
                     report["skipped"].append("%s: %s%s" % (target, label, "" if command["enabled"] else " (disabled)"))
                     continue
                 current = "%s: %s" % (target, label)
@@ -1515,17 +1630,29 @@ def peek_checks(factory, results, tmp):
         promoted = next(t["id"] for t in app.call("tabs") if t["selected"])
         counts = app.call("host-counts")
         strip = app.call("tab-strip")
-        results["expand_rebinds_host"] = {"ok": promoted != source and check_page(app, promoted, "Peek page")
-            and app.page(promoted)["identifier"] == content and app.page(promoted)["hostTab"] == promoted
-            and app.eval(promoted, "window.openPromotionState") == 73 and counts == before
-            and strip[0]["tabs"] == [source, promoted] and strip[0]["active"] == promoted,
-            "before": before, "after": counts, "strip": strip}
+        if app.page(source)["style"] == "chrome":
+            # Fork patch P1 (PR #53 round 2, lead decision): a sidebar tab is a
+            # tab of the hidden Chrome window and a Peek page is Alloy, so
+            # expanding reloads the page in a new Chrome host (docs/m4.md).
+            page = app.page(promoted)
+            results["expand_rebinds_host"] = {"ok": promoted != source and check_page(app, promoted, "Peek page")
+                and page["style"] == "chrome" and page["identifier"] != content and page["hostTab"] == promoted
+                and counts["created"] == before["created"] + 1 and counts["engineContents"] == before["engineContents"]
+                and counts["retained"] == before["retained"]
+                and strip[0]["tabs"] == [source, promoted] and strip[0]["active"] == promoted,
+                "rule": "Chrome style: expand reloads in a Chrome host", "before": before, "after": counts, "strip": strip}
+        else:
+            results["expand_rebinds_host"] = {"ok": promoted != source and check_page(app, promoted, "Peek page")
+                and app.page(promoted)["identifier"] == content and app.page(promoted)["hostTab"] == promoted
+                and app.eval(promoted, "window.openPromotionState") == 73 and counts == before
+                and strip[0]["tabs"] == [source, promoted] and strip[0]["active"] == promoted,
+                "before": before, "after": counts, "strip": strip}
         app.call("close", tab=promoted)
         wait_until(lambda: app.call("host-counts")["engineContents"] == baseline["engineContents"], timeout=5, step=0.1)
         after = app.call("host-counts")
         strip = app.call("tab-strip")
         results["close_promoted_releases_host"] = {"ok": after["retained"] == baseline["retained"]
-            and after["engineContents"] == baseline["engineContents"] and after["created"] == before["created"]
+            and after["engineContents"] == baseline["engineContents"] and after["created"] == counts["created"]
             and strip[0]["tabs"] == [source] and check_page(app, source, "Peek source"), "after": after}
         results["window_png"] = {"ok": True, "file": shot(app, "peek-promoted-window.png")}
     finally:

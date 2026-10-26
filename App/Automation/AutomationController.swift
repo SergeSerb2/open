@@ -308,6 +308,12 @@
       // Windows and pixels (Open's own windows only).
       case "windows":
         return NSApp.windows.map(describe)
+      case "panel-close":
+        // The close button of the panel that shows page `page` (performClose).
+        guard let n = a["page"] as? Int, let aux = w.auxiliaryPages.first(where: { $0.content.identifier == n })
+        else { throw Failure(message: "no panel for page") }
+        aux.panel.performClose(nil)
+        return true
       case "dismiss":
         // Ends what a Chromium command opened: modal panels (Print), sheets
         // (Save As), and windows that are not Open's (DevTools, Chrome

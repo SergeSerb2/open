@@ -24,6 +24,7 @@ let commands: [(name: String, handler: @MainActor ([String]) async throws -> Voi
     ("favicons", { try await runFavicons(args: $0) }),
     ("profiles", { try runProfiles(args: $0) }),
     ("adblock", { try await runAdBlock(args: $0) }),
+    ("media-demo", { try await runMediaDemo(args: $0) }),
     ("sleep-demo", { try await runSleepDemo(args: $0) }),
     ("sleep-sim", { try await runSleepSimulation(args: $0) }),
 ]

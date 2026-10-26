@@ -258,6 +258,14 @@ and the Share Arc and Import items work that way.
 | Manage Extensions… |  | navigateToChromeExtensionsPage: |
 | Add Extension… |  | navigateToChromeWebStore: |
 
+Code adds more at run time (2026-10-25; `features-advanced.md` §11.1 EX-5
+and §11.3 EX-10): one item per extension with a 16×16 icon above these two
+(`BrowserExtensionsMainMenuProvider`), and a hidden item "Open Extensions"
+(`toggleOpenExtensions:`, Cmd+E, binding id `openExtensionsPicker`, catalog
+text "Open pinned extensions picker.") built by the hidden-items builder at
+`0x10003aa54`. "Use Selection to Find" has no key in the nib, so Cmd+E is
+Arc's extension picker, not a Find command.
+
 ### Window (10 items)
 
 | Item | Shortcut | Selector |
@@ -552,6 +560,11 @@ Management; Organize; Toggle Space Manager; View Spaces`. Full pairs are in
 Inside the bar, Up/Down, Return, and Esc follow normal macOS list rules.
 That last sentence is a guess. No string proves it. The bar also shows key
 caps (`CommandBar.KeyboardShortcutView`, `showShortcutsWhenHoldingCmd`).
+Update 2026-10-25: `showShortcutsWhenHoldingCmd` belongs to the Favorites
+("top apps") view state, behind the remote flag
+`show-top-app-shortcuts-when-holding-cmd` (built-in default false). The
+Essential Keyboard Shortcuts window lists five items. See
+`commandbar-completion.md` §4–§5 (CC-23…CC-31).
 
 ## Gestures and mouse
 
