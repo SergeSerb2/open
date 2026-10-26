@@ -70,7 +70,13 @@ final class OffscreenRenderer {
         desc.usage = [.renderTarget, .shaderRead]
         desc.storageMode = .managed
         let texture = device.makeTexture(descriptor: desc)!
-        let renderer = CARenderer(mtlTexture: texture, options: [kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!])
+        let queue = device.makeCommandQueue()!
+        // CARenderer and the read-back fence must share a queue. A fence on an
+        // unrelated queue can finish before rendering and return uninitialized pixels.
+        let renderer = CARenderer(mtlTexture: texture, options: [
+            kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!,
+            kCARendererMetalCommandQueue as String: queue
+        ])
         // The window's context owns the live layers, so render a plain deep copy.
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -94,7 +100,6 @@ final class OffscreenRenderer {
             renderer.render()
             renderer.endFrame()
         }
-        let queue = device.makeCommandQueue()!
         let cb = queue.makeCommandBuffer()!
         let blit = cb.makeBlitCommandEncoder()!
         blit.synchronize(resource: texture)
@@ -143,6 +148,13 @@ enum LayerCloner {
         let src = presentation ? (model.presentation() ?? model) : model
         let dst: CALayer
         switch src {
+        case let s as CATextLayer:
+            let d = CATextLayer()
+            d.string = s.string; d.font = s.font; d.fontSize = s.fontSize
+            d.foregroundColor = s.foregroundColor; d.alignmentMode = s.alignmentMode
+            d.truncationMode = s.truncationMode; d.isWrapped = s.isWrapped
+            d.allowsFontSubpixelQuantization = s.allowsFontSubpixelQuantization
+            dst = d
         case let s as CAShapeLayer:
             let d = CAShapeLayer()
             d.path = s.path; d.fillColor = s.fillColor; d.fillRule = s.fillRule; d.strokeColor = s.strokeColor
@@ -169,7 +181,7 @@ enum LayerCloner {
         dst.isGeometryFlipped = src.isGeometryFlipped
         dst.isHidden = src.isHidden
         dst.opacity = src.opacity
-        dst.contents = src.contents
+        if !(src is CATextLayer) { dst.contents = src.contents }
         dst.contentsRect = src.contentsRect
         dst.contentsCenter = src.contentsCenter
         dst.contentsGravity = src.contentsGravity
