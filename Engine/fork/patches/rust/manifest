@@ -2,3 +2,5 @@
 # One block per active series entry:
 # <file>.patch
 # paths: <space-separated pathspecs>
+# 0001-adblock-vendor.patch
+paths: third_party/rust

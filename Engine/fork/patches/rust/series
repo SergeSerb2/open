@@ -1,2 +1,3 @@
 # Open patches for Rust. One patch per line: <file>.patch  # rationale
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
+0001-adblock-vendor.patch  # gnrt vendor+gen output for the adblock 0.8.11 closure (generated; adblock-fork §4)
