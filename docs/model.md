@@ -117,7 +117,10 @@ encoded DTOs before and after save/load), compares all original semantic
 fields, and renders all three Spaces against committed pre-change PNGs
 byte for byte. The raw fixture can gain only `keepAliveSites: []`, an
 additive default from the later main-branch keep-alive change. The source
-fixture and its PNGs never change during verification.
+fixture and its PNGs never change during verification. The window-buttons
+change (PR #104) re-rendered the PNGs: every changed pixel lies in the
+stand-in window buttons (x 13–73, y 17–31), which now draw the dimmed rest
+look; all other pixels equal the pre-Step-1 renders.
 The sidebar offscreen renderer supplies its Metal command queue to
 `CARenderer` and synchronizes readback on that same queue. This prevents a
 read-before-render race exposed by P1; 24 consecutive renders matched the
