@@ -10,7 +10,7 @@ import OpenStore
     public typealias Section = LibrarySection
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
-        if oldValue != section { selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
+        if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]
@@ -44,8 +44,14 @@ import OpenStore
     public let model: BrowserModel
     public let actions: any LibraryActions
     @ObservationIgnored private let settingsActions: (any SettingsActions)?
-    /// Built only on first entry, then retained across Library section switches.
-    @ObservationIgnored public private(set) lazy var spaceManagerView: NSView? = settingsActions?.makeSpaceManagerView()
+    @ObservationIgnored private var cachedSpaceManagerView: NSView?
+    /// Retry a transient nil; retain the first supplied view across section switches.
+    public var spaceManagerView: NSView? {
+        if let cachedSpaceManagerView { return cachedSpaceManagerView }
+        let view = settingsActions?.makeSpaceManagerView()
+        cachedSpaceManagerView = view
+        return view
+    }
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
     public private(set) var archives: [ProfileID: ArchiveStore]
