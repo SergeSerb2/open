@@ -64,16 +64,43 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
     undo.undo()
 
     reset()
+    let beforeMiddleDrop = source.today.map(\.id)
+    let middleSelection = [beforeMiddleDrop.last!, beforeMiddleDrop.first!]
+    var expectedMiddleDrop = Array(beforeMiddleDrop.dropFirst().dropLast())
+    expectedMiddleDrop.insert(contentsOf: middleSelection, at: 1)
+    check(model.moveNodes(ids: middleSelection, to: .spaceToday(source.id), at: 2) == 2
+          && source.today.map(\.id) == expectedMiddleDrop && moves() == middleSelection,
+          "B3 a middle drop handles selected nodes on both sides of its boundary")
+    undo.undo(); check(source.today.map(\.id) == beforeMiddleDrop, "B3 middle-drop undo restores order")
+
+    reset()
     let calls = sink.archiveCalls
     let oldRows = await archive.count()
+    let expectedRemovals = [a.id] + source.today.reversed().filter { $0.id == nested.id || $0.id == c.id }.map(\.id)
     let count = model.archiveNodes(ids: [a.id, nested.id, c.id])
     let batch = sink.lastBatch
     let folderBatch = sink.lastFolders
     check(count == 3 && sink.archiveCalls == calls + 1 && folderBatch.contains { $0.folder.id == nested.id && $0.reason == .folderDeleted }
-          && batch.contains { $0.tab.id == a.id && $0.reason == .closed } && removals().count == 3, "B4 archive uses one sink batch and per-node removes")
+          && batch.contains { $0.tab.id == a.id && $0.reason == .closed } && removals() == expectedRemovals, "B4 archive uses one sink batch and highest-index-first removal IDs per parent")
     receipt("B4")
     undo.undo(); composite.flushAll()
     check(await archive.count() == oldRows && model.node(id: nested.id) != nil && !undo.canUndo, "B4 undo restores nodes and discards archive rows")
+
+    reset()
+    let beforePaneArchive = fingerprint(model)
+    check(model.archiveNodes(ids: [p1.id, p2.id, p1.id, ItemID()]) == 2
+          && Set(sink.lastBatch.map { $0.tab.id }) == Set([p1.id, p2.id]) && sink.lastFolders.isEmpty
+          && sink.lastBatch.allSatisfy { $0.spaceID == source.id && $0.profileID == profile.id && $0.originalLocation == NodeParent.splitPane(split.id).archiveLocation }
+          && model.node(id: p1.id) == nil && model.node(id: p2.id) == nil,
+          "B4 sink contains only detached panes and retains their original owner through split collapse")
+    composite.flushAll()
+    let archivedP1 = await archive.record(id: p1.id), archivedP2 = await archive.record(id: p2.id)
+    check(archivedP1?.spaceID == source.id && archivedP2?.profileID == profile.id,
+          "B4 both collapsed-pane records keep original ownership in SQLite")
+    undo.undo(); composite.flushAll()
+    let paneArchiveCount = await archive.count()
+    check(fingerprint(model) == beforePaneArchive && paneArchiveCount == oldRows && !undo.canUndo,
+          "B4 collapsed-pane bulk archive undoes as one exact tree restoration")
 
     reset()
     let folder = model.createFolder(in: .spaceToday(source.id), at: 0, title: "Selection", withNodes: [b.id, c.id])!
@@ -89,6 +116,19 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
           && Array(source.today.prefix(2)).map(\.id) == [c.id, split.id] && c.pinnedURL == nil && p1.pinnedURL == nil, "B6 unpin puts rows at Today top in order")
     undo.undo()
 
+    let deep = model.createFolder(in: .folder(nested.id), title: "Deep")!
+    let deepTab = tab("Deep child"); model.moveNode(id: deepTab.id, to: .folder(deep.id), at: nil)
+    deep.customIcon = "archivebox"
+    model.setSplitOrientation(splitID: split.id, orientation: .vertical)
+    model.setSplitFractions(splitID: split.id, fractions: [0.25, 0.75])
+    model.focusSplitPane(splitID: split.id, tabID: p2.id)
+    func subtreeIDs(_ node: SidebarNode) -> [ItemID] {
+        switch node {
+        case .tab: return [node.id]
+        case .folder(let folder): return [folder.id] + folder.children.flatMap(subtreeIDs)
+        case .split(let split): return [split.id] + split.panes.map(\.id)
+        }
+    }
     a.customTitle = "Custom A"; a.customIcon = "star"; a.isMuted = true
     reset()
     let copies = model.duplicateNodes(ids: [a.id, split.id, nested.id, fav.id])
@@ -98,8 +138,15 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
     check(copies.count == 4 && inserts() == copies && copiedTab?.pinnedURL == a.pinnedURL
           && copiedTab?.url == a.url && copiedTab?.customTitle == a.customTitle && copiedTab?.customIcon == a.customIcon && copiedTab?.isMuted == true
           && copiedSplit?.panes.count == 2 && copiedSplit?.panes.first?.id != p1.id
-          && copiedFolder?.children.first?.id != b.id && copies.last == source.today.first?.id,
-          "B7 duplicate tab/split/folder/favorite has fresh IDs and preserves stored fields")
+          && copiedSplit?.orientation == .vertical && copiedSplit?.fractions == [0.25, 0.75]
+          && copiedSplit?.focusedPaneID == copiedSplit?.panes[1].id
+          && copiedFolder?.children.first?.id != b.id && copiedFolder?.children.last?.folder?.customIcon == deep.customIcon
+          && copiedFolder?.children.last?.folder?.children.first?.tab?.url == deepTab.url
+          && copiedFolder.map { subtreeIDs(.folder($0)).count == subtreeIDs(.folder(nested)).count
+              && Set(subtreeIDs(.folder($0))).isDisjoint(with: subtreeIDs(.folder(nested))) } == true
+          && copiedSplit.map { Set(subtreeIDs(.split($0))).isDisjoint(with: subtreeIDs(.split(split))) } == true
+          && copies.last == source.today.first?.id,
+          "B7 copies use new IDs at every depth and retain split focus, fractions, orientation, and customization")
     undo.undo(); check(copies.allSatisfy { model.node(id: $0) == nil } && !undo.canUndo, "B7 one undo removes every copy")
     undo.redo(); check(copies.allSatisfy { model.node(id: $0) != nil }, "B7 redo restores the same copy IDs")
     undo.undo()
@@ -110,7 +157,6 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
           && model.createFolder(in: .favorites(profile.id)) == nil
           && model.setPinned(ids: [fav.id, nested.id], pinned: true) == 0 && events.isEmpty && !undo.canUndo,
           "B8 refused bulk commands leave tree, events, and undo unchanged")
-    let deep = model.createFolder(in: .folder(nested.id), title: "Deep")!
     reset()
     let expanded = model.setAllFoldersExpanded(spaceID: source.id, expanded: false)
     check(expanded == 3 && !deep.isExpanded && !nested.isExpanded && !target.isExpanded && events.isEmpty, "B9 collapse reaches every depth without structural events")
@@ -155,11 +201,32 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
     let unread = model.newTab(in: source.id, url: url("Unread"), unread: true)
     check(unread.isUnread, "Unread background creation sets the persisted flag")
     undo.undo(); undo.redo()
+    let secondSource = model.createSpace(title: "Second source", profileID: profile.id)
+    let f1 = model.newTab(in: secondSource.id, url: url("Folder unread one"))
+    let f2 = model.newTab(in: secondSource.id, url: url("Folder unread two"), unread: true)
+    let unreadFolder = model.createFolder(in: .spaceToday(secondSource.id), title: "Unread folder", withNodes: [f1.id, f2.id])!
+    let s1 = model.newTab(in: secondSource.id, url: url("Split unread one"))
+    let s2 = model.newTab(in: secondSource.id, url: url("Split unread two"), unread: true)
+    let unreadSplit = model.makeSplit(tabIDs: [s1.id, s2.id])!
+    let movedTabs = [a, unread, f1, f2, s1, s2]
+    let oldFlags = movedTabs.map(\.isUnread)
+    let selected = [a.id, unread.id, unreadFolder.id, unreadSplit.id]
     reset()
-    check(model.moveNodes(ids: [a.id, unread.id], toSpace: destination.id, markUnread: true) == 2 && a.isUnread && unread.isUnread
-          && destination.pinned.first?.id == a.id && destination.today.first?.id == unread.id,
-          "Move to Space uses matching sections, ordered slots, and unread flags")
-    undo.undo(); check(!a.isUnread && unread.isUnread && window.focusedSpaceID == source.id, "Move undo restores original unread values")
+    check(model.moveNodes(ids: selected, toSpace: destination.id, markUnread: true) == 4 && movedTabs.allSatisfy(\.isUnread)
+          && destination.pinned.first?.id == a.id && Array(destination.today.prefix(3)).map(\.id) == [unread.id, unreadFolder.id, unreadSplit.id],
+          "Move to Space from two sources sets unread through folders/splits and keeps per-section order")
+    undo.undo(); check(movedTabs.map(\.isUnread) == oldFlags && window.focusedSpaceID == source.id, "Move undo restores all original descendant unread values")
+    reset()
+    check(model.moveNodes(ids: selected, toSpace: destination.id, markUnread: false) == 4 && movedTabs.map(\.isUnread) == oldFlags,
+          "Move with markUnread false preserves both read and unread descendants")
+    undo.undo(); check(movedTabs.map(\.isUnread) == oldFlags, "Unread false move undo preserves flags")
+    model.moveNode(id: a.id, to: .spacePinned(destination.id), at: 0)
+    reset()
+    check(model.moveNodes(ids: [a.id, unreadFolder.id], toSpace: destination.id, markUnread: true) == 1
+          && moves() == [unreadFolder.id] && !a.isUnread && f1.isUnread && f2.isUnread,
+          "Unread marks only actually relocated nodes; a same-slot pin stays read")
+    undo.undo()
+    model.moveNode(id: a.id, to: .spacePinned(source.id), at: 0)
     reset()
     let keep = Set([b.id, unread.id])
     let beforeClear = fingerprint(model)
