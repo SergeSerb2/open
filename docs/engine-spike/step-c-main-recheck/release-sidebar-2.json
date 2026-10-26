@@ -1,0 +1,341 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "sidebar": {
+    "background_space_window_open": {
+      "child": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": true,
+        "id": "2816B263-83C7-4704-BC13-D8553F3E7EC1",
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 3,
+          "browserIndex": 0,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": -1,
+          "chromeWindowId": -1,
+          "context": "Profile-41EFEE09",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": false,
+          "hostTab": "2816B263-83C7-4704-BC13-D8553F3E7EC1",
+          "identifier": 12,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [],
+          "popup": true,
+          "style": "alloy",
+          "title": "Background child",
+          "url": "about:blank",
+          "zoom": 0
+        },
+        "profile": "CD4040CA-2100-48A4-A1E2-52E02B4B984B",
+        "progress": 1,
+        "section": "today",
+        "selected": true,
+        "sleepPhase": "live",
+        "space": "27EA056C-629A-4A87-9ACC-8BA2BB65FFF0",
+        "title": "Background child",
+        "url": "about:blank",
+        "visible": true
+      },
+      "ok": true
+    },
+    "clear_today": {
+      "ok": true
+    },
+    "close_pinned_unloads": {
+      "ok": true
+    },
+    "close_today_archives": {
+      "ok": true
+    },
+    "comparison": {
+      "capture": "F0001",
+      "elements": [
+        {
+          "delta_e00": 0.57,
+          "element": "background (sidebar column) (101 points, max \u0394E 0.85)",
+          "position_pt": null
+        },
+        {
+          "delta_e00": 0.42,
+          "element": "panel fill (empty state) (11 points, max \u0394E 1.05)",
+          "position_pt": null
+        },
+        {
+          "delta_e00": 0.86,
+          "element": "toolbar: sidebar toggle",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.29,
+          "element": "toolbar: back",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.25,
+          "element": "toolbar: forward",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.26,
+          "element": "toolbar: reload",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.14,
+          "element": "URL field fill",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.51,
+          "element": "URL field magnifier",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.03,
+          "element": "URL field placeholder",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.08,
+          "element": "favorite tile 1",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.2,
+          "element": "favorite tile 2",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.14,
+          "element": "favorite tile 3",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.15,
+          "element": "favorite tile 4",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.26,
+          "element": "favorite tile 5",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.27,
+          "element": "favorite tile 6",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": null,
+          "element": "Space icon (centroid \u0394 0.1, 0.2 px)",
+          "position_pt": 0.2
+        },
+        {
+          "delta_e00": 0.19,
+          "element": "Space title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.03,
+          "element": "row 1 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.04,
+          "element": "row 2 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.1,
+          "element": "row 3 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.12,
+          "element": "row 4 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.12,
+          "element": "row 5 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.06,
+          "element": "row 6 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.09,
+          "element": "row 7 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.04,
+          "element": "row 8 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.03,
+          "element": "row 9 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.05,
+          "element": "row 10 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 1.39,
+          "element": "New Tab plus",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.36,
+          "element": "New Tab label",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.46,
+          "element": "bottom: Home",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 1.61,
+          "element": "bottom: plus",
+          "position_pt": 0.0
+        }
+      ],
+      "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
+      "ok": true,
+      "private_artifacts": ".re/app-shell-comparison-sidebar",
+      "worst_delta_e00": 1.61,
+      "worst_position_pt": 1.0
+    },
+    "drag_reorder_intent": {
+      "ok": true
+    },
+    "durable_profile_storage": {
+      "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof.",
+      "status": "BLOCKED"
+    },
+    "empty": {
+      "ok": true
+    },
+    "evicted_live_state_stays_unloaded": {
+      "ok": true,
+      "samples": [
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        },
+        {
+          "hasWebContent": false,
+          "loaded": false,
+          "loading": false,
+          "progress": 0
+        }
+      ]
+    },
+    "folder_toggle": {
+      "ok": true
+    },
+    "hidden_cache_lru": {
+      "ok": true,
+      "retained_before_wake": 9
+    },
+    "new_tab_lazy": {
+      "ok": true
+    },
+    "pin_unpin": {
+      "ok": true
+    },
+    "profile_change_tears_down": {
+      "inactive_tab": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": false,
+        "id": "0857C5D5-A653-4F0C-AA8D-C76971B76F49",
+        "loaded": false,
+        "loading": false,
+        "profile": "CD4040CA-2100-48A4-A1E2-52E02B4B984B",
+        "progress": 0,
+        "section": "today",
+        "selected": false,
+        "sleepPhase": "placeholder",
+        "space": "27EA056C-629A-4A87-9ACC-8BA2BB65FFF0",
+        "title": "Profile background",
+        "url": "data:text/html,%3Ctitle%3EProfile%20background%3C/title%3E%3Ch1%3EProfile%20background%3C/h1%3E",
+        "visible": false
+      },
+      "ok": true
+    },
+    "refused_move": {
+      "ok": true
+    },
+    "select": {
+      "ok": true
+    },
+    "space_switch_wrapper": {
+      "ok": true
+    },
+    "wake_pinned": {
+      "ok": true
+    },
+    "window_png": {
+      "file": "sidebar-window.png",
+      "ok": true
+    }
+  },
+  "started": "2026-10-26 14:32:45",
+  "style": "chrome"
+}

@@ -36,8 +36,11 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     public var fill: Fill
     /// Grain amount, 0…1 (`modifiers.noiseFactor`).
     public var noiseFactor: Double
-    /// `modifiers.intensityFactor`. Its effect is not yet known; see docs/design.md.
+    /// Editor opacity is 0.8 × intensity; imports keep the fitted opacity until calibration.
     public var intensityFactor: Double
+    public var texture: SpaceStyleTexture
+    /// Imported/stops themes keep their original field, opacity, and exact grain path.
+    public var usesLegacyIntensity: Bool
     public var translucency: Translucency
     /// Text palette. `nil` follows the macOS appearance (default theme only).
     public var contentAppearance: ContentAppearance?
@@ -51,11 +54,14 @@ public struct SpaceThemeStyle: Sendable, Hashable {
 
     public init(fill: Fill, noiseFactor: Double = 0, intensityFactor: Double = 0.8, translucency: Translucency = .light,
                 contentAppearance: ContentAppearance? = .light, isVibrant: Bool = true,
-                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil, shadedDarkAccent: RGBA? = nil, tintedLightAccent: RGBA? = nil) {
+                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil,
+                shadedDarkAccent: RGBA? = nil, tintedLightAccent: RGBA? = nil,
+                texture: SpaceStyleTexture = .grain, usesLegacyIntensity: Bool = false) {
         self.fill = fill; self.noiseFactor = noiseFactor; self.intensityFactor = intensityFactor
         self.translucency = translucency; self.contentAppearance = contentAppearance; self.isVibrant = isVibrant
         self.lightPalette = lightPalette; self.darkPalette = darkPalette; self.accent = accent
         self.shadedDarkAccent = shadedDarkAccent; self.tintedLightAccent = tintedLightAccent
+        self.texture = texture; self.usesLegacyIntensity = usesLegacyIntensity
     }
 
     /// Content appearance after applying the system fallback.
@@ -150,16 +156,46 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     // MARK: From the model
 
     public init(theme: SpaceTheme, system: ContentAppearance) {
+        if let style = theme.style {
+            self.init(style: style, system: system)
+            return
+        }
         if let data = theme.importedArcThemeJSON, let parsed = SpaceThemeStyle(arcWindowThemeJSON: data) {
             self = parsed
             return
         }
         if theme.gradientStopsLight.count >= 1 {
             let stops = theme.gradientStopsLight.sorted { $0.location < $1.location }.map { RGBA(rgba: $0.color) }
-            self.init(fill: .blended(base: Array(stops.prefix(2)), overlay: []), contentAppearance: nil)
+            self.init(fill: .blended(base: Array(stops.prefix(2)), overlay: []), contentAppearance: nil, usesLegacyIntensity: true)
             return
         }
         self = .defaultTheme(system: system)
+    }
+
+    public init(style: SpaceStyle, system: ContentAppearance) {
+        guard style.mathVersion == 1 else {
+            // Never reinterpret inputs whose derivation version is not implemented.
+            self = .defaultTheme(system: system)
+            return
+        }
+        let key = ThemeColorMath.toP3(style.keyColor)
+        let primary = ThemeColorMath.primaryPalette(key: key)
+        let palettes = ThemeColorMath.semanticPalettes(primary)
+        let colors = ThemeColorMath.harmony(key: key, count: style.colorCount, wheel: style.wheel)
+            .map { RGBA(rgba: ThemeColorMath.toExtendedSRGB($0)) }
+        let bias: Double
+        switch style.appearance {
+        case .automatic: bias = ThemeTuning.automaticBias
+        case .light: bias = -ThemeTuning.forcedBias
+        case .dark: bias = ThemeTuning.forcedBias
+        }
+        self.init(fill: .blended(base: Array(colors.prefix(2)), overlay: colors.count == 3 ? [.clear, colors[2]] : []),
+                  noiseFactor: style.noiseFactor, intensityFactor: style.intensityFactor,
+                  contentAppearance: ThemeColorMath.contentAppearance(key: key, light: palettes.light, dark: palettes.dark, bias: bias),
+                  lightPalette: palettes.light, darkPalette: palettes.dark, accent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shaded)),
+                  shadedDarkAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shadedDark)),
+                  tintedLightAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.tintedLight)),
+                  texture: style.texture, usesLegacyIntensity: false)
     }
 
     /// Parses Arc's `customInfo.windowTheme` object (schema in
@@ -215,7 +251,9 @@ public struct SpaceThemeStyle: Sendable, Hashable {
                   isVibrant: single["isVibrant"] as? Bool ?? true,
                   lightPalette: palette("light"), darkPalette: palette("dark"), accent: shaded,
                   shadedDarkAccent: (primary?["shadedDark"] as? [String: Any]).flatMap(RGBA.init(arcColor:)),
-                  tintedLightAccent: (primary?["tintedLight"] as? [String: Any]).flatMap(RGBA.init(arcColor:)))
+                  tintedLightAccent: (primary?["tintedLight"] as? [String: Any]).flatMap(RGBA.init(arcColor:)),
+                  texture: SpaceStyleTexture(rawValue: modifiers["overlay"] as? String ?? "grain") ?? .grain,
+                  usesLegacyIntensity: true)
     }
 }
 

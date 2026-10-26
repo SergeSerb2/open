@@ -1,0 +1,20 @@
+{
+  "commandbar": {
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "suite": {
+      "error": "{'bar': {'created': False, 'presented': False}, 'routing': {'barPresented': False, 'firstResponder': 'RenderWidgetHostViewCocoa', 'keyWindow': 0, 'sidebarMode': 'anchored'}, 'window': {'engineSelected': 1, 'engineURL': 'http://127.0.0.1:49635/start', 'frame': [50, 41, 1280, 800], 'fullscreen': False, 'fullscreenChanges': 0, 'fullscreenTransition': False, 'hiddenTitle': True, 'id': '0CBC4CFB-2492-46B2-87CB-119F22A1D6F8', 'number': 37565, 'pageFullscreen': False, 'paneBackgrounds': [{'color': [], 'tab': 'C8037BAE-B7E2-4C63-943A-EA0405FBB15F'}], 'panel': [228, 10, 1042, 780], 'peekCreated': False, 'revealed': False, 'selected': 'C8037BAE-B7E2-4C63-943A-EA0405FBB15F', 'shownPages': ['C8037BAE-B7E2-4C63-943A-EA0405FBB15F'], 'sidebarClass': 'OpenSidebar.SidebarView', 'sidebarMode': 'anchored', 'sidebarVisible': True, 'sidebarWidth': 228, 'space': 'CF023269-747E-40DB-BC1E-1DF51FE9870E', 'titled': True, 'trafficLights': [[12, 16], [35, 16], [58, 16]]}, 'menu': [{'action': 'openCommandAction:', 'enabled': True, 'id': 'new-tab', 'key': 't', 'payload': '', 'tag': 0, 'targetNil': False, 'title': 'New Tab\u2026'}, {'action': 'orderFrontFontPanel:', 'enabled': True, 'id': 'show-fonts', 'key': '', 'payload': '', 'tag': 0, 'targetNil': True, 'title': 'Show Fonts'}, {'action': 'openCommandAction:', 'enabled': True, 'id': 'new-tab', 'key': 't', 'payload': '', 'tag': 0, 'targetNil': False, 'title': 'New Tab\u2026'}]}",
+      "ok": false
+    }
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "embeddedUUID": "4C4C4479-5555-3144-A13D-8D658E72FFF9",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001051"
+  },
+  "started": "2026-10-26 01:01:55",
+  "style": "alloy"
+}
