@@ -224,7 +224,7 @@ def main():
                 disabled.append(f"{series}/{name}: {line}")
             elif run(*patch_git(src, series), "--reverse", "--check", str(FORK / "patches" / series / name)).returncode:
                 errors.append(f"{series}/{name} is not applied")
-        add("FAIL" if errors else "WARN" if disabled else "PASS", "S-3 Open patches", "; ".join(errors + disabled) or "all active patches applied (empty series is valid)")
+        add("FAIL" if errors else "WARN" if disabled else "PASS", "S-3 Open patches", "; ".join(errors + disabled) or f"all {sum(k == 'active' for k, *_ in records)} active patches applied (an empty series is valid)")
     except ValueError as error:
         records = []
         add("FAIL", "S-3 Open patches", str(error))
