@@ -560,6 +560,11 @@ Management; Organize; Toggle Space Manager; View Spaces`. Full pairs are in
 Inside the bar, Up/Down, Return, and Esc follow normal macOS list rules.
 That last sentence is a guess. No string proves it. The bar also shows key
 caps (`CommandBar.KeyboardShortcutView`, `showShortcutsWhenHoldingCmd`).
+Update 2026-10-25: `showShortcutsWhenHoldingCmd` belongs to the Favorites
+("top apps") view state, behind the remote flag
+`show-top-app-shortcuts-when-holding-cmd` (built-in default false). The
+Essential Keyboard Shortcuts window lists five items. See
+`commandbar-completion.md` §4–§5 (CC-23…CC-31).
 
 ## Gestures and mouse
 
