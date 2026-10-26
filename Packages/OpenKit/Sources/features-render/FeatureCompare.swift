@@ -29,10 +29,17 @@ enum FeatureCompare {
                 let actual = CGRect(x: f[0], y: f[1], width: f[2], height: f[3])
                 geometry("Pane \(i + 1) outer frame", expected: expected, actual: actual)
                 geometry("Pane \(i + 1) 32 pt bar", expected: CGRect(x: x, y: 10, width: 984, height: 32), actual: CGRect(x: actual.minX, y: actual.minY, width: actual.width, height: 32))
-                color("Pane \(i + 1) bar fill", CGRect(x: x + 150, y: 18, width: 80, height: 12))
+                // Page-derived, not chrome: the bar takes the page's reported color, and the fake
+                // page reports the captured page's color (render input `--page-color`).
+                color("Pane \(i + 1) bar fill = page color (input)", CGRect(x: x + 150, y: 18, width: 80, height: 12))
             }
             color("Focused ring core", CGRect(x: 1222, y: 80, width: 2, height: 1100))
+            // F0081 AX: the unfocused pane also shows back, forward, the copy button, and its host.
             let specs: [(String, CGRect)] = [
+                ("Unfocused Back glyph", CGRect(x: 233, y: 14, width: 32, height: 24)),
+                ("Unfocused Forward glyph", CGRect(x: 270, y: 14, width: 32, height: 24)),
+                ("Unfocused Copy URL glyph", CGRect(x: 671, y: 14, width: 24, height: 24)),
+                ("Unfocused Host label", CGRect(x: 694, y: 16, width: 54, height: 22)),
                 ("Unfocused Close glyph", CGRect(x: 1177, y: 14, width: 30, height: 24)),
                 ("Focused Back glyph", CGRect(x: 1227, y: 14, width: 32, height: 24)),
                 ("Focused Forward glyph", CGRect(x: 1264, y: 14, width: 32, height: 24)),

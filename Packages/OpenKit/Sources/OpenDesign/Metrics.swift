@@ -129,6 +129,10 @@ public enum SpaceListMetrics {
     /// Text origin inside the AX title frame, fitted on ink boxes (F0001):
     /// row titles and "New Tab" 1 pt, the Space title 3 pt, the URL placeholder 1 pt.
     public static let textInset: CGFloat = 1
+    /// Row titles keep 1 pt free at the right when they truncate (2 pt in all with the inset):
+    /// AX title width 128 drops "Import Logins & B…" (126.2 pt, F0090), 152 keeps
+    /// "Import Logins & Book…" (149.9, F0081), 168 keeps "…apple.…" (164.4, F0001).
+    public static let textTrailingInset: CGFloat = 1
     public static let headerTextInset: CGFloat = 3
     /// Close (×) or unload (−) button `[W − 39, y + 7, 26, 26]`; the title then ends at its left edge.
     public static let accessorySize: CGFloat = 26
@@ -138,6 +142,30 @@ public enum SpaceListMetrics {
     public static let indentPerLevel: CGFloat = 16
     /// Split row cell pitch at width 228 (icons x 33 / 129 in a depth-1 row). guess for other widths: equal halves.
     public static let splitDividerWidth: CGFloat = 1
+    /// Selected split row (F0081): the selected fill is a card, and each pane gets
+    /// its own cell inside it, 4 pt inside the card and 4 pt apart:
+    /// `[12, y + 6, 100, 28]` and `[116, y + 6, 100, 28]` at depth 0, width 228.
+    /// Corner ≈ 8 (row-by-row edge profile). The divider hides while the cells show.
+    public static let splitCellInset: CGFloat = 4
+    public static let splitCellGap: CGFloat = 4
+    public static let splitCellTop: CGFloat = 6
+    public static let splitCellHeight: CGFloat = 28
+    public static let splitCellCornerRadius: CGFloat = 8
+    /// Peek badge on the source row (F0090, F0101): a 24 pt plate `[W − 38, y + 8, 24, 24]`,
+    /// corner ≈ 6, with the Peek page's favicon (AX `[W − 35, y + 11, 18, 18]`, 16 pt ink).
+    /// The title then ends at `W − 39`, as with the close button.
+    public static let peekBadgeTrailingInset: CGFloat = 38
+    public static let peekBadgeY: CGFloat = 8
+    public static let peekBadgeSize: CGFloat = 24
+    public static let peekBadgeCornerRadius: CGFloat = 6
+    /// "/" before a pinned tab's title once it left its pinned URL (F0090, F0101 at depth 1):
+    /// a 2 pt stroke ≈ 14.5 pt tall, ≈ 8° from vertical (top x 57, bottom x 55), centered
+    /// 3 pt left of the title origin at y + 19.5. The title moves 2 pt (AX x 61 vs 59).
+    public static let pinnedSlashSize = CGSize(width: 2, height: 14.5)
+    public static let pinnedSlashAngle: CGFloat = 0.14
+    public static let pinnedSlashCenterX: CGFloat = -3
+    public static let pinnedSlashCenterY: CGFloat = 19.5
+    public static let pinnedSlashTitleShift: CGFloat = 2
     /// Pinned/Today divider row: 17 pt, 1 pt line at y + 7 from x 18 to W − 18.
     public static let dividerRowHeight: CGFloat = 17
     public static let dividerLineY: CGFloat = 7

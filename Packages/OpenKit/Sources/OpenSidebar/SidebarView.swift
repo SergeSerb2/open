@@ -60,7 +60,9 @@ public final class SidebarView: NSView {
             _ = self?.context.favoritesProfile?.favorites.count
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
+        loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.shownPeek != nil }) { [weak self] in self?.syncPeekDim() })
         syncTheme()
+        syncPeekDim()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -101,6 +103,15 @@ public final class SidebarView: NSView {
 
     public override func mouseEntered(with event: NSEvent) { context.pointerInSidebar = true }
     public override func mouseExited(with event: NSEvent) { context.pointerInSidebar = false }
+
+    /// A Peek's dim covers the toolbar row and the bottom bar, but not the URL field,
+    /// Favorites, or the Space list (F0090 vs F0101: toggle `#A2A3AB` → `#464654`,
+    /// row titles unchanged). The window controller dims the background under the sidebar.
+    private func syncPeekDim() {
+        let dimmed = context.shownPeek != nil
+        toolbar.alphaValue = dimmed ? SidebarRole.peekToolbarOpacity : 1
+        bottomBar.alphaValue = dimmed ? SidebarRole.peekBottomBarOpacity : 1
+    }
 
     /// Theme, appearance, and the window background.
     private func syncTheme() {
@@ -275,4 +286,43 @@ extension SidebarView {
 
     /// The focused page's tab list (checks and benches).
     public var focusedOutline: NSOutlineView? { pager.currentPage?.outline }
+
+    /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
+    public func contextMenu(nodeID: ItemID?) -> NSMenu? {
+        guard let page = pager.currentPage else { return nil }
+        var point = NSPoint(x: 100, y: page.outline.bounds.maxY + 50)
+        if let nodeID, let obj = context.model.node(id: nodeID)?.object {
+            let row = page.outline.row(forItem: obj)
+            guard row >= 0 else { return nil }
+            let r = page.outline.rect(ofRow: row)
+            point = NSPoint(x: r.midX, y: r.midY)
+        }
+        return page.menu(at: point)
+    }
+
+    private func cell(nodeID: ItemID) -> SidebarCellView? {
+        guard let page = pager.currentPage, let object = context.model.node(id: nodeID)?.object else { return nil }
+        let row = page.outline.row(forItem: object)
+        guard row >= 0 else { return nil }
+        return page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? SidebarCellView
+    }
+
+    /// The Peek badge plate on a tab row, in sidebar coordinates, when it shows.
+    public func peekBadgeFrame(tabID: ItemID) -> CGRect? {
+        guard let cell = cell(nodeID: tabID) as? TabCellView, let badge = cell.peekBadge, !badge.isHidden else { return nil }
+        return convert(badge.frame, from: cell)
+    }
+
+    /// Visible pane cells of a split row in sidebar coordinates (empty unless selected),
+    /// and whether its dividers show.
+    public func splitRowCells(splitID: ItemID) -> (cells: [CGRect], dividersVisible: Bool)? {
+        guard let cell = cell(nodeID: splitID) as? SplitCellView else { return nil }
+        return (cell.visibleCellFrames.map { convert($0, from: cell) }, cell.dividersVisible)
+    }
+
+    /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
+    public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }
+
+    /// The text the URL field shows: the current page's host or the placeholder.
+    public var displayedURLText: String { urlField.displayedText }
 }

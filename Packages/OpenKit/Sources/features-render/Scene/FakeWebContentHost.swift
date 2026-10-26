@@ -24,6 +24,13 @@ public final class FakeWebContentHost: WebContentHost {
     public var onLoadingChange: ((Bool) -> Void)?
     public var onFaviconChange: ((Data?) -> Void)?
     public var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
+    /// Render-only page colors by host (`--page-color HOST=RRGGBB`). A comparison gives a
+    /// fake page the background of the captured page, so the chrome around it is measured
+    /// against the same page pixels. Hosts without an entry keep the factory's color.
+    public static var pageColors: [String: NSColor] = [:]
+    /// Render-only (`--keep-titles`): pages do not report a title, so tabs keep their saved titles.
+    public static var reportsTitles = true
+    public var pageBackgroundColor: NSColor? { surface.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
 
     public init(tabID: ItemID, color: NSColor) {
         self.tabID = tabID; surface = FakePageView(color: color)
@@ -36,7 +43,8 @@ public final class FakeWebContentHost: WebContentHost {
     private func publish() {
         guard let url = currentURL else { return }
         title = url.host() ?? "New Tab"; surface.label.stringValue = title
-        onURLChange?(url); onTitleChange?(title)
+        if let color = url.host().flatMap({ Self.pageColors[$0] }) { surface.layer?.backgroundColor = color.cgColor }
+        onURLChange?(url); if Self.reportsTitles { onTitleChange?(title) }
     }
     private func beginLoading() {
         loadGeneration += 1; let generation = loadGeneration

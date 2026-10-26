@@ -41,9 +41,14 @@ public final class PaneChromeView: NSView {
     var onMenu: ((NSView) -> Void)?
     var onURL: (() -> Void)?
     var onCopy: (() -> Void)?
+    /// Bar color when the page reports none: the Space's light background, else white.
+    var fallbackColor: NSColor = .white { didSet { update() } }
     let label = NSTextField(labelWithString: "")
     private var buttons: [ActionButton] = []
     public var isFocused = false { didSet { update() } }
+    /// F0081: the focused pane shows every control; an unfocused pane shows back,
+    /// forward, the copy button, the host, and Close (AX and pixels).
+    private static let unfocusedControls: Set<Int> = [0, 1, 3, 6]
     public init() {
         super.init(frame: .zero); wantsLayer = true
         let specs = [("arrow.left", "Go back"), ("arrow.right", "Go forward"), ("arrow.clockwise", "Reload"),
@@ -66,9 +71,9 @@ public final class PaneChromeView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
     func update() {
+        layer?.backgroundColor = (host?.pageBackgroundColor ?? fallbackColor).cgColor
         label.stringValue = host?.currentURL?.host()?.replacingOccurrences(of: "www.", with: "") ?? ""
-        for (i, b) in buttons.enumerated() { b.isHidden = !isFocused && i != 6 }
-        label.isHidden = !isFocused
+        for (i, b) in buttons.enumerated() { b.isHidden = !isFocused && !Self.unfocusedControls.contains(i) }
         buttons[0].isEnabled = host?.canGoBack ?? false; buttons[1].isEnabled = host?.canGoForward ?? false
         buttons[4].isEnabled = false
         buttons[2].image = NSImage(systemSymbolName: host?.isLoading == true ? "xmark" : "arrow.clockwise", accessibilityDescription: "Reload or Stop")
@@ -77,12 +82,27 @@ public final class PaneChromeView: NSView {
     public override func layout() {
         super.layout(); let w = bounds.width
         buttons[0].frame = SplitMetrics.back; buttons[1].frame = SplitMetrics.forward; buttons[2].frame = SplitMetrics.reload
-        let labelWidth = min(max(0, w - 300), ceil((label.stringValue as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width) + 4)
-        label.frame = CGRect(x: (w - labelWidth) / 2 - 2, y: 8, width: labelWidth, height: 16)
-        buttons[3].frame = CGRect(x: label.frame.minX - 25, y: 4, width: 24, height: 24)
         buttons[4].frame = CGRect(x: w - 105, y: 2, width: 32, height: 28)
         buttons[5].frame = CGRect(x: w - 69, y: 4, width: 32, height: 24)
         buttons[6].frame = CGRect(x: w - 37, y: 4, width: 32, height: 24)
+        // Centered group (F0081 AX): copy 24 · 3 · host · 3 · an empty 24 pt slot, so the
+        // host sits on the bar's center line. Narrow panes truncate the host; with no room
+        // for a few characters, the host and copy button hide. guess: no narrow capture.
+        let left = (isFocused ? buttons[2].frame.maxX : buttons[1].frame.maxX) + SplitMetrics.barControlGap
+        let right = (isFocused ? buttons[4].frame.minX : buttons[6].frame.minX) - SplitMetrics.barControlGap
+        let slot = SplitMetrics.hostSlot
+        let text = ceil((label.stringValue as NSString).size(withAttributes: [.font: label.font ?? .systemFont(ofSize: 13)]).width) + 4
+        let box = min(text, right - left - 2 * slot)
+        let fits = !label.stringValue.isEmpty && box >= SplitMetrics.hostMinimumWidth
+        // Whole points keep the copy glyph sharp (AX frames are integral).
+        let x = max(left + slot, min((w - box) / 2 - 2, right - slot - box)).rounded()
+        // Tail truncation only when the host does not fit: the text field also truncates a
+        // string that only just fits its box.
+        label.lineBreakMode = box < text ? .byTruncatingTail : .byClipping
+        label.frame = CGRect(x: x, y: 8, width: max(0, box), height: 16)
+        buttons[3].frame = CGRect(x: x - 25, y: 4, width: 24, height: 24)
+        // Both focus states show the host group, so room alone decides.
+        label.isHidden = !fits; buttons[3].isHidden = !fits
     }
     private func press(_ i: Int) {
         switch i {

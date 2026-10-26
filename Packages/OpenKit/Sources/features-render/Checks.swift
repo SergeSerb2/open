@@ -334,7 +334,87 @@ enum FeatureChecks {
         check(sleeping.title == oldTitle, "C1 generation guard drops stale callback after eviction")
         let image = OffscreenRenderer().render(c.contentView, scale: 1)
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
+        try await visualFinish { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
+    }
+
+    /// M4 visual finish: the Peek dim under the sidebar content, the badge and lighter
+    /// source row, sidebar clicks through a Peek, page-colored pane bars, Arc's
+    /// unfocused-pane controls, and narrow four-pane bars without overlap.
+    static func visualFinish(_ check: (Bool, String) -> Void) async throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
+        let window = model.windows[0], space = model.spaces[0]
+        let source = space.pinned[0].tab!, other = space.pinned[1].tab!
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: source.id)
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults)
+        defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
+        func settle() { OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
+        settle()
+        c.peekController.open(url: URL(string: "https://example.org/preview")!, sourceTabID: source.id)
+        try await FeatureCLI.waitForLoads(factory, root: c.contentView); settle()
+        let root = c.contentView, overlay = c.peekController.overlay
+        let order: [Int] = [c.container, overlay.backdrop, c.sidebar, overlay].map { v in root.subviews.firstIndex { $0 === v } ?? -1 }
+        check(order.allSatisfy { $0 >= 0 } && order == order.sorted(), "VF1 Peek dim sits above the pages and below the sidebar; panel and buttons above all")
+        check(c.context.shownPeek?.sourceNodeID == source.id && c.context.peekBadges[source.id]?.url.host() == "example.org", "VF2 sidebar gets the shown Peek and the source badge")
+        check(c.sidebar.displayedURLText == "example.org", "VF2 URL field shows the Peek host (F0090)")
+        let rowPoint: CGPoint = c.sidebar.rowFrame(nodeID: other.id).map { root.convert(CGPoint(x: $0.midX, y: $0.midY), from: c.sidebar) } ?? .zero
+        let marginPoint = CGPoint(x: c.container.frame.minX + 30, y: c.container.frame.midY)
+        let panelPoint = CGPoint(x: overlay.panel.frame.midX, y: overlay.panel.frame.midY)
+        check(root.hitTest(rowPoint)?.isDescendant(of: c.sidebar) == true, "VF3 a sidebar row takes clicks while a Peek is open")
+        check(root.hitTest(marginPoint) === overlay.backdrop, "VF3 the dimmed page area takes clicks on the backdrop")
+        check(root.hitTest(panelPoint)?.isDescendant(of: overlay) == true, "VF3 the Peek panel keeps its clicks")
+        let peekHost = c.peekController.stack.last?.host as? FakeWebContentHost
+        let png = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in NSColor.systemBlue.setFill(); r.fill(); return true }.tiffRepresentation
+        peekHost?.onFaviconChange?(png)
+        check(png != nil && c.context.peekBadges[source.id]?.faviconPNG == png, "VF4 the Peek page's favicon reaches the badge")
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: other.id, space: space.id)); settle()
+        check(!c.peekController.isShown && c.context.shownPeek == nil && c.context.peekBadges[source.id] != nil, "VF5 another selection hides the Peek and keeps the badge (F0101)")
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: source.id, space: space.id)); settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == source.id, "VF5 the source row brings its Peek back")
+        let event = NSEvent.mouseEvent(with: .leftMouseDown, location: marginPoint, modifierFlags: [], timestamp: 0, windowNumber: c.window!.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+        overlay.backdrop.mouseDown(with: event); settle()
+        check(c.peekController.stack.isEmpty && c.context.peekBadges.isEmpty && c.context.shownPeek == nil && overlay.backdrop.isHidden, "VF6 a click on the dim dismisses the Peek and its badge")
+
+        c.performCommand("add-split-view"); try await FeatureCLI.waitForLoads(factory, root: c.contentView); settle()
+        // The new pane starts blank (no host to show or copy); give it a page.
+        if let id = c.splitController.split?.panes.last?.id { (c.container.host(for: id) as? FakeWebContentHost)?.load(URL(string: "https://pane.example.net/")!) }
+        try await FeatureCLI.waitForLoads(factory, root: c.contentView); settle()
+        func buttons(_ slot: PaneSlotView) -> [String: NSButton] {
+            Dictionary(uniqueKeysWithValues: (slot.paneChrome?.subviews ?? []).compactMap { $0 as? NSButton }.map { ($0.toolTip ?? "", $0) })
+        }
+        let visible = c.container.slots.map { slot in Set(buttons(slot).filter { !$0.value.isHidden }.keys) }
+        let focusedIndex = c.container.slots.firstIndex { !$0.focusRing.isHidden } ?? -1
+        check(focusedIndex >= 0 && visible[1 - focusedIndex] == ["Go back", "Go forward", "Copy Current URL", "Close This Pane"] && visible[focusedIndex].count == 7,
+              "VF7 unfocused pane shows back, forward, copy, host, close; focused shows all (F0081) (focused \(focusedIndex): \(visible.map { $0.sorted().joined(separator: ",") }))")
+        let colorsMatch = c.container.slots.allSatisfy { slot in
+            guard let host = c.container.host(for: slot.tabID), let page = host.pageBackgroundColor?.cgColor, let bar = slot.paneChrome?.layer?.backgroundColor else { return false }
+            return bar == page
+        }
+        check(colorsMatch, "VF8 each pane bar takes its page's reported color")
+        guard let split = c.splitController.split else { check(false, "VF9 split exists"); return }
+        check(c.sidebar(c.sidebar, didRequest: .addTabToSplit(splitID: split.id)) && split.panes.count == 3, "VF9 split-row Add Tab… adds a pane through the window controller")
+        check(!c.sidebar(c.sidebar, didRequest: .addTabToSplit(splitID: other.id)), "VF9 Add Tab… refuses a node that is not a split")
+
+        // Narrow four-pane bars (1280×900, the synthetic screen): nothing overlaps.
+        let narrowModel = FeatureCLI.synthetic(), narrowFactory = FakeWebContentHostFactory()
+        let nw = narrowModel.windows[0], ns = narrowModel.spaces[0]
+        let tabs = (ns.pinned + ns.today).compactMap(\.tab)
+        let four = narrowModel.makeSplit(tabIDs: Array(tabs.prefix(4)).map(\.id))!
+        narrowModel.focusSplitPane(splitID: four.id, tabID: four.panes[2].id)
+        narrowModel.selectNode(windowID: nw.id, spaceID: ns.id, nodeID: four.id)
+        let n = BrowserWindowController(model: narrowModel, windowID: nw.id, factory: narrowFactory, size: CGSize(width: 1280, height: 900), defaults: defaults)
+        defer { n.container.closeAll(); n.window?.close() }
+        try await FeatureCLI.waitForLoads(narrowFactory, root: n.contentView); OffscreenRenderer.settle(n.contentView, runLoop: 0.01)
+        var overlaps = 0, outside = 0, truncated = 0
+        for slot in n.container.slots {
+            guard let bar = slot.paneChrome else { continue }
+            var frames = bar.subviews.filter { !$0.isHidden && ($0 is NSButton || $0 is NSTextField) }.map(\.frame)
+            if let label = bar.subviews.compactMap({ $0 as? NSTextField }).first, !label.isHidden, label.lineBreakMode == .byTruncatingTail { truncated += 1 }
+            outside += frames.filter { !bar.bounds.contains($0) }.count
+            while let f = frames.popLast() { overlaps += frames.filter { $0.intersects(f) }.count }
+        }
+        check(n.container.slots.count == 4 && overlaps == 0 && outside == 0, "VF10 four-pane bars at 1280 pt: no overlapping or clipped controls (\(overlaps) overlaps, \(outside) outside)")
+        check(truncated == 3, "VF10 narrow unfocused bars truncate their hosts; the focused bar drops the host group (\(truncated) truncated)")
     }
 }

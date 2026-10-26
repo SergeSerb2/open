@@ -42,6 +42,8 @@ public final class PeekController {
         public let sourceNodeID: ItemID
         public let hostTabID: ItemID
         public var host: (any WebContentHost)?
+        /// The Peek page's favicon, for the source row's badge.
+        public var faviconPNG: Data?
     }
     public private(set) var stack: [PeekItem] = []
     public var isOpen: Bool { !stack.isEmpty }
@@ -60,6 +62,8 @@ public final class PeekController {
     @ObservationIgnored private var dismissGeneration = 0
     public var onChange: (() -> Void)?
     public var onToast: ((String, (() -> Void)?) -> Void)?
+    /// The top Peek's URL, history, loading state, or favicon changed (sidebar badge, URL field, toolbar).
+    public var onPageChange: (() -> Void)?
     public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
     public init(model: BrowserModel, splitController: SplitViewController, factory: any WebContentHostFactory, defaults: UserDefaults) {
         self.model = model; self.splitController = splitController; self.factory = factory; self.defaults = defaults
@@ -78,7 +82,7 @@ public final class PeekController {
     }
     public func open(url: URL, sourceTabID: ItemID) {
         guard let space = splitController.space else { return }
-        dismissGeneration += 1; isDismissing = false; overlay.alphaValue = 1
+        dismissGeneration += 1; isDismissing = false; overlay.setOpacity(1, animated: false)
         if stack.count >= 5 { stack.last?.host?.load(url); return }
         let hostID = ItemID(), host = factory.makeHost(tabID: hostID, profileID: space.profileID, url: nil)
         let nodeID: ItemID = if case .splitPane(let id)? = model.parent(of: sourceTabID) { id } else { sourceTabID }
@@ -87,10 +91,15 @@ public final class PeekController {
         let itemID = item.id
         host.onURLChange = { [weak self, weak host] value in
             guard let self, let host, let i = self.stack.firstIndex(where: { $0.id == itemID }), self.stack[i].host === host else { return }
-            self.stack[i].url = value
+            self.stack[i].url = value; self.onPageChange?()
+        }
+        host.onFaviconChange = { [weak self, weak host] data in
+            guard let self, let host, let i = self.stack.firstIndex(where: { $0.id == itemID }), self.stack[i].host === host else { return }
+            self.stack[i].faviconPNG = data; self.onPageChange?()
         }
         host.onLoadingChange = { [weak self, weak host] loading in
             guard let self, let host, self.stack.last?.id == itemID, self.stack.last?.host === host else { return }
+            self.onPageChange?()
             if !loading {
                 if self.duration(0.12) == 0 { host.view.alphaValue = 1 }
                 else { NSAnimationContext.runAnimationGroup { c in c.duration = self.duration(0.12); host.view.animator().alphaValue = 1 } }
@@ -106,12 +115,12 @@ public final class PeekController {
         }
         host.load(url); refresh(); host.focus(); installKeys()
         if duration(Motion.peekOpen) > 0 {
-            overlay.alphaValue = 0
+            overlay.setOpacity(0, animated: false)
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 let animation = CABasicAnimation(keyPath: "transform.scale"); animation.fromValue = 0.98; animation.toValue = 1
                 animation.duration = Motion.peekOpen; animation.timingFunction = Motion.easeOut; overlay.panel.layer?.add(animation, forKey: "peekOpen")
             }
-            NSAnimationContext.runAnimationGroup { c in c.duration = duration(Motion.peekOpen); overlay.animator().alphaValue = 1 }
+            NSAnimationContext.runAnimationGroup { c in c.duration = duration(Motion.peekOpen); overlay.setOpacity(1, animated: true) }
         }
         onChange?()
     }
@@ -154,10 +163,10 @@ public final class PeekController {
             scale.duration = interval; overlay.panel.layer?.add(scale, forKey: "peekDismiss")
         }
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = interval; overlay.animator().alphaValue = 0
+            context.duration = interval; overlay.setOpacity(0, animated: true)
         } completionHandler: { [weak self] in MainActor.assumeIsolated {
             guard let self, self.dismissGeneration == generation, self.stack.last?.id == id else { return }
-            self.isDismissing = false; self.finishDismiss(); self.overlay.alphaValue = 1
+            self.isDismissing = false; self.finishDismiss(); self.overlay.setOpacity(1, animated: false)
         } }
     }
     private func finishDismiss() {

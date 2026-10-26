@@ -15,6 +15,8 @@ final class TextLabel: NSView {
     var baseline: CGFloat = 15 { didSet { needsDisplay = true } }
     /// Text origin inside the view (Arc's text fields draw 2 pt inside their frame).
     var inset: CGFloat = 0 { didSet { needsDisplay = true } }
+    /// Space kept free at the right end when the text truncates.
+    var trailingInset: CGFloat = 0 { didSet { needsDisplay = true } }
     var alignment: NSTextAlignment = .left { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
@@ -39,11 +41,14 @@ final class TextLabel: NSView {
         guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
         var line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
-        let available = bounds.width - inset
+        let available = bounds.width - inset - trailingInset
         let width = CTLineGetTypographicBounds(line, nil, nil, nil)
-        if width > available, available > 0 {
+        if width > available {
+            // Tail truncation, like Arc's titles ("Keepi…", F0079). A box too narrow
+            // for even "…" (four-pane split rows) draws nothing rather than overflow.
             let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: attrs))
-            line = CTLineCreateTruncatedLine(line, available, .end, token) ?? line
+            guard available > 0, let truncated = CTLineCreateTruncatedLine(line, available, .end, token) else { return }
+            line = truncated
         }
         let lineWidth = CTLineGetTypographicBounds(line, nil, nil, nil)
         var x = inset

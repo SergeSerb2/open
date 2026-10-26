@@ -68,6 +68,12 @@ public struct ModelSidebarActions {
             return model.createFolder(in: .folder(parent)) != nil
         case .separateSplit(let id):
             model.unsplit(splitID: id)
+        case .separatePane(let split, let tab):
+            guard model.parent(of: tab) == .splitPane(split) else { return false }
+            model.removePane(splitID: split, tabID: tab, archive: false)
+        case .setSplitOrientation(let split, let orientation):
+            guard model.node(id: split)?.split != nil else { return false }
+            model.setSplitOrientation(splitID: split, orientation: orientation)
         case .resetToPinnedURL(let id):
             model.resetPinnedTab(id: id)
         case .replacePinnedURL(let id):
