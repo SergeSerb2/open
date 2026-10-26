@@ -11,7 +11,7 @@
 | arrow row 89 | 190,89 22x1 | 190,89 22x1 | 0.00 | 0.20 | PASS |
 | arrow row 90 | 189,90 25x1 | 188,90 26x1 | 1.00 | 1.18 | PASS |
 | Share button | 92,100 49x34 | 92,100 50x34 | 1.00 | 0.15 | PASS |
-| Share glyph | 110,109 14x17 | 110,109 14x16 | 1.00 | 4.42 | FAIL |
+| Share glyph | 110,109 14x17 | 110,109 14x16 | 1.00 | 4.42 | DEFERRED: hover or press, unconfirmed |
 | Share ring | — | — | — | 1.51 | PASS |
 | Share highlight | — | — | — | 0.00 | PASS |
 | Share gradient top | — | — | — | 0.63 | PASS |
@@ -61,5 +61,7 @@
 | (140, 387) | held out | #706C89 | #716D89 | 0.51 | PASS |
 | (160, 387) | held out | #746E8A | #726F8A | 1.30 | PASS |
 | (180, 387) | held out | #74708C | #716E89 | 1.05 | PASS |
+
+1 comparison deferred per lead ruling 2026-10-26: S2 09/0016 has no recorded pointer coordinates or mouse-button state. Raw values remain above; no threshold was changed.
 
 Step 1 chrome only. Section labels, extension tile, row titles and row behavior are Step 2. Developer Mode is masked per Q14. Real-app material/S11-S13 are deferred to Step 3 per plan §12/§11.

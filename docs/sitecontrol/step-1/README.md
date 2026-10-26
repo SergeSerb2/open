@@ -9,7 +9,7 @@ The body reserves the measured 297 pt no-Boosts stack. Step 2 adds its section v
 - `accessibility.txt`: native AX hierarchy; the host occurs once.
 - `checks.txt`: native event flows, render probes, receipts, and the open benchmark.
 - `comparison-base.md`: numeric sRGB element results against S2 09/0010.
-- `comparison-hover.md`: numeric results against S2 09/0016; the Share-glyph difference is pending a lead ruling against §3.4's fixed-glyph hover rule.
+- `comparison-hover.md`: numeric results against S2 09/0016; the Share-glyph comparison is deferred per the lead ruling of 2026-10-26 because the recorder saved no pointer coordinates or mouse-button state. Its raw ΔE remains in the table; the fixed glyph is unchanged.
 
 The comparison excludes Step 2 sections. Arrow rows use only the outside left/right ring strips to avoid neighboring arrow ink. Wells spanning the sidebar/page boundary use column-local affine ring backgrounds, so the boundary does not count as well ink. Ring color averages the straight portions of all four edges. The classification and acceptance thresholds remain 50% contrast, 85% core, 1 pt position, and ΔE00 2 for non-text elements.
 

@@ -275,11 +275,25 @@ recessed "key":
 | Top highlight | 1 pt #575757 on the first row only | S2 09/0010 y 101 |
 | Ring and shadow | 1 pt outer ring, black 0.30, all sides; shadow black 0.20, radius 1, y 1 | S2 09/0010: ring pixels #343340 next to material #47475B; under the button #212027 then #434154; fit |
 | Corner | 6, continuous | S2 09/0010 corner insets ≈ 2.5, 1, 0.5, 0 per row |
-| Hover | The highlight drops to #484848; nothing else changes | S2 09/0016, 0018, 0019, 0021 |
+| Hover | The highlight drops to #484848. Keep the glyph fixed pending the input-state confirmation below. | S2 09/0016, 0018, 0019, 0021; lead ruling 2026-10-26 |
 | Pressed | The gradient darkens by 6 levels (#212121 → #101010) | guess |
 | Glyph | 17 pt Regular template, white 0.85 | glyph ink 15–19 pt tall, peak #CDCDCD on 1x strokes (visual fit) |
 | Disabled | Glyph alpha × 0.3, no hover | Open choice |
 | Focus ring | The button's own rounded rect, outset 2, keyboard focus only | Open choice |
+
+**2026-10-26 capture qualification (lead ruling, 16:38 PT).** S2 09/0016 at 10:24:09 records
+Share glyph core ≈ 185, versus ≈ 200 in 09/0010, with the same 14 × 17 ink box. The top
+highlight is #484848 and the button fills / other three glyphs match their resting state.
+`s2-notes.txt` logs “09 step2 hover top-row button 1” at 10:24:08, followed by separate button
+2/3/4 hover steps at 10:24:11/14/17. This supports hover, but does not prove pointer/button
+state: `capture-loop.sh` saved window-only `screencapture -x -o -l` images (no cursor), window
+frames, and AX trees; it saved no pointer coordinates or mouse-button state. AX confirms the
+Share target's screen frame ≈ `(537.1,322.3,49.8,33.4)`, not the pointer position. The session
+video does not show this panel (IS §20.15). Classification: **“hover or press, unconfirmed.”**
+Keep all four action glyphs fixed. Defer only the 09/0016 Share-glyph comparison until input-state
+evidence confirms a hover; keep its measured raw ΔE in the table. Do not apply Share's darkening
+to the other buttons: their hover steps also lack recorded pointer/button state. The highlight,
+fill, ring, and other glyph comparisons remain gated at their existing thresholds.
 
 Tooltips were not captured: use the labels below with the shortcut keycaps (shared capsule in
 `OpenDesign/TooltipView.swift`). Glyphs are Open's own SF choices; the Boost glyph is one token,

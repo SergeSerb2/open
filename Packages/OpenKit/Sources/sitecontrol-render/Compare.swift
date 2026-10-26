@@ -37,7 +37,7 @@ enum SiteControlCompare {
                      Element(name: "More glyph",region: CGRect(x: body.minX+202,y: footer+9,width: 16,height: 14),kind: .ink),
                      Element(name: "top rim",region: body,kind: .fill(CGRect(x: body.minX+37,y: body.minY,width: 1,height: 1))),
                      Element(name: "bottom rim",region: body,kind: .fill(CGRect(x: body.minX+37,y: body.maxY-1,width: 1,height: 1)))]
-        var table = "| Element | Arc ink box | Open ink box | Max edge error (pt) | DE00 | Result |\n|---|---|---|---|---|---|\n", failed = 0
+        var table = "| Element | Arc ink box | Open ink box | Max edge error (pt) | DE00 | Result |\n|---|---|---|---|---|---|\n", failed = 0, deferred = 0
         for element in elements {
             let ab: CGRect?,ob: CGRect?,ac: [Double]?,oc: [Double]?
             switch element.kind {
@@ -60,9 +60,13 @@ enum SiteControlCompare {
             let requiresBox: Bool
             switch element.kind { case .ink,.text,.arrow: requiresBox = true; case .ring: requiresBox = false; case .fill: requiresBox = !element.name.contains("gradient") && !element.name.contains("highlight") && !element.name.contains("rim") && !element.name.hasSuffix(" ring") }
             let pass = (!requiresBox || (ab != nil && ob != nil)) && (error ?? 0)<=1 && (textOnly || (de ?? .infinity)<=2)
-            if !pass { failed += 1 }
+            // Lead ruling 2026-10-26: the window-only recorder has neither
+            // cursor coordinates nor mouse-button state. Keep the fixed glyph
+            // until the 0016 hover/press classification can be confirmed.
+            let unconfirmedShare = state == "scc-hover-action" && element.name == "Share glyph"
+            if unconfirmedShare { deferred += 1 } else if !pass { failed += 1 }
             func box(_ r: CGRect?) -> String { r.map { "\(Int($0.minX)),\(Int($0.minY)) \(Int($0.width))x\(Int($0.height))" } ?? "—" }
-            table += "| \(element.name) | \(box(ab)) | \(box(ob)) | \(error.map { String(format: "%.2f",$0) } ?? "—") | \(de.map { String(format: "%.2f",$0) } ?? "—") | \(pass ? "PASS" : "FAIL") |\n"
+            table += "| \(element.name) | \(box(ab)) | \(box(ob)) | \(error.map { String(format: "%.2f",$0) } ?? "—") | \(de.map { String(format: "%.2f",$0) } ?? "—") | \(unconfirmedShare ? "DEFERRED: hover or press, unconfirmed" : (pass ? "PASS" : "FAIL")) |\n"
         }
         table += "\n| Material probe | Arc sRGB | Open sRGB | DE00 | Result |\n|---|---|---|---|---|\n"
         for (x,y,gated) in [(150,330,true),(180,240,true),(240,330,true),(260,250,true),(235,180,false),(300,330,false)] {
@@ -79,6 +83,7 @@ enum SiteControlCompare {
             func rgb(_ p: [Double]) -> String { p.map { String(format: "%02X",Int($0.rounded())) }.joined() }
             table += "| (\(x), \(y)) | \(fit ? "fit" : "held out") | #\(rgb(a)) | #\(rgb(o)) | \(String(format: "%.2f",de)) | \(de<=2 ? "PASS" : "FAIL") |\n"
         }
+        if deferred>0 { table += "\n\(deferred) comparison deferred per lead ruling 2026-10-26: S2 09/0016 has no recorded pointer coordinates or mouse-button state. Raw values remain above; no threshold was changed.\n" }
         table += "\nStep 1 chrome only. Section labels, extension tile, row titles and row behavior are Step 2. Developer Mode is masked per Q14. Real-app material/S11-S13 are deferred to Step 3 per plan §12/§11.\n"
         try FileManager.default.createDirectory(at: directory,withIntermediateDirectories: true)
         try table.write(to: directory.appendingPathComponent("table.md"),atomically: true,encoding: .utf8)
