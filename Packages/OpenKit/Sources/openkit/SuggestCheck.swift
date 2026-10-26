@@ -494,7 +494,7 @@ private func remoteChecks(log: CheckLog, fx: Fixture) async {
 
 // MARK: - Latency
 
-private struct SplitMix64 {
+private struct SuggestRNG {
     var state: UInt64
     mutating func next() -> UInt64 {
         state &+= 0x9E37_79B9_7F4A_7C15
@@ -518,7 +518,7 @@ private let benchHosts = ["github.com", "docs.google.com", "mail.google.com", "y
 /// 5,000 tabs over 10 Spaces (folders, splits, pinned, today) plus 100 favorites.
 @MainActor
 private func makeBenchModel() -> (BrowserModel, Profile, [Space]) {
-    var rng = SplitMix64(state: 42)
+    var rng = SuggestRNG(state: 42)
     let profile = Profile(name: "Bench")
     let now = Date()
     var n = 0
@@ -573,7 +573,7 @@ private func latencyCheck(log: CheckLog, history: HistoryStore) async {
     engine.prewarm()
     print(String(format: "\nlatency model: %d tabs indexed, index build %.2f ms", engine.indexedTabCount, engine.lastIndexBuildMilliseconds))
 
-    var rng = SplitMix64(state: 7)
+    var rng = SuggestRNG(state: 7)
     let classes = ["word prefix 1-4 chars", "two words", "host prefix", "word + number", "URL-like", "arithmetic",
                    "action words", "random 3 letters", "uppercase word", "history title (\"article N\")"]
     func randomQuery() -> (Int, String) {
