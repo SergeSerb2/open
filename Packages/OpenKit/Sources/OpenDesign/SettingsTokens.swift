@@ -3,6 +3,13 @@ import AppKit
 /// Settings measurements: review round 1, a-settings.png A0499–A0507 (0.70 px/pt,
 /// ±1.5 pt), and ARC_PreferencesFeature Assets.car color facts. See docs/settings.md.
 public enum SettingsTokens {
+    // First-run plan §3.7. Open layout choices, pending the designer's review.
+    public static let firstRunSize = CGSize(width:560,height:460)
+    public static let firstRunHorizontalInset: CGFloat = 32
+    public static let firstRunVerticalInset: CGFloat = 28
+    public static let firstRunIconSize: CGFloat = 64
+    public static let firstRunIdentityWidth: CGFloat = 380
+    public static let firstRunButtonWidth: CGFloat = 240
     public static let contentInset: CGFloat = 64
     public static let bandHeight: CGFloat = 89
     public static let titleHeight: CGFloat = 28

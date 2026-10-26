@@ -139,11 +139,29 @@ public struct ArcImporter {
 
     /// JSONSerialization produces immutable containers. Their contents are private and read-only;
     /// only the model construction that consumes them runs on the main actor.
-    public struct ParsedSidebar: @unchecked Sendable { fileprivate let root: [String: Any] }
+    public struct ParsedSidebar: @unchecked Sendable { let root: [String: Any] }
     public func readSidebar() throws -> ParsedSidebar {
         let url = arcDirectory.appendingPathComponent("StorableSidebar.json")
         guard let data = try? Data(contentsOf: url), let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw ImportError.missingSidebar }
         return ParsedSidebar(root: root)
+    }
+    /// Shared by model import and the count-only probe; missing/empty refs mean Default.
+    static func profileReferenceKey(_ raw:Any?)->String {
+        if let value=raw as? String {return value == "Default" ? "default":value}
+        guard let object=raw as? [String:Any] else {return "default"}
+        if object["default"] as? Bool == true {return "default"}
+        return object.keys.sorted().compactMap {object[$0] as? String}.first ?? "default"
+    }
+    /// UI labels only, read on a utility worker when the wizard prepares its review.
+    /// The count-only probe never returns these strings or builds model objects.
+    public func spaceMappingLabels() throws -> [String] {
+        let root=try readSidebar().root
+        guard let sidebar=root["sidebar"] as? [String:Any],let containers=sidebar["containers"] as? [Any],containers.count>1,let holder=containers[1] as? [String:Any],let spaces=holder["spaces"] as? [Any] else {throw ImportError.malformedSidebar}
+        return stride(from:1,to:spaces.count,by:2).compactMap {index in
+            guard let object=spaces[index] as? [String:Any] else {return nil}
+            let name=(object["title"] as? String).flatMap{$0.isEmpty ? nil:$0} ?? "Untitled Space"
+            return name+" → "+name
+        }
     }
     @MainActor
     public func importAll(sidebar parsed: ParsedSidebar? = nil, directoryNamesToAvoid: Set<String> = [], existingDirectories: [ProfileID: String] = [:]) throws -> ArcImportResult {
@@ -207,12 +225,7 @@ public struct ArcImporter {
         func string(_ object: [String: Any], _ keys: [String]) -> String? {
             keys.compactMap { object[$0] as? String }.first { !$0.isEmpty }
         }
-        func refKey(_ raw: Any?) -> String {
-            if let raw = raw as? String { return raw }
-            guard let object = raw as? [String: Any] else { return "default" }
-            if object["default"] as? Bool == true { return "default" }
-            return object.keys.sorted().compactMap { object[$0] as? String }.first ?? "default"
-        }
+        func refKey(_ raw: Any?) -> String {Self.profileReferenceKey(raw)}
         var metadata: [String: ProfileMetadata] = [:]
         var metadataOrder: [String] = []
         var sourceDirectories: Set<String> = []

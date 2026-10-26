@@ -105,7 +105,7 @@ extension SyntheticData {
         for i in 0..<2 {
             let container = "example-container-\(i)", children = i == 0 ? ["example-tab-0", "example-tab-1", "example-easel"] : ["example-tab-2"]
             items += [container, ["id": container, "data": ["itemContainer": [:]], "childrenIds": children]]
-            spaces += ["example-space-\(i)", ["id": "example-space-\(i)", "title": "Example Space \(i+1)", "containerIDs": ["pinned", container]]]
+            spaces += ["example-space-\(i)", ["id": "example-space-\(i)", "title": "Example Space \(i+1)", "containerIDs": ["pinned", container], "profile": i == 0 ? ["default":true]:[:]]]
         }
         for i in 0..<3 { items += ["example-tab-\(i)", ["id": "example-tab-\(i)", "data": ["tab": ["savedURL": "https://example.com/\(i)", "savedTitle": "Example Tab \(i+1)"]]]] }
         items += ["example-easel", ["id": "example-easel", "data": ["easel": [:]]]]
@@ -117,4 +117,27 @@ extension SyntheticData {
         guard sqlite3_exec(database, "CREATE TABLE IF NOT EXISTS logins(blacklisted_by_user INTEGER); DELETE FROM logins; INSERT INTO logins VALUES(0),(0);", nil, nil, nil) == SQLITE_OK else { throw CocoaError(.fileWriteUnknown) }
         try JSONSerialization.data(withJSONObject: ["sidebar": ["containers": ["example", ["items": items, "spaces": spaces]]]], options: .sortedKeys).write(to: directory.appendingPathComponent("StorableSidebar.json"))
     }
+    /// A real on-disk probe fixture; no profile or reader is mocked.
+    public static func writeProbeFixture(to directory:URL) throws {
+        try writeImportFixture(to:directory)
+        let profile=directory.appendingPathComponent("User Data/Default")
+        func sql(_ file:String,_ source:String) throws {
+            var database:OpaquePointer?
+            guard sqlite3_open(profile.appendingPathComponent(file).path,&database) == SQLITE_OK else {sqlite3_close(database);throw CocoaError(.fileWriteUnknown)}
+            defer {sqlite3_close(database)}
+            guard sqlite3_exec(database,source,nil,nil,nil) == SQLITE_OK else {throw CocoaError(.fileWriteUnknown)}
+        }
+        try sql("History", """
+        CREATE TABLE meta(key TEXT,value TEXT); INSERT INTO meta VALUES('version','70');
+        CREATE TABLE urls(id INTEGER PRIMARY KEY,url TEXT,title TEXT,hidden INTEGER);
+        CREATE TABLE visits(id INTEGER PRIMARY KEY,url INTEGER,visit_time INTEGER,transition INTEGER,incremented_omnibox_typed_score INTEGER);
+        CREATE TABLE keyword_search_terms(keyword_id INTEGER,url_id INTEGER,term TEXT,normalized_term TEXT);
+        INSERT INTO urls VALUES(1,'https://example.com/a','Example History A',0),(2,'https://example.org/b','Example History B',0),(3,'chrome://settings','Example Internal',0);
+        INSERT INTO visits VALUES(1,1,13437000000000000,0,0),(2,1,13437000005000000,1,1),(3,2,13437000010000000,8,0),(4,3,13437000020000000,0,0),(5,1,13437000030000000,3,0),(6,1,0,0,0);
+        """)
+        try sql("Cookies","CREATE TABLE cookies(host_key TEXT); INSERT INTO cookies VALUES('example.com'),('example.org');")
+        let items:[Any]=["example-archive-a",["sidebarItem":["id":"example-archive-a","data":["tab":["savedURL":"https://example.com/archive"]]],"reason":"manual","archivedAt":800000000,"source":["space":["_0":"example-space-0"]]],"example-archive-b",["sidebarItem":["id":"example-archive-b","data":["tab":["savedURL":"https://example.org/archive"]]],"reason":"auto","archivedAt":800000001,"source":["space":["_0":"example-space-1"]]],"example-archive-skipped",["sidebarItem":["id":"example-archive-skipped","data":["easel":[:]]],"reason":"manual"]]
+        try JSONSerialization.data(withJSONObject:["items":items]).write(to:directory.appendingPathComponent("StorableArchiveItems.json"))
+    }
+
 }

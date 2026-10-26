@@ -1,6 +1,6 @@
 # First run — Welcome, Import from Arc, and default browser
 
-Status: plan, not implemented. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
+Status: Steps A and B implemented in OpenSettings/OpenImport; Steps C–F remain app-shell work. This file is the complete brief for the coding agent that implements it. That agent has no other context. Read this file top to bottom, then read each source it names before you edit that area. Do not invent a second design.
 
 User-visible name rule: never use the Arc brand in UI text. "Little Arc" is "Little Open" in Open. The only exception is "Import from Arc" (`AGENTS.md`). Search aliases may keep old names.
 
@@ -117,7 +117,7 @@ Probe steps, in order. Each step failure sets its own field to `nil` and continu
 1. **Directory and sidebar presence.** `fileExists` on the Arc directory and on `StorableSidebar.json`. If the sidebar file is absent, return `sidebarFound = false` and all counts `nil` (the §6.1 no-data state). Do not stat the user's real path anywhere else.
 2. **Sidebar estimate (fast, no model build).** Read `StorableSidebar.json` as `Data` and walk only the top shape the importer already defines: `sidebar.containers[1].spaces` (alternating `[id, object, …]`) for the Space count, and `sidebar.containers[1].items` length for the item count. Do not build a `BrowserModel`, do not map IDs, do not read titles or URLs into any log or result. This is a count of array entries, not an import; label it an estimate in the view model (`"Found: about N items"` copy rule, §4). If the JSON does not parse, `spaces`/`sidebarItems = nil` and `sidebarFound = true` (the file exists; the real parse error belongs to the import attempt, §6.3).
 3. **Archive estimate.** If `StorableArchiveItems.json` exists, count its alternating-array entries (`count / 2`). Absent file → `nil` (the importer treats a missing archive file as "not imported", not an error).
-4. **History estimate (copied DB, count only).** Reuse the phase-2 copy discipline exactly (`docs/plans/import-phase2.md` §1.9, as corrected in `docs/model.md`: copy `History` + `-wal` in WAL mode or `-journal` in rollback mode into a fresh mode-700 temp dir with mode-600 files, never copy `-shm`, open only the copy, `PRAGMA quick_check` must return `ok`, one 200 ms retry, delete the copy in all paths). On the copy, run `SELECT COUNT(*) FROM visits` and `SELECT COUNT(*) FROM urls` and keep the visit count as the estimate. Any failure (missing file, schema outside 65–75, quick-check failure twice) → `historyVisits = nil`. Make no network request. Print nothing.
+4. **History estimate (copied DB, count only).** Reuse the phase-2 copy discipline exactly (`docs/plans/import-phase2.md` §1.9, as corrected in `docs/model.md`: copy `History` + `-wal` in WAL mode or `-journal` in rollback mode into a fresh mode-700 temp dir with mode-600 files, never copy `-shm`, open only the copy, `PRAGMA quick_check` must return `ok`, one 200 ms retry, delete the copy in all paths). Use the existing `ArcHistoryReader` streaming report and keep `keptVisits` as the estimate, as required by §10 F2. Do not return the raw table size: internal schemes, subframes, and invalid times must be filtered by the same reader as import. Any failure (missing file, schema outside 65–75, quick-check failure twice) → `historyVisits = nil`. Make no network request. Print nothing.
 5. **Secret row counts (no Keychain).** Open copied `Login Data` and `Cookies` databases with the same copy rules and run `SELECT COUNT(*)` on `logins` and `cookies`. Sum them into `secretRows`. No `ChromiumCrypto` call, no consent token, no decryption. Expired/failed rows are still counted; the label is "passwords and cookies" (§4), not a promise of what will decrypt.
 6. **Arc running (hint only).** The App target — not `OpenImport` — fills `arcIsRunning` after the probe returns: `NSWorkspace.shared.runningApplications` contains bundle id `company.thebrowser.Browser`. `OpenImport` never imports AppKit, so `ArcProbeResult.arcIsRunning` defaults `false` and the App overwrites it on the main actor. Running Arc never blocks the import: the copy-first rules exist precisely for this case. The flag only selects the §6.2 hint text.
 
@@ -287,9 +287,9 @@ Use these strings exactly (D9). Short and plain. "You" is the user. No string co
 |---|---|
 | W-1 | `Open` (wordmark and window title) |
 | W-2 | `Open is a fast, private browser that keeps your spaces, tabs, and history on this Mac.` |
-| W-3 | `Found your Arc data: %d spaces, about %d tabs.` (probe landed, `sidebarFound == true`) |
-| W-4 | `Checking for your Arc data…` (probe running) |
-| W-5 | `No Arc data found on this Mac.` (probe landed, `sidebarFound == false`) |
+| W-3 | `Found data to import: %d spaces, about %d tabs.` (probe landed, `sidebarFound == true`) |
+| W-4 | `Checking for data to import…` (probe running) |
+| W-5 | `No data found to import on this Mac.` (probe landed, `sidebarFound == false`) |
 | W-6 | `Import from Arc` (primary button) |
 | W-7 | `Start fresh` (secondary button) |
 
@@ -302,23 +302,29 @@ Use these strings exactly (D9). Short and plain. "You" is the user. No string co
 | I-3 | `Spaces & tabs` (checkbox) — help: `Spaces, pinned and today tabs, favorites, and folders. These come together.` — found: `Found: %d spaces` |
 | I-4 | `Archive` (checkbox) — help: `Tabs you closed or archived.` — found: `Found: %d archived tabs` |
 | I-5 | `History` (checkbox) — help: `Pages you visited. This can take a little longer. You can also do this later from Settings.` — found: `Found: %d visits` |
-| I-6 | `Passwords & cookies` (secrets subheading + checkbox) — help: `Saved passwords, cookies, addresses, and cards. macOS will ask for permission on the next step. You can also do this later from Settings.` — found: `Found: %d saved items` |
+| I-6 | `Passwords and cookies` (secrets subheading + checkbox) — help: `Saved passwords, cookies, addresses, and cards. macOS will ask for permission on the next step. You can also do this later from Settings.` — found: `Found: %d saved items` |
 | I-7 | `Arc is open right now. Open can still import. If anything is missing, quit Arc and import again from Settings.` (only when `arcIsRunning`) |
 | I-8 | `Back` / `Not now` / `Continue` (footer buttons) |
 | I-9 | `Counting…` (a found line while its count is `nil` and the probe is running) |
 | I-10 | `Not found` (a found line when the backing file is absent) |
 | I-11 | `No Arc data found at %@.` (empty state; `%@` is the folder path) — body: `Open looked for the files Arc keeps on this Mac and did not find them. You can pick a different folder, or start fresh.` — buttons: `Choose Folder…`, `Start fresh` |
 
-### 4.3 Secrets consent step
+### 4.3 Passwords consent step
+
+These strings come from the shared `PasswordsImportCopy` used by the Settings import wizard. The capability is OFF in this build. First run does not keep a second copy.
 
 | ID | String |
 |---|---|
-| S-1 | `Passwords and cookies` (heading) |
-| S-2 | `Open can check your saved passwords, cookies, addresses, and cards from Arc.` |
-| S-3 | `To read them, macOS will show a Keychain prompt. Choose Allow to continue. Open asks once and does not ask again during this import.` |
-| S-4 | `For now, Open only checks this data and copies nothing. Full secret import arrives with the browser engine, and you can run it then from Settings.` |
+| S-1 | `Passwords and cookies can't be imported yet.` (capability OFF) |
+| S-2 | `Open found %d saved items in Arc. Open didn't read or copy them.` (capability OFF) |
+| S-3 | `Import passwords and cookies from Arc?` (capability ON) |
+| S-4 | `Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else.` (capability ON) |
 | S-5 | `You can skip this step and do it later from Settings.` |
-| S-6 | `Allow and Import Secrets` (primary) / `Skip Secrets` / `Cancel` |
+| S-6 | `Continue Without Passwords` / `Cancel`; `Import Passwords and Cookies` appears only with the capability ON |
+
+Additional count/status strings: `Could not be read` (a present file failed); `Import data found. Choose what to bring into Open.` (Welcome with an uncountable sidebar); `Open found the sidebar file, but could not count it. You can try the import or choose a different folder.` (Import hint); `Passwords and cookies can't be imported yet. You can continue without them and import later from Settings.` (capability OFF checkbox help). The default-browser note is `Little Open follows your link routing settings.`
+
+Unknown-count Passwords body (shared with the wizard): `Open didn't read or copy passwords or cookies. You can continue without them.`
 
 ### 4.4 Progress and report
 
@@ -533,7 +539,7 @@ Work in order. A step starts only when the step before it passes. Every PR: merg
 
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
-| A. Wizard dependency + preview renders | Gate: `OpenSettings` exists with `ImportPlan`, `ImportOutcome`, `SettingsActions`, and the §5.8 `ImportWizardViewModel` (settings-library Steps 1–7 cover this; if they have not landed, land settings Step 1 + the wizard view model first as its own PR under that plan). Then add `FirstRun.swift` (view model + step views, §3) with the fake-actions logger, and render the six screens in `settings-preview`. No App wiring yet. | `Packages/OpenKit/Sources/OpenSettings/FirstRun.swift`, `Packages/OpenKit/Sources/settings-preview/main.swift` (edit) | `settings-preview render` writes the six first-run PNGs (Welcome, Import, Secrets, Progress, Report, Default browser) at 1x/2x from the synthetic fixture; the fake action log shows `ACTION runImport … secrets=false` for the skip path and zero Keychain calls. Opus designer reviews these PNGs before Step B starts (fix layout in this step; colors stay tokens). |
+| A. Wizard dependency + preview renders | Gate: `OpenSettings` exists with `ImportPlan`, `ImportOutcome`, `SettingsActions`, and the §5.8 `ImportWizardViewModel` (settings-library Steps 1–7 cover this; if they have not landed, land settings Step 1 + the wizard view model first as its own PR under that plan). Then add `FirstRun.swift` (view model + step views, §3) with the fake-actions logger, and render the six screens in `settings-preview`. No App wiring yet. | `Packages/OpenKit/Sources/OpenSettings/FirstRun.swift`, `Packages/OpenKit/Sources/settings-preview/main.swift` (edit) | `settings-preview render` writes the six first-run PNGs (Welcome, Import, Secrets, Progress, Report, Default browser) at 1x/2x from the synthetic fixture; the fake action log shows `ACTION runImport … secrets=false` for the skip path and zero Keychain calls. Opus designer reviews these PNGs before Step C starts (fix layout in this step; colors stay tokens). |
 | B. Probe | `ArcProbe` (§2.2) with the copy-first count reads; wire no UI. Verify through a throwaway `/tmp` probe binary or the `openkit` CLI style the repo already uses — do not add a permanent CLI command unless the settings wizard needs the same counts (it does: §5.8 Step 1 "live counts" — share this probe there instead of a second counter). | `Packages/OpenKit/Sources/OpenImport/ArcProbe.swift` | Probe against the §10.1 fixture (built by hand under `/tmp` for this step) returns the exact counts; probe against an empty folder returns `sidebarFound = false`; probe against the WAL-locked fixture still returns history counts from the copy. Runtime on the fixture < 1 s. |
 | C. First-run window (no import yet) | `isFirstRun` (D2), `--skip-first-run` / `--arc-dir`, the §5.1 save guard, `FirstRunWindowController`, `AppFirstRunActions` with Start fresh + finish wired (`finishFirstRun(imported: false)`), Welcome step live with probe counts. Import buttons navigate steps but `runImport` still forwards to the Settings stub. | `App/AppDelegate.swift`, `App/LaunchOptions.swift`, `App/main.swift` (if needed), `App/FirstRun/*` | Manual + automation smoke: fresh temp root shows Welcome within budget (`timing`), Start fresh lands in the real window with one default Space, relaunch does not repeat, mid-flow quit repeats (F11 by hand). `--only shell` still passes. |
 | D. Import + report + landing | The shared `runImport` body (§5.4 phases 1–2: sidebar, archive, model swap via `installModel(_:)`, save), progress + report steps, §6.3/§6.4/§6.5 states. Settings General G-6 calls the same body (wire it if the Settings window exists; otherwise prove the body through first run and note the Settings hook as pending that plan's Step 8). | `App/FirstRun/AppFirstRunActions.swift`, App `SettingsActions` conformance file (per settings plan §3.4 placement), `App/AppDelegate.swift` (`installModel`) | Suite F1–F7 pass. Accounted checks pass on the fixture. A sidebar-corrupt fixture lands on E-1 with the default model untouched. |
@@ -579,3 +585,8 @@ These do not block Step A. Each names its default. Implementers: build the state
 - Approved. Implementation starts after the Settings + Library PR (OpenSettings wizard types) and app-shell Steps A + B merge; Step A of this plan re-checks those types first.
 - `importAll` main-actor hitch: move any work over O(100) items off the main actor; measure with the largest fixture.
 - Window size and W-2 wording: decided by the Opus design review of the rendered screens.
+
+
+### Execution decisions (2026-10-25 user brief)
+
+Implement Steps A and B now, then stop. The designer reviews all six screen pairs before Step C. This overrides the earlier Step-A design gate before B and the app-shell prerequisite for A/B. Build only with `nice -n 10 swift build -c release -j 6` in Packages/OpenKit. The user's naming rule removes the source-browser name from Welcome status lines; it remains allowed inside the import flow. The shared Settings Passwords copy and capability gate override the older S-strings and button names above. No real data or Keychain access is needed for A/B. Steps C–F, real-window automation and launch timing remain pending.

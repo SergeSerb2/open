@@ -8,6 +8,7 @@ import OpenRouting
 import OpenAdBlock
 import OpenSuggest
 import SQLite3
+import OpenImport
 
 struct CheckFailure: Error, CustomStringConvertible { let description: String }
 func require(_ condition: @autoclosure () throws -> Bool, _ message: String) throws { if try !condition() { throw CheckFailure(description: message) } }
@@ -84,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "first-run-flows", "first-run-probe"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -93,6 +94,67 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         let personal=vm.model.profiles[0].id,work=vm.model.profiles[1].id
         do {
             switch name {
+            case "first-run-probe":
+                let directory=env.root.appendingPathComponent("Probe Source")
+                try SyntheticData.writeProbeFixture(to:directory)
+                let started=DispatchTime.now().uptimeNanoseconds
+                let probe=await ArcProbe(arcDirectory:directory).run()
+                let seconds=Double(DispatchTime.now().uptimeNanoseconds-started)/1_000_000_000
+                try require(probe.sidebarFound && probe.spaces == 2 && probe.sidebarItems == 4 && probe.archiveItems == 3 && probe.historyVisits == 3 && probe.secretRows == 4 && probe.savedItems == 4 && probe.settingsCounts["Profiles"] == 1 && probe.settingsCounts["Search settings"] == 1,"probe fixture counts differ")
+                try require(seconds < 1,"small fixture probe exceeded one second")
+                let receipt=String(decoding:try JSONEncoder().encode(probe),as:UTF8.self)
+                try require(!receipt.contains("example.com") && !receipt.contains("Example History"),"probe returned source URLs or titles")
+                let shared=ImportWizardViewModel(root:vm,directory:directory);await shared.refreshCounts()
+                try require(shared.counts == probe.settingsCounts && shared.probe?.historyVisits == 3,"wizard retained a second counter")
+                let actions=PreviewFirstRunActions(),first=FirstRunViewModel(settings:vm,actions:actions,directory:directory)
+                await first.refreshProbe();try require(first.probe?.settingsCounts == shared.counts,"first run differs from the shared probe")
+                let empty=env.root.appendingPathComponent("Empty Probe");try FileManager.default.createDirectory(at:empty,withIntermediateDirectories:true)
+                let absent=await ArcProbe(arcDirectory:empty).run()
+                try require(absent.arcDirectoryExists && !absent.sidebarFound && absent.spaces == nil && absent.historyVisits == nil && absent.secretRows == nil && absent.settingsCounts.isEmpty,"empty source manufactured counts")
+                await first.choose(directory:empty);first.showImport();try require(first.probe?.sidebarFound == false && actions.events.isEmpty,"empty UI performed an action")
+                first.startFresh();try require(actions.events == ["finishFirstRun imported=false"],"empty path did not finish fresh")
+                let pendingSource=env.root.appendingPathComponent("Pending Probe")
+                try SyntheticData.writeImportFixture(to:pendingSource)
+                try Data("invalid database".utf8).write(to:pendingSource.appendingPathComponent("User Data/Default/History"))
+                let earlyActions=PreviewFirstRunActions();earlyActions.nextOutcome=ImportOutcome(counts:["Spaces":2])
+                let early=FirstRunViewModel(settings:vm,actions:earlyActions,directory:pendingSource)
+                let pendingCount=Task {await early.refreshProbe()};await Task.yield()
+                try require(early.wizard.busy && !early.wizard.isImporting,"slow probe fixture was not counting")
+                early.startFresh();try require(earlyActions.events == ["finishFirstRun imported=false"],"counting blocked Start fresh")
+                early.showImport();early.skipImport();try require(early.step == .defaultBrowser,"counting blocked Not now")
+                early.showImport();await early.continueImport();try require(early.step == .report && earlyActions.plans.count == 1,"counting blocked Continue")
+                await pendingCount.value;try require(early.step == .report && early.probe?.historyVisits == nil,"late probe changed the import step")
+                let history=directory.appendingPathComponent("User Data/Default/History")
+                var writer:OpaquePointer?
+                guard sqlite3_open(history.path,&writer) == SQLITE_OK else {throw CheckFailure(description:"WAL writer did not open")}
+                defer {sqlite3_exec(writer,"ROLLBACK",nil,nil,nil);sqlite3_close(writer)}
+                try require(sqlite3_exec(writer,"PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; INSERT INTO visits VALUES(7,1,13437000040000000,0,0); BEGIN IMMEDIATE; INSERT INTO visits VALUES(8,1,13437000050000000,0,0);",nil,nil,nil) == SQLITE_OK,"WAL fixture writer failed")
+                let dbBefore=try Data(contentsOf:history),walURL=URL(fileURLWithPath:history.path+"-wal"),walBefore=try Data(contentsOf:walURL)
+                let locked=await ArcProbe(arcDirectory:directory).run()
+                try require(locked.historyVisits == 4 && locked.secretRows == 4,"WAL-locked source lost committed rows or read uncommitted rows")
+                try require(try Data(contentsOf:history) == dbBefore && Data(contentsOf:walURL) == walBefore,"probe changed its source")
+                print("PROBE fixture spaces=2 items=4 archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=\(seconds)")
+            case "first-run-flows":
+                let (flow,actions)=try await firstRunPreview(env)
+                let bytes=try Data(contentsOf:vm.snapshot.fileURL)
+                try require(flow.step == .welcome && flow.includeSpacesAndTabs && flow.includeArchive && !flow.includeHistory && !flow.includeSecrets && actions.events.isEmpty,"first-run defaults performed an action")
+                flow.startFresh();try require(actions.events == ["finishFirstRun imported=false"],"fresh path performed import or default-browser work")
+                actions.events=[];flow.showImport();flow.includeSecrets=true;await flow.continueImport()
+                try require(flow.step == .secretsConsent && actions.plans.isEmpty,"consent did not stop import")
+                flow.cancelPasswords();try require(flow.step == .importChoices && actions.plans.isEmpty,"consent cancel ran an action")
+                await flow.continueImport();await flow.allowPasswords()
+                try require(flow.step == .secretsConsent && actions.plans.isEmpty,"unavailable capability granted consent")
+                await flow.skipPasswords()
+                try require(flow.step == .report && actions.plans.count == 1 && !actions.plans[0].secretsConsented && actions.simulatedKeychainRequests == 0,"skip path requested passwords")
+                try require(try Data(contentsOf:vm.snapshot.fileURL) == bytes && vm.defaults.object(forKey:"open.firstRun.completed") == nil,"preview flow wrote completion or snapshot")
+                flow.enterDefaultBrowser();try require(!flow.isDefaultBrowser && !actions.events.contains("setAsDefaultBrowser"),"default step prompted on entry")
+                actions.defaultError="synthetic failure";flow.makeDefault();try require(flow.errorText != nil && !flow.isDefaultBrowser,"default failure lost finish controls")
+                actions.defaultError=nil;actions.declineDefault=true;flow.makeDefault();try require(flow.defaultWasAttempted && !flow.isDefaultBrowser && flow.errorText == nil,"declined default was not shown")
+                actions.declineDefault=false;flow.makeDefault();try require(flow.isDefaultBrowser,"default success not refreshed")
+                flow.finish();try require(actions.events.last == "finishFirstRun imported=true","finish lost the imported state")
+                actions.nextOutcome=ImportOutcome(errorText:"Open could not read your Arc data.");flow.showImport();flow.includeSecrets=false;await flow.continueImport()
+                try require(flow.step == .failed,"failed import did not reach retry")
+                flow.skipImport();flow.finish();try require(actions.events.last == "finishFirstRun imported=false","failed import finished as imported")
             case "general-toggles":
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()

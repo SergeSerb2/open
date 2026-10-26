@@ -106,7 +106,7 @@ The import fixture contains two Spaces, three tabs, one skipped easel, and two c
 | Downloads progress, Retry/Reveal IDs, missing-file guard | PASS |
 | Captures thumbnail/Save As/delete file+index; profile History search/open | PASS |
 | Four Library empty states: native hosted AX labels and valid PNGs | PASS |
-| `settings-preview check` | PASS — 28 checks, 0 failed ([receipt](settings/checks.txt)) |
+| `settings-preview check` | PASS — 30 checks, 0 failed ([current receipt](first-run/checks.txt)); the original 28 Settings/Library flows are retained |
 | Renders | 86 PNGs: all panes/sections at both scales, General/Profiles in both appearances, distinct long-pane details, every requested sheet, import Choose/Review/Passwords/Report and engine-ready Passwords copy, Library empty states, shortcut states, suggestion notice, engine editor, and invalid rule |
 | `dump-keys` | PASS — synthetic-root guard; sorted persisted values |
 
@@ -239,3 +239,8 @@ The lead chose **Icon** as the tab/window title (the stored pane ID and commands
 Import graph assembly remains on the main actor. `ArcImporter.importAll(sidebar:)` walks the parsed item/Space/Profile graph and constructs actor-isolated OpenModel objects. Moving that work requires a separate Sendable intermediate model or a change to model isolation; this is not a cheap Settings-only move. The remaining walk is proportional to imported nodes and can pause the window for a very large sidebar. This PR claims off-main file/JSON parsing and count reads, not fully off-main model assembly or a large-import latency result.
 
 Additional states: [suggestion notice](settings/sheet-suggestion-notice@1x.png), [engine-ready Passwords copy](settings/import-passwords-ready@1x.png), [search-engine edit form](settings/sheet-search-engine-edit@1x.png), [invalid rule](settings/sheet-link-rule-invalid@1x.png), each with a matching @2x PNG. The engine-ready copy render stops before consent or import. It never requests a consent token or accesses Keychain.
+
+
+## Shared first-run probe
+
+First-run Steps A/B replace the wizard's independent count reads with OpenImport.ArcProbe. Counts, file-presence states and cancellation now match first run. No BrowserModel is built for counts. Space mapping labels load only when Review opens, on a utility worker, and are excluded from probe results. Unknown/present-but-unreadable counts no longer show a made-up zero. The count and import busy states are separate so a first-run estimate cannot gate navigation. See [first-run.md](first-run.md) for the 30-flow receipt, WAL checks, timing and six screen pairs. Actual import graph construction is still the import action's responsibility; app-shell Steps C–F are pending.

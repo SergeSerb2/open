@@ -150,7 +150,7 @@ public struct ArcHistoryReader: Sendable {
     /// The array-returning overload above remains available to existing callers.
     public func readBatches(batchSize: Int = 5000, consume: ([ArcHistoryVisitRecord]) async -> Void) async throws -> ArcHistoryReadReport {
         let cursor = try ArcHistoryCursor(historyFileURL: historyFileURL, batchSize: batchSize)
-        while let batch = try cursor.next() { await consume(batch) }
+        while let batch = try cursor.next() { try Task.checkCancellation(); await consume(batch) }
         return cursor.report
     }
 }

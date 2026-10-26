@@ -4,6 +4,7 @@ import OpenSettings
 import OpenModel
 import OpenCommands
 import OpenStore
+import OpenImport
 import CryptoKit
 
 @MainActor final class PreviewActions: SettingsActions {
@@ -74,8 +75,16 @@ import CryptoKit
 }
 @MainActor func run() async throws {
     let args = Array(CommandLine.arguments.dropFirst())
-    if args.isEmpty || args.contains("--help") { print("settings-preview render --out DIR [--scale 1|2|both]\nsettings-preview check [--only NAME]\nsettings-preview dump-keys --root DIR"); return }
+    if args.isEmpty || args.contains("--help") { print("settings-preview render --out DIR [--scale 1|2|both] [--first-run-only]\nsettings-preview check [--only NAME]\nsettings-preview dump-keys --root DIR\nsettings-preview probe --arc-dir DIR"); return }
     func value(_ flag: String) -> String? { args.firstIndex(of: flag).flatMap { $0 + 1 < args.count ? args[$0+1] : nil } }
+    if args[0] == "probe" {
+        guard let directory=value("--arc-dir") else {throw CheckFailure(description:"--arc-dir is required")}
+        let start=DispatchTime.now().uptimeNanoseconds
+        let result=await ArcProbe(arcDirectory:URL(fileURLWithPath:directory)).run()
+        struct Receipt:Codable {let probe:ArcProbeResult;let seconds:Double}
+        let data=try JSONEncoder().encode(Receipt(probe:result,seconds:Double(DispatchTime.now().uptimeNanoseconds-start)/1_000_000_000))
+        print(String(decoding:data,as:UTF8.self));return
+    }
     if args[0] == "dump-keys" { guard let root = value("--root") else { throw CheckFailure(description: "--root is required") }; try dumpKeys(root: URL(fileURLWithPath: root)); return }
     if args[0] == "check" { try await runChecks(only: value("--only")); return }
     let env = try PreviewEnvironment(); defer { env.close() }
@@ -90,6 +99,7 @@ import CryptoKit
         let rawScale = value("--scale") ?? "both"
         guard ["1", "2", "both"].contains(rawScale) else { throw NSError(domain: "invalid scale", code: 2) }
         let scales = rawScale == "both" ? [1,2] : [Int(rawScale)!]
+        if args.contains("--first-run-only") {try await renderFirstRunScreens(output:output,scales:scales);return}
         for pane in PaneID.allCases {
             settings.selectedPane = pane
             for scale in scales { try await render(SettingsContent(viewModel: settings), size: CGSize(width: 684, height: 650), scale: scale, dark: true, to: output.appendingPathComponent("\(pane == .appIcon ? "app-icon" : pane.rawValue)@\(scale)x.png")) }
@@ -176,6 +186,7 @@ import CryptoKit
                 try require(try Data(contentsOf:output.appendingPathComponent("\(first)@\(scale)x.png")) != Data(contentsOf:output.appendingPathComponent("\(second)@\(scale)x.png")),"detail targets produced the same viewport")
             }
         }
+        try await renderFirstRunScreens(output:output,scales:scales)
         // Retain the synthetic caller fixture so dump-keys can independently inspect every store.
         try settings.flush(); _ = try env.diskDefaults()
         let fixture = output.appendingPathComponent("fixture")
@@ -206,4 +217,71 @@ app.run()
 @MainActor final class RenderWindow: NSWindow {
     var scale: CGFloat = 1
     override var backingScaleFactor: CGFloat { scale }
+}
+
+/// Deliberate preview-only action boundary. It never calls Keychain or a browser service.
+@MainActor final class PreviewFirstRunActions:FirstRunActions {
+    var plans:[ImportPlan]=[]
+    var events:[String]=[]
+    var simulatedKeychainRequests=0
+    var nextOutcome=ImportOutcome()
+    var holdImport=false
+    var pending:CheckedContinuation<Void,Never>?
+    var defaultBrowser=false
+    var declineDefault=false
+    var defaultError:String?
+    func runImport(plan:ImportPlan) async -> ImportOutcome {
+        plans.append(plan)
+        let line="runImport spaces=\(plan.spaces) archive=\(plan.archive) history=\(plan.history) secrets=\(plan.secretsConsented)"
+        events.append(line);print("ACTION \(line)")
+        if plan.secretsConsented {simulatedKeychainRequests += 1}
+        if holdImport {await withCheckedContinuation {pending=$0}}
+        var result=nextOutcome
+        if !plan.spaces {for key in ["Spaces","Pinned and Today tabs","Imported tabs","Favorites","Folders","Search settings"] {result.counts[key]=0}}
+        if !plan.archive {result.counts["Archive"]=0}
+        if !plan.history {result.counts["History"]=0}
+        result.counts["Passwords and cookies"]=0
+        return result
+    }
+    func releaseImport() {holdImport=false;let continuation=pending;pending=nil;continuation?.resume()}
+    func isDefaultBrowser()->Bool {defaultBrowser}
+    func setAsDefaultBrowser()->String? {events.append("setAsDefaultBrowser");print("ACTION setAsDefaultBrowser");if defaultError == nil && !declineDefault {defaultBrowser=true};return defaultError}
+    func finishFirstRun(imported:Bool) {let line="finishFirstRun imported=\(imported)";events.append(line);print("ACTION \(line)")}
+}
+
+@MainActor func firstRunPreview(_ env:PreviewEnvironment) async throws -> (FirstRunViewModel,PreviewFirstRunActions) {
+    let directory=env.root.appendingPathComponent("Example Import")
+    try SyntheticData.writeProbeFixture(to:directory)
+    let actions=PreviewFirstRunActions()
+    let model=FirstRunViewModel(settings:env.settings,actions:actions,directory:directory)
+    await model.refreshProbe()
+    let parsed=try await Task.detached(priority:.utility) {try ArcImporter(arcDirectory:directory).readSidebar()}.value
+    let imported=try ArcImporter(arcDirectory:directory).importAll(sidebar:parsed)
+    let r=imported.report
+    // Canned preview action, derived from this small synthetic fixture's actual import report.
+    actions.nextOutcome=ImportOutcome(counts:["Spaces":r.spaces,"Pinned and Today tabs":r.pinnedTabs+r.todayTabs,"Favorites":r.favorites,"Folders":r.folders,"Archive":imported.archiveRecords.count,"History":model.probe?.historyVisits ?? 0,"Search settings":r.profiles,"Passwords and cookies":0,"Imported tabs":r.importedTabNodes,"Skipped easels":r.skippedEasels+r.archiveSkippedEasels,"Skipped notes":r.skippedNotes+r.archiveSkippedNotes])
+    return (model,actions)
+}
+
+@MainActor func renderFirstRunScreens(output:URL,scales:[Int]) async throws {
+    let env=try PreviewEnvironment();defer {env.close()}
+    let (model,actions)=try await firstRunPreview(env)
+    func capture(_ name:String) async throws {
+        for scale in scales {try await render(FirstRunView(model:model),size:FirstRunWindow.size,scale:scale,dark:true,to:output.appendingPathComponent("first-run-\(name)@\(scale)x.png"))}
+    }
+    try await capture("welcome")
+    model.showImport();try await capture("import")
+    model.includeSecrets=true;await model.continueImport()
+    try require(model.step == .secretsConsent && actions.plans.isEmpty,"first-run consent did not gate the import")
+    try await capture("secrets")
+    actions.holdImport=true
+    let importing=Task {await model.skipPasswords()}
+    while actions.pending == nil {await Task.yield()}
+    try await capture("progress")
+    actions.releaseImport();await importing.value
+    try require(model.step == .report,"first-run report missing")
+    try await capture("report")
+    model.enterDefaultBrowser();try await capture("default-browser")
+    try require(actions.plans.count == 1 && actions.plans.allSatisfy{!$0.secretsConsented} && actions.simulatedKeychainRequests == 0,"preview crossed the consent gate")
+    print("GATE first-run consent-bearing-plans=0 simulated-keychain-requests=0 (preview adapter only)")
 }
