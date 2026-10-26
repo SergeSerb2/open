@@ -18,6 +18,7 @@ import OpenStore
     public var showsPreviews = false
     public var showsImport = false
     public var showsSearchEngines = false
+    @ObservationIgnored public lazy var profiles = ProfilesViewModel(root: self)
     @ObservationIgnored public lazy var general = GeneralViewModel(root: self)
     @ObservationIgnored public lazy var advanced = AdvancedViewModel(root: self)
     @ObservationIgnored public lazy var appIcon = AppIconViewModel(root: self)
@@ -32,6 +33,12 @@ import OpenStore
         selectedPane = PaneID(rawValue: defaults.string(forKey: "open.settings.lastPane") ?? "") ?? .general
         selectedProfileID = model.defaultProfile?.id ?? ProfileID()
         links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: model.windows.map { RoutingWindowSnapshot(id: $0.id, kind: $0.style == .littleOpen ? .littleOpen : .standard, focusedSpaceID: $0.focusedSpaceID) }, rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: defaults.object(forKey: "open.links.externalInLittleOpen") as? Bool ?? true), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser())
+    }
+    public func refreshLinks() {
+        links = LinksSettingsModel(snapshot: RoutingSnapshot(spaces: model.spaces.map { RoutingSpaceSnapshot(id: $0.id, title: model.displayTitle(for: $0), profileID: $0.profileID) }, windows: [], rules: model.routingRules, defaultDestination: model.defaultDestination, externalLinksInLittleOpen: bool("open.links.externalInLittleOpen")), spaces: model.spaces.map { SpaceOption(id: $0.id, title: model.displayTitle(for: $0)) }, isDefaultBrowser: actions.isDefaultBrowser())
+        links.littleOpenHotkeyEnabled = bool("open.links.littleOpenHotkeyEnabled")
+        links.optionCommandClickLittleOpen = bool("open.links.optionCommandClickLittleOpen")
+        links.littleOpenAutoArchiveAfter = model.profile(id: selectedProfileID)?.settings.littleOpenAutoArchiveAfter ?? .sixHours
     }
     public func save() { snapshot.scheduleSave(model: model) }
     public func flush() throws { try snapshot.saveNow(model: model) }

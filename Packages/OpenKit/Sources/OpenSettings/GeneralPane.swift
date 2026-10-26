@@ -18,9 +18,9 @@ public struct GeneralPane: View {
     public init(model: GeneralViewModel) { self.model = model }
     public var body: some View {
         SettingsGroup("") {
-            Toggle("Automatically update Open", isOn: $model.updates).help("Open checks for updates in the background.")
+            SettingsSwitch("Automatically update Open", isOn: $model.updates).help("Open checks for updates in the background.")
             Divider()
-            Toggle("Warn before quitting", isOn: $model.warn).accessibilityIdentifier("warnBeforeQuitPreference")
+            SettingsSwitch("Warn before quitting", isOn: $model.warn).accessibilityIdentifier("warnBeforeQuitPreference")
         }.toggleStyle(.switch).controlSize(.small)
         SettingsGroup("") {
             PreferenceToggle(title: "Previews", key: "open.general.previewsEnabled", root: model.root)
