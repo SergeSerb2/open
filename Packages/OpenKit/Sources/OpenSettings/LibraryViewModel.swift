@@ -10,7 +10,7 @@ import OpenStore
     public typealias Section = LibrarySection
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
-        if oldValue != section { selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
+        if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]
@@ -43,6 +43,15 @@ import OpenStore
     public let defaults: UserDefaults
     public let model: BrowserModel
     public let actions: any LibraryActions
+    @ObservationIgnored private let settingsActions: (any SettingsActions)?
+    @ObservationIgnored private var cachedSpaceManagerView: NSView?
+    /// Retry a transient nil; retain the first supplied view across section switches.
+    public var spaceManagerView: NSView? {
+        if let cachedSpaceManagerView { return cachedSpaceManagerView }
+        let view = settingsActions?.makeSpaceManagerView()
+        cachedSpaceManagerView = view
+        return view
+    }
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
     public private(set) var archives: [ProfileID: ArchiveStore]
@@ -50,12 +59,15 @@ import OpenStore
     public let faviconStore: FaviconStore?
     private let snapshot: SnapshotStore
     private var archiveOwners: [ItemID: ProfileID] = [:]
+    @ObservationIgnored private var archivedDisplayTitles: [ItemID: String] = [:]
     @ObservationIgnored private var archivedChildCounts: [ItemID: Int] = [:]
     private var activeArchiveLoad = UUID()
     private var cursors: [ProfileID: Int] = [:]
     private var generation = UUID()
     public init(model: BrowserModel, defaults: UserDefaults, actions: any LibraryActions, downloads: any DownloadsProvider, captures: any CapturesProvider,
-                archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore], snapshot: SnapshotStore, faviconStore: FaviconStore? = nil) {
+                archives: [ProfileID: ArchiveStore], histories: [ProfileID: HistoryStore], snapshot: SnapshotStore, faviconStore: FaviconStore? = nil, settingsActions: (any SettingsActions)? = nil) {
+        SettingsDefaults.register(in: defaults)
+        self.settingsActions = settingsActions
         self.model = model; self.defaults = defaults; self.actions = actions; self.downloads = downloads; self.captures = captures
         self.archives = archives; self.histories = histories; self.snapshot = snapshot; self.faviconStore = faviconStore
         section = LibrarySection(rawValue: defaults.string(forKey: "open.library.lastSection") ?? "") ?? .archive
@@ -77,7 +89,7 @@ import OpenStore
         await reload()
     }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
-    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
+    public func reloadArchive() async { var total=0; for store in archives.values {total += await store.count()};archiveTotalCount=total; generation = UUID(); cursors = [:]; archiveOwners = [:]; archivedChildCounts = [:]; archivedDisplayTitles = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {
         guard archiveHasMore, !archiveLoading else { return }; archiveLoading = true; let request = generation, load = UUID();activeArchiveLoad=load
         defer { if request == generation && load == activeArchiveLoad { archiveLoading = false } }
@@ -90,6 +102,8 @@ import OpenStore
         let page = Array(candidates.sorted { a, b in a.1.archivedAt == b.1.archivedAt ? a.1.id.description < b.1.id.description : a.1.archivedAt > b.1.archivedAt }.prefix(100))
         for (profile, row) in page {
             cursors[profile, default: 0] += 1; archiveOwners[row.id] = profile
+            let custom = (try? JSONDecoder().decode(ArchivedTitle.self, from: Data(row.payloadJSON.utf8)))?.customTitle
+            archivedDisplayTitles[row.id] = row.kind == .folder ? row.title : (custom ?? TidyTitles.tidy(title: row.title, url: row.url))
             if row.kind == .folder { archivedChildCounts[row.id] = Self.countArchivedChildren(row) }
         }
         archiveRows += page.map(\.1); archiveHasMore = page.count == 100; archiveLoading=false
@@ -97,6 +111,9 @@ import OpenStore
             if favicons[row.id] != icon { faviconImages[row.id]=icon.flatMap{NSImage(data:$0)} }
             favicons[row.id] = icon } }
     }
+    private struct ArchivedTitle: Decodable { let customTitle: String? }
+    public func archivedDisplayTitle(_ row: ArchivedTabRecord) -> String { archivedDisplayTitles[row.id] ?? row.title }
+
     public func restore(id: ItemID, to spaceID: SpaceID? = nil) async {
         guard !model.spaces.isEmpty else { statusText = "Create a Space before restoring this tab."; return }
         guard let row = archiveRows.first(where: { $0.id == id }), let profile = archiveOwners[id] ?? row.profileID, let store = archives[profile], var record = await store.record(id: id) else { statusText = "This archived tab is no longer available."; return }

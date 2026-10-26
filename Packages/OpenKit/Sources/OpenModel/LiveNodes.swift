@@ -46,7 +46,7 @@ public final class Tab {
 
     public let live = TabLiveState()
 
-    public var displayTitle: String { customTitle ?? title }
+    public var displayTitle: String { customTitle ?? TidyTitles.tidy(title: title, url: url) }
 
     public init(
         id: ItemID = ItemID(), url: URL, title: String = "",

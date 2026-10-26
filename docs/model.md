@@ -672,26 +672,6 @@ cancels pending generations. `flush()` captures pending dirty state on the main
 actor before waiting for writes. Frame notifications only update window fields
 and schedule this save; they do not notify the engine factory or tab mirror.
 
-## Sidebar M1 Muse follow-up (2026-10-26)
-
-Bulk moves build one original-slot map per parent and use prefix removal counts to
-update positions without per-node list searches. The primitive validates a supplied
-slot before removal; the existing single-node path retains its normal lookup.
-Same-slot nodes emit no move. Move to Space marks unread only on descendants of
-actually relocated nodes and leaves every flag untouched with markUnread false.
-Bulk archive builds each parent position map once, sorts by those values, and
-removes known slots from highest to lowest (split collapse retains its existing path).
-
-The CLI now asserts exact B4 removal IDs/order, B7 fresh IDs at every depth plus
-split focus/fractions/orientation, and unread true/false through folders and splits
-from two source Spaces. It also checks a same-slot pin stays read and a middle drop
-with selected nodes on both sides. `commands-demo` passes 156/156 on the M1 base.
-
-`openkit bench` runs 20 real command/undo rounds at 50 and 500 nodes, with exact
-event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
-Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
-500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
-new target, dependency, timer, App edit, or desktop input was added.
 ## Sidebar completion M2 (2026-10-26)
 
 Delete (`closeTab` on a folder, or a folder in `archiveNodes`) now archives one
@@ -728,3 +708,91 @@ FA7 checks the snapshot roundtrip only; the unrelated ArchiveStore before/after
 comparison was removed. Library folder counts decode once per page load, cache
 by row ID, and clear on reload. A failed archive-row deletion after folder restore
 says "Folder restored", with a real SQLite delete-failure CLI scenario.
+
+## Sidebar completion M3 (2026-10-26)
+
+`Tab.displayTitle` now uses `customTitle ?? TidyTitles.tidy(title:url:)`. The
+Open-written rule table follows sidebar-completion §3.7 for Gmail, Google Docs,
+Drive, Calendar, YouTube, GitHub, X/Twitter, LinkedIn, Wikipedia, Stack Overflow,
+Figma, Slack, Outlook, and Amazon. Host matching is exact after removing one
+leading www. The first matching rule wins. Empty results keep the raw title.
+No Arc JSON values were read or copied. Raw `Tab.title`, snapshot values, and
+suggestion-search inputs are unchanged.
+
+Regexes compile once. A main-actor cache holds at most 512 title/host/path/fragment
+keys. The real commands-demo flow passes 40 fixture pairs, custom-title precedence,
+no-match and empty-result cases, and snapshot roundtrip. T3 p95 was 0.334 µs for
+10,000 cache hits and 4.875 µs for 1,000 misses (limits 5/50 µs). All 170 demo
+checks pass. No suggestion code or suite checks changed.
+
+The 13 capture-state comparisons could not run: `.re/vf/run-states.sh` and its
+capture-time inputs are absent from this checkout and the current project/worktrees.
+The full `sidebar-render check` remains part of verify-all; lane S owns TT1/TT2.
+No claim of capture parity is made for this step.
+
+## Sidebar M1 Muse follow-up (2026-10-26)
+
+Bulk moves build one original-slot map per parent and use prefix removal counts to
+update positions without per-node list searches. The primitive validates a supplied
+slot before removal; the existing single-node path retains its normal lookup.
+Same-slot nodes emit no move. Move to Space marks unread only on descendants of
+actually relocated nodes and leaves every flag untouched with markUnread false.
+Bulk archive builds each parent position map once, sorts by those values, and
+removes known slots from highest to lowest (split collapse retains its existing path).
+
+The CLI now asserts exact B4 removal IDs/order, B7 fresh IDs at every depth plus
+split focus/fractions/orientation, and unread true/false through folders and splits
+from two source Spaces. It also checks a same-slot pin stays read and a middle drop
+with selected nodes on both sides. `commands-demo` passes 156/156 on the M1 base.
+
+`openkit bench` runs 20 real command/undo rounds at 50 and 500 nodes, with exact
+event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
+Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
+500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
+new target, dependency, timer, App edit, or desktop input was added.
+
+## Sidebar completion M4 (2026-10-26)
+
+Open's two sounds are generated from fixed-seed PCM with the Python standard
+library and converted by afconvert. `tools/generate-sounds.py --check` regenerates
+both files and compares their pinned SHA-256 and committed bytes. `SoundEffects`
+loads AVAudioPlayer lazily, reads `open.advanced.playSoundEffects` at each use, and
+loads/plays nothing when it is absent or false. The default remains false; there
+is no production caller for the general event effect (lead Q6). The license
+inventory records these assets as Open's own work, with no recorded reference audio.
+
+The existing SettingsDefaults registry now owns the three sidebar hint/banner keys.
+The lead Q3 Previews sources use `open.general.previewsFolders` and
+`open.general.previewsPages` in the same UserDefaults store. ProfileSettings is
+unchanged. The Previews sheet replaces its former hovering-links switch with
+Folders and Pinned tabs and Favorites. The registry in settings-library.md records
+the exact keys; no second settings store is introduced.
+
+The release `features-render check` passes 150/150: SE1 loads the real bundled CAFs
+at 0.450 s / -6.000 dBFS and 1.100 s / -8.000 dBFS; SE2 proves absent and false
+preferences neither load nor play. The Settings CLI verifies defaults, disk writes,
+and reload through the existing store. `features-render` and sound regeneration now
+run in verify-all. No audio playback, unit tests, App edits, or desktop input.
+
+## Sidebar completion M5 (2026-10-26)
+
+LibrarySection.spaces is the first Library row. It hosts the native view supplied
+by `SettingsActions.makeSpaceManagerView() -> NSView?`, through a source-compatible
+optional SettingsActions injection in LibraryViewModel. The view is created only
+on first entry, retained across section switches, and constrained to fill the host.
+OpenSettings imports no OpenSidebar code and adds no library target. A nil factory
+result shows the Library empty state. Spaces has no unrelated archive/search toolbar.
+The selected section persists in the existing UserDefaults registry.
+
+`settings-preview check --only library-spaces` passes L1 through the actual Library
+view and the injected labeled native stand-in. It verifies lazy creation, render,
+reuse, section persistence, and a nil factory. The empty-state check uses the native
+headline AX label, as existing offscreen Library checks do; SwiftUI's combined
+message label is not exposed in a never-ordered window. The normal render command
+also includes Library Spaces at 1x and 2x. App presentation and the concrete sidebar
+SpaceManagerView remain their separate lane steps. No unit tests or desktop input.
+
+M5's first integrated full run passed all 35 Settings checks but retained a FAIL
+in the render inventory gate: the first-run merge fixed its count at 214, while
+Library Spaces adds two images. The verifier now requires exactly 216 and explicitly
+requires both Library Spaces scales. The prior FAIL receipt remains in the run logs.
