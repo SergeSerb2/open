@@ -458,7 +458,7 @@ final class TabCellView: SidebarCellView {
     func beginRename() {
         guard let tab else { return }
         let id = tab.id
-        beginEditing(text: tab.displayTitle, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
+        beginEditing(text: tab.customTitle ?? tab.title, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
                      font: title.font) { [weak self] value in self?.context?.send(.rename(nodeID: id, title: value)) }
     }
 }

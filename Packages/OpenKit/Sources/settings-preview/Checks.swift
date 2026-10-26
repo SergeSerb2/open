@@ -39,7 +39,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         archives = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, ArchiveStore(fileURL: directories.archiveFileURL(for: $0))) })
         histories = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, HistoryStore(fileURL: directories.historyFileURL(for: $0))) })
         faviconStore = try FaviconStore(databaseURL: root.appendingPathComponent("State/favicons.sqlite3"))
-        library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore)
+        library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore, settingsActions: actions)
         let library = self.library
         libraryActions.selectedHistoryProfile = { [weak library] in library?.historyProfileID }
         let settings = self.settings
@@ -85,7 +85,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "shortcuts-save", "shortcuts-conflict", "advanced-toggles", "adblock", "app-icon", "import-counts", "library-archive", "library-downloads", "library-captures-history", "empty-states", "archive-save-failure", "archive-owner-partial", "adblock-profile-lifecycle", "suggestion-notice", "shortcuts-recording-admission", "archive-paging", "links-save-failure", "adblock-readiness", "settings-caches", "library-folder-archive", "library-tidy-search", "first-run-actions-and-adapter-gate", "first-run-probe", "first-run-count-parity", "probe-cancel-mid-copy", "sidebar-defaults", "library-spaces", "previews-legacy-migration"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -236,6 +236,80 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let receipt=try await ArcProbe.verifyCopyCancellation()
                 try require(receipt.cancelled && receipt.copyStarted && receipt.copyWasPartial && receipt.privateModes && receipt.temporaryCopyRemoved && receipt.sourceUnchanged,"cancelled partial copy leaked files, changed its source, or bypassed cancellation")
                 print("COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchanged=true")
+            case "previews-legacy-migration":
+                let cases: [(legacy: Bool, folders: Bool?)] = [(false, nil), (true, false), (false, true)]
+                for (legacy, storedFolders) in cases {
+                    let expectedFolders = storedFolders ?? legacy
+                    let suite = "open.previews.migration.\(UUID().uuidString)"
+                    let defaults = UserDefaults(suiteName: suite)!
+                    defer { defaults.removePersistentDomain(forName: suite) }
+                    defaults.set(legacy, forKey: "open.general.previewsOnHover")
+                    if let storedFolders { defaults.set(storedFolders, forKey: "open.general.previewsFolders") }
+                    let migrated = SettingsViewModel(model: vm.model, actions: env.actions, defaults: defaults, root: env.root, snapshot: vm.snapshot)
+                    try require(migrated.bool("open.general.previewsFolders") == expectedFolders && migrated.bool("open.general.previewsPages") == legacy,
+                                "legacy preview source choices were reset or an explicit new choice was overwritten")
+                    try require(defaults.synchronize(), "migration did not flush to the existing defaults store")
+                    let disk = defaults.persistentDomain(forName: suite)!
+                    try require(disk["open.general.previewsFolders"] as? Bool == expectedFolders && disk["open.general.previewsPages"] as? Bool == legacy,
+                                "preview migration did not persist the source keys")
+                    defaults.set(true, forKey: "open.general.previewsPages")
+                    defaults.set(false, forKey: "open.general.previewsOnHover")
+                    let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: suite)!, root: env.root, snapshot: vm.snapshot)
+                    try require(reloaded.bool("open.general.previewsFolders") == expectedFolders && reloaded.bool("open.general.previewsPages"),
+                                "repeat registration overwrote a later per-source choice")
+                }
+                print("Legacy preview false/true, missing keys, explicit choices, disk writes, and repeat startup passed")
+            case "sidebar-defaults":
+                try require(!vm.bool("open.sidebar.hideHintShown") && !vm.bool("open.sidebar.autoArchiveBannerDismissed")
+                            && vm.bool("open.sidebar.autoArchiveBannerEligible") && !vm.bool("open.advanced.playSoundEffects")
+                            && vm.bool("open.general.previewsFolders") && vm.bool("open.general.previewsPages"), "sidebar app defaults differ")
+                vm.set(true, for: "open.sidebar.hideHintShown")
+                vm.set(true, for: "open.sidebar.autoArchiveBannerDismissed")
+                vm.set(false, for: "open.sidebar.autoArchiveBannerEligible")
+                vm.set(false, for: "open.general.previewsFolders")
+                vm.set(false, for: "open.general.previewsPages")
+                let disk = try env.diskDefaults()
+                try require(disk["open.sidebar.hideHintShown"] as? Bool == true && disk["open.sidebar.autoArchiveBannerDismissed"] as? Bool == true
+                            && disk["open.sidebar.autoArchiveBannerEligible"] as? Bool == false && disk["open.general.previewsFolders"] as? Bool == false
+                            && disk["open.general.previewsPages"] as? Bool == false, "sidebar settings did not reach the existing UserDefaults store")
+                let reloaded = SettingsViewModel(model: vm.model, actions: env.actions, defaults: UserDefaults(suiteName: env.suite)!, root: env.root, snapshot: vm.snapshot)
+                try require(reloaded.bool("open.sidebar.hideHintShown") && !reloaded.bool("open.general.previewsPages"), "sidebar settings did not survive reload")
+            case "library-spaces":
+                let library = env.library
+                try require(env.actions.spaceManagerMakeCount == 0 && LibrarySection.allCases.first == .spaces,
+                            "L1 Space Manager built before entry or Spaces is not first")
+                library.section = .spaces
+                let manager = library.spaceManagerView
+                try require(manager != nil && env.actions.spaceManagerMakeCount == 1, "L1 factory did not supply the native view")
+                let labels = try await render(LibraryContent(viewModel: library), size: CGSize(width: 960, height: 640), scale: 1, dark: true,
+                                              to: env.root.appendingPathComponent("library-spaces-check.png"))
+                try require(labels.contains("Space Manager preview"), "L1 injected view did not render")
+                library.section = .archive
+                library.statusText = "Folder restored. Click to view."; library.restoredSpaceID = vm.model.spaces[0].id
+                library.section = .spaces
+                try require(library.statusText.isEmpty && library.restoredSpaceID == nil, "L1 Spaces retained Archive status/View action")
+                try require(library.spaceManagerView === manager && env.actions.spaceManagerMakeCount == 1,
+                            "L1 section switches rebuilt the injected view")
+                let persisted = try env.diskDefaults()
+                try require(persisted["open.library.lastSection"] as? String == "spaces", "L1 selected section did not reach the existing defaults file")
+                let reloaded = LibraryViewModel(model: vm.model, defaults: env.defaults, actions: env.libraryActions, downloads: env.downloadFeed,
+                    captures: env.captures, archives: env.archives, histories: env.histories, snapshot: vm.snapshot, settingsActions: env.actions)
+                try require(reloaded.section == .spaces && env.actions.spaceManagerMakeCount == 1, "L1 Spaces selection did not persist or factory was eager")
+                env.actions.spaceManagerAvailable = false
+                let emptyLabels = try await render(LibraryContent(viewModel: reloaded), size: CGSize(width: 960, height: 640), scale: 1, dark: true,
+                                                   to: env.root.appendingPathComponent("library-spaces-unavailable-check.png"))
+                try require(emptyLabels.contains("Spaces") && !emptyLabels.contains("Space Manager preview") && reloaded.spaceManagerView == nil, "L1 nil injection has no visible empty state")
+                let attempts = env.actions.spaceManagerMakeCount
+                env.actions.spaceManagerAvailable = true
+                reloaded.section = .downloads; reloaded.section = .spaces
+                let recovered = reloaded.spaceManagerView
+                try require(recovered != nil && recovered !== manager && env.actions.spaceManagerMakeCount == attempts + 1,
+                            "L1 transient nil was cached or a manager was shared across view models")
+                try require(reloaded.spaceManagerView === recovered && env.actions.spaceManagerMakeCount == attempts + 1,
+                            "L1 recovered manager was not cached")
+                let recoveredLabels = try await render(LibraryContent(viewModel: reloaded), size: CGSize(width: 960, height: 640), scale: 1, dark: true,
+                                                       to: env.root.appendingPathComponent("library-spaces-recovered-check.png"))
+                try require(recoveredLabels.contains("Space Manager preview"), "L1 recovered manager did not render")
             case "general-toggles":
                 vm.general.warn = false; _ = try env.diskDefaults(); vm.general.updates = false
                 let disk = try env.diskDefaults()
@@ -422,6 +496,37 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let storedCount = await countArchive(env.archives); try require(storedCount == 4, "delete not in SQLite")
                 library.requestClearArchive(); let beforeClear = await countArchive(env.archives); try require(library.confirmsClear && beforeClear == 4, "clear did not ask first")
                 await library.clearArchiveConfirmed(); let after = await countArchive(env.archives); try require(after == 0 && env.libraryActions.log.contains("clearArchive"), "clear not on disk")
+            case "library-tidy-search":
+                let space = vm.model.spaces[0]
+                let raw = "Inbox (3) - accountneedle@example.invalid - Gmail"
+                let gmail = vm.model.newTab(in: space.id, url: URL(string: "https://mail.google.com/mail/#inbox")!, title: raw)
+                let custom = vm.model.newTab(in: space.id, url: URL(string: "https://docs.google.com/document/d/example")!, title: "Raw - Google Docs")
+                vm.model.renameNode(id: custom.id, title: "My literal - Google Docs")
+                vm.model.closeTab(id: gmail.id); vm.model.closeTab(id: custom.id)
+                (vm.model.archiveSink as? ProfileArchiveSink)?.flushAll()
+                let library = env.library
+                library.query = "accountneedle"; await library.reloadArchive()
+                try require(library.archiveRows.count == 1 && library.archiveRows[0].id == gmail.id && library.archiveRows[0].title == raw,
+                            "Gmail archive search lost text removed by tidy")
+                try require(library.archivedDisplayTitle(library.archiveRows[0]) == "Inbox", "Library did not tidy the raw Gmail search result")
+                library.query = ""; await library.reloadArchive()
+                let customRow = library.archiveRows.first { $0.id == custom.id }!
+                try require(library.archivedDisplayTitle(customRow) == "My literal - Google Docs", "Library tidied a custom title")
+                let directory = env.root.appendingPathComponent("Tidy Import")
+                try SyntheticData.writeImportFixture(to: directory)
+                let item: [String: Any] = ["sidebarItem": ["id": "tidy-import-gmail", "data": ["tab": ["savedURL": gmail.url.absoluteString, "savedTitle": raw]]],
+                                           "reason": "manual", "archivedAt": 800000000, "source": ["space": ["_0": "example-space-0"]]]
+                try JSONSerialization.data(withJSONObject: ["items": ["tidy-import-gmail", item]])
+                    .write(to: directory.appendingPathComponent("StorableArchiveItems.json"))
+                let importer = ArcImporter(arcDirectory: directory)
+                let parsed = try importer.readSidebar()
+                let imported = try importer.importAll(sidebar: parsed)
+                let store = ArchiveStore(fileURL: env.root.appendingPathComponent("tidy-import.sqlite3"))
+                let inserted = await store.importRecords(imported.archiveRecords)
+                let found = await store.search("accountneedle")
+                try require(inserted.inserted == 1 && found.count == 1 && found[0].title == raw,
+                            "imported Gmail archive did not retain the raw search title")
+                print("T2 archive Gmail raw search, tidy display, custom title, and real Arc import passed")
             case "library-folder-archive":
                 try await env.prepareLibrary()
                 let space = vm.model.spaces[0], library = env.library
