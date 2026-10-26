@@ -931,3 +931,16 @@ Agents may not launch Arc (AGENTS.md rule 4). Use a throwaway test account on a 
 ## Appendix B. Lead decisions
 
 None yet.
+
+## Appendix — Lead decisions (2026-10-26)
+
+- Approved. Use Chromium's built-in password manager and autofill in the fork, with Open's own Arc-style UI. Engine work queues after #53 (P1) and the profiles engine-root fix, because the import writes into the per-profile engine data at `Engine/<profile dir>`.
+- Q-1 No "Addresses" row in Settings ▸ Profiles (Arc parity).
+- Q-2 Card mandatory re-auth is on by default for new profiles, with no opt-in bubble.
+- Q-3 iCloud Keychain passkeys: request the managed entitlement. This becomes release user item **U-9**, not U-8: U-8 is already the public-repo or mirror decision. Security keys and phone passkeys ship without it.
+- Q-4 Chromium pages show as `open://…`. This is a display alias only; the engine loads `chrome://`. It is shared with the extensions UI plan, which decided the same.
+- Q-5 Rename Chromium's product-name strings to "Open" in P5 (trim and brand), before release.
+- Q-6 The Credential Management account chooser stays off (Arc parity).
+- Q-7 The save sheet shows only the host, no username. Revisit after S-1.
+- Import consent rules stay as they are (import-phase2 lead decisions). Never touch the user's real Arc secrets without their explicit consent in the app.
+- The screenshots go into the user's single combined Arc capture session.
