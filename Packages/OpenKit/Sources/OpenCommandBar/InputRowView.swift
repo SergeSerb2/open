@@ -102,7 +102,9 @@ final class CommandBarFieldEditor: NSTextView {
         compositionDepth -= 1
     }
 
+    var onModifiedReturn: ((NSEvent.ModifierFlags) -> Bool)?
     private func handleHelpKey(_ event: NSEvent) -> Bool {
+        if [36, 76].contains(event.keyCode), event.modifierFlags.contains(.command), !hasMarkedText(), !isUpdatingComposition, onModifiedReturn?(event.modifierFlags) == true { return true }
         if !hasMarkedText(), !isUpdatingComposition,
            event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "i", onHelp?() == true { return true }

@@ -1,0 +1,16 @@
+[
+  {
+    "config": "Debug",
+    "exit": 0,
+    "seconds": 98.34,
+    "head": "632f13e40015d2fe18110520da88eedd78e02f3a",
+    "executableSHA256": "822355a65ff90d43340821b3b8d47d7a3088c9929941b3f311d112f240ed8e33"
+  },
+  {
+    "config": "Release",
+    "exit": 0,
+    "seconds": 53.9,
+    "head": "632f13e40015d2fe18110520da88eedd78e02f3a",
+    "executableSHA256": "fe088e395f0c31dc73526d3ad8c558ece7cb79ce5a134f4093a834b8ce8d8dab"
+  }
+]

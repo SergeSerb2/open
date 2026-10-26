@@ -501,3 +501,32 @@ These do not block Step A. Each names its owner and deadline. Implementers: buil
 - Approved with the stated defaults for every open question in §9 (180 pt hide threshold, Peek split semantics per the M4 lead decisions, ad-block via the request-filter hook until the fork engine lands, sleep history capture via today's API until P-MEM patches land).
 - Ownership: the app-shell implementer owns App/ UI composition and wiring. The engine lead (fork bring-up + extension P1) owns Engine/, Engine/fork/, project.yml engine settings, and adds only small, clearly separated hooks in App/ (new OpenEngine delegate callbacks). Coordinate by merging origin/main often; on conflicts in App/, keep both sides' intent.
 - Phasing: Steps A + B first (one PR each). Step C after the command bar PR (#43) merges. Steps D–I follow in order.
+
+### Step C integration update (lead direction, 2026-10-25)
+
+PR #43 supplies the merged command-bar delegate API. PR #51 (`dc62e65`) supplies
+`OpenSettings`; Step C uses its real `SettingsPresenter` and `LibraryPresenter`
+and their action protocols. The §4.11 placeholder is superseded.
+`App/Settings/AppSettingsActions.swift` replaces the planned
+`SettingsPlaceholder.swift`. Both view models receive the app's existing
+`SnapshotStore`. Library uses the existing Archive/History stores, the engine
+Downloads feed, and `FileCapturesProvider`. `view-downloads`, `view-archive`, and
+`view-history` select the matching section in the shared Library window.
+`SearchEngines.resolve(id:profile:)` resolves built-in and custom search engines.
+The query gate uses `SettingsPresenter.prepareForRemoteSuggestions(profileID:)`
+without opening a Settings window or changing its selected profile.
+
+The App command extension lives with the registry menu bridge in `MainMenu.swift`.
+Duplicate copies a tab, all split panes, or a complete folder subtree immediately
+after its source, with fresh IDs and no hosts, as directed by the lead. A single
+model undo removes the whole copy. CEF's AppKit pump uses explicit model command
+undo groups, because its runloop does not supply AppKit event-group boundaries.
+
+Engine adapter limits at this step remain explicit: the current public engine
+has no initiate-download/save-page API. Save Page uses a native Save panel and
+`Page.captureSnapshot` MHTML through OpenEngine. Data clearing supports only the
+engine's all-time combined cookies/cache operation; other selections return a
+plain error before mutation. Durable import, ad-block engine binding, and sleep
+lifecycle binding stay in their planned later steps. Their Settings action
+adapters do not claim those operations completed. Little Open remains the Step C
+stub until Step E. No engine implementation or engine project setting changed.

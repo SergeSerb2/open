@@ -22,6 +22,8 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   var onPageBackgroundChange: ((NSColor?) -> Void)?
   var onLiveStateChange: ((WebContentLiveState) -> Void)?
   private var backgroundGeneration = 0
+  private var backgroundTask: Task<Void, Never>?
+  var hasBackgroundTask: Bool { backgroundTask != nil }
   var liveState: WebContentLiveState {
     WebContentLiveState(isLoading: content.isLoading, progress: content.estimatedProgress,
       canGoBack: content.canGoBack, canGoForward: content.canGoForward,
@@ -51,6 +53,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   func close() {
     guard !closed else { return }; closed = true; generation += 1
+    cancelBackgroundRead()
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
@@ -61,7 +64,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     guard !closed, let owner else { return }
     let token = generation
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
-      onURLChange?(url); backgroundGeneration += 1; pageBackgroundColor = nil; onPageBackgroundChange?(nil)
+      onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }
     if changes.contains(.title), !page.title.isEmpty { onTitleChange?(page.title) }
@@ -75,12 +78,24 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   /// OpenEngine has no page-color event yet. Read the committed page after
   /// loading ends; a late answer cannot cross a close, rebind, or navigation.
-  private func refreshPageBackground() {
-    guard !closed, !content.isLoading else { return }
+  private func cancelBackgroundRead() {
+    backgroundGeneration += 1
+    backgroundTask?.cancel(); backgroundTask = nil
+  }
+  func refreshPageBackground() {
+    guard !closed, owner?.app.engineReady == true, owner?.app.terminationRequested == false,
+          !content.isLoading else { return }
+    cancelBackgroundRead()
     backgroundGeneration += 1
     let revision = backgroundGeneration, token = generation
-    Task { @MainActor [weak self] in
+    backgroundTask = Task { @MainActor [weak self] in
       guard let self else { return }
+      defer { if self.backgroundGeneration == revision { self.backgroundTask = nil } }
+      guard !Task.isCancelled, !self.closed, self.owner?.app.engineReady == true,
+            self.owner?.app.terminationRequested == false else { return }
+      await self.owner?.app.deferAsyncEngineWorkForAutomation()
+      guard !Task.isCancelled, !self.closed, self.owner?.app.engineReady == true,
+            self.owner?.app.terminationRequested == false else { return }
       let script = """
       (() => { const c=document.createElement('canvas'); c.width=c.height=1; const x=c.getContext('2d');
         const colors=[document.querySelector('meta[name="theme-color"]')?.content,
@@ -89,8 +104,11 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
           x.clearRect(0,0,1,1); x.fillStyle=v; x.fillRect(0,0,1,1); const p=Array.from(x.getImageData(0,0,1,1).data); if(p[3]) return p; }
         return [255,255,255,255]; })()
       """
+      self.owner?.app.noteAsyncEngineCall("pageBackground")
       let values = try? await self.content.evaluateJavaScript(script) as? [Double]
-      guard !self.closed, self.generation == token, self.backgroundGeneration == revision,
+      guard !Task.isCancelled, !self.closed, self.owner?.app.engineReady == true,
+            self.owner?.app.terminationRequested == false,
+            self.generation == token, self.backgroundGeneration == revision,
             let values, values.count == 4 else { return }
       let color = NSColor(srgbRed: values[0]/255, green: values[1]/255, blue: values[2]/255, alpha: values[3]/255)
       self.pageBackgroundColor = color; self.onPageBackgroundChange?(color)
@@ -101,7 +119,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.close(page: page) } }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
-    !closed && (MainMenu.performReservedShortcut(event) || owner?.controller?.handleKeyDown(event) == true)
+    !closed && owner?.controller?.handleKeyDown(event) == true
+  }
+  func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
+    !closed && owner?.controller?.handleKeyDown(event, unconsumed: true) == true
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
     !closed && owner?.webContent(page, runJavaScriptDialog: dialog) == true
