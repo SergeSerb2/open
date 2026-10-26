@@ -10,11 +10,10 @@ public struct SiteControlContext: Sendable, Equatable {
     public var displayHost: String
     public var isIncognito: Bool
     public var security: SiteSecurity
-    public var faviconPNG: Data?
     public init(tabID: ItemID, profileID: ProfileID, url: URL, displayHost: String, isIncognito: Bool = false,
-                security: SiteSecurity = .unknown, faviconPNG: Data? = nil) {
+                security: SiteSecurity = .unknown) {
         self.tabID = tabID; self.profileID = profileID; self.url = url; self.displayHost = displayHost
-        self.isIncognito = isIncognito; self.security = security; self.faviconPNG = faviconPNG
+        self.isIncognito = isIncognito; self.security = security
     }
     public var isWebsite: Bool { ["http", "https"].contains(url.scheme?.lowercased() ?? "") && url.host != nil }
 }
@@ -61,6 +60,7 @@ public struct SiteDataKinds: OptionSet, Sendable {
     public init(rawValue: Int) { self.rawValue = rawValue }
     public static let cookies = SiteDataKinds(rawValue: 1), cache = SiteDataKinds(rawValue: 2), storage = SiteDataKinds(rawValue: 4)
 }
+public enum SiteControlAction: Sendable, CaseIterable { case share, newBoost, capturePortion, captureFullPage }
 public enum BoostCodeTab: Sendable, Equatable { case css, js }
 public enum BoostEditorMode: Sendable, Equatable { case simple, code(BoostCodeTab) }
 public enum SiteControlPresentationMode: Sendable, Equatable { case standard, extensionPicker }
@@ -77,10 +77,10 @@ public struct SiteControlObservationToken: Hashable, Sendable {
 /// supplies geometry; this library never reaches into sidebar or engine views.
 public struct SiteControlGeometry: Sendable {
     public var anchor: CGRect
-    public var sidebarMaxX: CGFloat
+    public var urlFieldMaxY: CGFloat?
     public var content: CGRect
-    public init(anchor: CGRect, sidebarMaxX: CGFloat, content: CGRect) {
-        self.anchor = anchor; self.sidebarMaxX = sidebarMaxX; self.content = content
+    public init(anchor: CGRect, urlFieldMaxY: CGFloat? = nil, content: CGRect) {
+        self.anchor = anchor; self.urlFieldMaxY = urlFieldMaxY; self.content = content
     }
 }
 

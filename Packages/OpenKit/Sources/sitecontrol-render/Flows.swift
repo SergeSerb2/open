@@ -1,5 +1,6 @@
 import AppKit
 import OpenSiteControl
+import OpenDesign
 
 @MainActor
 enum Flows {
@@ -35,15 +36,15 @@ enum Flows {
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         let dump = accessibilityDump(c.view.panel)
         let pairs = [("AXPopover", "Site Control Center"),
-                     ("AXButton", "Share"), ("AXButton", "Copy URL"), ("AXButton", "New Boost"),
+                     ("AXButton", "Share"), ("AXButton", "New Boost"),
                      ("AXButton", "Capture a portion of this page"), ("AXButton", "Capture the full page"),
-                     ("AXButton", "Capture in Portrait Mode"), ("AXStaticText", "Connection: Secure"), ("AXMenuButton", "More")]
+                     ("AXStaticText", "Connection: Secure"), ("AXMenuButton", "More")]
         checks.append(Check(name: "F21 native AX role and label pairs, host description, favicon hidden", pass:
             pairs.allSatisfy { dump.contains($0.0 + " label=" + $0.1 + "\n") } &&
             c.view.panel.accessibilityLabel() == "news.example.com" && c.view.panel.accessibilityHelp() == nil && !dump.contains("AXImage")))
         checks.append(Check(name: "Step 1 More is disabled", pass: c.view.panel.controls.last?.isEnabled == false))
         s.value?.commandsEnabled = [:]; s.changed()
-        checks.append(Check(name: "missing capture capability disables all three actions", pass:
+        checks.append(Check(name: "missing capture capability disables both actions", pass:
             c.view.panel.controls.filter { $0.controlID.hasPrefix("action.capture") }.allSatisfy { !$0.isEnabled }))
         let second = Stage(source: s)
         s.value?.context.displayHost = "updated.example.com"; s.changed()
@@ -82,7 +83,7 @@ enum Flows {
         checks.append(Check(name: "successful presentation resets once-per-failure-episode reporting",pass: episodes == 2))
         let animated = Stage()
         animated.controller.dismiss(reason: .escape,animated: true)
-        checks.append(Check(name: "close fades both layers and disables hit testing immediately",pass: !animated.controller.view.isActive && !animated.controller.view.isHidden && animated.controller.view.presentationLayers.allSatisfy { $0.animation(forKey: "close.opacity")?.duration == 0.12 }))
+        checks.append(Check(name: "close fades both layers and disables hit testing immediately",pass: !animated.controller.view.isActive && !animated.controller.view.isHidden && animated.controller.view.presentationLayers.allSatisfy { $0.animation(forKey: "close.opacity")?.duration == Motion.popoverClose }))
         animated.controller.present(anchor: .urlField,tabID: animated.source.tabID,animated: true)
         RunLoop.main.run(until: Date().addingTimeInterval(0.22))
         checks.append(Check(name: "old close completion cannot hide a new presentation",pass: animated.controller.isPresented && !animated.controller.view.isHidden))
@@ -94,21 +95,16 @@ enum Flows {
             let security = securityStage.controller.view.panel.controls.first { $0.controlID == "security" }!
             checks.append(Check(name: "security label policy for \(scheme)",pass: security.isHidden == !["https","http"].contains(scheme) && (security.isHidden || security.title == (scheme == "https" ? "Secure" : "Insecure"))))
         }
-        let corner = Stage()
-        for closing in [false,true] {
-            corner.controller.dismiss(reason: .action,animated: false)
-            corner.controller.present(anchor: .urlField,tabID: corner.source.tabID,animated: !closing)
-            if closing { corner.controller.dismiss(reason: .escape,animated: true) }
-            for _ in 0..<3 {
-                OffscreenRenderer.settle(corner.root); RunLoop.main.run(until: Date().addingTimeInterval(0.025))
-                let expected = corner.controller.view.panel.frame.origin
-                let fixed = corner.controller.view.presentationLayers.allSatisfy { layer in
-                    guard let presentation = layer.presentation() else { return false }
-                    return layer.anchorPoint == .zero && hypot(presentation.frame.minX-expected.x,presentation.frame.minY-expected.y)<0.1
-                }
-                checks.append(Check(name: "motion \(closing ? "close" : "open") top-left remains fixed",pass: fixed))
-            }
+        for width: CGFloat in [228,300,500] {
+            let stage = Stage(sidebarWidth: width)
+            let frame = stage.controller.view.panelFrame, tip = stage.controller.view.visibleArrowTip
+            checks.append(Check(name: "F23 sidebar width \(width) gives arrow and body geometry",pass: frame.minX == width-27-118 && frame.minY == 91 && tip == CGPoint(x: width-27,y: 81)))
         }
+        let clamped = Stage(sidebarWidth: 228,size: CGSize(width: 400,height: 300))
+        checks.append(Check(name: "F23 narrow/short window clamps height inside margins",pass: clamped.controller.view.panelFrame.maxY == 292 && clamped.controller.view.panelFrame.minX >= 8 && clamped.controller.view.panelFrame.maxX <= 392))
+        let noArrow = Stage(); noArrow.controller.present(anchor: .contentTopLeading,tabID: noArrow.source.tabID,animated: false)
+        checks.append(Check(name: "content anchor has no arrow",pass: noArrow.controller.view.panel.arrowX == nil && noArrow.controller.view.panelFrame.origin == CGPoint(x: 240,y: 22)))
+        checks += MotionChecks.run()
         return checks
     }
     /// Traverse the actual AppKit AX children (including cells), not NSView.subviews.
