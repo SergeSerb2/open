@@ -1,0 +1,86 @@
+#!/usr/bin/env python3 -I
+"""Client for Open's automation socket (docs/automation.md).
+
+  tools/openctl ping
+  tools/openctl open url=https://example.com style=chrome
+  tools/openctl eval tab=1 js='document.title'
+  tools/openctl snapshot path=/tmp/w.png
+  tools/openctl raw '{"cmd":"tabs"}'
+  tools/openctl shot /tmp/w.png [window=<number>]   # on-screen pixels
+
+`shot` runs `screencapture -l <window number>` for OUR window (main window by
+default; pass window=N from `openctl windows`). It needs the calling terminal
+to have Screen Recording permission; without it use `snapshot` (in-app).
+
+Arguments are key=value pairs; values that parse as JSON (numbers, true,
+false, null, [..], {..}) are sent as JSON, anything else as a string.
+Socket: $OPEN_AUTOMATION_SOCKET, else <user data dir>/automation.sock
+(Debug default: ~/Library/Application Support/Open-Dev).
+"""
+import json
+import os
+import socket
+import sys
+
+
+def socket_path():
+    if os.environ.get("OPEN_AUTOMATION_SOCKET"):
+        return os.environ["OPEN_AUTOMATION_SOCKET"]
+    data = os.environ.get("OPEN_USER_DATA") or os.path.expanduser(
+        "~/Library/Application Support/Open-Dev")
+    return os.path.join(data, "automation.sock")
+
+
+def call(cmd, args=None, timeout=120):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(timeout)
+    s.connect(socket_path())
+    s.sendall((json.dumps({"id": 1, "cmd": cmd, "args": args or {}}) + "\n").encode())
+    buf = b""
+    while not buf.endswith(b"\n"):
+        chunk = s.recv(1 << 20)
+        if not chunk:
+            break
+        buf += chunk
+    s.close()
+    return json.loads(buf)
+
+
+def parse_value(v):
+    try:
+        return json.loads(v)
+    except ValueError:
+        return v
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ("-h", "--help"):
+        print(__doc__)
+        return 0
+    if argv[1] == "shot":
+        path = argv[2] if len(argv) > 2 and "=" not in argv[2] else "/tmp/open-shot.png"
+        opts = dict(a.split("=", 1) for a in argv[2:] if "=" in a)
+        number = opts.get("window")
+        if not number:
+            wins = call("windows")["result"]
+            main = [w for w in wins if w["visible"] and w["class"] == "NSWindow" and w["parent"] == 0]
+            number = str(main[0]["number"])
+        import subprocess
+        rc = subprocess.call(["screencapture", "-l", number, "-o", "-x", path])
+        print(json.dumps({"ok": rc == 0, "path": path, "window": int(number)}))
+        return rc
+    if argv[1] == "raw":
+        req = json.loads(argv[2])
+        resp = call(req["cmd"], req.get("args"))
+    else:
+        args = {}
+        for a in argv[2:]:
+            k, _, v = a.partition("=")
+            args[k] = parse_value(v)
+        resp = call(argv[1], args)
+    print(json.dumps(resp, indent=2, sort_keys=True))
+    return 0 if resp.get("ok") else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
