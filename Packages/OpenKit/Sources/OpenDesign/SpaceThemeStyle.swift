@@ -39,7 +39,7 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     /// Editor opacity is 0.8 × intensity; imports keep the fitted opacity until calibration.
     public var intensityFactor: Double
     public var texture: SpaceStyleTexture
-    /// Imported/stops themes keep the capture-fitted opacity until Step 9 calibration.
+    /// Imported/stops themes keep their original field, opacity, and exact grain path.
     public var usesLegacyIntensity: Bool
     public var translucency: Translucency
     /// Text palette. `nil` follows the macOS appearance (default theme only).
