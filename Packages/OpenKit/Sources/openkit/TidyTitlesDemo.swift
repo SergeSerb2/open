@@ -44,7 +44,9 @@ func runTidyTitlesDemo(check: (Bool, String) -> Void) {
         ("https://github.com/", "GitHub · Project", "GitHub · Project"),
         ("https://www.amazon.com/", "An ordinary title", "An ordinary title"),
         ("https://mail.google.com/#Inbox", "Case-sensitive fragment", "Case-sensitive fragment"),
-        ("file:///tmp/synthetic", "Local file", "Local file")
+        ("file:///tmp/synthetic", "Local file", "Local file"),
+        ("https://en.wikipedia.org/wiki/Example", "مرحبا بالعالم - Wikipedia", "مرحبا بالعالم"),
+        ("https://youtube.com/watch?v=example", "(١٢) مثال - YouTube", "مثال")
     ]
     let profile = Profile(name: "Tidy Titles")
     let space = Space(title: "Tidy Titles", profileID: profile.id)
@@ -54,7 +56,7 @@ func runTidyTitlesDemo(check: (Bool, String) -> Void) {
         let tab = model.newTab(in: space.id, url: URL(string: url)!, title: title)
         if tab.displayTitle == expected && tab.title == title { matches += 1 }
     }
-    check(fixtures.count == 40 && matches == 40, "T1 40 Open-written title/URL fixtures through Tab.displayTitle (\(matches)/40)")
+    check(fixtures.count == 42 && matches == 42, "T1 42 Open-written title/URL fixtures through Tab.displayTitle (\(matches)/42)")
     let custom = model.newTab(in: space.id, url: URL(string: "https://mail.google.com/#inbox")!, title: "Raw")
     model.renameNode(id: custom.id, title: "My custom title")
     check(custom.displayTitle == "My custom title" && TidyTitles.tidy(title: "", url: URL(string: "https://github.com")!) == "",
