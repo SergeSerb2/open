@@ -79,6 +79,12 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `extensions` | — | Installed extensions and the window's toolbar actions (through the OpenWeb `ExtensionHost` protocol) |
 | `popup` | `extension` | Run the action like a click on its button; returns the popup page |
 | `popup-close` | — | Close the open popup |
+| `actions` | — | The focused window's toolbar actions from Chrome's model (fork patch P2): `ready`, and per action id, name, title, tooltip, accessible name, badge and colors, enabled, has popup, pinned and pinned index, wants to run, site access, showing popup, and the toolbar image and plain icon (PNG byte count, hash and point width) |
+| `ext-pin` | `extension`, `pinned` (default `true`) | Pin or unpin an action |
+| `ext-move` | `extension`, `index` | Move a pinned action to a pinned index |
+| `ext-run` | `extension`, `source` (`toolbar` default, `menu`, `command`) | Run the action as the user would; returns whether it ran (a popup opens, or `chrome.action.onClicked` fires) |
+| `ext-menu` | `extension`, `source` (`toolbar` default, `menu`), `select` | The action's context menu items (title, command, enabled, checked, separator, submenu); with `select`, run the item with that title |
+| `ext-popup` | — | The open popup: `open`, its page, its extension, and its source (`user`, `command`, `api`) |
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
 | `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
@@ -132,11 +138,12 @@ tools/e2e/engine_e2e.py --only features --style alloy      # engine features
 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
 tools/e2e/engine_e2e.py --only extensions --style chrome
 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+tools/e2e/engine_e2e.py --only actions --style chrome      # fork patch P2: toolbar actions and popups
 OPEN_AUTOMATION=1 tools/build.sh Release
 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. The `actions` suite loads `tools/e2e/fixtures/action-probe` (a popup action with a per-tab badge, an `onClicked` counter, and a `chrome.action.openPopup()` call) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame

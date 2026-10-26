@@ -5,16 +5,52 @@ NS_HEADER_AUDIT_BEGIN(nullability, sendability)
 
 @class OEBrowser;
 @class OEBrowserContext;
+@class OEContextMenuItem;
 @class OEExtensionAction;
+@class OEExtensionActionMenu;
 @class OEWebContent;
+
+/// How an action is run (Chrome's ToolbarActionViewModel::InvocationSource).
+typedef NS_ENUM(NSInteger, OEExtensionActionSource) {
+  OEExtensionActionSourceToolbarButton = 0,
+  OEExtensionActionSourceMenuEntry = 1,
+  OEExtensionActionSourceCommand = 2,
+} NS_SWIFT_NAME(OEBrowser.ExtensionActionSource);
+
+/// What opened the action popup.
+typedef NS_ENUM(NSInteger, OEExtensionPopupSource) {
+  /// A click, a menu entry, or the shell's run call.
+  OEExtensionPopupSourceUser = 0,
+  /// The extension's _execute_action keyboard command.
+  OEExtensionPopupSourceCommand = 1,
+  /// chrome.action.openPopup().
+  OEExtensionPopupSourceAPI = 2,
+} NS_SWIFT_NAME(OEBrowser.ExtensionPopupSource);
+
+/// Where an action's context menu opens
+/// (ExtensionContextMenuModel::ContextMenuSource).
+typedef NS_ENUM(NSInteger, OEExtensionMenuSource) {
+  OEExtensionMenuSourceToolbarAction = 0,
+  OEExtensionMenuSourceMenuItem = 1,
+} NS_SWIFT_NAME(OEBrowser.ExtensionMenuSource);
 
 NS_SWIFT_UI_ACTOR
 @protocol OEBrowserDelegate <NSObject>
 @optional
-/// The toolbar actions changed (install, uninstall, enable, or, with patch
-/// P2, a dynamic icon/title/badge change). Redraw from -extensionActions.
+/// The list or the order of the toolbar actions changed (install,
+/// uninstall, enable, disable, pin, unpin, move), or the window's live
+/// model came or went (extensionActionsReady changed). Redraw from
+/// -extensionActions. Also sent for a single action's change when the
+/// delegate does not implement browser:didUpdateExtensionAction:.
 - (void)browserDidUpdateExtensionActions:(OEBrowser*)browser
     NS_SWIFT_NAME(browserDidUpdateExtensionActions(_:));
+/// One action's state changed (icon, badge, title, enabled, wants-to-run,
+/// site access, popup shown, or the active tab changed). Coalesced: at most
+/// one call per action per run loop turn. -extensionActions already has the
+/// new snapshot.
+- (void)browser:(OEBrowser*)browser
+    didUpdateExtensionAction:(OEExtensionAction*)action
+    NS_SWIFT_NAME(browser(_:didUpdate:));
 
 /// An action popup opened. Host `popup.view` in a panel anchored to the
 /// action's button. The engine created the web content and owns its
@@ -28,11 +64,24 @@ NS_SWIFT_UI_ACTOR
     didResizeExtensionPopup:(OEWebContent*)popup
                      toSize:(NSSize)size
     NS_SWIFT_NAME(browser(_:didResizeExtensionPopup:to:));
-/// The popup closed (window.close(), -closeExtensionPopup, or a new popup
-/// replaced it). Remove its view.
+/// The popup closed: window.close(), Escape, -closeExtensionPopup, the
+/// active tab changed (as in Chrome), the extension unloaded, reloaded or
+/// crashed, or the window closed. Remove its view. Calls from
+/// -closeExtensionPopup and -executeExtensionAction: arrive inside them.
 - (void)browser:(OEBrowser*)browser
     didCloseExtensionPopup:(OEWebContent*)popup
     NS_SWIFT_NAME(browser(_:didCloseExtensionPopup:));
+/// The popup's first load stopped: show it now (Chrome shows its bubble at
+/// this point). Arrives after didOpenExtensionPopup (P2).
+- (void)browser:(OEBrowser*)browser
+    extensionPopupIsReady:(OEWebContent*)popup
+    NS_SWIFT_NAME(browser(_:extensionPopupIsReady:));
+/// The user ran an action that is disabled for the active tab. Chrome shows
+/// the action's context menu instead: show
+/// contextMenu(forExtensionAction:source:) at the action's button.
+- (void)browser:(OEBrowser*)browser
+    requestsContextMenuForExtensionAction:(NSString*)extensionIdentifier
+    NS_SWIFT_NAME(browser(_:requestsContextMenuForExtensionAction:));
 
 #pragma mark Tab requests from Chromium (fork patch P1)
 // Chromium changes a window's tabs on its own for chrome.tabs and similar
@@ -125,21 +174,80 @@ OE_EXPORT @interface OEBrowser : NSObject
 @property(nonatomic, weak, nullable) OEWebContent* activeWebContent;
 
 #pragma mark Extension actions
-/// Toolbar actions of enabled extensions, in pin order.
+/// Every toolbar action of the enabled extensions of this window's profile:
+/// pinned actions in pinned order first, then the rest. With a live model
+/// (extensionActionsReady) the snapshots are for the active tab. Without
+/// one they come from the profile's list (`live` NO): pins and defaults,
+/// and pin changes made in other windows show at the next update. Empty
+/// until the profile's context is ready; browserDidUpdateExtensionActions
+/// follows.
 @property(nonatomic, readonly, copy) NSArray<OEExtensionAction*>* extensionActions;
-/// Runs an action for the active tab, like a click on its toolbar button.
-/// A popup action opens its popup (see the delegate); returns NO when the
-/// action cannot run (unknown id, disabled, or a popup-less action, which
-/// needs patch P2).
+/// YES while Chrome's toolbar action model for this window is live (P2). It
+/// needs the window's hidden Chrome window, which exists only while the
+/// window has a live Chrome style tab: a new window, or one whose tabs all
+/// sleep, has no live actions.
+@property(nonatomic, readonly) BOOL extensionActionsReady;
+/// Pins or unpins an action (the profile's extensions.pinned_extensions;
+/// every window of the profile gets browserDidUpdateExtensionActions).
+- (void)setExtensionAction:(NSString*)extensionIdentifier
+                    pinned:(BOOL)pinned
+    NS_SWIFT_NAME(setExtensionAction(_:pinned:));
+/// Moves a pinned action.
+- (void)moveExtensionAction:(NSString*)extensionIdentifier
+              toPinnedIndex:(NSUInteger)index
+    NS_SWIFT_NAME(moveExtensionAction(_:toPinnedIndex:));
+/// Runs an action for the active tab as the user would: opens its popup
+/// (see the delegate) or fires chrome.action.onClicked, and runs blocked
+/// scripts when the extension wants to run. Running the action whose popup
+/// is open closes it. A disabled action asks for its context menu instead
+/// (browser:requestsContextMenuForExtensionAction:). Returns NO for an
+/// unknown id and without a live model (extensionActionsReady NO).
+- (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
+                        source:(OEExtensionActionSource)source
+    NS_SWIFT_NAME(executeExtensionAction(_:source:));
+/// executeExtensionAction(_:source: .toolbarButton).
 - (BOOL)executeExtensionAction:(NSString*)extensionIdentifier
     NS_SWIFT_NAME(executeExtensionAction(_:));
 /// The open popup, if any. One per browser, like Chrome.
 @property(nonatomic, readonly, nullable) OEWebContent* extensionPopup;
+/// Valid from didOpenExtensionPopup until didCloseExtensionPopup.
+@property(nonatomic, readonly) OEExtensionPopupSource extensionPopupSource;
+@property(nonatomic, readonly, copy, nullable) NSString* extensionPopupExtensionIdentifier;
 - (void)closeExtensionPopup;
+/// YES while the open popup must stay open when it loses focus, as in
+/// Chrome: an app-modal JavaScript dialog is showing, a web-modal dialog of
+/// the popup is showing (a WebAuthn or passkey request), or DevTools
+/// inspects the popup. Read it when the popup's panel resigns key, and keep
+/// the panel open while it is YES. The shell's own JavaScript dialogs for
+/// tabs are not included. NO without a popup.
+@property(nonatomic, readonly) BOOL extensionPopupStaysOpenOnBlur;
+/// The action's context menu (Chrome's ExtensionContextMenuModel: name,
+/// pin, options, site access, remove, manage), or nil for an unknown action
+/// or without a live model. Show the items, then call -selectCommand: or
+/// -cancel.
+- (nullable OEExtensionActionMenu*)contextMenuForExtensionAction:(NSString*)extensionIdentifier
+                                                         source:(OEExtensionMenuSource)source
+    NS_SWIFT_NAME(contextMenu(forExtensionAction:source:));
 
 /// Closes the popup and detaches every web content. Call when the window
 /// closes.
 - (void)close;
+@end
+
+/// One toolbar action's context menu (fork patch P2). Each menu has its own
+/// Chrome menu model, kept until -selectCommand:, -cancel, or the object goes
+/// away, so several menus can be open at once. The model also goes away
+/// with the action or with the window's live model.
+NS_SWIFT_UI_ACTOR
+OE_EXPORT @interface OEExtensionActionMenu : NSObject
+@property(nonatomic, readonly, copy) NSString* extensionIdentifier;
+/// Radio items come as checked items.
+@property(nonatomic, readonly, copy) NSArray<OEContextMenuItem*>* items;
+/// Runs an enabled item of this menu. NO if the menu was used, cancelled or
+/// is gone, or `commandIdentifier` is not an enabled item.
+- (BOOL)selectCommand:(NSInteger)commandIdentifier
+    NS_SWIFT_NAME(select(command:));
+- (void)cancel;
 @end
 
 NS_HEADER_AUDIT_END(nullability, sendability)

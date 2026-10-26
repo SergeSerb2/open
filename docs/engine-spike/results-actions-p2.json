@@ -1,0 +1,173 @@
+{
+  "actions": {
+    "action_menu_commands": {
+      "commands": {
+        "Manage Extension": {
+          "ok": true,
+          "opened": [
+            "chrome://extensions/?id=jihnllejimhgcmfmcnchbekapeajboik"
+          ],
+          "title": "Manage Extension"
+        },
+        "Pin": {
+          "ok": true,
+          "title": "Pin"
+        },
+        "Remove from": {
+          "dialog": [
+            "NativeWidgetMacNSWindow"
+          ],
+          "dismissed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "ok": true,
+          "title": "Remove from Chromium"
+        },
+        "View Web Permissions": {
+          "ok": true,
+          "opened": [
+            "chrome://settings/content/siteDetails?site=chrome-extension%3A%2F%2Fjihnllejimhgcmfmcnchbekapeajboik"
+          ],
+          "title": "View Web Permissions"
+        }
+      },
+      "ok": true
+    },
+    "actions_list": {
+      "ids": [
+        "jihnllejimhgcmfmcnchbekapeajboik",
+        "nngceckbapebfimnlniiiahkandclblb"
+      ],
+      "ok": true,
+      "probe": {
+        "accessibleName": "Action probe",
+        "badge": "",
+        "badgeColor": null,
+        "badgeTextColor": null,
+        "enabled": true,
+        "hasPopup": true,
+        "icon": {
+          "bytes": 292,
+          "hash": 8083657103300457312,
+          "width": 16
+        },
+        "id": "jihnllejimhgcmfmcnchbekapeajboik",
+        "name": "Open action probe",
+        "pinned": false,
+        "pinnedIndex": -1,
+        "showingPopup": false,
+        "siteAccess": 0,
+        "title": "Action probe",
+        "toolbarImage": {
+          "bytes": 384,
+          "hash": 3541469537752315754,
+          "width": 28
+        },
+        "tooltip": "Action probe",
+        "wantsToRun": false
+      }
+    },
+    "bitwarden_popup_width": {
+      "ok": true,
+      "popup_views": 1,
+      "widths": [
+        34,
+        480
+      ]
+    },
+    "context_menu": {
+      "items": [
+        "Open action probe",
+        "Remove from Chromium",
+        "Unpin",
+        "Manage Extension",
+        "View Web Permissions"
+      ],
+      "ok": true
+    },
+    "on_clicked": {
+      "ok": true,
+      "popup_less_on_tab": true,
+      "popup_opened": false,
+      "storage": {
+        "clicks": 1,
+        "lastClickTab": 1984525594
+      }
+    },
+    "open_popup_api": {
+      "ok": true,
+      "result": "ok",
+      "source": "api"
+    },
+    "per_tab_state": {
+      "ok": true,
+      "tab_a": {
+        "badge": "7",
+        "badgeColor": "#ff0000ff",
+        "enabled": true,
+        "title": "Probe A"
+      },
+      "tab_b": {
+        "badge": "",
+        "enabled": false,
+        "title": "Action probe"
+      }
+    },
+    "pin_and_move": {
+      "after_move": [
+        [
+          "nngceckbapebfimnlniiiahkandclblb",
+          0
+        ],
+        [
+          "jihnllejimhgcmfmcnchbekapeajboik",
+          1
+        ]
+      ],
+      "after_pin": [
+        "jihnllejimhgcmfmcnchbekapeajboik",
+        "nngceckbapebfimnlniiiahkandclblb"
+      ],
+      "ok": true
+    },
+    "popup_is_chrome_popup": {
+      "current_tab": "https://example.com/?a",
+      "document_size": [
+        320,
+        253
+      ],
+      "last_size": [
+        320,
+        253
+      ],
+      "ok": true,
+      "opened": true,
+      "popup_views": 1,
+      "ready": true,
+      "showing_popup": true,
+      "source": "user"
+    },
+    "run_again_closes_popup": {
+      "ok": true
+    },
+    "window_close_closes_popup": {
+      "ok": true
+    }
+  },
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "embeddedUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
+  },
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "pid": 16454,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome/Profiles"
+  },
+  "started": "2026-10-26 02:38:20",
+  "style": "chrome"
+}

@@ -2,3 +2,4 @@
 # Order in this file is apply order. See docs/plans/fork-infra.md §4.2.
 0302-open-hosted-tabs.patch  # P1: hosted Chrome style tabs (delegate, per-tab client, popups, focus, BUILD.gn)
 0303-open-context-menu-submenu-commands.patch  # P1: context-menu commands of submenus with their own delegate (macOS text services) do not crash
+0304-open-extension-popups.patch  # P2: extension action popups get a CEF browser host (ChromeBrowserDelegate friend)

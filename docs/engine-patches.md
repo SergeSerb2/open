@@ -29,18 +29,29 @@ For this plan:
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
-Proposed `Engine/fork/patches/cef/series` lines (all touched files are under `src/cef/` except where noted; new classes are overlay files):
+The series as built (P1 and P2). Two series with their own numbers:
+`Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
+`Engine/fork/patches/cef/series` for files under it. New classes are overlay
+files (`Engine/fork/src/`), not patches; that includes the whole
+`CefTabStrip` API (`src/cef/include/cef_tab_strip.h`), whose C API and
+wrappers `engine-apply` regenerates.
 
 ```text
-0301-open-headless-browser-window.patch   # P1: macOS BrowserWindow without Views for hidden tab-strip Browsers
-0302-open-chrome-native-parent-mac.patch  # P1: Chrome-style tabs hosted in parent_view on macOS (tab_strip_id)
-0303-open-tab-strip-api.patch             # P1: CefTabStrip + CefTabStripHandler + translator output
-0304-open-extensions-container.patch      # P2: ExtensionsContainer/ExtensionActionDelegate/popup host on the hidden Browser
-0305-open-extension-action-api.patch      # P2: CefExtensionActionInfo/Handler + translator output
-0306-open-audible-state.patch             # P6: CefDisplayHandler::OnAudioStateChange
-0307-open-extension-manager-api.patch     # P3: list/install/enable/uninstall + registry events
-0308-open-extension-install-prompt.patch  # P3: install/uninstall/permission prompts to the client (also patches chrome/browser/ui/views/extensions/extension_install_dialog_view.cc, so it needs a chromium/series entry)
+# chromium/series
+0301-open-headless-browser-window.patch        # P1: Browser features without a BrowserView
+0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
+0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
+# cef/series (starts at 0302)
+0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
+0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
+0304-open-extension-popups.patch               # P2: popup browser hosts (ChromeBrowserDelegate friend)
 ```
+
+A new patch takes the next free number of its series, counting open PRs:
+#64 adds `chromium/0304-open-hidden-browser-no-tab-groups.patch`. Still
+planned: P3 (extension management API in the overlay; the install and
+uninstall prompts patch `chrome/browser/ui/views/extensions/`, so a
+Chromium series entry) and P6 (audible state, a CEF series entry).
 
 The keyboard hook needs no patch: `OEApplication.keyEquivalentHandler` plus CEF's `OnPreKeyEvent` cover app shortcuts (engine-spike.md, "Shell").
 
@@ -147,6 +158,46 @@ New CEF API (`cef/include/cef_extension_action.h`):
 - `CefExtensionActionHandler`: `OnActionsChanged(strip)`, `OnPopupOpened(strip, popup_browser, extension_id)` (the popup is a `CefBrowser`, so OpenEngine wraps it in an `OEWebContent` like any page), `OnPopupResized(strip, size)`, `OnPopupClosed(strip)`.
 
 OpenEngine side: no API change. `OEExtensionAction` gets live values, `-browserDidUpdateExtensionActions:` fires on updates, and the popup delegate calls (`didOpenExtensionPopup`, `didResizeExtensionPopup`, `didCloseExtensionPopup`) carry the real host.
+
+### Status: implemented (2026-10-26, branch `m7/ext-p2-actions`)
+
+As built: the patch above with Chrome 156's newer toolbar model and other file names. It serves the extensions UI plan's engine requests E1–E7 ([plans/extensions-ui.md](plans/extensions-ui.md) §7). Differences are marked "deviation".
+
+| Part | Where | What it does |
+|---|---|---|
+| `open_engine::OpenExtensionsToolbar` | overlay `open/browser/extensions/open_extensions_toolbar.{h,cc}` | One per hidden tab-strip `Browser`, made with it. An `ExtensionsToolbarViewModel` (`chrome/browser/ui/extensions/extensions_toolbar_view_model.h`, the model Chrome 156's Views and WebUI toolbars share) on `ToolbarActionsModel`, registered as the window's `ExtensionsContainer` (`ScopedUnownedUserData` on the Browser), so `chrome.action.openPopup()` and Chrome's own callers find it. Each action is Chrome's `ExtensionActionViewModel` with an `ExtensionActionDelegate` (template: `extension_action_delegate_android.cc`) that hands popups to the toolbar. Change reports to the strip's handler are coalesced: at most one list change and one update per action per message-loop turn. |
+| `open_engine::OpenExtensionPopup` | overlay `open/browser/extensions/open_extension_popup.{h,cc}` | Port of Android's `ExtensionActionPopupContents`: the `ExtensionView` of a real `ExtensionViewHost` of type `kExtensionPopup`, auto-resize within 25×25 to 800×600 (`extension_popup_types.h`), `window.close()`, "Inspect Popup". A CEF browser is attached to the host's `WebContents` with `ChromeBrowserDelegate::CreateBrowserHostForPopup` (CEF's own path for DevTools and other popups), so OpenEngine wraps it in an `OEWebContent` like any page. The `ExtensionViewHost` stays the `WebContents` delegate. One popup per window, as in Chrome. |
+| `OpenBrowserWindow::IsToolbarVisible()` | overlay `open/browser/tab_strip/open_browser_window.mm` | Now `true`. `chrome.action.openPopup()` refuses a window without a visible toolbar ("Browser window has no toolbar."); in Open the embedder draws the actions. |
+| CEF API | overlay `cef/include/cef_tab_strip.h` | `CefTabStrip`: `AreExtensionActionsReady`, `GetExtensionActionIds` (pinned in pinned order, then the rest), `GetExtensionActionState` (a dictionary: name, title, accessibleName, tooltip, badgeText, badgeBackgroundColor, badgeTextColor, enabled, hasPopup, pinned, pinnedIndex, wantsToRun, siteAccess, showingPopup), `GetExtensionActionImage(id, size, toolbar)` (a `CefImage` with 1x and 2x reps: Chrome's toolbar image with badge and decorations, or the plain icon), `SetExtensionActionPinned`, `MoveExtensionAction`, `ExecuteExtensionAction(id, source)`, `CloseExtensionPopup`, `GetExtensionActionMenu(id, source)`, `RunExtensionActionMenuCommand`. `CefTabStripHandler`: `OnExtensionActionsChanged`, `OnExtensionActionUpdated`, `OnBeforeExtensionPopupCreated` (the client, settings and extra info of the popup's browser), `OnExtensionPopupOpened(browser, extension id, source)`, `OnExtensionPopupResized`, `OnExtensionPopupReady` (first load stopped: Chrome shows its bubble here), `OnExtensionPopupClosed`. P1's per-action getters stay. |
+| CEF hook | `patches/cef/0304-open-extension-popups.patch` (+6/−0) | `ChromeBrowserDelegate::CreateBrowserHostForPopup` is private; the patch makes `open_engine::OpenExtensionPopup` a friend. |
+| Feature default | `Engine/OpenEngine/src/OEApp.mm` | `--enable-features=ExtensionsPinnedByDefault` (merged into any existing list): a new install's action is pinned (plan Q4). The profile pref `extensions.pinned_by_default` defaults to on (`extensions_ui_prefs.cc`). |
+
+OpenEngine: `-[OEBrowser extensionActions]` comes from `CefTabStrip` once the window has a Chrome style tab, else from the manifests as before. New: `extensionActionsReady`, `setExtensionAction(_:pinned:)`, `moveExtensionAction(_:toPinnedIndex:)`, `executeExtensionAction(_:source:)`, `extensionPopupSource`, `extensionPopupExtensionIdentifier`, `contextMenu(forExtensionAction:source:)` (`OEExtensionActionMenu`), and the delegate calls `browser(_:didUpdate:)` and `browser(_:extensionPopupIsReady:)`. `OEExtensionAction` gains `extensionName`, `accessibleName`, `tooltip`, `toolbarImage` (28 pt), `icon` (16 pt, plain), `badgeTextColor`, `pinned`, `pinnedIndex`, `wantsToRun`, `siteAccess` and `showingPopup` (docs/engine-api.md). The popup is an `OEWebContent` (`isPopup`, `extensionPopupIdentifier`) that the existing `didOpenExtensionPopup`/`didResizeExtensionPopup`/`didCloseExtensionPopup` calls carry.
+
+Deviations from the plan:
+
+- No `cef_extension_action.h` and no `CefExtensionActionInfo` class: the action API is on `CefTabStrip`, which is per window like Chrome's toolbar, and the state is a `CefDictionaryValue`, so a new field needs no translator change.
+- No `cef_extension_popup_host.mm`: the popup's view is its `WebContents` view, which the shell parents through the same hosted platform delegate as P1's tabs.
+- Running the action whose popup is open closes the popup. Chrome's `ExecuteUserAction` does not toggle (its toolbar button does), so `-[OEBrowser executeExtensionAction:source:]` does.
+- A popup from `chrome.action.openPopup()` reports source API. Chrome opens it only for the active window; the e2e run sees it open (the test window is the profile's last active one).
+- Not in P2: the `_execute_action` shortcut fields of plan E2 (`shortcutKeyEquivalent`, `shortcutModifierFlags`) and `ExtensionActionDelegate::RegisterCommand` (no-op). Extension shortcuts need the keybinding registry (plan E9, PR #53 follow-up E15; docs/followups.md).
+- Context menu titles are Chromium's ("Remove from Chromium", "Pin", "Unpin"): the product strings are not branded yet (`branding/README.md`). The shell relabels them (plan §3.6).
+
+Verification (`tools/e2e/engine_e2e.py --style chrome --config Release`, fork engine):
+
+- `--only actions` 11/11 (new suite; fixture `tools/e2e/fixtures/action-probe` plus Bitwarden). It covers:
+  - action state from Chrome's model: 28 pt toolbar image and 16 pt icon, per-tab badge and title;
+  - the popup is a Chrome popup: `getViews({type: "popup"})`, its tab query sees the page under it, and the ready and resize events arrive;
+  - `onClicked` for a popup-less tab;
+  - `chrome.action.openPopup()` opens the popup with source API;
+  - running the action again closes its popup, and so does `window.close()`;
+  - pin, move and unpin;
+  - Chrome's context menu, every command of which runs (Pin; Manage Extension and View Web Permissions open `chrome://` tabs; Remove shows Chrome's uninstall dialog, dismissed);
+  - Bitwarden's popup takes its fixed width (480 pt; it was narrow in P1).
+- `--only extensions` 8/8. With Chrome's model, 1Password without an account has no popup (`setPopup({popup: ""})`), so its click fires `onClicked` and opens its welcome tab, as in Chrome; the check now expects that. The Web Store install (Google Translate) is pinned.
+- `--only tabstrip` 24/24, `--only features` 19/19, `--only shell` 6/6, `--only peek` 6/6.
+
+Results: `docs/engine-spike/results-actions-p2.json`, `results-extensions-chrome.json`, screenshots `chrome-popup-*.png`.
 
 ## P3. Extension management and consent prompts
 

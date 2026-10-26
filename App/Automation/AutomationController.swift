@@ -17,6 +17,8 @@
 
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
+    /// An action menu kept by `ext-menu keep`, for a later `stale` select.
+    private var staleMenu: OEExtensionActionMenu?
 
     init(app: AppDelegate) {
       self.app = app
@@ -314,6 +316,69 @@
       case "popup-close":
         try focusedBrowser(w).closeExtensionPopup()
         return true
+
+      // Toolbar actions from Chrome's model (fork patch P2).
+      case "actions":
+        let browser = try focusedBrowser(w)
+        return ["ready": browser.extensionActionsReady, "actions": browser.extensionActions.map(describe)] as [String: Any]
+      case "ext-pin":
+        guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        let browser = try focusedBrowser(w)
+        browser.setExtensionAction(id, pinned: a["pinned"] as? Bool ?? true)
+        return true
+      case "ext-move":
+        guard let id = a["extension"] as? String, let index = a["index"] as? Int else { throw Failure(message: "missing extension or index") }
+        try focusedBrowser(w).moveExtensionAction(id, toPinnedIndex: UInt(index))
+        return true
+      case "ext-run":
+        guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        let source: OEBrowser.ExtensionActionSource =
+          switch a["source"] as? String { case "menu": .menuEntry; case "command": .command; default: .toolbarButton }
+        return try focusedBrowser(w).executeExtensionAction(id, source: source)
+      case "ext-menu":
+        // The action's context menu: its items, or select one by title.
+        guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        let browser = try focusedBrowser(w)
+        guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
+        else { throw Failure(message: "no menu") }
+        func items(_ list: [OEContextMenuItem]) -> [[String: Any]] {
+          list.map { ["title": $0.title, "command": $0.commandIdentifier, "enabled": $0.isEnabled, "checked": $0.isChecked,
+                      "separator": $0.isSeparator, "submenu": items($0.submenu)] as [String: Any] }
+        }
+        let listed = items(menu.items)
+        if let title = a["select"] as? String {
+          func find(_ list: [OEContextMenuItem]) -> OEContextMenuItem? {
+            for item in list { if item.title == title { return item }; if let hit = find(item.submenu) { return hit } }
+            return nil
+          }
+          guard let item = find(menu.items) else { menu.cancel(); throw Failure(message: "no menu item \(title)") }
+          // `stale`: run the item on the menu kept earlier (`keep`), built
+          // before this one; this one is cancelled.
+          if a["stale"] as? Bool == true, let older = staleMenu {
+            staleMenu = nil
+            menu.cancel()
+            return ["items": listed, "ran": older.select(command: item.commandIdentifier)] as [String: Any]
+          }
+          return ["items": listed, "ran": menu.select(command: item.commandIdentifier)] as [String: Any]
+        } else if a["keep"] as? Bool == true {
+          // Kept open (not cancelled) for a later `stale` select.
+          staleMenu = menu
+        } else {
+          menu.cancel()
+        }
+        return listed
+      case "ext-popup":
+        let browser = try focusedBrowser(w)
+        guard let popup = browser.extensionPopup else { return ["open": false] as [String: Any] }
+        return ["open": true, "page": describe(popup, in: w), "extension": browser.extensionPopupExtensionIdentifier ?? "",
+                "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue],
+                "staysOpenOnBlur": browser.extensionPopupStaysOpenOnBlur] as [String: Any]
+      case "activate":
+        // Makes Open's window key (Chrome's "active window"), even with an
+        // action popup's panel in front.
+        NSApp.activate()
+        w.window?.makeKeyAndOrderFront(nil)
+        return ["key": w.window?.isKeyWindow ?? false]
 
       // Windows and pixels (Open's own windows only).
       case "windows":
@@ -623,6 +688,30 @@
         "extension": c.extensionPopupIdentifier ?? "",
         "hostTab": w.tabID(for: c)?.description ?? "",
         "pageBackground": colorComponents(pageColor),
+      ]
+    }
+
+    private func describe(_ action: OEExtensionAction) -> [String: Any] {
+      func png(_ image: NSImage?) -> [String: Any] {
+        guard let image, let data = EngineWebContentHostFactory.pngData(image) else { return ["bytes": 0] }
+        // Each representation's pixel size: 1x and 2x.
+        let reps = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }.sorted { $0[0] < $1[0] }
+        return ["bytes": data.count, "hash": data.hashValue, "width": image.size.width, "pixels": reps,
+                "object": ObjectIdentifier(image).hashValue]
+      }
+      func hex(_ color: NSColor?) -> Any {
+        guard let c = color?.usingColorSpace(.sRGB) else { return NSNull() }
+        return String(format: "#%02x%02x%02x%02x", Int(c.redComponent * 255), Int(c.greenComponent * 255),
+                      Int(c.blueComponent * 255), Int(c.alphaComponent * 255))
+      }
+      return [
+        "id": action.extensionIdentifier, "name": action.extensionName, "title": action.title,
+        "tooltip": action.tooltip, "accessibleName": action.accessibleName, "badge": action.badgeText ?? "",
+        "badgeColor": hex(action.badgeBackgroundColor), "badgeTextColor": hex(action.badgeTextColor),
+        "enabled": action.isEnabled, "hasPopup": action.hasPopup, "pinned": action.isPinned,
+        "pinnedIndex": action.pinnedIndex, "wantsToRun": action.wantsToRun, "siteAccess": action.siteAccess.rawValue,
+        "showingPopup": action.isShowingPopup, "toolbarImage": png(action.toolbarImage), "icon": png(action.icon),
+        "live": action.isLive,
       ]
     }
 

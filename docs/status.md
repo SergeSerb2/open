@@ -26,7 +26,7 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 - Library paths are under `Packages/OpenKit/Sources/`.
 - App wiring: **main** (M1 shell on `main`), **PR #45/#52/#53** (real app of that PR), **none**.
 - Harness checks run in this audit (§6): `sidebar-render check` 125/125, `features-render check` 147/147, `commandbar-render check` 78/78, `commands-dump` OK, `settings-preview check`, and `tools/verify-all.sh`. Check IDs such as `features-render S3` come from the check output.
-- e2e suites: `tools/e2e/engine_e2e.py --only <suite>`. On `main`: `shell`, `features`, `extensions`, `measure`. PR #52 adds `window`, `sidebar`, `peek`. PR #53 adds `tabstrip`. Results: `docs/engine-spike/results-*.json` on the named branch.
+- e2e suites: `tools/e2e/engine_e2e.py --only <suite>`. On `main`: `shell`, `features`, `extensions`, `measure`. PR #52 adds `window`, `sidebar`, `peek`. PR #53 adds `tabstrip`; the P2 PR adds `actions`. Results: `docs/engine-spike/results-*.json` on the named branch.
 
 ### 0.3 Work in flight that this file counts
 
@@ -40,7 +40,8 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 | Release Steps 1/3 | PR #54, merged to `main` as `724e35d` during this audit (`tools/release-locales.txt`) | planned (partial) |
 | Release Step 9 | PR #55, merged to `main` as `f41955c` during this audit (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`) | planned (partial) |
 | Release Step 11 | PR #57 (`tools/release.sh`) | in PR |
-| Extensions P1 tab-strip bridge | PR #53, branch `m7/ext-p1-tabstrip` | in PR |
+| Extensions P1 tab-strip bridge | PR #53, merged to `main` as `0e4467c` | done |
+| Extensions P2 toolbar actions and popups | branch `m7/ext-p2-actions` | in PR |
 | Space creation + theme editor plan | branch `plan/space-theme-editor` | plan in progress |
 | Site Control Center + Boost editor plan | branch `plans/site-control-boost-editor` | plan in progress |
 | Media controls + Picture in Picture plan | PR #59, merged to `main` as `211a8bb` during this audit (`docs/plans/media-pip.md`) | planned (rows cite `media-pip`) |
@@ -365,9 +366,9 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 |---|---|---|---|---|---|---|---|
 | Extension runtime: MV3 service workers, content scripts, declarativeNetRequest, options pages | AGENTS.md v1 | `docs/engine-spike.md` | `Engine/OpenEngine` | main | e2e `extensions` (uBO Lite, Dark Reader, 1Password, Bitwarden) | done | |
 | Toolbar action buttons and popups (basic) | AGENTS.md; FA SC-4 | app-shell §4.12 | `App` extension bar | main; PR #52 (ported) | e2e `extensions` (popups render) | done (partial) | Bitwarden-class popups need P1 (next row). |
-| `chrome.tabs` and `chrome.windows` see Open's tabs (P1 tab-strip bridge) | engine-patches P1 | engine-patches P1 | fork overlay `Engine/fork/src/open/browser/tab_strip/*`; Chromium patches 0301–0303, CEF 0302–0303; requests in `App/WebContent/EngineWebContentHostFactory.swift`, order in `App/TabStripMirror.swift` | PR #53 | e2e `--style chrome --only tabstrip` (PR #53 round 2) | in PR | |
-| Live action state: badge, title, enabled | engine-patches P2 | engine-patches P2 | PR #53 (`browserDidUpdateExtensionActions`) | PR #53 (the toolbar does not draw the badge yet, `docs/followups.md`) | `tabstrip` | in PR (partial) | |
-| Real popup host, `setIcon`, `onClicked` | engine-patches P2 | engine-patches P2 | — | — | — | planned | |
+| `chrome.tabs` and `chrome.windows` see Open's tabs (P1 tab-strip bridge) | engine-patches P1 | engine-patches P1 | fork overlay `Engine/fork/src/open/browser/tab_strip/*`; Chromium patches 0301–0303, CEF 0302–0303; requests in `App/WebContent/EngineWebContentHostFactory.swift`, order in `App/TabStripMirror.swift` | main (PR #53, `0e4467c`) | e2e `--style chrome --only tabstrip` (PR #53 round 2) | done | |
+| Live action state: icon, badge, title, enabled, pin and order, context menu | engine-patches P2 | engine-patches P2; extensions UI plan §7 E1–E5, E7 | `OEBrowser`, `OEExtensionAction` (P2: Chrome's toolbar model) | P2 PR: the extension bar draws `toolbarImage` (icon and badge as Chrome draws them); pin, move and menu are automation only until the extensions UI steps | e2e `actions` (`actions_list`, `per_tab_state`, `pin_and_move`, `context_menu`) | in PR | Shortcuts (`_execute_action`) need the keybinding registry (`docs/followups.md`). |
+| Real popup host, `setIcon`, `onClicked`, `chrome.action.openPopup()` | engine-patches P2 | engine-patches P2; extensions UI plan §7 E6 | `OEBrowser` popup calls (`extensionPopupIsReady`, popup source) | P2 PR (existing popup panel) | e2e `actions` (`popup_is_chrome_popup`, `on_clicked`, `open_popup_api`, `bitwarden_popup_width`) | in PR | |
 | Install, uninstall, enable from Open's UI; Open's consent prompts; Web Store install | engine-patches P3 | engine-patches P3 | — | main: `chrome://extensions` and the Web Store in a Chrome-style tab | e2e `extensions` (Chrome style installs; Alloy fails) | planned | |
 | Extensions menu: Manage Extensions…, Add Extension… | MH Extensions | app-shell §4.3 | registry | main: one View ▸ "Extensions" item | — | done (partial) | |
 | Extensions UI (toolbar placement, pinning, menus, management) | — | plan in progress: extensions UI | — | — | — | planned | |
