@@ -1622,3 +1622,19 @@ measuring.
 - Q9 When a keyword is the same, Site Search wins over an extension omnibox keyword. The extension stays reachable by its name.
 - Extension keyboard shortcuts (`chrome.commands`) need a keybinding registry without a focus manager; see PR #53 follow-up E15.
 - The screenshots go into the user's single combined Arc capture session.
+
+## Appendix — Engine P2 as built (2026-10-26, branch `m7/ext-p2-actions`)
+
+The engine side of E1–E7 is in (docs/engine-patches.md, P2 status; docs/engine-api.md, `OEBrowser`). What the shell steps need to know:
+
+- **E1.** As specified. `extensionActions` comes from Chrome's model once the window has a live Chrome style tab. Before that, and in Alloy style, it is the old manifest list, and `extensionActionsReady` is `false`.
+- **E2.** As specified, except `shortcutKeyEquivalent` and `shortcutModifierFlags`. They need the keybinding registry (E9, `docs/followups.md`). `toolbarImage` is nullable (nil without P2). `icon` is the current plain action icon (`setIcon` included), not the manifest icon. Both images are shared objects: copy one before you change its size.
+- **E3.** As specified. A delegate without `browser(_:didUpdate:)` gets `browserDidUpdateExtensionActions` for single-action changes too.
+- **E4.** As specified. Q4 is on: a new install (Web Store, Load unpacked) is pinned at the end of the pinned list. Extensions loaded with `--load-extension` at startup are not pinned; Chrome does the same.
+- **E5.** As specified. The engine also gives D2: running the action whose popup is open closes it (Chrome's `ExecuteUserAction` does not toggle). An action with no popup for the tab fires `onClicked`. Example: 1Password without an account calls `setPopup({popup: ""})`, so its click opens its welcome tab through `browser(_:didOpen:active:)`.
+- **E6.** As specified. `didOpenExtensionPopup` comes first. `extensionPopupIsReady` comes once, when the first load stops. `didResizeExtensionPopup` comes whenever the page's size changes, so one can arrive after ready. `chrome.action.openPopup()` opens the popup with `extensionPopupSource == .api` (A4 anchor rules). Chrome allows that only for the profile's active window.
+- **E7.** As specified. Chromium 156 titles in this build: the extension name, "Remove from Chromium" (no ellipsis; the product name is not branded yet), "Pin"/"Unpin" (not "Pin to Toolbar"), "Manage Extension", "View Web Permissions", plus "Options", the site-access submenu, and "Inspect Popup" when they apply. The §3.6 relabel table must match "Chromium", not only "Chrome". Command results seen end to end:
+  - Pin: pins.
+  - Manage Extension: opens `chrome://extensions/?id=…` as a new tab.
+  - View Web Permissions: opens `chrome://settings/content/siteDetails?site=…` as a new tab.
+  - Remove: shows Chrome's own uninstall dialog until P3 (E10).

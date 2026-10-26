@@ -1,5 +1,38 @@
 {
   "actions": {
+    "action_menu_commands": {
+      "commands": {
+        "Manage Extension": {
+          "ok": true,
+          "opened": [
+            "chrome://extensions/?id=jihnllejimhgcmfmcnchbekapeajboik"
+          ],
+          "title": "Manage Extension"
+        },
+        "Pin": {
+          "ok": true,
+          "title": "Pin"
+        },
+        "Remove from": {
+          "dialog": [
+            "NativeWidgetMacNSWindow"
+          ],
+          "dismissed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "ok": true,
+          "title": "Remove from Chromium"
+        },
+        "View Web Permissions": {
+          "ok": true,
+          "opened": [
+            "chrome://settings/content/siteDetails?site=chrome-extension%3A%2F%2Fjihnllejimhgcmfmcnchbekapeajboik"
+          ],
+          "title": "View Web Permissions"
+        }
+      },
+      "ok": true
+    },
     "actions_list": {
       "ids": [
         "jihnllejimhgcmfmcnchbekapeajboik",
@@ -15,7 +48,7 @@
         "hasPopup": true,
         "icon": {
           "bytes": 292,
-          "hash": 3619970828457138445,
+          "hash": 4867471209432073558,
           "width": 16
         },
         "id": "jihnllejimhgcmfmcnchbekapeajboik",
@@ -27,7 +60,7 @@
         "title": "Action probe",
         "toolbarImage": {
           "bytes": 384,
-          "hash": -6946070243047969243,
+          "hash": 4023447010085592982,
           "width": 28
         },
         "tooltip": "Action probe",
@@ -58,7 +91,7 @@
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 2078305270
+        "lastClickTab": 1592166086
       }
     },
     "open_popup_api": {
@@ -131,10 +164,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 98654,
+    "pid": 83282,
     "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome/Profiles"
   },
-  "started": "2026-10-26 02:23:54",
+  "started": "2026-10-26 02:36:12",
   "style": "chrome"
 }

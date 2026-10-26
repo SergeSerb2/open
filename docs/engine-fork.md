@@ -277,11 +277,12 @@ The app now builds against the fork by default (`tools/fetch-cef.sh`,
 | chromium | `0303-open-hosted-tab-lifecycle.patch` | +43/−0 | `extensions/api/tabs/tabs_api.cc`, `resource_coordinator/tab_lifecycle_unit.cc` |
 | cef | `0302-open-hosted-tabs.patch` | +79/−6 | `BUILD.gn`, `browser_host_base.h`, `browser_info_manager.cc`, `browser_platform_delegate_create.cc`, `chrome/chrome_browser_delegate.cc`, `chrome/chrome_browser_host_impl.cc` |
 | cef | `0303-open-context-menu-submenu-commands.patch` | +15/−1 | `chrome/chrome_context_menu_handler.cc` |
+| cef | `0304-open-extension-popups.patch` (P2, 2026-10-26) | +6/−0 | `chrome/chrome_browser_delegate.h` (`OpenExtensionPopup` may call `CreateBrowserHostForPopup`) |
 
-Overlay: `open/browser/tab_strip/*` and `open/open_libcef_sources.gni`
-(about 1,600 lines, compiled into `libcef_static`), and the API header
-`cef/include/cef_tab_strip.h`. What each part does:
-[engine-patches.md](engine-patches.md), P1 status.
+Overlay: `open/browser/tab_strip/*` (P1), `open/browser/extensions/*` (P2,
+about 900 lines) and `open/open_libcef_sources.gni`, compiled into
+`libcef_static`, and the API header `cef/include/cef_tab_strip.h`. What each
+part does: [engine-patches.md](engine-patches.md), P1 and P2 status.
 
 Open's Chromium patches can change lines that CEF's own patches added
 (`browser_window_features.cc` is one). Three tool changes follow from that:

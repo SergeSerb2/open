@@ -240,11 +240,24 @@ def extension_checks(app, style, results):
     results["dnr_blocking"] = {"ok": all(v == "blocked" for v in with_ext.values()), "probe": with_ext}
 
     # Action popups opened from OUR toolbar button, plus chrome.tabs from them.
+    has_popup = {a["id"]: a["popup"] for a in app.call("extensions")["actions"]}
     popups = {}
     for name, ext_id in EXT.items():
         info = {}
         try:
             app.call("events")
+            if style == "chrome" and not has_popup.get(ext_id, True):
+                # No popup for this tab (chrome.action.setPopup({popup: ""});
+                # 1Password without an account): as in Chrome, the click
+                # fires chrome.action.onClicked. 1Password then opens or
+                # selects its welcome tab.
+                app.call("ext-run", extension=ext_id)
+                opened = wait_until(lambda: [t for t in app.call("tabs") if t["selected"]
+                                             and t["url"].startswith("chrome-extension://%s/" % ext_id)], timeout=15)
+                info["on_clicked_tab"] = opened and opened[0]["url"]
+                info["ok"] = bool(opened)
+                popups[name] = info
+                continue
             p = app.call("popup", extension=ext_id)["identifier"]
             state_js = ('({elements: document.querySelectorAll("*").length,'
                         ' text: document.body ? document.body.innerText.slice(0, 120) : "",'
@@ -342,9 +355,14 @@ def webstore_install(app, style):
     installed = wait_until(lambda: any(e["id"] == CWS_TEST_ID for e in app.call("extensions")["installed"]),
                            timeout=25)
     out["installed"] = bool(installed)
+    if installed and style == "chrome":
+        # A new install is pinned (extensions UI plan Q4; fork patch P2 turns
+        # on Chromium's ExtensionsPinnedByDefault).
+        out["pinned"] = bool(wait_until(lambda: [x for x in app.call("actions")["actions"]
+                                                 if x["id"] == CWS_TEST_ID and x["pinned"]], timeout=10))
     out["windows_after"] = [(w["class"], w["frame"]) for w in app.call("windows") if w["visible"]]
     out["console"] = [e["message"] for e in app.call("events") if e.get("type") == "console"][-5:]
-    out["ok"] = bool(installed)
+    out["ok"] = bool(installed) and (style != "chrome" or out["pinned"])
     app.call("close", tab=t)
     return out
 
@@ -1952,7 +1970,6 @@ def actions_checks(app, results):
               and probe["hasPopup"] and probe["toolbarImage"]["bytes"] > 0 and probe["icon"]["bytes"] > 0
               and probe["toolbarImage"]["width"] == 28 and probe["icon"]["width"] == 16,
         "probe": probe, "ids": [x["id"] for x in actions()["actions"]]}
-
     # The popup is a Chrome extension popup: getViews lists it, its tab query
     # sees the page under it, and it reports ready and its size.
     state = open_popup(ACTION_PROBE)
@@ -2068,6 +2085,12 @@ def actions_checks(app, results):
     results["window_close_closes_popup"] = {"ok": bool(state) and bool(closed)}
 
     # Pin and order: pinned actions first, in pinned order; moves and unpins.
+    # Start from none pinned. (--load-extension installs come before Chrome's
+    # toolbar model observes installs, so pin-by-default does not apply to
+    # them; the extensions suite checks it with a Web Store install.)
+    for ext in (ACTION_PROBE, EXT["bitwarden"]):
+        app.call("ext-pin", extension=ext, pinned=False)
+    wait_until(lambda: not [x for x in actions()["actions"] if x["pinned"]], timeout=10)
     app.call("ext-pin", extension=ACTION_PROBE, pinned=True)
     app.call("ext-pin", extension=EXT["bitwarden"], pinned=True)
     pinned = wait_until(lambda: (lambda ids: ids if ids[:2] == [ACTION_PROBE, EXT["bitwarden"]] else None)(
@@ -2103,6 +2126,43 @@ def actions_checks(app, results):
     close_popup()
     results["bitwarden_popup_width"] = {"ok": bool(state) and views == 1 and bool(widths) and max(widths) >= 350,
                                         "widths": widths[-5:], "popup_views": views}
+
+    # Every other command of the action menu runs without a crash in an Open
+    # window (the PR #53 rule for context menus). Pin pins; Manage Extension
+    # and View Web Permissions open Chrome's pages as Open tabs; Remove shows
+    # Chrome's uninstall dialog (Open's own prompts are P3), which is
+    # dismissed, so the extension stays.
+    ran = {}
+    for prefix in ("Pin", "Manage Extension", "View Web Permissions", "Remove from"):
+        items = [x for x in app.call("ext-menu", extension=ACTION_PROBE)
+                 if not x["separator"] and x["title"].startswith(prefix) and not x["title"].startswith("Pinned")]
+        if not items or not items[0]["enabled"]:
+            ran[prefix] = {"ok": False, "item": items[0] if items else None}
+            continue
+        title = items[0]["title"]
+        before_tabs = {t["id"] for t in app.call("tabs")}
+        before_windows = {w["number"] for w in app.call("windows")}
+        app.call("ext-menu", extension=ACTION_PROBE, select=title)
+        r = {"title": title}
+        if prefix == "Pin":
+            r["ok"] = bool(wait_until(lambda: (lambda x: x and x["pinned"])(action(ACTION_PROBE)), timeout=10))
+        elif prefix == "Remove from":
+            r["dialog"] = wait_until(lambda: [w["class"] for w in app.call("windows") if w["visible"]
+                                              and w["number"] not in before_windows], timeout=10)
+            r["dismissed"] = app.call("dismiss")
+            time.sleep(1)
+            r["ok"] = bool(r["dialog"]) and bool(action(ACTION_PROBE))
+        else:
+            opened = wait_until(lambda: [t["url"] for t in app.call("tabs") if t["id"] not in before_tabs
+                                         and t["url"].startswith("chrome://")], timeout=10)
+            r["opened"] = opened
+            r["ok"] = bool(opened)
+            for t in app.call("tabs"):
+                if t["id"] not in before_tabs:
+                    app.call("close", tab=t["id"])
+        app.call("ping")
+        ran[prefix] = r
+    results["action_menu_commands"] = {"ok": all(v["ok"] for v in ran.values()), "commands": ran}
 
 
 # ----------------------------------------------------------------------------
