@@ -17,16 +17,58 @@ private final class CLISleepStore: SleepHistoryStoring {
     let disk: SleepStore
     let trace: SleepTrace
     var errors: [String] = []
-    init(root: URL, trace: SleepTrace) {
-        disk = SleepStore(root: root); self.trace = trace
-        disk.onError = { [weak self] message in
-            self?.errors.append(message)
-            FileHandle.standardError.write(Data((message + "\n").utf8))
+    let root: URL
+    weak var model: BrowserModel?
+    private var stores: [String: SleepStore] = [:]
+    private var bootstrapError: Error?
+    private let defaultDirectoryName: String
+    init(root: URL, trace: SleepTrace, model: BrowserModel? = nil) {
+        var preparedModel = model
+        var preparationError: Error?
+        do {
+            if let model { try OpenDataRoot.prepare(root: root, model: model) }
+            else { preparedModel = try SnapshotStore(root: root).load() }
+        } catch { preparationError = error }
+        self.root = root; self.trace = trace; self.model = preparedModel
+        let name = preparedModel?.defaultProfile?.dataDirectoryName ?? "Default"
+        defaultDirectoryName = name
+        disk = SleepStore(fileURL: ProfileDirectories(root: root).sleepFileURL(dataDirectoryName: name))
+        stores[name] = disk
+        bootstrapError = preparationError
+        if let preparationError { errors.append("SleepStore bootstrap failed: \(preparationError)") }
+        disk.onError = { [weak self] message in self?.report(message) }
+    }
+    private func report(_ message: String) {
+        errors.append(message)
+        FileHandle.standardError.write(Data((message + "\n").utf8))
+    }
+    private func store(for tabID: ItemID) -> SleepStore {
+        var parent = model?.parentByID[tabID]
+        var name = model?.defaultProfile?.dataDirectoryName ?? defaultDirectoryName
+        while let current = parent {
+            switch current {
+            case .favorites(let id): name = model?.profile(id: id)?.dataDirectoryName ?? name; parent = nil
+            case .spacePinned(let id), .spaceToday(let id):
+                name = model?.space(id: id).flatMap { model?.profile(id: $0.profileID)?.dataDirectoryName } ?? name
+                parent = nil
+            case .folder(let id), .splitPane(let id): parent = model?.parentByID[id]
+            }
         }
+        if let store = stores[name] { return store }
+        let store = SleepStore(fileURL: ProfileDirectories(root: root).sleepFileURL(dataDirectoryName: name))
+        store.onError = { [weak self] in self?.report($0) }
+        stores[name] = store
+        return store
+    }
+    func allTabIDs() async -> [ItemID] {
+        var ids: [ItemID] = []
+        for store in stores.values { ids += await store.allTabIDs() }
+        return ids
     }
     func save(tabID: ItemID, envelope e: SleepHistoryEnvelope) async throws {
         trace.record("save-start", tabID)
-        try await disk.save(SleepHistoryRecord(tabID: tabID, container: e.container, currentIndex: e.currentIndex,
+        if let bootstrapError { throw bootstrapError }
+        try await store(for: tabID).save(SleepHistoryRecord(tabID: tabID, container: e.container, currentIndex: e.currentIndex,
             entryCount: e.entryCount, currentURL: e.currentURL, currentTitle: e.currentTitle,
             faviconURL: e.faviconURL, hasPageState: e.hasPageState, containerVersion: e.containerVersion,
             chromiumTag: e.chromiumTag, capturedAt: e.capturedAt))
@@ -36,16 +78,17 @@ private final class CLISleepStore: SleepHistoryStoring {
     var flushFinished = false
     func flush() async throws {
         flushStarted = true
-        try await disk.flush()
+        if let bootstrapError { throw bootstrapError }
+        for store in stores.values { try await store.flush() }
         flushFinished = true
     }
     func sleepHistory(tabID: ItemID) async -> SleepHistoryEnvelope? {
-        guard let r = await disk.load(tabID: tabID) else { return nil }
+        guard bootstrapError == nil, let r = await store(for: tabID).load(tabID: tabID) else { return nil }
         return SleepHistoryEnvelope(container: r.container, currentIndex: r.currentIndex, entryCount: r.entryCount,
             currentURL: r.currentURL, currentTitle: r.currentTitle, faviconURL: r.faviconURL,
             hasPageState: r.hasPageState, containerVersion: r.containerVersion, chromiumTag: r.chromiumTag, capturedAt: r.capturedAt)
     }
-    func deleteSleepHistory(tabID: ItemID) { disk.delete(tabID: tabID) }
+    func deleteSleepHistory(tabID: ItemID) { store(for: tabID).delete(tabID: tabID) }
 }
 
 @MainActor
@@ -159,7 +202,7 @@ private final class SleepScenario {
         space = Space(profileID: profile.id)
         window = BrowserWindowState(focusedSpaceID: space.id)
         model = BrowserModel(profiles: [profile], spaces: [space], windows: [window])
-        store = CLISleepStore(root: root, trace: trace)
+        store = CLISleepStore(root: root, trace: trace, model: model)
         engine = SimulatedSleepEngine(model: model, clock: clock, trace: trace)
         visibility = CLISleepVisibility(model: model)
         controller = SleepController(model: model, engine: engine, store: store, visibility: visibility, chromiumTag: "156.0.8078.48", now: { [clock] in clock.date })
@@ -339,10 +382,10 @@ func runSleepDemo(args: [String]) async throws {
     let retained = await cap.store.sleepHistory(tabID: capID)
     check("over-cap write rejected and logged; old record retained", cap.store.errors.count == 1 && retained == exact)
     let bytes = await cap.store.disk.totalBytes()
-    let storedIDs = Set(await cap.store.disk.allTabIDs())
+    let storedIDs = Set(await cap.store.allTabIDs())
     check("totalBytes and allTabIDs report stored blobs", bytes == exact.container.count + (retryBlob?.container.count ?? 0) && storedIDs == [capID, retry.id])
     cap.store.disk.delete(tabIDs: [capID, retry.id]); cap.store.disk.flushQueue()
-    check("batch delete works", await cap.store.disk.allTabIDs().isEmpty)
+    check("batch delete works", await cap.store.allTabIDs().isEmpty)
     try await cap.store.save(tabID: capID, envelope: exact); cap.store.deleteSleepHistory(tabID: capID)
     check("single delete and missing load work", await cap.store.sleepHistory(tabID: capID) == nil)
 
@@ -373,12 +416,12 @@ func runSleepDemo(args: [String]) async throws {
     try FileManager.default.copyItem(at: Bundle.module.url(forResource: "sleep-schema1", withExtension: "json")!, to: oldStore.fileURL)
     let oldModel = try oldStore.load()!
     let defaultMode = oldModel.profiles.first?.settings.sleepMode == .balanced
-    oldStore.saveNow(model: oldModel)
+    try oldStore.saveNow(model: oldModel)
     let reloaded = try oldStore.load()!
     let schema = try oldStore.loadData()?.schemaVersion
     check("pre-change schema-1 fixture defaults balanced; roundtrip OK", defaultMode && SnapshotMapper.structurallyEqual(oldModel, reloaded) && schema == 1)
     for mode in SleepMode.allCases {
-        oldModel.profiles[0].settings.sleepMode = mode; oldStore.saveNow(model: oldModel)
+        oldModel.profiles[0].settings.sleepMode = mode; try oldStore.saveNow(model: oldModel)
         check("snapshot persists \(mode.rawValue) mode", try oldStore.load()?.profiles.first?.settings.sleepMode == mode)
     }
 
@@ -389,7 +432,7 @@ func runSleepDemo(args: [String]) async throws {
     await splitScenario.controller.tick()
     check("selected split protects every pane", splitScenario.controller.visibleTabIDs() == [left.id, right.id] && left.live.sleepPhase == .live && right.live.sleepPhase == .live)
     try await splitScenario.controller.captureAllForQuit()
-    check("quit capture includes both split panes", Set(await splitScenario.store.disk.allTabIDs()) == [left.id, right.id])
+    check("quit capture includes both split panes", Set(await splitScenario.store.allTabIDs()) == [left.id, right.id])
     splitScenario.model.closeTab(id: left.id); splitScenario.controller.tabClosed(left.id)
     check("archive close retains sleep row", await splitScenario.store.sleepHistory(tabID: left.id) != nil)
 
@@ -408,7 +451,7 @@ func runSleepDemo(args: [String]) async throws {
     try Data([0]).write(to: invalidRoot)
     let invalidStore = CLISleepStore(root: invalidRoot, trace: SleepTrace())
     do { try await invalidStore.save(tabID: ItemID(), envelope: exact) } catch {}
-    _ = await invalidStore.disk.allTabIDs()
+    _ = await invalidStore.allTabIDs()
     await Task.yield()
     check("SQLite/open failures surface onError and keep CLI running", !invalidStore.errors.isEmpty)
 
@@ -655,7 +698,7 @@ private func runSleepControllerBench(root: URL, check: (String, Bool) -> Void) a
         if i % 101 == 4 { tab.live.devToolsOpen = true }
         return tab
     }
-    let profiles = (0..<4).map { Profile(name: "Bench \($0)", settings: ProfileSettings(sleepMode: $0 == 0 ? .conservative : $0 == 3 ? .aggressive : .balanced)) }
+    let profiles = (0..<4).map { Profile(name: "Bench \($0)", settings: ProfileSettings(sleepMode: $0 == 0 ? .conservative : $0 == 3 ? .aggressive : .balanced), dataDirectoryName: "Bench-\($0)") }
     var spaces: [Space] = []
     for (p, profile) in profiles.enumerated() {
         profile.favorites = Array(tabs[(p * 1250)..<(p * 1250 + 10)])
@@ -676,7 +719,7 @@ private func runSleepControllerBench(root: URL, check: (String, Bool) -> Void) a
     visibility.states[windows[5].id] = .occluded
     visibility.peek = [tabs[90].id, tabs[1300].id]; visibility.littleOpen = [tabs[2600].id]
     visibility.pictureInPicture = [tabs[3900].id]; visibility.splitPanes = [tabs[4998].id, tabs[4999].id]
-    let store = CLISleepStore(root: root, trace: trace)
+    let store = CLISleepStore(root: root, trace: trace, model: model)
     let engine = SimulatedSleepEngine(model: model, clock: clock, trace: trace)
     let controller = SleepController(model: model, engine: engine, store: store, visibility: visibility,
                                      chromiumTag: "156.0.8078.48", now: { clock.date })
@@ -693,7 +736,7 @@ private func runSleepControllerBench(root: URL, check: (String, Bool) -> Void) a
     samples.sort()
     let p50 = samples[99], p95 = samples[189], maximum = samples[199]
     print(String(format: "FULL controller pass 5000 tabs / 200 passes: p50=%.3f ms p95=%.3f ms max=%.3f ms", p50, p95, maximum))
-    print("bench workload: profiles=4 spaces=12 windows=8 visibleWindows=5; unloadQueries=\(trace.ids("unload-query").count) discards=\(trace.ids("discard").count) committedRows=\(await store.disk.allTabIDs().count)")
+    print("bench workload: profiles=4 spaces=12 windows=8 visibleWindows=5; unloadQueries=\(trace.ids("unload-query").count) discards=\(trace.ids("discard").count) committedRows=\(await store.allTabIDs().count)")
     check("full controller pass over 5000 tabs < 2 ms p95 (200 measured passes)", p95 < 2 && trace.ids("discard").count > 0 && model.index.values.compactMap(\.tab).count == 5000)
 }
 
@@ -703,7 +746,7 @@ func runSleepSimulation(args: [String]) async throws {
     guard let model = try SnapshotStore(root: URL(fileURLWithPath: args[0])).load() else { throw SleepCLIError.missingSnapshot }
     let root = FileManager.default.temporaryDirectory.appendingPathComponent("open-sleep-sim-\(UUID().uuidString)")
     defer { try? FileManager.default.removeItem(at: root) }
-    let clock = SleepClock(), trace = SleepTrace(), store = CLISleepStore(root: root, trace: trace)
+    let clock = SleepClock(), trace = SleepTrace(), store = CLISleepStore(root: root, trace: trace, model: model)
     let tabs = model.index.values.compactMap(\.tab).sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
     let engine = SimulatedSleepEngine(model: model, clock: clock, trace: trace)
     for tab in tabs { tab.live.sleepPhase = .live; tab.lastActiveAt = clock.date }
@@ -741,6 +784,6 @@ func runSleepSimulation(args: [String]) async throws {
     let gateOK = protectedIDs.allSatisfy { model.tab(id: $0)?.live.sleepPhase == .live }
     let quietOK = tabs.filter { !protectedIDs.contains($0.id) }.allSatisfy { $0.live.sleepPhase == .sleeping && !controller.liveContent.contains($0.id) }
     store.disk.flushQueue()
-    print("48h checks: never-sleep gates=\(gateOK ? "OK" : "FAIL") quiet freeze-discard-destroy=\(quietOK ? "OK" : "FAIL") storedRows=\(await store.disk.allTabIDs().count) bytes=\(await store.disk.totalBytes())")
+    print("48h checks: never-sleep gates=\(gateOK ? "OK" : "FAIL") quiet freeze-discard-destroy=\(quietOK ? "OK" : "FAIL") storedRows=\(await store.allTabIDs().count) bytes=\(await store.disk.totalBytes())")
     guard gateOK && quietOK else { throw SleepCLIError.checksFailed(1) }
 }

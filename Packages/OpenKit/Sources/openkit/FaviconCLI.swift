@@ -49,6 +49,7 @@ private func faviconCommand(_ args: [String]) async throws {
         guard ProcessInfo.processInfo.environment["OPENKIT_FAVICON_DEBUG"] == "1" else { faviconUsageExit() }
     }
     #endif
+    try await OpenDataRoot.prepare(storeFileURL: URL(fileURLWithPath: dbPath))
     let store = try FaviconStore(databaseURL: URL(fileURLWithPath: dbPath))
     switch command {
     case "fetch":

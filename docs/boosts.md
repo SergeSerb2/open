@@ -1,5 +1,7 @@
 # Boosts + Zap
 
+Profiles integration: pass `fileURL: ProfileDirectories(root: root).boostsFileURL(for: profile)` to `BoostStore(root:profileID:fileURL:)`. The current destination is `Profiles/<dataDirectoryName>/Boosts/boosts.json`. The original `root:profileID:` constructor remains available for standalone callers; the App must pass the explicit Profile path. No App caller exists yet.
+
 `OpenBoosts` is a Swift 6, macOS 26+ library in OpenKit. It depends only on
 `OpenModel` for `ProfileID`. It provides the data, persistence, matching, injection
 plans, picker bridge, and page runtimes. It has no engine or App wiring. Editor UI,

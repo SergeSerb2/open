@@ -16,10 +16,6 @@ public actor HistoryStore {
     var db: SQLiteDB?
     public let fileURL: URL
 
-    public init(root: URL) {
-        self.fileURL = root.appendingPathComponent("State/history.sqlite3")
-    }
-
     public init(fileURL: URL) { self.fileURL = fileURL }
 
     public func open() {

@@ -198,7 +198,7 @@ enum RenderCLI {
     static func synth(_ args: [String]) throws {
         guard let out = value(args, "--out") else { throw CLIError(description: usage) }
         let model = Synthetic.model(bulkRows: value(args, "--rows").flatMap(Int.init))
-        Synthetic.write(model, to: URL(fileURLWithPath: out))
+        try Synthetic.write(model, to: URL(fileURLWithPath: out))
         print("wrote synthetic snapshot to \(out): \(model.spaces.count) Spaces, \(model.index.count) nodes")
     }
 }

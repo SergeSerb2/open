@@ -65,10 +65,10 @@ enum Synthetic {
         space.today = today
     }
 
-    static func write(_ model: BrowserModel, to dir: URL) {
+    static func write(_ model: BrowserModel, to dir: URL) throws {
         model.rebuildIndex()
         let store = SnapshotStore(root: dir)
-        store.saveNow(model: model)
+        try store.saveNow(model: model)
         store.flush()
     }
 

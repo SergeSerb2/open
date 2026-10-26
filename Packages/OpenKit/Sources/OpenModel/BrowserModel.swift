@@ -44,14 +44,25 @@ public struct ArchivedTabRecord: Sendable, Identifiable {
 }
 
 /// Sink for tabs that leave the sidebar. Implemented by OpenStore's ArchiveStore.
-/// Called on the main actor; implementations must not block (dispatch async internally).
+/// Called on the main actor. Normal archive/discard calls dispatch asynchronously;
+/// confirmed Profile deletion may wait for the durable commit.
 @MainActor
 public protocol ArchiveSink: AnyObject {
     /// Stores tabs that left the sidebar. A bulk command passes all of its tabs in one call.
     func archive(_ entries: [ArchiveEntry])
+    /// Waits for durable archive commit; a failure must leave the model unchanged.
+    func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws
     /// Drops the rows of tabs that are back in the sidebar (restore, or undo of a close),
     /// so a tab is never in the sidebar and the archive at once.
     func discardArchived(ids: [ItemID])
+}
+
+public enum ProfileArchiveError: Error { case confirmationUnavailable }
+
+public extension ArchiveSink {
+    func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        throw ProfileArchiveError.confirmationUnavailable
+    }
 }
 
 extension NodeParent {
@@ -87,6 +98,16 @@ public enum TreeChange: Sendable {
     case remove(parent: NodeParent, index: Int, nodeID: ItemID)
     case move(fromParent: NodeParent, fromIndex: Int, toParent: NodeParent, toIndex: Int, nodeID: ItemID)
     case reload(parent: NodeParent)
+    case spaceProfileChanged(spaceID: SpaceID, from: ProfileID, to: ProfileID)
+}
+
+public enum ProfileNameIssue: String, Sendable, Equatable {
+    case empty, tooLong, invalidCharacters, duplicate
+}
+
+public enum ProfileDeleteBlock: Sendable, Equatable {
+    case isDefault
+    case spacesAssigned(count: Int)
 }
 
 @MainActor
@@ -741,11 +762,160 @@ public final class BrowserModel {
         registerChange(undo: { folder.isExpanded = old }, redo: { folder.isExpanded = expanded })
     }
 
+    // MARK: Profiles
+
+    public static func profileNameIssue(_ raw: String, in profiles: [Profile], excluding excludedID: ProfileID? = nil) -> ProfileNameIssue? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return .empty }
+        if name.count > 64 { return .tooLong }
+        if name == "." || name == ".." || name.contains(where: { "/:\\".contains($0) })
+            || name.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) { return .invalidCharacters }
+        if profiles.contains(where: { $0.id != excludedID && $0.name.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare(name) == .orderedSame }) { return .duplicate }
+        return nil
+    }
+
+    /// Filled by OpenDataRoot from disk and tombstones; model commands do no I/O.
+    @ObservationIgnored public var unavailableProfileDirectoryNames: Set<String> = []
+    @ObservationIgnored public var onArchiveError: ((Error) -> Void)?
+
+    public var defaultProfile: Profile? { profiles.first { $0.dataDirectoryName == "Default" } ?? profiles.first }
+
+    public func spaces(using profileID: ProfileID) -> [Space] { spaces.filter { $0.profileID == profileID } }
+
+    public func deleteBlockReason(for id: ProfileID) -> ProfileDeleteBlock? {
+        guard profile(id: id) != nil else { return nil }
+        if id == defaultProfile?.id { return .isDefault }
+        let count = spaces(using: id).count
+        return count > 0 ? .spacesAssigned(count: count) : nil
+    }
+
+    @discardableResult
+    public func createProfile(name: String, icon: SpaceIcon? = nil, settings: ProfileSettings = ProfileSettings()) -> Profile? {
+        guard Self.profileNameIssue(name, in: profiles) == nil else { return nil }
+        var directory = "Default"
+        if !profiles.isEmpty || unavailableProfileDirectoryNames.contains("default") {
+            repeat { directory = "Profile-" + UUID().uuidString.prefix(8).uppercased() }
+            while unavailableProfileDirectoryNames.contains(directory.lowercased()) || profiles.contains { $0.dataDirectoryName.caseInsensitiveCompare(directory) == .orderedSame }
+        }
+        let profile = Profile(name: name.trimmingCharacters(in: .whitespacesAndNewlines), icon: icon, settings: settings, dataDirectoryName: directory)
+        unavailableProfileDirectoryNames.insert(directory.lowercased())
+        let slot = profiles.count
+        insertProfile(profile, at: slot)
+        registerUndo({ model in model.removeProfile(profile.id); return true }, reapply: { model in
+            model.insertProfile(profile, at: slot)
+            return { model in model.removeProfile(profile.id); return true }
+        })
+        return profile
+    }
+
+    private func insertProfile(_ profile: Profile, at slot: Int) {
+        profiles.insert(profile, at: min(slot, profiles.count))
+        profileByIDCache[profile.id] = profile
+        for tab in profile.favorites { register(.tab(tab), under: .favorites(profile.id)) }
+    }
+
+    private func removeProfile(_ id: ProfileID) {
+        guard let profile = profile(id: id) else { return }
+        for tab in profile.favorites { unregister(.tab(tab)) }
+        profiles.removeAll { $0.id == id }
+        profileByIDCache[id] = nil
+    }
+
+    @discardableResult
+    public func renameProfile(id: ProfileID, to name: String) -> Bool {
+        guard let profile = profile(id: id), Self.profileNameIssue(name, in: profiles, excluding: id) == nil else { return false }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let old = profile.name
+        guard old != trimmed else { return true }
+        profile.name = trimmed
+        registerChange(undo: { profile.name = old }, redo: { profile.name = trimmed })
+        return true
+    }
+
+    public func setProfileIcon(id: ProfileID, icon: SpaceIcon?) {
+        guard let profile = profile(id: id), profile.icon != icon else { return }
+        let old = profile.icon
+        profile.icon = icon
+        registerChange(undo: { profile.icon = old }, redo: { profile.icon = icon })
+    }
+
+    @discardableResult
+    public func updateProfileSettings(id: ProfileID, settings: ProfileSettings) -> Bool {
+        guard let profile = profile(id: id) else { return false }
+        let old = profile.settings
+        guard old != settings else { return true }
+        profile.settings = settings
+        registerChange(undo: { profile.settings = old }, redo: { profile.settings = settings })
+        return true
+    }
+
+    @discardableResult
+    public func deleteProfile(id: ProfileID) throws -> Bool {
+        guard let revert = try removeProfileArchiving(id) else { return false }
+        registerUndo(revert, reapply: { model in
+            do { return try model.removeProfileArchiving(id) ?? Self.noRevert }
+            catch { model.onArchiveError?(error); return Self.noRevert }
+        })
+        return true
+    }
+
+    private func removeProfileArchiving(_ id: ProfileID) throws -> Revert? {
+        guard let profile = profile(id: id), deleteBlockReason(for: id) == nil,
+              let slot = profiles.firstIndex(where: { $0.id == id }) else { return nil }
+        let now = Date()
+        let entries = profile.favorites.map {
+            ArchiveEntry(tab: $0, reason: .closed, originalLocation: NodeParent.favorites(id).archiveLocation,
+                         spaceID: nil, profileID: id, archivedAt: now)
+        }
+        // Commit the archive and its directory tombstone before any model mutation.
+        if let archiveSink { try archiveSink.archiveForProfileDeletion(entries, directoryName: profile.dataDirectoryName) }
+        else if !entries.isEmpty { throw ProfileArchiveError.confirmationUnavailable }
+        unavailableProfileDirectoryNames.insert(profile.dataDirectoryName.lowercased())
+        removeProfile(id)
+        emit(.reload(parent: .favorites(id)))
+        let ids = entries.map { $0.tab.id }
+        return { model in
+            guard model.profile(id: id) == nil else { return false }
+            model.insertProfile(profile, at: slot)
+            model.emit(.reload(parent: .favorites(id)))
+            model.archiveSink?.discardArchived(ids: ids)
+            return true
+        }
+    }
+
+    @discardableResult
+    public func moveSpace(id: SpaceID, toProfile profileID: ProfileID) -> Bool {
+        guard let space = space(id: id), profile(id: profileID) != nil, space.profileID != profileID else { return false }
+        let old = space.profileID
+        setSpaceProfile(space, to: profileID)
+        registerChange(undo: { self.setSpaceProfile(space, to: old) }, redo: { self.setSpaceProfile(space, to: profileID) })
+        return true
+    }
+
+    private func setSpaceProfile(_ space: Space, to profileID: ProfileID) {
+        let old = space.profileID
+        guard old != profileID else { return }
+        space.profileID = profileID
+        emit(.spaceProfileChanged(spaceID: space.id, from: old, to: profileID))
+    }
+
+    @discardableResult
+    public func repairMissingProfileReferences() -> [SpaceID] {
+        guard let fallback = defaultProfile else { return [] }
+        var repaired: [SpaceID] = []
+        for space in spaces where profile(id: space.profileID) == nil {
+            setSpaceProfile(space, to: fallback.id)
+            repaired.append(space.id)
+        }
+        return repaired
+    }
+
     // MARK: Spaces
 
     @discardableResult
     public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon? = nil, theme: SpaceTheme = SpaceTheme()) -> Space {
-        let space = Space(title: title, icon: icon, theme: theme, profileID: profileID)
+        let resolvedProfile = profile(id: profileID)?.id ?? defaultProfile?.id ?? profileID
+        let space = Space(title: title, icon: icon, theme: theme, profileID: resolvedProfile)
         let i = spaces.count
         insertSpace(space, at: i)
         emit(.reload(parent: .spaceToday(space.id)))
@@ -758,16 +928,18 @@ public final class BrowserModel {
 
     public func updateSpace(id: SpaceID, title: String? = nil, icon: SpaceIcon?? = nil, theme: SpaceTheme? = nil, profileID: ProfileID? = nil) {
         guard let space = space(id: id) else { return }
+        if let profileID, profile(id: profileID) == nil { return }
         let oldTitle = space.title; let oldIcon = space.icon; let oldTheme = space.theme; let oldProfile = space.profileID
         let apply: @MainActor () -> Void = {
             if let title { space.title = title }
             if let icon { space.icon = icon }
             if let theme { space.theme = theme }
-            if let profileID { space.profileID = profileID }
+            if let profileID { self.setSpaceProfile(space, to: profileID) }
         }
         apply()
         registerChange(undo: {
-            space.title = oldTitle; space.icon = oldIcon; space.theme = oldTheme; space.profileID = oldProfile
+            space.title = oldTitle; space.icon = oldIcon; space.theme = oldTheme
+            self.setSpaceProfile(space, to: oldProfile)
         }, redo: apply)
     }
 

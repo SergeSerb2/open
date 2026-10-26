@@ -5,16 +5,22 @@ import OpenStore
 /// Forwards to the real ArchiveStore and counts sink calls, so the demo can show one call per bulk command.
 @MainActor
 final class CountingSink: ArchiveSink {
-    let store: ArchiveStore
+    let store: ProfileArchiveSink
     var archiveCalls = 0
     var lastBatch: [ArchiveEntry] = []
 
-    init(store: ArchiveStore) { self.store = store }
+    init(store: ProfileArchiveSink) { self.store = store }
 
     func archive(_ entries: [ArchiveEntry]) {
         archiveCalls += 1
         lastBatch = entries
         store.archive(entries)
+    }
+
+    func archiveForProfileDeletion(_ entries: [ArchiveEntry], directoryName: String) throws {
+        archiveCalls += 1
+        lastBatch = entries
+        try store.archiveForProfileDeletion(entries, directoryName: directoryName)
     }
 
     func discardArchived(ids: [ItemID]) { store.discardArchived(ids: ids) }
@@ -37,6 +43,7 @@ func describe(_ change: TreeChange) -> String {
     case .remove(let parent, let index, _): return "remove(\(label(parent))[\(index)])"
     case .move(let from, let fromIndex, let to, let toIndex, _): return "move(\(label(from))[\(fromIndex)] -> \(label(to))[\(toIndex)])"
     case .reload(let parent): return "reload(\(label(parent)))"
+    case .spaceProfileChanged(let space, let from, let to): return "profile(space \(space.rawValue.uuidString.prefix(8)): \(from.rawValue.uuidString.prefix(8))->\(to.rawValue.uuidString.prefix(8)))"
     }
 }
 
@@ -80,13 +87,15 @@ func runCommandsDemo(args: [String]) async throws {
         let space = Space(title: "Demo Space", profileID: profile.id)
         model = BrowserModel(profiles: [profile], spaces: [space], windows: [BrowserWindowState(focusedSpaceID: space.id)])
     }
+    _ = try prepareProfiles(model, root: root)
     guard let space = model.spaces.first, let profile = model.profile(id: space.profileID) else { print("no space"); exit(1) }
     let sid = space.id
     let pid = profile.id
     model.windows.first?.focusedSpaceID = sid
 
-    let archive = ArchiveStore(root: root)
-    let sink = CountingSink(store: archive)
+    let composite = profileArchiveSink(model: model, directories: ProfileDirectories(root: root))
+    let archive = composite.store(for: pid)
+    let sink = CountingSink(store: composite)
     model.archiveSink = sink
     let undo = UndoManager()
     // No event loop here, so no per-event groups: the model opens one group per command.
@@ -344,8 +353,116 @@ func runCommandsDemo(args: [String]) async throws {
     check(model.tab(id: u1.id) == nil && occurrences(of: u2.id, in: model) == 0 && indexMatchesRebuild(model), "older undo steps still apply cleanly")
     tree("final")
 
-    snapshots.saveNow(model: model)
-    archive.flushQueue()
+    step("profiles: create, validation, undo and stable directories")
+    let uniqueName = "Demo Profile " + UUID().uuidString.prefix(8)
+    guard let added = model.createProfile(name: "  \(uniqueName)  ") else { profileCLIError("demo profile creation failed") }
+    let addedID = added.id, directory = added.dataDirectoryName
+    check(added.name == uniqueName && directory.hasPrefix("Profile-") && events.isEmpty, "createProfile trims its name, mints a directory and emits no event")
+    let duplicate = model.createProfile(name: uniqueName.lowercased())
+    check(duplicate == nil && events.isEmpty, "duplicate create refuses without events")
+    undo.undo()
+    check(model.profile(id: addedID) == nil, "duplicate create registered no undo: undo removes the accepted create")
+    undo.redo()
+    check(model.profile(id: addedID) === added && added.dataDirectoryName == directory && model.profiles.last === added, "redo restores the same Profile, directory and index")
+    try ProfileDirectories(root: root).ensureProfileDirectories(for: added)
+    check(BrowserModel.profileNameIssue(" ", in: model.profiles) == .empty
+          && BrowserModel.profileNameIssue(String(repeating: "a", count: 65), in: model.profiles) == .tooLong
+          && [".", "..", "a/b", "a:b", "a\\b", "a\u{0000}b"].allSatisfy { BrowserModel.profileNameIssue($0, in: model.profiles) == .invalidCharacters }, "Profile name validation covers empty, length and unsafe characters")
+
+    step("profiles: rename, icon and whole settings")
+    let renamed = uniqueName + " Renamed"
+    check(model.renameProfile(id: addedID, to: renamed) && added.name == renamed, "renameProfile applies")
+    undo.undo(); check(added.name == uniqueName, "rename undo restores name")
+    undo.redo(); check(added.name == renamed && added.dataDirectoryName == directory, "rename redo keeps directory")
+    check(!model.renameProfile(id: addedID, to: profile.name) && events.isEmpty, "duplicate rename refuses without events")
+    undo.undo(); check(added.name == uniqueName, "duplicate rename registers no undo")
+    undo.redo()
+    model.setProfileIcon(id: addedID, icon: .emoji("💼"))
+    undo.undo(); check(added.icon == nil, "Profile icon undo")
+    undo.redo(); check(added.icon == .emoji("💼"), "Profile icon redo")
+    let oldSettings = added.settings
+    let newSettings = ProfileSettings(autoArchiveAfter: .never, littleOpenAutoArchiveAfter: .oneHour, searchEngineID: "google")
+    check(model.updateProfileSettings(id: addedID, settings: newSettings) && added.settings == newSettings, "whole Profile settings apply")
+    undo.undo(); check(added.settings == oldSettings, "whole settings undo")
+    undo.redo(); check(added.settings == newSettings && events.isEmpty, "whole settings redo without events")
+
+    step("profiles: move Space, preserving tabs and Favorites")
+    let keptTabs = model.index.values.compactMap(\.tab).map { ($0.id, $0.url, $0.pinnedURL) }
+    let keptFavorites = profile.favorites.map(\.id)
+    let expectedMove = "profile(space \(sid.description.prefix(8)): \(pid.description.prefix(8))->\(addedID.description.prefix(8)))"
+    check(model.moveSpace(id: sid, toProfile: addedID) && events.map(describe) == [expectedMove], "Space Profile move emits exactly one event")
+    check(keptTabs.allSatisfy { model.tab(id: $0.0)?.url == $0.1 && model.tab(id: $0.0)?.pinnedURL == $0.2 }
+          && profile.favorites.map(\.id) == keptFavorites && added.favorites.isEmpty, "Space move keeps tab IDs, URLs, pinnedURLs and old Profile Favorites")
+    events.removeAll(); undo.undo()
+    check(space.profileID == pid && events.map(describe) == ["profile(space \(sid.description.prefix(8)): \(addedID.description.prefix(8))->\(pid.description.prefix(8)))"], "Space Profile undo emits inverse event")
+    events.removeAll(); undo.redo()
+    check(space.profileID == addedID && events.map(describe) == [expectedMove], "Space Profile redo emits forward event")
+    events.removeAll()
+    check(!model.moveSpace(id: sid, toProfile: ProfileID()) && !model.moveSpace(id: sid, toProfile: addedID) && events.isEmpty, "missing and same Profile moves refuse without events")
+    undo.undo(); check(space.profileID == pid, "refused moves register no undo")
+    undo.redo()
+
+    step("profiles: combined Space edit")
+    let oldTitle = space.title, oldIcon = space.icon, oldTheme = space.theme
+    events.removeAll()
+    model.updateSpace(id: sid, title: "Profile Demo Space", icon: .some(.emoji("🧭")), theme: SpaceTheme(), profileID: pid)
+    check(space.profileID == pid && space.title == "Profile Demo Space" && events.count == 1, "combined Space editor emits one Profile event")
+    events.removeAll(); undo.undo()
+    check(space.profileID == addedID && space.title == oldTitle && space.icon == oldIcon && space.theme == oldTheme && events.count == 1, "combined edit undo restores all four values with inverse event")
+    events.removeAll(); undo.redo()
+    check(space.profileID == pid && space.title == "Profile Demo Space" && events.count == 1, "combined edit redo restores the whole edit")
+
+    events.removeAll()
+    model.updateSpace(id: sid, title: "Invalid edit", profileID: ProfileID())
+    check(space.profileID == pid && space.title == "Profile Demo Space" && events.isEmpty,
+          "stale Profile in updateSpace refuses the whole edit without events")
+
+    step("profiles: deletion refusals register no undo")
+    _ = model.moveSpace(id: sid, toProfile: addedID)
+    events.removeAll()
+    check(!(try model.deleteProfile(id: addedID)) && model.deleteBlockReason(for: addedID) == .spacesAssigned(count: 1) && events.isEmpty, "delete Profile with Spaces refuses without events")
+    undo.undo(); check(space.profileID == pid, "assigned-Profile deletion registered no undo")
+    events.removeAll()
+    check(!(try model.deleteProfile(id: model.defaultProfile!.id)) && events.isEmpty, "delete default Profile refuses without events")
+    undo.undo(); check(space.profileID == addedID && space.title == oldTitle, "default deletion registered no undo")
+    _ = model.moveSpace(id: sid, toProfile: pid)
+
+    step("profiles: archive Favorites on delete, undo and redo")
+    let profileFavorite = model.newTab(in: sid, url: url("profile-favorite"), title: "Profile Favorite")
+    model.addFavorite(tabID: profileFavorite.id, to: addedID)
+    let profileArchive = composite.store(for: addedID)
+    let callsBeforeProfileDelete = sink.archiveCalls
+    events.removeAll()
+    check((try model.deleteProfile(id: addedID)) && sink.archiveCalls == callsBeforeProfileDelete + 1
+          && sink.lastBatch.count == 1 && sink.lastBatch[0].profileID == addedID
+          && sink.lastBatch[0].originalLocation == NodeParent.favorites(addedID).archiveLocation
+          && events.map(describe) == ["reload(favorites)"], "Profile delete archives Favorites in one sink call and emits one reload")
+    var profileRows = await profileArchive.count()
+    check(model.profile(id: addedID) == nil && model.tab(id: profileFavorite.id) == nil
+          && profileRows == 1, "deleted Favorite is in its own Profile archive")
+    events.removeAll(); undo.undo()
+    check(model.profile(id: addedID) === added && model.tab(id: profileFavorite.id) === profileFavorite
+          && events.map(describe) == ["reload(favorites)"], "delete undo restores Profile, Favorites and index")
+    check(await profileArchive.count() == 0, "delete undo discards archived Favorite")
+    events.removeAll(); undo.redo()
+    profileRows = await profileArchive.count()
+    check(model.profile(id: addedID) == nil && events.map(describe) == ["reload(favorites)"]
+          && profileRows == 1, "delete redo archives Favorite again")
+
+    step("profiles: dangling reference repair has no undo")
+    let missingProfileID = ProfileID()
+    space.profileID = missingProfileID
+    events.removeAll()
+    let repaired = model.repairMissingProfileReferences()
+    check(repaired == [sid] && space.profileID == model.defaultProfile?.id
+          && events.map(describe) == ["profile(space \(sid.description.prefix(8)): \(missingProfileID.description.prefix(8))->\(model.defaultProfile!.id.description.prefix(8)))"], "missing Profile repairs to default and emits the repair event")
+    undo.undo()
+    check(model.profile(id: addedID) === added && space.profileID == model.defaultProfile?.id, "repair registered no undo; previous delete is undone")
+    undo.redo()
+    check(indexMatchesRebuild(model), "Profile section index equals a full rebuild")
+
+    try snapshots.saveNow(model: model)
+    composite.flushAll()
     print("commands-demo \(failed == 0 ? "OK" : "FAILED"): \(passed) checks passed, \(failed) failed, archive rows=\(await archive.count())")
     if failed > 0 { exit(1) }
 }

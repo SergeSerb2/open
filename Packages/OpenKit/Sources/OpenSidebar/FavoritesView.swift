@@ -50,7 +50,7 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
     }
 
     /// Full reload only when the window shows another profile's favorites.
-    private func reloadProfile() {
+    func reloadProfile() {
         let profile = context.favoritesProfile
         guard profile?.id != profileID || tabs.count != (profile?.favorites.count ?? 0) else { return }
         profileID = profile?.id

@@ -146,6 +146,9 @@ public final class SidebarView: NSView {
             if case .favorites = p { favorites.apply(change) }
         case .move(let from, _, let to, _, _):
             if case .favorites = from { favorites.apply(change) } else if case .favorites = to { favorites.apply(change) }
+        case .spaceProfileChanged:
+            // The focused Space may now show another profile's favorites.
+            favorites.reloadProfile()
         }
         pager.apply(change)
         needsLayout = true

@@ -24,7 +24,7 @@ public struct BoostFileDTO: Codable, Sendable {
 public final class BoostStore: @unchecked Sendable {
     public let root: URL
     public let profileID: ProfileID
-    public var fileURL: URL { root.appendingPathComponent("Boosts/\(profileID.rawValue.uuidString).json") }
+    public let fileURL: URL
 
     private let queue = DispatchQueue(label: "open.boosts", qos: .utility)
     private let lock = NSLock()
@@ -34,10 +34,13 @@ public final class BoostStore: @unchecked Sendable {
     private var sorted: [Boost]?
     private var loadedSchemaVersion = 1
 
-    public init(root: URL? = nil, profileID: ProfileID) {
+    /// Pass ProfileDirectories.boostsFileURL(for:) for the current per-Profile layout.
+    /// The nil default retains the original constructor for existing standalone callers.
+    public init(root: URL? = nil, profileID: ProfileID, fileURL: URL? = nil) {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         self.root = root ?? base.appendingPathComponent("Open", isDirectory: true)
         self.profileID = profileID
+        self.fileURL = fileURL ?? self.root.appendingPathComponent("Boosts/\(profileID.rawValue.uuidString).json")
     }
 
     public func load() -> [Boost] {

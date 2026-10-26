@@ -14,7 +14,9 @@ a sleep mode load as balanced. Quiet pinned tabs and favorites sleep like
 other tabs. Pin state alone does not protect them.
 
 `SleepStore` writes opaque history containers and sidecars to
-`State/sleep.sqlite3` on one utility queue. It uses the existing SQLite
+`Profiles/<dataDirectoryName>/State/sleep.sqlite3` through `ProfileDirectories`,
+with one utility queue per Profile. `SleepStore(fileURL:)` takes that explicit
+path. Call `OpenDataRoot.prepare()` before any store opens. It uses the existing SQLite
 helper with WAL, `synchronous=FULL`, and a five-second SQLite busy timeout.
 `save` and `flush` are async and throwing. Each returns after a real
 transaction commit. Over-cap writes and database errors reach `onError`

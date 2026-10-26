@@ -70,6 +70,8 @@ func runImportArcHistory(args: [String]) async {
           !importPath(destination, isWithin: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc")) else {
         importCLIError("error: destination must be outside Arc data.", code: 2)
     }
+    do { try await OpenDataRoot.prepare(storeFileURL: destination) }
+    catch { importCLIError("error: cannot prepare destination: \(error)", code: 1) }
     let start = ContinuousClock.now
     let result: (report: ArcHistoryReadReport, inserted: Int, duplicates: Int, urlCount: Int, failed: Bool)
     do {
