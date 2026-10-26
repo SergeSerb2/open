@@ -11,6 +11,11 @@ public final class SnapshotStore: @unchecked Sendable {
     private var pendingWork: DispatchWorkItem?
     private let lock = NSLock()
     private var dataRootLock: DataRootLock?
+    @MainActor private var dirtyModel: BrowserModel?
+    @MainActor private var saveGeneration = 0
+    @MainActor public private(set) var captureCount = 0
+    @MainActor public private(set) var scheduleCount = 0
+    @MainActor public var isDirty: Bool { dirtyModel != nil }
 
     private func holdRootLock() throws {
         try lock.withLock {
@@ -35,41 +40,50 @@ public final class SnapshotStore: @unchecked Sendable {
     /// Debounced save. Call from the main actor after any command.
     @MainActor
     public func scheduleSave(model: BrowserModel) {
-        do { try prepare(model: model) }
-        catch {
-            FileHandle.standardError.write(Data("SnapshotStore prepare failed: \(error)\n".utf8))
-            return
-        }
-        let dto = SnapshotMapper.dto(from: model)
+        // Scheduling never walks the model or opens files. Frame drags can
+        // mark dirty repeatedly; only the final debounced turn captures a DTO.
+        dirtyModel = model; saveGeneration += 1; scheduleCount += 1
+        let generation = saveGeneration
         lock.lock()
         pendingWork?.cancel()
-        // @Sendable: a closure formed on the main actor would otherwise be
-        // main-actor isolated, and Swift 6 traps when the queue runs it.
-        let work = DispatchWorkItem { @Sendable [weak self] in self?.writeReportingFailure(dto: dto) }
+        let work = DispatchWorkItem { @Sendable [weak self] in
+            Task { @MainActor [weak self] in self?.capturePending(generation: generation) }
+        }
         pendingWork = work
         lock.unlock()
         queue.asyncAfter(deadline: .now() + 1.0, execute: work)
+    }
+    @MainActor
+    private func capturePending(generation: Int) {
+        guard generation == saveGeneration, let model = dirtyModel else { return }
+        do {
+            try prepare(model: model)
+            let dto = SnapshotMapper.dto(from: model); captureCount += 1
+            dirtyModel = nil
+            lock.withLock { pendingWork = nil }
+            queue.async { [weak self] in self?.writeReportingFailure(dto: dto) }
+        } catch {
+            FileHandle.standardError.write(Data("SnapshotStore prepare failed: \(error)\n".utf8))
+        }
     }
 
     /// Synchronous save (also used by flush and the CLI).
     @MainActor
     public func saveNow(model: BrowserModel) throws {
+        saveGeneration += 1
+        lock.withLock { pendingWork?.cancel(); pendingWork = nil }
         try prepare(model: model)
-        let dto = SnapshotMapper.dto(from: model)
-        lock.lock(); pendingWork?.cancel(); pendingWork = nil; lock.unlock()
+        let dto = SnapshotMapper.dto(from: model); captureCount += 1; dirtyModel = nil
         try queue.sync { try write(dto: dto) }
     }
 
-    /// Writes synchronously. If a debounced DTO is pending it is written; otherwise no-op.
+    /// Captures dirty state synchronously, then waits for writes already queued.
     /// For quit-time use, prefer saveNow(model:) so the latest state is captured.
-    public func flush() {
-        queue.sync {
-            lock.lock()
-            let work = pendingWork
-            pendingWork = nil
-            lock.unlock()
-            _ = work // already scheduled work runs on this queue before the sync block completes
-        }
+    @MainActor public func flush() {
+        if let model = dirtyModel {
+            do { try saveNow(model: model) }
+            catch { FileHandle.standardError.write(Data("SnapshotStore flush failed: \(error)\n".utf8)) }
+        } else { queue.sync {} }
     }
 
     private func writeReportingFailure(dto: SnapshotFileDTO) {
