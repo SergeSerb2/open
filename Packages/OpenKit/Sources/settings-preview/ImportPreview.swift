@@ -77,8 +77,8 @@ import OpenImport
         return ImportOutcome(counts: ["Spaces":candidate.spaces.count-beforeSpaces,"Pinned and Today tabs":newTabs.subtracting(newFavorites).count,
                                       "Favorites":newFavorites.count,"Folders":newFolders.count,"Archive":archiveInserted,"History":0,
                                       "Search settings":plan.searchSettings ? source.report.profiles:0,"Passwords and cookies":0,"Imported tabs":newTabs.count,
-                                      "Imported Spaces": candidate.spaces.count - beforeSpaces, "Imported items": candidate.index.count - beforeTabs,
-                                      "Duplicates": duplicates + archiveDuplicates, "Imported Archive": archiveInserted,
+                                      ImportOutcomeKeys.spaces: candidate.spaces.count - beforeSpaces, ImportOutcomeKeys.tabs: candidate.index.count - beforeTabs,
+                                      "Duplicates": duplicates + archiveDuplicates, ImportOutcomeKeys.archive: archiveInserted,
                                       "Skipped easels": source.report.skippedEasels, "Skipped notes": source.report.skippedNotes,
                                       "Skipped unknown": source.report.skippedUnknown, "Archive accounted": source.report.archiveAccounted,
                                       "Archive total": source.report.archiveTotal, "Password and cookie copies": 0])
