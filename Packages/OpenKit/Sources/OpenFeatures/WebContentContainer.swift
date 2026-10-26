@@ -149,6 +149,10 @@ public final class WebContentContainer: NSView {
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
             self.tabProvider(id)?.live.faviconPNG = data
         }
+        host.onPageBackgroundChange = { [weak self, weak host] _ in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            self.slots.first { $0.tabID == id }?.paneChrome?.update()
+        }
         host.shouldNavigate = { [weak self, weak host] url, flags in
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return false }
             return self.onLinkClicked?(id, url, flags) ?? true

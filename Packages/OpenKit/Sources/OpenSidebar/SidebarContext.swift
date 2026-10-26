@@ -25,10 +25,33 @@ public final class SidebarContext {
     /// Open Peeks by source tab. The source row shows the Peek page's favicon in a
     /// plate at its right end, also while another tab is selected (F0090, F0101).
     /// Transient: the window controller sets it; the model never stores it.
-    public var peekBadges: [ItemID: SidebarPeekBadge] = [:]
+    /// Each tab has its own observable state, so a change reaches only that row:
+    /// a badge on or off lays the row out again, a new URL or favicon only redraws it.
+    public var peekBadges: [ItemID: SidebarPeekBadge] {
+        get { peekBadgeStates.compactMapValues(\.badge) }
+        set {
+            for id in Set(peekBadgeStates.keys).union(newValue.keys) {
+                let state = peekBadgeState(for: id), badge = newValue[id]
+                if state.badge != badge { state.badge = badge }
+                if state.isShown != (badge != nil) { state.isShown = badge != nil }
+            }
+        }
+    }
+    @ObservationIgnored private var peekBadgeStates: [ItemID: SidebarPeekBadgeState] = [:]
+    /// The badge state a row observes (made on first use and kept, so a row that
+    /// observes it before a Peek opens still hears about it).
+    func peekBadgeState(for id: ItemID) -> SidebarPeekBadgeState {
+        if let state = peekBadgeStates[id] { return state }
+        let state = SidebarPeekBadgeState(); peekBadgeStates[id] = state; return state
+    }
     /// The Peek on screen. Its source row draws a lighter fill, and the URL field
     /// and toolbar follow the Peek page (F0090: Peek host, Peek history).
-    public var shownPeek: SidebarShownPeek?
+    public var shownPeek: SidebarShownPeek? {
+        didSet { if shownPeek?.sourceNodeID != peekSourceNodeID { peekSourceNodeID = shownPeek?.sourceNodeID } }
+    }
+    /// The shown Peek's source row alone: row fills and the chrome dim observe this,
+    /// so the Peek's URL or loading changes do not reach every row.
+    public private(set) var peekSourceNodeID: ItemID?
 
     /// Optional favicon override (for example an engine-side cache).
     @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
@@ -104,6 +127,16 @@ public struct SidebarPeekBadge: Equatable, Sendable {
     public var url: URL
     public var faviconPNG: Data?
     public init(url: URL, faviconPNG: Data? = nil) { self.url = url; self.faviconPNG = faviconPNG }
+}
+
+/// One tab's Peek badge, observed by that tab's row only.
+@MainActor
+@Observable
+final class SidebarPeekBadgeState {
+    /// Read during row layout: the badge takes the close button's slot.
+    var isShown = false
+    /// Read while the badge draws: the Peek page's favicon and host.
+    var badge: SidebarPeekBadge?
 }
 
 /// The Peek on screen, as the sidebar shows it.

@@ -87,8 +87,19 @@ enum VisualFinishChecks {
         check(sidebar.toolbarNavigationVisible, "a selected tab brings back, forward, and reload back")
         let sourceRow = sidebar.rowFrame(nodeID: source.id)!
         check(sidebar.peekBadgeFrame(tabID: source.id) == nil, "no badge without a Peek")
+        let visibleTabRows = sidebar.displayedRows.filter { id in model.node(id: ItemID(rawValue: UUID(uuidString: id) ?? UUID()))?.tab != nil }.count
+        var layouts = SidebarDiagnostics.tabRowLayouts
         context.peekBadges = [source.id: SidebarPeekBadge(url: URL(string: "https://example.org/preview")!)]
-        pump()
+        pump(); _ = OffscreenRenderer().render(scene, scale: 1)
+        let onLayouts = SidebarDiagnostics.tabRowLayouts - layouts
+        check(onLayouts >= 1 && onLayouts <= 2, "a badge on lays out only its own row (\(onLayouts) row layouts; \(visibleTabRows) tab rows shown)")
+        layouts = SidebarDiagnostics.tabRowLayouts
+        let draws = SidebarDiagnostics.peekBadgeDraws
+        let png = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in NSColor.systemBlue.setFill(); r.fill(); return true }.tiffRepresentation
+        context.peekBadges = [source.id: SidebarPeekBadge(url: URL(string: "https://example.org/next")!, faviconPNG: png)]
+        pump(); _ = OffscreenRenderer().render(scene, scale: 1)
+        check(SidebarDiagnostics.tabRowLayouts == layouts && SidebarDiagnostics.peekBadgeDraws > draws,
+              "a Peek URL or favicon change redraws the badge only (\(SidebarDiagnostics.tabRowLayouts - layouts) row layouts, \(SidebarDiagnostics.peekBadgeDraws - draws) badge draws)")
         let w = sidebar.bounds.width
         check(sidebar.peekBadgeFrame(tabID: source.id) == CGRect(x: w - 38, y: sourceRow.minY + 8, width: 24, height: 24),
               "badge plate [W − 38, y + 8, 24, 24] (\(sidebar.peekBadgeFrame(tabID: source.id).map { "\($0)" } ?? "none"))")

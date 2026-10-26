@@ -337,6 +337,7 @@ final class TabCellView: SidebarCellView {
 
     override func layout() {
         super.layout()
+        SidebarDiagnostics.tabRowLayouts += 1
         rowStateChanged()
         let m = SpaceListMetrics.self
         let x0 = indent
@@ -365,11 +366,12 @@ final class TabCellView: SidebarCellView {
         var titleRight = (accessory?.isHidden ?? true) ? bounds.width - m.titleTrailingInset : accessory!.frame.minX
         // An open Peek marks its source row, also while another row is selected (F0090, F0101).
         // guess: the close button replaces the badge while the row is hovered.
-        let badge = tracked({ tab.flatMap { context?.peekBadges[$0.id] } }) { [weak self] in self?.needsLayout = true }
-        if let badge, accessory?.isHidden ?? true {
+        let badgeState = tab.flatMap { context?.peekBadgeState(for: $0.id) }
+        let badgeShown = tracked({ badgeState?.isShown ?? false }) { [weak self] in self?.needsLayout = true }
+        if let badgeState, badgeShown, accessory?.isHidden ?? true {
             let v = peekBadge ?? { let v = PeekBadgeView(); addSubview(v); peekBadge = v; return v }()
             v.isHidden = false
-            v.badge = badge
+            v.state = badgeState
             v.frame = CGRect(x: bounds.width - m.peekBadgeTrailingInset, y: m.peekBadgeY, width: m.peekBadgeSize, height: m.peekBadgeSize)
             titleRight = v.frame.minX - 1
         } else {
@@ -405,7 +407,8 @@ extension NSRect {
 /// source row's right end. The plate is `TabCellChildBackground`, corner ≈ 6.
 @MainActor
 final class PeekBadgeView: NSView {
-    var badge: SidebarPeekBadge? { didSet { if badge != oldValue { needsDisplay = true } } }
+    /// Observed while drawing: a new Peek URL or favicon redraws only this view.
+    weak var state: SidebarPeekBadgeState? { didSet { if state !== oldValue { needsDisplay = true } } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -419,7 +422,8 @@ final class PeekBadgeView: NSView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let badge else { return }
+        guard let badge = tracked({ state?.badge }, invalidate: { [weak self] in self?.needsDisplay = true }) else { return }
+        SidebarDiagnostics.peekBadgeDraws += 1
         let r = SpaceListMetrics.peekBadgeCornerRadius
         SidebarRole.peekBadgePlate.nsColor.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: r, yRadius: r).fill()

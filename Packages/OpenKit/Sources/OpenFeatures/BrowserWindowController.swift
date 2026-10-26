@@ -97,7 +97,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         for item in peekController.stack { badges[item.sourceTabID] = SidebarPeekBadge(url: item.host?.currentURL ?? item.url, faviconPNG: item.faviconPNG) }
         if context.peekBadges != badges { context.peekBadges = badges }
         let shown = peekController.isShown ? peekController.stack.last.map { item in
-            SidebarShownPeek(sourceNodeID: item.sourceNodeID, url: item.host?.currentURL ?? item.url, canGoBack: item.host?.canGoBack ?? false,
+            SidebarShownPeek(sourceNodeID: peekController.sourceNodeID(of: item), url: item.host?.currentURL ?? item.url, canGoBack: item.host?.canGoBack ?? false,
                              canGoForward: item.host?.canGoForward ?? false, isLoading: item.host?.isLoading ?? false)
         } : nil
         if context.shownPeek != shown { context.shownPeek = shown }
@@ -165,9 +165,6 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
-        case .separateSplit(let id):
-            let focused = model.node(id: id)?.split?.focusedPaneID; model.unsplit(splitID: id)
-            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: focused) }
         case .goBack: if peekController.isShown { peekController.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekController.isShown { peekController.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }

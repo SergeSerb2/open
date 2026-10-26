@@ -47,7 +47,7 @@ final class ToolbarView: NSView {
         // when they are disabled (F0090: all four `#444452`–`#464654`; F0108 without the dim: disabled tone).
         for b in [back, forward, reload] {
             b.glyphTint = { [unowned context] enabled in
-                (enabled || context.shownPeek != nil ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
+                (enabled || context.peekSourceNodeID != nil ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
             }
         }
         toggle.glyphTint = { _ in SidebarRole.toolbarGlyph.nsColor }

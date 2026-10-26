@@ -335,6 +335,7 @@ enum FeatureChecks {
         let image = OffscreenRenderer().render(c.contentView, scale: 1)
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
         try await visualFinish { check($0, $1) }
+        try await reviewRound1 { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }
@@ -416,5 +417,95 @@ enum FeatureChecks {
         }
         check(n.container.slots.count == 4 && overlaps == 0 && outside == 0, "VF10 four-pane bars at 1280 pt: no overlapping or clipped controls (\(overlaps) overlaps, \(outside) outside)")
         check(truncated == 3, "VF10 narrow unfocused bars truncate their hosts; the focused bar drops the host group (\(truncated) truncated)")
+    }
+
+    /// PR #50 review round 1: a collapsing split hands its selection to the surviving
+    /// tab (model level, with undo); a Peek follows its source tab into and out of a
+    /// split; a late page color reaches the pane bar.
+    static func reviewRound1(_ check: (Bool, String) -> Void) async throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
+        let window = model.windows[0], space = model.spaces[0]
+        let undo = UndoManager(); undo.groupsByEvent = false
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults)
+        defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
+        // Direct model edits schedule the controller's refresh on the main queue, which this
+        // task holds; refresh in place, as the other scenarios do.
+        func settle() async throws {
+            c.refresh(); try await FeatureCLI.waitForLoads(factory, root: c.contentView); OffscreenRenderer.settle(c.contentView, runLoop: 0.01)
+        }
+        func runMenu(_ split: Split, pane: Tab, item title: String) {
+            guard let menu = c.sidebar.contextMenu(nodeID: split.id), let paneTitle = menu.items.first(where: { $0.submenu?.item(withTitle: "Separate from Split View") != nil && $0.title.hasPrefix(String(pane.displayTitle.prefix(30))) }),
+                  let sub = paneTitle.submenu else { return }
+            sub.performActionForItem(at: sub.indexOfItem(withTitle: title))
+        }
+        func shows(_ tab: Tab) -> Bool {
+            c.context.currentTab?.id == tab.id && c.container.slots.count == 1 && c.container.slots[0].tabID == tab.id && c.container.slots[0].paneChrome == nil
+        }
+        let pinned = space.pinned.compactMap(\.tab)
+        for (label, title) in [("Separate from Split View", "Separate from Split View"), ("Archive Item", "Archive Item")] {
+            let a = model.newTab(in: space.id, url: URL(string: "https://pane-a.example.com/")!, title: "Pane A \(label)")
+            let b = model.newTab(in: space.id, url: URL(string: "https://pane-b.example.com/")!, title: "Pane B \(label)")
+            a.live.sleepPhase = .live; b.live.sleepPhase = .live
+            let split = model.makeSplit(tabIDs: [a.id, b.id])!
+            model.selectNode(windowID: window.id, spaceID: space.id, nodeID: split.id)
+            try await settle()
+            check(c.container.slots.count == 2, "RR1 \(label): a selected two-pane split shows two panes")
+            model.undoManager = undo
+            runMenu(split, pane: b, item: title); try await settle()
+            check(model.node(id: split.id) == nil && window.selectedNodeBySpace[space.id] == a.id && shows(a),
+                  "RR1 \(label) on a two-pane split selects the surviving tab and the container shows it")
+            undo.undo(); try await settle()
+            check(model.node(id: split.id)?.split?.panes.count == 2 && window.selectedNodeBySpace[space.id] == split.id && c.container.slots.count == 2,
+                  "RR1 \(label) undo restores the split and its selection")
+            undo.redo(); try await settle()
+            check(window.selectedNodeBySpace[space.id] == a.id && shows(a), "RR1 \(label) redo selects the surviving tab again")
+            model.undoManager = nil
+        }
+        // Separate All Tabs through the split-row menu: the focused pane stays selected.
+        let p = model.newTab(in: space.id, url: URL(string: "https://all-p.example.com/")!, title: "All P")
+        let q = model.newTab(in: space.id, url: URL(string: "https://all-q.example.com/")!, title: "All Q")
+        p.live.sleepPhase = .live; q.live.sleepPhase = .live
+        let all = model.makeSplit(tabIDs: [p.id, q.id])!
+        model.focusSplitPane(splitID: all.id, tabID: q.id)
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: all.id); try await settle()
+        // A Peek from the unfocused pane P.
+        c.peekController.open(url: URL(string: "https://peek-from-pane.example.org/")!, sourceTabID: p.id); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == all.id, "RR2 a Peek from a split pane belongs to the split row")
+        if let menu = c.sidebar.contextMenu(nodeID: all.id) { menu.performActionForItem(at: menu.indexOfItem(withTitle: "Separate All Tabs")) }
+        try await settle()
+        check(model.node(id: all.id) == nil && window.selectedNodeBySpace[space.id] == q.id && shows(q) && !c.peekController.isShown && c.peekController.isOpen,
+              "RR1 Separate All Tabs selects the focused pane; the Peek of pane P waits")
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: p.id, space: space.id)); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == p.id, "RR2 after Separate All Tabs, selecting the source tab shows its Peek again")
+        let esc = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: c.window!.windowNumber, context: nil,
+                                   characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
+        check(c.handleKeyDown(esc), "RR2 Escape reaches the Peek")
+        try await settle()
+        check(!c.peekController.isOpen && c.context.peekBadges.isEmpty, "RR2 Escape dismisses the Peek and its badge")
+        // A Peek from a tab, then a split made from that tab.
+        let t = pinned[2]; t.live.sleepPhase = .live
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: t.id); try await settle()
+        c.peekController.open(url: URL(string: "https://peek-from-tab.example.org/")!, sourceTabID: t.id); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == t.id, "RR2 a Peek from a tab shows on that tab")
+        let partner = model.newTab(in: space.id, url: URL(string: "https://partner.example.com/")!, title: "Partner"); partner.live.sleepPhase = .live
+        let made = model.makeSplit(tabIDs: [t.id, partner.id])!; try await settle()
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: made.id); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == made.id && c.context.peekBadges[t.id] != nil,
+              "RR2 after a split is made from the source tab, selecting the split shows the Peek again")
+        c.peekController.dismissAll(); try await settle()
+
+        // A page color that arrives after the URL callback reaches the pane bar.
+        guard let host = c.container.host(for: partner.id) as? FakeWebContentHost,
+              let slot = c.container.slots.first(where: { $0.tabID == partner.id }) else { check(false, "RR3 split pane host exists"); return }
+        let late = NSColor(srgbRed: 0.20, green: 0.40, blue: 0.80, alpha: 1)
+        FakeWebContentHost.pageColors["late-color.example.net"] = late
+        defer { FakeWebContentHost.pageColors["late-color.example.net"] = nil }
+        // No controller refresh here: only the host's callbacks may update the bar.
+        func settleCallbacksOnly() async throws { try await FeatureCLI.waitForLoads(factory, root: c.contentView); OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
+        host.load(URL(string: "https://late-color.example.net/")!); try await settleCallbacksOnly()
+        check(slot.paneChrome?.layer?.backgroundColor == late.cgColor, "RR3 a page color reported after the URL callback updates the pane bar")
+        let later = NSColor(srgbRed: 0.95, green: 0.85, blue: 0.20, alpha: 1)
+        host.simulatePageBackground(later); try await settleCallbacksOnly()
+        check(slot.paneChrome?.layer?.backgroundColor == later.cgColor, "RR3 a page that changes its color later updates the pane bar")
     }
 }

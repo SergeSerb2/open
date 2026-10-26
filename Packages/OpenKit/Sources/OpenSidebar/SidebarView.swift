@@ -60,7 +60,7 @@ public final class SidebarView: NSView {
             _ = self?.context.favoritesProfile?.favorites.count
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
-        loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.shownPeek != nil }) { [weak self] in self?.syncPeekDim() })
+        loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.peekSourceNodeID }) { [weak self] in self?.syncPeekDim() })
         syncTheme()
         syncPeekDim()
     }
@@ -108,7 +108,7 @@ public final class SidebarView: NSView {
     /// Favorites, or the Space list (F0090 vs F0101: toggle `#A2A3AB` → `#464654`,
     /// row titles unchanged). The window controller dims the background under the sidebar.
     private func syncPeekDim() {
-        let dimmed = context.shownPeek != nil
+        let dimmed = context.peekSourceNodeID != nil
         toolbar.alphaValue = dimmed ? SidebarRole.peekToolbarOpacity : 1
         bottomBar.alphaValue = dimmed ? SidebarRole.peekBottomBarOpacity : 1
     }
@@ -200,6 +200,9 @@ public protocol SidebarDelegate: AnyObject {
 public enum SidebarDiagnostics {
     /// `reloadData` calls on any tab list. One per page build; model changes add none.
     public internal(set) static var fullReloads = 0
+    /// Tab row layout passes and Peek badge draws (a badge change must not lay out every row).
+    public internal(set) static var tabRowLayouts = 0
+    public internal(set) static var peekBadgeDraws = 0
     /// Animate even in windows that are not on screen (frame captures of transitions).
     public static var forceAnimations = false
 }

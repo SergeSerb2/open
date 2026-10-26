@@ -113,7 +113,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             _ = self.context.selectedID(in: self.space.id)
             _ = self.context.isNewTabCommandBarOpen
             _ = self.context.forcedHover
-            _ = self.context.shownPeek?.sourceNodeID
+            _ = self.context.peekSourceNodeID
         }) { [weak self] in self?.updateRowStates(animated: true) })
         // Folder expansion and the pinned-collapsed flag. Reading the child lists
         // too re-arms the loop after structural changes, so new folders are tracked.
@@ -357,7 +357,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         rowView.allowsHighlight = highlight
         rowView.fillIndent = item.map { CGFloat(outline.level(forItem: $0)) * SpaceListMetrics.indentPerLevel } ?? 0
         rowView.isCurrent = item != nil && item === current
-        rowView.isPeekSource = context.shownPeek.map { itemID(of: item) == $0.sourceNodeID } ?? false
+        rowView.isPeekSource = context.peekSourceNodeID.map { itemID(of: item) == $0 } ?? false
         rowView.isHovered = item != nil && item === hover
         if let cell = rowView.view(atColumn: 0) as? DividerCellView { cell.showsClear = item === hover && hover === divider }
     }

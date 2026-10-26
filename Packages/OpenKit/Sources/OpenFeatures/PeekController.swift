@@ -39,7 +39,6 @@ public final class PeekController {
         public let id: UUID
         public var url: URL
         public let sourceTabID: ItemID
-        public let sourceNodeID: ItemID
         public let hostTabID: ItemID
         public var host: (any WebContentHost)?
         /// The Peek page's favicon, for the source row's badge.
@@ -85,8 +84,7 @@ public final class PeekController {
         dismissGeneration += 1; isDismissing = false; overlay.setOpacity(1, animated: false)
         if stack.count >= 5 { stack.last?.host?.load(url); return }
         let hostID = ItemID(), host = factory.makeHost(tabID: hostID, profileID: space.profileID, url: nil)
-        let nodeID: ItemID = if case .splitPane(let id)? = model.parent(of: sourceTabID) { id } else { sourceTabID }
-        let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, sourceNodeID: nodeID, hostTabID: hostID, host: host)
+        let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, host: host)
         stack.append(item)
         let itemID = item.id
         host.onURLChange = { [weak self, weak host] value in
@@ -145,9 +143,15 @@ public final class PeekController {
         let sourceIsVisible: Bool
         if case .favorites(let profileID)? = model.parent(of: item.sourceTabID) {
             sourceIsVisible = splitController.space?.profileID == profileID
-        } else { sourceIsVisible = splitController.selected?.id == item.sourceNodeID }
+        } else { sourceIsVisible = splitController.selected?.id == sourceNodeID(of: item) }
         guard sourceIsVisible else { overlay.isHidden = true; return }
         overlay.isHidden = false; if let host = item.host { overlay.showHost(host) }; overlay.needsLayout = true
+    }
+    /// The sidebar row a Peek belongs to, read now: the split that holds the source tab,
+    /// else the tab. A split made from the source tab, or dissolved, moves it.
+    public func sourceNodeID(of item: PeekItem) -> ItemID {
+        if case .splitPane(let splitID)? = model.parent(of: item.sourceTabID) { return splitID }
+        return item.sourceTabID
     }
     public func escape() {
         if isExpanding { expandingGeneration += 1; isExpanding = false; overlay.panel.layer?.removeAllAnimations(); overlay.buttons.forEach { $0.alphaValue = 1 }; overlay.needsLayout = true; refresh() }
