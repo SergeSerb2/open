@@ -583,20 +583,39 @@ func runCommandsDemo(args: [String]) async throws {
     }
     check(model.node(id: refusalSplit.id)?.split === refusalSplit, "refusals preserve the original split")
 
-    step("Space editor: late relocation failure rolls back the transaction")
+    let unknownProfileBefore = try snapshotBytes(), unknownProfileDepth = undoDepth()
+    events.removeAll()
+    let unknownProfileResult = model.createSpace(title: "Unknown Profile", profileID: ProfileID(), icon: nil, theme: SpaceTheme(), at: nil, moving: [movingTab.id])
+    let unknownProfileAfter = try snapshotBytes()
+    check(unknownProfileResult == nil && unknownProfileAfter == unknownProfileBefore && events.isEmpty && undoDepth() == unknownProfileDepth,
+          "unknown Profile refuses create without snapshot, event, or undo changes")
+
+    #if DEBUG
+    step("Space editor: DEBUG injection exercises the transaction rollback code")
     let rollbackDepth = undoDepth()
     let beforeRollback = try snapshotBytes()
     let revisionBeforeRollback = model.treeRevision
     events.removeAll()
-    model.diagnosticSpaceCreationFailureAtMove = 1
+    model.diagnosticRollbackFailureAtMove = 1
     let rolledBack = model.createSpace(title: "Rolled back", profileID: pid, icon: nil, theme: SpaceTheme(),
                                       at: nil, moving: [movingTab.id, movingFolder.id])
-    model.diagnosticSpaceCreationFailureAtMove = nil
+    model.diagnosticRollbackFailureAtMove = nil
     let afterRollback = try snapshotBytes()
     check(rolledBack == nil && afterRollback == beforeRollback && events.isEmpty && model.treeRevision == revisionBeforeRollback,
-          "forced failure after the first move restores all snapshot bytes, discards events and preserves tree revision")
+          "rollback-code injection after the first move restores snapshot bytes, events and revision")
     check(undoDepth() == rollbackDepth, "late relocation failure registers no undo")
     check(indexMatchesRebuild(model), "rollback restores the full index")
+    #else
+    print("  NOTE rollback-code injection runs only in the DEBUG openkit harness")
+    #endif
+
+    var finiteStyle = SpaceStyle(keyColor: RGBAColor(red: .nan, green: .infinity, blue: -.infinity), noiseFactor: .nan, intensityFactor: .infinity)
+    check(finiteStyle.keyColor == RGBAColor(red: 0, green: 0, blue: 0) && finiteStyle.noiseFactor == 0 && finiteStyle.intensityFactor == 0,
+          "SpaceStyle initializer sanitizes non-finite color and factors")
+    finiteStyle.keyColor.red = .nan; finiteStyle.keyColor.green = .infinity
+    finiteStyle.noiseFactor = -.infinity; finiteStyle.intensityFactor = .nan
+    check(finiteStyle.keyColor.red == 0 && finiteStyle.keyColor.green == 0 && finiteStyle.noiseFactor == 0 && finiteStyle.intensityFactor == 0,
+          "SpaceStyle writes sanitize non-finite components and factors")
 
     step("Space editor: previews, commit and icons")
     let originalTheme = space.theme
@@ -637,6 +656,9 @@ func runCommandsDemo(args: [String]) async throws {
     undo.undo(); check(space.icon == originalIcon, "Space icon is one undo step")
     undo.redo()
     let oldName = space.title
+    model.renameSpace(id: sid, title: "  Work \n")
+    check(space.title == "Work", "rename stores the trimmed title")
+    undo.undo(); check(space.title == oldName, "trimmed rename undo restores the previous title")
     model.renameSpace(id: sid, title: " \n ")
     check(space.title == nil, "whitespace-only rename stores an untitled Space")
     undo.undo(); check(space.title == oldName, "rename undo restores the exact old title")

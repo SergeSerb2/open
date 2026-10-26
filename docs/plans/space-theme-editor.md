@@ -780,8 +780,8 @@ occurs only once, and satisfies the placement rules in `docs/model.md`
 (including no move into its own descendant). An explicit insertion index
 must be in `0...spaces.count`. On any refusal return nil: no Space, moves,
 undo, TreeChange, or snapshot dirty state. After validation, create and move
-the nodes as one undo step. An empty moving list with a valid index never
-fails.
+the nodes as one undo step. An empty moving list with a valid index and a
+live Profile ID never fails.
 
 Lead review amendment (2026-10-26, Step 1 round 1): refuse a moving list
 that includes both an ancestor and its descendant. If any relocation fails
@@ -791,9 +791,16 @@ none. The real CLI exercises a forced late failure and checks snapshot
 bytes, undo depth, and the index. Success emits one `.move` per node, no
 source-parent reload, and has byte-identical undo and redo snapshots.
 
-The existing nonoptional `createSpace(title:profileID:icon:theme:)` forwards
-with `at: nil, moving: []`; it may force-unwrap with a comment explaining
-that this path cannot fail. Its callers do not change. Step 7's
+Lead review decision (2026-10-26 09:36 America/Vancouver): unknown Profile
+IDs refuse the failable overload before any mutation, undo, event, or save.
+The existing nonoptional `createSpace(title:profileID:icon:theme:)` requires
+a live Profile ID, delegates with `at: nil, moving: []`, and treats nil as
+a programmer error with a precondition naming the bad ID. Data/import/
+automation/restored-state callers use the failable overload. The caller
+audit changed the Settings selector, profiles CLI, and automation boundary;
+the remaining callers obtain IDs from live model objects or synthetic
+fixtures. Rollback fault injection is DEBUG-only, absent in production.
+Step 7's
 `moveToNewSpace` and `turnFolderIntoSpace` likewise return false or nil on
 refusal and change nothing.
 
