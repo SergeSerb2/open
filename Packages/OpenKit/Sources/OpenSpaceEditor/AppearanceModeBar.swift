@@ -17,11 +17,12 @@ public class ThemeEditorButton: NSView {
     private var pressed = false
     private let symbol: String
     private let pointSize: CGFloat
+    private let symbolWeight: NSFont.Weight
     private let glyphOffset: CGSize
     private let glyphColor: DesignColor?
 
-    public init(symbol: String, label: String, pointSize: CGFloat = 13, glyphOffset: CGSize = .zero, glyphColor: DesignColor? = nil) {
-        self.symbol = symbol; self.pointSize = pointSize; self.glyphOffset = glyphOffset; self.glyphColor = glyphColor
+    public init(symbol: String, label: String, pointSize: CGFloat = 13, weight: NSFont.Weight = .medium, glyphOffset: CGSize = .zero, glyphColor: DesignColor? = nil) {
+        self.symbol = symbol; self.pointSize = pointSize; self.symbolWeight = weight; self.glyphOffset = glyphOffset; self.glyphColor = glyphColor
         super.init(frame: .zero)
         wantsLayer = true; layer?.addSublayer(plate)
         plate.cornerRadius = 8
@@ -88,10 +89,10 @@ public class ThemeEditorButton: NSView {
         plate.borderColor = ThemeEditorColors.glyph.cgColor(appearance)
         CATransaction.commit()
         let size = pointSize + (appearance == .light && symbol == "moon.stars.fill" ? 1 : 0)
-        glyphView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: .medium))
+        glyphView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: symbolWeight))
         glyphView.contentTintColor = (glyphColor ?? (selected ? ThemeEditorColors.glyphSelected : ThemeEditorColors.glyph)).resolved(appearance).nsColor
         glyphView.needsDisplay = true
-        glyphView.alphaValue = enabled ? 1 : 0.35
+        glyphView.alphaValue = enabled ? 1 : ThemeEditorColors.disabledGlyphAlpha
     }
 }
 

@@ -204,6 +204,8 @@ enum EditorChecks {
         scene.click(scene.view.modes.buttons[1])
         check(scene.panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua,
               "E5 forced Light changes the editor while the system is Dark")
+        check(scene.view.modes.buttons.allSatisfy { abs(($0.glyphView.contentTintColor?.alphaComponent ?? 0) - 0.5) < 0.001 },
+              "E1 light mode glyphs use the shared black 0.50 token")
         scene.click(scene.view.modes.buttons[2])
         check(scene.panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua,
               "E5 forced Dark changes the editor live")
@@ -215,6 +217,8 @@ enum EditorChecks {
         let empty = try EditorScene(style: nil)
         check(abs(empty.view.pad.emptyLabel.frame.midY - 170) < 0.01 && !empty.view.remove.isHidden && !empty.view.add.isHidden,
               "E1 empty label is vertically centered and Add/Remove stay visible")
+        check(empty.view.remove.glyphView.alphaValue == 0.32 && empty.view.add.glyphView.alphaValue == 0.32,
+              "E1 disabled Remove/Add use the captured 0.32 glyph factor")
         empty.controller.close()
     }
     static func controls() throws {
