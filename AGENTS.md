@@ -21,6 +21,8 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 5. Read Arc user data only from `~/Library/Application Support/Arc` and only read-only. Never commit the user's personal data (URLs, titles, profile files). Commit schemas and redacted examples only.
 6. Do not write unit tests. Verify work end to end: build the real app, run it, and exercise the real flow.
 7. Cite evidence in every reverse-engineering finding: the rea command, symbol, string, or file that proves it. Mark guesses as guesses.
+8. Do not spawn subagents or delegate tasks yourself. The lead agent controls how many agents run at once.
+9. Start long-running jobs (engine builds, syncs) in their own session (for example `python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' <cmd>`), so an app restart does not kill them.
 
 ## Reverse-engineering tools
 
