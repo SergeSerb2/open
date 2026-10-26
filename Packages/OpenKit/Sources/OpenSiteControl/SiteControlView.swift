@@ -10,6 +10,8 @@ public final class SiteControlView: NSView {
     public var onKey: ((NSEvent) -> Bool)?
     public var anchorFrame: CGRect = .zero
     private let panelShadow = CALayer()
+    public var isActive = false
+    public var presentationLayers: [CALayer] { [panel.layer,panelShadow].compactMap { $0 } }
     public var panelFrame: CGRect { panel.frame }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
@@ -23,7 +25,7 @@ public final class SiteControlView: NSView {
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override func hitTest(_ point: NSPoint) -> NSView? {
-        guard !isHidden else { return nil }
+        guard isActive && !isHidden else { return nil }
         let local = convert(point, from: superview)
         guard bounds.contains(local) else { return nil }
         // Selection only: dismissal is an input side effect, never hit testing.
@@ -32,6 +34,8 @@ public final class SiteControlView: NSView {
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        if let surface = panel.layer { surface.anchorPoint = .zero; surface.position = panel.frame.origin }
+        panelShadow.anchorPoint = .zero
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = SiteControlShape.path(in: panel.bounds, radius: SiteControlMetrics.cornerRadius)
         // AppKit flips the backing layer. Positive local y is down in this overlay.
@@ -41,14 +45,17 @@ public final class SiteControlView: NSView {
     public override func keyDown(with event: NSEvent) {
         if onKey?(event) != true { super.keyDown(with: event) }
     }
-    public override func mouseDown(with event: NSEvent) {
+    public override func mouseDown(with event: NSEvent) { forwardOutside(event) }
+    public override func rightMouseDown(with event: NSEvent) { forwardOutside(event) }
+    public override func otherMouseDown(with event: NSEvent) { forwardOutside(event) }
+    private func forwardOutside(_ event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         if anchorFrame.contains(point) { onAnchor?(); return }
         guard !panel.frame.contains(point), let window else { return }
         onOutside?()
         // Dismiss synchronously, then let NSWindow dispatch the original click to
         // the now-uncovered real target. Anchor toggles are deliberately consumed.
-        if isHidden { window.sendEvent(event) }
+        if !isActive { window.sendEvent(event) }
     }
 }
 
@@ -61,6 +68,7 @@ public final class SiteControlPanelView: NSView {
     public var onSecurity: (() -> Void)?
     public override var isFlipped: Bool { true }
     public var preferredHeight: CGFloat { SiteControlMetrics.headerHeight + SiteControlMetrics.actionRowHeight + SiteControlMetrics.footerHeight }
+    private let surfaceMask = CAShapeLayer()
     private let hostLabel = NSTextField(labelWithString: "")
     private let favicon = SiteControlFaviconView()
     private let security = SiteControlButton(id: "security", label: "Connection", symbol: "lock.fill", pointSize: SiteControlMetrics.securityGlyph)
@@ -68,10 +76,10 @@ public final class SiteControlPanelView: NSView {
 
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
-        layer?.cornerRadius = SiteControlMetrics.cornerRadius; layer?.cornerCurve = .continuous
+        layer?.cornerRadius = 0; layer?.mask = surfaceMask
         setAccessibilityElement(true); setAccessibilityRole(.popover); setAccessibilityTitle("Site Control Center")
         hostLabel.font = Typography.siteControlTitle.font
-        hostLabel.setAccessibilityRole(.staticText); favicon.setAccessibilityElement(false); favicon.setAccessibilityHidden(true)
+        hostLabel.setAccessibilityElement(false); hostLabel.setAccessibilityHidden(true); favicon.setAccessibilityElement(false); favicon.setAccessibilityHidden(true)
         hostLabel.lineBreakMode = .byTruncatingTail; hostLabel.maximumNumberOfLines = 1
         addSubview(hostLabel); addSubview(favicon)
         let actions = [("share", "Share", "square.and.arrow.up"), ("copyURL", "Copy URL", "link"),
@@ -93,7 +101,7 @@ public final class SiteControlPanelView: NSView {
         more.setAccessibilityRole(.menuButton); more.isEnabled = false
         addSubview(security); addSubview(more)
         controls += [security, more]
-        setAccessibilityChildren([hostLabel] + controls)
+        setAccessibilityChildren(controls.filter { !$0.isHidden })
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
@@ -114,7 +122,9 @@ public final class SiteControlPanelView: NSView {
             let defaultEnabled = !button.controlID.hasPrefix("action.capture")
             button.isEnabled = button.controlID == "action.newBoost" ? snapshot.canCreateBoost : snapshot.commandsEnabled[commands[button.controlID] ?? ""] ?? defaultEnabled
         }
-        let secure = snapshot.context.security == .secure || (snapshot.context.security == .unknown && snapshot.context.url.scheme == "https")
+        let scheme = snapshot.context.url.scheme?.lowercased()
+        security.isHidden = scheme != "https" && scheme != "http"
+        let secure = scheme == "https"
         security.title = secure ? "Secure" : "Insecure"
         security.symbol = secure ? "lock.fill" : "lock.open.fill"
         security.tint = secure ? CommandBarColors.lockSecure : CommandBarColors.lockInsecure
@@ -122,10 +132,12 @@ public final class SiteControlPanelView: NSView {
         let actionable = snapshot.capabilities.contains(.certificateViewer)
         security.isEnabled = actionable; security.statusOnly = !actionable
         security.setAccessibilityRole(actionable ? .button : .staticText)
+        setAccessibilityChildren(controls.filter { !$0.isHidden })
         needsLayout = true; needsDisplay = true
     }
     public override func layout() {
         super.layout()
+        surfaceMask.frame = bounds; surfaceMask.path = SiteControlShape.path(in: bounds,radius: SiteControlMetrics.cornerRadius)
         favicon.frame = SiteControlMetrics.faviconFrame
         hostLabel.frame = CGRect(x: SiteControlMetrics.titleX, y: SiteControlMetrics.titleBaseline - hostLabel.font!.ascender,
                                  width: bounds.width - SiteControlMetrics.titleX - SiteControlMetrics.inset, height: hostLabel.intrinsicContentSize.height)
@@ -170,6 +182,7 @@ public final class SiteControlButton: NSButton {
     private let weight: NSFont.Weight
     private var trackingPress = false
     private var hovered = false
+    public var showsKeyboardFocus = false
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { isEnabled }
     public init(id: String, label: String, symbol: String, pointSize: CGFloat, weight: NSFont.Weight = .regular) {
@@ -202,6 +215,7 @@ public final class SiteControlButton: NSButton {
     public override func mouseDown(with event: NSEvent) {
         guard isEnabled else { return }
         TooltipController.shared.cancel(for: self)
+        showsKeyboardFocus = false
         trackingPress = true; isHighlighted = true; needsDisplay = true
     }
     public override func mouseUp(with event: NSEvent) {
@@ -235,7 +249,7 @@ public final class SiteControlButton: NSButton {
                 (title as NSString).draw(at: CGPoint(x: rect.maxX + SiteControlMetrics.securityPadding, y: (bounds.height - size.height) / 2), withAttributes: attrs)
             }
         }
-        if window?.firstResponder === self {
+        if showsKeyboardFocus && window?.firstResponder === self {
             Core.focusRing.nsColor.setStroke()
             let ring = NSBezierPath(roundedRect: bounds.insetBy(dx: SiteControlMetrics.focusWidth / 2, dy: SiteControlMetrics.focusWidth / 2), xRadius: SiteControlMetrics.actionRadius, yRadius: SiteControlMetrics.actionRadius)
             ring.lineWidth = SiteControlMetrics.focusWidth; ring.stroke()

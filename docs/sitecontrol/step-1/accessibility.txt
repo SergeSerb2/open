@@ -1,7 +1,5 @@
 AXPopover label=Site Control Center
   description=news.example.com
-  AXStaticText label=news.example.com
-    AXStaticText label=news.example.com
   AXButton label=Share
   AXButton label=Copy URL
   AXButton label=New Boost

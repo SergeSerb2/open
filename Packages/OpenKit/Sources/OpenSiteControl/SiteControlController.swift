@@ -17,6 +17,7 @@ public final class SiteControlController: NSObject {
     private let actions: SiteControlActions
     private weak var previousResponder: NSResponder?
     private var unavailableTabs: Set<ItemID> = []
+    private var presentationGeneration = 0
     private var changeObserver: SiteControlObservationToken?
 
     public init(source: SiteControlDataSource, actions: SiteControlActions) {
@@ -47,9 +48,11 @@ public final class SiteControlController: NSObject {
         guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if !isPresented { previousResponder = view.window?.firstResponder }
         self.anchor = anchor; self.tabID = tabID; self.mode = mode
-        isPresented = true; view.isHidden = false
+        presentationGeneration += 1
+        isPresented = true; view.isHidden = false; view.isActive = true
         view.panel.apply(snapshot); layout()
         guard isPresented else { return }
+        unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
         animateOpen(animated)
     }
@@ -83,11 +86,22 @@ public final class SiteControlController: NSObject {
     }
     public func dismiss(reason: SiteControlDismissReason, animated: Bool = true) {
         guard isPresented else { return }
-        isPresented = false
+        isPresented = false; view.isActive = false
+        presentationGeneration += 1; let generation = presentationGeneration
         view.window?.makeFirstResponder(previousResponder)
-        // The view is removed from hit testing immediately. No monitor or timer survives.
-        view.isHidden = true
-        view.panel.layer?.removeAllAnimations()
+        let finish = { [weak self] in
+            guard let self, self.presentationGeneration == generation, !self.isPresented else { return }
+            self.view.isHidden = true; self.view.presentationLayers.forEach { $0.removeAllAnimations() }
+        }
+        if animated {
+            CATransaction.begin(); CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } }
+            for layer in view.presentationLayers {
+                layer.removeAllAnimations(); let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = (layer.presentation() ?? layer).opacity; fade.toValue = 0
+                fade.duration = Motion.popoverClose; layer.opacity = 0; layer.add(fade,forKey: "close.opacity")
+            }
+            CATransaction.commit()
+        } else { finish() }
         onDismiss?(reason)
     }
     @discardableResult public func handleKey(_ event: NSEvent) -> Bool {
@@ -104,12 +118,15 @@ public final class SiteControlController: NSObject {
         if let command = commands[id] { actions.perform(command: command, tabID: tabID, anchor: rect) }
     }
     private func animateOpen(_ animated: Bool) {
-        guard animated, let layer = view.panel.layer else { return }
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
-        fade.duration = Motion.popoverOpen; fade.timingFunction = Motion.easeOut; layer.add(fade, forKey: "open.opacity")
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 0.66; scale.toValue = 1
-            scale.duration = Motion.popoverOpen; scale.timingFunction = Motion.easeOut; layer.add(scale, forKey: "open.scale")
+        for layer in view.presentationLayers {
+            layer.removeAllAnimations(); layer.opacity = 1; layer.transform = CATransform3DIdentity
+            guard animated else { continue }
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
+            fade.duration = Motion.popoverOpen; fade.timingFunction = Motion.easeOut; layer.add(fade, forKey: "open.opacity")
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                let scale = CABasicAnimation(keyPath: "transform.scale"); scale.fromValue = 0.66; scale.toValue = 1
+                scale.duration = Motion.popoverOpen; scale.timingFunction = Motion.easeOut; layer.add(scale, forKey: "open.scale")
+            }
         }
     }
 }

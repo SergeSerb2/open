@@ -19,6 +19,11 @@ enum Flows {
         c.toggle(anchor: .urlField, tabID: s.tabID, animated: false)
         stage.click(CGPoint(x: 800, y: 600))
         checks.append(Check(name: "F2 outside click closes and reaches page", pass: !c.isPresented && reason == .outside && stage.root.hits == 1))
+        for button in [NSEvent.EventType.rightMouseDown,.otherMouseDown] {
+            c.present(anchor: .urlField,tabID: s.tabID,animated: false)
+            stage.click(CGPoint(x: 800,y: 600),button: button)
+            checks.append(Check(name: "outside \(button) dismisses and forwards to the page",pass: !c.isPresented && (button == .rightMouseDown ? stage.root.rightHits == 1 : stage.root.otherHits == 1)))
+        }
         let target = SiteControlButton(id: "harness.page-target", label: "Page action", symbol: "link", pointSize: 18)
         target.frame = CGRect(x: 780, y: 580, width: 44, height: 36)
         var forwardedActions = 0; target.invoke = { forwardedActions += 1 }
@@ -29,7 +34,7 @@ enum Flows {
         target.removeFromSuperview()
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         let dump = accessibilityDump(c.view.panel)
-        let pairs = [("AXPopover", "Site Control Center"), ("AXStaticText", "news.example.com"),
+        let pairs = [("AXPopover", "Site Control Center"),
                      ("AXButton", "Share"), ("AXButton", "Copy URL"), ("AXButton", "New Boost"),
                      ("AXButton", "Capture a portion of this page"), ("AXButton", "Capture the full page"),
                      ("AXButton", "Capture in Portrait Mode"), ("AXStaticText", "Connection: Secure"), ("AXMenuButton", "More")]
@@ -67,6 +72,43 @@ enum Flows {
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         checks.append(Check(name: "F22 missing snapshot stays closed and logs once", pass: !c.isPresented && errors == 1 && s.calls.isEmpty))
+        let recovered = Stage(open: false), geometry = recovered.controller.geometry
+        var episodes = 0; recovered.controller.onUnavailable = { _ in episodes += 1 }
+        recovered.controller.geometry = nil
+        recovered.controller.present(anchor: .urlField,tabID: recovered.source.tabID,animated: false)
+        recovered.controller.geometry = geometry
+        recovered.controller.present(anchor: .urlField,tabID: recovered.source.tabID,animated: false)
+        recovered.controller.geometry = nil; recovered.controller.layout(); recovered.controller.layout()
+        checks.append(Check(name: "successful presentation resets once-per-failure-episode reporting",pass: episodes == 2))
+        let animated = Stage()
+        animated.controller.dismiss(reason: .escape,animated: true)
+        checks.append(Check(name: "close fades both layers and disables hit testing immediately",pass: !animated.controller.view.isActive && !animated.controller.view.isHidden && animated.controller.view.presentationLayers.allSatisfy { $0.animation(forKey: "close.opacity")?.duration == 0.12 }))
+        animated.controller.present(anchor: .urlField,tabID: animated.source.tabID,animated: true)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.22))
+        checks.append(Check(name: "old close completion cannot hide a new presentation",pass: animated.controller.isPresented && !animated.controller.view.isHidden))
+        checks.append(Check(name: "host is exposed once in native AX",pass: dump.components(separatedBy: "news.example.com").count == 2))
+        for scheme in ["https","http","chrome","open","chrome-extension","about","data","file"] {
+            let securityStage = Stage()
+            securityStage.source.value?.context.url = URL(string: scheme+"://example.test/")!
+            securityStage.source.changed()
+            let security = securityStage.controller.view.panel.controls.first { $0.controlID == "security" }!
+            checks.append(Check(name: "security label policy for \(scheme)",pass: security.isHidden == !["https","http"].contains(scheme) && (security.isHidden || security.title == (scheme == "https" ? "Secure" : "Insecure"))))
+        }
+        let corner = Stage()
+        for closing in [false,true] {
+            corner.controller.dismiss(reason: .action,animated: false)
+            corner.controller.present(anchor: .urlField,tabID: corner.source.tabID,animated: !closing)
+            if closing { corner.controller.dismiss(reason: .escape,animated: true) }
+            for _ in 0..<3 {
+                OffscreenRenderer.settle(corner.root); RunLoop.main.run(until: Date().addingTimeInterval(0.025))
+                let expected = corner.controller.view.panel.frame.origin
+                let fixed = corner.controller.view.presentationLayers.allSatisfy { layer in
+                    guard let presentation = layer.presentation() else { return false }
+                    return layer.anchorPoint == .zero && hypot(presentation.frame.minX-expected.x,presentation.frame.minY-expected.y)<0.1
+                }
+                checks.append(Check(name: "motion \(closing ? "close" : "open") top-left remains fixed",pass: fixed))
+            }
+        }
         return checks
     }
     /// Traverse the actual AppKit AX children (including cells), not NSView.subviews.

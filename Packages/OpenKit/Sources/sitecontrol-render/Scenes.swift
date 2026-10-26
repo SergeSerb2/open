@@ -5,12 +5,15 @@ import OpenSiteControl
 @MainActor
 final class Backdrop: NSView {
     var hits = 0
+    var rightHits = 0, otherHits = 0
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func mouseDown(with event: NSEvent) { hits += 1 }
+    override func rightMouseDown(with event: NSEvent) { rightHits += 1 }
+    override func otherMouseDown(with event: NSEvent) { otherHits += 1 }
     override func draw(_ dirtyRect: NSRect) {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         (dark ? NSColor(calibratedRed: 0.12, green: 0.13, blue: 0.20, alpha: 1) : NSColor(calibratedRed: 0.84, green: 0.85, blue: 0.95, alpha: 1)).setFill(); bounds.fill()
@@ -74,10 +77,11 @@ final class Stage {
         window.sendEvent(event)
     }
     private var eventNumber = 0
-    func click(_ p: CGPoint) {
+    func click(_ p: CGPoint, button: NSEvent.EventType = .leftMouseDown) {
         eventNumber += 1
         let wp = CGPoint(x: p.x, y: root.bounds.height - p.y)
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+        let up: NSEvent.EventType = button == .rightMouseDown ? .rightMouseUp : button == .otherMouseDown ? .otherMouseUp : .leftMouseUp
+        for type in [button, up] {
             let event = NSEvent.mouseEvent(with: type, location: wp, modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
                 eventNumber: eventNumber, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
