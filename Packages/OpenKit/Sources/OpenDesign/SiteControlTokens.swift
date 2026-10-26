@@ -75,15 +75,21 @@ public extension SiteControlMetrics {
 /// A continuous superellipse corner. Fill, inner edge and shadow share this path.
 public enum SiteControlShape {
     public static func path(in rect: CGRect, radius: CGFloat) -> CGPath {
-        let r = min(radius, rect.width / 2, rect.height / 2)
+        // Own G2 corner: zero curvature at the straight joins, fitted to the
+        // continuous-r16 targets (20 pt blend; 4.7 pt diagonal), all still guesses.
+        let r = min(radius, rect.width/2.56, rect.height/2.56), extent = 1.28*r
         let path = CGMutablePath()
-        let centers = [CGPoint(x: rect.maxX-r, y: rect.minY+r), CGPoint(x: rect.maxX-r, y: rect.maxY-r),
-                       CGPoint(x: rect.minX+r, y: rect.maxY-r), CGPoint(x: rect.minX+r, y: rect.minY+r)]
-        for (corner, center) in centers.enumerated() {
-            for step in 0...24 {
-                let angle = (-CGFloat.pi / 2) + CGFloat(corner) * .pi / 2 + CGFloat(step) * .pi / 48
-                let c = cos(angle), s = sin(angle)
-                let point = CGPoint(x: center.x + r * copysign(sqrt(abs(c)), c), y: center.y + r * copysign(sqrt(abs(s)), s))
+        let centers = [CGPoint(x: rect.maxX,y: rect.minY),CGPoint(x: rect.maxX,y: rect.maxY),CGPoint(x: rect.minX,y: rect.maxY),CGPoint(x: rect.minX,y: rect.minY)]
+        let controls = [CGPoint(x: -extent,y: 0),CGPoint(x: -0.75*r,y: 0),CGPoint(x: -0.436*r,y: 0),CGPoint(x: 0,y: 0.436*r),CGPoint(x: 0,y: 0.75*r),CGPoint(x: 0,y: extent)]
+        let coefficients: [CGFloat] = [1,5,10,10,5,1]
+        for (corner,center) in centers.enumerated() {
+            for step in 0...40 {
+                let t = CGFloat(step)/40
+                var p = CGPoint.zero
+                for i in 0...5 { let w = coefficients[i]*pow(1-t,CGFloat(5-i))*pow(t,CGFloat(i)); p.x += controls[i].x*w; p.y += controls[i].y*w }
+                let local = p
+                let angle = CGFloat(corner) * .pi / 2
+                let point = CGPoint(x: center.x+local.x*cos(angle)-local.y*sin(angle),y: center.y+local.x*sin(angle)+local.y*cos(angle))
                 if corner == 0 && step == 0 { path.move(to: point) } else { path.addLine(to: point) }
             }
         }

@@ -353,7 +353,7 @@ Height 44, separator above.
 
 | Part | Value |
 |---|---|
-| Security button | Left, x 10, height 28, padding 6. Glyph `lock.fill` 12 pt + "Secure" (12 pt Medium) in `CommandBarColors.lockSecure`, or `lock.open.fill` + "Insecure" in `CommandBarColors.lockInsecure` (`#F53714` / `#F25E6B`). Hover fill `SidebarColors.itemBackground`, radius 6. Click: E3 available → `showCertificateViewer` for the tab; before E3 → no action (button stays a status label, AX role static text). State before E3: `https` → Secure, anything else → Insecure (limitation: misses certificate errors and mixed content; named in E3). |
+| Security button | Left, x 10, height 28, padding 6. Glyph `lock.fill` 12 pt + "Secure" (12 pt Medium) in `CommandBarColors.lockSecure`, or `lock.open.fill` + "Insecure" in `CommandBarColors.lockInsecure` (`#F53714` / `#F25E6B`). Hover fill `SidebarColors.itemBackground`, radius 6. Click: E3 available → `showCertificateViewer` for the tab; before E3 → no action (button stays a status label, AX role static text). State before E3: `https` → Secure, `http` → Insecure, and every other scheme hides the label and its AX element (including `chrome`, `open`, `chrome-extension`, `about`, `data`, and `file`; lead decision 2026-10-26) (limitation: misses certificate errors and mixed content; named in E3). |
 | ⋯ button | Right, 28×28 at `W − 10 − 28`, `ellipsis` 13 pt Bold. Opens an `NSMenu` (native, `MenuColors` do not apply). |
 
 ⋯ menu (SC-16 order; titles are Arc's):
@@ -408,6 +408,7 @@ click that toggles the anchor button closes the panel and is consumed.
 - Boost row: group "<Name>, Enabled"; switch `.checkBox` "Enable <Name>"; edit `.button` "Edit
   <Name>".
 - Extension button: `.button` "<Title>", help "Pin"/"Unpin" when E4 exists.
+- The visible host label is hidden from AX; the panel description exposes the host once.
 - Security: `.button` "Connection: Secure" (static text before E3); ⋯ `.menuButton` "More".
 - Every action button has an AX label equal to its tooltip text without the keycaps.
 
@@ -1223,3 +1224,10 @@ banners (§3.5, §4.1, §4.3, §4.8), the interstitial body (§4.9), the Library
 - Q11 Cmd+E is decided in docs/plans/extensions-ui.md.
 - The engine needs E1–E6 go into the engine lead's queue after P2. The stopgaps in this plan ship first.
 - Captures #21 and #22 go into the user's single combined Arc capture session.
+
+### Round-2 lead clarifications (2026-10-26)
+
+Long Setting tile titles wrap to two lines (baselines 19 and 33), omitting the subtitle.
+Reload and global-off note baselines are row top + 20. Focus rings indicate keyboard focus only.
+Fill, edge, clip and shadow use one continuous r16 path. Geometry and palette remain guesses
+until capture session 2; F0137 supplies geometry only.

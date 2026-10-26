@@ -14,7 +14,7 @@ struct CLIError: Error, CustomStringConvertible { let description: String }
 enum CLI {
     static let motionNames = ["open", "close", "grow", "shrink"]
     static let motionTimes = [0.0, 0.04, 0.08, 0.26]
-    static let sccNames = ["scc-basic", "scc-insecure", "scc-adblock-excluded", "scc-adblock-unavailable", "scc-no-boosts", "scc-boosts-off", "scc-incognito", "scc-internal-page", "scc-many", "scc-pane-anchor", "scc-dark"]
+    static let sccNames = ["scc-basic", "scc-insecure", "scc-adblock-excluded", "scc-adblock-unavailable", "scc-no-boosts", "scc-boosts-off", "scc-incognito", "scc-internal-page", "scc-many", "scc-pane-anchor", "scc-dark", "scc-reload", "scc-hover", "scc-keyboard-focus", "scc-menu", "scc-picker", "scc-tooltip-on", "scc-tooltip-off", "scc-tooltip-unavailable", "scc-tooltip-private"]
     static let editorNames = ["editor-interstitial", "editor-simple", "editor-advanced-color", "editor-neutral-page", "editor-not-active", "editor-global-off", "editor-legacy", "editor-menu"]
     static let names = sccNames + editorNames
     static func value(_ args: [String], _ name: String) -> String? {
@@ -46,6 +46,7 @@ enum CLI {
                 autoreleasepool {
                 let stage = Stage(state: state, scale: scale, appearance: appearance)
                 let image = stage.render(scale: scale)
+                if state.hasPrefix("scc-tooltip") || state == "scc-menu" { checks.append(Flows.Check(name: state+" captures the native overlay",pass: stage.hasOverlay)) }
                 let panel = stage.controller.view.panelFrame
                 let a = pixel(image, x: Int((panel.minX + 160) * scale), y: Int((panel.minY + 8) * scale))
                 let b = pixel(image, x: Int(800 * scale), y: Int(600 * scale))
@@ -74,7 +75,7 @@ enum CLI {
                 let above = pixel(image, x: Int(panel.midX*scale), y: Int((panel.minY-10)*scale))
                 let below = pixel(image, x: Int(panel.midX*scale), y: Int((panel.maxY+10)*scale))
                 checks.append(Flows.Check(name: prefix + " shadow offset down", pass: luminance(below) < luminance(above)))
-                let origin = state == "scc-pane-anchor" ? CGPoint(x: 570, y: 51) : CGPoint(x: 241, y: 40)
+                let origin = state == "scc-pane-anchor" ? CGPoint(x: 599, y: 51) : CGPoint(x: 241, y: 40)
                 checks.append(Flows.Check(name: prefix + " anchor geometry", pass: panel.origin == origin))
                 checks.append(Flows.Check(name: "complete opaque capture \(state) \(appearance.rawValue) \(Int(scale))x", pass: fullyOpaque(image)))
                 checks.append(Flows.Check(name: "render \(state) \(appearance.rawValue) \(Int(scale))x (fill and glyph ink)", pass: image.width == Int(1000 * scale) && image.height == Int(760 * scale) && a != b && a.count == 4 && ink > 4))

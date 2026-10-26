@@ -1,13 +1,21 @@
-Panel first draw: main-thread CPU p95 4.735 ms; wall p95 5.803 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
-CPU samples ms: 4.296, 5.003, 4.579, 4.735, 4.436, 4.327, 4.345, 4.339, 4.328, 4.240, 4.354, 4.396, 4.524, 4.318, 4.196, 4.608, 4.324, 4.172, 4.432, 4.256, 4.324, 4.482, 4.450, 4.173, 4.141, 4.209, 4.201, 4.208, 4.189, 4.149
-Wall samples ms: 4.305, 5.635, 4.580, 5.158, 4.436, 4.344, 4.354, 4.347, 4.338, 4.249, 4.593, 5.903, 4.691, 4.318, 4.205, 4.813, 4.324, 4.172, 4.433, 4.265, 4.482, 4.482, 5.803, 4.173, 4.150, 4.265, 4.201, 4.208, 4.197, 4.158
-CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
+SiteControl: snapshot or geometry unavailable for tab A1BB03B1-CB4C-4649-A52F-40D61AA087A7
+SiteControl: snapshot or geometry unavailable for tab 27C11870-1D86-46C7-AB37-2D4F6ED6D0EE
+SiteControl: snapshot or geometry unavailable for tab 94548CC6-4A53-4BFD-ACC6-79316880E154
+SiteControl: snapshot or geometry unavailable for tab CEDC6DEB-1221-4923-A654-FFD44088ABEF
+SiteControl: snapshot or geometry unavailable for tab CEDC6DEB-1221-4923-A654-FFD44088ABEF
+SiteControl: snapshot or geometry unavailable for tab E57514BB-DEFD-478C-846C-3553D8490D39
+Panel first draw: main-thread CPU p95 7.147 ms; wall p95 7.284 ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x
+CPU samples ms: 6.924, 6.638, 6.931, 6.563, 6.961, 6.843, 7.147, 6.773, 6.773, 7.194, 6.912, 6.886, 6.919, 6.961, 6.840, 6.777, 7.122, 6.487, 6.603, 6.390, 6.897, 6.648, 6.762, 7.071, 6.795, 6.855, 6.762, 6.640, 6.525, 6.720
+Wall samples ms: 6.946, 6.664, 7.027, 6.612, 7.070, 6.948, 7.160, 6.892, 6.861, 7.407, 7.016, 6.924, 7.034, 7.041, 7.011, 6.980, 7.284, 6.501, 6.611, 6.426, 6.936, 6.712, 6.791, 7.175, 6.830, 6.871, 6.816, 6.662, 6.597, 6.778
+CPU parts mean (init/attach/present/display): 0.507, 0.097, 3.188, 3.019
 | Result | Check |
 |---|---|
 | PASS | F1 anchor presents |
 | PASS | F1 second anchor click closes and is consumed |
 | PASS | F2 Escape closes and restores focus |
 | PASS | F2 outside click closes and reaches page |
+| PASS | outside NSEventType(rawValue: 3) dismisses and forwards to the page |
+| PASS | outside NSEventType(rawValue: 25) dismisses and forwards to the page |
 | PASS | outside click reaches a real native target/action exactly once |
 | PASS | F21 native AX role and label pairs, host description, favicon hidden |
 | PASS | Step 2 More is enabled |
@@ -18,6 +26,24 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | F22 missing geometry stays closed and logs once |
 | PASS | F22 geometry lost while open closes and logs once |
 | PASS | F22 missing snapshot stays closed and logs once |
+| PASS | successful presentation resets once-per-failure-episode reporting |
+| PASS | close fades both layers and disables hit testing immediately |
+| PASS | old close completion cannot hide a new presentation |
+| PASS | host is exposed once in native AX |
+| PASS | security label policy for https |
+| PASS | security label policy for http |
+| PASS | security label policy for chrome |
+| PASS | security label policy for open |
+| PASS | security label policy for chrome-extension |
+| PASS | security label policy for about |
+| PASS | security label policy for data |
+| PASS | security label policy for file |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
 | PASS | F3 Tab visits the complete control order |
 | PASS | F3 Tab wraps |
 | PASS | F3 Shift+Tab reverses |
@@ -51,6 +77,20 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | live Boost removal keeps keyboard input in the panel |
 | PASS | Tab works after the focused Boost disappears |
 | PASS | Command shortcut dismisses and returns to normal routing |
+| PASS | picker item focus guard fails when Extensions UI lands |
+| PASS | Command+36 never activates a focused control |
+| PASS | Command+49 never activates a focused control |
+| PASS | Space with no focused control is passed to the page |
+| PASS | long tile titles use two full lines |
+| PASS | private switches have half opacity |
+| PASS | native AX puts actions before sections and host appears once |
+| PASS | native tracked Return chooses Clear Cookies and keeps reload row |
+| PASS | native tracked Esc dismisses with menuCancelled |
+| PASS | Command+Return on a Boost row cannot edit after dismissal |
+| PASS | mouse activation does not show a keyboard focus ring |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | reload growth moves content with its viewport without clipping the last row |
+| PASS | reload growth moves content with its viewport without clipping the last row |
 | PASS | render scc-basic light 1x header/action/footer fill |
 | PASS | render scc-basic light 1x every separator on device pixel |
 | PASS | render scc-basic light 1x shadow offset down |
@@ -315,6 +355,242 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | render scc-dark dark 2x anchor geometry |
 | PASS | complete opaque capture scc-dark dark 2x |
 | PASS | render scc-dark dark 2x (fill and glyph ink) |
+| PASS | render scc-reload light 1x header/action/footer fill |
+| PASS | render scc-reload light 1x every separator on device pixel |
+| PASS | render scc-reload light 1x shadow offset down |
+| PASS | render scc-reload light 1x anchor geometry |
+| PASS | complete opaque capture scc-reload light 1x |
+| PASS | render scc-reload light 1x (fill and glyph ink) |
+| PASS | render scc-reload light 2x header/action/footer fill |
+| PASS | render scc-reload light 2x every separator on device pixel |
+| PASS | render scc-reload light 2x shadow offset down |
+| PASS | render scc-reload light 2x anchor geometry |
+| PASS | complete opaque capture scc-reload light 2x |
+| PASS | render scc-reload light 2x (fill and glyph ink) |
+| PASS | render scc-reload dark 1x header/action/footer fill |
+| PASS | render scc-reload dark 1x every separator on device pixel |
+| PASS | render scc-reload dark 1x shadow offset down |
+| PASS | render scc-reload dark 1x anchor geometry |
+| PASS | complete opaque capture scc-reload dark 1x |
+| PASS | render scc-reload dark 1x (fill and glyph ink) |
+| PASS | render scc-reload dark 2x header/action/footer fill |
+| PASS | render scc-reload dark 2x every separator on device pixel |
+| PASS | render scc-reload dark 2x shadow offset down |
+| PASS | render scc-reload dark 2x anchor geometry |
+| PASS | complete opaque capture scc-reload dark 2x |
+| PASS | render scc-reload dark 2x (fill and glyph ink) |
+| PASS | render scc-hover light 1x header/action/footer fill |
+| PASS | render scc-hover light 1x every separator on device pixel |
+| PASS | render scc-hover light 1x shadow offset down |
+| PASS | render scc-hover light 1x anchor geometry |
+| PASS | complete opaque capture scc-hover light 1x |
+| PASS | render scc-hover light 1x (fill and glyph ink) |
+| PASS | render scc-hover light 2x header/action/footer fill |
+| PASS | render scc-hover light 2x every separator on device pixel |
+| PASS | render scc-hover light 2x shadow offset down |
+| PASS | render scc-hover light 2x anchor geometry |
+| PASS | complete opaque capture scc-hover light 2x |
+| PASS | render scc-hover light 2x (fill and glyph ink) |
+| PASS | render scc-hover dark 1x header/action/footer fill |
+| PASS | render scc-hover dark 1x every separator on device pixel |
+| PASS | render scc-hover dark 1x shadow offset down |
+| PASS | render scc-hover dark 1x anchor geometry |
+| PASS | complete opaque capture scc-hover dark 1x |
+| PASS | render scc-hover dark 1x (fill and glyph ink) |
+| PASS | render scc-hover dark 2x header/action/footer fill |
+| PASS | render scc-hover dark 2x every separator on device pixel |
+| PASS | render scc-hover dark 2x shadow offset down |
+| PASS | render scc-hover dark 2x anchor geometry |
+| PASS | complete opaque capture scc-hover dark 2x |
+| PASS | render scc-hover dark 2x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus light 1x header/action/footer fill |
+| PASS | render scc-keyboard-focus light 1x every separator on device pixel |
+| PASS | render scc-keyboard-focus light 1x shadow offset down |
+| PASS | render scc-keyboard-focus light 1x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus light 1x |
+| PASS | render scc-keyboard-focus light 1x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus light 2x header/action/footer fill |
+| PASS | render scc-keyboard-focus light 2x every separator on device pixel |
+| PASS | render scc-keyboard-focus light 2x shadow offset down |
+| PASS | render scc-keyboard-focus light 2x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus light 2x |
+| PASS | render scc-keyboard-focus light 2x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus dark 1x header/action/footer fill |
+| PASS | render scc-keyboard-focus dark 1x every separator on device pixel |
+| PASS | render scc-keyboard-focus dark 1x shadow offset down |
+| PASS | render scc-keyboard-focus dark 1x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus dark 1x |
+| PASS | render scc-keyboard-focus dark 1x (fill and glyph ink) |
+| PASS | render scc-keyboard-focus dark 2x header/action/footer fill |
+| PASS | render scc-keyboard-focus dark 2x every separator on device pixel |
+| PASS | render scc-keyboard-focus dark 2x shadow offset down |
+| PASS | render scc-keyboard-focus dark 2x anchor geometry |
+| PASS | complete opaque capture scc-keyboard-focus dark 2x |
+| PASS | render scc-keyboard-focus dark 2x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu light 1x header/action/footer fill |
+| PASS | render scc-menu light 1x every separator on device pixel |
+| PASS | render scc-menu light 1x shadow offset down |
+| PASS | render scc-menu light 1x anchor geometry |
+| PASS | complete opaque capture scc-menu light 1x |
+| PASS | render scc-menu light 1x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu light 2x header/action/footer fill |
+| PASS | render scc-menu light 2x every separator on device pixel |
+| PASS | render scc-menu light 2x shadow offset down |
+| PASS | render scc-menu light 2x anchor geometry |
+| PASS | complete opaque capture scc-menu light 2x |
+| PASS | render scc-menu light 2x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu dark 1x header/action/footer fill |
+| PASS | render scc-menu dark 1x every separator on device pixel |
+| PASS | render scc-menu dark 1x shadow offset down |
+| PASS | render scc-menu dark 1x anchor geometry |
+| PASS | complete opaque capture scc-menu dark 1x |
+| PASS | render scc-menu dark 1x (fill and glyph ink) |
+| PASS | scc-menu captures the native overlay |
+| PASS | render scc-menu dark 2x header/action/footer fill |
+| PASS | render scc-menu dark 2x every separator on device pixel |
+| PASS | render scc-menu dark 2x shadow offset down |
+| PASS | render scc-menu dark 2x anchor geometry |
+| PASS | complete opaque capture scc-menu dark 2x |
+| PASS | render scc-menu dark 2x (fill and glyph ink) |
+| PASS | render scc-picker light 1x header/action/footer fill |
+| PASS | render scc-picker light 1x every separator on device pixel |
+| PASS | render scc-picker light 1x shadow offset down |
+| PASS | render scc-picker light 1x anchor geometry |
+| PASS | complete opaque capture scc-picker light 1x |
+| PASS | render scc-picker light 1x (fill and glyph ink) |
+| PASS | render scc-picker light 2x header/action/footer fill |
+| PASS | render scc-picker light 2x every separator on device pixel |
+| PASS | render scc-picker light 2x shadow offset down |
+| PASS | render scc-picker light 2x anchor geometry |
+| PASS | complete opaque capture scc-picker light 2x |
+| PASS | render scc-picker light 2x (fill and glyph ink) |
+| PASS | render scc-picker dark 1x header/action/footer fill |
+| PASS | render scc-picker dark 1x every separator on device pixel |
+| PASS | render scc-picker dark 1x shadow offset down |
+| PASS | render scc-picker dark 1x anchor geometry |
+| PASS | complete opaque capture scc-picker dark 1x |
+| PASS | render scc-picker dark 1x (fill and glyph ink) |
+| PASS | render scc-picker dark 2x header/action/footer fill |
+| PASS | render scc-picker dark 2x every separator on device pixel |
+| PASS | render scc-picker dark 2x shadow offset down |
+| PASS | render scc-picker dark 2x anchor geometry |
+| PASS | complete opaque capture scc-picker dark 2x |
+| PASS | render scc-picker dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on light 1x header/action/footer fill |
+| PASS | render scc-tooltip-on light 1x every separator on device pixel |
+| PASS | render scc-tooltip-on light 1x shadow offset down |
+| PASS | render scc-tooltip-on light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on light 1x |
+| PASS | render scc-tooltip-on light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on light 2x header/action/footer fill |
+| PASS | render scc-tooltip-on light 2x every separator on device pixel |
+| PASS | render scc-tooltip-on light 2x shadow offset down |
+| PASS | render scc-tooltip-on light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on light 2x |
+| PASS | render scc-tooltip-on light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-on dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-on dark 1x shadow offset down |
+| PASS | render scc-tooltip-on dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on dark 1x |
+| PASS | render scc-tooltip-on dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-on captures the native overlay |
+| PASS | render scc-tooltip-on dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-on dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-on dark 2x shadow offset down |
+| PASS | render scc-tooltip-on dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-on dark 2x |
+| PASS | render scc-tooltip-on dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off light 1x header/action/footer fill |
+| PASS | render scc-tooltip-off light 1x every separator on device pixel |
+| PASS | render scc-tooltip-off light 1x shadow offset down |
+| PASS | render scc-tooltip-off light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off light 1x |
+| PASS | render scc-tooltip-off light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off light 2x header/action/footer fill |
+| PASS | render scc-tooltip-off light 2x every separator on device pixel |
+| PASS | render scc-tooltip-off light 2x shadow offset down |
+| PASS | render scc-tooltip-off light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off light 2x |
+| PASS | render scc-tooltip-off light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-off dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-off dark 1x shadow offset down |
+| PASS | render scc-tooltip-off dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off dark 1x |
+| PASS | render scc-tooltip-off dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-off captures the native overlay |
+| PASS | render scc-tooltip-off dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-off dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-off dark 2x shadow offset down |
+| PASS | render scc-tooltip-off dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-off dark 2x |
+| PASS | render scc-tooltip-off dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable light 1x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable light 1x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable light 1x shadow offset down |
+| PASS | render scc-tooltip-unavailable light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable light 1x |
+| PASS | render scc-tooltip-unavailable light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable light 2x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable light 2x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable light 2x shadow offset down |
+| PASS | render scc-tooltip-unavailable light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable light 2x |
+| PASS | render scc-tooltip-unavailable light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable dark 1x shadow offset down |
+| PASS | render scc-tooltip-unavailable dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable dark 1x |
+| PASS | render scc-tooltip-unavailable dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-unavailable captures the native overlay |
+| PASS | render scc-tooltip-unavailable dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-unavailable dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-unavailable dark 2x shadow offset down |
+| PASS | render scc-tooltip-unavailable dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-unavailable dark 2x |
+| PASS | render scc-tooltip-unavailable dark 2x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private light 1x header/action/footer fill |
+| PASS | render scc-tooltip-private light 1x every separator on device pixel |
+| PASS | render scc-tooltip-private light 1x shadow offset down |
+| PASS | render scc-tooltip-private light 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private light 1x |
+| PASS | render scc-tooltip-private light 1x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private light 2x header/action/footer fill |
+| PASS | render scc-tooltip-private light 2x every separator on device pixel |
+| PASS | render scc-tooltip-private light 2x shadow offset down |
+| PASS | render scc-tooltip-private light 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private light 2x |
+| PASS | render scc-tooltip-private light 2x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private dark 1x header/action/footer fill |
+| PASS | render scc-tooltip-private dark 1x every separator on device pixel |
+| PASS | render scc-tooltip-private dark 1x shadow offset down |
+| PASS | render scc-tooltip-private dark 1x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private dark 1x |
+| PASS | render scc-tooltip-private dark 1x (fill and glyph ink) |
+| PASS | scc-tooltip-private captures the native overlay |
+| PASS | render scc-tooltip-private dark 2x header/action/footer fill |
+| PASS | render scc-tooltip-private dark 2x every separator on device pixel |
+| PASS | render scc-tooltip-private dark 2x shadow offset down |
+| PASS | render scc-tooltip-private dark 2x anchor geometry |
+| PASS | complete opaque capture scc-tooltip-private dark 2x |
+| PASS | render scc-tooltip-private dark 2x (fill and glyph ink) |
 | PASS | step-1 committed SHA256 scc-basic-dark@1x.png |
 | PASS | step-1 committed SHA256 scc-basic-dark@2x.png |
 | PASS | step-1 committed SHA256 scc-basic-light@1x.png |
@@ -340,6 +616,10 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | step-2 committed SHA256 scc-dark-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-dark-light@1x.png |
 | PASS | step-2 committed SHA256 scc-dark-light@2x.png |
+| PASS | step-2 committed SHA256 scc-hover-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-hover-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-hover-light@1x.png |
+| PASS | step-2 committed SHA256 scc-hover-light@2x.png |
 | PASS | step-2 committed SHA256 scc-incognito-dark@1x.png |
 | PASS | step-2 committed SHA256 scc-incognito-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-incognito-light@1x.png |
@@ -352,10 +632,18 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | step-2 committed SHA256 scc-internal-page-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-internal-page-light@1x.png |
 | PASS | step-2 committed SHA256 scc-internal-page-light@2x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-light@1x.png |
+| PASS | step-2 committed SHA256 scc-keyboard-focus-light@2x.png |
 | PASS | step-2 committed SHA256 scc-many-dark@1x.png |
 | PASS | step-2 committed SHA256 scc-many-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-many-light@1x.png |
 | PASS | step-2 committed SHA256 scc-many-light@2x.png |
+| PASS | step-2 committed SHA256 scc-menu-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-menu-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-menu-light@1x.png |
+| PASS | step-2 committed SHA256 scc-menu-light@2x.png |
 | PASS | step-2 committed SHA256 scc-no-boosts-dark@1x.png |
 | PASS | step-2 committed SHA256 scc-no-boosts-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-no-boosts-light@1x.png |
@@ -364,6 +652,30 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | step-2 committed SHA256 scc-pane-anchor-dark@2x.png |
 | PASS | step-2 committed SHA256 scc-pane-anchor-light@1x.png |
 | PASS | step-2 committed SHA256 scc-pane-anchor-light@2x.png |
+| PASS | step-2 committed SHA256 scc-picker-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-picker-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-picker-light@1x.png |
+| PASS | step-2 committed SHA256 scc-picker-light@2x.png |
+| PASS | step-2 committed SHA256 scc-reload-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-reload-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-reload-light@1x.png |
+| PASS | step-2 committed SHA256 scc-reload-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-off-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-on-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-private-light@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-dark@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-dark@2x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-light@1x.png |
+| PASS | step-2 committed SHA256 scc-tooltip-unavailable-light@2x.png |
 | PASS | complete step-2 render receipts |
 | PASS | motion committed SHA256 close-000ms.png |
 | PASS | motion committed SHA256 close-040ms.png |
@@ -385,4 +697,4 @@ CPU parts mean (init/attach/present/display): 0.279, 0.064, 1.950, 2.065
 | PASS | panel build/layout/first draw main-thread CPU p95 < 8 ms |
 | PASS | native click to first draw wall p95 < 8 ms |
 
-380/380 passed
+686/686 passed

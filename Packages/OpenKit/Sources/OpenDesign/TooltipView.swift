@@ -55,6 +55,15 @@ public final class TooltipView: NSView {
         return NSSize(width: w + 2 * m.horizontalPadding + (tooltip.subtitle == nil ? 2 : 6), height: h)
     }
 
+    public override var wantsUpdateLayer: Bool { true }
+    public override func updateLayer() {
+        let scale = window?.backingScaleFactor ?? 2
+        guard bounds.width > 0,bounds.height > 0,let context = CGContext(data: nil,width: Int(ceil(bounds.width*scale)),height: Int(ceil(bounds.height*scale)),bitsPerComponent: 8,bytesPerRow: 0,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
+        context.scaleBy(x: scale,y: scale); context.translateBy(x: 0,y: bounds.height); context.scaleBy(x: 1,y: -1)
+        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context,flipped: true); draw(bounds); NSGraphicsContext.restoreGraphicsState()
+        layer?.contents = context.makeImage(); layer?.contentsScale = scale
+    }
+
     public override func draw(_ dirtyRect: NSRect) {
         let m = TooltipMetrics.self
         let b = bounds
@@ -147,7 +156,8 @@ public final class TooltipController {
         }
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 2 * margin, height: size.height + 2 * margin))
+        let outerSize = NSSize(width: size.width + 2 * margin,height: size.height + 2 * margin)
+        let host = NSView(frame: NSRect(origin: .zero,size: outerSize))
         host.wantsLayer = true
         content.frame = NSRect(x: margin, y: margin, width: size.width, height: size.height)
         content.shadow = {
@@ -159,7 +169,7 @@ public final class TooltipController {
         }()
         host.addSubview(content)
         panel.contentView = host
-        panel.setFrame(NSRect(x: origin.x - margin, y: origin.y - margin, width: host.frame.width, height: host.frame.height), display: true)
+        panel.setFrame(NSRect(x: origin.x - margin, y: origin.y - margin, width: outerSize.width, height: outerSize.height), display: true)
         if panel.parent !== window {
             panel.parent?.removeChildWindow(panel)
             window.addChildWindow(panel, ordered: .above)

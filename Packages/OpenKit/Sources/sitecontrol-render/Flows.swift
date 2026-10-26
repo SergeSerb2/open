@@ -28,6 +28,11 @@ enum Flows {
         c.toggle(anchor: .urlField, tabID: s.tabID, animated: false)
         stage.click(CGPoint(x: 800, y: 600))
         checks.append(Check(name: "F2 outside click closes and reaches page", pass: !c.isPresented && reason == .outside && stage.root.hits == 1))
+        for button in [NSEvent.EventType.rightMouseDown,.otherMouseDown] {
+            c.present(anchor: .urlField,tabID: s.tabID,animated: false)
+            stage.click(CGPoint(x: 800,y: 600),button: button)
+            checks.append(Check(name: "outside \(button) dismisses and forwards to the page",pass: !c.isPresented && (button == .rightMouseDown ? stage.root.rightHits == 1 : stage.root.otherHits == 1)))
+        }
         let target = SiteControlButton(id: "harness.page-target", label: "Page action", symbol: "link", pointSize: 18)
         target.frame = CGRect(x: 780, y: 580, width: 44, height: 36)
         var forwardedActions = 0; target.invoke = { forwardedActions += 1 }
@@ -38,7 +43,7 @@ enum Flows {
         target.removeFromSuperview()
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         let dump = accessibilityDump(c.view.panel)
-        let pairs = [("AXPopover", "Site Control Center"), ("AXStaticText", "news.example.com"),
+        let pairs = [("AXPopover", "Site Control Center"),
                      ("AXButton", "Share"), ("AXButton", "Copy URL"), ("AXButton", "New Boost"),
                      ("AXButton", "Capture a portion of this page"), ("AXButton", "Capture the full page"),
                      ("AXButton", "Capture in Portrait Mode"), ("AXStaticText", "Connection: Secure"), ("AXMenuButton", "More")]
@@ -76,6 +81,43 @@ enum Flows {
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         c.present(anchor: .urlField, tabID: s.tabID, animated: false)
         checks.append(Check(name: "F22 missing snapshot stays closed and logs once", pass: !c.isPresented && errors == 1 && s.calls.isEmpty))
+        let recovered = Stage(open: false), geometry = recovered.controller.geometry
+        var episodes = 0; recovered.controller.onUnavailable = { _ in episodes += 1 }
+        recovered.controller.geometry = nil
+        recovered.controller.present(anchor: .urlField,tabID: recovered.source.tabID,animated: false)
+        recovered.controller.geometry = geometry
+        recovered.controller.present(anchor: .urlField,tabID: recovered.source.tabID,animated: false)
+        recovered.controller.geometry = nil; recovered.controller.layout(); recovered.controller.layout()
+        checks.append(Check(name: "successful presentation resets once-per-failure-episode reporting",pass: episodes == 2))
+        let animated = Stage()
+        animated.controller.dismiss(reason: .escape,animated: true)
+        checks.append(Check(name: "close fades both layers and disables hit testing immediately",pass: !animated.controller.view.isActive && !animated.controller.view.isHidden && animated.controller.view.presentationLayers.allSatisfy { $0.animation(forKey: "close.opacity")?.duration == 0.12 }))
+        animated.controller.present(anchor: .urlField,tabID: animated.source.tabID,animated: true)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.22))
+        checks.append(Check(name: "old close completion cannot hide a new presentation",pass: animated.controller.isPresented && !animated.controller.view.isHidden))
+        checks.append(Check(name: "host is exposed once in native AX",pass: dump.components(separatedBy: "news.example.com").count == 2))
+        for scheme in ["https","http","chrome","open","chrome-extension","about","data","file"] {
+            let securityStage = Stage()
+            securityStage.source.value?.context.url = URL(string: scheme+"://example.test/")!
+            securityStage.source.changed()
+            let security = securityStage.controller.view.panel.controls.first { $0.controlID == "security" }
+            checks.append(Check(name: "security label policy for \(scheme)",pass: (security == nil || security!.isHidden) == !["https","http"].contains(scheme) && (security == nil || security!.title == (scheme == "https" ? "Secure" : "Insecure"))))
+        }
+        let corner = Stage()
+        for closing in [false,true] {
+            corner.controller.dismiss(reason: .action,animated: false)
+            corner.controller.present(anchor: .urlField,tabID: corner.source.tabID,animated: !closing)
+            if closing { corner.controller.dismiss(reason: .escape,animated: true) }
+            for _ in 0..<3 {
+                OffscreenRenderer.settle(corner.root); RunLoop.main.run(until: Date().addingTimeInterval(0.025))
+                let expected = corner.controller.view.panel.frame.origin
+                let fixed = corner.controller.view.presentationLayers.allSatisfy { layer in
+                    guard let presentation = layer.presentation() else { return false }
+                    return layer.anchorPoint == .zero && hypot(presentation.frame.minX-expected.x,presentation.frame.minY-expected.y)<0.1
+                }
+                checks.append(Check(name: "motion \(closing ? "close" : "open") top-left remains fixed",pass: fixed))
+            }
+        }
         checks += siteControls()
         return checks
     }
@@ -137,7 +179,7 @@ enum Flows {
         let site = Stage(); site.menu("All Site Settings…")
         check("F9 All Site Settings encodes the origin", site.source.calls == ["url:chrome://settings/content/siteDetails?site=https://news.example.com"] && !site.controller.isPresented)
         let internalPage = Stage(state: "scc-internal-page")
-        check("internal page has only Share, Copy URL and footer", internalPage.controller.view.panel.controls.map(\.controlID) == ["action.share", "action.copyURL", "security", "more"])
+        check("internal page has only Share, Copy URL and footer", internalPage.controller.view.panel.controls.map(\.controlID) == ["action.share", "action.copyURL", "more"])
         let privatePage = Stage(state: "scc-incognito")
         privatePage.tap("action.newBoost"); privatePage.tap("boost.\(ids[0]).switch"); privatePage.tap("boost.\(ids[0]).edit")
         check("F20 private window cannot create or edit Boosts", privatePage.source.calls.isEmpty && privatePage.controller.view.panel.control(id: "action.newBoost")?.isEnabled == false)
@@ -148,7 +190,7 @@ enum Flows {
         let scroll = many.controller.view.panel.subviews.compactMap { $0 as? NSScrollView }.first
         check("keyboard focus scrolls the long body", (scroll?.contentView.bounds.origin.y ?? 0) > 0 && many.controller.view.panelFrame.height == 640)
         basic.controller.present(anchor: .contentTopLeading, tabID: basic.source.tabID, mode: .extensionPicker, animated: false)
-        check("extension picker falls back to Add Extension in More", basic.controller.mode == .standard && basic.controller.preferredMenuItemTitle == "Add Extension…" && basic.focusedID == "more" && !basic.controller.view.panel.extensionsSectionVisible)
+        check("extension picker falls back to Add Extension in More", basic.controller.mode == .extensionPicker && basic.controller.preferredMenuItemTitle == "Add Extension…" && basic.focusedID == "more" && !basic.controller.view.panel.extensionsSectionVisible)
         let picker = Stage(state: "scc-no-boosts", open: false)
         let observation = MenuObservation()
         observation.picker = picker
@@ -184,6 +226,49 @@ enum Flows {
         check("Tab works after the focused Boost disappears", removal.focusedID == "action.share")
         let shortcut = Stage(); shortcut.key(code: 8, characters: "c", modifiers: [.command, .shift])
         check("Command shortcut dismisses and returns to normal routing", !shortcut.controller.isPresented && shortcut.source.calls.isEmpty)
+        check("picker item focus guard fails when Extensions UI lands", !basic.controller.view.panel.extensionsSectionVisible)
+        for code: UInt16 in [36,49] {
+            let command = Stage(); let target = command.controller.view.panel.control(id: "contentBlocking")!
+            command.window.makeFirstResponder(target); command.key(code: code,characters: code == 36 ? "\r" : " ",modifiers: .command)
+            check("Command+\(code) never activates a focused control", command.source.calls.isEmpty && !command.controller.isPresented)
+        }
+        let unfocused = Stage(); unfocused.key(code: 49,characters: " ")
+        check("Space with no focused control is passed to the page", unfocused.root.keys == [49])
+        let wrapped = Stage(state: "scc-many")
+        check("long tile titles use two full lines", wrapped.controller.view.panel.control(id: "contentBlocking")?.title == "Block Ads &\nTrackers")
+        check("private switches have half opacity", privatePage.controller.view.panel.control(id: "boost.\(ids[0]).switch")?.alphaValue == 0.5)
+        let axStage = Stage(); let nativeAX = accessibilityDump(axStage.controller.view.panel)
+        check("native AX puts actions before sections and host appears once", nativeAX.range(of: "AXButton label=Share").map { a in nativeAX.range(of: "AXScrollArea").map { a.lowerBound < $0.lowerBound } ?? false } == true && nativeAX.components(separatedBy: "news.example.com").count == 2 && nativeAX.contains("Site settings and Boosts"))
+        for selecting in [true,false] {
+            let native = Stage(); let observed = MenuObservation(); observed.picker = native
+            var dismissal: SiteControlDismissReason?; native.controller.onDismiss = { dismissal = $0 }
+            native.controller.onMenu = { menu,_ in
+                observed.menu = menu
+                let timer = Timer(timeInterval: 0.04,repeats: false) { _ in MainActor.assumeIsolated {
+                    observed.highlighted = observed.menu?.highlightedItem?.title
+                    observed.picker?.key(code: selecting ? 36 : 53,characters: selecting ? "\r" : "\u{1b}")
+                } }; observed.timer = timer; RunLoop.main.add(timer,forMode: .eventTracking)
+            }
+            native.tap("more")
+            if selecting { check("native tracked Return chooses Clear Cookies and keeps reload row", observed.highlighted == "Clear Cookies" && native.source.calls == ["clear:1"] && native.controller.isPresented && native.controller.view.panel.showsReload) }
+            else { check("native tracked Esc dismisses with menuCancelled", !native.controller.isPresented && dismissal == .menuCancelled) }
+            observed.timer?.invalidate(); native.controller.onMenu = nil
+        }
+        let rowCommand = Stage(); let row = rowCommand.controller.view.panel.control(id: "boost.\(ids[0]).switch")!.superview!
+        rowCommand.window.makeFirstResponder(row); rowCommand.key(code: 36,characters: "\r",modifiers: .command)
+        check("Command+Return on a Boost row cannot edit after dismissal", rowCommand.source.calls.isEmpty && !rowCommand.controller.isPresented)
+        let growth = Stage(); let lastRow = growth.controller.view.panel.control(id: "boost.\(ids[1]).switch")!.superview!
+        let oldY = lastRow.frame.minY
+        growth.tap("contentBlocking")
+        check("mouse activation does not show a keyboard focus ring", growth.controller.view.panel.control(id: "contentBlocking")?.showsKeyboardFocus == false)
+        let viewport = growth.controller.view.panel.subviews.compactMap { $0 as? NSScrollView }.first!
+        for _ in 0..<3 {
+            OffscreenRenderer.settle(growth.root); RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+            let y = lastRow.layer?.presentation()?.frame.minY ?? .infinity
+            let bottom = lastRow.layer?.presentation()?.frame.maxY ?? .infinity
+            let height = viewport.layer?.presentation()?.bounds.height ?? 0
+            check("reload growth moves content with its viewport without clipping the last row", y >= oldY && y < oldY+32 && bottom-viewport.contentView.bounds.minY <= height+0.5)
+        }
         return result
     }
     /// Traverse the actual AppKit AX children (including cells), not NSView.subviews.
