@@ -1102,3 +1102,34 @@ snapshot applied. Preceding key routing, socket transport and frame presentation
 are excluded. Every timed polling/capture interval now has a native activation
 trace bound, even without a key call. Unexpected foreground loss remains
 INTERRUPTED with at most three fresh workflow attempts.
+
+
+Round 1 verification is complete on main merged through `931a777`. App builds
+use `8e345dc`; window/actions use harness `5d57c96`, and shell uses `8a71e1b`.
+All app/package/build inputs match across these harness revisions. Default fork,
+Chrome hosting, UUID `4C4C4432-5555-3144-A144-B678285BC5F4`.
+
+| Suite | Debug | Release | Unexpected foreground interruptions |
+|---|---|---|---:|
+| window | 53 PASS; 2 named timing SKIP | 53 functional PASS; 2 launch-budget FAIL | 0 |
+| shell | 7/7 | 7/7 | 0 |
+| actions | 47/47 | 47/47 | 0 |
+
+Full heavy.sh verifier: **20 PASS, no SKIP**. Sidebar-render 429/429,
+commandbar-render 78/78, features-render 258/258. Live comparison: **1 pt /
+worst delta E00 1.55** in both configurations. Three socket-only interruption
+controls each have zero native-input steps and store INTERRUPTED, never PASS.
+
+Release cold/warm medians: sidebar **307 / 264 ms**, first paint **526 / 474 ms**,
+load **11.14 / 12.07 / 16.28**. Sidebar misses remain FAIL load exceptions for
+Step I; budgets stay 250 / 700 ms. Internal command-bar first/repeat results:
+Debug **32.50 / 13.59 ms**, Release **32.47 / 10.62 ms** (scope above).
+
+Save presenter replies use the socket caller boundary and the same production
+capture completion. The real MHTML engine capture and file write pass. System
+Save/Cancel buttons and remote key delivery remain unverified; native open,
+page editing and inline rename key routes remain tested. The completed shutdown
+record is awaited through engineShutdownEnd; both configurations reject forced
+cleanup and require zero pending work/hosts before shutdown.
+
+[Full review table, verifier rows, timing and retained failures](engine-spike/step-c-review-r1/summary.md).
