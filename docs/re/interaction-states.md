@@ -660,3 +660,47 @@ Single clicks (Space switch, folder) start 0.71–0.78 s after their notes, so c
 - The Boost code editor body (it showed "Internal debugging pages are currently disabled").
 - Peek motion, the tooltip delay, the first-hide hint (none showed on any path, notes 10:11:20), Favorite tile hover, and counts 6 and 7 in the grid.
 - Any 2x display: corner shapes and glyph opacity stay 1x fits.
+
+### 20.15 Site Control Center and Boost editor: design-pass measurements (items 9–11)
+
+A second pass over the same frames for `plans/site-control-boost-editor.md` (2026-10-26). Method: window-point pixel scans and flood fills at 1x; colors converted from the embedded display profile to sRGB (as in §0); scripts in `.re/scb-design/tools/` (local only). Frame positions are window points; editor positions are editor-window points. "±1" means one pixel at 1x.
+
+Site Control Center (S2 09/0010 without a Boost, 11/0005 with one; body x 83…318):
+
+| Property | Measured | Evidence |
+|---|---|---|
+| Vertical stack (body top = 0) | padding 10 · action row 32 · gap 37 (holds the "Extensions" label) · extension tile row 32 · gap 43 (holds the next label) · rows of 32 pt icon circles, pitch 43 · 15 · separator 1 · 10 · footer 32 · 10. Total 297 without Boosts; one Boosts section adds 75 (372). | x 103/109 column scans, ±1 |
+| Horizontal | 10 pt side padding for every block. Action buttons x 10, 66, 122, 178 (48 wide, gap 8). Icon circle x 10…42; row title x 50. Footer pill x 10, ≈ 82 wide; ⋯ circle x 194…226. | row scans, ±1 |
+| Action buttons | 48 x 32 (edge rows included; §20.5 rounds to 31). Fill #212121–#262626, 1 pt top highlight #575757. On hover the highlight drops to #484848; nothing else changes. | S2 09/0010 vs 0016, 0018, 0019, 0021 |
+| Labels | Section label ≈ 13 pt Semibold, #D9D9DD–#E0DBDE; its baseline ≈ 14 above the section's first row. Row title ≈ 13 pt Semibold #DFDFE2, cap top +2 and baseline +13 from the circle top; subtitle ≈ 12 pt #9B9AA6–#A3A2AC, baseline +29. Long titles end in "…" on one line ("Automatic Picture-In-P…"). | S2 09/0010 (visual sizes) |
+| Icon circles | On or allowed: #ECEDFF with a dark glyph ("Allowed", "Enabled"). Off: #84849A (translucent) with a white glyph ("Off"). The Boost row uses the same circle (wand glyph, white circle while "Enabled"). | S2 09/0010; 11/0005 |
+| Material fit | Over the dark sidebar (#252538, blurred #28283B) the body reads #403E54; over white (blurred #F8F8F8) #7B7B7B. Per channel ≈ 0.28 × blurred backdrop + 0.72 × #49475A (blue keeps less of the backdrop: weight 0.21). Fit from two probe pairs; a second sidebar probe is 5 levels off. | S2 09/0004 vs 0010 |
+| Separator, pill, ⋯ | Separator #66667B over the sidebar, #9C9EA1 over white (translucent white line). Pill fill #4A4A5E–#4C4C60 over #403E54; "Secure" #DBDBDF. ⋯ circle #595B5F. | S2 09/0010 |
+| Arrow | Tip at the URL field's bottom edge (y 82 = `URLFieldMetrics.y + height`), base at the body top (y 91), base ≈ 28, centered on the Site Control button's center x (201 at width 228). Rounded tip (≈ 10 px wide on its first row). | S2 09/0010 diff against 0004 |
+| Open motion | The popover window grows from the button: 38 x 47 at the button's center x during the open (`windows.tsv` in S2 09/0008); 266 x 405 (+1.5 %) one frame before 262 x 398 (S2 11/0003, 0004). | `windows.tsv` |
+| Window stays active | The sidebar keeps its active color (#252538 at (20, 500) in both 09/0004 and 09/0010). | pixel probe |
+| Boost row icon | Its sparkles change between frames while the pointer is elsewhere (an idle animation; 18 x 18 pt diff inside the icon). | S2 11/0004–0010 diffs |
+| ⋯ menu position | The native menu's top-left sat at the ⋯ center, where the synthetic click was (menu window 160 x 211 at screen (738, 654); ⋯ center (738, 660)). | S2 11/0011 `windows.tsv` |
+
+Boost editor (editor-window points; S2 10/0030 unless noted):
+
+| Property | Measured | Evidence |
+|---|---|---|
+| Window | Corner radius ≈ 12 (alpha profile). Not key while the simple controls are used; it becomes key and main only after a click into the code view (AX flags `focused,main` from S2 10/0079). | S2 10/0041 alpha; AX |
+| Placement | Screen x 2082…2265 for a browser window spanning x 445…2173: horizontally centered on the browser window's right edge (91 / 92 pt). Top 160 pt below the browser window's top. One sample; the rule is a guess (it may be a remembered position). | `windows.tsv` S2 10/0018 |
+| Colors | Header #F5F5F7, hairline #E9E9EB at y 39, body #FDFDFF, buttons #EBEBED, font card #FFFFFF, labels #252526 (name) and #3A3A3B (buttons), Done circle #ACACAD, font glyphs #999999. | S2 10/0041 |
+| Pad frame | Ring frame `[18, 58, 147, 147]`, plate `[25, 65, 133, 133]`, so the ring is 7 pt wide. Ring outer corner ≈ 20, plate corner ≈ 13–14. A soft shadow under the frame fades over ≈ 9 pt (#E8E8EA at the edge on #FDFDFF). | AX; S2 10/0041 scans |
+| Dot grid | 1 pt dots on a 4.0 pt pitch, aligned to the plate origin; a dot reads #E8EDEB–#EAEAEA on the near-white plate (≈ black 0.07–0.08). | S2 10/0030 rows 141, 145 … and columns 33, 37 … |
+| Plate | Near white (#FAFAFA … #FEFEFE before a color). After a color it carries a faint tint of the nearest ring color (for example #FBFFFA near green, #FDFAF6 near orange). | S2 10/0030, 0041 |
+| Hue ring | A conic gradient around the pad center. sRGB at the ring midline, by screen angle clockwise from 3 o'clock: 0° #EB4838 · 30° #EB7636 · 60° #F4BA49 · 90° #D4FD58 · 120° #90FC74 · 150° #80FCAD · 180° #7CF8F1 · 210° #356FF6 · 240° #392EF4 · 270° #8237F5 · 300° #DD31BF · 330° #DF3470. Before a color the ring is grey; its grey levels follow the colored ring's Rec. 709 luma within ≈ 10 levels (for example 90° #EAEAEA, 225° #454545). | S2 10/0030, 0041 |
+| Knobs | Primary: 30 pt disc, 2 pt white ring (34 outside), faint shadow; 38 pt disc during the drag (0039), 32 pt one frame later (0040). Secondary: 19 pt disc, 2 pt white ring, 1 pt grey outline (#C8C2CA). | flood fills S2 10/0038–0044 |
+| Knob law | The secondary knob sits **45° clockwise** of the primary on the same radius: (0.0°, 40.0 pt) and (44.5°, 40.0 pt) before a color; (252.3°, 46.2 pt) and (296.6°, 45.8 pt) after. Each knob's fill hue equals its screen angle: primary #5C3CC8 (hue 253.6°), secondary #3D203C (hue 297.9°). Before a color: primary #717171, secondary #333333. | S2 10/0030, 0038, 0041 |
+| Drag guide | While dragging, a ≈ 2 pt circle (≈ black 0.06) through the primary knob, centered on the pad center. Gone after the drag. | S2 10/0038–0040 vs 0041 |
+| Page effect of one color | With the primary at hue 253.6° (archive.org): white #FFFFFF → #E4E2F3 (hue 247°, S 0.07); #FCF5E6 → #D4C7F8; #222222 → #56285D and #333333 → #632F6F (hue ≈ 290°, the secondary's hue, S 0.57). Icons and images keep their own colors. | S2 10/0018 vs 0039 (main window) |
+| Font grid | Cells 26 x 26 at columns x 23, 51, 79, 106, 134 and rows y 281, 307, 333, 359 inside a white card `[18, 273, 147, 120]` (corner ≈ 11, soft shadow). The selected cell gets a full 26 pt circle #D9D9D9. No cell is selected before a font is chosen. | AX; S2 10/0030, 0046 |
+| Font faces (visual) | Row 1: a system sans, Helvetica Neue, Avenir, Futura, DIN Alternate. Row 2: a bold rounded sans (guess: "Arial Rounded MT Bold", a string near the editor strings), PT Mono, Courier, Times New Roman, Charter. Row 3: Baskerville, Hoefler Text, Palatino, Chalkboard, SignPainter. Row 4: Snell Roundhand, Papyrus, Apple Chancery, Luminari, Wingdings. The 18 named faces follow the binary's string order (BO-18); the first and sixth cells are guesses. | S2 10/0030 zoom; `strings` on the Arc binary |
+| Size and Case | A click shows a darker pressed fill only. No menu or popover window appeared and the page image did not change in the next frames. | S2 10/0050, 0056; `windows.tsv` |
+| Advanced popover | Light `NSPopover` window 250 x 232 at editor (−34, 258), arrow up at the sliders button. Body ≈ 222 x 204; labels 13 pt at y 299, 361, 423; sliders 186 x 16 at x −2 (18 pt body inset), knob 20 x 16, value 50 for each. The sliders button turns dark (≈ #474747) with a white glyph while the popover is open. | AX S2 10/0042; window 74512 |
+| Code mode bars | Header 40: "Back" `[10, 9, 60, 23]`, CSS · JS segments `[190, 8, 50, 24]` + `[240, 8, 50, 24]`. Web view y 40…518. Bottom bar 70 pt, white, with "Pick Selector" `[15, 535, 38, 38]` and "Show Developer Tools" `[63, 535, 38, 38]`. | AX S2 10/0071 |
+| Zap popup | A white card ≈ 428 x 90 next to the element: "Zap this" (red), "Zap all related elements" (orange), "Cancel" (grey), each ≈ 38 tall, and a grey band with the match count and selector ("1 [lang="en"] app-root"). In the bar text, the word "Zap" is drawn in a light accent color. | S2 10/0060 (visual) |
+| First-run card | The card starts at y 271; the area above it is dimmed by black ≈ 0.30 (#FDFDFF → #B1B1B3). Title #3139FF, three lines at y 331, 354, 377; body #95939F, two lines at y 411; "Make a Boost" fill #333AFF…#4848FF; footer #CEDBFC under a wavy edge (from y ≈ 463). | S2 10/0018 |
