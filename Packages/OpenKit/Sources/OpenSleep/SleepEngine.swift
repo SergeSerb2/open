@@ -67,17 +67,19 @@ public struct SleepVisibilitySnapshot: Sendable {
     public var littleOpen: Set<ItemID>
     public var splitPanes: Set<ItemID>
     public var pictureInPicture: Set<ItemID>
+    public var mediaControls: Set<ItemID>
 
     public init(windows: [WindowID: WindowState], peek: Set<ItemID> = [],
                 littleOpen: Set<ItemID> = [], splitPanes: Set<ItemID> = [],
-                pictureInPicture: Set<ItemID> = []) {
+                pictureInPicture: Set<ItemID> = [], mediaControls: Set<ItemID> = []) {
         self.windows = windows; self.peek = peek; self.littleOpen = littleOpen
         self.splitPanes = splitPanes; self.pictureInPicture = pictureInPicture
+        self.mediaControls = mediaControls
     }
 
     @MainActor
     public func visibleTabIDs(in model: BrowserModel) -> Set<ItemID> {
-        var ids = peek.union(littleOpen).union(splitPanes).union(pictureInPicture)
+        var ids = peek.union(littleOpen).union(splitPanes).union(pictureInPicture).union(mediaControls)
         for window in model.windows where windows[window.id] == .visible {
             guard let id = window.selectedNodeBySpace[window.focusedSpaceID],
                   let node = model.index[id] else { continue }

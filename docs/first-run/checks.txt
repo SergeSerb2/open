@@ -1,0 +1,143 @@
+adblock Personal enabled=true lists=EasyList,EasyPrivacy exclusions=example.com
+adblock Work enabled=true lists=EasyList,EasyPrivacy exclusions=
+default open.advanced.allowSitesThemeData = false
+default open.advanced.allowWindowDraggingFromWebTop = false
+default open.advanced.enableBoosts = true
+default open.advanced.enablePictureInPictureOnLeave = true
+default open.advanced.enableSharedQuotes = true
+default open.advanced.hapticOnTabReorder = true
+default open.advanced.playSoundEffects = false
+default open.advanced.restoreWindowsOnLaunch = true
+default open.advanced.showFullURLWithToolbar = false
+default open.advanced.tabSleepMode = automatic
+default open.appIcon.selectedID = openDefault
+default open.general.automaticallyUpdate = false
+default open.general.previewsDelaySeconds = 0.5
+default open.general.previewsEnabled = true
+default open.general.previewsOnHover = true
+default open.general.searchSuggestNoticeDismissed = false
+default open.general.warnBeforeQuitting = false
+default open.library.lastSection = archive
+default open.links.externalInLittleOpen = true
+default open.links.littleOpenHotkeyEnabled = true
+default open.links.openPeekOtherSites = true
+default open.links.openPeekShiftClick = true
+default open.links.optionCommandClickLittleOpen = true
+default open.pip.autoDisabledHosts = []
+default open.pip.keepOnTop = true
+default open.settings.lastPane = general
+default open.shortcuts.defaultPriority = browser
+default open.shortcuts.includeFavoritesInTabNumbering = true
+default open.shortcuts.switchToNinthEnabled = true
+keybindings new-tab = Ctrl+T priority=default
+keybindings zoom-in =  priority=default
+snapshot profile Personal askWhereToSaveEachFile = false
+snapshot profile Personal autoArchiveAfter = twelveHours
+snapshot profile Personal customSearchEngines =
+snapshot profile Personal downloadDirectory = ~/Downloads
+snapshot profile Personal littleOpenAutoArchiveAfter = sixHours
+snapshot profile Personal searchEngineID = google
+snapshot profile Personal searchSuggestEnabled = true
+snapshot profile Work askWhereToSaveEachFile = false
+snapshot profile Work autoArchiveAfter = twentyFourHours
+snapshot profile Work customSearchEngines = custom-docs
+snapshot profile Work downloadDirectory = ~/Downloads
+snapshot profile Work littleOpenAutoArchiveAfter = sixHours
+snapshot profile Work searchEngineID = duckduckgo
+snapshot profile Work searchSuggestEnabled = false
+PASS general-toggles
+ACTION setAsDefaultBrowser
+PASS default-browser
+PASS profile-search
+PASS profile-archive-scope
+PASS profile-downloads
+ACTION clearBrowsingData 10000000-0000-0000-0000-000000000001 kinds=3 range=All time
+PASS clear-data
+ACTION deleteProfileData ED486B2E-8929-4F15-8EDC-D8AEDFC1D5FD
+PASS profile-guards
+PASS links-rules
+ACTION keyBindingsDidChange
+PASS links-toggles
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+PASS shortcuts-save
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+PASS shortcuts-conflict
+ACTION setTabSleepMode aggressive
+PASS advanced-toggles
+ACTION setAdBlockEnabled false 10000000-0000-0000-0000-000000000001
+ACTION setEnabledBlockLists EasyList,EasyPrivacy,pl 10000000-0000-0000-0000-000000000001
+ACTION setAdBlockExcludedDomains example.com,example.org 10000000-0000-0000-0000-000000000001
+ACTION setEnabledBlockLists EasyList,EasyPrivacy 10000000-0000-0000-0000-000000000001
+ACTION openURL host=github.com 10000000-0000-0000-0000-000000000001
+PASS adblock
+ACTION setApplicationIcon openColor
+PASS app-icon
+ACTION runImport consent=false
+ACTION runImport consent=false
+ACTION runImport consent=false
+ACTION runImport consent=false
+ACTION runImport consent=false
+PASS import-counts
+ACTION restoreArchived 50000000-0000-0000-0000-000000000001
+ACTION deleteArchived 50000000-0000-0000-0000-000000000002
+ACTION clearArchive
+PASS library-archive
+ACTION retryDownload download-failed
+ACTION revealDownload download-done
+PASS library-downloads
+ACTION saveCapture 60000000-0000-0000-0000-000000000001
+ACTION deleteCapture 60000000-0000-0000-0000-000000000001
+ACTION openHistoryItem
+ACTION openHistoryItem
+PASS library-captures-history
+PNG empty-archive.png 960x640 36003 bytes sha256=a85398d99dc5bcc327bad304f82ebc998bc4e0ad9a6877a31e161d75fc3e7294
+PNG empty-downloads.png 960x640 33421 bytes sha256=7698760c1cca7f6fd91464cba4266de30d4a3f0f988c95b98754857cbe1cc693
+PNG empty-captures.png 960x640 31972 bytes sha256=1f06664ad964b60ad99515749fd3192e96ab43580c642250da1dee836949331e
+PASS empty-states
+PASS archive-save-failure
+ACTION deleteArchived 50000000-0000-0000-0000-000000000001
+ACTION deleteArchived 50000000-0000-0000-0000-000000000003
+PASS archive-owner-partial
+ACTION setAdBlockExcludedDomains example.org 26BE8744-6372-4AAF-9A04-5DF22EB733D7
+ACTION deleteProfileData 26BE8744-6372-4AAF-9A04-5DF22EB733D7
+PASS adblock-profile-lifecycle
+PASS suggestion-notice
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+ACTION keyBindingsDidChange
+PASS shortcuts-recording-admission
+PASS archive-paging
+PASS links-save-failure
+ACTION setAdBlockExcludedDomains example.org 5AD1DBE4-BD2E-4955-AAC5-CC499CC7866D
+ACTION deleteProfileData 5AD1DBE4-BD2E-4955-AAC5-CC499CC7866D
+PASS adblock-readiness
+ACTION keyBindingsDidChange
+PASS settings-caches
+ACTION finishFirstRun imported=false
+ACTION runImport spaces=true archive=true history=false secrets=false
+ACTION setAsDefaultBrowser
+ACTION setAsDefaultBrowser
+ACTION setAsDefaultBrowser
+ACTION finishFirstRun imported=true
+ACTION runImport spaces=true archive=true history=false secrets=false
+ACTION finishFirstRun imported=true
+ACTION runImport spaces=true archive=true history=true secrets=false
+ACTION runImport spaces=true archive=true history=true secrets=false
+ACTION runImport spaces=true archive=true history=true secrets=false
+ACTION finishFirstRun imported=false
+PASS first-run-actions-and-adapter-gate
+ACTION finishFirstRun imported=false
+ACTION finishFirstRun imported=false
+ACTION runImport spaces=true archive=true history=false secrets=false
+PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.001596916
+PASS first-run-probe
+PARITY actual-import archive=2 profiles=2 engines=2 history=3(partial) saved=4(partial)
+PASS first-run-count-parity
+COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchanged=true
+PASS probe-cancel-mid-copy
+SUMMARY 32 checks passed, 0 failed

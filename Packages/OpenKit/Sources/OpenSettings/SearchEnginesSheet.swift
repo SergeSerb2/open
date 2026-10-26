@@ -35,7 +35,7 @@ public struct SearchEnginesSheet:View {
         HStack(spacing:8) {
             if editing {
                 Button("Cancel Edit"){editing=false}
-                Button("Save Engine"){if model.saveEngine(id:selectedID,name:name,keyword:keyword,template:template){editing=false}}.keyboardShortcut(.defaultAction).disabled(!valid)
+                Button("Save Engine"){if model.saveEngine(id:selectedID,name:name,keyword:keyword,template:template){editing=false}}.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)).disabled(!valid)
             } else {
                 Button("Add"){selectedID=nil;name="";keyword="";template="";editing=true}
                 Button("Edit"){if let engine=selectedCustom {name=engine.name;keyword=engine.keywords.first ?? "";template=engine.searchURLTemplate;editing=true}}.disabled(selectedCustom == nil)

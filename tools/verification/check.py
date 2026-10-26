@@ -425,6 +425,8 @@ def main():
         route(cli, root, seed)
     elif name == "favicons":
         favicons(cli, seed)
+    elif name == "media-demo":
+        all_passed(run(cli, name))
     elif name == "sleep-demo":
         text = run(cli, name, str(Path("data").resolve()))
         all_passed(text)
@@ -443,14 +445,24 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) >= 86, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 214, "missing settings/library/appearance/detail/sheet/state renders")
+        states = ("welcome welcome-inactive welcome-counting welcome-nodata welcome-saveerror "
+                  "import import-arcrunning import-counting import-nodata import-parsehint "
+                  "import-parsehint-running import-partial import-capability-on secrets secrets-on "
+                  "progress progress-history-landed report report-worst report-saveerror failed "
+                  "default-browser default-declined default-error default-already "
+                  "welcome-singular import-singular secrets-singular report-singular "
+                  "welcome-large import-large secrets-large").split()
+        required = {f"first-run-{state}{appearance}@{scale}x.png"
+                    for state in states for appearance in ("", "-light") for scale in (1, 2)}
+        require(required <= {p.name for p in pngs}, "missing permanent first-run review state")
         for png in pngs:
             data = png.read_bytes()
             scale = 2 if "@2x" in png.name else 1
             sheets = {"previews": (480, 320), "search-engines": (520, 420), "clear-data": (460, 360),
                       "adblock": (600, 560), "link-rule": (520, 380), "link-rule-invalid": (520, 380), "suggestion-notice": (400, 180), "search-engine-edit": (520, 540), "profile-create": (440, 330),
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
-            expected = (960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650)))
+            expected = (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
