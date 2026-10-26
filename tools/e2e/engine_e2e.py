@@ -2595,6 +2595,23 @@ def actions_checks(app, results):
     closed = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
     results["page_close_closes_popup"] = {"ok": bool(state) and bool(closed)}
 
+    # Keys the popup page does not consume reach the popup's delegate: this
+    # shell closes the popup on Cmd+W there (plan F2), and the tab stays.
+    tabs_before = len(app.call("tabs"))
+    state = open_popup(ACTION_PROBE)
+    keys = {"opened": bool(state)}
+    if state:
+        app.call("focus", tab=state["page"]["identifier"])
+        app.call("events")
+        app.call("key", key="w", modifiers=["cmd"], window="popup", route="window")
+        keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
+        keys["delegate"] = [e for e in app.call("events") if e["type"] == "popupKey"]
+        keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
+        if not keys["closed"]:
+            close_popup()
+    results["popup_unconsumed_keys"] = {
+        "ok": keys["opened"] and keys.get("closed") and bool(keys.get("delegate")) and keys.get("tabs_kept"), **keys}
+
     # A tab switch closes the popup (Chrome's ExtensionPopup does).
     app.call("select", tab=a)
     state = open_popup(ACTION_PROBE)

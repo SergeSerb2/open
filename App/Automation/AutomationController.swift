@@ -853,7 +853,10 @@
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
     private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Any {
-      guard let target = w.window else { throw Failure(message: "no window") }
+      // `window: "popup"`: the action popup's panel (with `route: "window"`,
+      // straight to the popup page).
+      guard let target: NSWindow = a["window"] as? String == "popup" ? w.popupPanel : w.window
+      else { throw Failure(message: "no window") }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).
