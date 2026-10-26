@@ -100,6 +100,7 @@ public final class TooltipController {
     private var scheduledTooltip: Tooltip?
     public private(set) var scheduleCount = 0
     public private(set) var showCount = 0
+    public var visibleOrPendingTooltip: Tooltip? { scheduledTooltip }
     /// Read-back for the real tooltip harness flow.
     public var visibleTooltipView: TooltipView? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first : nil }
     public var visibleTooltip: Tooltip? { visibleTooltipView?.tooltip }

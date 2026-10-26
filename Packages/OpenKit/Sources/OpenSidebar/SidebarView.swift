@@ -34,6 +34,14 @@ public final class SidebarView: NSView {
     private var pointerTracking: NSTrackingArea?
     private var observerID: UUID?
     private var loops: [ObservationLoop] = []
+    private var modifierMonitor: Any?
+    private var modelUpdateDepth = 0
+    private var pendingChanges: [TreeChange] = []
+    private var pendingRename: ItemID?
+    private var banner: SidebarBannerView?
+    private var bannerShown = false
+    private var bannerGeneration = 0
+    private var preferencesObserver: NSObjectProtocol?
 
     public init(context: SidebarContext) {
         self.context = context
@@ -48,6 +56,15 @@ public final class SidebarView: NSView {
         wantsLayer = true
         context.sidebar = self
         mediaControls.onUpdateHeight = { [weak self] in self?.needsLayout = true }
+        NotificationCenter.default.addObserver(self, selector: #selector(windowResignedKey(_:)), name: NSWindow.didResignKeyNotification, object: nil)
+        modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, event.window === self.window {
+                    self.context.isOptionHeld = event.modifierFlags.contains(.option)
+                }
+            }
+            return event
+        }
         let renaming = SidebarMenus(context: context, beginRename: { [weak self] id in self?.beginRename(nodeID: id) })
         favorites.menus = renaming
         pager.menus = renaming
@@ -65,18 +82,36 @@ public final class SidebarView: NSView {
             _ = self?.context.sidebarWidth
         }) { [weak self] in self?.needsLayout = true })
         loops.append(ObservationLoop(read: { [weak self] in _ = self?.context.peekSourceNodeID }) { [weak self] in self?.syncPeekDim() })
+        loops.append(ObservationLoop(read: { [weak self] in
+            guard let self else { return }
+            _ = self.context.autoArchiveBannerRequested
+            _ = self.context.focusedSpace?.profileID
+            _ = self.context.focusedSpace.flatMap { self.context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
+        }) { [weak self] in self?.syncBanner() })
+        preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncBanner() }
+        }
         syncTheme()
         syncPeekDim()
+        syncBanner()
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     isolated deinit {
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
+        if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }
+        if let preferencesObserver { NotificationCenter.default.removeObserver(preferencesObserver) }
+        context.existingHoverPreviews?.dismiss()
         if let observerID { context.model.removeObserver(observerID) }
         loops.forEach { $0.cancel() }
     }
 
     public override var isFlipped: Bool { true }
+
+    @objc private func windowResignedKey(_ notification: Notification) {
+        if let resigned = notification.object as? NSWindow, resigned === window { context.isOptionHeld = false }
+    }
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
@@ -94,9 +129,11 @@ public final class SidebarView: NSView {
         favorites.frame = CGRect(x: 0, y: favTop, width: w, height: favH)
         let bottom = h - BottomBarMetrics.height
         let mediaHeight = mediaControls.requiredHeight
+        let bannerHeight = bannerShown ? banner?.height(for: max(0, w - 2 * BannerMetrics.inset)) ?? 0 : 0
+        let listBottom = bottom - mediaHeight - (bannerShown ? bannerHeight + 2 * BannerMetrics.inset : 0)
         let oldPager = pager.frame, oldMedia = mediaControls.frame
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, bottom - mediaHeight - favTop - favH))
+        pager.frame = CGRect(x: 0, y: favTop + favH, width: w, height: max(0, listBottom - favTop - favH))
         mediaControls.frame = CGRect(x: 0, y: bottom - mediaHeight, width: w, height: mediaHeight)
         CATransaction.commit()
         if oldMedia.height != mediaHeight && oldPager != .zero && animatesMediaChanges {
@@ -119,6 +156,12 @@ public final class SidebarView: NSView {
             }
         }
         bottomBar.frame = CGRect(x: 0, y: bottom, width: w, height: BottomBarMetrics.height)
+        if bannerShown, let banner {
+            let height = banner.height(for: max(0, w - 2 * BannerMetrics.inset))
+            banner.frame = CGRect(x: BannerMetrics.inset, y: bottom - mediaControls.requiredHeight - BannerMetrics.inset - height,
+                                  width: max(0, w - 2 * BannerMetrics.inset), height: height)
+
+        }
     }
 
     public override func updateTrackingAreas() {
@@ -197,6 +240,7 @@ public final class SidebarView: NSView {
     }
 
     private func apply(_ change: TreeChange) {
+        if modelUpdateDepth > 0 { pendingChanges.append(change); return }
         switch change {
         case .insert(let p, _, _), .remove(let p, _, _), .reload(let p):
             if case .favorites = p { favorites.apply(change) }
@@ -209,6 +253,39 @@ public final class SidebarView: NSView {
         pager.apply(change)
         needsLayout = true
     }
+
+    /// Model events remain per-node; only this view's synchronous transaction is
+    /// coalesced. This avoids ending and relaying out an outline 50 times.
+    func beginModelUpdates() { modelUpdateDepth += 1 }
+
+    func endModelUpdates() {
+        modelUpdateDepth -= 1
+        guard modelUpdateDepth == 0 else { return }
+        let changes = pendingChanges
+        pendingChanges = []
+        if !changes.isEmpty {
+            pager.applyBulk(changes)
+            if let profile = context.favoritesProfile {
+                favorites.apply(.reload(parent: .favorites(profile.id)))
+            }
+        }
+        if let id = pendingRename {
+            pendingRename = nil
+            reveal(nodeID: id)
+            layoutSubtreeIfNeeded()
+            beginRename(nodeID: id)
+        }
+    }
+
+    func renameInsertedNode(_ id: ItemID) {
+        if modelUpdateDepth > 0 { pendingRename = id }
+        else { reveal(nodeID: id); layoutSubtreeIfNeeded(); beginRename(nodeID: id) }
+    }
+
+    /// App command handlers and confirmed alerts use the same transactional path
+    /// as menus and drops, including selection consumption and view batching.
+    @discardableResult
+    public func perform(_ intent: SidebarIntent) -> Bool { context.send(intent) }
 
     /// Starts inline rename of a row (or of the Space title when `nodeID` is nil).
     public func beginRename(nodeID: ItemID?) {
@@ -309,7 +386,7 @@ extension SidebarView {
             let r = page.outline.rect(ofRow: row)
             point = NSPoint(x: r.midX, y: r.midY)
         }
-        return page.menu(at: point).items.map { $0.isSeparatorItem ? "—" : $0.title }
+        return page.menu(at: point).items.filter { !$0.isAlternate }.map { $0.isSeparatorItem ? "—" : $0.title }
     }
 
     /// Model destination for a drop at a row boundary of the focused page
@@ -336,6 +413,30 @@ extension SidebarView {
 
     /// The focused page's tab list (checks and benches).
     public var focusedOutline: NSOutlineView? { pager.currentPage?.outline }
+
+    /// Actual Clear control and its displayed strings, for host diagnostics.
+    public var clearControl: (view: NSView, title: String, tooltip: String)? {
+        guard let page = pager.currentPage else { return nil }
+        let row = page.outline.row(forItem: page.divider)
+        guard row >= 0, let cell = page.outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? DividerCellView else { return nil }
+        return (cell, cell.clearTitle, cell.clearTooltipTitle)
+    }
+
+    public func unreadDotFrame(nodeID: ItemID) -> CGRect? {
+        guard let cell = cell(nodeID: nodeID), let dot = cell.layer?.sublayers?.first(where: { $0.name == "sidebar-unread-dot" }), dot.opacity > 0 else { return nil }
+        return convert(dot.frame, from: cell)
+    }
+
+    public func drawnFolderGlyph(nodeID: ItemID) -> String? { (cell(nodeID: nodeID) as? FolderCellView)?.icon.lastDrawnGlyph }
+
+    public func folderIconView(nodeID: ItemID) -> NSView? { (cell(nodeID: nodeID) as? FolderCellView)?.icon }
+
+    public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
+
+    public func resetAction(tabID: ItemID) -> NSView? {
+        guard let cell = cell(nodeID: tabID) as? TabCellView, let button = cell.resetButton, !button.isHidden else { return nil }
+        return button
+    }
 
     /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
     public func contextMenu(nodeID: ItemID?) -> NSMenu? {
@@ -403,4 +504,50 @@ public struct SidebarChromeGeometry: Sendable, Equatable {
     public var headerTitle: CGRect?
     public var headerTitleBaseline: CGFloat?
     public var headerHovered: Bool
+}
+
+
+extension SidebarView {
+    /// The App sets the request after an actual sweep. Preference checks remain
+    /// live so every window hides after the App persists the dismissal.
+    private func syncBanner() {
+        let preferences = context.previewPreferences
+        let eligible = preferences.object(forKey: "open.sidebar.autoArchiveBannerEligible") == nil || preferences.bool(forKey: "open.sidebar.autoArchiveBannerEligible")
+        let interval = context.focusedSpace.flatMap { context.model.profile(id: $0.profileID) }?.settings.autoArchiveAfter
+        let wanted = context.autoArchiveBannerRequested && eligible && !preferences.bool(forKey: "open.sidebar.autoArchiveBannerDismissed") && interval != nil && interval != .never
+        guard wanted != bannerShown else { return }
+        bannerShown = wanted; bannerGeneration += 1
+        let generation = bannerGeneration
+        if wanted, banner == nil {
+            let view = SidebarBannerView(context: context)
+            view.onHeightChange = { [weak self] in self?.needsLayout = true }
+            banner = view; addSubview(view)
+        }
+        guard let banner else { return }
+        banner.layer?.removeAllAnimations()
+        if wanted {
+            banner.isHidden = false
+            needsLayout = true; layoutSubtreeIfNeeded()
+        } else { needsLayout = true }
+        guard animatesSidebarChanges else { banner.isHidden = !wanted; return }
+        let duration = wanted ? Motion.bannerIn : Motion.bannerOut
+        let opacity = CABasicAnimation(keyPath: "opacity")
+        opacity.fromValue = wanted ? 0 : 1; opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
+        let group = CAAnimationGroup(); group.animations = [opacity]; group.duration = duration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let slide = CABasicAnimation(keyPath: "transform.translation.y")
+            slide.fromValue = wanted ? 12 : 0; slide.toValue = wanted ? 0 : 12; slide.duration = duration
+            group.animations?.append(slide)
+        }
+        CATransaction.begin()
+        if !wanted { CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
+            guard let self, self.bannerGeneration == generation else { return }; self.banner?.isHidden = true
+        } } }
+        banner.layer?.add(group, forKey: "banner")
+        CATransaction.commit()
+    }
+    public var autoArchiveBanner: SidebarBannerView? { bannerShown ? banner : nil }
+    public var bannerContentInset: CGFloat { 0 }
+    public func refreshAutoArchiveBanner() { syncBanner() }
 }
