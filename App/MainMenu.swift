@@ -37,8 +37,7 @@ enum AppCommand {
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }
-  static let responderActions: [String: String] = ["cut":"cut:", "copy":"copy:", "paste":"paste:", "paste-and-match-style":"pasteAsPlainText:", "select-all":"selectAll:", "delete":"delete:", "make-upper-case":"uppercaseWord:", "make-lower-case":"lowercaseWord:", "capitalize":"capitalizeWord:", "font-bold":"toggleBoldface:", "font-italic":"toggleItalics:", "font-underline":"underline:", "show-fonts":"orderFrontFontPanel:", "show-spelling":"showGuessPanel:", "check-spelling":"checkSpelling:", "emoji-and-symbols":"orderFrontCharacterPalette:"]
-  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "new-window", "blank-window", "close-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "find", "find-next", "find-previous", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "toggle-full-screen", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "quit-open", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "undo", "redo", "minimize-window", "zoom-window", "bring-all-to-front", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space"]
+  static let implemented: Set<String> = ["new-tab", "open-command-bar", "search-tabs", "new-window", "blank-window", "archive-tab", "restore-last-closed-tab", "pin-unpin-tab", "pin-tab", "unpin-tab", "duplicate-tab", "rename-tab", "reset-tab", "replace-pinned-url", "clear-unpinned-tabs", "next-tab", "previous-tab", "cycle-tab-forward", "cycle-tab-backward", "tab-switcher-forward", "tab-switcher-backward", "next-space", "previous-space", "new-space", "new-folder", "focus-space", "reload", "force-reload", "stop-loading", "go-back", "go-forward", "zoom-in", "zoom-out", "zoom-actual-size", "print", "save-page-as", "share-page", "copy-url", "copy-url-markdown", "copy-url-quote", "developer-tools", "javascript-console", "view-source", "inspect-elements", "toggle-sidebar", "reveal-current-tab", "expand-pinned-section", "collapse-pinned-section", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-downloads", "view-library", "view-boosts", "manage-extensions", "add-extension", "new-little-open-window", "little-open-global", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team", "expand-all-folders", "collapse-all-folders", "add-to-favorites", "remove-from-favorites", "mute-all-tabs", "unmute-all-tabs", "reset-all-tabs-in-space"]
 }
 
 import OpenEngine
@@ -47,15 +46,14 @@ import OpenModel
 extension EngineWebContentHostFactory {
   func isAppCommandEnabled(_ original: String, enabledKey: String? = nil, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") {
       return controller?.isCommandEnabled(id, enabledKey: enabledKey ?? EnabledKey.currentTabInSplit) == true
     }
-    guard AppCommand.implemented.contains(id) || AppCommand.responderActions[id] != nil || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
+    guard AppCommand.implemented.contains(id) || id.hasPrefix("go-to-tab-") || id.hasPrefix("go-to-space-") else { return false }
     if id == "focus-space" { return payload.flatMap(UUID.init(uuidString:)).map { model.space(id: SpaceID(rawValue: $0)) != nil } ?? false }
     if id.hasPrefix("go-to-tab-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= orderedTabs.count }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? "") { return n <= model.spaces.count }
-    if id == "undo" { return app.undoManager.canUndo || window?.firstResponder is NSTextView || selectedContent != nil }
-    if id == "redo" { return app.undoManager.canRedo || window?.firstResponder is NSTextView || selectedContent != nil }
     if id == "pin-tab" { return selectedTab.map { !model.isPinned(tabID: $0.id) } ?? false }
     if id == "unpin-tab" { return selectedTab.map { model.isPinned(tabID: $0.id) } ?? false }
     let key = enabledKey ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
@@ -78,6 +76,7 @@ extension EngineWebContentHostFactory {
   @discardableResult
   func performAppCommand(_ original: String, payload: String? = nil) -> Bool {
     let id = AppCommand.canonicalID(original)
+    if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.perform(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") { return false }
     guard isAppCommandEnabled(id, payload: payload) else { return false }
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? ""), n <= model.spaces.count {
@@ -88,7 +87,6 @@ extension EngineWebContentHostFactory {
       let tabID = payload.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) } ?? orderedTabs[n - 1].id
       selectTabForCommand(tabID); return true
     }
-    if let selector = AppCommand.responderActions[id] { return NSApp.sendAction(NSSelectorFromString(selector), to: nil, from: nil) }
     switch id {
     case "new-tab": newTab(nil)
     case "open-command-bar": focusAddressBar(nil)
@@ -96,7 +94,6 @@ extension EngineWebContentHostFactory {
     case "archive-tab":
       if controller?.hasPeekController == true, controller?.peekController.isShown == true { controller?.peekController.dismissTop() }
       else { closeTab(nil) }
-    case "close-window": window?.performClose(nil)
     case "restore-last-closed-tab": restoreLastClosedTab(nil)
     case "pin-unpin-tab": togglePin(nil)
     case "pin-tab": if let tab = selectedTab { model.pinTab(id: tab.id) }
@@ -125,9 +122,6 @@ extension EngineWebContentHostFactory {
     case "zoom-in": selectedContent?.zoomIn()
     case "zoom-out": selectedContent?.zoomOut()
     case "zoom-actual-size": selectedContent?.resetZoom()
-    case "find": showFind(nil)
-    case "find-next": findNext(nil)
-    case "find-previous": findPrevious()
     case "print": selectedContent?.showPrintPanel()
     case "save-page-as": savePage()
     case "share-page": if let url = selectedContent?.url { NSSharingServicePicker(items: [url]).show(relativeTo: controller?.container.bounds ?? .zero, of: controller!.container, preferredEdge: .maxY) }
@@ -138,18 +132,9 @@ extension EngineWebContentHostFactory {
     case "developer-tools", "javascript-console", "inspect-elements": selectedContent?.showDevTools()
     case "view-source": if let url = selectedContent?.url { _ = openNewTab(url: URL(string: "view-source:\(url.absoluteString)")!, background: false) }
     case "toggle-sidebar": controller?.toggleSidebar()
-    case "toggle-full-screen": window?.toggleFullScreen(nil)
-    case "reveal-current-tab": if let id = selectedTab?.id { if windowState.sidebarMode == .hidden { controller?.toggleSidebar() }; controller?.sidebar.reveal(nodeID: id) }
+    case "reveal-current-tab": if let id = selectedTab?.id { if windowState.sidebarMode == .hidden { controller?.toggleSidebar() }; controller?.sidebar.reveal(nodeID: id); window?.makeFirstResponder(controller?.sidebar.focusedOutline) }
     case "expand-pinned-section", "collapse-pinned-section": if let space = focusedSpace { model.setPinnedSectionCollapsed(spaceID: space.id, collapsed: id == "collapse-pinned-section") }
     case "manage-extensions", "add-extension": openExtensionsPage(nil)
-    case "minimize-window": window?.miniaturize(nil)
-    case "zoom-window": window?.performZoom(nil)
-    case "bring-all-to-front": NSApp.arrangeInFront(nil)
-    case "undo", "redo":
-      if window?.firstResponder is NSTextView { _ = NSApp.sendAction(NSSelectorFromString(id + ":"), to: nil, from: nil) }
-      else if id == "undo", app.undoManager.canUndo { app.undoManager.undo() }
-      else if id == "redo", app.undoManager.canRedo { app.undoManager.redo() }
-      else { _ = NSApp.sendAction(NSSelectorFromString(id + ":"), to: nil, from: nil) }
     case "expand-all-folders", "collapse-all-folders":
       let ids = model.index.values.compactMap(\.folder).map(\.id)
       for folder in ids { model.setExpanded(folderID: folder, expanded: id == "expand-all-folders") }

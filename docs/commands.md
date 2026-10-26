@@ -53,7 +53,11 @@ Submenus: Edit holds Find, Spelling and Grammar, Substitutions, Transformations,
 Speech, and Format > Font. View holds Appearance and Developer. Help holds
 Troubleshooting.
 
-Standard system items are present: Services, Hide, Hide Others, Show All, Quit,
+Standard system items use `SystemCommandActions` metadata in `OpenCommands`.
+The builder installs their native AppKit selectors with `target = nil` and
+retains their registry titles and key equivalents. Services is the registered
+`NSApp.servicesMenu`; Font uses the registered `NSFontManager` menu. The App does
+not own a second selector map. Standard system items are present: Services, Hide, Hide Others, Show All, Quit,
 Undo/Redo, Cut/Copy/Paste, Select All, Emoji & Symbols, and Enter Full Screen.
 Dynamic sections: the Spaces menu lists each Space with Ctrl+1…9, and the Tabs
 menu lists open tabs with Cmd+1…9. Extra key equivalents ride on hidden carrier
@@ -218,6 +222,7 @@ Menu path `—` means the command has no menu item (keys or command bar only).
 | `expand-current-split` | Expand Current Split | — | window | View |
 | `separate-from-split-view` | Separate Page from Split View | — | window | View |
 | `reveal-current-tab` | Reveal Current Tab | Ctrl+Space | window | View |
+| `reveal-tab-in-sidebar` | Reveal Tab in Sidebar | — | window | Tabs |
 | `expand-pinned-section` | Expand Pinned Section | — | window | View |
 | `collapse-pinned-section` | Collapse Pinned Section | — | window | View |
 | `clear-cache-and-refresh` | Clear Cache and Refresh | — | window | View |
@@ -365,3 +370,22 @@ Reserved (out-of-scope keys):
    is not in strings. Open rejects only reserved-key reuse for now.
 5. Menu order inside each menu follows the RE report's item order, which the
    nib does not prove. Check against Arc on screen later.
+
+
+### Native edit and undo ownership (Step C)
+
+Native menus validate and dispatch to the first responder. Text fields and the
+Chromium page responder receive Cut, Copy, Paste, Paste and Match Style, Select
+All, Undo and Redo. The window key hook uses the same registry-native path when
+CEF receives a key directly. It does not invoke model undo before the page.
+
+The sidebar uses the model UndoManager only with sidebar focus or after no text
+responder takes the action. Reveal Tab in Sidebar focuses the actual outline.
+Native AppKit text fields use a separate window text UndoManager; the command
+bar keeps its own editing manager. Thus typing cannot enter model undo groups.
+Find uses AppKit's find actions in native text. Only the window responder's
+fallback opens the browser find bar.
+
+`Tabs > Reveal Tab in Sidebar` has no default shortcut, matching the empty
+shortcut cell in docs/re/menus-and-hotkeys.md §Tabs. The separate View command
+keeps Ctrl+Space. The menu comparison JSON includes both titles.

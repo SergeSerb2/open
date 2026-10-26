@@ -588,3 +588,36 @@ The fork Release socket build uses `OPEN_AUTOMATION=1`; normal Release keeps it 
 when a larger split remains. The first pass exposed this case (146/147); the
 failed log is retained under `.re/c-final-features-render-before-split-guard.log`.
 `sidebar-render check`: 125/125 PASS. No reference app was launched.
+
+
+### Step C audit P0 — native responder chain
+
+Standard system commands are now registry metadata (`SystemCommandActions`) in
+OpenCommands. Menu items carry AppKit selectors with `target=nil`, including
+native find tags and Bold/Italic font traits. Services, Window, and Font menus
+remain registered with AppKit. The App no longer maintains a selector map.
+
+Page Copy, Cut, Paste, Select All, and Undo are exercised through the actual
+window key route and native responders. Command-bar text undo uses the editor's
+own manager; it cannot undo a model tab action. Sidebar model undo is checked
+after Reveal Tab focuses the actual outline. Native Find gets first refusal in
+text fields; only the window's fallback opens browser Find.
+
+Tabs > Reveal Tab in Sidebar is registered and included in expected-menu.json.
+It has no default shortcut, as recorded in docs/re/menus-and-hotkeys.md §Tabs.
+View > Reveal Current Tab retains Ctrl+Space.
+
+A P0 development run passed the functional checks but missed the Debug first-open
+budget at 62.92 ms under load. Its [receipt](engine-spike/results-commandbar-step-c-before-focus-optimization-debug.json)
+is preserved. Opening the bar now avoids a redundant menu rebuild when its
+window is already active. Final measurements below supersede no earlier miss.
+
+The lead's independent fork verification of merged #52 reported a 253 ms cold
+sidebar median while seven agents built; its first run was 207 ms. Those are
+separate observations from the 218/232 ms measurements above. Step I must
+remeasure launch and command-bar budgets on an idle machine.
+
+P1 port boundary: this step changes no TabStripMirror, ExtensionTabRequests, or
+factory OEBrowserDelegate section. Factory changes are UI composition, command
+bar/navigation intents, native text/find responders, and the Library download
+notification. Engine code and engine project settings remain with the lead.

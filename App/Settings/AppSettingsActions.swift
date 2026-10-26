@@ -108,8 +108,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func openPreviewsSettings() {} // General owns its one sheet.
   func keyBindingsDidChange(store: KeyBindingStore) { app.reloadKeyBindings() }
-  func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "The durable browser import adapter is not connected yet. No data was imported.") }
-  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking preferences were saved. Engine filtering is connected in the next app-shell step.") }
+  func runImport(plan: ImportPlan) async -> ImportOutcome { ImportOutcome(errorText: "Import is not available in this build. No data was imported.") }
+  func setAdBlockEnabled(_ on: Bool, profileID: ProfileID) { status("Ad blocking is not active in this build. Your preferences were saved.") }
   func setEnabledBlockLists(_ ids: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func setAdBlockExcludedDomains(_ domains: [String], profileID: ProfileID) { setAdBlockEnabled(true, profileID: profileID) }
   func adBlockDebugInfo(profileID: ProfileID) -> String { "App engine filter adapter: pending Step D" }

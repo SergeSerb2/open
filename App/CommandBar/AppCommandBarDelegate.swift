@@ -23,7 +23,9 @@ final class AppCommandBarSession: CommandBarDelegate {
   func show(_ mode: CommandBarMode, requestedAt: Double) {
     openedAt = requestedAt
     guard let windowController = factory.controller, let profile = factory.focusedProfile else { return }
-    factory.app.focusWindow(factory.windowState.id, activate: true)
+    if factory.window?.isKeyWindow != true || !NSApp.isActive {
+      factory.app.focusWindow(factory.windowState.id, activate: true)
+    }
     windowController.dismissSidebarReveal()
     let engine = factory.app.stores.suggest(for: profile.id)
     if controller?.engine !== engine {
@@ -100,7 +102,7 @@ final class AppCommandBarSession: CommandBarDelegate {
     guard let bar = controller else { return ["created": false, "presented": false] }
     let range = (factory.window?.firstResponder as? NSTextView)?.selectedRange
     return ["created": true, "presented": bar.isPresented, "mode": bar.request?.mode.rawValue ?? "",
-      "text": bar.text, "profile": bar.request?.profileID?.description ?? "", "space": bar.request?.spaceID?.description ?? "",
+      "text": bar.text, "editorText": (factory.window?.firstResponder as? NSTextView)?.string ?? "", "editorCanUndo": (factory.window?.firstResponder as? NSTextView)?.undoManager?.canUndo ?? false, "profile": bar.request?.profileID?.description ?? "", "space": bar.request?.spaceID?.description ?? "",
       "selected": bar.selectedIndex ?? -1, "range": [range?.location ?? -1, range?.length ?? 0],
       "firstResultsMs": firstResultsMilliseconds ?? -1, "openFirstResultsMs": openFirstResultsMilliseconds ?? -1,
       "final": bar.isSnapshotFinal, "newTabHighlighted": factory.controller?.context.isNewTabCommandBarOpen ?? false,

@@ -64,6 +64,9 @@
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
           "root": app.directories.root.path,
         ]
+      case "menu-context":
+        return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
+          "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
@@ -93,6 +96,9 @@
         else { settings.links.externalLinksInLittleOpen.toggle() }
         return settings.commitLinks()
       case "pasteboard": return NSPasteboard.general.string(forType: .string) ?? ""
+      case "pasteboard-write":
+        guard let value = a["text"] as? String else { throw Failure(message: "missing clipboard text") }
+        NSPasteboard.general.clearContents(); return NSPasteboard.general.setString(value, forType: .string)
       case "shell-windows":
         return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
       case "window-reopen":
@@ -666,14 +672,18 @@
       }
     }
     private func menuEnabled(_ item: NSMenuItem) -> Bool {
-      (item.target as? NSMenuItemValidation)?.validateMenuItem(item) ?? item.isEnabled
+      guard let action = item.action else { return item.isEnabled }
+      let target = item.target ?? NSApp.target(forAction: action, to: nil, from: item)
+      if let validator = target as? NSMenuItemValidation { return validator.validateMenuItem(item) }
+      if let validator = target as? NSUserInterfaceValidations { return validator.validateUserInterfaceItem(item) }
+      return target != nil
     }
     private func menuRows(_ menu: NSMenu?) -> [[String: Any]] {
       (menu?.items ?? []).flatMap { item -> [[String: Any]] in
         if let submenu = item.submenu { return menuRows(submenu) }
         guard !item.isSeparatorItem else { return [] }
         return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
-          "enabled": menuEnabled(item), "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+          "enabled": menuEnabled(item), "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
       }
     }
     private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
@@ -708,7 +718,7 @@
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
+        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
       ]

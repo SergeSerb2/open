@@ -1340,7 +1340,7 @@ def commandbar_checks(factory, results, tmp, config):
     import threading
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
-            body = ("<!doctype html><title>Shell C %s</title><body style='background:#302d4a;color:white'>Shell C %s"
+            body = ("<!doctype html><title>Shell C %s</title><body style='background:#302d4a;color:white'>Shell C %s<p id=copy-source>PAGE COPY</p><input id=edit-input value=seed>"
                     "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);e.preventDefault()})</script>" % (self.path, self.path)).encode()
             self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
         def log_message(self, *args): pass
@@ -1350,8 +1350,8 @@ def commandbar_checks(factory, results, tmp, config):
     app = factory(urls=(origin + '/start',), fresh=True)
     state = lambda: app.call('commandbar-state')
     def bar(key, route='app'):
-        app.call('key', key=key, modifiers=['cmd'], route=route)
-        assert wait_until(lambda: state().get('presented'), timeout=3, step=.05), state()
+        routing = app.call('key', key=key, modifiers=['cmd'], route=route)
+        assert wait_until(lambda: state().get('presented'), timeout=3, step=.05), {'bar':state(),'routing':routing,'window':app.call('window-state'),'menu':[r for r in app.call('menu-state') if r['id'] in ('new-tab','show-fonts')]}
         return state()
     def type_query(text):
         app.call('key', text=text)
@@ -1362,6 +1362,7 @@ def commandbar_checks(factory, results, tmp, config):
         app.call('suggest-remote', enabled=False)
         assert wait_until(lambda: app.call('hotkey-state')['prepared'], timeout=5, step=.02), 'post-paint command preparation did not run'
         results['lazy_commandbar'] = {'ok': state().get('created') is False}
+        app.call('focus', tab=tab)
         opened = bar('t', 'window')
         first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
         results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None}
@@ -1377,6 +1378,39 @@ def commandbar_checks(factory, results, tmp, config):
         type_query(origin + '/edited'); press('return')
         correct = wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /edited', step=.1)
         results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
+        app.call('focus', tab=new['id'])
+        app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
+        press('c', modifiers=['cmd'], route='window')
+        copied = wait_until(lambda: app.call('pasteboard') == 'PAGE COPY', step=.05)
+        results['page_copy_native_responder'] = {'ok': bool(copied), 'clipboard': app.call('pasteboard')}
+        app.call('click', tab=new['id'], selector='#edit-input')
+        press('a', modifiers=['cmd'], route='window')
+        selected = wait_until(lambda: app.eval(new['id'], "[document.querySelector('#edit-input').selectionStart,document.querySelector('#edit-input').selectionEnd]") == [0,4], step=.05)
+        results['page_select_all_native_responder'] = {'ok': bool(selected)}
+        press('v', modifiers=['cmd'], route='window')
+        pasted = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'PAGE COPY', step=.05)
+        results['page_paste_native_responder'] = {'ok': bool(pasted)}
+        press('z', modifiers=['cmd'], route='window')
+        undone = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'seed', step=.05)
+        results['page_undo_native_responder'] = {'ok': bool(undone) and app.call('window-state')['selected'] == new['id']}
+        press('a', modifiers=['cmd'], route='window'); press('x', modifiers=['cmd'], route='window')
+        cut = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == '', step=.05)
+        results['page_cut_native_responder'] = {'ok': bool(cut) and app.call('pasteboard') == 'seed'}
+        press('z', modifiers=['cmd'], route='app')
+        wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'seed', step=.05)
+        menu = app.call('menu-state')
+        native_ids = {'cut','copy','paste','paste-and-match-style','select-all','undo','redo','find','find-next','find-previous','quit-open','hide-open','hide-others','show-all','minimize-window','zoom-window','bring-all-to-front','close-window','toggle-full-screen','emoji-and-symbols','start-speaking','stop-speaking','show-fonts','font-bold','font-italic','font-underline'}
+        native_rows = [r for r in menu if r['id'] in native_ids]
+        results['system_menu_nil_targets'] = {'ok': {r['id'] for r in native_rows} == native_ids and all(r['targetNil'] and r['action'] for r in native_rows), 'rows': native_rows}
+        registered = app.call('menu-context')
+        results['native_menu_registration'] = {'ok': all(registered.values()), 'menus': registered}
+        results['native_font_traits'] = {'ok': any(r['id'] == 'font-bold' and r['action'] == 'addFontTrait:' and r['tag'] == 2 for r in menu) and any(r['id'] == 'font-italic' and r['action'] == 'addFontTrait:' and r['tag'] == 1 for r in menu)}
+        results['tabs_reveal_registered'] = {'ok': any(r['id'] == 'reveal-tab-in-sidebar' and r['title'] == 'Reveal Tab in Sidebar' and r['key'] == '' for r in menu)}
+        before_text_undo = len(app.call('tabs'))
+        bar('t'); type_query('word'); native_before = state(); native_route = press('z', modifiers=['cmd'])
+        native_undone = wait_until(lambda: state()['text'] == '', timeout=3, step=.05)
+        results['native_field_undo_preserves_model'] = {'ok': bool(native_undone) and state()['presented'] and len(app.call('tabs')) == before_text_undo, 'before':native_before, 'after':state(), 'route':native_route}
+        press('escape'); time.sleep(.25)
         counts = app.call('host-counts')['created']; selected_before = app.call('window-state')['selected']
         bar('t'); type_query(origin + '/background'); press('return', modifiers=['cmd'])
         background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background'), None), step=.1)
@@ -1437,7 +1471,7 @@ def commandbar_checks(factory, results, tmp, config):
         before = app.call('host-counts'); tree = app.call('sidebar-tree'); app.call('menu-perform', id='duplicate-tab')
         after = app.call('sidebar-tree'); copies = [x for x in after['today'] if x['id'] not in {n['id'] for n in tree['today']}]
         results['duplicate_tab_lazy'] = {'ok': len(copies) == 1 and copies[0]['url'] == origin + '/cross' and not copies[0]['loaded'] and before['created'] == app.call('host-counts')['created'], 'copies': copies}
-        app.call('menu-perform', id='undo'); results['duplicate_single_undo'] = {'ok': len(app.call('sidebar-tree')['today']) == len(tree['today'])}
+        app.call('menu-perform', id='reveal-tab-in-sidebar'); app.call('menu-perform', id='undo'); results['duplicate_single_undo'] = {'ok': len(app.call('sidebar-tree')['today']) == len(tree['today'])}
         other = app.call('open', url=origin + '/split')['id']
         app.call('split')
         split = next(n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
@@ -1445,7 +1479,7 @@ def commandbar_checks(factory, results, tmp, config):
         splits = [n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split']
         copied = next(n for n in splits if n['id'] != split['id'])
         results['duplicate_split_lazy'] = {'ok': len(splits) == 2 and len(copied['children']) == 2 and all(not n['loaded'] for n in copied['children']) and {n['id'] for n in copied['children']}.isdisjoint(n['id'] for n in split['children']) and [n['url'] for n in copied['children']] == [n['url'] for n in split['children']] and before == app.call('host-counts')['created'], 'copy': copied}
-        app.call('menu-perform', id='undo')
+        app.call('menu-perform', id='reveal-tab-in-sidebar'); app.call('menu-perform', id='undo')
         # Separate through the model-owned selection path before the folder flow.
         app.call('menu-perform', id='separate-from-split-view')
         app.call('select', tab=target)

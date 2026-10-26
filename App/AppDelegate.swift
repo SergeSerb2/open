@@ -343,7 +343,7 @@ extension AppDelegate: CommandDispatcher {
     if littleOpenStub == nil {
       let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 540), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
       window.title = "Little Open"; window.isReleasedWhenClosed = false
-      let label = NSTextField(labelWithString: "Little Open sessions arrive in the routing step.")
+      let label = NSTextField(labelWithString: "Little Open is not available in this build.")
       label.frame = NSRect(x: 28, y: 260, width: 650, height: 24); window.contentView?.addSubview(label)
       window.center(); littleOpenStub = NSWindowController(window: window)
     }
@@ -351,11 +351,13 @@ extension AppDelegate: CommandDispatcher {
     scheduleMenuRebuild()
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
     return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
   }
   func performCommand(_ id: String, payload: String?) { performCommand(id) }
   func performCommand(_ id: String) {
+    if SystemCommandActions.selectors[id] != nil { _ = SystemCommandActions.perform(id); return }
     switch id {
     case "new-window", "blank-window": makeWindow()
     case "new-tab":
@@ -371,15 +373,10 @@ extension AppDelegate: CommandDispatcher {
     case "view-downloads": settingsPresenter.showLibrary(section: .downloads)
     case "view-archive": settingsPresenter.showLibrary(section: .archive)
     case "view-history": settingsPresenter.showLibrary(section: .history)
-    case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing arrives in the next app-shell step."
+    case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
     case "keyboard-shortcuts-edu": settingsPresenter.show(pane: .shortcuts)
-    case "archive-tab", "close-window": NSApp.keyWindow?.performClose(nil)
+    case "archive-tab": NSApp.keyWindow?.performClose(nil)
     case "new-little-open-window", "little-open-global": showLittleOpenStub()
-    case "quit-open": NSApp.terminate(nil)
-    case "about-open": NSApp.orderFrontStandardAboutPanel(nil)
-    case "hide-open": NSApp.hide(nil)
-    case "hide-others": NSApp.hideOtherApplications(nil)
-    case "show-all": NSApp.unhideAllApplications(nil)
     case "help-center", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()
       _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)

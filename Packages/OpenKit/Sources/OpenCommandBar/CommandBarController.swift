@@ -150,6 +150,10 @@ public final class CommandBarController: NSObject {
         view.container.animateIn(animated: false)
     }
 
+    public func editingUndoManager(for responder: NSResponder?) -> UndoManager? {
+        responder === panel.input.editor ? panel.input.editor.undoManager : nil
+    }
+
     public func dismiss(reason: CommandBarDismissReason, animated: Bool = true) {
         pendingReturn = nil
         panel.input.editor.resetSession()

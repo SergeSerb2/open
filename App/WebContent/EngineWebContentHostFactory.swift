@@ -75,6 +75,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    controller.onTextUndoManager = { [weak self] window in
+      self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
+    }
     controller.keyBindingOverrides = app.keyBindings
     controller.isApplicationActive = { [weak self] in NSApp.isActive || self?.window?.isKeyWindow == true }
     controller.ownsAdditionalKeyWindow = { [weak self] in self?.ownsKeyWindow($0) == true }
@@ -365,7 +368,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !pendingDialogs.isEmpty else { return false }; pendingDialogs.removeFirst().complete(accepted: accept, text: text); return true
   }
   private func makeFindField() -> NSSearchField {
-    let field = NSSearchField(); field.placeholderString = "Find in page"; field.target = self
+    let field = NSSearchField(); field.placeholderString = "Find in page"; field.target = self; field.delegate = self
     field.action = #selector(findFieldChanged(_:)); field.isHidden = true
     controller?.contentView.addSubview(field); findFieldCreated = true; return field
   }
@@ -592,7 +595,7 @@ extension EngineWebContentHostFactory {
   }
 }
 
-extension EngineWebContentHostFactory: NSTextFieldDelegate {
+extension EngineWebContentHostFactory: NSSearchFieldDelegate {
   func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
     if control === findField, commandSelector == #selector(NSResponder.cancelOperation(_:)) {
       findField.isHidden = true; selectedContent?.stopFinding(clearSelection: true); selectedContent?.focusPage(); return true
@@ -877,4 +880,29 @@ final class ClosureMenuItem: NSMenuItem {
   required init(coder: NSCoder) { fatalError() }
 
   @objc private func run() { handler() }
+}
+
+// AppKit reaches browser Find only after the text/page responder declines it.
+// Undo/Redo use AppKit itself and the window delegate's selected UndoManager.
+extension EngineWebContentHostFactory: NSMenuItemValidation {
+  @objc func performFindPanelAction(_ sender: Any?) {
+    switch (sender as? NSMenuItem)?.tag ?? 1 {
+    case 1: showFind(nil)
+    case 2: findNext(nil)
+    case 3: findPrevious()
+    case 7:
+      guard let page = selectedContent else { return }
+      Task { @MainActor [weak self] in
+        if let value = try? await page.evaluateJavaScript("window.getSelection().toString()") as? String,
+           !value.isEmpty { self?.findField.stringValue = value; self?.findNext(nil) }
+      }
+    default: break
+    }
+  }
+  func validateMenuItem(_ item: NSMenuItem) -> Bool {
+    switch item.action {
+    case #selector(performFindPanelAction(_:)): return selectedContent != nil
+    default: return true
+    }
+  }
 }

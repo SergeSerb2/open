@@ -331,6 +331,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 now: Date(timeIntervalSinceReferenceDate: event.timestamp))
         }
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, false)
+        // CEF can deliver a page event straight to the window. Keep native
+        // edit actions on the same nil-target responder path in that layer.
+        if case .system? = decision, webFocused, routing.isAppActive,
+           let shortcut = KeyboardShortcut.from(event: event),
+           let id = SystemCommandActions.command(for: shortcut, overrides: keyBindingOverrides),
+           SystemCommandActions.isEnabled(id), SystemCommandActions.perform(id) {
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
         guard case .browserCommand(let id)? = decision,
               handles(id) || onCommand != nil,
               isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
@@ -385,7 +394,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) { saveWindowState(); visibilityOverride = .closed; dismissSidebarReveal(); container.closeAll(); onClose?(); onVisibilityChange?() }
-    public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undoManager }
+    public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
+    private lazy var nativeTextUndoManager = UndoManager()
+    public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        if let editor = onTextUndoManager?(window) { return editor }
+        if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
+        return model.undoManager
+    }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
     public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
