@@ -3,6 +3,7 @@ import OpenSettings
 import OpenModel
 import OpenStore
 import OpenCommands
+import OpenRouting
 
 struct CheckFailure: Error, CustomStringConvertible { let description: String }
 func require(_ condition: @autoclosure () throws -> Bool, _ message: String) throws { if try !condition() { throw CheckFailure(description: message) } }
@@ -46,7 +47,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
 }
 
 @MainActor func runChecks(only: String?) async throws {
-    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "advanced-toggles", "app-icon"]
+    let names = ["general-toggles", "default-browser", "profile-search", "profile-archive-scope", "profile-downloads", "clear-data", "profile-guards", "links-rules", "links-toggles", "advanced-toggles", "app-icon"]
     if let only { try require(names.contains(only), "Unknown check \(only)") }
     var passed = 0
     for name in names where only == nil || only == name {
@@ -106,6 +107,35 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let created = vm.profiles.create(name: "Example Test")!
                 try require(created.settings.searchEngineID == "google" && vm.profiles.delete(id: created.id), "unused profile lifecycle")
                 let disk = try env.diskModel(); try require(disk.profiles.count == 2, "profile deletion not on disk")
+            case "links-rules":
+                vm.links.addRule(); let newID = vm.links.drafts.last!.id
+                vm.links.drafts[vm.links.drafts.count - 1].pattern = "example.com"
+                vm.links.drafts[vm.links.drafts.count - 1].destinationKind = .space
+                vm.links.drafts[vm.links.drafts.count - 1].spaceID = vm.model.spaces[2].id
+                vm.links.moveRule(from: vm.links.drafts.count - 1, to: 0); vm.commitLinks()
+                var disk = try env.diskModel(); try require(disk.routingRules.first?.id == newID, "route order not persisted")
+                vm.links.testURLString = "example.com/x"; vm.links.runTest()
+                try require(vm.links.testDecision?.resolved == .space(spaceID: vm.model.spaces[2].id, profileID: vm.model.profiles[1].id), "test target differs")
+                let routeRoot = env.root.appendingPathComponent("route-copy")
+                try FileManager.default.createDirectory(at: routeRoot.appendingPathComponent("State"), withIntermediateDirectories: true)
+                try FileManager.default.copyItem(at: vm.snapshot.fileURL, to: routeRoot.appendingPathComponent("State/browser.json"))
+                let cli = Process(); cli.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("openkit")
+                cli.arguments = ["route", routeRoot.path, "example.com/x", "--expect-destination", "space:" + vm.model.spaces[2].id.description]
+                let output = Pipe(); cli.standardOutput = output; cli.standardError = output; try cli.run()
+                let routeText = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self); cli.waitUntilExit()
+                try require(cli.terminationStatus == 0 && routeText.contains("Office"), "openkit route disagreed: \(routeText)")
+                vm.links.drafts[0].pattern = ""; vm.commitLinks(); disk = try env.diskModel()
+                try require(vm.links.drafts[0].pattern.isEmpty && disk.routingRules.first?.match == .hostEquals("example.com"), "invalid draft reached disk or disappeared")
+                vm.links.drafts[0].pattern = "example.com"; vm.links.spaces.removeAll { $0.id == vm.model.spaces[2].id }; vm.links.runTest()
+                try require(vm.links.testDecision?.resolved == .space(spaceID: vm.model.spaces[0].id, profileID: vm.model.profiles[0].id), "stale target did not fall through")
+            case "links-toggles":
+                vm.links.externalLinksInLittleOpen = false; vm.links.littleOpenHotkeyEnabled = false; vm.commitLinks()
+                let disk = try env.diskDefaults()
+                try require(disk["open.links.externalInLittleOpen"] as? Bool == false && disk["open.links.littleOpenHotkeyEnabled"] as? Bool == false, "link toggles not persisted")
+                try require(env.actions.log == ["keyBindingsDidChange"], "hotkey owner not notified")
+                vm.links.testURLString = "https://example.net/a"; vm.links.runTest()
+                if case .littleOpen = vm.links.testDecision?.resolved {} else { throw CheckFailure(description: "explicit Little Open route lost with external OFF") }
+                _ = try env.diskModel()
             case "advanced-toggles":
                 vm.set(true, for: "open.advanced.allowWindowDraggingFromWebTop"); vm.advanced.sleepMode = .aggressive
                 let disk = try env.diskDefaults()

@@ -14,6 +14,7 @@ public struct SettingsContent: View {
                 VStack(spacing: 20) {
                     switch viewModel.selectedPane {
                     case .general: GeneralPane(model: viewModel.general)
+                    case .links: LinksPane(root: viewModel)
                     case .profiles: ProfilesPane(model: viewModel.profiles)
                     case .appIcon: AppIconPane(model: viewModel.appIcon)
                     case .advanced: AdvancedPane(model: viewModel.advanced)
