@@ -1,10 +1,17 @@
-Step 1 skeleton open: build + native click + layout + first display; 30 samples, 5 warmups; p95 main thread 6.734 ms, wall 10.245 ms
+SiteControl: snapshot or geometry unavailable for tab BF92BEDA-DFEC-4731-BBD4-D52ECD2DFD30
+SiteControl: snapshot or geometry unavailable for tab 2DC61061-6663-4965-83C4-E076AE142079
+SiteControl: snapshot or geometry unavailable for tab BCB7B6CD-051E-4448-9770-F073599B53A6
+SiteControl: snapshot or geometry unavailable for tab FEC0CACA-2123-4826-82EA-076F52FBCCB2
+SiteControl: snapshot or geometry unavailable for tab FEC0CACA-2123-4826-82EA-076F52FBCCB2
+Step 1 skeleton open: build + native click + layout + first display; 30 samples, 5 warmups; p95 main thread 8.728 ms, wall 15.674 ms
 | Result | Check |
 |---|---|
 | PASS | F1 anchor presents |
 | PASS | F1 second anchor click closes and is consumed |
 | PASS | F2 Escape closes and restores focus |
 | PASS | F2 outside click closes and reaches page |
+| PASS | outside NSEventType(rawValue: 3) dismisses and forwards to the page |
+| PASS | outside NSEventType(rawValue: 25) dismisses and forwards to the page |
 | PASS | outside click reaches a real native target/action exactly once |
 | PASS | F21 native AX role and label pairs, host description, favicon hidden |
 | PASS | Step 1 More is disabled |
@@ -15,6 +22,24 @@ Step 1 skeleton open: build + native click + layout + first display; 30 samples,
 | PASS | F22 missing geometry stays closed and logs once |
 | PASS | F22 geometry lost while open closes and logs once |
 | PASS | F22 missing snapshot stays closed and logs once |
+| PASS | successful presentation resets once-per-failure-episode reporting |
+| PASS | close fades both layers and disables hit testing immediately |
+| PASS | old close completion cannot hide a new presentation |
+| PASS | host is exposed once in native AX |
+| PASS | security label policy for https |
+| PASS | security label policy for http |
+| PASS | security label policy for chrome |
+| PASS | security label policy for open |
+| PASS | security label policy for chrome-extension |
+| PASS | security label policy for about |
+| PASS | security label policy for data |
+| PASS | security label policy for file |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion open top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
+| PASS | motion close top-left remains fixed |
 | PASS | render scc-basic light 1x header/action/footer fill and size |
 | PASS | render scc-basic light 1x action and footer ink |
 | PASS | render scc-basic light 1x separator on device pixel |
@@ -45,6 +70,7 @@ Step 1 skeleton open: build + native click + layout + first display; 30 samples,
 | PASS | committed SHA256 scc-basic-light@1x.png |
 | PASS | committed SHA256 scc-basic-light@2x.png |
 | PASS | four committed render receipts |
-| PASS | bench skeleton open p95 6.734 ms <= 8 ms main thread |
+| FAIL | bench skeleton open p95 8.728 ms <= 8 ms main thread |
 
-45/45 passed
+64/65 passed
+FAIL: command sitecontrol-render exited 1; expected 0
