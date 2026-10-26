@@ -1,0 +1,146 @@
+# Engine spike and M1 engine foundation
+
+Date: 2026-10-25. Engine: CEF 156.0.14+g4fa4ab5 (Chromium 156.0.8078.48), the same CEF commit as our fork's base, from the Spotify CDN (`tools/fetch-cef.sh`). Machine: Apple Silicon, 18 cores, macOS 27.2 beta. A Chromium build ran in parallel during every measurement (load average about 26), so the timings are pessimistic.
+
+All results come from the real app driven through the automation channel ([automation.md](automation.md)) by `tools/e2e/engine_e2e.py`. Raw results: `docs/engine-spike/results-*.json`. Screenshots show Open's own windows only.
+
+## Verdict
+
+**Engine: go.** CEF's embedding layer on Chromium 156 hosts any number of pages in our own NSViews with every feature the shell needs (table below, 18 of 19 checks pass; the one failure is Widevine, which v1 does not ship by lead decision). The shell talks only to OpenEngine, which already has Arc's ADK shape (`OEEngine`, `OEBrowserContext`, `OEBrowser`, `OEWebContent`).
+
+**Extensions: the runtime works today; the UI integration needs our fork.** In stock CEF, with pages in our own views (Alloy style):
+
+1. Content scripts, MV3 service workers, and declarativeNetRequest blocking work for uBlock Origin Lite, Dark Reader, 1Password, and Bitwarden. Options pages work as tabs.
+2. Our own toolbar shows every action with its icon, and a click opens the popup page in our panel: uBO Lite, Dark Reader, and 1Password render and work.
+3. `chrome.tabs` and `chrome.windows` do not see our tabs ("No current window"), so popups that ask for the current tab break (Bitwarden stays on its spinner), and dynamic action state (badge, `setIcon`) never reaches us.
+4. Web Store install and `chrome://extensions` work only in Chrome-style pages, which stock CEF on macOS can host only in a separate Chrome window, with one window per tab as far as `chrome.windows` is concerned.
+5. Fork patches P1 (tab-strip bridge), P2 (actions and popups), and P3 (management and prompts) close all of these with code paths that Chromium 156 already has for its WebUI toolbar and for Android (estimate 7–11 engineer-weeks): [engine-patches.md](engine-patches.md).
+
+## Extensions in detail
+
+Extensions: uBlock Origin Lite 2026.1021.1354, Dark Reader 4.9.133, 1Password 8.12.42.36, Bitwarden 2026.10.0 (CRX files from the Chrome Web Store, unpacked with their store IDs, loaded with `--load-extension`), plus Google Translate installed from the Web Store page.
+
+Runs: `tools/e2e/engine_e2e.py --only extensions --style alloy|chrome` (Debug build): `results-extensions-alloy.json`, `results-extensions-chrome.json`, and the `alloy-*`/`chrome-*` screenshots.
+
+| Check | Alloy: page in our NSView (Open's default) | Chrome style: page in a CEF Views window glued over our view |
+|---|---|---|
+| Enumerate installed extensions, actions, and icons for our own toolbar | pass (from Preferences + manifests) | pass |
+| MV3 service workers running (DevTools targets) | pass, all 4 | pass, all 4 |
+| Content scripts: isolated worlds for all 4; Dark Reader dark theme applied | pass (`alloy-content-script-darkreader.png`) | pass |
+| declarativeNetRequest blocking (uBO Lite blocks both ad-script probes; without extensions they load) | pass | pass |
+| Options pages as tabs (uBO Lite dashboard, Dark Reader settings) | pass | pass |
+| Action popup opened from our toolbar button, in our panel | uBO Lite and 1Password render and work; Dark Reader renders (`alloy-popup-darkreader.png`; the DOM probe read the panel's first empty document in one of three runs); Bitwarden stays on its spinner | unreliable: the popup is itself a Views window over our panel; uBO Lite works, others failed or timed out in this run |
+| `chrome.tabs`/`chrome.windows` from inside a popup | `chrome.windows.getCurrent()`: "No current window"; `tabs.query({})`: `[]` | 4 windows for 3 tabs + popup (one window per page); the "active tab" is the popup itself |
+| Pages that extensions open (welcome pages, `chrome.tabs.create`) | none opened in this run | adopted as Open tabs: 1Password welcome, Dark Reader help |
+| Web Store install: "Add to Chrome", Chrome's dialog, "Add extension" | **fail**: the dialog opens as a free-standing window; the install does not complete | pass: dialog as a sheet, Google Translate installed (`chrome-webstore-dialog.png`) |
+| `chrome://extensions` | **fail**: does not render | pass: lists the 4 extensions (`chrome-chrome-extensions.png`) |
+
+What this means: everything that runs inside the extension system works in Alloy style. What is missing is the bridge between the extension system and our UI: the window/tab model (P1), live action state and real popup hosts (P2), and management/prompts (P3). Chrome style shows that the stock Chrome UI paths work, but it cannot be Open's hosting model: on macOS it needs a separate Views window per page, and `chrome.windows` sees one window per tab.
+
+## Engine features
+
+`tools/e2e/engine_e2e.py --only features --style alloy` (Debug build): `results-features-alloy.json`.
+
+| Check | Result | Evidence |
+|---|---|---|
+| JS dialogs | pass | `alert`, `confirm`, `prompt` reach our delegate; prompt text returns to the page |
+| Permission prompts | pass | Notification request reaches our delegate; grant returns "granted" (geolocation not exercised: it would trigger the macOS location prompt for the user) |
+| Popups and new tabs | pass | `window.open` with size goes to a panel; `target=_blank` becomes a Today tab at the top |
+| Find in page | pass | 132 matches for "browser" on the Wikipedia page |
+| Zoom | pass | level 1 → `innerWidth` 1084 → 903 |
+| Context menu hook | pass | Chromium's items arrive in our delegate (Back, Forward, Print, View Page Source) |
+| Audible state and mute | pass | audible while a WAV plays, not after pause; mute works |
+| HTML fullscreen | pass | delegate called, `document.fullscreenElement` set |
+| Picture in Picture | pass | `requestPictureInPicture()` resolves; Chromium shows its PiP window |
+| PDF viewer | pass | Chromium's PDF extension renders (`alloy-pdf-viewer.png`) |
+| Print to PDF | pass | 440 KB file |
+| Downloads | pass | destination from our delegate, progress events, file written |
+| User scripts (Boosts) | pass | CSS and JS injected before page scripts on the matched site only |
+| Request filter (ad-block hook) | pass | a matched request is blocked, then loads after the filter is cleared |
+| Profiles | pass | a second Space with profile "Work" gets its own context: no cookie, no localStorage from Default |
+| Ad-block control | pass | without extensions the ad URLs load (so the DNR result above is real) |
+| Codecs | pass (as expected) | VP9, AV1, Opus, MP3 yes; H.264, AAC, HEVC no in stock CEF (the fork's GN args turn on proprietary codecs: P4) |
+| Widevine | **fail** (expected) | `requestMediaKeySystemAccess("com.widevine.alpha")` is unsupported in stock CEF; v1 does not ship Widevine (`Engine/fork/gn/release.args.gn`) |
+| Renderer crash | pass | crash state reaches the model; reload recovers |
+
+## M1 shell
+
+`tools/e2e/engine_e2e.py --only shell` (Debug build): `results-shell-debug.json`, `shell-window.png`, `shell-split-view.png`.
+
+| Check | Result |
+|---|---|
+| Fresh start | Default model (one profile, one Space) when the snapshot folder is empty |
+| Tab strip mirror | The window's `OEBrowser` holds the loaded pages in sidebar order (favorites, pinned, today) |
+| Keyboard | With a page focused that calls `preventDefault()` on every key: Cmd-L (sent straight to the page view) and Cmd-T (sent through `NSApplication`) focus our address field; typing a host and Return opens it as a new tab; Cmd-W archives it; Cmd-Shift-T restores it with the same tab ID |
+| Split View | Two live pages side by side in one window |
+| Window PNG | From inside the app, no Screen Recording permission |
+| Persistence | Quit and relaunch: same tabs, IDs, sections, and URLs from `State/browser.json`; only the selected tab loads at launch |
+
+The shell is deliberately plain: a list of the focused Space's tabs (favorites, pinned with folders and splits, today), an address field, a Space menu, the extension toolbar, and the page. OpenSidebar replaces the left side.
+
+## Measurements
+
+Release build with the automation channel (`OPEN_AUTOMATION=1 tools/build.sh Release`), `tools/e2e/engine_e2e.py --only measure --config Release`: `results-measure-release.json`. Load average 26 on 18 cores at the start (a Chromium build was running), so these are upper bounds.
+
+Launch (process start to each mark; median of 3 warm launches with a restored `example.com` tab; first launch after a build in the last column):
+
+| Mark | Warm launch | First launch after a build |
+|---|---|---|
+| `main()` | 29 ms | 1882 ms |
+| `CefInitialize` returned | 258 ms | 2192 ms |
+| Engine initialized | 320 ms | 2291 ms |
+| Window and sidebar shown | 472 ms | 2436 ms |
+| Restored tab: main-frame load end | 673 ms | 2704 ms |
+| Restored tab: first contentful paint | **705 ms** | 2985 ms |
+
+Budgets (docs/architecture.md): sidebar ≤ 250 ms, first web paint ≤ 700 ms, on an idle machine. Under this load we are at 472 ms and 705 ms. The first launch after a build loses about 1.9 s before `main()` (system checks of the new 226 MB framework; guess), not in our code. Two easy wins remain: build the window before `CefInitialize` returns (today it is built when the engine reports ready, at 320 ms, and takes about 150 ms to appear), and keep the CEF framework signature stable so the first-launch check is paid once per release.
+
+Memory (physical footprint of all Open processes, as Activity Monitor counts it; Chromium's task manager split by kind):
+
+| Pages | Total | Browser | GPU | Renderers | Utility (network, storage) | Processes |
+|---|---|---|---|---|---|---|
+| 1 (`example.com`) | **217 MB** | 64 MB | 42 MB | 64 MB | 46 MB | 6 |
+| 10 (example.org, Wikipedia, IANA, MDN, Hacker News, W3C, GitHub, rust-lang.org, python.org) | **936 MB** | 85 MB | 238 MB | 571 MB | 56 MB | 15 |
+
+With one tab there are two renderer processes (37 + 28 MB); the second is probably Chromium's spare renderer kept warm for the next navigation (guess). The GPU process grows to 238 MB with 10 pages that were each shown once; tab sleeping ([docs/memory-design.md](memory-design.md)) targets exactly these two lines.
+
+Idle CPU with 10 pages loaded, 10 s window: 0.7 % of one core in total (Chromium task manager, all processes).
+
+### Bundle size
+
+| Part | Size |
+|---|---|
+| Open.app (Release, all locales) | 329 MB |
+| Chromium Embedded Framework binary (arm64 only) | 226 MB |
+| CEF resources: 220 locale folders | 50 MB |
+| CEF resources: `resources.pak` / `icudtl.dat` | 20 MB / 10 MB |
+| CEF `Libraries/` (SwiftShader software GL 16 MB, Vulkan loader, sandbox) | 16 MB |
+| OpenEngine.framework / app binary / 5 helpers | 1.3 MB / 2.0 MB / 48 KB each |
+| **Open.app with `OPEN_KEEP_LOCALES="en"`** (clean clone, measured) | **279 MB** |
+
+What can go:
+
+- Locales: 219 of 220 `.lproj` folders, about 49 MB, with no visible change for an English UI (Open's own UI strings live in the app). `OPEN_KEEP_LOCALES="en"` does it at build time.
+- SwiftShader (16 MB): only used when the GPU is unavailable (VMs, GPU process crash loops). Keep for v1; reconsider with crash data.
+- The CEF binary: an `is_official_build=true` fork build (LTO, PGO) and turning off unused Chrome services (P5) shrink it. Arc's ArcCore arm64 slice is 239 MB for comparison (docs/re/arccore-engine.md §6).
+
+## Build
+
+- From a clean clone: `git clone …` then `OPEN_KEEP_LOCALES="en" tools/build.sh Release` took 1 min 20 s on this loaded machine with the CDN download and extraction cached in `~/Library/Caches/Open/cef` (2 min 8 s when the extraction is not cached yet). The result is 279 MB, passes `codesign -v --deep` (ad-hoc), leaves `git status` clean, and loads `https://example.com` (title read through the DevTools endpoint).
+- `CEF_SOURCE=fork tools/fetch-cef.sh` hands over to `tools/fetch-engine.sh --run` (docs/engine-fork.md), which copies the fork's recorded distribution into `Vendor/cef/`; then the wrapper is rebuilt. Not exercised end to end yet: no fork distribution is recorded until the running fork build finishes. Its error paths are checked (no recorded distribution, unknown source, CDN pin not matching `Engine/fork/VERSIONS`).
+
+## Bugs found and fixed on the way
+
+- OpenKit `SnapshotStore.scheduleSave` crashed every app that called it: the debounced write closure was formed on the main actor, and Swift 6 traps when the background queue runs it (`_dispatch_assert_queue_fail` from `swift_task_checkIsolated`). Fixed with a `@Sendable` closure. The `openkit` CLI never hit it because it uses `saveNow`.
+- CEF rejects a cache path under a symlinked folder (`/tmp` → `/private/tmp`) and silently falls back to in-memory storage. OpenEngine now resolves the user data folder first.
+- With the Chrome bootstrap, Chromium can finish initializing before `applicationDidFinishLaunching`; the shell now builds windows at whichever comes first.
+- AppKit's "reopen windows?" alert after a crash: Open restores from its own snapshot, so AppKit state restoration is off.
+- Release builds hung page loads on the shared "Chromium Safe Storage" keychain item, which belongs to other Chromium-based apps and makes macOS ask for access. OpenEngine now uses its own item ("Open Safe Storage"), and ad-hoc signed builds use Chromium's mock key.
+- The browser process crashed once inside CEF (null dereference during ObjC message forwarding on a run-loop task) right after an extension popup closed and its page was released. Likely cause: CEF needs a browser's parent view to live until `OnBeforeClose`, and our view could go first. Pages now stay alive until `OnBeforeClose`, and CEF's view is parked if the shell drops a page without closing it. The crash was not reproducible on demand; no browser-process crash happened in the full suite runs since (the renderer crash reports from that time are the deliberate `chrome://crash` check). A quit-time race (`oe_quitIfDone` after `shutdown`) was fixed too.
+
+## Decisions for the lead
+
+1. Approve the patch order P1 → P2 → P3 in [engine-patches.md](engine-patches.md) and assign P1 (largest, blocks the other two).
+2. `chrome.windows` mapping: one Chrome window per Open window (proposed) or per Space.
+3. Folders as `chrome.tabGroups`: yes or no.
+4. Until P1 lands, ship extensions in Alloy style (runtime works; `chrome.tabs`-dependent popups do not), or keep a Chrome-style fallback page for the Web Store and `chrome://extensions` (the shell does this today from View › Extensions)?
