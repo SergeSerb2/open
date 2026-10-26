@@ -232,6 +232,21 @@ class Open:
         if self.focus_tracker:
             self.focus_tracker.checkpoint()
 
+    def accept_file_reveal_handoff(self, receipt, path):
+        """Only the explicitly tested own-download NSWorkspace reveal may hand off to Finder."""
+        assert receipt.get("performed") and receipt.get("reveal", {}).get("path") == path and os.path.isfile(path), receipt
+        assert os.path.commonpath([os.path.realpath(path), os.path.realpath(self.user_data)]) == os.path.realpath(self.user_data), path
+        deadline = time.monotonic() + 5
+        while True:
+            state = self.call("native-focus-state"); events = self.call("activation-events")
+            observed = any(e["event"] == "frontmostChanged" and e.get("frontmostBundle") == "com.apple.finder" for e in events)
+            if state.get("frontmostBundle") == "com.apple.finder" and observed:
+                break
+            if time.monotonic() >= deadline:
+                raise FocusInterruption("own download reveal did not hand off to Finder", [state])
+            time.sleep(.02)
+        if self.focus_tracker: self.focus_tracker.checkpoint()
+
     def eval(self, tab, js, **kw):
         # A page that navigates (or an extension that reloads it) destroys
         # the execution context mid-call; try again on the new document.
@@ -542,6 +557,242 @@ def webstore_install(app, style):
 
 # ----------------------------------------------------------------------------
 # Engine feature checks (no extensions needed)
+
+
+def page_chrome_checks(factory, results, tmp):
+    """Real page chrome flows. Policies expose caller choices, never fake engine replies."""
+    import http.server
+    import threading
+    payload = b'OPEN PAGE CHROME DOWNLOAD\n' * 327680
+    fixture_path = Path(ROOT) / 'tools/e2e/fixtures/page-chrome/page.html'
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            path = self.path.split('?', 1)[0]
+            if path.startswith('/download'):
+                self.send_response(200); self.send_header('Content-Type', 'application/octet-stream')
+                self.send_header('Content-Disposition', 'attachment; filename="%s"' % ('cancel.bin' if 'cancel' in path else 'page-chrome.bin'))
+                self.send_header('Content-Length', str(len(payload))); self.end_headers()
+                try:
+                    for i in range(0, len(payload), 65536):
+                        self.wfile.write(payload[i:i+65536]); self.wfile.flush(); time.sleep(.06)
+                except (BrokenPipeError, ConnectionResetError): pass
+                return
+            if path == '/image.svg':
+                body = b'<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="#936550"/></svg>'; mime = 'image/svg+xml'
+            elif path == '/link': body = b'<title>Linked fixture</title><h1>Linked fixture needle</h1>'; mime = 'text/html'
+            else: body = fixture_path.read_bytes(); mime = 'text/html'
+            self.send_response(200); self.send_header('Content-Type', mime); self.send_header('Content-Length', str(len(body))); self.end_headers()
+            try: self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError): pass
+        def log_message(self, *args): pass
+    servers = [http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler) for _ in range(3)]
+    for server in servers: threading.Thread(target=server.serve_forever, daemon=True).start()
+    origins = ['http://127.0.0.1:%d' % server.server_address[1] for server in servers]
+    origin = origins[0]; app = factory(urls=(origin + '/page',), fresh=True)
+    try:
+        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
+        app.call('policy', dialogs='', permissions='', contextMenu='hold')
+        def key(name=None, **args): return app.call('key', **dict(args, **({'key': name} if name else {})))
+        def find_state(): return app.call('find-state')
+        def open_find(text):
+            app.call('focus', tab=tab); key('f', modifiers=['cmd'], route='window')
+            assert wait_until(lambda: find_state()['visible'], timeout=3, step=.02), find_state()
+            key(text=text)
+        open_find('needle')
+        found = wait_until(lambda: (lambda s: s if s['count'] == 3 and s['index'] > 0 else None)(find_state()), timeout=5, step=.02)
+        results['find_bar_open_type'] = {'ok': bool(found) and found['text'] == 'needle' and found['frame'][2:] == [260,24], 'state': find_state()}
+        shot(app, 'page-chrome-find.png')
+        assert found, find_state()
+        initial = found['index']; key('return')
+        next_match = wait_until(lambda: find_state()['index'] == initial % 3 + 1, timeout=3, step=.02)
+        key('return', modifiers=['shift'])
+        previous = wait_until(lambda: find_state()['index'] == initial, timeout=3, step=.02)
+        results['find_bar_next_previous'] = {'ok': bool(next_match) and bool(previous), 'initial': initial, 'state': find_state()}
+        key('escape'); closed = wait_until(lambda: not find_state()['visible'], timeout=3, step=.02)
+        results['find_bar_escape'] = {'ok': bool(closed) and app.eval(tab, 'document.hasFocus()')}
+        open_find('absent-match-12345')
+        empty = wait_until(lambda: find_state()['text'] == 'absent-match-12345' and find_state()['count'] == 0, timeout=3, step=.02)
+        key('a', modifiers=['cmd']); key('backspace')
+        cleared = wait_until(lambda: not find_state()['visible'] and find_state()['text'] == '', timeout=3, step=.02)
+        results['find_bar_empty'] = {'ok': bool(empty) and bool(cleared)}
+        app.call('peek-open', tab=tab, url=origin + '/link')
+        peek = wait_until(lambda: (lambda s: s if s['shown'] and s['stack'] and s['stack'][-1]['content'] else None)(app.call('peek-state')), timeout=8, step=.05)
+        assert peek, app.call('peek-state')
+        peek_page = peek['stack'][-1]['content']; app.call('wait', tab=peek_page)
+        key('f', modifiers=['cmd']); key(text='needle')
+        peek_find = wait_until(lambda: find_state()['count'] == 1 and find_state()['page'] == peek_page, timeout=5, step=.02)
+        results['find_bar_peek_scope'] = {'ok': bool(peek_find), 'state': find_state()}
+        key('escape'); app.call('peek-close'); app.call('focus', tab=tab)
+
+        # A split changes the actual focused engine pane, not merely the sidebar row.
+        peer_tab=app.call('open',url=origin+'/link')['id'];app.call('wait',tab=peer_tab)
+        app.call('split');app.call('menu-perform',id='focus-split-pane-2')
+        focused=app.call('window-state');key('f',modifiers=['cmd']);key(text='needle')
+        expected_count=1 if focused['engineURL']==origin+'/link' else 3
+        split_find=wait_until(lambda:find_state()['count']==expected_count and find_state()['page']==focused['engineSelected'],timeout=5,step=.02)
+        results['find_bar_split_scope']={'ok':bool(split_find),'state':find_state(),'focusedEngine':focused['engineSelected']}
+        key('escape');app.call('split');app.call('select',tab=tab);app.call('focus',tab=tab)
+
+        # This fixture uses the same current OpenEngine action/popup contract as real extensions.
+        action=wait_until(lambda:next((a for a in app.call('extensions')['actions'] if a['title']=='Page chrome popup'),None),timeout=10,step=.1)
+        if action:
+            opened=app.call('extension-toolbar-press',extension=action['id'])
+            popup=wait_until(lambda:(lambda s:s if s['visible'] and s['content'] else None)(app.call('extension-popup-state')),timeout=5,step=.02)
+            assert popup,app.call('extension-popup-state');app.call('wait',tab=popup['content'])
+            results['extension_popup_panel']={'ok':opened and app.eval(popup['content'],'document.title')=='Page chrome popup' and all(25<=v<=limit for v,limit in zip(popup['size'],[800,600])),'state':popup}
+            app.call('click',tab=popup['content'],selector='#edit');key(text='popup input',window=popup['window'])
+            results['extension_popup_input']={'ok':app.eval(popup['content'],'document.querySelector("#edit").value')=='popup input'}
+            app.eval(popup['content'],'window.resizeFixture();true')
+            resized=wait_until(lambda:(lambda s:s if s['visible'] and s['size']!=popup['size'] else None)(app.call('extension-popup-state')),timeout=5,step=.05)
+            results['extension_popup_resize']={'ok':bool(resized) and all(25<=v<=limit for v,limit in zip(resized['size'],[800,600])),'before':popup,'after':resized}
+            app.call('extension-toolbar-press',extension=action['id'])
+            toggled=wait_until(lambda:not app.call('extension-popup-state')['visible'],timeout=3,step=.02)
+            results['extension_popup_second_click']={'ok':bool(toggled)}
+            app.call('focus',tab=tab);app.call('extension-toolbar-press',extension=action['id'])
+            popup=wait_until(lambda:(lambda s:s if s['visible'] and s['content'] else None)(app.call('extension-popup-state')),timeout=5,step=.02)
+            assert popup,app.call('extension-popup-state');app.call('wait',tab=popup['content']);app.call('click',tab=popup['content'],selector='#close')
+            closed=wait_until(lambda:not app.call('extension-popup-state')['visible'],timeout=3,step=.02)
+            results['extension_popup_window_close']={'ok':bool(closed)}
+            app.call('focus',tab=tab);app.call('extension-toolbar-press',extension=action['id'])
+            assert wait_until(lambda:app.call('extension-popup-state')['visible'],timeout=5,step=.02)
+            rect=app.call('downloads-state')['button'];assert len(rect)==4 and rect[2]>0,rect
+            app.call('mouse',action='queued-click',x=rect[0]+rect[2]/2,y=rect[1]+rect[3]/2)
+            outside=wait_until(lambda:not app.call('extension-popup-state')['visible'],timeout=3,step=.02)
+            results['extension_popup_outside_click']={'ok':bool(outside)}
+            if app.call('downloads-state')['visible']:app.call('downloads-show')
+            app.call('focus',tab=tab)
+        else:
+            results['extension_popup_pending']={'status':'BLOCKED','reason':'pending #93: fixture action not published by current engine','engineActions':app.call('extensions')['actions']}
+        results['extension_chrome_model_pending']={'status':'BLOCKED','reason':'pending #93: native Chrome toolbar action/popup implementation is not on main'}
+
+        def start_dialog(script):
+            app.eval(tab, 'window.outcome="pending";setTimeout(()=>{window.outcome=(' + script + ');},0);true')
+            return wait_until(lambda: (lambda s: s if s['visible'] else None)(app.call('page-dialog-state')), timeout=5, step=.02)
+        for name, script, accepted, text, expected, kind in [
+            ('alert', '(alert("page chrome alert"),"alert done")', True, None, 'alert done', 0),
+            ('confirm_cancel', 'confirm("page chrome confirm")', False, None, False, 1),
+            ('confirm_accept', 'confirm("page chrome confirm")', True, None, True, 1),
+            ('prompt_accept', 'prompt("page chrome prompt","seed")', True, 'typed response', 'typed response', 2),
+            ('prompt_cancel', 'prompt("page chrome prompt","seed")', False, 'ignored', None, 2)]:
+            visible = start_dialog(script); assert visible, app.call('page-dialog-state')
+            if name == 'prompt_accept': shot(app, 'page-chrome-dialog.png', window=visible['window'])
+            response = app.call('page-dialog-press', accept=accepted, text=text)
+            done = wait_until(lambda: app.eval(tab, 'window.outcome') == expected, timeout=5, step=.02)
+            results['dialog_' + name] = {'ok': visible['kind'] == kind and response and bool(done)
+                and (kind != 2 or visible['text'] == 'seed'), 'sheet': visible, 'result': app.eval(tab, 'window.outcome')}
+        app.call('policy', dialogs='dismiss')
+        dismissed = app.eval(tab, '[confirm("dismiss policy"),prompt("dismiss prompt","seed")]')
+        results['dialog_dismiss_policy'] = {'ok': dismissed == [False, None] and app.call('page-dialog-state')['pending'] == 0, 'result': dismissed}
+        app.call('policy', dialogs='hold')
+        app.eval(tab, 'setTimeout(()=>{window.outcome=confirm("held confirm")},0);true')
+        held = wait_until(lambda: (lambda s: s if s['pending'] == 1 and s['held'] else None)(app.call('page-dialog-state')), timeout=5, step=.02)
+        answered = app.call('dialog', accept=True)
+        results['dialog_hold_policy'] = {'ok': bool(held) and not held['visible'] and answered and bool(wait_until(lambda: app.eval(tab,'window.outcome') is True, timeout=3, step=.02))}
+        app.call('policy', dialogs='')
+        closing = app.call('open', url=origin + '/page?unsaved')['id']; app.call('wait', tab=closing); app.call('focus', tab=closing)
+        app.call('click', tab=closing, selector='#unload'); before_hosts = app.call('host-counts')['created']
+        app.call('close', tab=closing)
+        unload = wait_until(lambda: (lambda s: s if s.get('visible') and s.get('kind') == 3 else None)(app.call('page-dialog-state')), timeout=5, step=.02)
+        assert unload, app.call('page-dialog-state')
+        app.call('page-dialog-press', accept=False)
+        stayed = wait_until(lambda: not app.call('page-dialog-state')['visible'], timeout=3, step=.02)
+        results['dialog_beforeunload_stay'] = {'ok': bool(stayed) and any(t['id'] == closing for t in app.call('tabs'))
+            and app.eval(closing,'document.title') == 'Page chrome fixture' and app.call('host-counts')['created'] == before_hosts, 'sheet': unload}
+        app.call('close', tab=closing)
+        assert wait_until(lambda: app.call('page-dialog-state').get('kind') == 3 and app.call('page-dialog-state')['visible'], timeout=5, step=.02)
+        app.call('page-dialog-press', accept=True)
+        removed = wait_until(lambda: all(t['id'] != closing for t in app.call('tabs')), timeout=5, step=.02)
+        results['dialog_beforeunload_leave'] = {'ok': bool(removed) and app.call('page-dialog-state')['pending'] == 0}
+        app.call('select', tab=tab); app.call('focus', tab=tab)
+
+        # Separate secure localhost origins keep remembered decisions independent.
+        remembered = []
+        for index, allow, remember in [(0,False,False),(1,True,True),(2,False,True)]:
+            target = app.call('open', url=origins[index]+'/page?permission')['id']; app.call('wait',tab=target); app.call('focus',tab=target)
+            app.call('permission-setting',tab=target,origin=origins[index],kind=8,state=0)
+            app.eval(target,'window.permissionResult="pending";Notification.requestPermission().then(v=>window.permissionResult=v);true')
+            prompt = wait_until(lambda: (lambda s: s if s['visible'] else None)(app.call('permission-state')), timeout=5, step=.02)
+            assert prompt, app.call('permission-state')
+            if allow: shot(app, 'page-chrome-permission.png', window=prompt['window'])
+            pressed = app.call('permission-press', allow=allow, remember=remember)
+            outcome = 'granted' if allow else 'denied'
+            settled = wait_until(lambda: app.eval(target,'window.permissionResult') == outcome, timeout=5, step=.02)
+            stored = app.call('permission-setting',tab=target,origin=origins[index],kind=8)
+            wanted = (1 if allow else 2) if remember else 0
+            results['permission_' + ('allow_remember' if allow else 'deny_remember' if remember else 'deny_once')] = {
+                'ok': bool(pressed) and bool(settled) and stored == wanted and app.call('permission-state')['pending'] == 0,
+                'prompt': prompt, 'stored': stored, 'expectedStored': wanted}
+            if remember: remembered.append((origins[index],wanted,outcome))
+        old_decisions = app.call('permission-state')['decisions']
+        known = app.call('open',url=origins[1]+'/page?remembered')['id'];app.call('wait',tab=known)
+        actual = app.eval(known,'Notification.requestPermission()')
+        results['permission_stored_no_prompt'] = {'ok': actual == 'granted' and not app.call('permission-state')['visible'] and app.call('permission-state')['decisions'] == old_decisions}
+        app.call('select',tab=tab);app.call('focus',tab=tab)
+        # Actual engine context menu events; selections use the same NSMenu items.
+        def context(selector, selection=False):
+            if selection:app.eval(tab,'(()=>{const r=document.createRange();r.selectNodeContents(document.querySelector('+json.dumps(selector)+'));const s=getSelection();s.removeAllRanges();s.addRange(r);return true})()')
+            pos=app.eval(tab,'(()=>{const r=document.querySelector('+json.dumps(selector)+').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()')
+            app.call('context-menu-cancel');app.call('rightclick',tab=tab,x=pos[0],y=pos[1])
+            menu=wait_until(lambda:(lambda s:s if s['items'] and not s['completed'] else None)(app.call('context-menu-state')),timeout=5,step=.02)
+            assert menu,app.call('context-menu-state');return menu
+        menu=context('#page-target');results['page_context_page']={'ok': any(r['engine'] for r in menu['items']) and not any(r['key']=='link-copy' for r in menu['items']), 'items':menu['items']};app.call('context-menu-cancel')
+        menu=context('#link-target');app.call('pasteboard-write',text='LINK NOT COPIED');picked=app.call('context-menu-select',key='link-copy')
+        results['page_context_link']={'ok':picked and app.call('pasteboard')==origin+'/link' and all(any(r['key']==key for r in menu['items']) for key in ('link-open','link-new-tab','link-peek','link-copy')), 'items':menu['items']}
+        menu=context('#image-target');app.call('pasteboard-write',text='IMAGE NOT COPIED');picked=app.call('context-menu-select',key='image-copy-url')
+        results['page_context_image']={'ok':picked and app.call('pasteboard')==origin+'/image.svg' and any(r['key']=='image-new-tab' for r in menu['items']), 'items':menu['items']}
+        menu=context('#selection-target',True);app.call('pasteboard-write',text='HIGHLIGHT NOT COPIED');picked=app.call('context-menu-select',key='selection-copy-link')
+        results['page_context_selection']={'ok':picked and ':~:text=Distinct%20selection%20text' in app.call('pasteboard'), 'items':menu['items']}
+        context('#link-target');before={t['id'] for t in app.call('tabs')};app.call('context-menu-select',key='link-new-tab')
+        opened=wait_until(lambda:next((t for t in app.call('tabs') if t['id'] not in before and t['url']==origin+'/link'),None),timeout=5,step=.02)
+        assert opened,app.call('tabs');app.call('select',tab=opened['id']);app.call('wait',tab=opened['id'])
+        results['page_context_new_tab_engine']={'ok':app.eval(opened['id'],'document.title')=='Linked fixture' and opened['profile']==app.tab(tab)['profile']}
+        app.call('select',tab=tab);app.call('focus',tab=tab)
+        app.call('site-controls');site=app.call('site-controls-state')
+        results['site_control_host_pending']={'status':'BLOCKED','reason':'pending #69','hostRequest':site}
+        assert not site['available'] and site['requests']>0 and site['request']['profile']==app.tab(tab)['profile'] and site['request']['anchor'][2:]==[30,30],site
+        # Relauch proves the remembered default-context values are durable.
+        app.call('save');app.quit();app=factory(urls=());app.call('wait');app.call('select',tab=tab);app.call('wait',tab=tab)
+        values=[app.call('permission-setting',tab=tab,origin=o,kind=8) for o,_,_ in remembered]
+        results['permission_remember_relaunch']={'ok':values==[v for _,v,_ in remembered],'values':values}
+        app.call('policy',dialogs='',permissions='',contextMenu='hold');app.call('focus',tab=tab)
+        directory=Path(app.user_data)/'downloads';directory.mkdir(exist_ok=True)
+        app.call('download-profile-options',directory=str(directory),ask=False)
+        initial=app.call('downloads-show');results['downloads_empty']={'ok':initial['visible'] and initial['rows']==[],'state':initial}
+        app.call('downloads-show')
+        app.call('click',tab=tab,selector='#download-target')
+        def download(name):return next((r for r in app.call('downloads-state')['rows'] if r['name']==name),None)
+        started=wait_until(lambda:(lambda r:r if r and r['state']=='inProgress' and r['received']>0 and r['received']<len(payload) else None)(download('page-chrome.bin')),timeout=10,step=.05)
+        assert started,app.call('downloads-state');app.call('downloads-show')
+        shot(app, 'page-chrome-downloads.png')
+        results['downloads_start_progress']={'ok':started['total']==len(payload) and started['path'].startswith(str(directory)) and app.call('downloads-state')['visible'],'row':started}
+        assert app.call('downloads-action',id=started['id'],action='pause')['performed']
+        last=[None,time.monotonic()]
+        def bytes_stable():
+            row=download('page-chrome.bin')
+            if not row or row['state']!='paused':return None
+            if row['received']!=last[0]:last[:]=[row['received'],time.monotonic()]
+            return row if time.monotonic()-last[1]>=1 else None
+        paused=wait_until(bytes_stable,timeout=4,step=.05)
+        results['downloads_pause']={'ok':bool(paused) and paused['received']<len(payload),'row':paused}
+        assert app.call('downloads-action',id=started['id'],action='resume')['performed']
+        continued=wait_until(lambda:(lambda r:r if r and r['received']>(paused or started)['received'] else None)(download('page-chrome.bin')),timeout=5,step=.05)
+        results['downloads_resume']={'ok':bool(continued),'row':continued}
+        complete=wait_until(lambda:(lambda r:r if r and r['state']=='completed' else None)(download('page-chrome.bin')),timeout=20,step=.1)
+        file=Path(complete['path']) if complete else directory/'missing'
+        results['downloads_finish']={'ok':bool(complete) and file.exists() and file.read_bytes()==payload,'row':complete}
+        # Cancel is a real failed/empty-path case, not a fake finished row.
+        app.eval(tab,'document.querySelector("#download-target").href="'+origin+'/download-cancel.bin";true');app.call('click',tab=tab,selector='#download-target')
+        cancel=wait_until(lambda:(lambda r:r if r and r['state']=='inProgress' else None)(download('cancel.bin')),timeout=5,step=.05)
+        assert cancel,app.call('downloads-state');app.call('downloads-action',id=cancel['id'],action='cancel')
+        cancelled=wait_until(lambda:(lambda r:r if r and r['state']=='cancelled' else None)(download('cancel.bin')),timeout=5,step=.05)
+        results['downloads_cancel']={'ok':bool(cancelled) and not Path(cancelled['path']).exists(),'row':cancelled}
+        reveal=app.call('downloads-action',id=started['id'],action='reveal')
+        app.accept_file_reveal_handoff(reveal, str(file))
+        results['downloads_show_in_finder']={'ok':reveal['performed'] and reveal['reveal']['id']==started['id'] and reveal['reveal']['path']==str(file) and file.exists(),
+            'request':reveal,'boundary':'Real NSWorkspace reveal request and Finder foreground; Finder selection UI is not inspected.'}
+    finally:
+        app.quit()
+        for server in servers:server.shutdown();server.server_close()
 
 
 def feature_checks(app, style, results, tmp):
@@ -3316,7 +3567,7 @@ def main():
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions"],
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "page-chrome"],
                     required=True)
     opts = ap.parse_args()
 
@@ -3327,6 +3578,8 @@ def main():
     shutil.rmtree(tmp, ignore_errors=True)
     os.makedirs(tmp)
     extra = ["--use-mock-keychain"]
+    if opts.only in ("features", "page-chrome"):
+        extra += ["--load-extension=" + os.path.join(ROOT, "tools/e2e/fixtures/page-chrome-extension"), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "extensions":
         dirs = [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "1password", "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
@@ -3371,6 +3624,9 @@ def main():
         elif opts.only in ("commandbar", "actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "page-chrome":
+            results[opts.only] = CheckedResults(tracker)
+            page_chrome_checks(factory, results[opts.only], tmp)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config)
@@ -3397,6 +3653,8 @@ def main():
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
+            if opts.only == "features":
+                page_chrome_checks(factory, results["features"], tmp)
 
     interrupted_attempts = []
     for attempt in range(1, 4):
@@ -3431,14 +3689,14 @@ def main():
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "page-chrome"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "page-chrome")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)

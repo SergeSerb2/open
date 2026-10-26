@@ -28,6 +28,8 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   @ObservationIgnored private(set) var libraryPresenter: LibraryPresenter?
   private(set) var downloadRevision = 0
   private var removedDownloads: Set<String> = []
+  private var pausedDownloads: Set<String> = []
+  private(set) var lastDownloadReveal: [String: String] = [:]
   func show(pane: PaneID? = nil) { settingsPresenter.show(pane: pane); NSApp.activate(); app.scheduleMenuRebuild() }
   func showLibrary(section: LibrarySection? = nil) {
     guard let captures else { settings.statusText = "Captures could not be opened."; show(); return }
@@ -46,13 +48,14 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func refreshDownloads() { downloadRevision += 1 }
   var downloads: [DownloadItemSnapshot] {
     _ = downloadRevision
+    guard app.engineReady, !app.shutdownPrepared else { return [] }
     return OEEngine.shared.contexts.flatMap { context in
       guard let profile = profile(for: context) else { return [DownloadItemSnapshot]() }
       return context.downloads.compactMap { download in
         let id = "\(context.identifier):\(download.identifier)"
         guard !removedDownloads.contains(id) else { return nil }
         let state: DownloadState
-        switch download.state { case .complete: state = .completed; case .cancelled: state = .cancelled; case .interrupted: state = .failed; default: state = .inProgress }
+        switch download.state { case .complete: state = .completed; case .cancelled: state = .cancelled; case .interrupted: state = .failed; default: state = pausedDownloads.contains(id) ? .paused : .inProgress }
         var snapshot = DownloadItemSnapshot(id: id, fileName: download.suggestedFilename,
           sourceHost: download.sourceURL.host() ?? "", receivedBytes: download.receivedBytes,
           totalBytes: download.totalBytes >= 0 ? download.totalBytes : nil, state: state,
@@ -64,10 +67,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   @ObservationIgnored private var downloadStarted: [String: Date] = [:]
   func noteDownload(_ download: OEDownload, context: OEBrowserContext) {
     let id = "\(context.identifier):\(download.identifier)"
+    if download.state == .complete || download.state == .cancelled || download.state == .interrupted { pausedDownloads.remove(id) }
     if downloadStarted[id] == nil { downloadStarted[id] = Date() }; refreshDownloads()
   }
-  private func profile(for context: OEBrowserContext) -> Profile? {
-    app.model.profiles.first { $0.id.description == context.identifier || app.directories.engineDirectory(for: $0).standardizedFileURL == context.directory?.standardizedFileURL }
+  func profile(for context: OEBrowserContext) -> Profile? {
+    app.model.profiles.first { $0.dataDirectoryName == context.identifier || app.directories.engineDirectory(for: $0).standardizedFileURL == context.directory?.standardizedFileURL }
       ?? (context === OEEngine.shared.defaultContext ? app.model.defaultProfile : nil)
   }
   private func download(_ id: String) -> OEDownload? {
@@ -131,11 +135,16 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func restoreArchived(id: ItemID) { app.scheduleSave(); app.scheduleMenuRebuild() }
   func deleteArchived(id: ItemID) { app.scheduleMenuRebuild() }
   func clearArchive() { app.scheduleMenuRebuild() }
-  func revealDownload(id: String) { if let url = download(id)?.destinationURL { NSWorkspace.shared.activateFileViewerSelecting([url]) } }
+  func revealDownload(id: String) {
+    guard let item = download(id), item.state == .complete, let url = item.destinationURL,
+          FileManager.default.fileExists(atPath: url.path) else { return }
+    lastDownloadReveal = ["id": id, "path": url.path]
+    NSWorkspace.shared.activateFileViewerSelecting([url])
+  }
   func retryDownload(id: String) { if let item = download(id), let profile = OEEngine.shared.contexts.first(where: { id.hasPrefix($0.identifier + ":") }).flatMap({ self.profile(for: $0) }) ?? app.model.defaultProfile { openURL(item.sourceURL, profileID: profile.id) } }
-  func cancelDownload(id: String) { download(id)?.cancel(); refreshDownloads() }
-  func pauseDownload(id: String) { download(id)?.pause(); refreshDownloads() }
-  func resumeDownload(id: String) { download(id)?.resume(); refreshDownloads() }
+  func cancelDownload(id: String) { download(id)?.cancel(); pausedDownloads.remove(id); refreshDownloads() }
+  func pauseDownload(id: String) { download(id)?.pause(); pausedDownloads.insert(id); refreshDownloads() }
+  func resumeDownload(id: String) { download(id)?.resume(); pausedDownloads.remove(id); refreshDownloads() }
   func openDownload(id: String) { if let url = download(id)?.destinationURL { NSWorkspace.shared.open(url) } }
   func removeDownload(id: String) { removedDownloads.insert(id); refreshDownloads() }
   func deleteCapture(id: UUID) {} // Library already removed the file and index.

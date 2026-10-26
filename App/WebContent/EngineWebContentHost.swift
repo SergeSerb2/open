@@ -64,6 +64,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     guard !closed, let owner else { return }
     let token = generation
     if changes.contains(.URL), let url = page.url, url.absoluteString != "about:blank" {
+      owner.pageURLChanged(page)
       onURLChange?(url); cancelBackgroundRead(); pageBackgroundColor = nil; onPageBackgroundChange?(nil)
     }
     guard !closed, generation == token else { return }

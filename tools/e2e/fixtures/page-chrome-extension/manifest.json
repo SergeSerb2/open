@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Open page chrome fixture","version":"1.0","action":{"default_title":"Page chrome popup","default_popup":"popup.html"},"permissions":["activeTab"]}

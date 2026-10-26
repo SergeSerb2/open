@@ -6,8 +6,8 @@ import AppKit
 @MainActor
 final class ActivationTrace {
   private(set) var events: [[String: Any]] = []
-  private var applicationObservers: [NSObjectProtocol] = []
-  private var workspaceObserver: NSObjectProtocol?
+  private var applicationObservers: [any NSObjectProtocol] = []
+  private var workspaceObserver: (any NSObjectProtocol)?
 
   init() {
     for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
@@ -24,9 +24,10 @@ final class ActivationTrace {
     workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] notification in
       let target = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
       let name = target?.localizedName ?? "unknown", pid = target?.processIdentifier ?? 0
+      let bundle = target?.bundleIdentifier ?? ""
       MainActor.assumeIsolated {
         self?.append(["event": "frontmostChanged", "uptime": ProcessInfo.processInfo.systemUptime,
-          "frontmostApp": name, "frontmostPID": pid])
+          "frontmostApp": name, "frontmostPID": pid, "frontmostBundle": bundle])
       }
     }
   }

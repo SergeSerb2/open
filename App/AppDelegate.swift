@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   var menuRebuildTask: Task<Void, Never>?
   var afterPaintTask: Task<Void, Never>?
   var littleOpenStub: NSWindowController?
-  var commandWindowObserver: NSObjectProtocol?
+  var commandWindowObserver: (any NSObjectProtocol)?
   private var activeWindowID: WindowID?
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION

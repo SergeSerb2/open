@@ -29,6 +29,8 @@ public final class SidebarView: NSView {
     let favorites: FavoritesView
     let pager: SpacePagerView
     let bottomBar: BottomBarView
+    /// Read-only host anchor; geometry remains owned by the sidebar.
+    public var siteControlsAnchorView: NSView { urlField.siteControls }
     public let mediaControls: MediaControlsView
     private var cardBackground: ThemeBackgroundView?
     private var pointerTracking: NSTrackingArea?

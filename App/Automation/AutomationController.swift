@@ -84,6 +84,7 @@
         return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
           "uptime": ProcessInfo.processInfo.systemUptime,
           "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
+          "frontmostBundle": NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "",
           "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0] as [String: Any]
       case "menu-state":
         NSApp.mainMenu?.update()
@@ -163,6 +164,36 @@
         w.pendingSaveChoice = nil
         panel.sheetParent?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil)
         choice(URL(fileURLWithPath: path)); return true
+      case "find-state": return w.findState
+      case "page-dialog-state": return w.dialogState
+      case "page-dialog-press": return w.pageDialogs.press(accepted: a["accept"] as? Bool ?? true, text: a["text"] as? String)
+      case "permission-state": return w.permissionState
+      case "permission-press": return w.pagePermissions.press(allow: a["allow"] as? Bool ?? false, remember: a["remember"] as? Bool ?? false)
+      case "permission-setting":
+        let page = try content(a, w)
+        guard let origin = (a["origin"] as? String).flatMap(URL.init(string:)) else { throw Failure(message: "missing origin") }
+        let kind = OEPermissionKind(rawValue: a["kind"] as? UInt32 ?? OEPermissionKind.notifications.rawValue)
+        if let state = a["state"] as? Int, let value = OEPermissionState(rawValue: state) { page.context.setPermissionState(value, for: kind, origin: origin) }
+        return page.context.permissionState(for: kind, origin: origin).rawValue
+      case "context-menu-state": return w.contextMenuSession?.state ?? ["items": [], "completed": true]
+      case "context-menu-select": return (a["key"] as? String).map { w.contextMenuSession?.perform(key: $0) == true } ?? false
+      case "context-menu-cancel": w.contextMenuSession?.cancel(); return true
+      case "downloads-show": w.pageDownloads.button.performClick(nil); return w.pageDownloads.state
+      case "downloads-state": return w.pageDownloads.state
+      case "downloads-action":
+        guard let id = a["id"] as? String, let action = a["action"] as? String else { throw Failure(message: "missing download action") }
+        let performed = w.pageDownloads.perform(id: id, action: action)
+        return ["performed": performed, "reveal": app.settingsPresenter.lastDownloadReveal] as [String: Any]
+      case "download-profile-options":
+        guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }
+        var settings = profile.settings
+        if let path = a["directory"] as? String { settings.downloadDirectory = path }
+        if let ask = a["ask"] as? Bool { settings.askWhereToSaveEachFile = ask }
+        return app.model.updateProfileSettings(id: profile.id, settings: settings)
+      case "site-controls-state": return w.siteControls.state
+      case "site-controls": return w.siteControls.present()
+      case "extension-popup-state": return w.extensionPopup.state
+      case "extension-toolbar-press": return (a["extension"] as? String).map { w.pressExtensionButton(id: $0) } ?? false
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
       case "suggest-remote":
         guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }
@@ -337,6 +368,28 @@
             pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
         }
         let action = a["action"] as? String
+        if action == "queued-click" {
+          let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+          BrowserWindowController.automationPointer = (number, point)
+          let delivered = Mutex(false)
+          let monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { e in
+            if e.windowNumber == number && e.eventNumber == motionTag { delivered.withLock { $0 = true } }
+            return e
+          }
+          defer { if let monitor { NSEvent.removeMonitor(monitor) } }
+          for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let e = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+              windowNumber: number, context: nil, eventNumber: motionTag, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) {
+              NSApp.postEvent(e, atStart: false)
+            }
+          }
+          let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+          while !delivered.withLock({ $0 }) {
+            guard ContinuousClock.now < deadline else { throw Failure(message: "queued click was not dequeued") }
+            try await Task.sleep(for: .milliseconds(5))
+          }
+          return ["delivered": true]
+        }
         if action == "move" || action == "hover" {
           // Local event monitors run on AppKit's native dequeue path. Queue
           // motion just like real input, including after a Space transition.
@@ -965,8 +1018,8 @@
     private func menuEnabled(_ item: NSMenuItem) -> Bool {
       guard let action = item.action else { return item.isEnabled }
       let target = item.target ?? NSApp.target(forAction: action, to: nil, from: item)
-      if let validator = target as? NSMenuItemValidation { return validator.validateMenuItem(item) }
-      if let validator = target as? NSUserInterfaceValidations { return validator.validateUserInterfaceItem(item) }
+      if let validator = target as? any NSMenuItemValidation { return validator.validateMenuItem(item) }
+      if let validator = target as? any NSUserInterfaceValidations { return validator.validateUserInterfaceItem(item) }
       return target != nil
     }
     private func menuRows(_ menu: NSMenu?) -> [[String: Any]] {
@@ -1031,7 +1084,7 @@
         return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
       }
       let keys: [String: (String, UInt16)] = [
-        "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
+        "backspace": ("\u{7f}", 51), "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),

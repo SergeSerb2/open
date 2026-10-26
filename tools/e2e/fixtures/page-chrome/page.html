@@ -1,0 +1,7 @@
+<!doctype html><meta charset="utf-8"><title>Page chrome fixture</title>
+<style>body{font:16px -apple-system;margin:24px;background:#faf7f2;color:#222}#targets>*{display:block;margin:22px 0}#image-target{width:80px;height:60px}button{font:inherit}#page-target{width:300px;height:45px;background:#e5dfd6}</style>
+<h1>Page chrome</h1><p>needle Alpha needle Beta needle</p>
+<button id="gesture" onclick="window.clicked=true">Page gesture</button>
+<button id="unload" onclick="window.onbeforeunload=e=>{e.preventDefault();e.returnValue='';return ''}">Unsaved changes</button>
+<div id="targets"><div id="page-target">Page target</div><a id="link-target" href="/link">Link target</a><img id="image-target" src="/image.svg" alt="Image target"><p id="selection-target">Distinct selection text</p><a id="download-target" href="/download.bin" download>Download fixture</a></div>
+<script>window.outcome='unset';document.addEventListener('keydown',e=>window.lastKey=e.key)</script>

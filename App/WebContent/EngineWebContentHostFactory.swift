@@ -16,7 +16,7 @@ final class AuxiliaryPage {
   let content: OEWebContent
   let panel: NSPanel
   /// The panel's close button closes the page too.
-  var closeObserver: NSObjectProtocol?
+  var closeObserver: (any NSObjectProtocol)?
   init(content: OEWebContent, panel: NSPanel) { self.content = content; self.panel = panel }
 }
 
@@ -55,11 +55,26 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
+    extensionPopup.dismiss()
     commandBarSession?.show(mode, requestedAt: requestedAt)
   }
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
   private var popupPanel: NSPanel?
+  let extensionPopup = ExtensionPopupPresenter()
+  private var siteControlsHost: SiteControlsHost?
+  var siteControls: SiteControlsHost {
+    if let siteControlsHost { return siteControlsHost }
+    let host = SiteControlsHost(owner: self); siteControlsHost = host; return host
+  }
+  private var findBar: FindBarView?
+  private weak var findPage: OEWebContent?
+  private var dialogPresenter: PageDialogPresenter?
+  private var permissionPresenter: PermissionPromptPresenter?
+  private var downloadsPresenter: DownloadsPopoverController?
+  private(set) var contextMenuSession: PageContextMenuSession?
+  private var closeRequests: [ItemID: Task<Void, Never>] = [:]
+  private var downloadSavePanels: [UUID: DownloadDestinationChoice] = [:]
   private lazy var extensionBar = makeExtensionBar()
   private lazy var findField = makeFindField()
   private var extensionBarCreated = false
@@ -75,7 +90,32 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   var downloadDirectory: URL?
   private(set) var events: [[String: Any]] = []
   private(set) var lastFindResult: OEFindResult?
-  private(set) var pendingDialogs: [OEJavaScriptDialog] = []
+  var pendingDialogs: [OEJavaScriptDialog] { dialogPresenter?.pendingDialogs ?? [] }
+  var pageDialogs: PageDialogPresenter {
+    if let dialogPresenter { return dialogPresenter }
+    let presenter = PageDialogPresenter(); presenter.window = window
+    presenter.onDecision = { [weak self] page, kind, accepted in
+      guard let self else { return }
+      self.record("dialogDecision", page, ["kind": kind.rawValue, "accepted": accepted])
+      if kind == .beforeUnload, !accepted, let id = self.tabID(for: page) { self.closeRequests[id]?.cancel(); self.closeRequests[id] = nil }
+    }
+    dialogPresenter = presenter; return presenter
+  }
+  var pagePermissions: PermissionPromptPresenter {
+    if let permissionPresenter { return permissionPresenter }
+    let presenter = PermissionPromptPresenter(owner: self); permissionPresenter = presenter; return presenter
+  }
+  var pageDownloads: DownloadsPopoverController {
+    if let downloadsPresenter { return downloadsPresenter }
+    let presenter = DownloadsPopoverController(owner: self); downloadsPresenter = presenter
+    return presenter
+  }
+  func showDownloads() { if pageDownloads.button.superview == nil { extensionBar.addArrangedSubview(pageDownloads.button) }; layoutViews(); pageDownloads.show() }
+  func refreshDownloads() { downloadsPresenter?.refresh() }
+  var dialogState: [String: Any] { dialogPresenter?.state ?? ["pending": 0, "visible": false] }
+  var permissionState: [String: Any] { permissionPresenter?.state ?? ["pending": 0, "visible": false, "decisions": 0] }
+
+
 
   init(app: AppDelegate, state: BrowserWindowState) {
     self.app = app; windowState = state
@@ -100,7 +140,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       return self?.isAppCommandEnabled(id, enabledKey: key) ?? false
     }
     controller.onLayout = { [weak self] in self?.layoutViews() }
-    controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id) }
+    controller.onFocus = { [weak self] in guard let self else { return }; self.app.didFocusWindow(self.windowState.id); self.permissionPresenter?.presentPending() }
     controller.nextResponder = self; nextResponder = NSApp
     controller.onSidebarIntent = { [weak self] intent in guard let self else { return false }; return self.performSidebar(intent) }
     controller.onStateChange = { [weak self] in
@@ -119,6 +159,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     for (id, url) in queuedNavigations { model.tab(id: id)?.url = url }
     queuedNavigations.removeAll()
     showSelection(focus: false)
+    if pageDownloads.button.superview == nil { extensionBar.addArrangedSubview(pageDownloads.button) }; layoutViews()
   }
   #if OPEN_AUTOMATION
   func navigateBeforeEngineForAutomation(_ input: String) {
@@ -207,6 +248,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
+    if contextMenuSession?.belongs(to: host.content) == true { contextMenuSession?.cancel() }
+    dialogPresenter?.cancel(page: host.content); permissionPresenter?.cancel(page: host.content)
+    closeRequests[host.tabID]?.cancel(); closeRequests[host.tabID] = nil
     commandBarNavigationFocus.remove(host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
@@ -288,6 +332,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     window?.title = selectedTab?.displayTitle.isEmpty == false ? selectedTab!.displayTitle : "Open"
     if focus { selectedContent?.focusPage() }
     commandBarSession?.contextDidChange(); app.scheduleMenuRebuild()
+    if findFieldCreated, findBar?.isHidden == false { searchFind(forward: true) }
+    if let page = permissionPresenter?.pending.first?.page, page !== selectedContent { permissionPresenter?.cancel(page: page) }
+    downloadsPresenter?.refresh()
     layoutViews()
   }
   func select(nodeID: ItemID?, focus: Bool = true) {
@@ -352,7 +399,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string); return true
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary: app.settingsPresenter.showLibrary(); return true
-    case .showSiteControls, .manageSpaces, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
+    case .showSiteControls: return siteControls.present()
+    case .manageSpaces, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
          .exportSpaceIntoFolder, .editPinnedURL, .share, .changeIcon, .customizePage,
          .copyAllLinks, .turnFolderIntoSpace, .moveToNewSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
@@ -364,7 +412,26 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   /// chrome.tabs.remove: pinned tabs and favorites stay in the sidebar and
   /// unload; Today tabs close (archived).
   func closeTab(id: ItemID) {
+    guard model.tab(id: id) != nil, !isClosing else { return }
+    // OEWebContent.close is a force-close. Page.close is the existing public
+    // OpenEngine DevTools path that lets Chromium run beforeunload first.
+    guard let page = hosts[id]?.content, page.isLive else { finishCloseTab(id: id); return }
+    guard closeRequests[id] == nil, app.engineReady else { return }
+    dialogPresenter?.cancel(page: page); permissionPresenter?.cancel(page: page)
+    closeRequests[id] = Task { @MainActor [weak self, weak page] in
+      guard let self, let page, !self.isClosing, !Task.isCancelled else { return }
+      do { _ = try await page.sendDevToolsMethod("Page.close", parameters: [:]) }
+      catch {
+        guard !self.isClosing, self.model.tab(id: id) != nil, !Task.isCancelled else { return }
+        self.closeRequests[id] = nil; self.record("closeError", page, ["message": error.localizedDescription])
+      }
+      // The engine's real close callback commits the model removal. A rejected
+      // beforeunload leaves both the model and the host intact.
+    }
+  }
+  private func finishCloseTab(id: ItemID) {
     guard model.tab(id: id) != nil else { return }
+    closeRequests[id]?.cancel(); closeRequests[id] = nil
     let order = orderedTabs.map(\.id), index = order.firstIndex(of: id) ?? 0
     let wasSelected = selectedTab?.id == id
     var isFavorite = false
@@ -380,6 +447,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func closeAll() {
     guard !isClosing else { return }
     isClosing = true
+    for task in closeRequests.values { task.cancel() }; closeRequests.removeAll()
+    dialogPresenter?.close(); permissionPresenter?.close(); downloadsPresenter?.close(); extensionPopup.dismiss()
+    contextMenuSession?.cancel(); contextMenuSession = nil
+    for choice in downloadSavePanels.values { choice.cancel() }; downloadSavePanels.removeAll()
     for task in saveCaptureTasks.values { task.cancel() }
     saveCaptureTasks.removeAll()
     findSelectionTask?.cancel(); findSelectionTask = nil
@@ -408,14 +479,23 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     event["content"] = content?.identifier ?? 0; event["time"] = Date().timeIntervalSince1970
     events.append(event); if events.count > 2000 { events.removeFirst(events.count - 2000) }
   }
+  func pageURLChanged(_ page: OEWebContent) {
+    permissionPresenter?.cancel(page: page)
+    if findPage === page { findBar?.update(count: 0, active: 0) }
+  }
   func drainEvents() -> [[String: Any]] { defer { events.removeAll() }; return events }
   func completePendingDialog(accept: Bool, text: String?) -> Bool {
-    guard !pendingDialogs.isEmpty else { return false }; pendingDialogs.removeFirst().complete(accepted: accept, text: text); return true
+    dialogPresenter?.answer(accepted: accept, text: text) ?? false
   }
   private func makeFindField() -> NSSearchField {
     let field = NSSearchField(); field.placeholderString = "Find in page"; field.target = self; field.delegate = self
+    field.sendsSearchStringImmediately = true; field.sendsWholeSearchString = false
     field.action = #selector(findFieldChanged(_:)); field.isHidden = true
-    controller?.contentView.addSubview(field); findFieldCreated = true; return field
+    let bar = FindBarView(field: field); findBar = bar
+    bar.onPrevious = { [weak self] in self?.findPrevious() }
+    bar.onNext = { [weak self] in self?.findNext(nil) }
+    bar.onClose = { [weak self] in self?.hideFind() }
+    controller?.contentView.addSubview(bar); findFieldCreated = true; return field
   }
   private func makeExtensionBar() -> NSStackView {
     let bar = NSStackView(); bar.orientation = .horizontal; bar.spacing = 4
@@ -423,8 +503,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private func layoutViews() {
     guard let controller else { return }; let panel = controller.container.frame
-    if findFieldCreated { findField.frame = CGRect(x: panel.maxX - 268, y: panel.minY + 8, width: 260, height: 24) }
-    if extensionBarCreated { extensionBar.frame = CGRect(x: panel.maxX - 210, y: panel.minY + 8, width: 200, height: 26) }
+    if findFieldCreated { findBar?.frame = CGRect(x: panel.maxX - 268, y: panel.minY + 8, width: 260, height: 24) }
+    if extensionBarCreated { extensionBar.isHidden = findBar?.isHidden == false; extensionBar.frame = CGRect(x: panel.maxX - 210, y: panel.minY + 8, width: 200, height: 26) }
   }
   private func updateChrome() { window?.title = selectedTab?.displayTitle ?? "Open" }
 }
@@ -445,6 +525,7 @@ extension EngineWebContentHostFactory {
       button.isEnabled = action.isEnabled
       extensionBar.addArrangedSubview(button)
     }
+    extensionBar.addArrangedSubview(pageDownloads.button)
     let manage = NSButton(title: "⋯", target: self, action: #selector(openExtensionsPage(_:)))
     manage.bezelStyle = .accessoryBarAction
     manage.toolTip = "Manage extensions"
@@ -452,9 +533,14 @@ extension EngineWebContentHostFactory {
     layoutViews()
   }
 
+  @discardableResult func pressExtensionButton(id: String) -> Bool {
+    guard let button = extensionBar.arrangedSubviews.first(where: { $0.identifier?.rawValue == id }) as? NSButton, button.isEnabled else { return false }
+    button.performClick(nil); return true
+  }
   @objc private func extensionButtonClicked(_ sender: NSButton) {
     guard let id = sender.identifier?.rawValue else { return }
-    focusedBrowser?.executeExtensionAction(id)
+    if focusedBrowser?.extensionPopup?.extensionPopupIdentifier == id { focusedBrowser?.closeExtensionPopup() }
+    else { focusedBrowser?.executeExtensionAction(id) }
   }
 
   // MARK: Panels
@@ -632,28 +718,33 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func showFind(_ sender: Any?) {
-    _ = findField; layoutViews(); findField.isHidden = false
-    window?.makeFirstResponder(findField)
+    guard app.engineReady, !isClosing, selectedContent != nil else { return }
+    _ = findField; findBar?.isHidden = false; findField.isHidden = false; layoutViews()
+    findPage = selectedContent; window?.makeFirstResponder(findField); findField.selectText(nil)
   }
-
-  func findPrevious() {
-    guard findFieldCreated, !findField.stringValue.isEmpty else { return }
-    selectedContent?.find(findField.stringValue, forward: false, caseSensitive: false)
+  func hideFind() {
+    guard findFieldCreated else { return }
+    findPage?.stopFinding(clearSelection: true); findPage = nil
+    findField.stringValue = ""; findField.isHidden = true; findBar?.isHidden = true
+    findBar?.update(count: 0, active: 0); layoutViews()
+    // This is an explicit user dismissal, never an async load completion.
+    if NSApp.isActive, window?.isKeyWindow == true { selectedContent?.focusPage() }
   }
-
-  @objc func findNext(_ sender: Any?) {
-    guard !findField.stringValue.isEmpty else { return }
-    selectedContent?.find(findField.stringValue, forward: true, caseSensitive: false)
+  private func searchFind(forward: Bool) {
+    guard app.engineReady, !isClosing, findFieldCreated, !findField.stringValue.isEmpty, let page = selectedContent else { return }
+    if findPage !== page { findPage?.stopFinding(clearSelection: true); findBar?.update(count: 0, active: 0); findPage = page }
+    page.find(findField.stringValue, forward: forward, caseSensitive: false)
   }
-
+  func findPrevious() { searchFind(forward: false) }
+  @objc func findNext(_ sender: Any?) { searchFind(forward: true) }
   @objc private func findFieldChanged(_ sender: NSSearchField) {
-    if sender.stringValue.isEmpty {
-      selectedContent?.stopFinding(clearSelection: true)
-      findField.isHidden = true
-      selectedContent?.focusPage()
-    } else {
-      selectedContent?.find(sender.stringValue, forward: true, caseSensitive: false)
-    }
+    if sender.stringValue.isEmpty { hideFind() } else { searchFind(forward: true) }
+  }
+  var findState: [String: Any] {
+    ["visible": findBar?.isHidden == false, "text": findFieldCreated ? findField.stringValue : "",
+      "count": findBar?.matchCount ?? 0, "index": findBar?.matchIndex ?? 0,
+      "frame": findBar.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? [],
+      "page": findPage?.identifier ?? 0]
   }
 
   /// URL for address-field input: a URL, a host, or a search.
@@ -675,7 +766,7 @@ extension EngineWebContentHostFactory {
       page.browser?.closeExtensionPopup()
       focusedBrowser?.closeExtensionPopup()
     } else if let id = tabID(for: page) {
-      closeTab(id: id)
+      finishCloseTab(id: id)
     } else {
       page.close()
     }
@@ -686,6 +777,7 @@ extension EngineWebContentHostFactory {
     auxiliaryPages.removeAll { $0 === page }
     if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
     page.closeObserver = nil
+    dialogPresenter?.cancel(page: page.content); permissionPresenter?.cancel(page: page.content)
     page.content.close()
     page.panel.orderOut(nil)
   }
@@ -693,8 +785,10 @@ extension EngineWebContentHostFactory {
 
 extension EngineWebContentHostFactory: NSSearchFieldDelegate {
   func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-    if control === findField, commandSelector == #selector(NSResponder.cancelOperation(_:)) {
-      findField.isHidden = true; selectedContent?.stopFinding(clearSelection: true); selectedContent?.focusPage(); return true
+    guard control === findField else { return false }
+    if commandSelector == #selector(cancelOperation(_:)) { hideFind(); return true }
+    if commandSelector == #selector(insertNewline(_:)) {
+      searchFind(forward: NSApp.currentEvent?.modifierFlags.contains(.shift) != true); return true
     }
     return false
   }
@@ -704,6 +798,7 @@ extension EngineWebContentHostFactory: NSSearchFieldDelegate {
 
 extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didChange changes: OEWebContentChange) {
+    if changes.contains(.URL) { pageURLChanged(webContent) }
     if changes.contains(.title), let popup = auxiliaryPages.first(where: { $0.content === webContent }) { popup.panel.title = webContent.title }
     record("change", webContent, ["changes": changes.rawValue])
   }
@@ -775,7 +870,8 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Key events that reach the page view directly (not through
   /// NSApplication.sendEvent) still get the reserved app shortcuts.
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
-    controller?.handleKeyDown(event) == true
+    if webContent.extensionPopupIdentifier != nil, event.keyCode == 53 { extensionPopup.dismiss(); return true }
+    return controller?.handleKeyDown(event) == true
   }
 
   func webContentDidRequestClose(_ webContent: OEWebContent) {
@@ -787,81 +883,29 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
-    record(
-      "dialog", webContent,
-      ["kind": dialog.kind.rawValue, "message": dialog.message, "default": dialog.defaultPromptText])
+    record("dialog", webContent, ["kind": dialog.kind.rawValue, "message": dialog.message, "default": dialog.defaultPromptText])
+    if isClosing { dialog.complete(accepted: false, text: nil); return true }
     switch dialogPolicy {
-    case "accept":
-      dialog.complete(accepted: true, text: promptText ?? dialog.defaultPromptText)
-      return true
+    case "accept": dialog.complete(accepted: true, text: promptText ?? dialog.defaultPromptText)
     case "dismiss":
       dialog.complete(accepted: false, text: nil)
-      return true
-    case "hold":
-      pendingDialogs.append(dialog)
-      return true
-    default:
-      guard let window = webContent.view.window else { return false }
-      let alert = NSAlert()
-      alert.messageText = webContent.url?.host() ?? "This page says"
-      alert.informativeText = dialog.message
-      alert.addButton(withTitle: "OK")
-      if dialog.kind != .alert { alert.addButton(withTitle: "Cancel") }
-      let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-      if dialog.kind == .prompt {
-        field.stringValue = dialog.defaultPromptText
-        alert.accessoryView = field
-      }
-      alert.beginSheetModal(for: window) { response in
-        dialog.complete(accepted: response == .alertFirstButtonReturn, text: field.stringValue)
-      }
-      return true
+      if dialog.kind == .beforeUnload, let id = tabID(for: webContent) { closeRequests[id]?.cancel(); closeRequests[id] = nil }
+    default: pageDialogs.enqueue(dialog, page: webContent, held: dialogPolicy == "hold")
     }
+    return true
   }
-
   func webContent(_ webContent: OEWebContent, decidePermissionRequest request: OEPermissionRequest) -> Bool {
     record("permission", webContent, ["origin": request.origin.absoluteString, "kinds": request.kinds.rawValue])
     switch permissionPolicy {
-    case "grant":
-      request.grant()
-      return true
-    case "deny":
-      request.deny()
-      return true
-    default:
-      guard let window = webContent.view.window else { return false }
-      let alert = NSAlert()
-      alert.messageText = "\(request.origin.host() ?? "This site") wants permission"
-      alert.informativeText = "Requested: \(request.kinds.rawValue)"
-      alert.addButton(withTitle: "Allow")
-      alert.addButton(withTitle: "Block")
-      alert.beginSheetModal(for: window) { response in
-        response == .alertFirstButtonReturn ? request.grant() : request.deny()
-      }
-      return true
+    case "grant": request.grant()
+    case "deny": request.deny()
+    default: pagePermissions.request(request, page: webContent)
     }
+    return true
   }
-
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
-    let ns = NSMenu()
-    if let link = menu.linkURL {
-      let opener = tabID(for: webContent)
-      ns.addItem(
-        ClosureMenuItem(title: "Open Link in New Tab") { [weak self] in
-          self?.openNewTab(url: link, background: true, opener: opener)
-        })
-      ns.addItem(.separator())
-    }
-    for item in menu.items {
-      if item.isSeparator {
-        ns.addItem(.separator())
-        continue
-      }
-      let command = item.commandIdentifier
-      let mi = ClosureMenuItem(title: item.title) { menu.select(command: command) }
-      mi.isEnabled = item.isEnabled
-      ns.addItem(mi)
-    }
+    contextMenuSession?.cancel()
+    let session = PageContextMenuSession(request: menu, page: webContent, owner: self); contextMenuSession = session
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
       items.flatMap { item -> [[String: Any]] in
         if item.isSeparator { return [] }
@@ -869,34 +913,19 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
         return [["id": item.commandIdentifier, "title": item.title, "enabled": item.isEnabled, "submenu": submenu]]
       }
     }
-    record(
-      "contextMenu", webContent,
-      [
-        "items": menu.items.map(\.title), "commands": commands(menu.items),
-        "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue,
-      ])
-    if contextMenuPolicy == "record" {
-      menu.cancel()
-      return true
-    }
-    if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
-      // After the right click returns, as a picked menu item would.
-      DispatchQueue.main.async { menu.select(command: command) }
-      return true
-    }
-    let point = menu.location
-    let view = webContent.view
-    DispatchQueue.main.async {
-      let picked = ns.popUp(positioning: nil, at: point, in: view)
-      if !picked { menu.cancel() }
-    }
+    record("contextMenu", webContent, ["items": menu.items.map(\.title), "commands": commands(menu.items),
+      "link": menu.linkURL?.absoluteString ?? "", "targets": menu.targets.rawValue, "appItems": session.rows])
+    if contextMenuPolicy == "record" { session.cancel() }
+    else if contextMenuPolicy == "hold" { /* the socket chooses a real built item */ }
+    else if let policy = contextMenuPolicy, policy.hasPrefix("run:"), let command = Int(policy.dropFirst(4)) {
+      DispatchQueue.main.async { if !session.perform(key: "engine:\(command)") { session.cancel() } }
+    } else { DispatchQueue.main.async { session.present() } }
     return true
   }
-
   func webContent(_ webContent: OEWebContent, didUpdateFindResult result: OEFindResult) {
     lastFindResult = result
-    if result.isFinal {
-      if findFieldCreated { findField.placeholderString = "\(result.activeMatchIndex)/\(result.matchCount)" }
+    if result.isFinal, findFieldCreated, webContent === findPage {
+      findBar?.update(count: result.matchCount, active: result.activeMatchIndex)
     }
   }
 
@@ -919,6 +948,7 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   func webContent(_ webContent: OEWebContent, didFinishLoadWithStatus status: Int) {
     finishCommandBarNavigation(webContent)
     app.prepareCommandsAfterPaint(webContent)
+    if findFieldCreated, findBar?.isHidden == false, selectedContent === webContent { searchFind(forward: true) }
     if tabID(for: webContent) != nil { LaunchTiming.shared.mark("firstLoadEnd") }
     record("load", webContent, ["status": status, "url": webContent.url?.absoluteString ?? ""])
   }
@@ -945,34 +975,17 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
   }
 
   func browser(_ browser: OEBrowser, didOpenExtensionPopup popup: OEWebContent, for action: OEExtensionAction) {
-    popupPanel?.orderOut(nil)
-    popup.delegate = self  // dialogs, console, context menu like any page
-    let panel = makePanel(size: NSSize(width: 360, height: 480), title: action.title)
-    popupPanel = panel
-    host(popup, in: panel)
-    if let button = extensionBar.arrangedSubviews.first(where: {
-      $0.identifier?.rawValue == action.extensionIdentifier
-    }), let win = window {
-      let r = win.convertToScreen(button.convert(button.bounds, to: nil))
-      panel.setFrameTopLeftPoint(NSPoint(x: r.minX, y: r.minY - 4))
-    }
-    present(panel)
+    guard !isClosing, let window else { browser.closeExtensionPopup(); return }
+    popup.delegate = self
+    let button = extensionBar.arrangedSubviews.first { $0.identifier?.rawValue == action.extensionIdentifier }
+    extensionPopup.show(popup, browser: browser, parent: window, anchor: button, title: action.title)
+    popupPanel = extensionPopup.panel
     record("extensionPopup", popup, ["extension": action.extensionIdentifier, "open": true])
   }
-
-  func browser(_ browser: OEBrowser, didResizeExtensionPopup popup: OEWebContent, to size: NSSize) {
-    guard let panel = popupPanel else { return }
-    let frame = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size))
-    var f = panel.frame
-    f.origin.y += f.height - frame.height
-    f.size = frame.size
-    panel.setFrame(f, display: true)
-  }
-
+  func browser(_ browser: OEBrowser, didResizeExtensionPopup popup: OEWebContent, to size: NSSize) { if extensionPopup.owns(popup) { extensionPopup.resize(size) } }
   func browser(_ browser: OEBrowser, didCloseExtensionPopup popup: OEWebContent) {
-    popup.view.removeFromSuperview()
-    popupPanel?.orderOut(nil)
-    popupPanel = nil
+    dialogPresenter?.cancel(page: popup); permissionPresenter?.cancel(page: popup)
+    if extensionPopup.owns(popup) { extensionPopup.cleanup(); popupPanel = nil }
     record("extensionPopup", popup, ["open": false])
   }
 }
@@ -1175,12 +1188,37 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     _ context: OEBrowserContext, decideDestinationFor download: OEDownload, suggestedFilename: String,
     completion: @escaping @MainActor (URL?) -> Void
   ) {
-    let dir = downloadDirectory ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
-    completion(dir.appendingPathComponent(suggestedFilename.isEmpty ? "download" : suggestedFilename))
+    guard !isClosing, app.engineReady else { completion(nil); return }
+    let profile = app.settingsPresenter.profile(for: context) ?? focusedProfile
+    let name = URL(fileURLWithPath: suggestedFilename).lastPathComponent
+    let filename = name.isEmpty || name == "." ? "download" : name
+    if downloadDirectory == nil, profile?.settings.askWhereToSaveEachFile == true, let window {
+      let id = UUID(), choice = DownloadDestinationChoice(completion: completion)
+      let panel = choice.panel; downloadSavePanels[id] = choice
+      panel.nameFieldStringValue = filename
+      panel.beginSheetModal(for: window) { [weak self, choice] response in
+        self?.downloadSavePanels[id] = nil
+        choice.finish(self?.isClosing == false && response == .OK ? panel.url : nil)
+      }
+    } else {
+      let path = (profile?.settings.downloadDirectory ?? "~/Downloads") as NSString
+      let dir = downloadDirectory ?? URL(fileURLWithPath: path.expandingTildeInPath, isDirectory: true)
+      do {
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        var target = dir.appendingPathComponent(filename), suffix = 1
+        while FileManager.default.fileExists(atPath: target.path) {
+          let original = URL(fileURLWithPath: filename)
+          target = dir.appendingPathComponent(original.deletingPathExtension().lastPathComponent + " (\(suffix))")
+          if !original.pathExtension.isEmpty { target.appendPathExtension(original.pathExtension) }; suffix += 1
+        }
+        completion(target)
+      } catch { record("downloadDestinationError", download.webContent, ["message": error.localizedDescription]); completion(nil) }
+    }
   }
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
     app.settingsPresenter.noteDownload(download, context: context)
+    for factory in app.hostFactories.values { factory.refreshDownloads() }
     record(
       "download", download.webContent,
       [
