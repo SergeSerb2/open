@@ -1,8 +1,25 @@
 import AppKit
 import OpenDesign
 
+/// The Peek dim. It sits above the web content and below the sidebar, so it darkens
+/// the window background and the page while sidebar text, glyphs, and fills stay
+/// as they are (F0090 vs F0101: titles keep `#D7D9F8`, a tile's white 0.10 fill
+/// composites over the darkened background). A click on it dismisses the Peek.
+@MainActor
+public final class PeekBackdropView: NSView {
+    var onDismiss: (() -> Void)?
+    public override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    public override func mouseDown(with event: NSEvent) { onDismiss?() }
+}
+
+/// The Peek panel and its three buttons. It spans the window above the sidebar but
+/// takes clicks only on the panel and buttons; the sidebar stays usable (F0101:
+/// selecting another tab hides the Peek), and other clicks reach the backdrop.
 @MainActor
 public final class PeekOverlayView: NSView {
+    public let backdrop = PeekBackdropView()
+    public override var isHidden: Bool { didSet { backdrop.isHidden = isHidden } }
     public let panel = NSView()
     public let pageClip = NSView()
     public private(set) var buttons: [NSButton] = []
@@ -12,10 +29,11 @@ public final class PeekOverlayView: NSView {
     public var onDismiss: (() -> Void)?
     public var onExpand: (() -> Void)?
     public var onSplit: (() -> Void)?
-    public var scrimColor = NSColor.black.withAlphaComponent(0.55) { didSet { layer?.backgroundColor = scrimColor.cgColor } }
+    public var scrimColor = NSColor.black.withAlphaComponent(0.55) { didSet { backdrop.layer?.backgroundColor = scrimColor.cgColor } }
     public var controlsFill = NSColor.black { didSet { buttons.forEach { ($0 as? ActionButton)?.circleFill = controlsFill } } }
     public init() {
-        super.init(frame: .zero); wantsLayer = true; layer?.backgroundColor = scrimColor.cgColor
+        super.init(frame: .zero); wantsLayer = true; backdrop.layer?.backgroundColor = scrimColor.cgColor
+        backdrop.onDismiss = { [weak self] in self?.onDismiss?() }
         panel.wantsLayer = true; pageClip.wantsLayer = true; pageClip.layer?.masksToBounds = true
         pageClip.layer?.cornerRadius = PanelMetrics.cornerRadius; pageClip.layer?.backgroundColor = NSColor.black.cgColor
         panel.layer?.shadowColor = NSColor.black.cgColor; panel.layer?.shadowOpacity = PeekMetrics.shadowOpacity
@@ -54,8 +72,13 @@ public final class PeekOverlayView: NSView {
         pageClip.addSubview(host.view); host.view.frame = pageClip.bounds; host.view.autoresizingMask = [.width, .height]
         host.view.alphaValue = host.isLoading ? 0 : 1
     }
-    public override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if !panel.frame.contains(point) { onDismiss?() }
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        let hit = super.hitTest(point)
+        return hit === self ? nil : hit
+    }
+    /// Sets the overlay and its backdrop together; inside an animation group both animate.
+    func setOpacity(_ value: CGFloat, animated: Bool) {
+        if animated { animator().alphaValue = value; backdrop.animator().alphaValue = value }
+        else { alphaValue = value; backdrop.alphaValue = value }
     }
 }

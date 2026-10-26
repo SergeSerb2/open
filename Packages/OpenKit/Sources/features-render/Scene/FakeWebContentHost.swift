@@ -24,6 +24,14 @@ public final class FakeWebContentHost: WebContentHost {
     public var onLoadingChange: ((Bool) -> Void)?
     public var onFaviconChange: ((Data?) -> Void)?
     public var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
+    /// Render-only page colors by host (`--page-color HOST=RRGGBB`). A comparison gives a
+    /// fake page the background of the captured page, so the chrome around it is measured
+    /// against the same page pixels. Hosts without an entry keep the factory's color.
+    public static var pageColors: [String: NSColor] = [:]
+    /// Render-only (`--keep-titles`): pages do not report a title, so tabs keep their saved titles.
+    public static var reportsTitles = true
+    public var pageBackgroundColor: NSColor? { surface.layer?.backgroundColor.flatMap(NSColor.init(cgColor:)) }
+    public var onPageBackgroundChange: ((NSColor?) -> Void)?
 
     public init(tabID: ItemID, color: NSColor) {
         self.tabID = tabID; surface = FakePageView(color: color)
@@ -31,12 +39,22 @@ public final class FakeWebContentHost: WebContentHost {
     public func load(_ url: URL) {
         guard !isClosed else { return }
         history = Array(history.prefix(cursor + 1)); history.append(url); cursor = history.count - 1
-        loadCount += 1; publish(); beginLoading()
+        loadCount += 1; publish(colorAfterLoad: true); beginLoading()
     }
-    private func publish() {
+    /// A navigation's page color (`--page-color`) arrives late, like an engine's: after the
+    /// URL callback, and for a load only once loading ends.
+    private var pendingPageColor: NSColor?
+    private func publish(colorAfterLoad: Bool = false) {
         guard let url = currentURL else { return }
         title = url.host() ?? "New Tab"; surface.label.stringValue = title
-        onURLChange?(url); onTitleChange?(title)
+        onURLChange?(url); if Self.reportsTitles { onTitleChange?(title) }
+        pendingPageColor = url.host().flatMap { Self.pageColors[$0] }
+        if !colorAfterLoad { applyPendingPageColor() }
+    }
+    private func applyPendingPageColor() {
+        guard let color = pendingPageColor else { return }
+        pendingPageColor = nil
+        surface.layer?.backgroundColor = color.cgColor; onPageBackgroundChange?(color)
     }
     private func beginLoading() {
         loadGeneration += 1; let generation = loadGeneration
@@ -44,7 +62,7 @@ public final class FakeWebContentHost: WebContentHost {
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, !self.isClosed, self.loadGeneration == generation else { return }
-                self.isLoading = false; self.onLoadingChange?(false)
+                self.isLoading = false; self.onLoadingChange?(false); self.applyPendingPageColor()
             }
         }
         loadingWork = work
@@ -52,14 +70,20 @@ public final class FakeWebContentHost: WebContentHost {
     }
 
     public func reload() { guard !isClosed else { return }; loadCount += 1; beginLoading() }
-    public func stop() { loadingWork?.cancel(); loadGeneration += 1; isLoading = false; onLoadingChange?(false) }
+    public func stop() { loadingWork?.cancel(); loadGeneration += 1; isLoading = false; onLoadingChange?(false); applyPendingPageColor() }
     public func goBack() { guard !isClosed, canGoBack else { return }; cursor -= 1; publish() }
     public func goForward() { guard !isClosed, canGoForward else { return }; cursor += 1; publish() }
     public func focus() { guard !isClosed else { return }; surface.window?.makeFirstResponder(surface) }
     public func close() {
         guard !isClosed else { return }; isClosed = true; loadingWork?.cancel(); loadGeneration += 1
         onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
+        onPageBackgroundChange = nil
         surface.removeFromSuperview()
+    }
+    /// The page changes its own background (a theme switch or late paint): report it as an engine would.
+    public func simulatePageBackground(_ color: NSColor) {
+        guard !isClosed else { return }
+        surface.layer?.backgroundColor = color.cgColor; onPageBackgroundChange?(color)
     }
     @discardableResult public func simulateLinkClick(_ url: URL, modifiers: NSEvent.ModifierFlags = []) -> Bool {
         guard !isClosed else { return false }

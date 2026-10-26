@@ -161,6 +161,20 @@ public enum SidebarRole {
     public static let switcherInactiveOpacity: Double = 0.55
     /// The "navigated away from the pinned URL" slash.
     public static let pinnedSlash = SidebarColors.tabSlash
+    /// Pane cells inside a selected split row: white 0.07 over the selected card in
+    /// both cells (F0081 `#5D5C6A` on `#50505F`) → `TabCellChildBackground`.
+    /// F0081 shows no extra mark on the focused pane's cell.
+    public static let splitCellFill = SidebarColors.tabChildBackground
+    /// Peek badge plate: white ≈ 0.075 over the row (F0101), 0.07 over the row fill (F0090) → `TabCellChildBackground`.
+    public static let peekBadgePlate = SidebarColors.tabChildBackground
+    /// The source row while its Peek is on screen: white 0.10 instead of the 0.20
+    /// selected fill (F0090, F0102: `#232234` over `#0A0A1D`) → `SidebarItemBackground`. guess: the token.
+    public static let peekSourceFill = SidebarColors.itemBackground
+    /// Toolbar row and bottom bar opacity while a Peek is on screen: they sit under the
+    /// Peek's dim. Fitted per bar on F0090 glyph cores over the dimmed background (toggle,
+    /// reload; Home, plus). Arc's dim is not a plain opacity, so one value cannot fit both bars.
+    public static let peekToolbarOpacity: CGFloat = 0.43
+    public static let peekBottomBarOpacity: CGFloat = 0.52
     /// Drop target line while dragging rows.
     public static let dropLine = Core.brandBlue
 }

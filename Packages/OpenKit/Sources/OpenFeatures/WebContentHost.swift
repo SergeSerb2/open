@@ -22,6 +22,14 @@ public protocol WebContentHost: AnyObject {
     var onLoadingChange: ((Bool) -> Void)? { get set }
     var onFaviconChange: ((Data?) -> Void)? { get set }
     var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)? { get set }
+    /// The page's own background color. A split pane's 32 pt bar takes it
+    /// (F0081: lavender page → `#DEDEFA` bar, white page → white bar); nil uses the
+    /// Space fallback. TODO(engine): report the page background or theme color
+    /// (docs/engine-api.md, "Page background color").
+    var pageBackgroundColor: NSColor? { get }
+    /// Called when `pageBackgroundColor` changes, also after the URL callback for the
+    /// same navigation (the color can arrive late).
+    var onPageBackgroundChange: ((NSColor?) -> Void)? { get set }
 }
 
 @MainActor

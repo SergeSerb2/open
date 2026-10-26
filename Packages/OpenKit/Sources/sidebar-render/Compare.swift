@@ -174,6 +174,15 @@ struct SpecLayout {
     var depths: [Int] = []
     /// Rows drawn as split rows (two cells).
     var splitRows: Set<Int> = []
+    /// A selected split row: the card, one cell per pane, titles at the pane pitch (F0081).
+    var selectedSplitRow: Int?
+    var splitPanes = 2
+    /// The source row of an open Peek: its badge plate; with `--peek-shown`, its lighter fill (F0090).
+    var peekRow: Int?
+    var peekShown = false
+    /// Split-row titles measured at the pane pitch (x = icon + 26, width pitch − 38), not at the
+    /// depth-1 offsets used for F0079. Opt-in, so earlier state tables stay comparable.
+    var pitchSplitTitles = false
 
     init(args: [String], windowHeight: Double) {
         self.windowHeight = windowHeight
@@ -191,7 +200,15 @@ struct SpecLayout {
         hoverButton = RenderCLI.value(args, "--hover-button")
         depths = RenderCLI.value(args, "--depths")?.split(separator: ",").compactMap { Int($0) } ?? []
         splitRows = Set(RenderCLI.value(args, "--split-rows")?.split(separator: ",").compactMap { Int($0) } ?? [])
+        selectedSplitRow = RenderCLI.value(args, "--selected-split-row").flatMap(Int.init)
+        if let v = RenderCLI.value(args, "--split-panes").flatMap(Int.init) { splitPanes = v }
+        peekRow = RenderCLI.value(args, "--peek-row").flatMap(Int.init)
+        peekShown = args.contains("--peek-shown")
+        pitchSplitTitles = args.contains("--pitch-split-titles")
     }
+
+    /// Split cell pitch (cell width + 4 pt gap) for a row at this indent.
+    func splitPitch(_ row: Int) -> Double { (sidebarWidth - 16 - indent(row) - 4) / Double(splitPanes) }
 
     var favHeight: Double { Double(FavoritesMetrics.sectionHeight(count: favorites, sidebarWidth: CGFloat(sidebarWidth))) }
     var headerTop: Double { Double(FavoritesMetrics.sectionTop) + favHeight }
@@ -218,7 +235,10 @@ struct SpecLayout {
         for i in 0..<rowCount {
             let x = 15 + indent(i)
             m.append(CGRect(x: x, y: top(ofRow: i) + 9, width: 22, height: 22))
-            if isSplit(i) { m.append(CGRect(x: x + 96, y: top(ofRow: i) + 9, width: 22, height: 22)) }
+            if i == selectedSplitRow {
+                for c in 1..<splitPanes { m.append(CGRect(x: x + Double(c) * splitPitch(i), y: top(ofRow: i) + 9, width: 22, height: 22)) }
+            } else if isSplit(i) { m.append(CGRect(x: x + 96, y: top(ofRow: i) + 9, width: 22, height: 22)) }
+            if i == peekRow { m.append(CGRect(x: sidebarWidth - 36, y: top(ofRow: i) + 10, width: 20, height: 20)) }
         }
         m.append(CGRect(x: sidebarWidth, y: 0, width: 4000, height: windowHeight))
         // System-drawn parts: traffic lights and the window's rounded corners.
@@ -271,13 +291,35 @@ struct SpecLayout {
         // Rows.
         for i in 0..<rowCount {
             let y = top(ofRow: i)
-            let titleRight = (i == hoverRow || i == selectedRow) ? 186.0 : W - 12
+            let titleRight = (i == hoverRow || i == selectedRow) ? 186.0 : (i == peekRow ? W - 40 : W - 12)
             let tx = 41 + indent(i)
-            if isSplit(i) {
+            if i == selectedSplitRow {
+                let ind = indent(i), pitch = splitPitch(i)
+                e.append(E(name: "row \(i + 1) split card fill", region: CGRect(x: 8 + ind, y: y + 2, width: W - 16 - ind, height: 36),
+                           kind: .fill(sample: CGRect(x: 30 + ind, y: y + 3, width: 60, height: 2))))
+                for c in 0..<splitPanes {
+                    let cx = 12 + ind + Double(c) * pitch
+                    e.append(E(name: "row \(i + 1) split cell \(c + 1) fill", region: CGRect(x: cx, y: y + 6, width: pitch - 4, height: 28),
+                               kind: .fill(sample: CGRect(x: cx + 12, y: y + 7, width: pitch - 28, height: 2))))
+                    e.append(E(name: "row \(i + 1) split cell \(c + 1) title", region: CGRect(x: cx + 31, y: y + 8, width: pitch - 36, height: 25), kind: .ink))
+                }
+            } else if isSplit(i) && pitchSplitTitles {
+                for c in 0..<splitPanes {
+                    e.append(E(name: "row \(i + 1) split title \(c + 1)", region: CGRect(x: 43 + indent(i) + Double(c) * splitPitch(i), y: y + 8, width: splitPitch(i) - 38, height: 25), kind: .ink))
+                }
+            } else if isSplit(i) {
                 e.append(E(name: "row \(i + 1) split title 1", region: CGRect(x: tx + 18, y: y + 8, width: 60, height: 25), kind: .ink))
                 e.append(E(name: "row \(i + 1) split title 2", region: CGRect(x: tx + 114, y: y + 8, width: 60, height: 25), kind: .ink))
             } else {
                 e.append(E(name: "row \(i + 1) title", region: CGRect(x: tx, y: y + 8, width: titleRight - tx, height: 25), kind: .ink))
+            }
+            if i == peekRow {
+                if peekShown {
+                    e.append(E(name: "row \(i + 1) Peek source fill", region: CGRect(x: 8 + indent(i), y: y + 2, width: W - 16 - indent(i), height: 36),
+                               kind: .fill(sample: CGRect(x: 150, y: y + 5, width: 30, height: 4))))
+                }
+                e.append(E(name: "row \(i + 1) Peek badge plate", region: CGRect(x: W - 38, y: y + 8, width: 24, height: 24),
+                           kind: .fill(sample: CGRect(x: W - 33, y: y + 9, width: 14, height: 2))))
             }
             if i == hoverRow || i == selectedRow {
                 let name = i == selectedRow ? "row \(i + 1) selected fill" : "row \(i + 1) hover fill"

@@ -155,6 +155,10 @@ Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCach
 | `webContent(_:didFinishLoadWithStatus:)`, `webContent(_:didFailLoadWithError:)` | Main frame |
 | `webContent(_:didReceiveDevToolsEvent:parameters:)`, `webContent(_:didLogConsoleMessage:level:source:line:)` | Diagnostics, automation |
 
+### Page background color
+
+TODO(engine): `OEWebContent` has no page color yet. The M4 split pane bar needs one (`WebContentHost.pageBackgroundColor` and `onPageBackgroundChange` in OpenFeatures). Arc paints each pane's 32 pt bar in the page's own color (F0081: lavender page → `#DEDEFA` bar, white page → white bar; `re/interaction-states.md` §11). The color is not the pixels under the bar, so the engine must report it: the page's `theme-color` or its document background (guess: which one Arc uses). Report it as a state change after the URL change of the same navigation, and again when the page changes it. Until then the bar uses the Space's light background.
+
 ## Extensions
 
 `OEExtensionManager` (per context): `installedExtensions` (`OEExtension`: id, name, version, summary, manifest version, enabled, unpacked, folder, icon, options URL, permissions, host permissions), `extension(identifier:)`, `reload()`, `managementPageURL` (`chrome://extensions`, Chrome style only), `webStorePageURL(extensionIdentifier:)`, and a delegate. In stock CEF the list comes from the profile's Preferences and manifests and refreshes when Chromium rewrites them; fork patch P3 replaces this with Chromium's live registry.
