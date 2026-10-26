@@ -21,7 +21,8 @@ public final class SidebarView: NSView {
     }
     /// `.floatingCard` is the hover-reveal card shown while the sidebar is hidden:
     /// rounded 10, a light 1 px stroke, its own background (interaction-states §13).
-    public var presentation: Presentation = .anchored { didSet { applyPresentation() } }
+    /// The host draws the card's shadow and moves the card; see `prepareFloatingCard(size:)`.
+    public var presentation: Presentation = .anchored { didSet { if presentation != oldValue { applyPresentation() } } }
 
     let toolbar: ToolbarView
     let urlField: URLFieldView
@@ -82,7 +83,7 @@ public final class SidebarView: NSView {
     public override func layout() {
         super.layout()
         let w = bounds.width, h = bounds.height
-        cardBackground?.frame = bounds
+        if presentation == .floatingCard { cardBackground?.frame = bounds }
         toolbar.frame = CGRect(x: 0, y: 0, width: w, height: URLFieldMetrics.y)
         urlField.frame = CGRect(x: URLFieldMetrics.insetX, y: URLFieldMetrics.y, width: w - 2 * URLFieldMetrics.insetX, height: URLFieldMetrics.height)
         let favTop = FavoritesMetrics.sectionTop
@@ -126,27 +127,43 @@ public final class SidebarView: NSView {
         for v in [toolbar, urlField, favorites, bottomBar] as [NSView] { v.needsDisplay = true; v.needsLayout = true }
     }
 
+    /// Builds the card's own theme background before the card shows, so its first frame
+    /// is never empty: a new `ThemeBackgroundView` only fills its field on the next display
+    /// tick. The view is kept (hidden) between reveals; only a theme or size change rebuilds it.
+    public func prepareFloatingCard(size: CGSize) {
+        let bg: ThemeBackgroundView
+        if let cardBackground { bg = cardBackground } else {
+            bg = ThemeBackgroundView(frame: CGRect(origin: .zero, size: size))
+            bg.isHidden = presentation != .floatingCard
+            addSubview(bg, positioned: .below, relativeTo: nil)
+            cardBackground = bg
+        }
+        if let space = context.focusedSpace, bg.targetStyle != context.style(for: space) { bg.style = context.style(for: space) }
+        bg.isWindowActive = context.isWindowActive
+        bg.frame = CGRect(origin: .zero, size: size)
+        bg.layoutSubtreeIfNeeded()
+        bg.prepareForSnapshot()
+    }
+
     private func applyPresentation() {
         switch presentation {
         case .anchored:
-            cardBackground?.removeFromSuperview()
-            cardBackground = nil
+            cardBackground?.isHidden = true
             layer?.cornerRadius = 0
             layer?.borderWidth = 0
             layer?.masksToBounds = false
             pager.themeBackground = themeBackground
         case .floatingCard:
-            let bg = cardBackground ?? ThemeBackgroundView(frame: bounds)
-            if let space = context.focusedSpace { bg.style = context.style(for: space) }
-            bg.isWindowActive = context.isWindowActive
-            addSubview(bg, positioned: .below, relativeTo: nil)
-            cardBackground = bg
+            if cardBackground == nil { prepareFloatingCard(size: bounds.size) }
+            cardBackground?.isHidden = false
+            // One rounded clip for everything in the card (theme, rows, the scroll view), with
+            // the 1 px stroke drawn by the same layer inside its bounds, above the content.
             layer?.cornerRadius = WindowMetrics.revealCardRadius
-            layer?.cornerCurve = .continuous
+            layer?.cornerCurve = .circular  // F0129 corner fit (WindowMetrics.revealCardRadius)
             layer?.masksToBounds = true
-            layer?.borderWidth = 1
+            layer?.borderWidth = WindowMetrics.revealCardStrokeWidth
             layer?.borderColor = SidebarColors.border.cgColor(.light)
-            pager.themeBackground = bg
+            pager.themeBackground = cardBackground
         }
         needsLayout = true
     }
@@ -331,4 +348,29 @@ extension SidebarView {
 
     /// The text the URL field shows: the current page's host or the placeholder.
     public var displayedURLText: String { urlField.displayedText }
+
+    /// Chrome geometry in sidebar coordinates, for host checks: the URL field and its hover
+    /// state, and the focused Space header band, its title frame and baseline, and its hover state.
+    public var chromeGeometry: SidebarChromeGeometry {
+        let header = pager.currentPage?.header
+        let title = header?.titleLabel
+        return SidebarChromeGeometry(
+            urlField: urlField.frame, urlFieldHovered: urlField.isHovered,
+            favorites: favorites.frame,
+            header: header.map { convert($0.bounds, from: $0) },
+            headerTitle: title.map { convert($0.frame, from: header) },
+            headerTitleBaseline: title.flatMap { t in header.map { convert(CGPoint(x: 0, y: t.frame.minY + t.baseline), from: $0).y } },
+            headerHovered: header?.isHeaderHovered ?? false)
+    }
+}
+
+/// See `SidebarView.chromeGeometry`.
+public struct SidebarChromeGeometry: Sendable, Equatable {
+    public var urlField: CGRect
+    public var urlFieldHovered: Bool
+    public var favorites: CGRect
+    public var header: CGRect?
+    public var headerTitle: CGRect?
+    public var headerTitleBaseline: CGFloat?
+    public var headerHovered: Bool
 }

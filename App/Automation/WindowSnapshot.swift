@@ -7,34 +7,19 @@
   ///
   /// The window server returns our own AppKit drawing, but on macOS 26+ it
   /// leaves out layers that the Chromium GPU process draws into our window.
-  /// So the page area of every visible web view is pasted in from a DevTools
-  /// Page.captureScreenshot. For true on-screen pixels use
-  /// `tools/openctl shot`, which runs `screencapture -l <our window id>`.
+  /// So every visible page's DevTools Page.captureScreenshot goes into a
+  /// temporary layer right above that page's view while the window server
+  /// captures: whatever AppKit draws over the page (the hover-reveal card and
+  /// its shadow, Peek controls, toasts) then composites over real page pixels,
+  /// as on screen. For true on-screen pixels use `tools/openctl shot`, which
+  /// runs `screencapture -l <our window id>`.
   @MainActor
   enum WindowSnapshot {
     private typealias CreateFromArray = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
 
     static func capture(_ window: NSWindow, to url: URL) async throws -> String {
-      // Draw pending AppKit changes (a command that just changed the sidebar)
-      // and give the window server a frame to pick them up.
-      window.contentView?.layoutSubtreeIfNeeded()
-      window.displayIfNeeded()
-      CATransaction.flush()
-      try? await Task.sleep(for: .milliseconds(50))
-      var base: NSImage
-      var method: String
-      if let image = windowServerImage(window), !isBlank(image) {
-        base = NSImage(cgImage: image, size: window.frame.size)
-        method = "windowserver+devtools"
-      } else if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-        view.cacheDisplay(in: view.bounds, to: rep)
-        base = NSImage(size: view.bounds.size)
-        base.addRepresentation(rep)
-        method = "appkit+devtools"
-      } else {
-        throw AutomationController.Failure(message: "cannot capture window")
-      }
       var overlays: [(NSRect, NSImage)] = []
+      var underlays: [NSView] = []
       for content in OEEngine.shared.allWebContents
       where content.view.window === window && !content.view.isHiddenOrHasHiddenAncestor && content.isLive {
         // A page that never painted (for example chrome://extensions in an
@@ -42,6 +27,36 @@
         guard let png = await pagePNG(content, timeout: 3), let page = NSImage(data: png) else { continue }
         // Window base coordinates cover the whole frame, origin bottom-left.
         overlays.append((content.view.convert(content.view.bounds, to: nil), page))
+        guard let parent = content.view.superview, let image = page.cgImage(forProposedRect: nil, context: nil, hints: nil) else { continue }
+        let underlay = NSView(frame: content.view.frame)
+        underlay.wantsLayer = true
+        underlay.layer?.contents = image
+        underlay.layer?.contentsGravity = .resize
+        parent.addSubview(underlay, positioned: .above, relativeTo: content.view)
+        underlays.append(underlay)
+      }
+      defer { underlays.forEach { $0.removeFromSuperview() } }
+      // Draw pending AppKit changes (a command that just changed the sidebar)
+      // and give the window server a frame to pick them up.
+      window.contentView?.layoutSubtreeIfNeeded()
+      window.displayIfNeeded()
+      CATransaction.flush()
+      try? await Task.sleep(for: .milliseconds(underlays.isEmpty ? 50 : 120))
+      var base: NSImage
+      var method: String
+      if let image = windowServerImage(window), !isBlank(image) {
+        base = NSImage(cgImage: image, size: window.frame.size)
+        method = "windowserver+devtools"
+        // The window server composited the pages in their layers; paste only pages
+        // that could not get one.
+        overlays.removeAll { overlay in underlays.contains { $0.convert($0.bounds, to: nil) == overlay.0 } }
+      } else if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+        view.cacheDisplay(in: view.bounds, to: rep)
+        base = NSImage(size: view.bounds.size)
+        base.addRepresentation(rep)
+        method = "appkit+devtools"
+      } else {
+        throw AutomationController.Failure(message: "cannot capture window")
       }
       let size = window.frame.size
       let out = NSImage(size: size)
