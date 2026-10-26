@@ -81,7 +81,7 @@ engine extension state. This plan adds no second store for any of those values (
 
 | # | Decision | Why / evidence |
 |---|---|---|
-| D-1 | New SwiftPM library target `OpenSiteControl` in `Packages/OpenKit`. It holds the Site Control Center view and controller, the Boost editor views and session, and the code editor. It depends on `OpenModel`, `OpenDesign`, `OpenBoosts`, `OpenAdBlock` (only for `AdBlockSites` registrable domains), and `OpenWeb` only. The Library Boosts list is a SwiftUI section in `OpenSettings` (§4.11), because the Library window is SwiftUI (settings plan D-2). It never imports `OpenEngine` or CEF. | `docs/architecture.md`: packages never import the engine. One target keeps shared parts (tiles, rows, switches) in one place. |
+| D-1 | New SwiftPM library target `OpenSiteControl` in `Packages/OpenKit`. It holds the Site Control Center view and controller, the Boost editor views and session, and the code editor. It depends on `OpenModel`, `OpenDesign`, `OpenBoosts`, `OpenAdBlock` (only for `AdBlockSites` registrable domains), `OpenWeb`, and — once it lands — `OpenExtensionsUI` (§3.6) only. The Library Boosts list is a SwiftUI section in `OpenSettings` (§4.11), because the Library window is SwiftUI (settings plan D-2). It never imports `OpenEngine` or CEF. | `docs/architecture.md`: packages never import the engine. One target keeps shared parts (tiles, rows, switches) in one place. |
 | D-2 | `OpenSiteControl` uses AppKit views only. No SwiftUI. Layer-backed, drawn with `OpenDesign` tokens. | The panel opens on a click on the hot path and must hit < 8 ms. `AGENTS.md`: SwiftUI only where cheap. The Library section (§4.11) follows the Library window's SwiftUI rule instead. |
 | D-3 | The Site Control Center is an in-window overlay view (like the command bar overlay in `OpenCommandBar`), not an `NSPopover` and not a separate window. | Arc uses an `NSPopover` (`onPopoverClose`, SC-9). On macOS 26 a system popover draws Liquid Glass; `AGENTS.md` says keep Arc's look. An in-window overlay also keeps the browser window key, so the sidebar never flips to its inactive tones (`docs/design.md` §5.3). The command bar already proves an overlay above CEF content works. |
 | D-4 | The Boost editor is a child `NSPanel` of the browser window: `.borderless`, `.nonactivatingPanel`, `becomesKeyOnlyIfNeeded = true`. It becomes key only for text input (rename field, code editors). | Arc's editor is a window (`BoostsEditorWindowController`, `BoostsEditorWindowContent`, `codeEditingWindowSize`, BO-14). `becomesKeyOnlyIfNeeded` keeps the browser window active while the user drags the wheel or clicks tools. |
@@ -215,7 +215,7 @@ the panel).
 |---|---|---|---|
 | Settings | "Settings" | "More" | All Site Settings (§3.7 menu item 10) |
 | Boosts | "Boosts" | "Manage" | `view-boosts` → Library Boosts list (§4.11) |
-| Extensions | "Extensions" | "Manage" | Manage Extensions (§3.7 menu item 7) |
+| Extensions | "Extensions" | "Manage" | `manage-extensions` (§3.7 menu item 7) |
 
 ### 3.4 Settings section (tiles)
 
@@ -301,18 +301,49 @@ Actions:
 
 ### 3.6 Extensions section
 
-Shown when the tab's window has at least one extension action (`ExtensionHost.extensionActions`).
+Shared with `docs/plans/extensions-ui.md` (extensions-UI plan, in review on branch
+`docs/plan-extensions-ui`). That plan owns the section **body**: `ExtensionsSectionBody` and
+`ExtensionItemView` in its new target `OpenExtensionsUI` (item styles `.tile` for this grid and
+`.row`), the item data (`ExtensionItem` from the extended OpenWeb `ExtensionHost`), pin order
+(Chromium pref `extensions.pinned_extensions`, no second store), and the item intents
+`.run(id, anchor)`, `.togglePin(id)`, `.contextMenu(id, anchor)`. This plan owns the section
+header, its place in the panel, the panel itself, and the footer menu.
+
+Arc evidence (SC-14 plus the extensions-UI planner's findings): items are an extension button and a
+pin button; fields name, isPinned, isFocused, fallbackIcon, title, isActive; grid and row layouts;
+"Add Extension" as the last item; per-site access is **not** in the panel — it is in Chromium's
+extension context menu on right-click.
 
 | Part | Value |
 |---|---|
-| Grid | Buttons 36×36, gap 6, inset 14, wrap at 7 per row (7 × 36 + 6 × 6 = 288 ≤ 292). |
-| Button | Extension icon 20×20 centered (`ExtensionActionInfo.iconPNG`, fallback `puzzlepiece.extension.fill`). Badge text (≤ 4 chars) 9 pt Bold on a capsule at the top-right. Hover fill `SidebarColors.itemBackground`. Tooltip = action title. |
-| Pin button | On hover, a 14×14 `pin.fill` / `pin.slash.fill` badge at the button's top-left; tooltip "Pin" / "Unpin" (SC-14). Hidden until E4 lands. |
-| Add Extension | Last cell: `plus` 14 pt, tooltip and AX label "Add Extension". Opens `https://chromewebstore.google.com/` in a new Today tab. |
-| Click | `ExtensionHost.executeAction(extensionID:)`; the popup opens at the button's screen rect (app-shell §4.12 popup panel). The Site Control Center closes first. |
-| Right-click | E4: `showExtensionActionContextMenu`. Before E4: an NSMenu with "Manage Extensions…" only. |
+| Shown | When the tab's window has at least one extension item. |
+| Body frame | x 14, width 292 (panel width − 2 × 14), height from `ExtensionsSectionBody` (its grid metrics). |
+| Click | `.run(id, anchor)` → the App runs the action; the popup opens at the item's screen rect (app-shell §4.12). The Site Control Center closes first. |
+| Pin | `.togglePin(id)` → App → `ExtensionHost.setPinned` (E4). Hidden until E4 lands. |
+| Icon and badge | Drawn by `ExtensionItemView` from `toolbarImage` (Chromium's badge is baked in). This plan draws no badge of its own. |
+| Right-click | `.contextMenu(id, anchor)` → App → Chromium's extension context menu (site access lives there). Before E4: an NSMenu with "Manage Extensions…" only. |
+| Add Extension | Runs the `add-extension` command (exists in `OpenCommands`). |
+| Header "Manage" | Runs the `manage-extensions` command (exists). |
 
-Arc's "extension picker" key monitor (SC-9) is covered by grid keyboard navigation (§3.9).
+Until `OpenExtensionsUI` lands, the section stays hidden (the ⋯ menu still has both extension
+items). No second grid implementation is built here.
+
+#### 3.6.1 Extension picker mode
+
+The panel has a presentation mode for keyboard use of the Extensions section (Arc's extension picker,
+`ExtensionPickerState`, SC-9):
+
+- API: `SiteControlController.present(anchor: SiteControlAnchor, tabID: ItemID,
+  mode: SiteControlPresentationMode)` with `enum SiteControlPresentationMode { case standard,
+  extensionPicker }` and `enum SiteControlAnchor { case urlField, paneBar(ItemID), contentTopLeading }`.
+- `.extensionPicker`: the panel opens as usual, then sets keyboard focus on the first extension item
+  (`ExtensionsSectionBody.focusedID`); arrow keys move, Return runs the focused item, Esc closes the
+  panel. With no extension items it opens in `.standard` mode with focus on "Add Extension…" in the
+  ⋯ menu button (Open choice).
+- Anchor when the call comes from a key binding: `.urlField` when the sidebar is shown, else
+  `.paneBar` for a focused split pane, else `.contentTopLeading` (panel at 12 pt from the web
+  content's top-left, no arrow).
+- The key binding and its command id belong to the extensions-UI plan (Q11).
 
 ### 3.7 Footer
 
@@ -333,8 +364,8 @@ Height 44, separator above.
 | 4 | Manage Boosts… | Boosts section hidden | `view-boosts` |
 | 5 | New Boost… | Boosts section hidden and New Boost enabled | §3.5 New Boost |
 | 6 | — | | |
-| 7 | Manage Extensions… | always | Opens the extensions management page (`OEExtensionManager.managementPageURL`, `chrome://extensions`, Chrome-style tab until P3) |
-| 8 | Add Extension… | always | As §3.6 Add Extension |
+| 7 | Manage Extensions… | always | `manage-extensions` command (extensions-UI plan owns its target page; today `OEExtensionManager.managementPageURL`, Chrome-style tab until P3) |
+| 8 | Add Extension… | always | `add-extension` command (opens `https://chromewebstore.google.com/category/extensions`, the URL in Arc's binary; extensions-UI plan §3.12 owns it) |
 | 9 | — | | |
 | 10 | All Site Settings… | http(s) page | Opens `chrome://settings/content/siteDetails?site=<origin>` in a new Today tab (same mechanism as Settings "More Settings…", settings plan §5.5) |
 
@@ -358,7 +389,7 @@ The overlay takes first responder when it opens; the page loses key focus until 
 |---|---|
 | Esc | Close; focus returns to the page (or to the sidebar if the click came from there). |
 | Tab / Shift+Tab | Next / previous control: action buttons, section headers, tiles, Boost switches and edit buttons, extension buttons, security button, ⋯. Focus ring 2 pt `Core.focusRing`, radius = control radius + 2. |
-| Arrow keys | Move inside the current grid (action row, tiles, extension grid) and between Boost rows. |
+| Arrow keys | Move inside the current grid (action row, tiles, extension items) and between Boost rows. In `.extensionPicker` mode focus starts on the first extension item (§3.6.1). |
 | Space / Return | Activate the focused control (Return on a Boost row = Edit). |
 | Option held | No change in v1 (Arc's `_optionKeyDown` purpose is unknown, Q8). |
 | Any Command shortcut (for example Cmd+Shift+C) | Closes the panel, then routes normally through `KeyboardRouter`. |
@@ -652,7 +683,7 @@ pattern in `LibraryViewModel`).
 | Interstitial dismissed | Editor | `open.boosts.hasDismissedInterstitial` Bool (false) | `UserDefaults` |
 | JS notice dismissed | Editor | `open.boosts.hasDismissedJSNotice` Bool (false) | `UserDefaults` |
 | Code editor size | Editor | `open.boosts.codeEditorSize` String `"<w>x<h>"` ("560x640") | `UserDefaults` |
-| Extension pin | Pin badge (E4) | `OEBrowser.setPinned(extensionAction:at:)` (P2) | Chromium prefs (`extensions.pinned_extensions`) |
+| Extension pin | Pin button (E4) | `ExtensionHost.setPinned` → `-[OEBrowser setExtensionAction:pinned:]` (extensions-UI plan E4) | Chromium prefs (`extensions.pinned_extensions`) |
 | Cookies, cache | ⋯ menu | `WebProfile.clearSiteData(origin:kinds:)` (E2) | Chromium |
 | Panel state | — | none | Arc has `PersistedSiteControlCenterState` (contents unknown); Open persists nothing (Open choice) |
 
@@ -807,6 +838,8 @@ public struct SiteDataKinds: OptionSet, Sendable { public let rawValue: Int
     public static let cookies = SiteDataKinds(rawValue: 1), cache = SiteDataKinds(rawValue: 2), storage = SiteDataKinds(rawValue: 4) }
 public enum BoostCodeTab: Sendable, Equatable { case css, js }
 public enum BoostEditorMode: Sendable, Equatable { case simple, code(BoostCodeTab) }
+public enum SiteControlPresentationMode: Sendable, Equatable { case standard, extensionPicker }   // §3.6.1
+public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(ItemID), contentTopLeading }
 ```
 
 ### 6.3 Protocols the App implements (`SiteControlDataSource.swift`)
@@ -828,7 +861,7 @@ public enum BoostEditorMode: Sendable, Equatable { case simple, code(BoostCodeTa
     func setExtensionPinned(_ id: String, pinned: Bool)            // E4
     func showSecurityDetails(tabID: ItemID)                         // E3
     func clearSiteData(_ kinds: SiteDataKinds, tabID: ItemID)       // E2 / interim
-    func openURLInNewTab(_ url: URL, tabID: ItemID)                 // web store, chrome://extensions, site settings
+    func openURLInNewTab(_ url: URL, tabID: ItemID)                 // chrome://settings site details
     func reload(tabID: ItemID)
 }
 
@@ -861,8 +894,9 @@ the render harness passes fakes).
 
 | Intent / command | Handler |
 |---|---|
-| `.showSiteControls` | `siteControl.toggle(anchor: urlFieldButtonRect, tabID: focused tab)` |
-| Pane bar button 4 | Same with the pane bar button rect and the pane's tab |
+| `.showSiteControls` | `siteControl.toggle(anchor: .urlField, tabID: focused tab)` (toggle = `present(…, mode: .standard)` or close) |
+| Pane bar button 4 | `siteControl.toggle(anchor: .paneBar(paneTabID), tabID: paneTabID)` |
+| Extension picker key binding (extensions-UI plan, Q11) | `siteControl.present(anchor: §3.6.1 rule, tabID: focused tab, mode: .extensionPicker)` |
 | `.customizePage(tabID:)` | `edit-boost` for that tab |
 | `new-boost`, `edit-boost`, `new-legacy-boost` | §4.1 |
 | `view-boosts` | Library window, section `boosts` |
@@ -1025,7 +1059,7 @@ Control Center, Boost editor, full Site Control Center; rows #21 and #22 are add
 | E1 | List the content settings a site has changed, for every Chromium content-setting type (not only the 12 permission kinds), and set them | Settings tiles beyond the 12 kinds (JavaScript, Images, Pop-ups, Sound, Ads, …) | 12 kinds, ask/allow/block, no enumeration | `-[OEBrowserContext changedSiteSettingsForOrigin:] -> NSArray<OESiteSetting *>` (`kind` string id, `state` allow/block/ask/session); `-setSiteSetting:state:origin:`. OpenWeb: `WebProfile.changedSiteSettings(origin:)`, `setSiteSetting(_:kind:origin:)`. Arc: `getChangedContentSettingsForOrigin:` |
 | E2 | Clear one origin's cookies, cache, or storage separately | ⋯ Clear Cache / Clear Cookies | `clearBrowsingData(origin:)` = cookies of one origin + cache of all sites | `-clearSiteDataForOrigin:types:completion:` with `OESiteDataTypeCookies \| Cache \| Storage` (Chromium `BrowsingDataRemover` + origin filter). OpenWeb: `clearSiteData(origin:kinds:)` |
 | E3 | Security state and certificate | Footer security button | none | `OEWebContent.securityLevel` (`secure`, `neutral`, `insecure`, `dangerous`, `mixedContent`) + change flag `OEWebContentChangeSecurity`; `certificateChain -> NSArray (SecCertificateRef)` so Swift shows `SFCertificatePanel`. Arc: `ArcSecureContext`, `showCertificateDialog` |
-| E4 | Extension action pin state and pin/unpin, per-action context menu | Extensions section pin badge, right-click | manifest defaults, no pin | P2 (`docs/engine-patches.md`): `OEExtensionAction.pinnedIndex`, `-[OEBrowser setPinned:forExtensionAction:atIndex:]`, `-showContextMenuForExtensionAction:` |
+| E4 | Extension pin state, pin/unpin, the per-action context menu, and the toolbar image | Extensions section pin, right-click, item icon | manifest defaults, no pin | Names owned by `docs/plans/extensions-ui.md` §7 (use these, not new ones): its E2 adds `OEExtensionAction.toolbarImage` (28×28 pt with Chromium's badge baked in), `pinned`, `pinnedIndex`; its E4 is `-[OEBrowser setExtensionAction:pinned:]` and `-moveExtensionAction:toPinnedIndex:`; its E7 is `-contextMenuForExtensionAction:source:` returning `OEExtensionActionMenu` (items reuse `OEContextMenuItem`; `select(command:)` / `cancel()`). Engine work rides P2 (`docs/engine-patches.md`). |
 | E5 | Evaluate in the isolated world and deliver picker/applier messages there | Zap, secure live preview | main world only | P7 |
 | E6 | Blocked request count per page | Not shown in v1 (Q5); automation only | — | adblock-fork §12.1 `blockedResourceCountForBrowser:` |
 
@@ -1040,7 +1074,7 @@ Each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary (`AGE
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
 | 1 | Target skeleton, tokens, empty panel with header/actions/footer on fake data; harness with `render`, `ax`, `check` | `Package.swift`, `OpenDesign/SiteControlTokens.swift`, `OpenSiteControl/SiteControlTypes.swift`, `SiteControlDataSource.swift`, `SiteControlController.swift`, `SiteControlView.swift`, `sitecontrol-render/*`, `tools/verify-all.sh`, `tools/verification/check.py` | `sitecontrol-render check` PASS (F1, F2, F21 partial, F22), renders `scc-basic` header/footer at 1x/2x; `verify-all` row PASS |
-| 2 | Sections: tiles, Boost rows, extensions grid, ⋯ menu, reload row, keyboard, AX, animations | `SiteControlTiles.swift`, `SiteControlView.swift`, `SiteControlController.swift` | F3–F9, F20–F22 PASS; all `scc-*` states render; bench "click → first draw" < 8 ms |
+| 2 | Sections: tiles, Boost rows, Extensions section host (body from `OpenExtensionsUI` when it exists, else hidden), ⋯ menu, reload row, keyboard, picker mode, AX, animations | `SiteControlTiles.swift`, `SiteControlView.swift`, `SiteControlController.swift` | F3–F9, F20–F22 PASS; all `scc-*` states render; bench "click → first draw" < 8 ms |
 | 3 | App data source + actions; anchors (URL field, pane bar); intents and commands; automation `site-controls`, `pasteboard`; e2e `sitecontrol` | `App/SiteControl/AppSiteControlSource.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenFeatures/PaneChromeView.swift`, `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`, `docs/automation.md` | `--only sitecontrol` S1–S9 PASS (S10 blocked) on the real app; `--only features` still PASS |
 | 4 | OpenBoosts `BoostColorWheel` + normalization; editor session (undo, preview/commit, h0); simple-mode views; interstitial; menu | `OpenBoosts/Boost.swift`, `BoostStore.swift`, `docs/boosts.md`, `OpenSiteControl/BoostEditorSession.swift`, `BoostEditorPanel.swift`, `BoostEditorViews.swift` | F10–F12, F14–F16, F19 PASS; `editor-*` simple states render; `boosts` harness (verify-all) still 26/26 |
 | 5 | App editor host: adapter preview/refresh, commands `new-boost`/`edit-boost`/`new-legacy-boost`/`view-boosts`, `.customizePage`; Library Boosts section + App provider; automation `boost-editor`, `boosts`; e2e `boosteditor` B1–B3, B6–B10 | `App/Boosts/BoostEngineAdapter.swift`, `OpenFeatures/BrowserWindowController.swift`, `OpenSettings/BoostsSection.swift`, `OpenSettings/LibraryTypes.swift`, `settings-preview/LibraryPreview.swift`, the App's Library provider, automation, e2e | Listed e2e checks PASS on the real app; `settings-preview check` (verify-all) PASS with the new `boosts` section states |
@@ -1081,6 +1115,7 @@ Steps B and D. Step 5 needs Step F.
 | Q8 | Option key in the panel (Arc tracks it; purpose unknown). | Ignore in v1; revisit with capture #22 (Option held). |
 | Q9 | Ad-block path mismatch: `ProfileDirectories.adBlockListsDirectory` (`Profiles/<dataDirectoryName>/AdBlock/lists`) vs `AdBlockStore` (`Profiles/<UUID>/adblock/`). | Ad-block owner picks one (recommend `AdBlockStore`'s, it is the code that writes) and removes the other helper. This plan only calls `AdBlockStore`. |
 | Q10 | Zap list placement: in the editor (this plan) or Arc-style shelf over the page bottom? | In the editor. The in-page picker bar already sits at the page bottom; a second strip there would overlap it. Revisit with capture #21. |
+| Q11 | Arc binds Cmd+E to a hidden "Open Extensions" item that opens the extension picker (extensions-UI planner's finding), but Open's registry binds Cmd+E to `use-selection-to-find`. Which wins? | Owned by the extensions-UI plan. This plan only provides `present(anchor:tabID:mode: .extensionPicker)` (§3.6.1). |
 
 ## Appendix A — New tokens (`OpenDesign/SiteControlTokens.swift`)
 
@@ -1092,7 +1127,7 @@ public enum SiteControlMetrics {          // §3; all guess unless a section cit
     public static let actionButton = CGSize(width: 44, height: 36), actionGap: CGFloat = 4, actionRadius: CGFloat = 8
     public static let sectionHeaderHeight: CGFloat = 28, sectionBottomPadding: CGFloat = 10
     public static let tile = CGSize(width: 142, height: 48), tileGap: CGFloat = 8, tileRadius: CGFloat = 10, tileIcon: CGFloat = 28
-    public static let boostRowHeight: CGFloat = 40, extensionButton: CGFloat = 36, extensionGap: CGFloat = 6
+    public static let boostRowHeight: CGFloat = 40   // extension item metrics belong to OpenExtensionsUI (§3.6)
     public static let footerHeight: CGFloat = 44, reloadRowHeight: CGFloat = 32
     public static let shadowOpacity: Float = 0.25, shadowRadius: CGFloat = 16, shadowOffsetY: CGFloat = 6
 }

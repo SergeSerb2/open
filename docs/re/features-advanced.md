@@ -246,9 +246,10 @@ address (or the address minus 0x20, Swift's literal form), then the containing f
 decompiled. Short labels are Swift small strings: two 64-bit immediates, the first holding bytes
 0–7, the second bytes 8–14 plus a count byte (`0xE0 | n`, or `0xA0 | n` when non-ASCII), so
 `0x6c6553206b636950` + `0xed0000726f746365` reads "Pick Selector". Long labels are pointers
-(`0x8000000… + 0x20`) with a count word. Every long literal quoted below was re-read at its file offset in `.re/bin/Arc-arm64`
-(virtual address − 0x100000000), for example 0x39bbf40 = "Manage Boosts…". Field and case names come from Swift reflection strings,
-which `strings` prints in declaration order (`.re/features-advanced/strings-main.txt`).
+(`0x8000000… + 0x20`) with a count word. Every long literal quoted below was re-read at its file
+offset in `.re/bin/Arc-arm64` (virtual address − 0x100000000), for example 0x39bbf40 = "Manage
+Boosts…". Field and case names come from Swift reflection strings, which `strings` prints in
+declaration order (`.re/features-advanced/strings-main.txt`).
 
 - **BO-14 — The editor is a window with two modalities.** Editor state fields, in order:
   `modality` (cases `code`, `none`), `selectorPickerMode`, `showingAdvancedColorMapper`,
@@ -440,7 +441,12 @@ Method as in §4.7. Functions are named by their address in the shared project.
   `onRightClick`, `onPinButtonClick`; the section has `rows`, `items`, `isPinned`, and an "Add
   Extension" button (`FUN_10137f248`); pin tooltips "Pin" / "Unpin" (`FUN_101383090`). No string
   for per-site extension access exists. Rule: the section is the window's extension actions with
-  click, right-click, and pin, plus Add Extension.
+  click, right-click, and pin, plus Add Extension. Layouts `GridLayout` and `RowLayout` and the state
+  `ExtensionPickerState` sit with the feature's types (strings near line 86 161); a hidden binding
+  `openExtensionsPicker` ("Open pinned extensions picker.", line 130 474) drives the picker
+  (`focusedExtension`, `didFocus` / `didSelect` / `didCancel`). Per-site access comes from Chromium's
+  extension context menu on right-click (`ArcBrowser showExtensionContextMenu:`). Cross-check:
+  `docs/plans/extensions-ui.md`.
 - **SC-15 — Action buttons (refines SC-5).** Type enum order: `share`, `copyURL`, `newBoost`,
   `capture`, `captureFullPage`, `capturePortraitMode`. Tooltips (`FUN_10137ae90`): "Share", "Copy
   URL", "New Boost", "Capture a portion of this page", "Capture the full page", "Capture in
