@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "disallow": ["slack.com", "meet.google.com", "teams.microsoft.com"],
+  "sites": [
+    { "hosts": ["twitch.tv"], "hide": ["play", "scrub", "skip"] },
+    { "hosts": ["meet.google.com"], "hide": ["close"] },
+    { "hosts": ["youtube.com"], "activatesWhenInaudible": true },
+    { "hosts": ["open.spotify.com"], "hide": ["skip", "scrub"] },
+    { "hosts": ["netflix.com"], "hide": ["skip", "scrub"] }
+  ]
+}

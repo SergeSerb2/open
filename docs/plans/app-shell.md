@@ -171,7 +171,7 @@ Implement this section in `OpenFeatures.BrowserWindowController` plus the App fa
 | Pane clip inside container | radius 6 continuous, shadow black 0.25, radius 3, offset 1 pt down; empty panel fill white ≈ 10 % over the gradient | `PanelMetrics`, `WebPanelChromeLayer` |
 | Hover-reveal card | 5 pt from window edges, radius 10, 1 px stroke `SidebarColors.border` | `WindowMetrics.revealCard*` |
 | Find bar | top-right of the container, 260 × 24, 8 pt from the container's top-right (port the M1 placement into the container's coordinate space) | §4.9 |
-| Toast | bottom-center of the root, 280 × 34 (the OpenFeatures controller's existing toast) | M4 §4.4 |
+| Toast | top-right of the web panel, 8 pt from its top and 10 pt from its right edge; 42 pt tall (46 with a button) | `docs/plans/page-platform.md` §4.1 (replaces the bottom-center 280 × 34 toast) |
 
 Layout runs in `layoutContent()` on resize, sidebar width change, sidebar mode change, Space switch, and fullscreen change. During a live sidebar drag, update frames per tick but do not rebuild the theme field and do not write the model (D4).
 
@@ -206,7 +206,7 @@ Use `OpenFeatures.WebContentContainer` as specified in M4 §5. The shell's dutie
 
 ### 3.7 Toasts
 
-Reuse the toast in `OpenFeatures.BrowserWindowController` (black 0.85, radius 8, optional Undo button). Sources: Peek close undo, "tab closed" undo where Arc shows one (verify against captures; if unverified, show only the Peek toast in v1 and say so in the PR), Boost apply feedback (§4.5), and sleep discard failure ("a tab could not sleep; it stays open"). One toast at a time; a new toast replaces the old and cancels its undo. Toast lifetime 5 s. Toasts never steal focus.
+Superseded by `docs/plans/page-platform.md` §4.1: one `ToastCenter` per window with Arc's look (Space-tinted, top-right of the web panel, overlap stacking, 3 s lifetime, 6 s with a button). Until that plan's Step 1 lands, reuse the toast in `OpenFeatures.BrowserWindowController` (black 0.85, radius 8, optional Undo button). Sources: Peek close undo, "tab closed" undo where Arc shows one (verify against captures; if unverified, show only the Peek toast in v1 and say so in the PR), Boost apply feedback (§4.5), and sleep discard failure ("a tab could not sleep; it stays open"). One toast at a time; a new toast replaces the old and cancels its undo. Toast lifetime 5 s. Toasts never steal focus.
 
 ### 3.8 Multiple windows, full screen, and persistence
 
