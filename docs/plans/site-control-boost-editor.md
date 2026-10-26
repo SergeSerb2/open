@@ -93,7 +93,7 @@ engine extension state. This plan adds no second store for any of those values (
 | D-10 | Boost editing and creation are disabled in incognito windows. Existing Boosts still apply there (boosts plan Q4 default). | Arc refuses Boost install in Incognito ("Open this link outside Incognito Mode to install this Boost", BO-10). Editing in incognito would write a site visit into the persistent Profile store. Lead question Q6 confirms. |
 | D-11 | The panel shows Arc's sections in Arc's order: header, actions, Settings, Boosts, Extensions, footer. Labels are Arc's decoded labels (§2, Appendix B). Layout values are Open choices or guesses until a capture exists (§11.1 R-1). | No capture of the panel exists (`docs/re/interaction-states.md` §2, "Only its tooltip"). Labels and structure are proven by strings and decompiled constants (SC-9 to SC-16). |
 
-## 1. Current state (verified 2026-10-25 on `origin/main` 724e35d, after M5 #51; re-verify before you edit)
+## 1. Current state (verified 2026-10-25 on `origin/main` c95be65, after M5 #51 and #56; re-verify before you edit)
 
 Run `git log --oneline -3` and read each file below before you change its area.
 
