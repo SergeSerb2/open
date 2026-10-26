@@ -147,7 +147,7 @@ public struct ArcImporter {
     }
     /// Shared by model import and the count-only probe; missing/empty refs mean Default.
     static func profileReferenceKey(_ raw:Any?)->String {
-        if let value=raw as? String {return value == "Default" ? "default":value}
+        if let value=raw as? String {return value}
         guard let object=raw as? [String:Any] else {return "default"}
         if object["default"] as? Bool == true {return "default"}
         return object.keys.sorted().compactMap {object[$0] as? String}.first ?? "default"

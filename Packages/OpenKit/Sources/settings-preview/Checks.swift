@@ -113,6 +113,23 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try require(absent.arcDirectoryExists && !absent.sidebarFound && absent.spaces == nil && absent.historyVisits == nil && absent.secretRows == nil && absent.settingsCounts.isEmpty,"empty source manufactured counts")
                 await first.choose(directory:empty);first.showImport();try require(first.probe?.sidebarFound == false && actions.events.isEmpty,"empty UI performed an action")
                 first.startFresh();try require(actions.events == ["finishFirstRun imported=false"],"empty path did not finish fresh")
+                let namedSource=env.root.appendingPathComponent("Named Default Source")
+                try SyntheticData.writeImportFixture(to:namedSource)
+                let sidebarURL=namedSource.appendingPathComponent("StorableSidebar.json")
+                var sidebarRoot=try JSONSerialization.jsonObject(with:Data(contentsOf:sidebarURL)) as! [String:Any]
+                var sidebar=sidebarRoot["sidebar"] as! [String:Any],containers=sidebar["containers"] as! [Any]
+                var holder=containers[1] as! [String:Any],spaces=holder["spaces"] as! [Any],namedSpace=spaces[1] as! [String:Any]
+                namedSpace["profile"]="Default";spaces[1]=namedSpace;holder["spaces"]=spaces;containers[1]=holder;sidebar["containers"]=containers;sidebarRoot["sidebar"]=sidebar
+                try JSONSerialization.data(withJSONObject:sidebarRoot).write(to:sidebarURL)
+                try JSONSerialization.data(withJSONObject:["profiles":["Default",["id":"Default","name":"Example Named Default","directoryBasename":"Example-Named"]]]).write(to:namedSource.appendingPathComponent("StorableProfiles.json"))
+                let namedOutput=env.root.appendingPathComponent("Named Default Output"),process=Process(),pipe=Pipe()
+                process.executableURL=URL(fileURLWithPath:CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("openkit")
+                process.arguments=["import-arc","--arc-dir",namedSource.path,"--out",namedOutput.path]
+                process.standardOutput=pipe;process.standardError=pipe
+                try process.run();_=pipe.fileHandleForReading.readDataToEndOfFile();process.waitUntilExit()
+                try require(process.terminationStatus == 0,"named Default CLI import failed")
+                let namedModel=try SnapshotStore(root:namedOutput).load()
+                try require(namedModel?.profiles.count == 2 && namedModel?.profiles.contains(where:{$0.dataDirectoryName == "Example-Named"}) == true,"probe refactor changed named Default import semantics")
                 let pendingSource=env.root.appendingPathComponent("Pending Probe")
                 try SyntheticData.writeImportFixture(to:pendingSource)
                 try Data("invalid database".utf8).write(to:pendingSource.appendingPathComponent("User Data/Default/History"))

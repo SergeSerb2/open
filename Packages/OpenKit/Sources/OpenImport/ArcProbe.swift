@@ -63,7 +63,10 @@ public struct ArcProbe:Sendable {
                 default:counts["Skipped unknown",default:0] += 1
                 }
             }
-            let profiles=Set(spaces.map {ArcImporter.profileReferenceKey($0.1["profile"])})
+            let profiles=Set(spaces.map {entry in
+                let key=ArcImporter.profileReferenceKey(entry.1["profile"])
+                return key == "Default" ? "default":key // estimate only; model import keeps its metadata rules
+            })
             counts["Profiles"]=max(1,profiles.count);counts["Search settings"]=max(1,profiles.count)
             if let routes=json("StorableLinkRouting.json") as? [String:Any],let rules=routes["rules"] as? [Any] {counts["Routing rules"]=rules.count}
             else {counts["Routing rules"]=0}
