@@ -20,9 +20,9 @@ public final class ColorPadView: NSView {
         super.init(frame: frame)
         wantsLayer = true; layer?.cornerRadius = 4; layer?.masksToBounds = true
         layer?.addSublayer(dots)
-        for knob in knobs { layer?.addSublayer(knob.outer) }
-        emptyLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        emptyLabel.alignment = .center; emptyLabel.maximumNumberOfLines = 2
+        for knob in knobs.reversed() { layer?.addSublayer(knob.outer) }
+        emptyLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        emptyLabel.alignment = .center; emptyLabel.maximumNumberOfLines = 1
         emptyLabel.setAccessibilityElement(false)
         addSubview(emptyLabel)
         setAccessibilityElement(true); setAccessibilityRole(.slider); setAccessibilityLabel("Color")
@@ -50,7 +50,8 @@ public final class ColorPadView: NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         dots.frame = bounds
         CATransaction.commit()
-        emptyLabel.frame = CGRect(x: bounds.midX - 110, y: bounds.midY - 20, width: 220, height: 40)
+        let height = ceil(emptyLabel.cell?.cellSize(forBounds: CGRect(x: 0, y: 0, width: 220, height: 40)).height ?? 18)
+        emptyLabel.frame = CGRect(x: bounds.midX - 110, y: bounds.midY - height / 2, width: 220, height: height)
         paintKnobs()
     }
     public override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshAppearance() }
@@ -66,6 +67,11 @@ public final class ColorPadView: NSView {
                                 y: bounds.midY + $0.y * ThemeEditorMetrics.padRadius) }
     }
     public var primaryKnobFrame: CGRect? { primaryKnobCenter.map { CGRect(x: $0.x - 22, y: $0.y - 22, width: 44, height: 44) } }
+    public var secondaryKnobFrames: [CGRect] {
+        knobs.dropFirst().filter { !$0.outer.isHidden }.map {
+            CGRect(x: $0.outer.position.x - 13.5, y: $0.outer.position.y - 13.5, width: 27, height: 27)
+        }
+    }
 
     private func unit(_ point: CGPoint) -> CGPoint {
         CGPoint(x: (point.x - bounds.midX) / ThemeEditorMetrics.padRadius,
@@ -141,13 +147,13 @@ public final class ColorPadView: NSView {
             let colors = ThemeColorMath.harmony(key: ThemeColorMath.toP3(style.keyColor), count: style.colorCount, wheel: style.wheel)
             for (index, color) in colors.enumerated() {
                 let position = ThemeColorMath.knob(for: color, range: state.range)
-                let size: CGFloat = index == 0 ? 44 : 30, ring: CGFloat = index == 0 ? 5 : 3
+                let size: CGFloat = index == 0 ? 44 : 27, ring: CGFloat = index == 0 ? 5 : 3
                 let knob = knobs[index]
                 knob.outer.isHidden = false
                 knob.outer.bounds = CGRect(x: 0, y: 0, width: size, height: size)
                 knob.outer.path = CGPath(ellipseIn: knob.outer.bounds, transform: nil)
                 knob.outer.position = CGPoint(x: bounds.midX + position.x * 170, y: bounds.midY + position.y * 170)
-                knob.outer.fillColor = CGColor(gray: 1, alpha: index == 0 ? 1 : 0.8)
+                knob.outer.fillColor = CGColor(gray: 1, alpha: 1)
                 knob.inner.frame = knob.outer.bounds; knob.rim.frame = knob.outer.bounds
                 knob.inner.path = CGPath(ellipseIn: knob.outer.bounds.insetBy(dx: ring, dy: ring), transform: nil)
                 knob.inner.fillColor = CGColor(colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!, components: [color.r, color.g, color.b, 1])
@@ -155,7 +161,10 @@ public final class ColorPadView: NSView {
                 knob.rim.fillColor = nil; knob.rim.lineWidth = 1
                 knob.rim.strokeColor = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
                     ? ThemeEditorColors.glyph.cgColor(contentAppearance)
-                    : contentAppearance == .light ? CGColor(gray: 0, alpha: 0.12) : nil
+                    : nil
+                knob.outer.shadowColor = CGColor(gray: contentAppearance == .light ? 0 : 1, alpha: 1)
+                knob.outer.shadowOpacity = 0.06; knob.outer.shadowRadius = 2
+                knob.outer.shadowOffset = CGSize(width: 0, height: 2); knob.outer.shadowPath = knob.outer.path
                 knob.outer.contentsScale = renderScale; knob.inner.contentsScale = renderScale; knob.rim.contentsScale = renderScale
             }
         }
@@ -164,17 +173,21 @@ public final class ColorPadView: NSView {
     }
 
     private func updateKnobScale() {
-        let desired: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : state.isGestureInProgress ? 1.12 : pointerOnKnob ? 1.08 : 1
-        let layer = knobs[0].outer
-        let old = layer.transform.m11
-        guard abs(old - desired) > 0.001 else { return }
-        let animation: CABasicAnimation = state.isGestureInProgress ? CABasicAnimation(keyPath: "transform.scale") : Motion.editorKnobReturn.animation(keyPath: "transform.scale")
-        animation.fromValue = layer.presentation()?.transform.m11 ?? old; animation.toValue = desired
-        if state.isGestureInProgress { animation.duration = 0.12; animation.timingFunction = Motion.easeOut }
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        layer.transform = CATransform3DMakeScale(desired, desired, 1)
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { layer.add(animation, forKey: "knob-scale") }
-        CATransaction.commit()
+        for (index, knob) in knobs.enumerated() {
+            let active = state.isGestureInProgress || pointerOnKnob
+            let desired: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : index == 0
+                ? (state.isGestureInProgress ? 1.136 : pointerOnKnob ? 1.09 : 1) : (active ? 30.0 / 27 : 1)
+            let layer = knob.outer
+            let old = layer.transform.m11
+            guard abs(old - desired) > 0.001 else { continue }
+            let animation: CABasicAnimation = state.isGestureInProgress ? CABasicAnimation(keyPath: "transform.scale") : Motion.editorKnobReturn.animation(keyPath: "transform.scale")
+            animation.fromValue = layer.presentation()?.transform.m11 ?? old; animation.toValue = desired
+            if state.isGestureInProgress { animation.duration = 0.12; animation.timingFunction = Motion.easeOut }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer.transform = CATransform3DMakeScale(desired, desired, 1)
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { layer.add(animation, forKey: "knob-scale") }
+            CATransaction.commit()
+        }
     }
 }
 

@@ -1,24 +1,25 @@
 import CoreGraphics
 
-/// Dark tokens measured in F0137. Light tokens are the plan's v1 guesses.
+/// Session 1 and session 2 capture calibration. Own drawing, no Arc assets.
 public enum ThemeEditorColors {
-    public static let padFill = DesignColor(light: .black(0.03), dark: .white(0.04))
+    public static let padFill = DesignColor(light: .black(0.055), dark: .white(0.04))
     public static let dot = DesignColor(light: .black(0.14), dark: .white(0.20))
     public static let knobRing = DesignColor(.white(1))
-    public static let glyph = DesignColor(light: .black(0.45), dark: .white(0.50))
+    public static let glyph = DesignColor(light: .black(0.55), dark: .white(0.50))
     // F0137 Automatic core #C6C5C5 over the selected plate: white 0.50.
-    public static let glyphSelected = DesignColor(light: .black(0.45), dark: .white(0.50))
-    public static let selectedPlate = DesignColor(light: .black(0.07), dark: .white(0.10))
-    public static let hoverPlate = DesignColor(light: .black(0.04), dark: .white(0.06))
-    public static let secondaryText = glyph
-    public static let trackFill = DesignColor(light: .black(0.06), dark: .white(0.08))
-    public static let waveActive = DesignColor(light: .black(0.45), dark: .white(0.53))
-    public static let waveInactive = DesignColor(light: .black(0.12), dark: .white(0.15))
+    public static let glyphSelected = DesignColor(light: .black(0.55), dark: .white(0.50))
+    public static let selectedPlate = DesignColor(light: .black(0.10), dark: .white(0.10))
+    public static let hoverPlate = DesignColor(light: .black(0.11), dark: .white(0.11))
+    public static let secondaryText = DesignColor(light: .black(0.74), dark: .white(0.90))
+    public static let trackFill = DesignColor(light: .black(0.085), dark: .white(0.08))
+    public static let waveActive = DesignColor(light: .black(0.40), dark: .white(0.53))
+    public static let waveInactive = DesignColor(light: .black(0.15), dark: .white(0.15))
     public static let thumb = DesignColor(.white(1))
-    public static let dotUnlit = DesignColor(light: .black(0.12), dark: .white(0.15))
-    public static let dotLit = DesignColor(light: .black(0.45), dark: .white(0.50))
-    /// Own texture preview, calibrated to the F0138 center fill at noise 0.45.
+    public static let dotUnlit = DesignColor(light: .black(0.15), dark: .white(0.15))
+    public static let dotLit = DesignColor(light: .black(0.40), dark: .white(0.50))
+    /// Neutral fallback when a preview tile cannot be made.
     public static let noisePreviewBase = RGBA(0.46, 0.46, 0.46)
+
 }
 
 public enum ThemeEditorMetrics {

@@ -139,6 +139,14 @@ black at fixed alphas). Aliases: `runtime-observations.md` §3.3.
 Harmony colors for count `n` and wheel `w`: `analogous` → `[k, +40°, −40°]`
 (first `n`); `complementary` → `n = 2: [k, +180°]`, `n = 3: [k, +150°, +210°]`.
 
+Add transition (lead, 2026-10-26 11:57 America/Vancouver): when count is
+exactly 1, Add sets `wheel = .complementary` and count 2. A second Add keeps
+that mode and gives +150°/+210°. At count ≥2, Add preserves the stored
+wheel (including a page-2 analogous style reduced to two colors). Count and
+mode change in one undoable command; undo restores both. Do not change the
+harmony function or rewrite stored styles. Evidence: session 2 item 17,
+frames 0065/0067/0069, page-1 Brand 8, +180° then +150°/+210°.
+
 Background layout: `n = 1` → single color; `n = 2` → base `[c0, c1]`, no
 overlay; `n = 3` → base `[c0, c1]`, overlay `[clear, c2]`. Translucency is
 always `light` (all 4 stored themes, including the dark-content one).
@@ -150,6 +158,11 @@ the dark text that light content uses (both from the semantic palettes). Bias: A
 `ThemeTuning.automaticBias` (= 0.0, guess, §15 Q3), Light −21, Dark +21.
 
 ### 2.2 Pad mapping
+
+**Provisional, not a parity gate:** capture session 2 contradicts this
+linear radius law. See the dated lead amendment and mandatory Step 9 gate
+below. Keep current stored styles and mathVersion semantics until that work
+is implemented with an explicit compatibility decision.
 
 Unit disc, y down, angle clockwise from 3 o'clock. Lightness range by mode:
 Automatic `0.01…0.97`, Light `0.575…0.97`, Dark `0.01…0.425`.
@@ -416,7 +429,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Content inset | 13 pt each side → content 356 × 508 | §14 AX |
 | Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp inside the screen's `visibleFrame` with 8 pt margins; if clamped horizontally, keep it fully on screen. | §14 (x 500 = sidebar width, y 35) |
 | Opened from the creation form | top aligned with the Theme card's top, same left edge (**guess**) | §6 |
-| Appearance | follows the system appearance; tokens in §5.9 | §15 Q9 |
+| Appearance | forced Space Light/Dark overrides the system live; Automatic follows the system; tokens in §5.9 | Session 2 0158–0163, lead round 3 supersedes Q9 |
 | One per window | Opening an editor for any Space closes the open one first (commit is already done per gesture). | Open choice |
 | Close triggers | Esc; mouse down in any app window outside the panel (local event monitor); the app deactivates (`NSApplication.didResignActiveNotification`); the browser window closes or switches Space; the edited Space is deleted | Arc `didKeyDownEscape`; transient popover behavior |
 
@@ -426,7 +439,7 @@ R1: screen clamping keeps the material **body** 8 pt inside `visibleFrame`,
 not the transparent outer band. Model-backed editor sessions use the model's
 single undo manager (defaulting to the owner's manager when unassigned).
 Remove/Add both use 16 pt Medium and `glyph`; the cool `addGlyph` token is
-removed. Light `glyphSelected` is black 0.45. Empty copy stays exactly
+removed. Light `glyphSelected` is black 0.55 (session 2). Empty copy stays exactly
 "Tap to pick a color for this space"; AX percentages have no space.
 
 | Element | Frame | Notes |
@@ -449,11 +462,11 @@ Drawing (layers, no `draw(_:)` per frame):
 |---|---|
 | Plate | fill `ThemeEditorColors.padFill` |
 | Dot grid | our own tile: 1.0 pt dots, pitch 4.25 pt, `ThemeEditorColors.dot`; one cached `CGImage` pattern per scale |
-| Primary knob | 44 pt circle: 5 pt ring `ThemeEditorColors.knobRing` (white), 34 pt disc filled with the key color (P3 `CGColor`). No shadow (none measured). |
-| Harmony knobs | 30 pt circle: 3 pt ring white @ 0.8, 24 pt disc with the harmony color. Not draggable. **guess** (not captured, §15 Q10) |
-| Knob hover | scale 1.08 over 0.12 s ease-out (**guess**) |
-| Knob drag | scale 1.12 (**guess**); returns to 1.0 on mouse up over 0.2 s spring |
-| Empty state | text "Tap to pick a color for this space", 13 pt Medium, `ThemeEditorColors.secondaryText`, centered in the pad, max width 220, 2 lines |
+| Primary knob | 44 pt circle: 5 pt ring `ThemeEditorColors.knobRing` (white), 34 pt disc filled with the key color (P3 `CGColor`). Downward shadow y +2, radius 2, white 0.06 in dark / black 0.06 in light; no normal light outline (session 2, fit). |
+| Harmony knobs | 27 pt circle: 3 pt pure white ring, 21 pt disc. Scale to about 30 pt with hover/drag; not draggable. Draw secondary knobs first and the primary last, so coincident grey knobs stay underneath. Session 2 0050–0064 and 0067–0080 supersedes Q10. |
+| Knob hover | primary ×1.09, secondary about 30/27, over 0.12 s ease-out (session 2 0076) |
+| Knob drag | primary ×1.136, secondary about 30/27 (session 2 0077–0080); returns to 1.0 on mouse up over 0.2 s spring |
+| Empty state | text "Tap to pick a color for this space", 13 pt Semibold (weight fit), `secondaryText` white 0.90 / light black 0.74, one line at max width 220; center the actual label height on the pad, not a top-aligned 40 pt wrapping frame (session 2 0010) |
 
 Interaction:
 
@@ -480,18 +493,18 @@ around the pad plate.
 | Glyphs | SF Symbols `sparkles`, `sun.max.fill`, `moon.stars.fill`, 15 pt medium |
 | Glyph color | selected `ThemeEditorColors.glyphSelected`, unselected `glyph` (white ≈ 0.5 measured) |
 | Selected plate | 32 × 32, radius 8, `ThemeEditorColors.selectedPlate` (white ≈ 0.10 measured) |
-| Hover plate | `ThemeEditorColors.hoverPlate` |
+| Hover plate | alpha 0.11 in both modes; source-over selected plate when selected, combined alpha 0.199 |
 | Hover effect | `NSImageView.addSymbolEffect(.bounce)` once on hover enter (our replacement for Arc's looping Lottie) |
 | Tooltips | "Automatic Appearance", "Light Appearance", "Dark Appearance" |
 | Action | set `appearance`; remap lightness (§2.2); commit one step |
 
 ### 5.5 Remove and Add
 
-32 × 32 buttons, glyphs `minus` / `plus` 13 pt medium, `glyph` color, hover
+32 × 32 buttons, glyphs `minus` / `plus` 16 pt Medium, `glyph` color, hover
 plate radius 8. Tooltips "Remove color" / "Add color". Add is enabled when
 count < 3. Remove is enabled when count ≥ 1. Remove at count 1 clears the
-theme (§3.2) and shows the empty state. Both buttons are hidden in the empty
-state (**guess**). Each click is one commit.
+theme (§3.2) and shows the empty state. Both buttons stay visible and disabled in the empty
+state (session 2 0010; supersedes the hidden-button guess). Each click is one commit.
 
 ### 5.6 Presets strip
 
@@ -552,24 +565,26 @@ R1 does not change the approved thumb mapping, dial center, or hit frames.
 
 ### 5.9 Color tokens (`OpenDesign/ThemeEditorTokens.swift`, new)
 
-Dark values are measured on F0137 over the popover material. Light values are
-**guesses** (no light capture; §15 Q9).
+Dark values use F0137 and session 2. Light values are calibrated from
+session 2 item 20 frame 0027 and item 17 frames 0158–0159. Harness backdrops
+are `2E3237` (dark session 2) and `FCFBFC` (light); private captures stay local.
 
 | Token | Dark | Light |
 |---|---|---|
-| `padFill` | white 0.04 | black 0.03 |
+| `padFill` | white 0.04 | black 0.055 |
 | `dot` | white 0.20 | black 0.14 |
-| `knobRing` | white 1.0 | white 1.0 (+ black 0.12 1 pt outer stroke) |
-| `glyph` | white 0.50 | black 0.45 |
-| `glyphSelected` | white 0.50 | black 0.45 |
-| `selectedPlate` | white 0.10 | black 0.07 |
-| `hoverPlate` | white 0.06 | black 0.04 |
-| `secondaryText` | white 0.50 | black 0.45 |
-| `trackFill` | white 0.08 | black 0.06 |
-| `waveActive` | white 0.53 | black 0.45 |
-| `waveInactive` | white 0.15 | black 0.12 |
+| `knobRing` | white 1.0 | white 1.0; no normal outline |
+| `glyph` | white 0.50 | black 0.55 |
+| `glyphSelected` | white 0.50 | black 0.55 |
+| `selectedPlate` | white 0.10 | black 0.10 |
+| `hoverPlate` | white 0.11 | black 0.11 |
+| `secondaryText` | white 0.90 | black 0.74 |
+| `trackFill` | white 0.08 | black 0.085 |
+| `waveActive` | white 0.53 | black 0.40 |
+| `waveInactive` | white 0.15 | black 0.15 |
+
 | `thumb` | white 1.0 | white 1.0 (+ black 0.12 1 pt stroke) |
-| `dotUnlit` / `dotLit` | white 0.15 / 0.50 | black 0.12 / 0.45 |
+| `dotUnlit` / `dotLit` | white 0.15 / 0.50 | black 0.15 / 0.40 |
 
 ### 5.10 Motion (PROVISIONAL tokens in `Motion`)
 
@@ -1231,3 +1246,59 @@ on both pages; the same editor in macOS Light.
 - Q10 The 2nd and 3rd color knobs are 30 pt, not draggable, and move with the main knob.
 - Q11 Spaces ▸ Rename Space edits the name in the sidebar header. A dialog appears only when the sidebar is hidden.
 - The capture request goes into the user's single combined Arc capture session.
+
+
+### Lead round-3 overrides — 2026-10-26
+
+Evidence: `theme-design-r2.md`, capture session 2 item 17
+(`20261026-104045-17-theme-editor`) and item 20
+(`20261026-103516-20-light-mode`); private frames remain local under `.re/`.
+
+- **Harmony / N5:** the 11:57 lead clarification supersedes the earlier
+  suggestion to alter the harmony function. Add switches a one-color style
+  to complementary, in one undo step; Add at two colors preserves its mode.
+  No preset or persisted style is rewritten. Frames 0065/0067/0069 prove the
+  page-1 complementary offsets. The editor wiring lands in Step 3, where
+  `ThemeEditorState` exists; Step 2 keeps and gates both harmony modes.
+- **Step 9 is a hard written acceptance gate, not optional polish.** Decode
+  Arc's knob-radius ↔ color function before claiming pad parity. Frames
+  0027–0049 show shared radii for mid greys; 0091–0097 show a deep color at
+  the center (lightness about 0.45), not black. Do not decode it in this
+  review pass. Current M3 proves an internal round trip only.
+- **Q4 / intensity:** Step 9 must reproduce the tint at intensity zero.
+  Frames 0098/0100/0111: Arc keeps a tint at 0 (current Open ΔE00 7.30),
+  and the measured intensity-1 alpha is about 0.75. The provisional law is
+  not a verified Arc law. Preserve these capture values as the calibration
+  acceptance inputs; no stored-value meaning changes in this review pass.
+- **D-8 / equal mean darkness:** the earlier equal-darkness requirement is
+  superseded as an Arc parity target. Step 9 must calibrate per-texture
+  darkness and contrast from 0112/0114/0116/0118 at noise 0.8. Arc tweed is
+  darkest and smoothest, with mean (209.6,184.8,185.8) and L standard
+  deviation 2.53, versus no-texture (228.9,201.9,202.7). Grain, sand, denim,
+  and tweed do not share one mean. Keep existing procedural Space tiles and
+  current compatibility checks until Step 9 replaces this provisional fit;
+  they are regression checks, not a claim that Arc uses equal darkness.
+  Grain strength and per-channel calibration belong to this same gate.
+
+- **Q9 / appearance override:** session 2 frames 0158–0163 prove forced
+  Light/Dark changes the editor even under the opposite system mode.
+  Automatic inherits the system. This supersedes the original Q9 decision.
+  Light tokens and the FCFBFC harness backdrop are calibrated from item 20
+  0027 and item 17 0158–0159; no outline on the knob, thumb, or tick.
+- **Empty state / N4:** frame 0010 replaces the hidden-button and dimmed
+  controls guesses: bright centered label, visible disabled Remove/Add.
+  Step 4 hides the thumb and tick, leaves the wave inactive at its default
+  amplitude, and draws only unlit dial dots.
+- **Secondary knobs / N6:** frames 0067–0080 give 27 pt at rest, pure white
+  rings, about 30 pt on hover/drag, with the primary on top. Grey knobs in
+  0050–0064 coincide rather than forming a visible bullseye.
+- **Hover / N13:** 0016/0020 and 0066–0068 give alpha 0.11; selected plus
+  hover stacks to about 0.20. Minus glyph is pixel-aligned and shifted 1 pt
+  down, preserving the button frame (0081–0085).
+
+Session-2 render comparison samples opaque glyph cores at ≥99% peak
+contrast, so different antialiased SF/Arc silhouettes do not bias a token
+measurement. Half-peak boxes still report center/height. Disabled glyphs
+sit among brighter grid dots; their table samples fixed core coordinates
+instead of treating grid dots as symbol bounds. The light moon uses 17 pt
+(16 pt in dark) to retain the captured height in item 20 frame 0027.

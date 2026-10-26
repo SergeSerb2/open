@@ -47,7 +47,10 @@ public struct ThemeEditorState: Equatable, Sendable {
         case .endDrag, .endKeyboardGesture:
             isGestureInProgress = false; startKnob = nil; startPointer = nil
         case .addColor:
-            if let value = style, value.colorCount < 3 { style?.colorCount += 1 }
+            if var value = style, value.colorCount < 3 {
+                if value.colorCount == 1 { value.wheel = .complementary }
+                value.colorCount += 1; style = value
+            }
         case .removeColor:
             if let value = style {
                 if value.colorCount == 1 { style = nil; emptyAppearance = .automatic }

@@ -26,6 +26,7 @@ public class ThemeEditorButton: NSView {
         wantsLayer = true; layer?.addSublayer(plate)
         plate.cornerRadius = 8
         glyphView.imageScaling = .scaleNone
+        (glyphView as? EditorGlyphView)?.alignsToPixels = symbol == "minus"
         glyphView.setAccessibilityElement(false)
         addSubview(glyphView)
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label)
@@ -76,12 +77,18 @@ public class ThemeEditorButton: NSView {
         guard layer != nil else { return }
         let appearance = contentAppearance
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        plate.backgroundColor = (selected ? ThemeEditorColors.selectedPlate : ThemeEditorColors.hoverPlate).cgColor(appearance)
+        let hovering = (hovered || forcedHover || pressed) && enabled
+        var color = (selected ? ThemeEditorColors.selectedPlate : ThemeEditorColors.hoverPlate).resolved(appearance)
+        if selected && hovering {
+            color.alpha = 1 - (1 - color.alpha) * (1 - ThemeEditorColors.hoverPlate.resolved(appearance).alpha)
+        }
+        plate.backgroundColor = color.cgColor
         plate.opacity = selected || ((hovered || forcedHover || pressed) && enabled) ? 1 : 0
         plate.borderWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast && plate.opacity > 0 ? 1 : 0
         plate.borderColor = ThemeEditorColors.glyph.cgColor(appearance)
         CATransaction.commit()
-        glyphView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: pointSize, weight: .medium))
+        let size = pointSize + (appearance == .light && symbol == "moon.stars.fill" ? 1 : 0)
+        glyphView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size, weight: .medium))
         glyphView.contentTintColor = (glyphColor ?? (selected ? ThemeEditorColors.glyphSelected : ThemeEditorColors.glyph)).resolved(appearance).nsColor
         glyphView.needsDisplay = true
         glyphView.alphaValue = enabled ? 1 : 0.35
@@ -123,11 +130,17 @@ public final class AppearanceModeBar: NSView {
 }
 
 @MainActor private final class EditorGlyphView: NSImageView {
+    var alignsToPixels = false
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
         guard let image, let context = NSGraphicsContext.current?.cgContext else { return }
-        let rect = CGRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
+        var rect = CGRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
                           width: image.size.width, height: image.size.height)
+        if alignsToPixels {
+            let scale = window?.backingScaleFactor ?? 1
+            rect.origin.x = (rect.origin.x * scale).rounded() / scale
+            rect.origin.y = (rect.origin.y * scale).rounded() / scale
+        }
         context.saveGState(); context.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
         image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         context.setBlendMode(.sourceIn); context.setFillColor((contentTintColor ?? .labelColor).cgColor)
