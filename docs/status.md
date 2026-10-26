@@ -1,7 +1,7 @@
 # Open v1 status inventory
 
-Audit date: 2026-10-25 (America/Vancouver). Base: `origin/main` at `c95be65` (includes PR #46 fork bring-up, PR #50 M4 visual finish, and three PRs that merged during the audit: #51 Settings + Library, #54 release locales, #56 Settings polish).
-Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #53 `a03d2a5`, plus the titles and file lists of PRs #55–#57.
+Audit date: 2026-10-25 (America/Vancouver). Base: `origin/main` at `f41955c` (includes PR #46 fork bring-up, PR #50 M4 visual finish, and five PRs that merged during the audit: #51 Settings + Library, #54 release locales, #55 license inventory, #56 Settings polish, #59 media + PiP plan).
+Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #53 `a03d2a5`, plus the title and file list of PR #57.
 
 This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.md v1 scope, and the platform basics a browser needs. For each item it names the plan, the library code, the App wiring, and the evidence. It is an inventory. It changes no code.
 
@@ -12,7 +12,7 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 | Status | Meaning |
 |---|---|
 | **done** | A user can use it in the app built from `main` today. On `main` the App is still the plain M1 shell (`App/BrowserWindowController.swift`: table-view tab list, address field). So "done" often means "works in the M1 shell, without Arc's look". |
-| **in PR** | It works in the real app of an open PR (#45, #52, #53), or its code is in an open PR (#55–#57). |
+| **in PR** | It works in the real app of an open PR (#45, #52, #53), or its code is in an open PR (#57). |
 | **planned** | A plan names the missing part. Library code can already exist on `main` (for example all of `OpenSettings` from #51, which no App code shows yet). "Plan in progress" means a plan that another agent is writing now (§0.3). |
 | **unplanned** | No plan covers the missing part. Library code can exist (the note says so). |
 | **out of scope** | Excluded by AGENTS.md (accounts, sync, Easels, Notes, Arc Max) or by a lead decision. Listed only so nobody builds it by accident. |
@@ -22,7 +22,7 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 ### 0.2 Short names
 
 - RE docs: **FC** `re/features-core.md`, **FA** `re/features-advanced.md`, **MH** `re/menus-and-hotkeys.md`, **IS** `re/interaction-states.md`, **DM** `re/data-model.md`, **DT** `re/design-tokens.md`, **RO** `re/runtime-observations.md`. "r9" means rule 9 in that section.
-- Plans (`docs/plans/`): `app-shell`, `m4` (`m4-split-peek-littleopen`), `routing` (`routing-little-open`), `profiles`, `settings` (`settings-library`), `boosts-zap`, `adblock-fork`, `memory-fork`, `import2` (`import-phase2`), `applescript`, `first-run`, `release`, `fork-infra`. Step letters (Step C, Step E…) are app-shell §7 steps.
+- Plans (`docs/plans/`): `app-shell`, `media-pip`, `m4` (`m4-split-peek-littleopen`), `routing` (`routing-little-open`), `profiles`, `settings` (`settings-library`), `boosts-zap`, `adblock-fork`, `memory-fork`, `import2` (`import-phase2`), `applescript`, `first-run`, `release`, `fork-infra`. Step letters (Step C, Step E…) are app-shell §7 steps.
 - Library paths are under `Packages/OpenKit/Sources/`.
 - App wiring: **main** (M1 shell on `main`), **PR #45/#52/#53** (real app of that PR), **none**.
 - Harness checks run in this audit (§6): `sidebar-render check` 125/125, `features-render check` 147/147, `commandbar-render check` 78/78, `commands-dump` OK, `settings-preview check`, and `tools/verify-all.sh`. Check IDs such as `features-render S3` come from the check output.
@@ -38,14 +38,15 @@ This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.
 | Settings + Library | PR #51, merged to `main` as `dc62e65` during this audit; changes no `App/` file | planned (library on `main`; App wiring in app-shell §4.11 and settings Step 8) |
 | Settings polish | PR #56, merged to `main` as `c95be65` during this audit (`OpenSettings` only) | counted with Settings + Library |
 | Release Steps 1/3 | PR #54, merged to `main` as `724e35d` during this audit (`tools/release-locales.txt`) | planned (partial) |
-| Release Steps 9, 11 | PR #55 (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`), PR #57 (`tools/release.sh`) | in PR |
+| Release Step 9 | PR #55, merged to `main` as `f41955c` during this audit (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`) | planned (partial) |
+| Release Step 11 | PR #57 (`tools/release.sh`) | in PR |
 | Extensions P1 tab-strip bridge | PR #53, branch `m7/ext-p1-tabstrip` | in PR |
 | Space creation + theme editor plan | branch `plan/space-theme-editor` | plan in progress |
 | Site Control Center + Boost editor plan | branch `plans/site-control-boost-editor` | plan in progress |
-| Media controls + Picture in Picture plan | branch `t3/media-controls-picture-in-picture` | plan in progress |
+| Media controls + Picture in Picture plan | PR #59, merged to `main` as `211a8bb` during this audit (`docs/plans/media-pip.md`) | planned (rows cite `media-pip`) |
 | Extensions UI plan | branch `t3/extensions-ui-plan` | plan in progress |
 
-I did not read the in-progress plans. Where a row says "plan in progress", the scope match comes from the plan's title, not its text.
+I did not read the in-progress plans. Where a row says "plan in progress", the scope match comes from the plan's title, not its text. The media plan merged before this PR, so its rows cite its text (`media-pip` below).
 
 ### 0.4 Headline
 
@@ -53,11 +54,11 @@ I did not read the in-progress plans. Where a row says "plan in progress", the s
 - No `App/` file on `main` or in PR #52 uses `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `BoostStore`, `AdBlockStore`, `SleepController`, `ScriptHost`, `RoutingEvaluator`, or `GlobalHotkeyService` (`git grep` on both trees). These land in app-shell Steps C–H. PR #52 reaches `KeyboardRouter` only inside `OpenFeatures.BrowserWindowController`, for split, Peek, and back/forward keys.
 - Biggest unplanned gaps: Open's own password manager, writing imported Arc passwords and cookies into Open, and the dispatch of system menu items (Cut, Copy, Paste, Quit…) once `MenuBuilder` replaces the M1 menu (§3).
 
-Row count by status (281 rows in §1; a "(partial)" row counts under its base status):
+Row count by status (282 rows in §1; a "(partial)" row counts under its base status):
 
 | Area | done | in PR | planned | unplanned | out of scope |
 |---|---:|---:|---:|---:|---:|
-| 1.1 Sidebar | 0 | 17 | 2 | 8 | 0 |
+| 1.1 Sidebar | 0 | 17 | 4 | 7 | 0 |
 | 1.2 Spaces | 2 | 7 | 4 | 3 | 2 |
 | 1.3 Tabs | 7 | 5 | 11 | 6 | 0 |
 | 1.4 Favorites | 1 | 4 | 0 | 0 | 0 |
@@ -76,8 +77,8 @@ Row count by status (281 rows in §1; a "(partial)" row counts under its base st
 | 1.17 Engine and platform basics | 9 | 2 | 19 | 15 | 1 |
 | 1.18 Settings and Library | 0 | 0 | 10 | 0 | 2 |
 | 1.19 First run | 0 | 0 | 4 | 0 | 0 |
-| 1.20 Release | 0 | 2 | 7 | 0 | 0 |
-| **Total** | **23** | **62** | **137** | **51** | **8** |
+| 1.20 Release | 0 | 1 | 8 | 0 | 0 |
+| **Total** | **23** | **61** | **140** | **50** | **8** |
 
 ## 1. Feature tables
 
@@ -92,8 +93,9 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Tab row states: hover fill, selected fill and shadow, close ×, "−" on loaded pinned rows | FC §1.2 r8, r11; IS §3 | design.md §5.3 | `OpenSidebar/SidebarRows.swift` | PR #52 | `sidebar-render check`; design.md §8 (ΔE ≤ 2.03) | in PR | |
 | Engine favicon on loaded rows | FC §1.2 r8 | app-shell §4.13 | — | PR #52 | none named (`docs/app-shell.md` Step B: favicon events update model slices) | in PR | |
 | Stored favicons for unloaded and imported rows | FC §1.2 r8 | app-shell §4.8 (Step H) | `OpenStore/FaviconStore.swift`, `OpenStore/FaviconFetcher.swift` | none | verify-all `favicons` | planned | |
-| Per-tab audio icon and mute button | FC §1.2 r10 | app-shell §4.1 | `SidebarRows.swift`; model `setMuted` | PR #52 (`toggleMute` sets host `isMuted`) | e2e `features` "Audible state and mute" (`docs/engine-spike.md`) | in PR | Web Audio is missed until engine patch P6 (planned, `docs/engine-patches.md`). |
-| Mute all tabs / Unmute all tabs | FC §1.2 r10, §4.4 | none: registry ids `mute-all-tabs`, `unmute-all-tabs` have no menu and no row in app-shell §4.3 | `OpenCommands/CommandRegistry.swift` | none | `commands-dump` (registered) | unplanned | Command-bar actions only. |
+| Per-tab audio icon and mute button | FC §1.2 r10 | app-shell §4.1; media-pip | `SidebarRows.swift`; model `setMuted` | PR #52 (`toggleMute` sets host `isMuted`) | e2e `features` "Audible state and mute" (`docs/engine-spike.md`) | in PR | Web Audio is missed until engine patch P6 (planned, `docs/engine-patches.md`). |
+| Mute all tabs / Unmute all tabs | FC §1.2 r10, §4.4 | media-pip (command-bar actions) | `OpenCommands/CommandRegistry.swift` (`mute-all-tabs`, `unmute-all-tabs`, no menu) | none | `commands-dump` (registered) | planned | Not in the app-shell §4.3 table. |
+| Recording indicator on rows (camera or microphone in use) | FC §1.2 r10 (2026-10-25 update); FA §8 | media-pip | none | none | none | planned | |
 | Tidy titles for known sites (for example Gmail fragment → "Inbox") | FC §1.2 r9 | none | none | none | none | unplanned | Non-AI rule table. |
 | Unread badge on rows added in the background | FC §1.2 r12 | none | model field `Tab.isUnread` (`OpenModel/LiveNodes.swift`), set by import; the sidebar does not draw it | none | none | unplanned (partial) | |
 | Hover Previews of folder, pinned, and favorite rows | FC §1.2 r13; IS §18 General | settings §5.1 (switch and Previews sheet only) | `OpenSettings` switch | none | none | unplanned (behavior) | |
@@ -112,7 +114,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Tooltips: capsule, keycaps, placement | IS §5 | design.md §5.6 | `OpenSidebar/Tooltip.swift` | PR #52 | `sidebar-render check` (one schedule per hover) | in PR | 0.6 s delay is a guess. |
 | Inactive-window glyph tones | design.md §5.3 | app-shell §3.1 | `OpenSidebar` | PR #52 | `sidebar-render` inactive comparison (design.md §8) | in PR | |
 | Row accessibility and keyboard navigation | — (Open requirement) | design.md §14 | `OpenSidebar` | PR #52 | `sidebar-render check` (AX dump, key events) | in PR | |
-| Sidebar media widget | FA PP-6 | plan in progress: media controls + PiP | none | none | none | planned | |
+| Sidebar media controls (mini player stack above the bottom bar) | FA §8 (PP-6, PP-20) | media-pip (D-1, D-3) | none (new `OpenMedia` library planned, media-pip D-10) | none | none | planned | |
 | Edge-swipe gesture to hide the sidebar | MH "Gestures" (`hideSidebarWithGesture`) | none | none | none | none | unplanned | |
 
 ### 1.2 Spaces
@@ -389,9 +391,9 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | JavaScript dialogs: alert, confirm, prompt, beforeunload | — | app-shell §4.9 | — | main, PR #52 | e2e `features` "JS dialogs" | done | Plain `NSAlert` sheets. |
 | History recording per profile (FTS) | FC §4.2 | app-shell §4.8 (Step H) | `OpenStore/HistoryStore.swift` | none (no `recordVisit` caller in `App/`) | `suggest-check`; `openkit bench` | planned | |
 | History view (Cmd+Y) | MH Archive | settings Library History | `OpenSettings/HistorySection.swift` | none | `settings-preview` | planned | |
-| Picture in Picture for video | FA PP-1, PP-2 | plan in progress: media controls + PiP | — | main (Chromium's own PiP window) | e2e `features` "Picture in Picture" | done (engine default) | Arc's own PiP window is planned. |
-| Auto-PiP on tab switch; Google Meet auto-PiP; Document PiP | FA PP-3–5 | plan in progress | — | — | — | planned | |
-| Media controls and mini player | FA PP-6–9 | plan in progress | — | — | — | planned | |
+| Picture in Picture for video | FA §8 (PP-1, PP-2) | media-pip (D-8: phase 1 keeps Chromium's PiP window) | — | main (Chromium's own PiP window) | e2e `features` "Picture in Picture" | done (engine default) | Open's own PiP window chrome is planned (media-pip phase 2). |
+| Auto-PiP on tab leave; Google Meet auto-PiP; Document PiP | FA §8 (PP-3–5) | media-pip (D-4, D-5) | — | — | — | planned | |
+| Mini player controls: play/pause, tracks, mute, camera/microphone toggles | FA §8 (PP-6–9, PP-21) | media-pip | — | — | — | planned | |
 | Print (Cmd+P), print to PDF | MH File | — | — | main | e2e `features` "Print to PDF" | done | |
 | Save Page As (Cmd+Shift+S) | MH File | app-shell §4.3 | — | none | none | planned | |
 | Zoom in, out, actual size | MH View | — | — | main | e2e `features` "Zoom" | done | |
@@ -460,7 +462,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Notarization and DMG | — | release §3 | — | — | — | planned | Needs U-3. |
 | Sparkle updates with an appcast on GitHub Pages | — | release §6 | — | — | — | planned | Needs U-4, U-5. |
 | English-only locales | engine-patches P5 | release §2.7 | `tools/embed-cef.sh` (`OPEN_KEEP_LOCALES`); `tools/release-locales.txt` (#54, merged) | — | — | planned (partial) | The list is on `main`; the release pipeline that applies it is PR #57. |
-| License inventory and acknowledgements | `docs/followups.md` | release §7, Step 9 | PR #55 (`docs/release/licenses.md`, `tools/generate-acknowledgements.py`) | — | — | in PR | The review itself needs U-6. |
+| License inventory and acknowledgements | `docs/followups.md` | release §7, Step 9 | `docs/release/licenses.md`, `tools/generate-acknowledgements.py` (#55, merged) | — | — | planned (partial) | The inventory is on `main`; the review itself needs U-6. |
 | Crash symbol archive (dSYMs kept on this Mac) | — | release §2.5 | — | — | — | planned | |
 | `tools/release.sh --dry-run` | — | release §11, Step 11 | PR #57 (`tools/release.sh`) | — | — | in PR | |
 
@@ -553,7 +555,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 14. **Copy URL as Quote** (Cmd+Ctrl+Shift+C). Evidence: FC §1.4 r19. Belongs in: app-shell §4.3 (needs the page selection from the engine).
 15. **Copy URL toast** ("Copied Current URL" with Share) and the **Arc toast look** (Space-tinted, top-right, stacking). Evidence: FC §4.7 r18; IS §16. Belongs in: app-shell §3.7 and `OpenFeatures`.
 16. **Zoom level toast** ("110%"). Evidence: IS §16. Belongs in: app-shell §3.7.
-17. **Mute all / Unmute all; Expand / Collapse All Folders; Reset all tabs in this Space.** Registry only. Evidence: FC §1.2 r10, §1.5 r23, §3.2 r8. Belongs in: app-shell §4.3 (model loops).
+17. **Expand / Collapse All Folders; Reset all tabs in this Space.** Registry only. Evidence: FC §1.5 r23, §3.2 r8. Belongs in: app-shell §4.3 (model loops).
 18. **Turn folder into Space; Export Space into folder; Turn Space into folder.** Intents and menu items exist; no model command. Evidence: FC §2.2 r7; IS §15. Belongs in: `OpenModel` plus app-shell §4.1.
 19. **Hover Previews** of folder, pinned, and favorite rows. The Settings switch exists (`OpenSettings`). Evidence: FC §1.2 r13. Belongs in: `OpenSidebar` plus `OpenFeatures` (reuse the Peek host).
 20. **Tidy titles** for known sites. Evidence: FC §1.2 r9. Belongs in: `OpenSidebar` or `OpenModel` (an Open-written rule table).
@@ -672,7 +674,7 @@ Design reviews of Settings, the first-run screens, and the Links pane belong to 
 
 ## 6. Evidence for this audit
 
-The audit started on `42bba0b`. PR #51 merged during the audit, so the branch was fast-forwarded to `dc62e65` and the checks marked "both" ran again. PR #54 (a text file and a plan line) and PR #56 (`OpenSettings` polish) merged next; `tools/verify-all.sh` ran again on the final merge. No unit tests, no Arc launch, no desktop input, and no Arc user data were used.
+The audit started on `42bba0b`. PR #51 merged during the audit, so the branch was fast-forwarded to `dc62e65` and the checks marked "both" ran again. PRs #54, #55, #56, and #59 merged next (docs, a text file, a script, and `OpenSettings` polish); the branch merged each one, and `tools/verify-all.sh` ran again on the final merge. No unit tests, no Arc launch, no desktop input, and no Arc user data were used.
 
 | Command | Tree | Result |
 |---|---|---|
@@ -683,7 +685,7 @@ The audit started on `42bba0b`. PR #51 merged during the audit, so the branch wa
 | `.build/release/commandbar-render check` | both | 78/78 passed |
 | `.build/release/settings-preview check` (inside verify-all) | `dc62e65` | 28 checks passed, 0 failed |
 | `.build/release/sidebar-render bench --rows 1000` | `42bba0b` | scroll p95 3.67 ms; moveNode p95 4.84 ms; Space switch 7.6–14.8 ms (load 8.5) |
-| `tools/verify-all.sh` | all | `42bba0b`: 14 PASS; `dc62e65`: 15 PASS (adds `settings-preview`); merge with `724e35d`: 15 PASS; final merge with `c95be65`: 15 PASS; no SKIP |
+| `tools/verify-all.sh` | all | `42bba0b`: 14 PASS; `dc62e65`: 15 PASS (adds `settings-preview`); merges with `724e35d`, `c95be65`, `211a8bb`: 15 PASS each; final merge with `f41955c`: 15 PASS; no SKIP |
 | Coverage join (§2) with a fresh `commands-dump --markdown` | both | Same counts on both trees |
 | `git grep` for library types in `App/` on `origin/main` and `origin/t3/app-shell-real-window` | both | No App use of `MenuBuilder`, `CommandBarController`, `SuggestEngine`, `HistoryStore`, `FaviconStore`, `BoostStore`, `AdBlockStore`, `SleepController`, `ScriptHost`, `RoutingEvaluator`, `GlobalHotkeyService`, `archiveExpiredTabs` |
 | Diff of the MH menu tables against `expected-menu.json` | both | 1 Arc item missing (Reveal Tab in Sidebar); 2 extra standard macOS items |
