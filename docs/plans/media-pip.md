@@ -1624,6 +1624,11 @@ buttons (derived from the rule).
 | Title | origin x 14, baseline y 22. Maximum width = `(PiP shown ? cardW − 58 : cardW − 34) − 24` (a 14 pt leading inset and a 10 pt gap before the button). | fact: E3 AX text `[22, 976.5, 130, 16]`; ink x 23…149; the first capital's rows 980…989, so the baseline is 990 (card y 968 → 22). The formula gives 130 at `cardW` 212. |
 | Truncation | one line, tail, "…" | fact: E3 and E7 (three titles) |
 
+The mini-player plate radius is a fit from E3/E7, not the separate toolbar
+plate measurement. Evidence: `.re/reviews/pr110-scripts/platefit.py` and
+`platefit2.py` (32× analytic coverage, calibrated against Open's known 6 pt
+plate); 5 continuous RMS 0.034, 6 continuous RMS 0.116.
+
 PP-16's 0 ↔ 24 pt Close width is read as title-row presence under
 stack hover. E2 has no title-row buttons, while E7 shows Close on all cards;
 there is no per-card width state in the captured states, so Open builds no
@@ -2153,7 +2158,7 @@ Acceptance: MC1–MC15 PASS; every other `sidebar-render check` line PASS;
 R1–R4 meet the targets or name each miss; MC9 PASS; `tools/verify-all.sh`
 PASS.
 
-### 13.9 Implementation results (2026-10-26)
+### 13.9 Initial implementation results (head 85fd361, 2026-10-26)
 
 Implemented on `feature/media-step3b-mini-player`, stacked on #109. The
 F1–F11 Muse review corrections above ship with the implementation: one shadow
@@ -2199,6 +2204,40 @@ Light/themed fills, drawer and motion retain their provisional labels.
 Full numeric tables, render matrix, binary hashes and runtime receipts:
 [Step 3b evidence](../../Packages/OpenKit/MediaRenders/step3b/README.md).
 The §7 sRGB/plane/ink/CIEDE2000 method is implemented by `compare-media`.
+
+### 13.10 Design review r1 fixes and verification (2026-10-26)
+
+| Finding | Status | Change and evidence |
+|---|---|---|
+| F1: height-change fly-in | Fixed | Anchor-correct starts for pager/container; new checks compare animation starts with the on-screen position and sample the pager at +16 ms. They fail on `85fd361`. |
+| F2: interrupted collapse snaps backward | Fixed | Capture presentation position, size, opacity and shadow path before model changes for container, pager, cards, child views and title fades. Stale title-fade completions are ignored. One- and three-card re-entry checks fail on `85fd361` and pass after the fix. |
+| F3: title/drawer overlap controls | Fixed | Pin row frames using the reviewed formulas; the clipped content edge reveals them. Presentation samples during expand, collapse, re-entry and drawer opening show no control-row overlap. |
+| F4: plate radius | Fixed | `MiniPlayerMetrics.buttonPlateRadius = 5`, continuous, applied only to mini-player buttons. Spec/design now label the value as an E3/E7 fit. |
+| F5: default tooltip fill | Deferred to assigned token-fix task | No tooltip color change here. Open remains `#1C1B22`; Arc is `#0A0D4F` (E3/S2 04/0021, review ΔE00 19.5). |
+| F6: spring response | Fixed, still a guess | Mini-player stack response is 0.2 s, damping 1, based on the measured sidebar spring. O9 still needs a mini-player motion capture. |
+| F7: native play/pause coverage | Added | Reduce Motion OFF: check the shipping `NSImageView` path, live AppKit ink, and native-event pause/play replacement. Actual App-window comparison remains with Step 6 integration. |
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
+`heavy.sh` in a detached session after merging main `d92a695`.
+`sidebar-render check`: **525 passed, 0 failed**, including **49 motion checks**.
+MC8 idle CPU: **0.014%** over 2 s, no idle animation keys or collapse work.
+The focused motion suite passes **49/49**. The identical harness fails the old
+`85fd361` production code with **36 failures** (13 PASS), proving the F1/F2 gates
+are sensitive to the reported defects.
+
+MC9: **PASS**, 12 interleaved pairs against main `d92a695`, with
+`/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
+**-0.155 ms**, 20%-trimmed mean **-0.275 ms** (limit +0.3 ms).
+Baseline/head median p95: 4.350/4.140 ms.
+Collapsed 3-card report-only: 3.76 ms p95.
+
+Independent design review confirmed that the R3/R4 2 pt values in the initial
+tables are measurement artifacts: rounded-strip ring sampling and different
+strings/descenders, respectively. No product geometry correction is needed for
+those values. All 62 synthetic renders were regenerated; the raw comparison tables
+remain available. Tooltip F5 stays with the assigned token-fix task.
+
+[Final evidence and review receipts](../../Packages/OpenKit/MediaRenders/step3b/README.md).
 
 ## Appendix — Lead decisions (2026-10-25)
 

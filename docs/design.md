@@ -1111,7 +1111,7 @@ Behaviors checked through the automation layer: Option-click on the green button
 
 Window suite on head `ea323e9` (origin/main `c768c38` merged, review rounds 1 and 2 fixed), one Release run under the shared on-screen lock, repeated on `20a7e93` after the merge of origin/main `f965b20` (49 of 49 again; `sidebarDrawn` cold 242 ms, warm 224 ms): 49 of 49 rows passed, including every window-button row (`traffic_lights`; `traffic_light_look` with the hover hue checked in a key window, margins 85–188; the hover region; `traffic_light_actions`; all four `traffic_light_stale_hover` cases), the reveal and card rows, the F0001 comparison, and the launch budgets (`sidebarDrawn` cold 233 ms, warm 227 ms). Two temporary builds, not committed, show that the rows catch the bugs they target: with the hover-state fix turned off, all three original stale cases fail as the round-1 review reported (colored at rest after the full-screen exit and the restore, fill error 114–147 levels; grey under the pointer after ⌘S twice, hue margin ≤ 0.6); with `mouseEntered` doing nothing (round 2), `traffic_light_look` fails (hover alpha stays 0.001, hue margins ≤ 1.0 in light and dark) and so does the re-hover case. Three earlier runs on `e89b49f` passed every window-button row; their only failures were launch budgets at load 12–25 (cold 283 / 301 / 257 ms, warm 213 / 295 / 253 ms against 250 ms). Earlier runs on this branch (2026-10-26, before the review fixes) also passed the window-button rows whenever they reached them; their other failures were launch budgets, an engine crash at launch, and `OEErrorWebContentClosed` in `html_fullscreen_in_native` (`docs/followups.md`). One earlier set failed `traffic_light_look` for the dark window that is not key because the check tested for the colored ring there (a shadowed variable, fixed in `1a84a2d`).
 
-### 22.1 Step 3b implementation and comparison (2026-10-26)
+### 22.1 Initial Step 3b implementation and comparison (head 85fd361, 2026-10-26)
 
 The 33/66 pt card, static 13 Regular title, five slots, unmasked stack and palette
 fill are implemented. The shadow uses opaque black plus the single
@@ -1155,3 +1155,37 @@ Collapsed E2/E6 have no AX title, so the local runs use E3/E7 titles respectivel
 Light/themed fills, drawer and motion retain their provisional labels.
 
 [Open-only render matrix and full comparison tables](../Packages/OpenKit/MediaRenders/step3b/README.md).
+
+### 22.2 Design review r1 fixes and verification (2026-10-26)
+
+| Finding | Status | Change and evidence |
+|---|---|---|
+| F1: height-change fly-in | Fixed | Anchor-correct starts for pager/container; new checks compare animation starts with the on-screen position and sample the pager at +16 ms. They fail on `85fd361`. |
+| F2: interrupted collapse snaps backward | Fixed | Capture presentation position, size, opacity and shadow path before model changes for container, pager, cards, child views and title fades. Stale title-fade completions are ignored. One- and three-card re-entry checks fail on `85fd361` and pass after the fix. |
+| F3: title/drawer overlap controls | Fixed | Pin row frames using the reviewed formulas; the clipped content edge reveals them. Presentation samples during expand, collapse, re-entry and drawer opening show no control-row overlap. |
+| F4: plate radius | Fixed | `MiniPlayerMetrics.buttonPlateRadius = 5`, continuous, applied only to mini-player buttons. Spec/design now label the value as an E3/E7 fit. |
+| F5: default tooltip fill | Deferred to assigned token-fix task | No tooltip color change here. Open remains `#1C1B22`; Arc is `#0A0D4F` (E3/S2 04/0021, review ΔE00 19.5). |
+| F6: spring response | Fixed, still a guess | Mini-player stack response is 0.2 s, damping 1, based on the measured sidebar spring. O9 still needs a mini-player motion capture. |
+| F7: native play/pause coverage | Added | Reduce Motion OFF: check the shipping `NSImageView` path, live AppKit ink, and native-event pause/play replacement. Actual App-window comparison remains with Step 6 integration. |
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
+`heavy.sh` in a detached session after merging main `d92a695`.
+`sidebar-render check`: **525 passed, 0 failed**, including **49 motion checks**.
+MC8 idle CPU: **0.014%** over 2 s, no idle animation keys or collapse work.
+The focused motion suite passes **49/49**. The identical harness fails the old
+`85fd361` production code with **36 failures** (13 PASS), proving the F1/F2 gates
+are sensitive to the reported defects.
+
+MC9: **PASS**, 12 interleaved pairs against main `d92a695`, with
+`/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
+**-0.155 ms**, 20%-trimmed mean **-0.275 ms** (limit +0.3 ms).
+Baseline/head median p95: 4.350/4.140 ms.
+Collapsed 3-card report-only: 3.76 ms p95.
+
+Independent design review confirmed that the R3/R4 2 pt values in the initial
+tables are measurement artifacts: rounded-strip ring sampling and different
+strings/descenders, respectively. No product geometry correction is needed for
+those values. All 62 synthetic renders were regenerated; the raw comparison tables
+remain available. Tooltip F5 stays with the assigned token-fix task.
+
+[Final evidence and review receipts](../Packages/OpenKit/MediaRenders/step3b/README.md).

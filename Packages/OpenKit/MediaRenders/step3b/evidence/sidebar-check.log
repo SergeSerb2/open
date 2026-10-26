@@ -157,7 +157,7 @@ MC1–MC15: real composed sidebar, native events, offscreen layers (MC9 uses com
   OK   MC7 title has no animation for paused
   OK   MC7 title hover cross-fade ends
   OK   MC8 paused at rest: zero layer keys, zero collapse work, one store expiry
-  OK   MC8 paused idle CPU 0.011% (≤0.5%); no media timer/display link
+  OK   MC8 paused idle CPU 0.014% (≤0.5%); no media timer/display link
   OK   MC10 Peek dims controls with bottom bar
   OK   MC11 default dark fill
   OK   MC11 title, enabled/disabled glyph and plate roles dark
@@ -198,6 +198,56 @@ MC1–MC15: real composed sidebar, native events, offscreen layers (MC9 uses com
   OK   MC5 native hit test: microphone
   OK   MC5 native hit test: camera
   OK   MC14 recording actions update glyphs
+MC15 motion regression: anchored starts, interruption continuity and clipped rows
+  OK   MC15 motion host is offscreen and non-key
+  OK   MC15 F7 Reduce Motion OFF uses the shipping native pause image
+  OK   MC15 F7 live native pause path draws ink without the layer cloner
+  OK   MC15 F7 native events replace pause with play with Reduce Motion OFF
+  OK   MC15 F1 1 cards: height animation starts at on-screen positions, including non-centered anchors
+  OK   MC15 F1 1 cards: pager stays at its on-screen x/y 16 ms after hover
+  OK   MC15 F3 1 cards expand +16ms, card 0: title never overlaps controls (5.891536474227905, 5.891536474227905)
+  OK   MC15 F3 1 cards expand +50ms, card 0: title never overlaps controls (20.91949814558029, 20.91949814558029)
+  OK   MC15 F2 1 cards: real delayed collapse starts
+  OK   MC15 F3 1 cards collapse +50ms, card 0: title never overlaps controls (15.8419970870018, 15.8419970870018)
+  OK   MC15 F2 1 cards: pager/container retarget from their presentation values
+  OK   MC15 F2 1 cards: card/content retarget from their presentation values
+  OK   MC15 F2 title opacity retargets from visible opacity (0.72418404)
+  OK   MC15 F2 shadow retargets from the visible path
+  OK   MC15 F2 1 cards: interrupted collapse has no backward jump at +16ms (container 56.8419970870018 → 59.64669258873194)
+  OK   MC15 F3 1 cards interrupted +16ms, card 0: title never overlaps controls (18.646692588731934, 18.646692588731934)
+  OK   MC15 F1 drawer starts at its on-screen container position
+  OK   MC15 F3 1 cards drawer +16ms, card 0: title never overlaps controls (33.0, 33.86224150657654)
+  OK   MC15 F3 drawer +16ms, card 0: drawer never overlaps controls
+  OK   MC15 F4 mini-player plate radius is 5 continuous
+  OK   MC15 motion ends without idle animation keys or collapse work
+  OK   MC15 motion host is offscreen and non-key
+  OK   MC15 F1 3 cards: height animation starts at on-screen positions, including non-centered anchors
+  OK   MC15 F1 3 cards: pager stays at its on-screen x/y 16 ms after hover
+  OK   MC15 F3 3 cards expand +16ms, card 0: title never overlaps controls (6.003490537405014, 6.003490537405014)
+  OK   MC15 F3 3 cards expand +16ms, card 1: title never overlaps controls (6.003490537405014, 6.003490537405014)
+  OK   MC15 F3 3 cards expand +16ms, card 2: title never overlaps controls (6.003490537405014, 6.003490537405014)
+  OK   MC15 F3 3 cards expand +50ms, card 0: title never overlaps controls (20.354911744594574, 20.354911744594574)
+  OK   MC15 F3 3 cards expand +50ms, card 1: title never overlaps controls (20.354911744594574, 20.354911744594574)
+  OK   MC15 F3 3 cards expand +50ms, card 2: title never overlaps controls (20.354911744594574, 20.354911744594574)
+  OK   MC15 F2 3 cards: real delayed collapse starts
+  OK   MC15 F3 3 cards collapse +50ms, card 0: title never overlaps controls (14.236349523067474, 14.236349523067474)
+  OK   MC15 F3 3 cards collapse +50ms, card 1: title never overlaps controls (14.236349523067474, 14.236349523067474)
+  OK   MC15 F3 3 cards collapse +50ms, card 2: title never overlaps controls (14.236349523067474, 14.236349523067474)
+  OK   MC15 F2 3 cards: pager/container retarget from their presentation values
+  OK   MC15 F2 3 cards: card/content retarget from their presentation values
+  OK   MC15 F2 title opacity retargets from visible opacity (0.6779772)
+  OK   MC15 F2 shadow retargets from the visible path
+  OK   MC15 F2 3 cards: interrupted collapse has no backward jump at +16ms (container 124.4561294913292 → 140.35368944047306)
+  OK   MC15 F3 3 cards interrupted +16ms, card 0: title never overlaps controls (17.49485559960007, 17.49485559960007)
+  OK   MC15 F3 3 cards interrupted +16ms, card 1: title never overlaps controls (17.49485559960007, 17.49485559960007)
+  OK   MC15 F3 3 cards interrupted +16ms, card 2: title never overlaps controls (17.49485559960007, 17.49485559960007)
+  OK   MC15 F1 drawer starts at its on-screen container position
+  OK   MC15 F3 3 cards drawer +16ms, card 0: title never overlaps controls (33.0, 33.88592098094523)
+  OK   MC15 F3 drawer +16ms, card 0: drawer never overlaps controls
+  OK   MC15 F3 3 cards drawer +16ms, card 1: title never overlaps controls (33.0, 33.0)
+  OK   MC15 F3 3 cards drawer +16ms, card 2: title never overlaps controls (33.0, 33.0)
+  OK   MC15 F4 mini-player plate radius is 5 continuous
+  OK   MC15 motion ends without idle animation keys or collapse work
 review: drop feedback and actual command results
   OK   outline rejects a folder into itself
   OK   outline rejects a folder into its descendant
@@ -333,7 +383,7 @@ Peek badge and dim (F0090, F0101)
   OK   MS7 New Space passes the full selection; an unhandled App form preserves it
   OK   menu exposes New Folder with 3 Items
   OK   MS8 one folder insert and three moves, at the first selected slot
-  OK   MS8 inline rename starts and consumes selection (responder Optional(<NSTextView: 0x7c6c8f3700>
+  OK   MS8 inline rename starts and consumes selection (responder Optional(<NSTextView: 0x7ca4f74f00>
     Frame = {{0.00, 0.00}, {168.00, 20.00}}, Bounds = {{0.00, 0.00}, {168.00, 20.00}}
     Horizontally resizable: YES, Vertically resizable: YES
     MinSize = {168.00, 20.00}, MaxSize = {40000.00, 40000.00}
@@ -439,7 +489,7 @@ Peek badge and dim (F0090, F0101)
   OK   SM4 selection menu creates one folder and starts the real inline editor
   OK   HG3 changing the setting off suppresses real drop and reorder haptics
   OK   SM5 Delete is disabled with one Space
-  OK   SM6 10×100 Library to first layout 64.86 ms ≤ 120 ms; only 4 visible columns built
+  OK   SM6 10×100 Library to first layout 54.96 ms ≤ 120 ms; only 4 visible columns built
   OK   SM6 horizontal scroll builds newly visible pages once (added 4, reloads 4, visible (1700.0, 0.0, 900.0, 700.0))
   OK   SM6 model property changes cause no full reload
   OK   SM3 focused pager re-offsets after Space order changes without rebuilding its page
@@ -523,4 +573,4 @@ Peek badge and dim (F0090, F0101)
   OK   BN4 ineligible windows show no banner
   OK   BN3 never-archive Profile has no education threshold or banner
 
-checks: 476 passed, 0 failed
+checks: 525 passed, 0 failed

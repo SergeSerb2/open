@@ -1,161 +1,161 @@
 {
-  "baseline_ref": "f3c9cc5a921c4b1de409db63645a38c08aa1b9a0",
+  "baseline_ref": "d92a695bb12feaf38a06c7c99891a491cd7ca711",
   "lock": "/tmp/open-onscreen-e2e.lock",
   "lock_scope": "series",
   "pairs": 12,
   "mode": "MC9",
   "binary_sha256": {
-    "baseline": "af7eaa4f89d9dc0d51016bce84d2187b4515a21bba172a7512b3fc359c5af081",
-    "head": "8c75cdb0553773a367faa99c85ed71a73fcef509f3f491b94be1eea788cd061e"
+    "baseline": "7106658da6425b187f9c86fdfadbea9bc37e436bcaf163aa057d12238ba85fac",
+    "head": "1736fbdebbec9a80357d3a8f65c2648f9aa70b2af59178945663381b8880006b"
   },
   "records": [
     {
       "build": "baseline",
       "pair": 1,
-      "p95_ms": 3.57
+      "p95_ms": 4.21
     },
     {
       "build": "head",
       "pair": 1,
-      "p95_ms": 2.75
+      "p95_ms": 3.62
     },
     {
       "build": "head",
       "pair": 2,
-      "p95_ms": 3.02
+      "p95_ms": 3.65
     },
     {
       "build": "baseline",
       "pair": 2,
-      "p95_ms": 2.93
+      "p95_ms": 3.76
     },
     {
       "build": "baseline",
       "pair": 3,
-      "p95_ms": 2.19
+      "p95_ms": 4.81
     },
     {
       "build": "head",
       "pair": 3,
-      "p95_ms": 2.57
+      "p95_ms": 4.64
     },
     {
       "build": "head",
       "pair": 4,
-      "p95_ms": 1.73
+      "p95_ms": 5.25
     },
     {
       "build": "baseline",
       "pair": 4,
-      "p95_ms": 2.07
+      "p95_ms": 5.25
     },
     {
       "build": "baseline",
       "pair": 5,
-      "p95_ms": 1.96
+      "p95_ms": 5.84
     },
     {
       "build": "head",
       "pair": 5,
-      "p95_ms": 1.99
+      "p95_ms": 4.04
     },
     {
       "build": "head",
       "pair": 6,
-      "p95_ms": 2.21
+      "p95_ms": 4.44
     },
     {
       "build": "baseline",
       "pair": 6,
-      "p95_ms": 1.7
+      "p95_ms": 4.36
     },
     {
       "build": "baseline",
       "pair": 7,
-      "p95_ms": 2.16
+      "p95_ms": 4.34
     },
     {
       "build": "head",
       "pair": 7,
-      "p95_ms": 1.94
+      "p95_ms": 4.2
     },
     {
       "build": "head",
       "pair": 8,
-      "p95_ms": 1.91
+      "p95_ms": 4.8
     },
     {
       "build": "baseline",
       "pair": 8,
-      "p95_ms": 1.89
+      "p95_ms": 4.33
     },
     {
       "build": "baseline",
       "pair": 9,
-      "p95_ms": 1.67
+      "p95_ms": 4.74
     },
     {
       "build": "head",
       "pair": 9,
-      "p95_ms": 1.72
+      "p95_ms": 4.08
     },
     {
       "build": "head",
       "pair": 10,
-      "p95_ms": 2.08
+      "p95_ms": 4.46
     },
     {
       "build": "baseline",
       "pair": 10,
-      "p95_ms": 2.37
+      "p95_ms": 5.12
     },
     {
       "build": "baseline",
       "pair": 11,
-      "p95_ms": 2.0
+      "p95_ms": 4.23
     },
     {
       "build": "head",
       "pair": 11,
-      "p95_ms": 1.97
+      "p95_ms": 3.62
     },
     {
       "build": "head",
       "pair": 12,
-      "p95_ms": 1.62
+      "p95_ms": 3.77
     },
     {
       "build": "baseline",
       "pair": 12,
-      "p95_ms": 1.95
+      "p95_ms": 3.58
     }
   ],
   "summary": {
     "paired_deltas_ms": [
-      -0.8199999999999998,
-      0.08999999999999986,
-      0.3799999999999999,
-      -0.33999999999999986,
-      0.030000000000000027,
-      0.51,
-      -0.2200000000000002,
-      0.020000000000000018,
-      0.050000000000000044,
-      -0.29000000000000004,
-      -0.030000000000000027,
-      -0.32999999999999985
+      -0.5899999999999999,
+      -0.10999999999999988,
+      -0.16999999999999993,
+      0.0,
+      -1.7999999999999998,
+      0.08000000000000007,
+      -0.13999999999999968,
+      0.46999999999999975,
+      -0.6600000000000001,
+      -0.6600000000000001,
+      -0.6100000000000003,
+      0.18999999999999995
     ],
-    "paired_median_delta_ms": -0.0050000000000000044,
-    "paired_trimmed20_mean_delta_ms": -0.08500000000000002,
+    "paired_median_delta_ms": -0.1549999999999998,
+    "paired_trimmed20_mean_delta_ms": -0.27499999999999997,
     "baseline": {
-      "median_p95_ms": 2.035,
-      "mean_p95_ms": 2.205
+      "median_p95_ms": 4.35,
+      "mean_p95_ms": 4.5475
     },
     "head": {
-      "median_p95_ms": 1.98,
-      "mean_p95_ms": 2.1258333333333335
+      "median_p95_ms": 4.140000000000001,
+      "mean_p95_ms": 4.214166666666666
     }
   },
-  "stack_report_only_p95_ms": 2.22,
+  "stack_report_only_p95_ms": 3.76,
   "MC9": "PASS"
 }

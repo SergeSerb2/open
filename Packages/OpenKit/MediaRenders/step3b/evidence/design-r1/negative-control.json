@@ -11,5 +11,11 @@
     "failed": 0
   },
   "old_renderer_sha256": "8a3ff1f758609f8cb95a1e3a009be77c55cec6e10dc044ffa1c9799fcf1c095a",
-  "fixed_renderer_sha256": "5edbe747bfeb342899e7453726aac50ec198e3e717d42b95a66230d254fab19f"
+  "fixed_renderer_sha256": "5edbe747bfeb342899e7453726aac50ec198e3e717d42b95a66230d254fab19f",
+  "final_renderer_sha256": "1736fbdebbec9a80357d3a8f65c2648f9aa70b2af59178945663381b8880006b",
+  "final_main_ref": "d92a695bb12feaf38a06c7c99891a491cd7ca711",
+  "full_sidebar_result": {
+    "passed": 525,
+    "failed": 0
+  }
 }

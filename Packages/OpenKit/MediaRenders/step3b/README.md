@@ -49,11 +49,12 @@ remain intact and private.
 | [R3, E6](comparison/R3.md) | 2 | 0.56 | 0.91 |
 | [R4, E7](comparison/R4.md) | 2 | 0.86 | 0.93 |
 
-Named misses (the §13.8.6 pass rule permits quantified, explained misses):
+Tool-reported differences (confirmed as measurement artifacts by design review r1):
 
 - R3: back card 1's visible-strip right edge differs by 2 pt (Arc x=212,
-  Open x=210 at the scan band). Cause (inference): this is a contrast-threshold box on the rounded,
-  translucent 7 pt strip, over slightly different background pixels. The 10 pt
+  Open x=210 at the scan band). Cause: the 1 px ring samples the front card fill inside the rounded
+  7 pt strip, placing nearly equal corner pixels on opposite sides of the
+  threshold. Independent per-row reference crossings agree within 1 px. The 10 pt
   continuous corner remains the E2/E3 fit; native MC6 confirms the exact 202 pt
   card frame. The other visible strip edge is within 1 pt. Occluded bottom edges
   cannot be measured from pixels; MC6 checks all complete card frames.
@@ -109,35 +110,50 @@ F1–F11 from the Muse review are reflected in media plan §13 and this code:
   prune/undo restore. Slot rounding uses the actual window backing scale.
 - PP-16 Close-width and track-symbol evidence wording is reconciled with the capture.
 
-## Verification
+## Design review r1 fixes and verification
 
-`sidebar-render check`: **476 passed, 0 failed**. MC8: **0.011% CPU** over
-2 seconds, no animation keys, no pending collapse, and one store expiry item.
-The actual ellipsis/baseline hook and retiring/replacement/drawer-prune flows pass.
-The privacy-output rejection, removed-hover-flag rejection and expired-source CLI
-flows all pass. The expired render reserves zero media height.
+| Finding | Status | Change and evidence |
+|---|---|---|
+| F1: height-change fly-in | Fixed | Anchor-correct starts for pager/container; new checks compare animation starts with the on-screen position and sample the pager at +16 ms. They fail on `85fd361`. |
+| F2: interrupted collapse snaps backward | Fixed | Capture presentation position, size, opacity and shadow path before model changes for container, pager, cards, child views and title fades. Stale title-fade completions are ignored. One- and three-card re-entry checks fail on `85fd361` and pass after the fix. |
+| F3: title/drawer overlap controls | Fixed | Pin row frames using the reviewed formulas; the clipped content edge reveals them. Presentation samples during expand, collapse, re-entry and drawer opening show no control-row overlap. |
+| F4: plate radius | Fixed | `MiniPlayerMetrics.buttonPlateRadius = 5`, continuous, applied only to mini-player buttons. Spec/design now label the value as an E3/E7 fit. |
+| F5: default tooltip fill | Deferred to assigned token-fix task | No tooltip color change here. Open remains `#1C1B22`; Arc is `#0A0D4F` (E3/S2 04/0021, review ΔE00 19.5). |
+| F6: spring response | Fixed, still a guess | Mini-player stack response is 0.2 s, damping 1, based on the measured sidebar spring. O9 still needs a mini-player motion capture. |
+| F7: native play/pause coverage | Added | Reduce Motion OFF: check the shipping `NSImageView` path, live AppKit ink, and native-event pause/play replacement. Actual App-window comparison remains with Step 6 integration. |
 
-| Scroll measurement | Pairs | Paired median Δ (ms) | 20%-trimmed mean Δ (ms) | Result |
-|---|---|---|---|---|
-| [Pre-review, contended, per-run lock](evidence/mc9-pre-review-contended.json) | 12 | +0.390 | +0.402 | FAIL retained |
-| [A/A, same final binary/args, whole-series lock](evidence/aa-control.json) | 20 | +0.070 | +0.121 | control PASS |
-| [Final MC9, main f3c9cc5 vs paused card, whole-series lock](evidence/mc9.json) | 12 | −0.005 | −0.085 | PASS |
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
+`heavy.sh` in a detached session after merging main `d92a695`.
+`sidebar-render check`: **525 passed, 0 failed**, including **49 motion checks**.
+MC8 idle CPU: **0.014%** over 2 s, no idle animation keys or collapse work.
+The focused motion suite passes **49/49**. The identical harness fails the old
+`85fd361` production code with **36 failures** (13 PASS), proving the F1/F2 gates
+are sensitive to the reported defects.
 
-The final baseline/head median p95 values are 2.035/1.980 ms. The three-card stack
-run is report-only: 2.22 ms p95. The first run's failure is preserved; the media layout was not tuned to make the gate pass. All series-lock measurements
-hold the shared on-screen lock across every warmup, pair and stack run.
+MC9: **PASS**, 12 interleaved pairs against main `d92a695`, with
+`/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
+**-0.155 ms**, 20%-trimmed mean **-0.275 ms** (limit +0.3 ms).
+Baseline/head median p95: 4.350/4.140 ms.
+Collapsed 3-card report-only: 3.76 ms p95.
 
-[Sidebar check receipt](evidence/sidebar-check.log), [CLI flow receipt](evidence/cli-cases.json),
-[62-image synthetic render manifest](evidence/render-manifest.json). A/A, final MC9
-and the renders share the same head renderer SHA-256.
+The R3 2 pt number is a threshold artifact: the ring crosses the front-card
+fill inside a rounded 7 pt strip. Independent per-row crossings against the
+no-media reference agree within 1 px on every visible strip row. R4's 2 pt title
+number is from different strings/descenders; the same-string type matches exactly.
+These are measurement artifacts, not product geometry errors. The raw tables
+remain intact. The mini-player plate radius is now the independently fitted 5 pt.
 
-`origin/main` was merged at `f3c9cc5` (after `6778fc2`). Main's new theme/traffic-light
-work is in both the final baseline and the feature binary. The earlier
-[pre-merge passing gate](evidence/mc9-pre-merge.json) and [A/A control](evidence/aa-pre-merge.json)
-remain available. Renders and locked benchmarks were refreshed after the merge.
+F5 remains with the assigned token-fix task. The default tooltip fill is still
+`#1C1B22` here; Arc's capsule is `#0A0D4F` (E3 and S2 04/0021, review ΔE00 19.5).
 
-`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, after the
-main merges. Run through `heavy.sh` in a detached session. The head renderer
-hash is unchanged by full verification.
+[Review regression proof](evidence/design-r1/README.md),
+[complete verification table](evidence/verify-summary.md),
+[full sidebar checks](evidence/sidebar-check.log), [MC9](evidence/mc9.json),
+[62-image synthetic manifest](evidence/render-manifest.json).
 
-[Complete verification table](evidence/verify-summary.md).
+All 62 committed PNGs were regenerated from synthetic input. No AX-title PNG or
+Arc pixels were committed. Renders, full verification and MC9 use the same final
+renderer SHA-256. Earlier receipts are retained under `evidence/design-r1/pre-review-*`,
+`evidence/mc9-pre-review-contended.json`, `evidence/mc9-pre-merge.json` and the
+historical A/A receipts. Those A/A receipts belong to the initial implementation,
+not this revised binary.
