@@ -1,210 +1,210 @@
 {
-  "baseline": "origin/main 4ef33e9b07ab739afe315b9f08313e9eaf1b471b\nOnly Bench.swift receives the same deterministic row-media fixture instrumentation as head.\n",
+  "baseline": "origin/main ab9ad37670da3ee733172ae5eccc4fac9879d131\nOnly Bench.swift receives the same deterministic row-media fixture instrumentation as head.\n",
   "bench_source_sha256": "cc7cfaf5fc53fa6c5948a3acc671e6da83d5f097919a0934d08837a8e23b6498",
   "binary_sha256": {
-    "baseline": "54b9767959871cb705b0ad5035fa8da33928b4cf72a8b9dbc541974fd3fddb6e",
-    "head": "071d90eedaf3c5329d46c5550dcf94c83cef0e599e1a90479099f12a95e20964"
+    "baseline": "23964e115904d4de6000997cf7dd13c228c13f6ac04c5431ba17f89f2fa95648",
+    "head": "4155dc6b7694241ca80c155acc7213d466e4ec2cdcae5fc4913dd13771944247"
   },
   "records": [
     {
       "variant": "plain",
       "build": "baseline",
       "run": 1,
-      "p95_ms": 1.3
-    },
-    {
-      "variant": "plain",
-      "build": "head",
-      "run": 1,
-      "p95_ms": 1.45
-    },
-    {
-      "variant": "plain",
-      "build": "head",
-      "run": 2,
-      "p95_ms": 1.29
-    },
-    {
-      "variant": "plain",
-      "build": "baseline",
-      "run": 2,
-      "p95_ms": 1.34
-    },
-    {
-      "variant": "plain",
-      "build": "baseline",
-      "run": 3,
-      "p95_ms": 1.25
-    },
-    {
-      "variant": "plain",
-      "build": "head",
-      "run": 3,
-      "p95_ms": 1.26
-    },
-    {
-      "variant": "plain",
-      "build": "head",
-      "run": 4,
-      "p95_ms": 1.29
-    },
-    {
-      "variant": "plain",
-      "build": "baseline",
-      "run": 4,
-      "p95_ms": 1.38
-    },
-    {
-      "variant": "plain",
-      "build": "baseline",
-      "run": 5,
-      "p95_ms": 1.3
-    },
-    {
-      "variant": "plain",
-      "build": "head",
-      "run": 5,
-      "p95_ms": 1.3
-    },
-    {
-      "variant": "plain",
-      "build": "head",
-      "run": 6,
-      "p95_ms": 1.22
-    },
-    {
-      "variant": "plain",
-      "build": "baseline",
-      "run": 6,
-      "p95_ms": 1.61
-    },
-    {
-      "variant": "mixed",
-      "build": "baseline",
-      "run": 1,
-      "p95_ms": 1.5
-    },
-    {
-      "variant": "mixed",
-      "build": "head",
-      "run": 1,
-      "p95_ms": 1.6
-    },
-    {
-      "variant": "mixed",
-      "build": "head",
-      "run": 2,
       "p95_ms": 2.92
     },
     {
+      "variant": "plain",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 1.67
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 2.76
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 2,
+      "p95_ms": 2.66
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 3,
+      "p95_ms": 1.48
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 3,
+      "p95_ms": 1.51
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 4,
+      "p95_ms": 1.58
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 4,
+      "p95_ms": 2.99
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 5,
+      "p95_ms": 2.79
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 5,
+      "p95_ms": 2.71
+    },
+    {
+      "variant": "plain",
+      "build": "head",
+      "run": 6,
+      "p95_ms": 2.33
+    },
+    {
+      "variant": "plain",
+      "build": "baseline",
+      "run": 6,
+      "p95_ms": 3.18
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 1,
+      "p95_ms": 4.07
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 1,
+      "p95_ms": 4.14
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 2,
+      "p95_ms": 3.36
+    },
+    {
       "variant": "mixed",
       "build": "baseline",
       "run": 2,
-      "p95_ms": 3.04
+      "p95_ms": 2.53
     },
     {
       "variant": "mixed",
       "build": "baseline",
       "run": 3,
-      "p95_ms": 2.85
+      "p95_ms": 2.01
     },
     {
       "variant": "mixed",
       "build": "head",
       "run": 3,
-      "p95_ms": 2.8
+      "p95_ms": 2.69
     },
     {
       "variant": "mixed",
       "build": "head",
       "run": 4,
-      "p95_ms": 2.29
+      "p95_ms": 2.03
     },
     {
       "variant": "mixed",
       "build": "baseline",
       "run": 4,
-      "p95_ms": 1.62
+      "p95_ms": 2.89
     },
     {
       "variant": "mixed",
       "build": "baseline",
       "run": 5,
-      "p95_ms": 1.56
+      "p95_ms": 2.11
     },
     {
       "variant": "mixed",
       "build": "head",
       "run": 5,
+      "p95_ms": 3.39
+    },
+    {
+      "variant": "mixed",
+      "build": "head",
+      "run": 6,
+      "p95_ms": 3.02
+    },
+    {
+      "variant": "mixed",
+      "build": "baseline",
+      "run": 6,
       "p95_ms": 1.91
-    },
-    {
-      "variant": "mixed",
-      "build": "head",
-      "run": 6,
-      "p95_ms": 1.66
-    },
-    {
-      "variant": "mixed",
-      "build": "baseline",
-      "run": 6,
-      "p95_ms": 1.5
     }
   ],
   "summary": {
     "plain": {
       "baseline": {
         "runs": [
-          1.3,
-          1.34,
-          1.25,
-          1.38,
-          1.3,
-          1.61
+          2.92,
+          2.66,
+          1.48,
+          2.99,
+          2.79,
+          3.18
         ],
-        "median_p95_ms": 1.32,
-        "mean_p95_ms": 1.3633333333333333
+        "median_p95_ms": 2.855,
+        "mean_p95_ms": 2.67
       },
       "head": {
         "runs": [
-          1.45,
-          1.29,
-          1.26,
-          1.29,
-          1.3,
-          1.22
+          1.67,
+          2.76,
+          1.51,
+          1.58,
+          2.71,
+          2.33
         ],
-        "median_p95_ms": 1.29,
-        "mean_p95_ms": 1.3016666666666667
+        "median_p95_ms": 2.0,
+        "mean_p95_ms": 2.0933333333333333
       },
-      "mean_delta_ms": -0.061666666666666536
+      "mean_delta_ms": -0.5766666666666667
     },
     "mixed": {
       "baseline": {
         "runs": [
-          1.5,
-          3.04,
-          2.85,
-          1.62,
-          1.56,
-          1.5
+          4.07,
+          2.53,
+          2.01,
+          2.89,
+          2.11,
+          1.91
         ],
-        "median_p95_ms": 1.59,
-        "mean_p95_ms": 2.0116666666666667
+        "median_p95_ms": 2.32,
+        "mean_p95_ms": 2.5866666666666664
       },
       "head": {
         "runs": [
-          1.6,
-          2.92,
-          2.8,
-          2.29,
-          1.91,
-          1.66
+          4.14,
+          3.36,
+          2.69,
+          2.03,
+          3.39,
+          3.02
         ],
-        "median_p95_ms": 2.1,
-        "mean_p95_ms": 2.1966666666666668
+        "median_p95_ms": 3.19,
+        "mean_p95_ms": 3.105
       },
-      "mean_delta_ms": 0.18500000000000005
+      "mean_delta_ms": 0.5183333333333335
     }
   }
 }

@@ -15,7 +15,7 @@ swift build --package-path Packages/OpenKit -c release -j 6
 Packages/OpenKit/.build/release/sidebar-render synth --out /tmp/open-media-scene
 Packages/OpenKit/.build/release/sidebar-render render --snapshot /tmp/open-media-scene --out /tmp/row.png --width 228 --appearance dark --scale 2 --media today:0=audible:recording --media-theme default --crop-media
 Packages/OpenKit/.build/release/sidebar-render check
-python3 Packages/OpenKit/MediaRenders/step2/compare-bench.py --baseline-ref 4ef33e9b07ab739afe315b9f08313e9eaf1b471b --out /tmp/open-media-bench-review
+python3 Packages/OpenKit/MediaRenders/step2/compare-bench.py --baseline-ref ab9ad37670da3ee733172ae5eccc4fac9879d131 --out /tmp/open-media-bench-review
 ```
 
 The comparison builds a pinned baseline from `git archive`, copies only the
@@ -55,3 +55,19 @@ hidden-state changes remain static.
 | hovered | [PNG](hovered-light-228.png) | [PNG](hovered-dark-228.png) | [PNG](hovered-light-500.png) | [PNG](hovered-dark-500.png) |
 | deep-hovered | [PNG](deep-hovered-light-228.png) | [PNG](deep-hovered-dark-228.png) | [PNG](deep-hovered-light-500.png) | [PNG](deep-hovered-dark-500.png) |
 | red-theme | [PNG](red-theme-light-228.png) | [PNG](red-theme-dark-228.png) | [PNG](red-theme-light-500.png) | [PNG](red-theme-dark-500.png) |
+
+## Final comparison after the archive merge
+
+Baseline: main `ab9ad37670da3ee733172ae5eccc4fac9879d131`.
+Six measured interleaved pairs per variant; all commands preserve row/model parity.
+
+| Variant | Baseline median p95 | Head median p95 | Baseline mean p95 | Head mean p95 | Highest head p95 |
+|---|---:|---:|---:|---:|---:|
+| Plain | 2.855 ms | 2.000 ms | 2.670 ms | 2.093 ms | 2.760 ms |
+| Mixed | 2.320 ms | 3.190 ms | 2.587 ms | 3.105 ms | 4.140 ms |
+
+The lead's 2026-10-26 01:44 America/Vancouver decision requires no regression
+for unchanged-looking rows and an absolute 4.2 ms p95 budget for mixed rows.
+Both gates pass. Mixed cost is +0.518 ms mean and +0.870 ms median p95.
+The rejected shape-layer experiment is retained as evidence; the final code
+keeps the simpler static dot drawing. Final binary hashes are in the receipt.
