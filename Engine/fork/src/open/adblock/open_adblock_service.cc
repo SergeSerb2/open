@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include "base/files/file_util.h"
@@ -34,6 +35,8 @@ constexpr size_t kMaxPointerBytes = 64 * 1024;
 constexpr size_t kMaxManifestBytes = 4 * 1024 * 1024;
 constexpr size_t kMaxReceiptBytes = 4 * 1024 * 1024;
 constexpr size_t kMaxListBytes = 64 * 1024 * 1024;
+// All lists of one generation together (review 100-5; adblock-fork D-16).
+constexpr size_t kMaxInputBytes = 128 * 1024 * 1024;
 constexpr size_t kMaxDatBytes = 256 * 1024 * 1024;
 
 constexpr char kDatName[] = "engine.dat";
@@ -145,6 +148,14 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
     generation.file_hashes[*name] = *sha;
     entries.push_back({*name, *bytes, *sha});
   }
+  size_t total_bytes = 0;
+  for (const Entry& entry : entries) {
+    total_bytes += static_cast<size_t>(entry.bytes);
+  }
+  if (total_bytes > kMaxInputBytes) {
+    *error = "read manifest.json: lists over 128 MiB together";
+    return std::nullopt;
+  }
   std::sort(entries.begin(), entries.end(),
             [](const Entry& a, const Entry& b) { return a.name < b.name; });
   for (const Entry& entry : entries) {
@@ -159,14 +170,19 @@ std::optional<Generation> ReadGeneration(const base::FilePath& root,
   return generation;
 }
 
-// The DAT receipt binds engine.dat to one generation and its exact inputs.
+// The DAT receipt binds engine.dat to one generation, its exact inputs, and
+// the engine format that wrote it (adblock-fork §9.2, D-15). Only a lossless
+// build writes a DAT, and its receipt says so.
 base::DictValue MakeReceipt(const Generation& generation,
-                              const std::string& dat) {
+                            std::string_view dat) {
   base::DictValue files;
   for (const auto& [name, sha] : generation.file_hashes) {
     files.Set(name, sha);
   }
   base::DictValue receipt;
+  receipt.Set("engineFormat",
+              std::string(open_adblock::open_adblock_engine_format()));
+  receipt.Set("lossless", true);
   receipt.Set("generation", static_cast<int>(generation.number));
   receipt.Set("manifestSHA256", generation.manifest_sha256);
   receipt.Set("files", std::move(files));
@@ -220,10 +236,12 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
   if (prefer_dat) {
     if (std::optional<std::string> dat = ReadMatchingDat(*generation)) {
       auto engine = open_adblock::open_adblock_create_empty();
+      // No resources before Step 7.
       if (open_adblock::open_adblock_deserialize(
-              *engine, rust::Slice<const uint8_t>(
-                           reinterpret_cast<const uint8_t*>(dat->data()),
-                           dat->size()))) {
+              *engine,
+              rust::Slice<const uint8_t>(
+                  reinterpret_cast<const uint8_t*>(dat->data()), dat->size()),
+              rust::Str())) {
         result.engine = std::make_unique<OpenAdBlockService::EngineHolder>(
             std::move(engine));
         result.from_dat = true;
@@ -233,14 +251,26 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
   }
   if (!result.engine) {
     auto engine = BuildFromText(*generation);
+    // The texts are no longer needed: free them before serializing.
+    generation->texts = {};
+    result.lossless = open_adblock::open_adblock_build_report(*engine).lossless;
+    if (!result.lossless) {
+      // A DAT would drop rules (F-31): no cache, and an old DAT of this
+      // generation is never read (its receipt would not match).
+      result.engine =
+          std::make_unique<OpenAdBlockService::EngineHolder>(std::move(engine));
+      result.build_ms = timer.Elapsed().InMilliseconds();
+      return result;
+    }
     rust::Vec<uint8_t> serialized = open_adblock::open_adblock_serialize(*engine);
     result.engine =
         std::make_unique<OpenAdBlockService::EngineHolder>(std::move(engine));
     if (serialized.empty()) {
       result.error = "write engine.dat: serialization failed";
     } else {
-      std::string dat(reinterpret_cast<const char*>(serialized.data()),
-                      serialized.size());
+      // Written from the Rust buffer, without a copy.
+      std::string_view dat(reinterpret_cast<const char*>(serialized.data()),
+                           serialized.size());
       result.dat_size_bytes = dat.size();
       // DAT first, then its receipt: a torn pair fails the receipt check
       // and is rebuilt from text. Failure keeps the in-memory engine.
@@ -259,7 +289,8 @@ OpenAdBlockService::BuildResult BuildOnBackground(base::FilePath root,
 }
 
 // adblock-fork §6.3.3: lowercase, no trailing dot, no leading "*.", and
-// never a bare public suffix, a path, or an empty string.
+// never a bare public suffix, a path, or an empty string. Swift stores IPv6
+// addresses without brackets (docs/adblock-lists.md).
 std::optional<std::string> NormalizeDomain(std::string domain) {
   domain = base::ToLowerASCII(base::TrimWhitespaceASCII(domain, base::TRIM_ALL));
   if (base::EndsWith(domain, ".")) {
@@ -270,6 +301,9 @@ std::optional<std::string> NormalizeDomain(std::string domain) {
   }
   if (domain.empty() || domain.find_first_of("/\\ ") != std::string::npos) {
     return std::nullopt;
+  }
+  if (domain.find(':') != std::string::npos && domain.front() != '[') {
+    domain = "[" + domain + "]";
   }
   const GURL url("http://" + domain + "/");
   if (!url.is_valid()) {
@@ -318,8 +352,27 @@ void OpenAdBlockService::Shutdown() {
   shut_down_ = true;
   ++load_id_;
   weak_ptr_factory_.InvalidateWeakPtrs();
-  std::unique_lock lock(engine_mutex_);
-  engine_.reset();
+  VLOG(1) << "OpenAdBlock: shutdown";
+  std::shared_ptr<const EngineHolder> engine;
+  {
+    // Take the engine out under the lock; free it elsewhere, so a check that
+    // waits for the lock does not wait for the free.
+    std::unique_lock lock(engine_mutex_);
+    engine_.swap(engine);
+  }
+  ReleaseOnBuildRunner(std::move(engine));
+}
+
+void OpenAdBlockService::ReleaseOnBuildRunner(
+    std::shared_ptr<const EngineHolder> engine) {
+  if (engine) {
+    // A check on another thread may still hold the engine; then the last
+    // reference frees it there.
+    build_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce([](std::shared_ptr<const EngineHolder>) {},
+                       std::move(engine)));
+  }
 }
 
 void OpenAdBlockService::SetEnabled(bool enabled) {
@@ -360,23 +413,46 @@ bool OpenAdBlockService::IsExcluded(const GURL& top_level_url) const {
   if (!top_level_url.is_valid() || !top_level_url.has_host()) {
     return false;
   }
-  std::string key =
-      top_level_url.HostIsIPAddress()
-          ? std::string(top_level_url.host())
-          : net::registry_controlled_domains::GetDomainAndRegistry(
-                top_level_url,
-                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  if (key.empty()) {
-    key = std::string(top_level_url.host());
+  std::string host = base::ToLowerASCII(top_level_url.host());
+  if (base::EndsWith(host, ".")) {
+    host.pop_back();
   }
   std::lock_guard lock(exclusions_mutex_);
-  return excluded_domains_.contains(key);
+  if (top_level_url.HostIsIPAddress()) {
+    return excluded_domains_.contains(host);
+  }
+  // The host and each parent domain, at label boundaries, down to the
+  // registrable domain (or to the last label when there is none, so a
+  // stored entry under a private suffix Chromium does not know still
+  // matches; review 100-4).
+  const std::string registrable =
+      net::registry_controlled_domains::GetDomainAndRegistry(
+          top_level_url,
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+  std::string_view candidate = host;
+  while (!candidate.empty()) {
+    if (excluded_domains_.contains(std::string(candidate))) {
+      return true;
+    }
+    if (!registrable.empty() && candidate == registrable) {
+      return false;
+    }
+    const size_t dot = candidate.find('.');
+    if (dot == std::string_view::npos) {
+      return false;
+    }
+    candidate.remove_prefix(dot + 1);
+  }
+  return false;
 }
 
 void OpenAdBlockService::LoadFromDirectory(base::FilePath adblock_root,
                                            bool prefer_dat,
                                            base::OnceClosure done) {
   if (shut_down_) {
+    if (done) {
+      std::move(done).Run();
+    }
     return;
   }
   adblock_root_ = adblock_root;
@@ -397,8 +473,11 @@ void OpenAdBlockService::ReloadLists() {
 void OpenAdBlockService::OnBuilt(uint64_t load_id,
                                  base::OnceClosure done,
                                  BuildResult result) {
-  // A newer load started: its result wins.
+  // A newer load started: its result wins. The dropped engine is freed on
+  // the build runner.
   if (shut_down_ || load_id != load_id_) {
+    VLOG(1) << "OpenAdBlock: dropped the result of load " << load_id;
+    ReleaseOnBuildRunner(std::move(result.engine));
     return;
   }
   {
@@ -415,9 +494,12 @@ void OpenAdBlockService::OnBuilt(uint64_t load_id,
   }
   if (result.engine) {
     std::shared_ptr<const EngineHolder> engine = std::move(result.engine);
-    std::unique_lock lock(engine_mutex_);
-    engine_.swap(engine);
-    // The old engine dies here, or with the last check that still uses it.
+    {
+      std::unique_lock lock(engine_mutex_);
+      engine_.swap(engine);
+    }
+    // `engine` is the old one now.
+    ReleaseOnBuildRunner(std::move(engine));
   }
   VLOG(1) << "OpenAdBlock: loaded " << result.list_count << " lists, "
           << (result.from_dat ? "dat" : "text") << ", " << result.build_ms
@@ -437,7 +519,7 @@ OpenAdBlockService::CurrentEngine() const {
 open_adblock::OpenBlockerResult OpenAdBlockService::Check(
     const GURL& url,
     const GURL& source_url,
-    const std::string& request_type) const {
+    open_adblock::OpenRequestType request_type) const {
   std::shared_ptr<const EngineHolder> holder = CurrentEngine();
   if (!holder || !url.is_valid()) {
     return {};

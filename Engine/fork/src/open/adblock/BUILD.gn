@@ -6,12 +6,19 @@
 # depends on this target (CEF patch 0310); it must not depend on //cef.
 source_set("adblock") {
   sources = [
-    "open_adblock_selftest.cc",
-    "open_adblock_selftest.h",
     "open_adblock_service.cc",
     "open_adblock_service.h",
     "open_adblock_types.h",
   ]
+
+  # The --open-adblock-selftest mode is for development builds only: patch
+  # 0310 reads its switches only without OFFICIAL_BUILD (review 100-3).
+  if (!is_official_build) {
+    sources += [
+      "open_adblock_selftest.cc",
+      "open_adblock_selftest.h",
+    ]
+  }
   deps = [
     "//base",
     "//crypto",

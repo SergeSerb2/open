@@ -2547,3 +2547,52 @@ cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
   - Run 2: `engine_from_dat=1 last_build_ms=48`, PASS; the whole process took 0.31 s.
   - Cosmetic query: mean 66 µs per page (budget ≤ 100 µs).
 - **Shutdown.** Five quits (SIGTERM at 0.3, 0.5, 0.6, 0.8 and 1.0 s) during a 480 ms text build of a 12 MB `/tmp` fixture root. All exited with code 0 within 0.1 s, no `FATAL`, no new crash report, and zero cefsimple processes 1 s later.
+
+
+### Step 3, engine review r1 (2026-10-26)
+
+- **100-1(a).** The DAT receipt binds `engineFormat`
+  (`open_adblock_engine_format()`) and `lossless: true`. A DAT written by
+  another crate, shim or feature set no longer matches, so it is rebuilt
+  from text.
+- **100-1(b) (D-15).** A build whose lists have `$removeparam` or `:remove*()`
+  rules (the shim's build report) writes no DAT, so a DAT never drops them.
+- **100-2.** Engines are freed on the build runner: the old engine after a
+  swap, a dropped stale result, and the engine at `Shutdown()`, which takes
+  it out under the lock and frees it outside it.
+- **100-3.** Patch 0310 reads `--open-adblock-dir` and
+  `--open-adblock-selftest` only without `OFFICIAL_BUILD`, and the self-test
+  sources build only when `!is_official_build`. `tools/release.sh` fails an
+  official framework that contains `open-adblock-`. The dev framework has 3
+  such strings, as it should.
+- **100-4.** `IsExcluded` checks the host and each parent domain at label
+  boundaries down to the registrable domain (the Swift rule), and down to
+  the last label when Chromium knows no registrable domain. IPv6 entries are
+  bracketed before parsing. The self-test asserts behavior:
+  `a.news.example.org`, `news.example.org`, `www.example.com`, `example.com`
+  and `[::1]` are excluded; `example.org`, `other.example.org` and
+  `notexample.com` are not.
+- **100-5 (part).** A 128 MiB cap on a generation's lists together; the texts
+  are freed right after the build; the DAT is written from the Rust buffer
+  without a copy. Sharing engines across Profiles stays with Step 4 (D-16).
+- **100-6.** The accessor returns `nullptr` after `Shutdown()`.
+- **100-9 (part).** `LoadFromDirectory` after shutdown still runs `done`.
+- **Self-test.** Exit code 0 only on PASS (1 on FAIL, 2 without
+  `--open-adblock-dir`, 3 after 10 s). New checks: the review's CSS
+  injection lines give no CSS, a 4-byte DAT is refused, a `$removeparam`
+  list is lossy, the 8 KiB cap, gamedev.net keeps its plain selectors. It
+  prints the network check cost on six realistic URL shapes (about 6 µs in
+  this build). Its last step starts a text build and quits at once, so
+  `Shutdown()` runs with a build in flight.
+- **Results.** Run 1 builds from text and writes the DAT; run 2 loads it
+  (`engine_from_dat=1`, 62 ms). Both PASS. Cosmetic query 56 µs. Quitting
+  during a build: three runs, exit 0, no `FATAL`, no process left after 3 s
+  (a temporary `LOG(WARNING)` confirmed that `Shutdown()` runs; not
+  committed). SIGTERM in cefsimple does not reach `Shutdown()` at all: the
+  process exits at once with code 0, so the earlier SIGTERM test did not
+  exercise it.
+- **Correction.** Links are rejected for the leaf files and the generation
+  folder only, not for `adblock/` or `generations/` (defense in depth under
+  the same-user threat model, review 100-9).
+- **Follow-ups** (`docs/followups.md`): 100-7, 100-8, the rest of 100-9, the
+  0301 build-hook patch.

@@ -48,7 +48,9 @@ class OpenAdBlockService {
 
   // Normalized and checked here; the callers' input is not trusted.
   void SetExcludedDomains(std::vector<std::string> registrable_domains);
-  // Is the page's registrable domain excluded? Any thread.
+  // Is the page's host, or a parent domain of it down to its registrable
+  // domain, excluded? The Swift rule (OpenAdBlock SiteRules): an entry
+  // covers that domain and its subdomains, at a label boundary. Any thread.
   bool IsExcluded(const GURL& top_level_url) const;
 
   // Loads the adblock root (adblock-fork §9.2): current.json selects a
@@ -63,9 +65,10 @@ class OpenAdBlockService {
   void ReloadLists();
 
   // One network check. Any thread. A null engine, or an invalid URL, allows.
-  open_adblock::OpenBlockerResult Check(const GURL& url,
-                                        const GURL& source_url,
-                                        const std::string& request_type) const;
+  open_adblock::OpenBlockerResult Check(
+      const GURL& url,
+      const GURL& source_url,
+      open_adblock::OpenRequestType request_type) const;
   // The cosmetic filters for one frame URL. Any thread.
   open_adblock::OpenCosmeticResources CosmeticResources(const GURL& url) const;
   std::vector<std::string> HiddenSelectors(
@@ -96,6 +99,9 @@ class OpenAdBlockService {
 
     std::unique_ptr<EngineHolder> engine;
     bool from_dat = false;
+    // The build could be cached: a DAT restores the same engine (no
+    // $removeparam or :remove*() rules, which a v0 DAT drops).
+    bool lossless = true;
     int64_t generation = 0;
     uint32_t list_count = 0;
     uint64_t dat_size_bytes = 0;
@@ -107,6 +113,9 @@ class OpenAdBlockService {
  private:
   std::shared_ptr<const EngineHolder> CurrentEngine() const;
   void OnBuilt(uint64_t load_id, base::OnceClosure done, BuildResult result);
+  // Destroys |engine| on the build runner: freeing an engine takes 15 to
+  // 18 ms, too long for the UI thread (review 100-2).
+  void ReleaseOnBuildRunner(std::shared_ptr<const EngineHolder> engine);
   void NotifyStatus();
 
   const base::FilePath profile_dir_;
