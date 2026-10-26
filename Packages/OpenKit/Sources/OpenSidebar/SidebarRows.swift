@@ -159,7 +159,7 @@ final class SidebarRowView: NSTableRowView {
     // the modern NSAccessibility protocol used above.
     @available(macOS, deprecated: 10.10)
     override func accessibilityAttributeValue(_ attribute: NSAccessibility.Attribute) -> Any? {
-        if attribute == .selected { return isAccessibilitySelected() }
+        if attribute == .selected { return MainActor.assumeIsolated { isAccessibilitySelected() } }
         return super.accessibilityAttributeValue(attribute)
     }
     override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
