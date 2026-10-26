@@ -28,13 +28,14 @@ enum RenderCLI {
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
+          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N]
+      sidebar-render bench [--rows N] [--row-media mixed]
       sidebar-render check
     """
 
@@ -136,6 +137,7 @@ enum RenderCLI {
             guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }
             context.forcedHover = t
         }
+        try MediaScene.apply(args, context: context)
         return context
     }
 

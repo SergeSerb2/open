@@ -58,6 +58,8 @@ public enum RowMediaMetrics {
     public static let gapAfterTitle: CGFloat = 2
     public static let y: CGFloat = 10
     public static let recordingDot: CGFloat = 7
+    public static let recordingSlotWidth: CGFloat = 14
+    public static let glyphInsetX: CGFloat = 2
 }
 
 /// Media plan §4.2; guesses stay centralized until S3–S8. PP-6/16/17 supply the noted constants.
@@ -101,6 +103,7 @@ public enum PiPMetrics {
     public static let cornerRadius: CGFloat = 12
     public static let minimum = CGSize(width: 284, height: 160)
     public static let compactWidth: CGFloat = 300
+    public static let compactPlayGlyph: CGFloat = 22
     public static let compactPadding: CGFloat = 8
     public static let regularPadding: CGFloat = 10
     public static let cornerButton: CGFloat = 28

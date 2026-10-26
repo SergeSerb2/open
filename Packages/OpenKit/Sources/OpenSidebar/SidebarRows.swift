@@ -383,29 +383,37 @@ final class TabCellView: SidebarCellView {
         } else {
             peekBadge?.isHidden = true
         }
-        let showAudio = audible || muted
-        audio?.isHidden = !showAudio
-        recording?.isHidden = !capturing
-        let mMedia = RowMediaMetrics.self
-        let slotCount = (showAudio ? 1 : 0) + (capturing ? 1 : 0)
-        if slotCount > 0 {
-            let slotsWidth = CGFloat(slotCount) * mMedia.buttonSize
-            let titleW = min(title.textWidth, max(0, titleRight - titleX - slotsWidth - mMedia.gapAfterTitle))
-            var x = titleX + titleW + mMedia.gapAfterTitle
-            titleRight = min(titleRight, x)
-            if capturing {
-                let v = recording ?? { let v = RowRecordingView(frame: .zero); addSubview(v); recording = v; return v }()
-                v.context = context; v.isHidden = false
-                v.frame = CGRect(x: x, y: mMedia.y, width: mMedia.buttonSize, height: mMedia.buttonSize)
-                x += mMedia.buttonSize
-            }
-            if showAudio {
-                let b = makeAudio(); b.isHidden = false; b.context = context
-                b.update(tabID: tab?.id, muted: muted)
-                b.frame = CGRect(x: x, y: mMedia.y, width: mMedia.buttonSize, height: mMedia.buttonSize)
-            }
-        }
+        titleRight = layoutMediaAccessories(audible: audible, muted: muted, capturing: capturing, titleX: titleX, titleRight: titleRight)
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
+    }
+
+    /// One placement point for the recording dot; S9 may move it to the leading side.
+    /// Under pressure, reserve the speaker first and omit the recording dot (lead D9).
+    private func layoutMediaAccessories(audible: Bool, muted: Bool, capturing: Bool, titleX: CGFloat, titleRight: CGFloat) -> CGFloat {
+        let m = RowMediaMetrics.self, showAudio = audible || muted
+        audio?.isHidden = !showAudio
+        if !showAudio { audio?.update(tabID: tab?.id, muted: muted, animate: false) }
+        let available = max(0, titleRight - titleX - m.gapAfterTitle)
+        let audioWidth = showAudio ? m.buttonSize : 0
+        let showRecording = capturing && (!showAudio || available >= audioWidth + m.recordingSlotWidth)
+        recording?.isHidden = !showRecording
+        let width = audioWidth + (showRecording ? m.recordingSlotWidth : 0)
+        guard width > 0 else { return titleRight }
+        let textWidth = min(title.textWidth, max(0, available - width))
+        var x = min(titleX + textWidth + m.gapAfterTitle, titleRight - width)
+        let right = min(titleRight, x)
+        if showRecording {
+            let view = recording ?? { let view = RowRecordingView(frame: .zero); addSubview(view); recording = view; return view }()
+            view.context = context; view.isHidden = false
+            view.frame = CGRect(x: x, y: m.y, width: m.recordingSlotWidth, height: m.buttonSize)
+            x += m.recordingSlotWidth
+        }
+        if showAudio {
+            let button = makeAudio(); button.isHidden = false; button.context = context
+            button.update(tabID: tab?.id, muted: muted)
+            button.frame = CGRect(x: x, y: m.y, width: m.buttonSize, height: m.buttonSize)
+        }
+        return right
     }
 
     func beginRename() {
@@ -715,8 +723,6 @@ final class DividerCellView: SidebarCellView {
 
 
 extension SidebarDiagnostics {
-    /// Harness receipt: one discrete transition per mute change, never a looping effect.
-    public static var rowMediaSymbolTransitions = 0
     public static var mediaReduceMotionOverride: Bool?
     public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 }
@@ -725,53 +731,83 @@ extension SidebarDiagnostics {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// System symbol replacement approximates the slash/wave change (PP-19; features-core rule 10).
+@MainActor private final class RowStaticSpeakerView: NSView {
+    var glyph: Glyph = .audioPlaying { didSet { if glyph != oldValue { needsDisplay = true } } }
+    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let image = glyph.image else { return }
+        image.drawTinted(in: CGRect(x: RowMediaMetrics.glyphInsetX, y: (bounds.height - image.size.height) / 2,
+                                   width: image.size.width, height: image.size.height), color: SidebarRole.rowAccessory.nsColor)
+    }
+}
+
+/// System slash/wave replacement, anchored at the same left edge in both states (lead D1).
 @MainActor private final class RowSpeakerButton: PlateButton {
     private var symbol: RowSpeakerImageView?
+    private var staticGlyph: RowStaticSpeakerView?
     private var representedID: ItemID?
     private var lastMuted: Bool?
-    override init(glyph: Glyph?) {
-        super.init(glyph: glyph)
-        glyphView.isHidden = true
-
-    }
+    override init(glyph: Glyph?) { super.init(glyph: glyph); glyphView.isHidden = true }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        symbol?.frame = bounds
+        let fixed = CGRect(x: RowMediaMetrics.glyphInsetX, y: 0, width: max(0, bounds.width - RowMediaMetrics.glyphInsetX), height: bounds.height)
+        if symbol?.frame != fixed { symbol?.frame = fixed }
+        staticGlyph?.frame = bounds
         CATransaction.commit()
     }
-    func update(tabID: ItemID?, muted: Bool) {
+    func update(tabID: ItemID?, muted: Bool, animate: Bool = true) {
         let glyph: Glyph = muted ? .audioMuted : .audioPlaying
         guard let image = glyph.image else { return }
         let changed = representedID == tabID && lastMuted != nil && lastMuted != muted
+        let needsImage = lastMuted != muted || representedID != tabID
         if SidebarDiagnostics.mediaReducesMotion {
-            // RBSymbolLayer installs geometry animations even for plain image changes.
-            // Use the existing static glyph renderer under Reduce Motion, with no symbol layer.
-            symbol?.removeFromSuperview(); symbol = nil; glyphView.isHidden = false
+            symbol?.removeFromSuperview(); symbol = nil
+            let view = staticGlyph ?? { let view = RowStaticSpeakerView(frame: bounds); addSubview(view); staticGlyph = view; return view }()
+            view.glyph = glyph
         } else {
+            staticGlyph?.removeFromSuperview(); staticGlyph = nil
             let view: RowSpeakerImageView
-            if let symbol { view = symbol }
+            let created: Bool
+            if let symbol { view = symbol; created = false }
             else {
                 view = RowSpeakerImageView(frame: bounds)
-                view.wantsLayer = true; view.imageScaling = .scaleNone
-                if let lastMuted { view.image = (lastMuted ? Glyph.audioMuted : Glyph.audioPlaying).image }
-                addSubview(view); symbol = view
+                view.wantsLayer = true; view.imageScaling = .scaleNone; view.imageAlignment = .alignLeft
+                addSubview(view); symbol = view; created = true
             }
-            glyphView.isHidden = true
             view.contentTintColor = SidebarRole.rowAccessory.nsColor
-            if changed {
+            if changed && animate && !isHiddenOrHasHiddenAncestor && (window?.isVisible == true || SidebarDiagnostics.forceAnimations) {
                 view.setSymbolImage(image, contentTransition: .replace.magic(fallback: .replace))
-                SidebarDiagnostics.rowMediaSymbolTransitions += 1
-            } else if lastMuted != muted || representedID != tabID {
+                // Lead clarification, 2026-10-26: the unwrapped native call changes the
+                // symbol but starts no effect in the real offscreen harness. Use a finite
+                // cross-fade only when no native symbol-effect animation is present.
+                if !hasSymbolAnimation(view.layer) {
+                    let fade = CATransition(); fade.type = .fade; fade.duration = Motion.rowMediaFallback
+                    fade.setValue(true, forKey: "openMediaFallback")
+                    view.layer?.add(fade, forKey: "media.symbolFallback")
+                }
+            } else if needsImage || created {
                 CATransaction.begin(); CATransaction.setDisableActions(true)
                 view.image = image
                 CATransaction.commit()
             }
+            if !animate { removeAnimations(view.layer) }
         }
-        glyphView.glyph = glyph
-        representedID = tabID; lastMuted = muted
+        representedID = tabID; lastMuted = muted; needsLayout = true
+    }
+    private func hasSymbolAnimation(_ layer: CALayer?) -> Bool {
+        guard let layer else { return false }
+        if (layer.animationKeys() ?? []).contains(where: {
+            $0 != "position" && $0 != "bounds" && layer.animation(forKey: $0)?.value(forKey: "openMediaFallback") as? Bool != true
+        }) { return true }
+        return (layer.sublayers ?? []).contains { hasSymbolAnimation($0) }
+    }
+    private func removeAnimations(_ layer: CALayer?) {
+        layer?.removeAllAnimations(); layer?.sublayers?.forEach { removeAnimations($0) }
     }
     override func accessibilityHelp() -> String? { accessibleTitle?() }
 }

@@ -13,3 +13,8 @@ Small items found during review and verification. Each line: area — issue — 
 - Engine fork — dev frameworks are 455 MB (local symbols, no stripping) against 226 MB official; never ship a dev framework. If dev bundle size matters before the release build lands, try `enable_stripping=true` in dev args (relink only) and keep the unstripped copy for crash symbolication. — engine lead, 2026-10-25
 - Engine — re-measure the first launch of a fresh profile on an idle machine with a warmed framework: on 2026-10-25 the 1.3 s extra in `CefInitialize` appeared only right after a framework rebuild (docs/engine-spike.md, Fork vs prebuilt). — engine lead, 2026-10-25
 - Engine (profiles) — CEF logs "Cannot create profile at path …/Profiles/Profile-<id>/Engine" when a non-default profile opens: every request-context cache_path must be a child of `root_cache_path`. Set `root_cache_path` = `<data root>/Profiles`, global `cache_path` = `Profiles/Default` (lead decision 4), other profiles `Profiles/<dir>/Engine`; verify cookie persistence across relaunch for a second profile. Owner: engine lead. — app-shell Step B report, 2026-10-25
+
+
+- Media D8 (2026-10-26): decode the inline speaker-tooltip string and the
+  `SpeakerIcon` timing values from the shared read-only RE snapshots. Cite
+  the symbol/string evidence and confirm the tooltip text/case with S9.
