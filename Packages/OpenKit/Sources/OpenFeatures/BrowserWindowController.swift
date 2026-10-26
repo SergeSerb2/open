@@ -312,6 +312,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
     }
 
+    /// Layout passes the window reported (checks: the traffic lights are placed in them).
+    public var layoutPasses: Int { (window as? BrowserWindow)?.layoutPasses ?? 0 }
+
     /// Traffic-light frames in root coordinates and their visibility (checks and automation).
     public var trafficLightFrames: [(frame: CGRect, hidden: Bool)] {
         Self.trafficLightKinds.compactMap { kind in
@@ -532,12 +535,15 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
 @MainActor
 final class BrowserWindow: NSWindow {
     var onLayoutPass: (() -> Void)?
+    private(set) var layoutPasses = 0
     override func layoutIfNeeded() {
         super.layoutIfNeeded()
+        layoutPasses += 1
         onLayoutPass?()
     }
     override func displayIfNeeded() {
         super.layoutIfNeeded()
+        layoutPasses += 1
         onLayoutPass?()
         super.displayIfNeeded()
     }

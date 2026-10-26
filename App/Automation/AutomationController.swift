@@ -355,8 +355,10 @@
         let w = (a["id"] as? String).flatMap { id in app.windowControllers.first { $0.windowID.description == id } }
           .flatMap { app.hostFactories[$0.windowID] } ?? w
         guard let controller = w.controller, let win = w.window else { throw Failure(message: "no window") }
-        // Read what the next frame shows: run the pending layout (the title bar's included).
-        win.contentView?.superview?.layoutSubtreeIfNeeded()
+        // Read what the next frame shows: the window's own layout pass, the one its display
+        // runs (the traffic lights are placed at its end).
+        let passes = controller.layoutPasses
+        win.layoutIfNeeded()
         let lights = [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [Double]? in
           guard let button = win.standardWindowButton(kind) else { return nil }
           let center = controller.contentView.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)
@@ -374,7 +376,7 @@
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
           "sidebarClass": String(reflecting: type(of: controller.sidebar)),
           "panel": [panel.minX, panel.minY, panel.width, panel.height],
-          "trafficLights": lights,
+          "trafficLights": lights, "layoutPasses": passes,
           // The hardware pointer in window coordinates (top-left origin), read only, so a
           // check can keep its window away from where someone's pointer rests.
           "cursor": { let p = win.mouseLocationOutsideOfEventStream; return [Double(p.x), Double(win.frame.height - p.y)] }(),
