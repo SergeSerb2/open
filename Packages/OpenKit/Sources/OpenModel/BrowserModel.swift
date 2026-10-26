@@ -391,7 +391,21 @@ public final class BrowserModel {
         }
     }
 
-    private func removeChild(_ id: ItemID, from parent: NodeParent) -> (node: SidebarNode, index: Int)? {
+    private func removeChild(_ id: ItemID, from parent: NodeParent, at knownPosition: Int? = nil) -> (node: SidebarNode, index: Int)? {
+        if let i = knownPosition {
+            switch parent {
+            case .favorites, .splitPane:
+                return withTabList(parent) { list in
+                    guard list.indices.contains(i), list[i].id == id else { return nil }
+                    return (node: SidebarNode.tab(list.remove(at: i)), index: i)
+                }
+            case .spacePinned, .spaceToday, .folder:
+                return withNodeList(parent) { list in
+                    guard list.indices.contains(i), list[i].id == id else { return nil }
+                    return (node: list.remove(at: i), index: i)
+                }
+            }
+        }
         switch parent {
         case .favorites, .splitPane:
             return withTabList(parent) { list in
@@ -440,8 +454,8 @@ public final class BrowserModel {
 
     /// Removes a node and drops its subtree from the index. Emits `.remove`.
     @discardableResult
-    private func detach(_ id: ItemID) -> (node: SidebarNode, parent: NodeParent, index: Int)? {
-        guard let parent = parentByID[id], let removed = removeChild(id, from: parent) else { return nil }
+    private func detach(_ id: ItemID, at knownPosition: Int? = nil) -> (node: SidebarNode, parent: NodeParent, index: Int)? {
+        guard let parent = parentByID[id], let removed = removeChild(id, from: parent, at: knownPosition) else { return nil }
         unregister(removed.node)
         emit(.remove(parent: parent, index: removed.index, nodeID: id))
         return (removed.node, parent, removed.index)
@@ -449,11 +463,11 @@ public final class BrowserModel {
 
     /// Moves a node. The index changes in O(1): only the node's own parent entry moves.
     /// Applies the pinned-URL rule and emits `.move`. Returns the closure that moves it back.
-    private func relocate(_ id: ItemID, to destination: NodeParent, at position: Int?) -> Revert? {
+    private func relocate(_ id: ItemID, to destination: NodeParent, at position: Int?, fromIndex knownPosition: Int? = nil) -> Revert? {
         guard let source = parentByID[id] else { return nil }
         let fromSection = section(of: source)
         let toSection = section(of: destination)
-        guard let removed = removeChild(id, from: source) else { return nil }
+        guard let removed = removeChild(id, from: source, at: knownPosition) else { return nil }
         guard let toIndex = insertChild(removed.node, into: destination, at: position) else {
             _ = insertChild(removed.node, into: source, at: removed.index)
             return nil
@@ -470,8 +484,9 @@ public final class BrowserModel {
     }
 
     /// One archive entry per tab under `node`, each with the tab's direct parent.
-    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date()) -> [ArchiveEntry] {
-        let owning = owner(of: parent)
+    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date(),
+                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil) -> [ArchiveEntry] {
+        let owning = ownership ?? owner(of: parent)
         var entries: [ArchiveEntry] = []
         func collect(_ node: SidebarNode, _ parent: NodeParent) {
             switch node {
@@ -990,24 +1005,57 @@ public final class BrowserModel {
         return result.count
     }
 
-    private func moveMany(_ ids: [ItemID], to destination: NodeParent, at position: Int?) -> (count: Int, revert: Revert?) {
+    /// Prefix counts of removed original slots. Keeps bulk positions in O(log n),
+    /// without rescanning a changing source or destination list for each node.
+    private struct RemovalOffsets {
+        var sums: [Int]
+        init(count: Int) { sums = Array(repeating: 0, count: count + 1) }
+        mutating func remove(at position: Int) {
+            var i = position + 1
+            while i < sums.count { sums[i] += 1; i += i & -i }
+        }
+        func before(_ position: Int) -> Int {
+            var i = position, result = 0
+            while i > 0 { result += sums[i]; i -= i & -i }
+            return result
+        }
+    }
+
+    private func moveMany(_ ids: [ItemID], to destination: NodeParent, at position: Int?) -> (count: Int, revert: Revert?, moved: [ItemID]) {
         let moving = topLevelSelection(ids).filter { canMoveNode(id: $0, to: destination) }
-        guard !moving.isEmpty else { return (0, nil) }
+        guard !moving.isEmpty else { return (0, nil, []) }
         let old = childIDs(in: destination), selected = Set(moving)
         let requested = max(0, min(position ?? old.count, old.count))
         let start = requested - old.prefix(requested).filter { selected.contains($0) }.count
         let remaining = old.filter { !selected.contains($0) }
         var target = remaining
         target.insert(contentsOf: moving, at: start)
-        guard old != target else { return (0, nil) }
-        let boundary = start < remaining.count ? remaining[start] : nil
-        var reverts: [Revert] = []
+        guard old != target else { return (0, nil, []) }
+        let sources = Dictionary(uniqueKeysWithValues: moving.compactMap { id in parentByID[id].map { (id, $0) } })
+        let parents = Set(sources.values).union([destination])
+        let positions = Dictionary(uniqueKeysWithValues: parents.map { parent in
+            (parent, Dictionary(uniqueKeysWithValues: childIDs(in: parent).enumerated().map { ($0.element, $0.offset) }))
+        })
+        var offsets = Dictionary(uniqueKeysWithValues: positions.map { ($0.key, RemovalOffsets(count: $0.value.count)) })
+        let boundary = start < remaining.count ? positions[destination]?[remaining[start]] : nil
+        var reverts: [Revert] = [], moved: [ItemID] = []
+        var processed = 0, destinationCount = old.count
         for id in moving {
-            var slot = boundary.flatMap { self.position(of: $0, in: destination) }
-            if let current = self.position(of: id, in: destination), let value = slot, current < value { slot = value - 1 }
-            if let revert = relocate(id, to: destination, at: slot) { reverts.append(revert) }
+            guard let source = sources[id], let original = positions[source]?[id] else { continue }
+            let fromIndex = original - (offsets[source]?.before(original) ?? 0)
+                + (source == destination && boundary.map { original >= $0 } == true ? processed : 0)
+            var slot = boundary.map { $0 - (offsets[destination]?.before($0) ?? 0) + processed } ?? destinationCount
+            if source == destination && fromIndex < slot { slot -= 1 }
+            if source != destination || fromIndex != slot {
+                guard let revert = relocate(id, to: destination, at: slot, fromIndex: fromIndex) else { continue }
+                reverts.append(revert); moved.append(id)
+            }
+            // Even a same-slot item joins the logical inserted block. It emits no move.
+            offsets[source]?.remove(at: original)
+            processed += 1
+            if source != destination { destinationCount += 1 }
         }
-        return (reverts.count, Self.combined(reverts))
+        return (moved.count, Self.combined(reverts), moved)
     }
 
     @discardableResult
@@ -1027,13 +1075,11 @@ public final class BrowserModel {
             guard let parent = parentByID[id] else { continue }
             if case .spacePinned? = section(of: parent) { pinned.append(id) } else { today.append(id) }
         }
-        let unread = selected.compactMap { index[$0] }.flatMap { tabs(under: $0) }.map { ($0, $0.isUnread) }
         let p = moveMany(pinned, to: .spacePinned(spaceID), at: 0)
         let t = moveMany(today, to: .spaceToday(spaceID), at: 0)
         guard let structural = Self.combined([p.revert, t.revert].compactMap { $0 }) else { return (0, nil) }
-        if markUnread {
-            for (tab, _) in unread where owner(of: parentByID[tab.id] ?? .spaceToday(spaceID)).space == spaceID { tab.isUnread = true }
-        }
+        let unread = markUnread ? (p.moved + t.moved).compactMap { index[$0] }.flatMap { tabs(under: $0) }.map { ($0, $0.isUnread) } : []
+        for (tab, _) in unread { tab.isUnread = true }
         return (p.count + t.count, { model in
             guard structural(model) else { return false }
             for (tab, old) in unread where model.tab(id: tab.id) === tab { tab.isUnread = old }
@@ -1058,26 +1104,37 @@ public final class BrowserModel {
             if groups[parent] == nil { parents.append(parent) }
             groups[parent, default: []].append(id)
         }
+        let positions = Dictionary(uniqueKeysWithValues: parents.map { parent in
+            (parent, Dictionary(uniqueKeysWithValues: childIDs(in: parent).enumerated().map { ($0.element, $0.offset) }))
+        })
+        let sources = Dictionary(uniqueKeysWithValues: selected.compactMap { id in parentByID[id].map { (id, $0) } })
         let ordered = parents.flatMap { parent in
-            (groups[parent] ?? []).sorted { (position(of: $0, in: parent) ?? 0) > (position(of: $1, in: parent) ?? 0) }
+            (groups[parent] ?? []).sorted { (positions[parent]?[$0] ?? 0) > (positions[parent]?[$1] ?? 0) }
         }
         let now = Date()
-        // Capture direct parents before collapsing any selected panes.
-        let entries = ordered.flatMap { id -> [ArchiveEntry] in
-            guard let node = index[id], node.folder == nil, let parent = parentByID[id] else { return [] }
-            return archiveEntries(for: node, in: parent, reason: node.folder == nil ? .closed : .folderDeleted, at: now)
-        }
-        let folders = ordered.compactMap { id -> ArchiveFolderEntry? in
-            guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
-            return folderEntry(folder, parent: parent, archivedAt: now)
-        }
+        let ownership = Dictionary(uniqueKeysWithValues: parents.map { ($0, owner(of: $0)) })
+        var entries: [ArchiveEntry] = []
+        var folders: [ArchiveFolderEntry] = []
         var reverts: [Revert] = []
         for id in ordered {
+            guard let node = index[id], let originalParent = sources[id] else { continue }
+            // Preserve the original location before a pane collapse, but publish
+            // archive records only after this node actually leaves the tree.
+            let nodeEntries = node.folder == nil ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now, ownership: ownership[originalParent]) : []
+            let folder = node.folder.map { folderEntry($0, parent: originalParent, archivedAt: now) }
+            let revert: Revert?
             if case .splitPane(let splitID)? = parentByID[id], let split = index[splitID]?.split,
-               let revert = takePane(id, from: split) { reverts.append(revert) }
-            else if let removed = detach(id) {
-                reverts.append { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+               let taken = takePane(id, from: split) { revert = taken }
+            else {
+                let slot = sources[id].flatMap { parent in parentByID[id] == parent ? positions[parent]?[id] : nil }
+                if let removed = detach(id, at: slot) {
+                    revert = { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+                } else { revert = nil }
             }
+            guard let revert else { continue }
+            reverts.append(revert)
+            entries.append(contentsOf: nodeEntries)
+            if let folder { folders.append(folder) }
         }
         guard let structural = Self.combined(reverts) else { return (0, nil) }
         archiveSink?.archive(entries, folders: folders)
@@ -1290,6 +1347,7 @@ public final class BrowserModel {
         if let tab = tab(id: id) {
             let old = tab.customTitle
             let new = title.isEmpty ? nil : title
+            guard title != (old ?? tab.title), new != old else { return }
             tab.customTitle = new
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
         } else if let folder = index[id]?.folder {

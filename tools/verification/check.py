@@ -501,7 +501,8 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 214, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 216, "missing settings/library/appearance/detail/sheet/state renders")
+        require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
         states = ("welcome welcome-inactive welcome-counting welcome-nodata welcome-saveerror "
                   "import import-arcrunning import-counting import-nodata import-parsehint "
                   "import-parsehint-running import-partial import-capability-on secrets secrets-on "
@@ -520,6 +521,11 @@ def main():
                       "profile-rename": (440, 180), "archive-scope": (500, 160)}
             expected = (560, 520) if png.name.startswith("first-run-") else ((960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (sheets[png.name.split("@")[0][6:]] if png.name.startswith("sheet-") else (684, 650))))
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
+    elif name == "features-render":
+        run("python3", str(root / "tools/generate-sounds.py"), "--check")
+        text = run(str(root / "Packages/OpenKit/.build/release/features-render"), "check")
+        matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
+        require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
     elif name == "boosts":

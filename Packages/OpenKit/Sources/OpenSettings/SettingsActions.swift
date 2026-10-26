@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import OpenModel
 import OpenCommands
 
@@ -80,4 +81,14 @@ public extension ImportActions { var canImportPasswordsAndCookies: Bool { false 
     func openHelp(topic: String)
     func copyText(_ text: String)
     func openLibrary()
+    /// The Library hosts this native view without importing OpenSidebar.
+    /// Vend a distinct view for each LibraryViewModel: one NSView has one host.
+    /// Never share an instance between Library windows or view models. The caller
+    /// retains a successful result and may detach/rehost it on section switches.
+    /// Return nil for temporary unavailability; the caller retries on later access.
+    func makeSpaceManagerView() -> NSView?
+}
+
+public extension SettingsActions {
+    func makeSpaceManagerView() -> NSView? { nil }
 }

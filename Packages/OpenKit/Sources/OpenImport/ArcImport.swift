@@ -812,7 +812,7 @@ public struct ArcImporter {
                     let location = "today:\(openSpaceID.rawValue.uuidString)"
                     if kind == "welcomeToArc" { report.archiveImportedWelcome += 1 }
                     archiveRecords.append(ArchivedTabRecord(
-                        id: tab.id, url: tab.url, title: tab.displayTitle,
+                        id: tab.id, url: tab.url, title: tab.customTitle ?? tab.title,
                         spaceID: openSpaceID, profileID: ownerSpace.profileID,
                         archivedAt: archivedAt, reason: reason,
                         originalLocation: location, payloadJSON: payloadJSON
