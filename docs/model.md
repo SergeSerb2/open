@@ -1,6 +1,6 @@
 # OpenKit model design (M1)
 
-Status: implemented on branch `m1/openkit-core`. Package: [OpenKit](/Users/serge/.t3/worktrees/open/t3-eea14f87/Packages/OpenKit/Package.swift).
+Status: implemented. Package: [OpenKit](../Packages/OpenKit/Package.swift).
 No third-party dependencies. SQLite uses the system `SQLite3` module.
 No unit tests, per AGENTS.md. All verification is end to end through the `openkit` CLI.
 
@@ -48,28 +48,69 @@ Settings: `autoArchiveAfter` (`never` / 1h / 6h / 12h / 24h / 7d / 30d, default 
 
 Link routing: `RoutingRule { id, match, destination }`.
 Match: `.hostContains`, `.hostEquals`, `.urlPrefix`.
-Destination: `.space(SpaceID)`, `.littleArc`.
+Destination: `.space(SpaceID)`, `.littleArc`, `.mostRecentSpace`. A rule can target the most recent Space, as Arc rules do.
 `defaultDestination`: `.mostRecentSpace`, `.littleArc`, `.space(id)`.
+The snapshot DTOs stay at `schemaVersion` 1. `RoutingDestinationDTO.mostRecentSpace` was added after version 1 shipped. Files written before it hold only `space` / `littleArc` and still decode, because enum decoding needs only the cases in the payload. The Verification section shows this with a file from the M1 build.
 
 ### Commands
 
 State changes only through named commands on `BrowserModel`:
-`newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite` / `removeFavorite`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`.
+`newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`.
+Query: `isPinned(tabID:)`.
+`moveNode`, `addFavorite`, and `removeFavorite` return `false` when they refuse a move. `makeSplit` and `createFolder` return `nil`. A refused command changes nothing, emits no event, and registers no undo.
 
-Rules that matter:
+#### Placement rules
 
-- `closeTab` on a folder archives every tab inside it. On a split pane it removes that pane. A split that drops below 2 panes collapses back to a lone tab.
-- `moveNode` refuses to move a folder into its own descendant. Moving across the pinned/today boundary sets or clears `pinnedURL`.
-- `archiveExpiredTabs(now:)` uses the Space profile `autoArchiveAfter` and the tab `lastActiveAt`. It checks today tabs, split panes in today, and tabs inside today folders. Pinned tabs and favorites never expire.
-- `deleteSpace` keeps at least one Space. It archives the Space tabs and moves window focus to the first remaining Space.
-- Commands register inverse operations on the injected `UndoManager?`. Archiving commands register no undo. The archive record is the history.
+- Favorites hold tabs only. Folders and splits can never enter Favorites.
+- A split lives in a Space's pinned section, in a Space's Today section, or in any folder. It never lives in Favorites. `makeSplit` puts the split in the first tab's slot. It refuses a tab that is a favorite or already a split pane, duplicate IDs, and counts outside 2–4. `moveNode` refuses to move a split into Favorites.
+- Split panes move only through split commands (`makeSplit`, `unsplit`, `removePane`, `closeTab`). `moveNode` refuses a pane as source and a split as destination.
+- `moveNode` refuses to move a folder into itself or its own descendant. The check walks `parentByID` up from the destination folder.
+
+#### Favorites move, they never copy
+
+- `addFavorite(tabID:to:at:)` moves the same tab (same ID, same object) into the profile's Favorites. It emits one `.move` event and registers undo like `moveNode`. A `nil` `pinnedURL` becomes the current URL.
+- `removeFavorite(tabID:into:)` moves the tab to the top of a Space's Today section, which clears `pinnedURL`. The default Space is the focused Space of the first window that shows the favorite's profile. Undo puts the tab back in Favorites with its old `pinnedURL`.
+- This follows the review finding on M1: in Arc, adding a tab to Favorites moves that tab. Item 30 of [features-core.md](re/features-core.md) guessed a copy. The move is the rule here.
+
+#### Pinned state comes from ancestry
+
+- A tab counts as pinned when its ancestor chain reaches a Space's pinned section. This includes tabs inside folders and splits there. `isPinned(tabID:)` answers this.
+- Pinned and Favorites tabs keep a `pinnedURL`. Today tabs do not.
+- A move into pinned ancestry or Favorites sets `pinnedURL` to the current URL when it is `nil`.
+- A move from pinned ancestry or Favorites into Today ancestry clears `pinnedURL`.
+- The rule applies to every tab inside a moved folder or split. `makeSplit` and `createFolder` apply it to each tab they move.
+- Undo restores the exact old `pinnedURL` values, even if the tab navigated after the move.
+
+#### Archive and restore
+
+- `closeTab` archives. On a folder it archives every tab inside, with reason `folderDeleted`. On a split pane it archives that pane. A split left with one pane collapses: the remaining tab takes the split's slot.
+- `deleteSpace` keeps at least one Space. It archives the Space's tabs and moves window focus to the first remaining Space.
+- `clearToday(space:)` archives every Today node of the Space in one pass.
+- `archiveExpiredTabs(now:)` uses the Space profile's `autoArchiveAfter` and the tab's `lastActiveAt`. It checks Today tabs, split panes in Today, and tabs inside Today folders, at any depth. Pinned tabs and favorites never expire. A split left with fewer than 2 panes dissolves.
+- Every archive entry stores the tab's direct parent as `originalLocation` (`pinned:<uuid>`, `today:<uuid>`, `folder:<uuid>`, `favorites:<uuid>`, `split:<uuid>`; see `NodeParent.archiveLocation`), plus the owning Space and profile.
+- `restoreArchivedTab(_ record:)` rebuilds the tab from the record payload with its original ID. It places the tab, in this order: at the top of the original parent if that parent still exists (a split only while it has fewer than 4 panes); else at the top of the original Space's Today section; else at the top of the focused Space's Today section. The pinned-URL rule applies for the destination. The tab gets `lastActiveAt = now`, so auto-archive does not take it again at once. A record whose ID is already in the sidebar returns that tab unchanged. Undo sends the tab back to the archive.
+- `ArchivedTabRecord` lives in OpenModel, so the model does not depend on OpenStore.
+- `ArchiveSink` has two calls: `archive(_ entries: [ArchiveEntry])` and `discardArchived(ids:)`. A bulk command makes one `archive` call for all of its tabs. When a tab comes back to the sidebar (restore, or undo of a close, clear, or Space delete), the model calls `discardArchived`. So a tab is never in the sidebar and in the archive at the same time.
+
+#### Undo
+
+- Every command registers undo on the injected `UndoManager?`, except `archiveExpiredTabs`. Auto-archive runs in the background, so Cmd-Z must not bring old tabs back. The archive is its history.
+- One command is one undo step. With per-event grouping (the AppKit default), the event's group holds the step. With `groupsByEvent = false` (the CLI), the model opens one group per command. The model never changes the undo manager's settings.
+- Undo and redo call internal primitives only, never public commands. So an undo step never registers a second step. Redo runs the change again and captures fresh state for the next undo.
+- `archiveExpiredTabs` can remove Today tabs and dissolve Today splits under older undo steps. Each undo step checks that its nodes are still where it expects. It skips the ones that are gone, so it never duplicates a node or drops a tab that was not archived.
 
 ### Events and lookup
 
-After each structural command, `BrowserModel` sends one synchronous main-actor `TreeChange` to registered observers: `.insert(parent:index:nodeID)`, `.remove(parent:index:nodeID)`, `.move(fromParent:fromIndex:toParent:toIndex:nodeID)`, `.reload(parent)`.
+After each structural command, `BrowserModel` sends synchronous main-actor `TreeChange` events to registered observers: `.insert(parent:index:nodeID)`, `.remove(parent:index:nodeID)`, `.move(fromParent:fromIndex:toParent:toIndex:nodeID)`, `.reload(parent)`.
 `NodeParent` is `.spacePinned`, `.spaceToday`, `.folder`, `.favorites`, or `.splitPane`.
+Single-node commands send precise events: `newTab` one `.insert`, `moveNode` / `addFavorite` / `removeFavorite` one `.move`, `closeTab` one `.remove`. Commands that change several lists at once (`makeSplit`, `unsplit`, a split collapse) send one `.reload` per changed parent.
+Bulk commands make one pass. `clearToday` sends one `.reload`. `archiveExpiredTabs(now:)` sends one `.reload` per parent whose list changed (the Today section, a folder, or a split).
 Property changes send no event. Observation covers them.
-`BrowserModel` keeps `index: [ItemID: SidebarNode]` and `parentByID: [ItemID: NodeParent]`. Lookup is O(1). The index rebuilds after structural mutations.
+
+`BrowserModel` keeps `index: [ItemID: SidebarNode]` and `parentByID: [ItemID: NodeParent]`. Lookup is O(1).
+Commands update both maps in place. Insert and remove cost O(size of the subtree). A move costs O(1) for the maps, because only the moved node's own parent entry changes. The pinned-URL rule adds O(tabs in the subtree) when a move enters or leaves Pinned or Favorites.
+Child lists change in place, so a move does not copy the parent's array.
+`rebuildIndex()` walks the whole tree. It runs only on load and import. The bench and `commands-demo` compare the live maps with a full rebuild after each phase.
 
 ## OpenStore
 
@@ -85,8 +126,9 @@ Writes are atomic: write a temp file, then rename over the target.
 ### ArchiveStore (SQLite)
 
 Table `archived_tabs`: `id`, `url`, `title`, `space_id`, `profile_id`, `archived_at`, `reason` (`closed` / `autoArchived` / `clearedToday` / `folderDeleted`), `original_location`, `payload` (full tab DTO JSON for restore).
-The `ArchiveSink` entry point runs on the main actor and snapshots values there. Every SQLite statement runs on a private serial queue.
-API: `recent(limit:)`, `search(_:limit:)`, `restore(id:)` (returns the record and deletes the row), `purge(olderThanDays:)`, `count()`. All are async.
+`ArchiveStore` implements `ArchiveSink`. `archive(_:)` copies plain values on the main actor. JSON encoding and the SQLite writes run on a private serial queue, in one transaction per call. `discardArchived(ids:)` deletes rows on the same queue.
+Query API: `recent(limit:)`, `search(_:limit:)`, `restore(id:)` (returns the record and deletes the row), `purge(olderThanDays:)`, `count()`. All are async.
+The restore flow is: `ArchiveStore.restore(id:)` returns the record, then `BrowserModel.restoreArchivedTab(_:)` puts the tab back.
 
 ### HistoryStore (SQLite + FTS5)
 
@@ -100,7 +142,7 @@ Budget: under 5 ms on a 100k-URL database for selective command-bar queries. See
 Read order: sidebar, windows, routing.
 The importer reads only `StorableSidebar.json`, `StorableWindows.json`, and `StorableLinkRouting.json`. It never writes to the Arc folder.
 
-Sidebar parsing follows [data-model.md](/Users/serge/.t3/worktrees/open/t3-eea14f87/docs/re/data-model.md):
+Sidebar parsing follows [data-model.md](re/data-model.md):
 
 - Alternating `[id, object, …]` arrays for `items`, `spaces`, and `topAppsContainerIDs`.
 - Order comes from each parent `childrenIds`, never from the flat array order.
@@ -115,7 +157,7 @@ Sidebar parsing follows [data-model.md](/Users/serge/.t3/worktrees/open/t3-eea14
 - Easels, notes, and welcome items are skipped and counted.
 - One Open profile is created per distinct `Space.profile` value. All observed data uses `{default: true}`, so one profile serves all Spaces.
 - Windows: one `BrowserWindowState` per entry. Focus, sidebar width and mode, style, and stay-on-top map over. Unknown styles become standard windows.
-- Routing: `contains` becomes `.hostContains`, `equals` / `exact` becomes `.hostEquals`, `prefix` becomes `.urlPrefix`. Other match kinds are skipped and counted. A rule that points at the most recent Space maps to the first Space, because a rule needs a fixed destination. The file default destination maps directly.
+- Routing: `contains` becomes `.hostContains`, `equals` / `exact` becomes `.hostEquals`, `prefix` becomes `.urlPrefix`. Other match kinds are skipped and counted. A rule that points at the most recent Space maps to `.mostRecentSpace`. The file default destination maps directly.
 
 `ImportReport` counts: `totalItems`, `spaces`, `pinnedTabs`, `todayTabs`, `favorites`, `folders`, `splits`, `routingRules`, skipped easels / notes / welcome / unknown, `orphans`, and `skippedRoutingRules`.
 Audit rule: imported nodes + folders + splits + skipped + structural containers = `totalItems`. The CLI prints this check on every import.
@@ -135,14 +177,15 @@ openkit commands-demo DIR
 Titles and URLs are redacted by default. The tree prints item kind, ID prefix, and host only. `--show-titles` prints full titles and URLs. Never paste `--show-titles` output into docs.
 `dump` loads a snapshot and prints the tree (redacted).
 `roundtrip` loads, saves, reloads, and compares the two DTOs byte for byte. It exits non-zero on a mismatch.
-`bench` builds a synthetic model (5,000 items over 10 Spaces), times snapshot encode / decode / save / load, then inserts 100k history URLs and times 1,000 selective searches (p50 / p95).
-`commands-demo` runs new tab, pin, folder, move, split, `clearToday`, `archiveExpiredTabs` with a fake clock, and undo. It prints the tree after each step and proves events, undo, and the archive sink work.
+`bench` builds a synthetic model (5,000 items over 10 Spaces) and times snapshot encode / decode / save / load. It inserts 100k history URLs and times 1,000 selective searches (p50 / p95). Then it times `moveNode` ×10,000 on a 5,000-item model (with and without an UndoManager), undoes every move, and times `archiveExpiredTabs` on 2,000 expired tabs (model only, then with the real `ArchiveStore`).
+`commands-demo` runs every command against the real `ArchiveStore` in `DIR` and prints OK or FAIL for each check (66 checks), plus the tree at key steps. It covers: new tab, pin, folder; a split in a folder (allowed) with undo and redo; favorite move and unfavorite with undo and redo; placement rejections (split or folder into Favorites, a favorite into a split, a folder into its own descendant) with no events and no undo; a pane close that collapses its split, with undo; pinned to Today moves that clear `pinnedURL`, for a tab and for a folder with a split inside, with undo; close, archive, restore, with undo and redo; both restore fallbacks; restore into a split; `deleteSpace` with undo; `clearToday` with undo and redo; `archiveExpiredTabs` with a fake clock; and undo after auto-archive changed the tree. It exits non-zero on any failure.
 
 ## Verification (real runs, 2026-10-24)
 
-Build: `swift build -c release` in `Packages/OpenKit` — zero warnings, zero errors (Swift 6.4, strict concurrency).
+Build: `swift build -c release` in `Packages/OpenKit` after `swift package clean` — zero warnings, zero errors (Swift 6.4, strict concurrency).
 
-Real Arc import. Files were copied to a temp folder first, because Arc may be running. Both the live folder copy and the runtime snapshot in `.re/runtime/appsupport` give the same counts:
+Real Arc import. The `*.json` files were copied to a temp folder first, because Arc may be running.
+The runtime snapshot in `.re/runtime/appsupport` gives the same counts as at M1:
 
 ```text
 import report:
@@ -156,38 +199,47 @@ import report:
   containers(structural)=9 check imported+skipped+containers=46 total=46
 ```
 
-Every one of the 46 item objects is accounted for: 37 imported or skipped nodes + 9 structural containers.
-`todayTabs=0` is correct for this data. The only today item in the file is one easel, and easels are skipped by design.
+A fresh copy of the live Arc folder (2026-10-25) gives the same totals: 46 items, 46 accounted. The skipped split differs (easels 0, welcome 2) because the user kept using Arc. The check line still reads `imported+skipped+containers=46 total=46`.
+`todayTabs=0` in the runtime snapshot is correct. Its only Today item is one easel, and easels are skipped by design.
+The one routing rule targets the most recent Space. It now imports as `{"mostRecentSpace":{}}`.
 
-Roundtrip on the imported snapshot: `roundtrip OK`.
+Roundtrip: `roundtrip OK` on both imports and on the `commands-demo` folder.
 
-Commands demo on a fresh folder (titles shown here are synthetic demo data):
+Old files still decode. A schema 1 snapshot with the pre-change rule encoding (`{"space":{"_0":…}}` in place of `{"mostRecentSpace":{}}`) loads with `dump` and round-trips with `roundtrip OK`.
 
-```text
-events after newTab: 1
-made split (2 panes)
-archived after clearToday: 2 tabs (clearedToday)
-archiveExpiredTabs archived=1, sink total=3
-after undo: today count=0
-commands-demo OK
-```
-
-Bench (Apple Silicon, release build). One run is shown. Runs vary by a few ms:
+`commands-demo` on a fresh folder: `commands-demo OK: 66 checks passed, 0 failed`. Selected output (synthetic demo data):
 
 ```text
-bench: synthetic model (5000 items over 10 spaces)
-  snapshot encode: 20.6 ms
-  snapshot decode: 19.3 ms
-  snapshot save:   21.0 ms
-  snapshot load:   24.3 ms
-bench: history (100k URLs, 1000 searches)
-  history insert 100k: 1673.4 ms (urls=100000)
-  history search p50: 2.866 ms  p95: 3.667 ms
+  OK   one event: ["move(today[1] -> favorites[0])"]
+  OK   one event: ["move(favorites[0] -> today[0])"]
+  OK   undo: back in Pinned with the exact old pinnedURL, not the navigated URL
+  OK   folder moved pinned -> today: every tab inside cleared, split panes too
+  archived: Restorable reason=closed location=today space=original
+  restored: Restorable id=53466EBB at today[0]
+  OK   Today empty, one event: ["reload(today)"]
+  archiveExpiredTabs archived=4 events=["reload(folder E0ABE511)", "reload(split F632278D)", "reload(today)"]
+  OK   undo of the dissolved split does nothing: U1 once, U2 stays archived
 ```
+
+The same 66 checks also pass on a copy of the imported Arc snapshot (output filtered to check lines, so no titles are printed).
+
+Bench (Apple Silicon, release build). Three runs; ranges shown:
+
+| Bench | Result |
+|---|---|
+| snapshot encode / decode / save / load (5,000 items) | 17.8–18.7 / 15.6–19.0 / 17.5–19.6 / 21.0–23.8 ms |
+| history insert 100k URLs | 1,162–1,400 ms |
+| history search p50 / p95 (1,000 selective queries) | 2.51–2.73 / 3.18–3.30 ms |
+| `moveNode` ×10,000 on a 5,000-item model, UndoManager on | 3.3–4.3 µs average (target < 50 µs) |
+| `moveNode` ×10,000, no UndoManager | 2.3–2.8 µs average |
+| undo ×10,000 of those moves | 41–48 ms total; tree equals the original; index equals a full rebuild |
+| `archiveExpiredTabs` on 2,000 expired tabs, model only | 1.1–1.3 ms, 21 `.reload` events |
+| `archiveExpiredTabs` on 2,000 expired tabs, real `ArchiveStore` | 1.9–2.3 ms on the main actor + 12–14 ms background write (one transaction) |
+
+The move bench picks random tabs and moves them to random slots in random Pinned, Today, and folder parents across all 10 Spaces (seeded, so runs are comparable). The expiry bench has 1,500 top-level tabs, 400 tabs in 20 folders, and 100 panes in 50 three-pane splits that collapse, plus 450 fresh tabs.
 
 ## Open design questions
 
-1. Split panes inside a folder: `makeSplit` puts the split where its first tab lived. Confirm that a split inside a folder is a valid Arc state, or restrict splits to space-level parents.
-2. Favorite identity: `addFavorite` copies the tab (new ID). Arc may keep one item that is both a favorite and a tab. Copy keeps the model simple. It means rename and mute do not sync between the two rows.
-3. Routing rules that target the most recent Space have no fixed destination. The importer maps them to the first Space. A future `RoutingDestination.mostRecent` case may fit better.
-4. `ArchiveStore.restore` returns the stored record. The command that puts a restored tab back into a Space is not part of this milestone.
+1. Restore position. A restored tab goes to the top of its parent, because the record stores the parent but not the index. Arc's exact position is not verified.
+2. `focusSpace` and `selectNode` register undo. Arc probably does not undo navigation. If not, Cmd-Z after a click would undo the click, not the last edit. Verify in Arc, then drop their undo.
+3. `closeTab` archives pinned tabs and favorites too. In Arc, closing a pinned tab or a favorite may only unload it (guess). The UI layer must pick the right command until this is verified.

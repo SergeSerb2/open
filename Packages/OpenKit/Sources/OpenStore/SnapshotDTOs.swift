@@ -103,9 +103,13 @@ public enum RoutingMatchDTO: Codable, Sendable {
     case urlPrefix(String)
 }
 
+/// Schema version stays 1. The `mostRecentSpace` case was added after v1 shipped;
+/// files written before it contain only `space` / `littleArc` and still decode,
+/// because Swift's enum decoding only needs the cases present in the payload.
 public enum RoutingDestinationDTO: Codable, Sendable {
     case space(String)
     case littleArc
+    case mostRecentSpace
 }
 
 public enum DefaultDestinationDTO: Codable, Sendable {
@@ -247,6 +251,7 @@ public enum SnapshotMapper {
         switch r.destination {
         case .space(let id): d = .space(id.rawValue.uuidString)
         case .littleArc: d = .littleArc
+        case .mostRecentSpace: d = .mostRecentSpace
         }
         return RoutingRuleDTO(id: r.id.rawValue.uuidString, match: m, destination: d)
     }
@@ -262,6 +267,7 @@ public enum SnapshotMapper {
         switch dto.destination {
         case .space(let s): d = .space(SpaceID(uuidString: s))
         case .littleArc: d = .littleArc
+        case .mostRecentSpace: d = .mostRecentSpace
         }
         return RoutingRule(id: RuleID(uuidString: dto.id), match: m, destination: d)
     }

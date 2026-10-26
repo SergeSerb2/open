@@ -110,6 +110,7 @@ public enum RoutingMatch: Codable, Hashable, Sendable {
 public enum RoutingDestination: Codable, Hashable, Sendable {
     case space(SpaceID)
     case littleArc
+    case mostRecentSpace
 }
 
 public enum DefaultDestination: Codable, Hashable, Sendable {
