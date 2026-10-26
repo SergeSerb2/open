@@ -27,8 +27,8 @@ public final class PaneSlotView: NSView {
             if paneChrome == nil { let chrome = PaneChromeView(); paneChrome = chrome; clip.addSubview(chrome) }
             paneChrome?.host = host; paneChrome?.isFocused = focused; paneChrome?.onClose = close; paneChrome?.onMenu = menu
             paneChrome?.onURL = url; paneChrome?.onCopy = copy
-            // TODO(engine): page theme color. The semantic content background is the pre-engine fallback.
-            paneChrome?.layer?.backgroundColor = style.lightPalette?.background.cgColor ?? NSColor.white.cgColor
+            // The bar takes the page's color (host.pageBackgroundColor); the Space's light background is the fallback.
+            paneChrome?.fallbackColor = style.lightPalette?.background.nsColor ?? .white
             paneChrome?.update()
         } else { paneChrome?.removeFromSuperview(); paneChrome = nil }
         contentHostView?.removeFromSuperview(); placeholderView?.removeFromSuperview(); placeholderView = nil
@@ -148,6 +148,10 @@ public final class WebContentContainer: NSView {
         host.onFaviconChange = { [weak self, weak host] data in
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
             self.tabProvider(id)?.live.faviconPNG = data
+        }
+        host.onPageBackgroundChange = { [weak self, weak host] _ in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            self.slots.first { $0.tabID == id }?.paneChrome?.update()
         }
         host.shouldNavigate = { [weak self, weak host] url, flags in
             guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return false }

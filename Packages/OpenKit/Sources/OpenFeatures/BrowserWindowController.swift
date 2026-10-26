@@ -43,7 +43,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let window = NSWindow(contentRect: root.bounds, styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; super.init(window: window); window.contentView = root; window.delegate = self
         root.appearance = NSAppearance(named: .darkAqua)
-        root.addSubview(background); root.addSubview(container); root.addSubview(sidebar); root.addSubview(peekController.overlay)
+        // The Peek backdrop dims the background and pages under the sidebar's content (F0090).
+        root.addSubview(background); root.addSubview(container); root.addSubview(peekController.overlay.backdrop)
+        root.addSubview(sidebar); root.addSubview(peekController.overlay)
         sidebar.delegate = self; sidebar.themeBackground = background
         container.onLinkClicked = { [weak self] id, url, flags in self?.peekController.intercept(tabID: id, url: url, flags: flags) ?? true }
         container.onFocusedMetadata = { [weak self] in self?.window?.title = $0 }
@@ -52,6 +54,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         splitController.onChange = { [weak self] in self?.changed() }
         peekController.onChange = { [weak self] in self?.changed() }
         peekController.onToast = { [weak self] in self?.showToast($0, undo: $1) }
+        peekController.onPageChange = { [weak self] in self?.syncPeekSidebar() }
         toast.wantsLayer = true; toast.layer?.cornerRadius = 8; toast.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.85).cgColor
         toastLabel.textColor = .white; toast.addSubview(toastLabel)
         undoButton = ActionButton(symbol: "arrow.uturn.backward", title: "Undo") { [weak self] in self?.toastUndo?() }
@@ -85,11 +88,23 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let style = context.style(for: space)
         peekController.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekController.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
-        splitController.refresh(); peekController.refresh(); layoutContent(); container.refreshPlaceholders(); onVisibilityChange?()
+        splitController.refresh(); peekController.refresh(); layoutContent(); container.refreshPlaceholders(); syncPeekSidebar(); onVisibilityChange?()
+    }
+    /// Sidebar view state for open Peeks: a badge on each source row (F0090, F0101) and,
+    /// while one is on screen, its page for the URL field and toolbar.
+    private func syncPeekSidebar() {
+        var badges: [ItemID: SidebarPeekBadge] = [:]
+        for item in peekController.stack { badges[item.sourceTabID] = SidebarPeekBadge(url: item.host?.currentURL ?? item.url, faviconPNG: item.faviconPNG) }
+        if context.peekBadges != badges { context.peekBadges = badges }
+        let shown = peekController.isShown ? peekController.stack.last.map { item in
+            SidebarShownPeek(sourceNodeID: peekController.sourceNodeID(of: item), url: item.host?.currentURL ?? item.url, canGoBack: item.host?.canGoBack ?? false,
+                             canGoForward: item.host?.canGoForward ?? false, isLoading: item.host?.isLoading ?? false)
+        } : nil
+        if context.shownPeek != shown { context.shownPeek = shown }
     }
     private func layoutContent() {
         let size = root.bounds.size, hidden = context.window?.sidebarMode == .hidden
-        background.frame = root.bounds; sidebar.isHidden = hidden
+        background.frame = root.bounds; peekController.overlay.backdrop.frame = root.bounds; sidebar.isHidden = hidden
         sidebar.frame = CGRect(x: 0, y: 0, width: context.sidebarWidth, height: size.height)
         container.frame = PanelMetrics.frame(windowSize: size, sidebarWidth: context.sidebarWidth, sidebarHidden: hidden)
         let overlay = peekController.overlay; overlay.frame = root.bounds; overlay.contentRect = container.frame
@@ -98,7 +113,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         toast.frame = CGRect(x: root.bounds.midX - 140, y: 24, width: 280, height: 34)
         toastLabel.frame = CGRect(x: 12, y: 7, width: 210, height: 20); undoButton?.frame = CGRect(x: 238, y: 3, width: 32, height: 28)
     }
-    private func changed() { snapshotStore?.scheduleSave(model: model); peekController.refresh(); onVisibilityChange?() }
+    private func changed() { snapshotStore?.scheduleSave(model: model); peekController.refresh(); syncPeekSidebar(); onVisibilityChange?() }
     private func showToast(_ title: String, undo: (() -> Void)?) { toastUndo = undo; toastLabel.stringValue = title; undoButton.isHidden = undo == nil; toast.isHidden = title.isEmpty }
     public var peekBadgeTabIDs: Set<ItemID> { peekController.peekBadgeTabIDs }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
@@ -142,12 +157,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
         switch intent {
         case .newSplitView: splitController.addEmptyPane()
+        case .addTabToSplit(let id):
+            // "Add Tab…": the App's command bar fills the new empty pane.
+            guard model.node(id: id)?.split != nil else { return false }
+            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }
+            splitController.addEmptyPane()
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
-        case .separateSplit(let id):
-            let focused = model.node(id: id)?.split?.focusedPaneID; model.unsplit(splitID: id)
-            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: focused) }
         case .goBack: if peekController.isShown { peekController.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekController.isShown { peekController.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }

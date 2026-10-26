@@ -73,14 +73,13 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         model.focusSplitPane(splitID: split.id, tabID: id); container.focus(tabID: id); onChange?()
     }
     public func close(_ id: ItemID, separate: Bool, option: Bool = false) {
-        guard let split, let space else { return }
+        guard let split else { return }
         if option {
             model.unsplit(splitID: split.id); select(id)
         } else {
-            let survivor = split.panes.first { $0.id != id }?.id
+            // A collapsing split hands the selection to its surviving tab in the model.
             model.removePane(splitID: split.id, tabID: id, archive: !separate)
             if separate { select(id) }
-            else if model.node(id: split.id) == nil { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: survivor) }
         }
         maximizedPaneID = nil; refresh(); onChange?()
     }
