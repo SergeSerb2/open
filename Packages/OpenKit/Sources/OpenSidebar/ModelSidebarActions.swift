@@ -1,0 +1,103 @@
+import AppKit
+import OpenModel
+
+/// Maps the intents that only touch the model to `BrowserModel` commands.
+/// The App target calls this for model intents and handles engine and UI
+/// intents (navigation, command bar, sharing, dialogs) itself. The renderer
+/// and checks use it as their whole delegate.
+@MainActor
+public struct ModelSidebarActions {
+    public let context: SidebarContext
+
+    public init(context: SidebarContext) { self.context = context }
+
+    private var model: BrowserModel { context.model }
+    private var windowID: WindowID { context.windowID }
+
+    /// Returns false when the intent needs the App (engine, panels, pasteboard).
+    @discardableResult
+    public func perform(_ intent: SidebarIntent) -> Bool {
+        switch intent {
+        case .select(let id, let space):
+            model.selectNode(windowID: windowID, spaceID: space, nodeID: id)
+        case .selectFavorite(let id):
+            guard let space = context.focusedSpace else { return false }
+            model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id)
+        case .switchSpace(let id):
+            model.focusSpace(windowID: windowID, spaceID: id)
+        case .close(let id):
+            if let split = model.node(id: id)?.split {
+                for pane in split.panes { model.closeTab(id: pane.id) }
+            } else {
+                model.closeTab(id: id)
+            }
+        case .setExpanded(let id, let expanded):
+            model.setExpanded(folderID: id, expanded: expanded)
+        case .setPinnedCollapsed(let space, let collapsed):
+            // Model gap: no command for this flag yet (no undo, no save trigger).
+            model.space(id: space)?.isPinnedCollapsed = collapsed
+        case .pin(let id):
+            model.pinTab(id: id)
+        case .unpin(let id):
+            model.unpinTab(id: id)
+        case .rename(let id, let title):
+            model.renameNode(id: id, title: title)
+        case .renameSpace(let id, let title):
+            model.updateSpace(id: id, title: title)
+        case .move(let id, let parent, let index):
+            if case .favorites(let profile) = parent {
+                return model.addFavorite(tabID: id, to: profile, at: index)
+            }
+            return model.moveNode(id: id, to: parent, at: index)
+        case .moveToSpace(let id, let space):
+            return model.moveNode(id: id, to: SidebarPasteboard.destination(for: id, in: space, model: model), at: 0)
+        case .addFavorite(let id, let index):
+            guard let profile = context.favoritesProfile else { return false }
+            return model.addFavorite(tabID: id, to: profile.id, at: index)
+        case .moveFavorite(let id, let index):
+            guard let profile = context.favoritesProfile else { return false }
+            return model.moveNode(id: id, to: .favorites(profile.id), at: index)
+        case .removeFavorite(let id):
+            return model.removeFavorite(tabID: id, into: context.focusedSpace?.id)
+        case .clearToday(let space):
+            model.clearToday(space: space)
+        case .deleteFolder(let id):
+            model.closeTab(id: id)
+        case .newFolder(let parent):
+            return model.createFolder(in: parent) != nil
+        case .newNestedFolder(let parent):
+            return model.createFolder(in: .folder(parent)) != nil
+        case .separateSplit(let id):
+            model.unsplit(splitID: id)
+        case .resetToPinnedURL(let id):
+            model.resetPinnedTab(id: id)
+        case .replacePinnedURL(let id):
+            model.replacePinnedURL(id: id)
+        case .toggleMute(let id):
+            // Model gap: no command for mute yet (no undo).
+            model.tab(id: id)?.isMuted.toggle()
+        case .deleteSpace(let id):
+            model.deleteSpace(id: id)
+        case .moveSpace(let id, let index):
+            model.moveSpace(id: id, to: index)
+        case .setSpaceProfile(let space, let profile):
+            model.updateSpace(id: space, profileID: profile)
+        case .openURL(let url, let parent, let index):
+            switch parent {
+            case .spacePinned(let s), .spaceToday(let s):
+                let tab = model.newTab(in: s, url: url, title: url.host() ?? url.absoluteString, at: index)
+                if case .spacePinned = parent { return model.moveNode(id: tab.id, to: parent, at: index) }
+            case .folder, .favorites:
+                guard let space = context.focusedSpace else { return false }
+                let tab = model.newTab(in: space.id, url: url, title: url.host() ?? url.absoluteString)
+                if case .favorites(let p) = parent { return model.addFavorite(tabID: tab.id, to: p, at: index) }
+                return model.moveNode(id: tab.id, to: parent, at: index)
+            case .splitPane:
+                return false
+            }
+        default:
+            return false
+        }
+        return true
+    }
+}

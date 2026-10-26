@@ -687,14 +687,14 @@ public final class BrowserModel {
     }
 
     private func move(_ id: ItemID, to destination: NodeParent, at position: Int?) -> Revert? {
-        guard canMove(id, to: destination) else { return nil }
+        guard canMoveNode(id: id, to: destination) else { return nil }
         return relocate(id, to: destination, at: position)
     }
 
     /// Placement rules: only tabs enter Favorites (folders and splits never do); splits live
     /// in a Space's pinned or Today section or in a folder; panes move only through split
     /// commands; a folder never enters itself or its own descendant.
-    private func canMove(_ id: ItemID, to destination: NodeParent) -> Bool {
+    public func canMoveNode(id: ItemID, to destination: NodeParent) -> Bool {
         guard let node = index[id], let source = parentByID[id] else { return false }
         if case .splitPane = source { return false }
         switch destination {
@@ -732,7 +732,7 @@ public final class BrowserModel {
     private func fill(_ folder: Folder, in parent: NodeParent, with nodeIDs: [ItemID]) -> Revert? {
         guard attach(.folder(folder), to: parent, at: nil) != nil else { return nil }
         var moves: [Revert] = []
-        for id in nodeIDs where canMove(id, to: .folder(folder.id)) {
+        for id in nodeIDs where canMoveNode(id: id, to: .folder(folder.id)) {
             if let revert = relocate(id, to: .folder(folder.id), at: nil) { moves.append(revert) }
         }
         let reverts = moves

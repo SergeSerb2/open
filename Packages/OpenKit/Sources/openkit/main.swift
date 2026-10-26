@@ -8,13 +8,14 @@ if sweptImportCopies > 0 {
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else {
-    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons|profiles|sleep-demo|sleep-sim> ...")
+    print("usage: openkit <import-arc|import-arc-history|import-arc-secrets|verify-secrets-fixture|archive-list|dump|roundtrip|bench|commands-demo|suggest|suggest-check|route|favicons|profiles|adblock|sleep-demo|sleep-sim> ...")
     exit(2)
 }
 let rest = Array(arguments.dropFirst())
 
 do {
     switch command {
+    case "adblock": try await runAdBlock(args: rest)
     case "verify-secrets-fixture":
         try runSyntheticSecretsFixture()
     case "import-arc-secrets":
