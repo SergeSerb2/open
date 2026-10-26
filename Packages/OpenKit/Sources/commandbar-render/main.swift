@@ -20,6 +20,7 @@ enum CLI {
       commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
           states: \(Scenes.names.joined(separator: ", "))
       commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT]
+      commandbar-render ax [--state NAME]           # dump the rendered overlay accessibility tree
       commandbar-render flows                      # keyboard and mouse flows; exit 1 on failure
       commandbar-render check                      # flows + a render of every state + the keystroke budget (tools/verify-all.sh)
       commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2]
@@ -43,6 +44,11 @@ enum CLI {
         switch cmd {
         case "render": try render(rest)
         case "compare": try compare(rest)
+        case "ax":
+            let env = Scenes.env()
+            let stage = try Scenes.run(value(rest, "--state") ?? "typing-git", env: env, size: CGSize(width: 1440, height: 900), scale: 1, backdrop: .darkPage)
+            _ = stage.render(scale: 1)
+            print(ReviewFlows.accessibilityDump(stage.controller.view))
         case "flows":
             report(Flows.run())
         case "check":

@@ -10,6 +10,7 @@ public final class CommandBarView: NSView {
     var panel: PanelView { container.panel }
     /// Called for a mouse-down outside the panel.
     var onClickOutside: (() -> Void)?
+    var onMoveToWindow: (() -> Void)?
     /// False while hidden: the overlay then passes every event through.
     var isActive = false
 
@@ -21,6 +22,11 @@ public final class CommandBarView: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public override var isFlipped: Bool { true }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { onMoveToWindow?() }
+    }
 
     /// Visible rows; sets the panel height.
     var visibleRowCount = 0 { didSet { if visibleRowCount != oldValue { needsLayout = true } } }

@@ -39,6 +39,27 @@ final class ResultsView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .list }
+    override func accessibilityLabel() -> String? { "Suggestions" }
+    override func accessibilityChildren() -> [Any]? { rowViews.filter { $0.row != nil } }
+    override func accessibilitySelectedChildren() -> [Any]? {
+        guard let i = selectedIndex, rowViews.indices.contains(i) else { return [] }
+        return [rowViews[i]]
+    }
+    private var announcedSelection: CommandBarRow?
+
+    private func announceSelection() {
+        let row = selectedIndex.flatMap { rows.indices.contains($0) ? rows[$0] : nil }
+        guard row != announcedSelection else { return }
+        announcedSelection = row
+        NSAccessibility.post(element: self, notification: .selectedChildrenChanged)
+        if let row, let window {
+            NSAccessibility.post(element: window, notification: .announcementRequested, userInfo: [
+                .announcement: row.title, .priority: NSAccessibilityPriorityLevel.medium.rawValue,
+            ])
+        }
+    }
 
     var contentHeight: CGFloat { CGFloat(rows.count) * CommandBarMetrics.rowHeight }
     var maxScroll: CGFloat { max(0, contentHeight - bounds.height) }
@@ -50,6 +71,8 @@ final class ResultsView: NSView {
             let v = ResultRowView(frame: .zero)
             v.favicons = favicons
             v.theme = theme
+            let index = rowViews.count
+            v.onPress = { [weak self] in self?.onClick?(index, []) }
             addSubview(v)
             rowViews.append(v)
         }
@@ -64,12 +87,14 @@ final class ResultsView: NSView {
         selectedIndex = selected.flatMap { rows.indices.contains($0) ? $0 : nil }
         scrollOffset = min(scrollOffset, maxScroll)
         layoutRows()
+        announceSelection()
     }
 
     func select(_ index: Int?) {
         selectedIndex = index.flatMap { rows.indices.contains($0) ? $0 : nil }
         if let i = selectedIndex { scrollToVisible(i) }
         layoutRows()
+        announceSelection()
     }
 
     func resetScroll() { scrollOffset = 0 }

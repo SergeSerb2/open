@@ -13,6 +13,7 @@ final class ResultRowView: NSView {
     weak var favicons: CommandBarFaviconSource?
     /// Diagnostics: draw passes since creation.
     private(set) var drawCount = 0
+    var onPress: (() -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -25,6 +26,26 @@ final class ResultRowView: NSView {
     override var isFlipped: Bool { true }
     override var isOpaque: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func isAccessibilityElement() -> Bool { row != nil }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { row?.title }
+    override func accessibilityValue() -> Any? {
+        guard let row else { return nil }
+        let accessory: String
+        switch row.accessory {
+        case .none: accessory = ""
+        case .switchTo(let label): accessory = label
+        case .keys(let keys): accessory = keys.joined(separator: " ")
+        }
+        return [row.subtitle, accessory].filter { !$0.isEmpty }.joined(separator: ", ")
+    }
+    override func isAccessibilitySelected() -> Bool { isSelected }
+    override func accessibilityPerformPress() -> Bool {
+        guard row != nil, let onPress else { return false }
+        onPress()
+        return true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let row, let ctx = NSGraphicsContext.current?.cgContext else { return }

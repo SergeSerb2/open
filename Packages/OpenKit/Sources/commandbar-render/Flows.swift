@@ -247,6 +247,7 @@ enum Flows {
             check("Empty Cmd+T: row 1 selected, Return acts on it", s.controller.rows.count > 0 && intentMatches(s.recorder.intents.first, row),
                   "row 1 \(row?.kind.rawValue ?? "-") \(row?.title ?? "-"); intents \(s.recorder.intents)")
         }
+        checks += ReviewFlows.run(env)
         return checks
     }
 

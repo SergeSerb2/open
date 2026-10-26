@@ -125,17 +125,22 @@ The input's leading icon follows the first row: magnifier for searches and an em
 | Cmd+T (`.newTab`) | Empty field, rows for the empty query, row 1 selected | F0063 |
 | Cmd+L (`.editCurrentURL`) | Field holds the current URL, fully selected; typing replaces it | F0048 |
 | `.searchTabs` | Tab rows only; placeholder "Search Tabs…" | placeholder guess |
-| Typing | One query per change. Snapshot 0 is applied on the next main-actor turn, before the frame draws. | suggest.md |
+| Typing | One query per committed text change. Marked IME text does not query; composition end submits exactly one query. Paste replaces CR/LF with spaces and caps visible input at 2,048 characters before querying that same text. | implementation; flows 36–44, 64–65 |
 | Later snapshots | Before the user moves the selection it stays on row 1, so it changes only when the top hit changes. After a move it stays on the same suggestion id. | features-core §4.3 rule 8 (guess there); our rule |
 | Up / Down | Move the selection; stop at the ends; the list scrolls by whole rows | menus-and-hotkeys "normal list rules" (guess) |
-| Return | Acts on the selected row and closes. A Return typed before its query's first snapshot lands waits for it. | F0041 |
+| Return | Acts on what is highlighted on screen at the key press (what you see is what you get). Only if NO snapshot exists yet for the current text does Return wait for that text's first snapshot, then open its top row. It never waits for history or remote providers. An empty first snapshot consumes the pending Return without opening anything. | lead rule; flows 30, 52–57; F0041 shows selection |
 | Esc | Closes with `.dismissed(.escape)`, typed text or not. A second Esc is not the bar's (it reaches the App's Exit command). | F0052 → F0053; docs/commands.md |
-| Tab | With a hint: enters Site Search; the trigger word becomes the chip. Without: does nothing (focus stays). | features-core §4.6 rule 15 |
+| Tab | With a hint: enters Site Search; the trigger word becomes the chip. Without: normal AppKit focus traversal; Shift+Tab also traverses normally. | features-core §4.6 rule 15 (hint); accessibility rule, flow 50 |
 | Space | After a site's exact name or keyword ("yt", "youtube"): enters Site Search; the hint then reads "Tab or Space". A prefix ("you") stays text. | F0040 shows "or Space"; exact-match rule guess |
 | Backspace on an empty scoped query | Leaves Site Search | features-core §4.6 rule 16 |
 | Pointer move over a row | Selects it (real moves only; rows sliding under a still pointer do not) | features-core §4.7 rule 17 (guess) |
 | Click a row / outside / (i) | Choose / close (`.clickOutside`) / `.showHelp` | outside click guess |
+| Cmd+I | Show command bar help while the input is focused; Tab is available for Site Search or normal focus traversal. | implementation; flow 49 |
 | Cmd / Shift / Option + Return | Reported in the intent's `modifiers`; no other behavior | Arc names `CommandBarSelectionOptions`, but no capture or string proves the keys |
+
+During IME composition, Return, Tab, Esc, Space, and arrows go to the input method. Return commits composition without choosing a result. Each present and dismiss unmarks composition and clears the field editor's own undo stack. Presentation before window attachment focuses the input when its view gets a window.
+
+Rows expose AX buttons with the title as their label, subtitle and accessory as their value, and a press action. Selection changes post `selectedChildrenChanged` and an announcement with the row label. The field's native placeholder matches the drawn placeholder. The (i) control is a labeled AX button and Cmd+I opens its help.
 
 The field editor has spelling, grammar, completion, substitutions, and data detection off: URLs must not be "corrected", and each check costs work per keystroke.
 
@@ -171,6 +176,7 @@ Profiling (`sample`) found three costs, now fixed: a forced panel layout on ever
 commandbar-render render (--state NAME | --scene FILE.json) --out FILE.png [--scale 1|2] [--size WxH] [--backdrop-color #RRGGBB]
     states: empty, typing-git, cmd-l, space-hint, site-chip, site-search, calculator, actions, scrolled
 commandbar-render compare --arc CAPTURE.png --ours RENDER.png --scene FILE.json --out DIR [--title TEXT]
+commandbar-render ax [--state NAME] # dump the rendered overlay AX tree
 commandbar-render flows       # keyboard and mouse flows
 commandbar-render check       # flows + a render of every state + the keystroke budget (tools/verify-all.sh)
 commandbar-render bench [--tabs 5000] [--history 100000] [--scale 2]
@@ -236,7 +242,7 @@ Other states: text selection fill 0.00 (F0048); selected input text 1.0 pt / 0.6
 
 ## 9. Flows (`commandbar-render flows`)
 
-Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 35/35 pass (5 consecutive runs). `check` adds a render of every state at 2x and the keystroke budget: 45/45.
+Real key events go through the window and the bar's field editor; mouse events go to the hit-tested views; the engine is the real `SuggestEngine` over the synthetic world. 68/68 pass, including 33 review regression checks. `check` adds a render of every state at 2x and the keystroke budget: 78/78.
 
 | # | Flow |
 |---|---|
@@ -262,6 +268,33 @@ Real key events go through the window and the bar's field editor; mouse events g
 | 30 | Return right after typing waits for that query |
 | 31–34 | Hover selects row 3; click row 3 → its intent; click outside → `.clickOutside`; click (i) → `.showHelp` |
 | 35 | Empty Cmd+T: row 1 selected, Return acts on it |
+| 36–44 | Japanese IME composition: zero queries while marked, one on unmark/commit; Return only commits; Tab/Esc/Space/arrows stay with the input method |
+| 45–51 | Rendered AX tree: button labels, values, selection, press action, native placeholder, help through AX/Cmd+I, Tab traversal, shortcut values |
+| 52–55 | Pending Return is cleared by a new query, present, dismiss/reopen, or an empty first snapshot |
+| 56–57 | Return opens the visible highlighted row while providers are pending, or the top row of the current text's first snapshot |
+| 58–59 | Boundary arrows preserve selection; Up at row zero does not set `userMovedSelection` |
+| 60–61 | Real favicon SQLite store: all same-origin waiters and rows update; FIFO miss eviction permits retry |
+| 62–63 | Preview rows without backing suggestions return nil safely, including Return |
+| 64–65 | Multiline Unicode paste is capped at 2,048 characters; further typing preserves visible/query equality |
+| 66–67 | Dismiss/reopen and present while open clear composition and undo |
+| 68 | Present before attachment focuses the field, selects Cmd+L's URL, and accepts replacement typing |
+
+### 9.1 Review findings
+
+| Finding | Fix | Flow result |
+|---|---|---|
+| 1. IME composition | Guard queries and command handling while marked; batch composition edits and submit once on commit. | PASS, 36–44 |
+| 2. Accessibility | AX row buttons with label/value/press, selection notifications and label announcements, native placeholder, labeled help with Cmd+I, normal Tab traversal without a hint. | PASS, 45–51; `commandbar-render ax` dumps the rendered tree |
+| 3. Pending Return lifetime | Clear on query/present/dismiss; bind to generation and text; consume only a current-text row or discard an empty first snapshot. | PASS, 52–55 |
+| 4. Return lead rule | Use the visible highlight immediately; defer only until the current text's first snapshot, never provider completion. | PASS, 30, 56–57 |
+| 5. Boundary arrows | Set `userMovedSelection` only when the index changes. | PASS, 58–59 |
+| 6. Favicons | Keep every waiter per origin; notify all with their own page URL; bound misses and images with one FIFO. | PASS, 60–61 |
+| 7. Selected suggestion | Check `suggestions.indices.contains` before indexing. | PASS, 62–63 |
+| 8. Paste and long input | Normalize CR/LF and cap at 2,048 characters in the editor's should-change path; query exactly the visible text. | PASS, 64–65 |
+| 9. Undo | Use a private editor undo manager; unmark and clear it on present/dismiss. | PASS, 66–67 |
+| 10. Delayed focus | Focus the field in `viewDidMoveToWindow` while presented, preserving Cmd+L selection. | PASS, 68 |
+
+The eight Arc comparisons in §8 were rerun after these fixes. All eight generated element tables match the saved pre-fix tables exactly. The §8 comparison tables remain unchanged, including the existing differences in §8.3. No visual tokens or committed screenshots changed.
 
 ## 10. What the App and the engine must provide
 

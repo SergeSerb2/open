@@ -29,6 +29,14 @@ func blocking<T: Sendable>(_ op: @escaping @MainActor () async -> T) -> T {
     return result!
 }
 
+@MainActor
+func blockingThrowing<T: Sendable>(_ op: @escaping @MainActor () async throws -> T) throws -> T {
+    let result: Result<T, Error> = blocking {
+        do { return .success(try await op()) } catch { return .failure(error) }
+    }
+    return try result.get()
+}
+
 /// Records every intent and presentation change.
 @MainActor
 final class IntentRecorder: CommandBarDelegate {
@@ -49,13 +57,14 @@ final class Stage {
     let controller: CommandBarController
     let recorder = IntentRecorder()
 
-    init(size: CGSize, scale: CGFloat, engine: SuggestEngine, backdrop: CommandBarBackdrop) {
+    init(size: CGSize, scale: CGFloat, engine: SuggestEngine, backdrop: CommandBarBackdrop, beforeAttach: ((CommandBarController) -> Void)? = nil) {
         root = StageRoot(frame: CGRect(origin: .zero, size: size))
         root.backdrop = backdrop
         controller = CommandBarController(engine: engine)
         controller.delegate = recorder
         controller.view.frame = root.bounds
         controller.view.autoresizingMask = [.width, .height]
+        beforeAttach?(controller)
         root.addSubview(controller.view)
         window = OffscreenRenderer.host(root, scale: scale)
         controller.backdrop = backdrop
@@ -68,7 +77,7 @@ final class Stage {
         OffscreenRenderer.settle(root)
     }
 
-    var fieldEditor: NSTextView? { controller.view.window?.fieldEditor(false, for: nil) as? NSTextView ?? (window.firstResponder as? NSTextView) }
+    var fieldEditor: NSTextView? { window.firstResponder as? NSTextView }
 
     /// Types `text` through the field editor (the same path as the keyboard: NSTextView
     /// insertText → NSTextField delegate → controller).
@@ -89,7 +98,7 @@ final class Stage {
     }
 
     enum Key {
-        case up, down, returnKey, escape, tab, backspace, space
+        case up, down, returnKey, escape, tab, backspace, space, info
         var code: UInt16 {
             switch self {
             case .up: 126
@@ -99,6 +108,7 @@ final class Stage {
             case .tab: 48
             case .backspace: 51
             case .space: 49
+            case .info: 34
             }
         }
         var characters: String {
@@ -110,6 +120,7 @@ final class Stage {
             case .tab: "\t"
             case .backspace: "\u{7F}"
             case .space: " "
+            case .info: "i"
             }
         }
     }

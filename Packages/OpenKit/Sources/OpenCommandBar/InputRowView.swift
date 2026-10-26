@@ -24,6 +24,17 @@ final class CommandBarTextFieldCell: NSTextFieldCell {
 
 /// The input: 18 Medium, no bezel, no focus ring (interaction-states §9.2).
 final class CommandBarTextField: NSTextField {
+    private var drawnPlaceholder: String?
+    override var placeholderString: String? {
+        get { drawnPlaceholder }
+        // InputRowView paints this placeholder. Keep the field's public value for AX
+        // without enabling a second placeholder in NSTextFieldCell/the field editor.
+        set { drawnPlaceholder = newValue }
+    }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .textField }
+    override func accessibilityLabel() -> String? { placeholderString }
+    override func accessibilityPlaceholderValue() -> String? { placeholderString }
     override class var cellClass: AnyClass? {
         get { CommandBarTextFieldCell.self }
         set {}
@@ -34,6 +45,78 @@ final class CommandBarTextField: NSTextField {
 /// TextKit 1: its selection takes `selectedTextAttributes` whenever its window is key.
 final class CommandBarFieldEditor: NSTextView {
     override var acceptsFirstResponder: Bool { true }
+    private let editingUndoManager = UndoManager()
+    override var undoManager: UndoManager? { editingUndoManager }
+    private var compositionDepth = 0
+    var isUpdatingComposition: Bool { compositionDepth > 0 }
+    var onCompositionEnded: (() -> Void)?
+    var onHelp: (() -> Bool)?
+
+    static func normalized(_ text: String) -> String {
+        String(text.replacingOccurrences(of: "\r\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ").prefix(2_048))
+    }
+
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        guard let replacementString, NSMaxRange(affectedCharRange) <= (string as NSString).length else {
+            return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        }
+        let proposed = (string as NSString).replacingCharacters(in: affectedCharRange, with: replacementString)
+        let clean = Self.normalized(proposed)
+        guard clean != proposed else { return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString) }
+        // Re-enter the normal editing path with the bounded single line. The field and
+        // the query then receive the same text, including paste and multi-character input.
+        insertText(clean, replacementRange: NSRange(location: 0, length: (string as NSString).length))
+        return false
+    }
+
+    override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+        compositionDepth += 1
+        super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+        compositionDepth -= 1
+    }
+
+    override func unmarkText() {
+        let wasMarked = hasMarkedText()
+        compositionDepth += 1
+        super.unmarkText()
+        compositionDepth -= 1
+        if wasMarked, compositionDepth == 0 { onCompositionEnded?() }
+    }
+
+    override func insertText(_ insertString: Any, replacementRange: NSRange) {
+        let wasMarked = hasMarkedText()
+        if wasMarked { compositionDepth += 1 }
+        super.insertText(insertString, replacementRange: replacementRange)
+        if wasMarked {
+            compositionDepth -= 1
+            if compositionDepth == 0 { onCompositionEnded?() }
+        }
+    }
+
+    func resetSession() {
+        compositionDepth += 1
+        unmarkText()
+        undoManager?.removeAllActions()
+        compositionDepth -= 1
+    }
+
+    private func handleHelpKey(_ event: NSEvent) -> Bool {
+        if !hasMarkedText(), !isUpdatingComposition,
+           event.modifierFlags.intersection([.command, .option, .shift, .control]) == .command,
+           event.charactersIgnoringModifiers?.lowercased() == "i", onHelp?() == true { return true }
+        return false
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleHelpKey(event) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if !handleHelpKey(event) { super.keyDown(with: event) }
+    }
 }
 
 /// The input row: leading icon, optional Site Search chip, text field, and the
@@ -50,6 +133,7 @@ final class InputRowView: NSView {
             if input.chip != oldValue.chip { chipView.needsDisplay = true }
             if input.trailing != oldValue.trailing { hintView.needsDisplay = true }
             if input.placeholder != oldValue.placeholder { placeholderView.needsDisplay = true }
+            updatePlaceholder()
             needsLayout = true
         }
     }
@@ -104,6 +188,7 @@ final class InputRowView: NSView {
         field.lineBreakMode = .byClipping
         field.allowsEditingTextAttributes = false
         field.importsGraphics = false
+        updatePlaceholder()
         editor.isFieldEditor = true
         editor.isRichText = false
         editor.importsGraphics = false
@@ -129,6 +214,16 @@ final class InputRowView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Command Bar Input" }
+    override func accessibilityChildren() -> [Any]? {
+        input.trailing == .info ? [field, infoButton] : [field]
+    }
+
+    private func updatePlaceholder() {
+        field.placeholderString = input.placeholder
+    }
 
     /// Caret: the system accent (#007AFF, F0063). Selection: the theme's `dark.subtitle` (F0048).
     private func applyEditorColors() {
@@ -140,8 +235,9 @@ final class InputRowView: NSView {
 
     /// Replaces the text (Site Search clears the trigger word); the caret goes to the end.
     func setText(_ text: String) {
-        field.stringValue = text
-        field.currentEditor()?.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+        let clean = CommandBarFieldEditor.normalized(text)
+        field.stringValue = clean
+        field.currentEditor()?.selectedRange = NSRange(location: (clean as NSString).length, length: 0)
         textDidChange()
     }
 
@@ -306,6 +402,15 @@ final class InfoButton: NSView {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func accessibilityLabel() -> String? { "Command Bar Help" }
+    override func accessibilityHelp() -> String? { "Show command bar tips (Command-I)" }
+    override func accessibilityPerformPress() -> Bool {
+        guard !isHidden, let action else { return false }
+        action()
+        return true
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }

@@ -17,28 +17,34 @@ public final class FaviconStoreSource: CommandBarFaviconSource {
     private let store: FaviconStore
     private var images: [String: NSImage] = [:]
     private var misses: Set<String> = []
-    private var loading: Set<String> = []
+    private var loading: [String: UUID] = [:]
+    private var waiters: [String: [(URL, @MainActor (URL) -> Void)]] = [:]
     private var order: [String] = []
-    public var capacity = 512
+    public var capacity = 512 { didSet { trim() } }
 
     public init(store: FaviconStore) { self.store = store }
 
     public func favicon(for pageURL: URL, loaded: @escaping @MainActor (URL) -> Void) -> NSImage? {
         let key = Self.key(pageURL)
         if let image = images[key] { return image }
-        guard !misses.contains(key), !loading.contains(key) else { return nil }
-        loading.insert(key)
+        guard !misses.contains(key) else { return nil }
+        waiters[key, default: []].append((pageURL, loaded))
+        guard loading[key] == nil else { return nil }
+        let token = UUID()
+        loading[key] = token
         let store = store
         Task { @MainActor [weak self] in
             let icon = await store.icon(for: pageURL)
-            guard let self else { return }
-            self.loading.remove(key)
+            guard let self, self.loading[key] == token else { return }
+            self.loading[key] = nil
             guard let data = icon?.png64 ?? icon?.png32, let image = NSImage(data: data) else {
+                self.waiters[key] = nil
+                if self.images[key] == nil, !self.misses.contains(key) { self.order.append(key) }
                 self.misses.insert(key)
+                self.trim()
                 return
             }
             self.insert(image, for: key)
-            loaded(pageURL)
         }
         return nil
     }
@@ -47,13 +53,33 @@ public final class FaviconStoreSource: CommandBarFaviconSource {
     public func insert(_ image: NSImage, for pageURL: URL) { insert(image, for: Self.key(pageURL)) }
 
     private func insert(_ image: NSImage, for key: String) {
-        if images[key] == nil { order.append(key) }
+        if images[key] == nil, !misses.contains(key) { order.append(key) }
         images[key] = image
         misses.remove(key)
-        while order.count > capacity { images[order.removeFirst()] = nil }
+        loading[key] = nil
+        let callbacks = waiters.removeValue(forKey: key) ?? []
+        trim()
+        for (url, loaded) in callbacks { loaded(url) }
     }
 
-    static func key(_ url: URL) -> String { "\(url.scheme ?? "https")://\(url.host() ?? url.absoluteString)" }
+    private func trim() {
+        // Successful images and misses share one bounded FIFO of origins.
+        while order.count > max(0, capacity) {
+            let key = order.removeFirst()
+            images[key] = nil
+            misses.remove(key)
+        }
+    }
+
+    static func key(_ url: URL) -> String {
+        guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: true) else { return url.absoluteString }
+        parts.scheme = parts.scheme?.lowercased()
+        parts.host = parts.host?.lowercased()
+        parts.user = nil; parts.password = nil
+        if (parts.scheme == "https" && parts.port == 443) || (parts.scheme == "http" && parts.port == 80) { parts.port = nil }
+        parts.path = ""; parts.query = nil; parts.fragment = nil
+        return parts.string ?? url.absoluteString
+    }
 }
 
 /// A fixed set of icons, keyed by host. Used by renders and checks.

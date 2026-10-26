@@ -36,7 +36,10 @@ public final class CommandBarController: NSObject {
     public private(set) var rows: [CommandBarRow] = []
     public private(set) var suggestions: [Suggestion] = []
     public var selectedIndex: Int? { panel.results.selectedIndex }
-    public var selectedSuggestion: Suggestion? { selectedIndex.map { suggestions[$0] } }
+    public var selectedSuggestion: Suggestion? {
+        guard let i = selectedIndex, suggestions.indices.contains(i) else { return nil }
+        return suggestions[i]
+    }
     /// True once the user moved the selection in this query.
     public private(set) var userMovedSelection = false
     /// Sequence of the snapshot last applied, and its query.
@@ -47,6 +50,8 @@ public final class CommandBarController: NSObject {
 
     /// Called after each snapshot is applied to the views (diagnostics and checks).
     public var onSnapshotApplied: ((SuggestionSnapshot) -> Void)?
+    /// Called when a query is submitted (diagnostics and end-to-end flows).
+    public var onQueryStarted: ((String) -> Void)?
 
     private var panel: PanelView { view.panel }
     private var streamTask: Task<Void, Never>?
@@ -55,7 +60,9 @@ public final class CommandBarController: NSObject {
     /// The text `siteHint` was computed for.
     private var hintText = ""
     private var hintAllowsSpace = false
-    private var pendingReturn: CommandBarModifiers?
+    private var pendingReturn: (generation: Int, text: String, modifiers: CommandBarModifiers)?
+    private var queriedText: String?
+    private var selectAllOnFocus = false
 
     public init(engine: SuggestEngine) {
         self.engine = engine
@@ -65,6 +72,16 @@ public final class CommandBarController: NSObject {
         view.onClickOutside = { [weak self] in self?.dismiss(reason: .clickOutside) }
         let field = panel.input.field
         field.delegate = self
+        panel.input.editor.onCompositionEnded = { [weak self] in
+            self?.queriedText = nil
+            self?.textChanged()
+        }
+        panel.input.editor.onHelp = { [weak self] in
+            guard let self, self.isPresented else { return false }
+            self.delegate?.commandBar(self, perform: .showHelp)
+            return true
+        }
+        view.onMoveToWindow = { [weak self] in self?.focusInput() }
         panel.input.infoButton.action = { [weak self] in
             guard let self else { return }
             self.delegate?.commandBar(self, perform: .showHelp)
@@ -78,33 +95,31 @@ public final class CommandBarController: NSObject {
     /// Opens the bar (or switches it to another mode while open).
     public func present(_ request: CommandBarRequest, animated: Bool = true) {
         let wasPresented = isPresented
+        pendingReturn = nil
+        panel.input.editor.resetSession()
         self.request = request
         siteScope = nil
         engine.prewarm()
         let field = panel.input.field
         let initial = request.mode == .editCurrentURL ? (request.currentTabURL?.absoluteString ?? "") : ""
-        field.stringValue = initial
+        field.stringValue = CommandBarFieldEditor.normalized(initial)
         panel.input.textDidChange()
         isPresented = true
         view.isActive = true
         view.isHidden = false
         applyBackdrop()
-        runQuery(initial)
+        selectAllOnFocus = request.mode == .editCurrentURL
+        runQuery(text)
         view.layoutSubtreeIfNeeded()
-        if let window = view.window {
-            window.makeFirstResponder(field)
-            // Cmd+L: the whole URL is selected, so typing replaces it (F0048).
-            if let editor = field.currentEditor() {
-                editor.selectedRange = request.mode == .editCurrentURL ? NSRange(location: 0, length: (initial as NSString).length)
-                                                                       : NSRange(location: (initial as NSString).length, length: 0)
-            }
-        }
+        focusInput()
         if !wasPresented { view.container.animateIn(animated: animated) }
         delegate?.commandBar(self, didChangePresentation: true, mode: request.mode)
     }
 
     /// Shows fixed content without a query: renders, design review, and docs.
     public func presentPreview(_ preview: CommandBarPreview) {
+        pendingReturn = nil
+        panel.input.editor.resetSession()
         streamTask?.cancel()
         generation += 1
         request = CommandBarRequest(mode: preview.mode)
@@ -113,7 +128,7 @@ public final class CommandBarController: NSObject {
         view.isHidden = false
         applyBackdrop()
         let field = panel.input.field
-        field.stringValue = preview.text
+        field.stringValue = CommandBarFieldEditor.normalized(preview.text)
         panel.input.textDidChange()
         suggestions = []
         rows = preview.rows
@@ -122,19 +137,19 @@ public final class CommandBarController: NSObject {
         panel.results.setRows(preview.rows, selected: preview.selectedIndex)
         view.visibleRowCount = min(preview.rows.count, CommandBarMetrics.maxVisibleRows)
         panel.showsSeparator = !preview.rows.isEmpty
-        appliedQuery = preview.text
+        appliedQuery = text
+        queriedText = nil
         appliedSequence = 0
         isSnapshotFinal = true
         view.layoutSubtreeIfNeeded()
-        if let window = view.window {
-            window.makeFirstResponder(field)
-            let length = (preview.text as NSString).length
-            field.currentEditor()?.selectedRange = preview.selectAllText ? NSRange(location: 0, length: length) : NSRange(location: length, length: 0)
-        }
+        selectAllOnFocus = preview.selectAllText
+        focusInput()
         view.container.animateIn(animated: false)
     }
 
     public func dismiss(reason: CommandBarDismissReason, animated: Bool = true) {
+        pendingReturn = nil
+        panel.input.editor.resetSession()
         guard isPresented else { return }
         let mode = request?.mode ?? .newTab
         isPresented = false
@@ -150,6 +165,16 @@ public final class CommandBarController: NSObject {
             self.view.isHidden = true
         }
         delegate?.commandBar(self, didChangePresentation: false, mode: mode)
+    }
+
+    private func focusInput() {
+        guard isPresented, let window = view.window else { return }
+        let field = panel.input.field
+        window.makeFirstResponder(field)
+        // Cmd+L selects the whole URL, including when presented before attachment.
+        let length = (text as NSString).length
+        field.currentEditor()?.selectedRange = selectAllOnFocus ? NSRange(location: 0, length: length) : NSRange(location: length, length: 0)
+        panel.input.editor.undoManager?.removeAllActions()
     }
 
     private func applyBackdrop() {
@@ -174,14 +199,18 @@ public final class CommandBarController: NSObject {
     /// Text changed: a new query. Its first snapshot is buffered when `query` returns and
     /// is applied on the next main-actor turn, before the frame is drawn.
     func runQuery(_ text: String) {
+        pendingReturn = nil
+        guard !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
         generation += 1
         let gen = generation
         userMovedSelection = false
         appliedSequence = -1
         isSnapshotFinal = false
+        queriedText = text
         updateSiteHint(text)
         streamTask?.cancel()
         let stream = engine.query(text, context: context())
+        onQueryStarted?(text)
         streamTask = Task { @MainActor [weak self] in
             for await snapshot in stream {
                 guard let self, self.generation == gen, self.isPresented else { return }
@@ -191,6 +220,8 @@ public final class CommandBarController: NSObject {
     }
 
     private func apply(_ snapshot: SuggestionSnapshot) {
+        guard snapshot.query == text, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
+        let appliedGeneration = generation
         let r = request
         let visible = snapshot.suggestions.filter { $0.kind != .siteSearchHint }
         let newRows = visible.map {
@@ -219,9 +250,14 @@ public final class CommandBarController: NSObject {
         appliedQuery = snapshot.query
         isSnapshotFinal = snapshot.isFinal
         onSnapshotApplied?(snapshot)
-        if let modifiers = pendingReturn {
+        guard generation == appliedGeneration, isPresented, snapshot.query == text else { return }
+        if let pending = pendingReturn, pending.generation == generation, pending.text == text,
+           snapshot.query == text, let i = selectedIndex {
             pendingReturn = nil
-            if let i = selectedIndex { choose(i, modifiers: modifiers) }
+            choose(i, modifiers: pending.modifiers)
+        } else if firstOfQuery {
+            // An empty first snapshot is still a snapshot: Return never waits for providers.
+            pendingReturn = nil
         }
     }
 
@@ -281,7 +317,7 @@ public final class CommandBarController: NSObject {
         siteScope = site
         panel.input.setText(remainder)
         panel.input.needsLayout = true
-        runQuery(remainder)
+        runQuery(text)
     }
 
     /// Leaves Site Search (Backspace on an empty query, features-core §4.6 rule 16).
@@ -298,6 +334,7 @@ public final class CommandBarController: NSObject {
         guard !rows.isEmpty else { return }
         let current = selectedIndex ?? (delta > 0 ? -1 : rows.count)
         let next = min(max(0, current + delta), rows.count - 1)
+        guard next != selectedIndex else { return }
         userMovedSelection = true
         panel.results.select(next)
     }
@@ -339,6 +376,7 @@ public final class CommandBarController: NSObject {
 
     /// Handles a text-system command from the field editor. Returns true when consumed.
     func handle(_ selector: Selector, flags: NSEvent.ModifierFlags) -> Bool {
+        guard isPresented, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return false }
         switch selector {
         case #selector(NSResponder.moveUp(_:)):
             moveSelection(by: -1); return true
@@ -351,10 +389,11 @@ public final class CommandBarController: NSObject {
         case #selector(NSResponder.insertTab(_:)):
             if let site = siteHint {
                 enterSiteSearch(site)
+                return true
             }
-            return true // Tab never leaves the field.
+            return false // Without a Site Search hint, use normal AppKit focus traversal.
         case #selector(NSResponder.insertBacktab(_:)):
-            return true
+            return false
         case #selector(NSResponder.deleteBackward(_:)):
             if siteScope != nil, text.isEmpty { exitSiteSearch(); return true }
             return false
@@ -364,9 +403,11 @@ public final class CommandBarController: NSObject {
     }
 
     private func returnPressed(_ modifiers: CommandBarModifiers) {
-        // A key typed just before Return may not have its snapshot applied yet: act when it lands.
+        // Return acts on what is highlighted on screen at the key press (WYSIWYG).
+        // Only when this text has NO snapshot yet does it wait for that text's first
+        // snapshot and open its top row. It never waits for history or remote providers.
         if appliedQuery != text || appliedSequence < 0 {
-            pendingReturn = modifiers
+            pendingReturn = (generation, text, modifiers)
             return
         }
         if let i = selectedIndex { choose(i, modifiers: modifiers) }
@@ -374,7 +415,9 @@ public final class CommandBarController: NSObject {
 
     fileprivate func textChanged() {
         panel.input.textDidChange()
+        guard isPresented, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
         let t = text
+        guard queriedText != t else { return } // Commit can notify through both AppKit and unmarkText.
         // Space right after a site name or keyword enters Site Search ("youtube" + Space).
         if siteScope == nil, let site = siteHint, hintAllowsSpace, t == hintText + " " {
             enterSiteSearch(site)
