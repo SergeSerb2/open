@@ -40,7 +40,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var newTabMode = false
   private var enteredWindowFullscreenForPage = false
   private(set) var auxiliaryPages: [AuxiliaryPage] = []
-  private var popupPanel: NSPanel?
+  private(set) var popupPanel: NSPanel?
   private lazy var addressField = makeAddressField()
   private lazy var extensionBar = makeExtensionBar()
   private lazy var findField = makeFindField()
@@ -698,6 +698,19 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// NSApplication.sendEvent) still get the reserved app shortcuts.
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
     MainMenu.performReservedShortcut(event)
+  }
+
+  /// Keys an action popup's page did not consume (the engine forwards them,
+  /// fork patch P2). Cmd+W closes the popup, not the tab (extensions plan
+  /// §3.7 F2).
+  func webContent(_ webContent: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
+    guard let browser = focusedBrowser, webContent === browser.extensionPopup else { return false }
+    record("popupKey", webContent, ["key": event.charactersIgnoringModifiers ?? "", "command": event.modifierFlags.contains(.command)])
+    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers == "w" {
+      browser.closeExtensionPopup()
+      return true
+    }
+    return false
   }
 
   func webContentDidRequestClose(_ webContent: OEWebContent) {

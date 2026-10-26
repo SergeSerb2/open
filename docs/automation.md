@@ -70,7 +70,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `click` | `tab`, `selector` or `text` | Click an element with DevTools input events (a real user gesture inside the page) |
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
 | `type` | `tab`, `text` | Insert text in the focused page field |
-| `key` | `key`, `modifiers`, `route` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `text` sends plain characters to the first responder. |
+| `key` | `key`, `modifiers`, `route`, `window` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `window: "popup"` targets the action popup's panel instead. `text` sends plain characters to the first responder. |
 | `mouse` | `window`, `x`, `y`; `action=move` or `action=hover`; or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point (tracking areas follow the hardware pointer) and returns the owners it found |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
