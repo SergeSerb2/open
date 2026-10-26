@@ -1,6 +1,6 @@
 
 NAME                   RESULT SECONDS
-build                  PASS   37
-sitecontrol-render     FAIL   28
+build                  PASS   34
+sitecontrol-render     FAIL   26
 
-Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-102612.Ixucqx/
+Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-103619.Xnhyq0/
