@@ -61,7 +61,6 @@ final class MenuCommandTarget: NSObject, NSMenuItemValidation {
         guard let info = menuItem.representedObject as? [String: String],
               let id = info["command"] else { return true }
         let key = enabledKeys[ObjectIdentifier(menuItem).debugDescription] ?? CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always
-        if key == EnabledKey.always { return true }
         return dispatcher?.isCommandEnabled(id, enabledKey: key) ?? true
     }
 }

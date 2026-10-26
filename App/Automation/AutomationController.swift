@@ -5,6 +5,7 @@
   import OpenWeb
   import OpenFeatures
   import OpenSidebar
+  import OpenCommands
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -62,6 +63,28 @@
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
           "root": app.directories.root.path,
         ]
+      case "menu-state":
+        NSApp.mainMenu?.update()
+        return menuRows(NSApp.mainMenu)
+      case "menu-perform":
+        guard let id = a["id"] as? String, let (menu, index) = findMenuItem(id, in: NSApp.mainMenu) else { throw Failure(message: "unknown menu item") }
+        let item = menu.item(at: index)!
+        guard menuEnabled(item) else { throw Failure(message: "disabled menu item") }
+        menu.performActionForItem(at: index); return true
+      case "reload-keybindings": app.prepareCommandServices(); app.reloadKeyBindings(); return true
+      case "hotkey-state":
+        return ["prepared": app.commandServicesPrepared, "attempts": app.hotkeyAttempts, "registered": app.hotkeyService?.isRegistered ?? false,
+          "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
+      case "settings-state":
+        return ["settings": app.settingsPresenter.settings?.window?.windowNumber ?? 0,
+          "library": app.settingsPresenter.library?.window?.windowNumber ?? 0,
+          "hotkey": app.settingsPresenter.hotkeyToggle?.state == .on, "external": app.settingsPresenter.externalToggle?.state == .on] as [String: Any]
+      case "settings-toggle":
+        let presenter = app.settingsPresenter
+        let button = a["name"] as? String == "hotkey" ? presenter.hotkeyToggle : presenter.externalToggle
+        guard let button else { throw Failure(message: "settings not open") }
+        button.performClick(nil); return true
+      case "pasteboard": return NSPasteboard.general.string(forType: .string) ?? ""
       case "shell-windows":
         return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
       case "window-reopen":
@@ -79,6 +102,18 @@
       switch cmd {
 
       // Model-level tabs (the sidebar).
+      case "save-page-state": return ["requests": w.savePageRequestCount, "visible": w.pendingSavePanel?.isVisible == true, "pending": w.pendingSavePanel != nil, "number": w.pendingSavePanel?.windowNumber ?? 0] as [String: Any]
+      case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
+      case "suggest-remote":
+        guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }
+        var settings = profile.settings; settings.searchSuggestEnabled = a["enabled"] as? Bool ?? false
+        return app.model.updateProfileSettings(id: profile.id, settings: settings)
+      case "sidebar-duplicate":
+        guard let id = (a["id"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }) else { throw Failure(message: "missing id") }
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .duplicate(nodeID: id)) == true
+      case "sidebar-tree":
+        guard let space = w.focusedSpace else { throw Failure(message: "no space") }
+        return ["pinned": space.pinned.map(describeNode), "today": space.today.map(describeNode)]
       case "tabs":
         return w.orderedTabs.map { describe($0, in: w) }
       case "tab-state":
@@ -228,7 +263,7 @@
         }
         return true
       case "key":
-        return try sendKey(a, w)
+        return try await sendKey(a, w)
       case "events":
         return w.drainEvents()
       case "find":
@@ -603,8 +638,37 @@
     /// sends it straight to the window's first responder (the page view when
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
-    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Any {
-      guard let target = w.window else { throw Failure(message: "no window") }
+    private func describeNode(_ node: SidebarNode) -> [String: Any] {
+      switch node {
+      case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
+      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "children": folder.children.map(describeNode)]
+      case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
+      }
+    }
+    private func menuEnabled(_ item: NSMenuItem) -> Bool {
+      (item.target as? NSMenuItemValidation)?.validateMenuItem(item) ?? item.isEnabled
+    }
+    private func menuRows(_ menu: NSMenu?) -> [[String: Any]] {
+      (menu?.items ?? []).flatMap { item -> [[String: Any]] in
+        if let submenu = item.submenu { return menuRows(submenu) }
+        guard !item.isSeparatorItem else { return [] }
+        return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
+          "enabled": menuEnabled(item), "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+      }
+    }
+    private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
+      guard let menu else { return nil }
+      for (index, item) in menu.items.enumerated() {
+        if item.identifier?.rawValue == id { return (menu, index) }
+        if let found = findMenuItem(id, in: item.submenu) { return found }
+      }
+      return nil
+    }
+
+    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+      guard let target = (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window else { throw Failure(message: "no window") }
+      target.makeKeyAndOrderFront(nil); NSApp.activate()
+      for _ in 0..<20 { if NSApp.isActive { break }; try? await Task.sleep(for: .milliseconds(10)) }
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).
@@ -623,7 +687,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
-        "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
+        "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),

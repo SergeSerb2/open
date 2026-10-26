@@ -4,6 +4,7 @@ import OpenModel
 import OpenStore
 import OpenFeatures
 import QuartzCore
+import OpenCommands
 
 /// Owns the model, its stores, and the windows.
 @MainActor
@@ -15,9 +16,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
   private(set) var directories: ProfileDirectories!
   private(set) var hostFactories: [WindowID: EngineWebContentHostFactory] = [:]
   private(set) var windowControllers: [BrowserWindowController] = []
-  let undoManager = UndoManager()
+  // CEF pumps AppKit without a normal per-event undo group boundary. The
+  // model opens one group per command; multi-operation UI actions may nest.
+  let undoManager: UndoManager = { let manager = UndoManager(); manager.groupsByEvent = false; return manager }()
   private(set) var engineReady = false
   private(set) var terminationRequested = false
+  lazy var stores = AppStores(app: self)
+  lazy var settingsPresenter = SettingsPlaceholder(app: self)
+  var keyBindings = KeyBindingStore.empty
+  let fallbackKeyboard = KeyboardRouter()
+  var commandServicesPrepared = false
+  var hotkeyService: GlobalHotkeyService?
+  var hotkeyError: String?
+  var hotkeyAttempts = 0
+  var menuRebuildTask: Task<Void, Never>?
+  var afterPaintTask: Task<Void, Never>?
+  var littleOpenStub: NSWindowController?
   private var activeWindowID: WindowID?
   private(set) var startupEvidence: [String: Any] = [:]
   #if OPEN_AUTOMATION
@@ -48,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     terminationRequested = true
+    hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
     saveState()
     if !engineReady { CFRunLoopStop(CFRunLoopGetMain()) }
     return .terminateNow
@@ -96,7 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
         model.selectNode(windowID: state.id, spaceID: space.id, nodeID: tab.id)
       }
     }
-    model.addObserver { [weak self] _ in self?.scheduleSave() }
+    model.addObserver { [weak self] _ in self?.scheduleSave(); self?.scheduleMenuRebuild() }
     self.model = model
     self.directories = directories
     LaunchTiming.shared.mark("modelLoaded")
@@ -169,6 +184,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func didFocusWindow(_ id: WindowID) {
     activeWindowID = id
+    for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
     MainMenu.targetWindowCommands(hostFactories[id])
   }
 
@@ -213,6 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     engineReady = true
     showWindowsIfNeeded()
     for factory in hostFactories.values { factory.engineDidBecomeReady() }
+    scheduleMenuRebuild()
     #if OPEN_AUTOMATION
       let socket =
         options.automationSocket
@@ -252,5 +269,107 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func browserContext(_ context: OEBrowserContext, downloadDidUpdate download: OEDownload) {
     downloadOwner(download)?.browserContext(context, downloadDidUpdate: download)
+  }
+}
+
+extension AppDelegate: CommandDispatcher {
+  func factory(forKeyWindow window: NSWindow) -> EngineWebContentHostFactory? {
+    hostFactories.values.first { $0.ownsKeyWindow(window) }
+  }
+  func scheduleMenuRebuild() {
+    guard menuRebuildTask == nil else { return }
+    menuRebuildTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .milliseconds(30))
+      guard let self, !Task.isCancelled else { return }
+      self.menuRebuildTask = nil; NSApp.mainMenu = MainMenu.build()
+    }
+  }
+  /// No suggestion index, history, hotkey or settings work before first paint.
+  func prepareCommandsAfterPaint(_ page: OEWebContent) {
+    guard !commandServicesPrepared, afterPaintTask == nil else { return }
+    afterPaintTask = Task { @MainActor [weak self, weak page] in
+      defer { self?.afterPaintTask = nil }
+      for _ in 0..<40 {
+        guard let self, let page, !self.terminationRequested, !Task.isCancelled else { return }
+        let painted = (try? await page.evaluateJavaScript("performance.getEntriesByType('paint').length > 0")) as? Bool
+        if painted == true {
+          self.prepareCommandServices()
+          if let id = self.frontWindowController?.windowID, let profile = self.hostFactories[id]?.focusedProfile { self.stores.prewarm(profileID: profile.id) }
+          return
+        }
+        try? await Task.sleep(for: .milliseconds(50))
+      }
+    }
+  }
+  func prepareCommandServices() {
+    guard !commandServicesPrepared else { return }
+    commandServicesPrepared = true; reloadKeyBindings()
+  }
+  func reloadKeyBindings() {
+    let file = options.userDataDirectory.appendingPathComponent("State/keybindings.json")
+    do {
+      let loaded = FileManager.default.fileExists(atPath: file.path) ? try KeyBindingStore.load(from: file) : .empty
+      guard loaded.version == 1, loaded.unknownCommandIDs.isEmpty,
+        loaded.bindings.keys.allSatisfy({ CommandRegistry.byID[$0]?.isCustomizable == true }),
+        ConflictChecker.unexpected(ConflictChecker.check(overrides: loaded)).isEmpty else {
+        throw CocoaError(.fileReadCorruptFile)
+      }
+      keyBindings = loaded
+    } catch {
+      keyBindings = .empty; Self.commandLog("Key bindings could not be loaded: \(error)")
+    }
+    for controller in windowControllers { controller.keyBindingOverrides = keyBindings }
+    updateLittleOpenHotkey(); scheduleMenuRebuild()
+  }
+  func updateLittleOpenHotkey() {
+    hotkeyService?.unregister(); hotkeyError = nil
+    guard UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true,
+      let command = CommandRegistry.byID["little-open-global"],
+      let shortcut = keyBindings.effectiveShortcuts(for: command).first else { return }
+    if hotkeyService == nil { hotkeyService = GlobalHotkeyService() }
+    hotkeyAttempts += 1
+    do { try hotkeyService?.register(shortcut: shortcut) { [weak self] in Task { @MainActor in self?.showLittleOpenStub() } } }
+    catch { hotkeyError = String(describing: error); Self.commandLog("Little Open hotkey registration failed: \(error)") }
+  }
+  static func commandLog(_ message: String) { FileHandle.standardError.write(Data("Open: \(message)\n".utf8)) }
+  func showLittleOpenStub() {
+    if littleOpenStub == nil {
+      let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 540), styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+      window.title = "Little Open"; window.isReleasedWhenClosed = false
+      let label = NSTextField(labelWithString: "Little Open sessions arrive in the routing step.")
+      label.frame = NSRect(x: 28, y: 260, width: 650, height: 24); window.contentView?.addSubview(label)
+      window.center(); littleOpenStub = NSWindowController(window: window)
+    }
+    littleOpenStub?.showWindow(nil); littleOpenStub?.window?.makeKeyAndOrderFront(nil); NSApp.activate()
+    scheduleMenuRebuild()
+  }
+  func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
+    return ["new-window", "blank-window", "new-tab", "settings", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
+  }
+  func performCommand(_ id: String, payload: String?) { performCommand(id) }
+  func performCommand(_ id: String) {
+    switch id {
+    case "new-window", "blank-window": makeWindow()
+    case "new-tab":
+      let controller = frontWindowController ?? makeWindow()
+      controller.flatMap { hostFactories[$0.windowID] }?.newTab(nil)
+    case "settings": settingsPresenter.show()
+    case "view-library", "view-downloads", "view-boosts": settingsPresenter.showLibrary()
+    case "archive-tab", "close-window": NSApp.keyWindow?.performClose(nil)
+    case "new-little-open-window", "little-open-global": showLittleOpenStub()
+    case "quit-open": NSApp.terminate(nil)
+    case "about-open": NSApp.orderFrontStandardAboutPanel(nil)
+    case "hide-open": NSApp.hide(nil)
+    case "hide-others": NSApp.hideOtherApplications(nil)
+    case "show-all": NSApp.unhideAllApplications(nil)
+    case "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team":
+      let controller = frontWindowController ?? makeWindow()
+      _ = controller.flatMap { hostFactories[$0.windowID] }?.openNewTab(url: AppCommand.helpURL, background: false)
+    default:
+      #if DEBUG
+      if CommandRegistry.byID[id]?.isReserved != true { Self.commandLog("Unhandled app command: \(id)") }
+      #endif
+    }
   }
 }

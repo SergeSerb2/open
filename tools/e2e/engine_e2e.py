@@ -634,6 +634,8 @@ def shell_checks(app_factory, results, tmp):
         n0 = len(app.call("tabs"))
         route = {}
         route["cmd_l_window"] = app.call("key", key="l", modifiers=["cmd"], route="window")["firstResponder"]
+        app.call("key", key="escape")
+        time.sleep(.3)
         app.call("focus", tab=c)
         time.sleep(0.2)
         route["cmd_t_app"] = app.call("key", key="t", modifiers=["cmd"])["firstResponder"]
@@ -1333,12 +1335,162 @@ def measure(app_factory, results, tmp):
     results["ok"] = True
 
 
+def commandbar_checks(factory, results, tmp, config):
+    import http.server
+    import threading
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = ("<!doctype html><title>Shell C %s</title><body style='background:#302d4a;color:white'>Shell C %s"
+                    "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);e.preventDefault()})</script>" % (self.path, self.path)).encode()
+            self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    app = factory(urls=(origin + '/start',), fresh=True)
+    state = lambda: app.call('commandbar-state')
+    def bar(key, route='app'):
+        app.call('key', key=key, modifiers=['cmd'], route=route)
+        assert wait_until(lambda: state().get('presented'), timeout=3, step=.05), state()
+        return state()
+    def type_query(text):
+        app.call('key', text=text)
+        return wait_until(lambda: state() if state().get('text') == text and state().get('final') else None, timeout=5, step=.05)
+    def press(key, **kw): return app.call('key', key=key, **kw)
+    try:
+        tab = app.call('tabs')[0]['id']; wait_until(lambda: app.eval(tab, 'document.title') == 'Shell C /start', step=.1)
+        app.call('suggest-remote', enabled=False)
+        assert wait_until(lambda: app.call('hotkey-state')['prepared'], timeout=5, step=.02), 'post-paint command preparation did not run'
+        results['lazy_commandbar'] = {'ok': state().get('created') is False}
+        opened = bar('t', 'window')
+        first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
+        results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None}
+        results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
+        typed = type_query(origin.removeprefix('http://') + '/new')
+        press('return')
+        new = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/new'), None), step=.1)
+        assert new, app.call('tabs')
+        wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /new', step=.1)
+        results['typed_top_today'] = {'ok': app.call('tabs')[0]['id'] == new['id'] and app.eval(new['id'], 'document.title') == 'Shell C /new', 'tab': new['id']}
+        edited = bar('l', 'window')
+        results['cmd_l_selection'] = {'ok': edited['mode'] == 'editCurrentURL' and edited['text'] == origin + '/new' and edited['range'] == [0, len(origin + '/new')], 'state': edited}
+        type_query(origin + '/edited'); press('return')
+        correct = wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /edited', step=.1)
+        results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
+        bar('t'); calc = type_query('12*7'); assert calc, state()
+        rows = calc['rows']; index = next(i for i, r in enumerate(rows) if r['kind'] == 'calculator')
+        selected = calc['selected']
+        while selected != index:
+            press('down' if selected < index else 'up'); selected = state()['selected']
+        press('return')
+        results['calculator_copy'] = {'ok': app.call('pasteboard') == '84', 'clipboard': app.call('pasteboard')}
+        bar('t'); press('escape'); time.sleep(.3)
+        app.eval(new['id'], 'window.keys=[]')
+        press('escape', route='window'); time.sleep(.15)
+        results['escape_then_page'] = {'ok': not state()['presented'] and 'Escape' in app.eval(new['id'], 'window.keys'), 'keys': app.eval(new['id'], 'window.keys')}
+        mode = app.call('window-state')['sidebarMode']
+        press('s', modifiers=['cmd'], route='window'); hidden = app.call('window-state')['sidebarMode']
+        press('s', modifiers=['cmd'], route='window')
+        results['cmd_s_page_swallowing_keys'] = {'ok': mode != hidden and app.call('window-state')['sidebarMode'] == mode}
+        second_space = app.call('space-create', title='Cross Space', profile='Default')
+        target = app.call('open', url=origin + '/cross')
+        target = target['id'] if isinstance(target, dict) else target
+        app.call('wait', tab=target)
+        wait_until(lambda: app.eval(target, 'document.title') == 'Shell C /cross', step=.1)
+        first_space = next(s['id'] for s in app.call('spaces') if s['id'] != second_space)
+        app.call('space', space=first_space)
+        bar('t'); cross = type_query('Shell C /cross'); assert cross, state()
+        index = next(i for i, r in enumerate(cross['rows']) if r['tab'] == target)
+        selected = cross['selected']
+        while selected != index:
+            press('down' if selected < index else 'up'); selected = state()['selected']
+        return_routing = press('return')
+        switched = wait_until(lambda: app.call('window-state') if app.call('window-state')['space'] == second_space and app.call('window-state')['selected'] == target else None, timeout=3, step=.1)
+        results['switch_tab_across_spaces'] = {'ok': bool(switched) and app.eval(target, 'document.title') == 'Shell C /cross', 'state': app.call('window-state'), 'expectedSpace': second_space, 'expectedTab': target, 'rows': cross['rows'], 'barAfterReturn':state(), 'returnRouting':return_routing}
+        bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02)
+        results['first_results_budget'] = {'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None}
+        shot(app, 'commandbar-live-%s.png' % config.lower(), window=app.call('window-state')['number'])
+        press('escape'); time.sleep(.3)
+        other_profile_space = app.call('space-create', title='Isolated profile', profile='Commandbar Isolated')
+        app.call('suggest-remote', enabled=False)
+        isolated = bar('t'); isolated_rows = type_query('Shell C')
+        results['suggest_profile_isolation'] = {'ok': isolated['profile'] != opened['profile'] and all(r['tab'] not in (tab,new['id'],target) for r in isolated_rows['rows'])}
+        press('escape'); time.sleep(.2); app.call('space', space=second_space)
+        time.sleep(.1)
+        menu = app.call('menu-state')
+        results['dynamic_menus'] = {'ok': any(x['id'] == 'dynamic-space-' + second_space for x in menu) and any(x['id'] == 'dynamic-tab-' + target for x in menu), 'entries': len(menu)}
+        results['unsupported_disabled'] = {'ok': any(x['id'] == 'new-incognito-window' and not x['enabled'] for x in menu)}
+        before = app.call('host-counts'); tree = app.call('sidebar-tree'); app.call('menu-perform', id='duplicate-tab')
+        after = app.call('sidebar-tree'); copies = [x for x in after['today'] if x['id'] not in {n['id'] for n in tree['today']}]
+        results['duplicate_tab_lazy'] = {'ok': len(copies) == 1 and copies[0]['url'] == origin + '/cross' and not copies[0]['loaded'] and before['created'] == app.call('host-counts')['created'], 'copies': copies}
+        app.call('menu-perform', id='undo'); results['duplicate_single_undo'] = {'ok': len(app.call('sidebar-tree')['today']) == len(tree['today'])}
+        other = app.call('open', url=origin + '/split')['id']
+        app.call('split')
+        split = next(n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+        before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=split['id'])
+        splits = [n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split']
+        copied = next(n for n in splits if n['id'] != split['id'])
+        results['duplicate_split_lazy'] = {'ok': len(splits) == 2 and len(copied['children']) == 2 and all(not n['loaded'] for n in copied['children']) and {n['id'] for n in copied['children']}.isdisjoint(n['id'] for n in split['children']) and [n['url'] for n in copied['children']] == [n['url'] for n in split['children']] and before == app.call('host-counts')['created'], 'copy': copied}
+        app.call('menu-perform', id='undo')
+        # Separate through the model-owned selection path before the folder flow.
+        app.call('menu-perform', id='separate-from-split-view')
+        app.call('select', tab=target)
+        bindings = Path(app.user_data, 'State/keybindings.json')
+        bindings.write_text(json.dumps({'version':1,'bindings':{'new-tab':{'shortcuts':[{'key':'o','modifiers':['command','option','control']}], 'priority':'browser'}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        press('o', modifiers=['cmd','opt','ctrl'], route='window'); remapped = state()['presented']; press('escape'); time.sleep(.25)
+        menu = app.call('menu-state')
+        results['override_menu_and_router'] = {'ok': remapped and any(n['id'] == 'new-tab' and n['key'] == 'o' for n in menu)}
+        bindings.write_text(json.dumps({'version':1,'bindings':{'new-tab':{'shortcuts':[{'key':'t','modifiers':['command']}], 'priority':'site-then-browser'}}}))
+        app.call('reload-keybindings'); app.call('focus', tab=target); time.sleep(.1)
+        press('t', modifiers=['cmd'], route='window'); first = state()['presented']
+        press('t', modifiers=['cmd'], route='window'); second = state()['presented']
+        results['double_press_shared_router'] = {'ok': not first and second, 'first': first, 'second': second}
+        press('escape'); time.sleep(.25)
+        bindings.write_text('{broken'); app.call('reload-keybindings'); time.sleep(.1)
+        results['invalid_overrides_fallback'] = {'ok': any(n['id'] == 'new-tab' and n['key'] == 't' for n in app.call('menu-state'))}
+        bindings.unlink(); app.call('reload-keybindings')
+        folder = app.call('folder-create', title='Copy subtree')
+        app.call('sidebar-move', tab=target, folder=folder, index=0)
+        before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=folder)
+        folders = [n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']
+        results['duplicate_folder_lazy'] = {'ok': len(folders) == 2 and folders[0]['children'][0]['id'] != folders[1]['children'][0]['id'] and folders[1]['children'][0]['url'] == origin + '/cross' and not folders[1]['children'][0]['loaded'] and before == app.call('host-counts')['created'], 'folders': folders}
+        press(',', modifiers=['cmd'], route='window'); time.sleep(.2)
+        settings = app.call('settings-state'); app.call('menu-perform', id='settings'); time.sleep(.1)
+        results['settings_shared_window'] = {'ok': settings['settings'] > 0 and settings['settings'] == app.call('settings-state')['settings']}
+        original_hotkey = app.call('hotkey-state')['enabled']
+        if not original_hotkey: app.call('settings-toggle', name='hotkey')
+        app.call('settings-toggle', name='hotkey'); off = app.call('hotkey-state')
+        app.call('settings-toggle', name='hotkey'); on = app.call('hotkey-state')
+        results['global_hotkey_toggle'] = {'ok': not off['enabled'] and not off['registered'] and on['enabled'] and on['attempts'] > off['attempts'] and (on['registered'] or bool(on['error'])), 'off': off, 'on': on}
+        if not original_hotkey: app.call('settings-toggle', name='hotkey')
+        press('l', modifiers=['cmd','shift'], route='window'); time.sleep(.2)
+        library = app.call('settings-state')['library']; app.call('menu-perform', id='view-library')
+        results['library_shared_window'] = {'ok': library > 0 and library == app.call('settings-state')['library']}
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('focus', tab=target); time.sleep(.2)
+        press('s', modifiers=['cmd','shift'])
+        save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
+        results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
+        if save: press('escape', window=save['number'])
+        wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
+        time.sleep(.25)
+        app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
+        app.call('settings-toggle', name='external'); app.call('save'); app.quit()
+        app = factory(urls=())
+        press(',', modifiers=['cmd']); time.sleep(.2)
+        results['settings_persist_relaunch'] = {'ok': app.call('settings-state')['external'] != original_external}
+        app.call('settings-toggle', name='external')
+    finally:
+        app.quit(); server.shutdown(); server.server_close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
-    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "window", "sidebar", "peek"], required=True)
+    ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "window", "sidebar", "peek", "commandbar"], required=True)
     opts = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
@@ -1364,10 +1516,23 @@ def main():
         return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
+    def framework_uuid(path):
+        proc = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
+        match = re.search(r'UUID: ([0-9A-F-]+)', proc.stdout)
+        return match.group(1) if match else ''
+    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    embedded = framework_uuid(os.path.join(ROOT, 'build', opts.config, 'Open.app/Contents/Frameworks', framework))
+    vendor = framework_uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    stamp_path = os.path.join(ROOT, 'Vendor/cef/.open-source')
+    stamp = Path(stamp_path).read_text().strip() if os.path.exists(stamp_path) else ''
+    results['engine'] = {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed', 'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
     try:
         if opts.only == "shell":
             results["shell"] = {}
             shell_checks(factory, results["shell"], tmp)
+        elif opts.only == "commandbar":
+            results["commandbar"] = {}
+            commandbar_checks(factory, results["commandbar"], tmp, opts.config)
         elif opts.only == "window":
             results["window"] = {}
             window_checks(factory, results["window"], tmp, opts.config)
@@ -1398,14 +1563,14 @@ def main():
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features") else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek"):
+    for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek", "commandbar"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek", "commandbar")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)

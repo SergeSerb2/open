@@ -2,6 +2,8 @@
 
 ## Step A — window before engine
 
+Engine for Step A evidence: CDN CEF, before the fork distribution became the default.
+
 The real `OpenSidebar.SidebarView` draws from the snapshot before Chromium
 starts. The theme field is prepared before display. After the window transaction
 is flushed, a display-link callback must report a screen refresh later than
@@ -196,16 +198,18 @@ outside the strip until promotion.
 
 ### End-to-end evidence
 
+Engine for this Step B review round: CDN CEF. The fork evidence is recorded separately under Step C.
+
 | Suite / build | Result | Evidence |
 |---|---|---|
-| Release `--only window` | 38 functional PASS; 2 sidebar timing FAIL (38/40) | [Raw results](engine-spike/results-window-release.json) |
-| Release `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-release.json) |
-| Release `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-release.json) |
-| Release `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-release.json) |
-| Debug `--only window` | 38/38 PASS; 2 named Release-only SKIPs | [Raw results](engine-spike/results-window-debug.json) |
-| Debug `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-debug.json) |
-| Debug `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-debug.json) |
-| Debug `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-debug.json) |
+| Release `--only window` | 38 functional PASS; 2 sidebar timing FAIL (38/40) | [Raw results](engine-spike/results-window-step-b-cdn-release.json) |
+| Release `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-step-b-cdn-release.json) |
+| Release `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-step-b-cdn-release.json) |
+| Release `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-step-b-cdn-release.json) |
+| Debug `--only window` | 38/38 PASS; 2 named Release-only SKIPs | [Raw results](engine-spike/results-window-step-b-cdn-debug.json) |
+| Debug `--only sidebar` | 18/18 PASS; durable engine storage BLOCKED | [Raw results](engine-spike/results-sidebar-step-b-cdn-debug.json) |
+| Debug `--only peek` | 6/6 PASS | [Raw results](engine-spike/results-peek-step-b-cdn-debug.json) |
+| Debug `--only shell` | 6/6 PASS | [Raw results](engine-spike/results-shell-step-b-cdn-debug.json) |
 | Debug / Release builds | PASS; no Swift warnings | `nice -n 10 tools/build.sh Debug/Release` |
 | sidebar-render / features-render | 125/125 and 147/147 PASS | Real library executables |
 | tools/verify-all.sh | 14 PASS; no SKIP | Summary below |

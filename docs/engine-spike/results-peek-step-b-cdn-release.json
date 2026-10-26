@@ -1,0 +1,108 @@
+{
+  "config": "Release",
+  "peek": {
+    "close_promoted_releases_host": {
+      "after": {
+        "created": 2,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "expand_rebinds_host": {
+      "after": {
+        "created": 2,
+        "engineContents": 2,
+        "retained": 2
+      },
+      "before": {
+        "created": 2,
+        "engineContents": 2,
+        "retained": 2
+      },
+      "ok": true,
+      "strip": [
+        {
+          "active": "AD04E150-6EAB-464D-99E4-F6277E2380B8",
+          "activeIsMember": true,
+          "contents": [
+            1,
+            2
+          ],
+          "context": "Default",
+          "profile": "01A0C3D3-E0DC-4DC1-960F-7C03FB7DD458",
+          "tabs": [
+            "FCE8FFA3-A78C-478A-9256-CA81836B2F67",
+            "AD04E150-6EAB-464D-99E4-F6277E2380B8"
+          ]
+        }
+      ]
+    },
+    "page_background_after_load": {
+      "host": {
+        "audible": false,
+        "browser": 1,
+        "browserIndex": 1,
+        "browserPinned": false,
+        "canGoBack": true,
+        "context": "Default",
+        "crash": 0,
+        "extension": "",
+        "favicon": false,
+        "fullscreen": false,
+        "hidden": false,
+        "hostTab": "6675CAA1-9D4A-4730-9297-8CA7196A12A0",
+        "identifier": 1,
+        "kind": "tab",
+        "live": true,
+        "loading": false,
+        "muted": false,
+        "pageBackground": [
+          30,
+          80,
+          120,
+          255
+        ],
+        "popup": false,
+        "style": "alloy",
+        "title": "Page color 2",
+        "url": "data:text/html,%3Ctitle%3EPage%20color%202%3C/title%3E%3Cbody%20style=%22background:rgb(30,80,120)%22%3E%3Ch1%3EPage%20color%202%3C/h1%3E",
+        "zoom": 0
+      },
+      "ok": true,
+      "pane_color": [
+        30,
+        80,
+        120,
+        255
+      ]
+    },
+    "peek_active_stays_model_tab": {
+      "ok": true,
+      "strip": [
+        {
+          "active": "FCE8FFA3-A78C-478A-9256-CA81836B2F67",
+          "activeIsMember": true,
+          "contents": [
+            1
+          ],
+          "context": "Default",
+          "profile": "01A0C3D3-E0DC-4DC1-960F-7C03FB7DD458",
+          "tabs": [
+            "FCE8FFA3-A78C-478A-9256-CA81836B2F67"
+          ]
+        }
+      ]
+    },
+    "peek_png": {
+      "file": "peek-window.png",
+      "ok": true
+    },
+    "window_png": {
+      "file": "peek-promoted-window.png",
+      "ok": true
+    }
+  },
+  "started": "2026-10-25 22:10:36",
+  "style": "alloy"
+}

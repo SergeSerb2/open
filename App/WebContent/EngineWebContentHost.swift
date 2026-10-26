@@ -101,7 +101,10 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
   }
   func webContentDidRequestClose(_ page: OEWebContent) { if !closed { owner?.close(page: page) } }
   func webContent(_ page: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
-    !closed && (MainMenu.performReservedShortcut(event) || owner?.controller?.handleKeyDown(event) == true)
+    !closed && owner?.controller?.handleKeyDown(event) == true
+  }
+  func webContent(_ page: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
+    !closed && owner?.controller?.handleKeyDown(event, unconsumed: true) == true
   }
   func webContent(_ page: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
     !closed && owner?.webContent(page, runJavaScriptDialog: dialog) == true

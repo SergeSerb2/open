@@ -79,7 +79,7 @@ public final class SplitViewController: NSViewController, CommandDispatcher {
         } else {
             // A collapsing split hands the selection to its surviving tab in the model.
             model.removePane(splitID: split.id, tabID: id, archive: !separate)
-            if separate { select(id) }
+            // BrowserModel retargets the selection when the split collapses.
         }
         maximizedPaneID = nil; refresh(); onChange?()
     }

@@ -35,16 +35,18 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
     public var littleOpenAutoArchiveAfter: AutoArchiveInterval
     public var searchEngineID: String
     public var sleepMode: SleepMode
+    public var searchSuggestEnabled: Bool
 
-    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "duckduckgo", sleepMode: SleepMode = .balanced) {
+    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "duckduckgo", sleepMode: SleepMode = .balanced, searchSuggestEnabled: Bool = true) {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchEngineID = searchEngineID
         self.sleepMode = sleepMode
+        self.searchSuggestEnabled = searchSuggestEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode, searchSuggestEnabled
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
 
@@ -56,6 +58,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
             ?? .sixHours
         searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
         sleepMode = try container.decodeIfPresent(SleepMode.self, forKey: .sleepMode) ?? .balanced
+        searchSuggestEnabled = try container.decodeIfPresent(Bool.self, forKey: .searchSuggestEnabled) ?? true
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -64,6 +67,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
         try container.encode(searchEngineID, forKey: .searchEngineID)
         try container.encode(sleepMode, forKey: .sleepMode)
+        try container.encode(searchSuggestEnabled, forKey: .searchSuggestEnabled)
     }
 }
 
