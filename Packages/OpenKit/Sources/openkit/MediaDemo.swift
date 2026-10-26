@@ -158,6 +158,9 @@ import OpenWeb
     uncontrollable.playback = .paused
     protection.update(tabID: tab, windowID: window, state: uncontrollable, isMuted: false, isCapturing: false)
     check("uncontrollable paused protected before expiry", protection.sleepProtectedTabIDs(windowID: window) == [tab])
+    let captureWithoutControls = ItemID()
+    protection.update(tabID: captureWithoutControls, windowID: window, state: uncontrollable, isMuted: false, isCapturing: true)
+    check("uncontrollable recording session has no card", protection.visibleSources(windowID: window, displayed: []).isEmpty && protection.sleepProtectedTabIDs(windowID: window).contains(captureWithoutControls))
     now.addTimeInterval(3600); await protectionScheduler.waitForFire()
     check("uncontrollable paused expires at 60 min", protectionScheduler.firedCount == 1 && protection.sleepProtectedTabIDs(windowID: window).isEmpty && protection.visibleSources(windowID: window, displayed: []).isEmpty)
 

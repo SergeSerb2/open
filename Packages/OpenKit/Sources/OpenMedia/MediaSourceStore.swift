@@ -152,7 +152,7 @@ import OpenWeb
         let list = sourceList(windowID: windowID), now = clock()
         let eligible = sources.values.filter { $0.windowID == windowID && $0.origin == .tab && !$0.userDismissed && !isExpired($0, at: now) }
         let cards = eligible.filter { s in
-            guard s.isControllable || s.kind == .recording else { return false }
+            guard s.isControllable else { return false }
             if s.enginePictureInPicture { return false }
             if case .active = s.pip { return false }
             return true
