@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate About Credits.rtf and its text twin from the release inventory.
 
-No network, third-party modules, or credentials. Without --require-cef-credits,
-missing/sample Chromium credits produce a visibly incomplete local preview.
+No network, third-party modules, or credentials. Preview mode warns about
+missing/sample Chromium credits and an unset public MPL source location.
+--require-cef-credits enforces both gates for existing release callers.
 """
 import argparse
 import html.parser
@@ -11,6 +12,7 @@ import plistlib
 import re
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = ['Component', 'Version', 'License', 'How Open uses it', 'Source / offer']
@@ -80,6 +82,18 @@ def check_versions(rows):
             raise ValueError('update the Sparkle inventory to the exact linked pin before generating credits')
 
 
+def public_source_location(path):
+    matches = re.findall(r'^Public MPL source location:[ \t]*(\S+)[ \t]*$',
+                         path.read_text(encoding='utf-8'), re.M)
+    if len(matches) != 1:
+        return None
+    location = matches[0]
+    url = urlsplit(location)
+    if url.scheme != 'https' or not url.hostname or url.username or url.password:
+        return None
+    return location
+
+
 class CreditsParser(html.parser.HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -130,7 +144,10 @@ def main():
     p.add_argument('--text-output', type=Path, help='defaults to Acknowledgements.txt beside the RTF')
     p.add_argument('--inventory', type=Path, default=ROOT / 'docs/release/licenses.md')
     p.add_argument('--cef-credits', type=Path, default=ROOT / 'Vendor/cef/CREDITS.html')
-    p.add_argument('--require-cef-credits', action='store_true')
+    p.add_argument('--require-cef-credits', action='store_true',
+                   help='release mode: require full CEF credits and the public MPL source location')
+    p.add_argument('--require-public-source', action='store_true',
+                   help='refuse an unset public MPL source location, even without full CEF credits')
     p.add_argument('--marketing-version')
     p.add_argument('--build-number')
     p.add_argument('--engine-stamp')
@@ -143,6 +160,15 @@ def main():
     rows = inventory(a.inventory)
     check_versions(rows)
     shipped = [r for r in rows if not re.search(r'not yet linked|not bundled', r[1], re.I)]
+    source_location = public_source_location(a.inventory)
+    needs_source = any('MPL-2.0' in r[2] for r in shipped)
+    warnings = []
+    failures = []
+    if needs_source and not source_location:
+        message = 'INCOMPLETE PREVIEW: public MPL source location is unset; user decision U-8 is required.'
+        warnings.append(message)
+        if a.require_public_source or a.require_cef_credits:
+            failures.append(message)
     gpl = any(r[0] == 'uBlock Origin resources / scriptlets' for r in shipped)
     if gpl:
         row = next(r for r in shipped if r[0] == 'uBlock Origin resources / scriptlets')
@@ -159,6 +185,8 @@ def main():
     paragraphs = [f'Open {marketing} ({build})', stamp, '']
     for name, version, license_name, use, offer in shipped:
         paragraphs.extend([f'{name} — {version} — {license_name}\n{use}\n{offer}', ''])
+    if needs_source:
+        paragraphs.extend(['Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)'), ''])
     paragraphs.extend(['License texts', ''])
     texts = ['MPL-2.0.txt'] + (['GPL-3.0.txt'] if gpl else []) + ['MIT-Sparkle.txt', 'BSD-CEF.txt']
     for name in texts:
@@ -177,7 +205,11 @@ def main():
     if not complete:
         message = 'INCOMPLETE PREVIEW: full Chromium/codec CREDITS.html is missing or is the upstream sample.'
         if a.require_cef_credits:
-            raise ValueError(message)
+            failures.append(message)
+        warnings.append(message)
+    if failures:
+        raise ValueError('\n'.join(failures))
+    for message in warnings:
         print('WARNING: ' + message, file=sys.stderr)
         paragraphs.extend([message, ''])
     text = '\n'.join(paragraphs)
@@ -190,6 +222,8 @@ def main():
     twin.write_text(text, encoding='utf-8')
     print(f'Generated {a.output} and {twin}')
     print(f"Component paragraphs: {len(shipped)}; conditional GPL: {'included' if gpl else 'omitted (assets not shipped)'}; Chromium credits: {'complete' if complete else 'INCOMPLETE PREVIEW'}")
+    if needs_source:
+        print('Public MPL source location: ' + (source_location or 'UNSET (U-8 pending)'))
 
 
 if __name__ == '__main__':

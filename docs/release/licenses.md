@@ -9,8 +9,8 @@ the generator omits them from the shipped component paragraphs.
 |---|---|---|---|---|
 | Chromium | 156.0.8078.48 | BSD-style (Chromium license) | Engine core | https://chromium.googlesource.com/chromium/src/+/d0c02bfad08ec92a6ffcf989e53cd995e6381a4c/LICENSE ; full third-party credits must come from the matching CEF distribution's CREDITS.html |
 | CEF | 156.0.14+g4fa4ab5 (branch 8078) | BSD | Embedding layer | https://github.com/chromiumembedded/cef/tree/4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f ; Vendor/cef/LICENSE.txt; committed text BSD-CEF.txt below |
-| adblock (Brave adblock-rust) | 0.8.11 — not yet linked | MPL-2.0 | Planned browser-process network and cosmetic matching | https://github.com/brave/adblock-rust/tree/v0.8.11 ; fork-infra Step 8 has not vendored the crate. When linked, publish the vendored sources and all modified MPL files in https://github.com/SergeSerb2/open/tree/main/Engine/fork/patches/rust/ |
-| Public Suffix List | 2026-10-22_08-36-41_UTC; commit 8437e5262f13305f94087abe699b4fe2be1d1de8 | MPL-2.0 | OpenSuggest URL-versus-search decisions; same snapshot in OpenAdBlock | https://publicsuffix.org/list/public_suffix_list.dat ; source snapshot with intact MPL header: https://github.com/SergeSerb2/open/tree/main/Packages/OpenKit/Sources/OpenSuggest/Resources/public_suffix_list.dat ; modified MPL files remain available in this public repository |
+| adblock (Brave adblock-rust) | 0.8.11 — not yet linked | MPL-2.0 | Planned browser-process network and cosmetic matching | https://github.com/brave/adblock-rust/tree/v0.8.11 ; fork-infra Step 8 has not vendored the crate. When linked, the vendored sources and all modified MPL files require a public source-offer location; the user has not chosen it (U-8 below) |
+| Public Suffix List | 2026-10-22_08-36-41_UTC; commit 8437e5262f13305f94087abe699b4fe2be1d1de8 | MPL-2.0 | OpenSuggest URL-versus-search decisions; same snapshot in OpenAdBlock | https://publicsuffix.org/list/public_suffix_list.dat is the upstream source; Open's exact bundled snapshot and any modified MPL files require a public source-offer location. That location is not chosen yet (U-8 below) |
 | FFmpeg (Chromium bundled) | Chromium 156.0.8078.48 pin | LGPL-2.1 (Chromium build) | H.264/AAC with proprietary_codecs=true and ffmpeg_branding="Chrome" | https://chromium.googlesource.com/chromium/src/+/d0c02bfad08ec92a6ffcf989e53cd995e6381a4c/third_party/ffmpeg/ ; full component license and notices must be included in the generated Chromium credits |
 | Sparkle | not yet linked (Step 7 chooses the exact pin) | MIT | Planned update framework | https://github.com/sparkle-project/Sparkle ; MIT-Sparkle.txt is prepared from upstream 2.10.1, not a dependency pin. Update this row and verify the license text when Step 7 lands |
 | Filter lists (EasyList, EasyPrivacy, catalog subscriptions) | not bundled in the current app; list-pins.txt snapshots 2026-10-25 | Each list's own license | Downloaded ad-block data; OpenAdBlock is not linked by the current app target | https://easylist.to/ ; Packages/OpenKit/Sources/OpenAdBlock/Resources/catalog.json records every upstream URL; list-pins.txt records the EasyList and EasyPrivacy hashes. Review each list's own terms before bundling; catalog entries alone are not bundled asset evidence |
@@ -18,6 +18,28 @@ the generator omits them from the shipped component paragraphs.
 Patent note: release builds enable proprietary codecs. H.264/AAC patent licensing for distribution is
 not granted by any open-source license above and is part of the §10 user
 gate. The plan ships the acknowledgment; it does not clear the patent risk.
+
+## Public MPL source location (U-8)
+
+Public MPL source location: UNSET
+
+`SergeSerb2/open` is a private repository (verified with
+`gh repo view SergeSerb2/open --json visibility`, 2026-10-25: `PRIVATE`).
+A private repository URL is not an available source offer for public
+recipients. No public source or download location has been chosen.
+Release plan §10 U-8 leaves the choice to the user: make that repository
+public, or use a public mirror that also holds the release DMGs and feed.
+
+After that choice, publish the exact shipped MPL-covered source files and
+any modifications at a location accessible without authentication. Update
+the `Public MPL source location:` entry to that HTTPS location and replace
+the pending source offers in the component rows with exact public links.
+Verify anonymous access before release. The generator checks the configured
+location without network access; it does not prove that a server is public.
+Until then, preview output warns and records the unset location in both
+artifacts. `--require-public-source` refuses it; `--require-cef-credits`
+also enforces that source-location gate so existing release callers cannot
+bypass it.
 
 ## Conditional GPL-3.0 component
 
@@ -54,6 +76,7 @@ The default generator can preview the prepared inventory without that input,
 but prints an explicit warning and includes the missing-credits status in
 both outputs. Such a preview is not release-license acceptance.
 
-MPL source changes must be committed as source in this public repository.
+MPL source changes must remain available as source at the public location
+chosen under U-8; a commit in the current private repository is not enough.
 The inventory and artifacts do not close the release plan's license/patent
 review gate. Public distribution waits for the user's §10 confirmation.

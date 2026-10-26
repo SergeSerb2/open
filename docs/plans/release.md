@@ -773,6 +773,14 @@ https://github.com/SergeSerb2/open/releases/download/v<marketing>/` and
 
 ### 6.4 Hosting (GitHub Releases + GitHub Pages)
 
+The locations below depend on the user's §10 U-8 decision. `SergeSerb2/open`
+is currently private. Its release assets are not public downloads, and
+private-repository Pages requires a paid GitHub plan. The proposed feed URL
+`https://sergeserb2.github.io/open/appcast.xml` is conditional on U-8, not
+an established public endpoint. If the user chooses a public mirror, update
+the feed and archive URLs in the app, appcast and release tools to that
+chosen repository before U-5 or the first public release.
+
 - Archives on GitHub Releases of `SergeSerb2/open` (C-14): one Release per
   tag (§8.2) holding `Open-<marketing>.dmg`, its `.sha256`, and every
   `.delta` for that build. Releases host large files; Pages does not.
@@ -1120,16 +1128,28 @@ plan time; re-check before quoting them to anyone else.
 | U-2 | Developer ID Application certificate | In Xcode Settings → Accounts, or the developer portal: create a "Developer ID Application" certificate; install it in the login Keychain. Confirm with `security find-identity -v -p codesigning` (must list `Developer ID Application: …`) | Included in U-1 | §4 signing, §3 notarization |
 | U-3 | Notary credentials | Create an app-specific password at appleid.apple.com, then run §3.1's `store-credentials "open-notary"` with the Apple ID + Team ID + that password | Free | §3.2, DMG notarization |
 | U-4 | Sparkle key consent + backup | Approve one §6.2 `generate_keys` run; paste the printed public key into `SUPublicEDKey` (implementer can paste; user approves); store the `-x` export in a password manager, then delete the `/tmp` file | Free | All update signing |
-| U-5 | GitHub Pages enablement | In `SergeSerb2/open` Settings → Pages, enable deploy from the `gh-pages` branch (§6.4). Requires repo admin, which the user holds | Free | Feed hosting (`sergeserb2.github.io/open/appcast.xml`) |
+| U-5 | GitHub Pages enablement | Depends on U-8. In the public repository chosen there, enable deploy from the `gh-pages` branch (§6.4). Requires repo admin, which the user holds. The proposed `sergeserb2.github.io/open/appcast.xml` URL depends on that choice | Free for a public repo; private-repo Pages needs a paid GitHub plan | Feed hosting at the location selected under U-8 |
 | U-6 | License + patent review confirmation | Read §7's inventory (MPL-2.0 source offer, conditional GPL-3.0 assets, proprietary-codec patent note) and confirm in writing in the release PR that the posture was reviewed (counsel optional, user's call) | Free (own review) | First public release only |
 | U-7 | Publish approval per release | Approve the tag (§8.2) and run or approve the §8.4 `gh release create` + feed commit | Free | Each public release |
+| U-8 | Public source and download location | Make `SergeSerb2/open` public, or create a public mirror repo (for example `SergeSerb2/open-releases`) that holds the release DMGs, the appcast (GitHub Pages), and the MPL-covered source files. Pages on a private repo needs a paid GitHub plan, and private release assets are not publicly downloadable. The user chooses; no location is selected by this plan | Depends on the user's choice | U-5, first public release, MPL source offer |
+
+U-8 is unresolved: `gh repo view SergeSerb2/open --json visibility` reports
+`PRIVATE`. The public-repository source-offer statement in §7.3 is
+conditional on U-8; the current private repository does not satisfy it for
+public recipients. Record the selected public source location in
+`docs/release/licenses.md`, publish the exact shipped MPL-covered sources
+there, and verify anonymous access to the sources, DMGs and feed before
+public distribution. No repository is made public or created by this plan.
+
+Hosting evidence: [GitHub Pages availability](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)
+and [release read-access requirement](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).
 
 Free-tier note: GitHub Releases and Pages for a public repo cost nothing.
 No domain, no server, no CI runner, and no App Store fee beyond U-1 exists
 in this plan. Team ID value itself is not secret, but it is never typed by
 the implementer — it is read from U-2's identity (§4.1).
 
-### 10.2 What works without any of U-1…U-7
+### 10.2 What works without any of U-1…U-8
 
 - Everything except public distribution: `tools/release.sh --dry-run`
   (ad-hoc signing, SKIP notarization, throwaway update key), local launch
