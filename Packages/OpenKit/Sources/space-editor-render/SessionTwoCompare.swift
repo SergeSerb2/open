@@ -23,13 +23,7 @@ enum SessionTwoCompare {
         }
         if state == "preview" { try preview(arc: arc, ours: ours, out: out); return }
         if state == "page-two" {
-            let rows = (0..<9).map { i in
-                let rect = CGRect(x: 71 + Double(i) * 29.5, y: 391, width: 4, height: 4)
-                return Compare.measure(.init(name: "page-2 swatch \(i + 1)", region: rect, kind: .fill(sample: rect)), arc: arc, ours: ours, scale: 1)
-            }
-            try write(rows, title: "Session 2 page-two center colors", out: out)
-            if rows.contains(where: { ($0.deltaE ?? .infinity) > 2 }) { throw CLIError(description: "page-two color gate failed") }
-            return
+            try PresetCompare.run(arc: arc, ours: ours, out: out, sampleStops: args.contains("--sample-stops")); return
         }
         var elements: [Compare.Element] = [
             .init(name: "pad fill", region: CGRect(x: 35, y: 110, width: 60, height: 60),

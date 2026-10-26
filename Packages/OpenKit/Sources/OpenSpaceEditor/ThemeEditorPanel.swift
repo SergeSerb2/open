@@ -83,11 +83,12 @@ public final class ThemeEditorContentView: NSView {
     private var keyViews: [NSView] = []
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
     public private(set) var layoutPassCount = 0
-    public var renderScale: CGFloat = 1 { didSet { pad.renderScale = renderScale; noise.renderScale = renderScale } }
+    public var renderScale: CGFloat = 1 { didSet { pad.renderScale = renderScale; noise.renderScale = renderScale; presets.renderScale = renderScale } }
 
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true
         content.wantsLayer = true
+        (content as? EditorFlippedView)?.overflowSlider = intensity
         content.frame = CGRect(origin: CGPoint(x: 13, y: 13), size: ThemeEditorMetrics.contentSize)
         addSubview(content)
         let controls: [NSView] = [pad, modes, remove, add, presets, intensity, noise]
@@ -147,5 +148,12 @@ public final class ThemeEditorContentView: NSView {
 }
 
 @MainActor private final class EditorFlippedView: NSView {
+    weak var overflowSlider: SineSliderView?
     override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        if !isHidden, bounds.contains(local), let slider = overflowSlider, slider.enabled, !slider.isHidden,
+           slider.displayedThumbFrame.contains(slider.convert(local, from: self)) { return slider }
+        return super.hitTest(point)
+    }
 }

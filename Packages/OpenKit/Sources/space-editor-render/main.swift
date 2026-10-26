@@ -19,7 +19,7 @@ enum RenderCLI {
                                [--provisional-import-intensity]
     space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec editor|window|theme-window|session2-editor --out DIR
                                 [--noise 0|0.45] [--state empty|light|dark]
-    space-editor-render fit-light-glyphs --capture-root SESSIONS --out .re/DIR [--inspect] [--candidate ALPHA]
+    space-editor-render fit-light-glyphs --capture-root SESSIONS --out .re/DIR [--inspect]
     space-editor-render check
     """
     static func value(_ args: [String], _ key: String) -> String? {

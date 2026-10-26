@@ -16,6 +16,7 @@ public enum ThemeEditorAction: Equatable, Sendable {
 
 /// Values only. Views paint the state; the controller owns preview and undo.
 public struct ThemeEditorState: Equatable, Sendable {
+    public static let noiseInputEpsilon = 1e-6
     public var style: SpaceStyle?
     public var presetPage: Int = 0
     public var isGestureInProgress = false
@@ -74,10 +75,10 @@ public struct ThemeEditorState: Equatable, Sendable {
         case .setIntensity(let value, let final):
             style?.intensityFactor = value; isGestureInProgress = !final
         case .setNoise(let value, let final):
-            style?.noiseFactor = value; isGestureInProgress = !final
+            style?.noiseFactor = abs(value) <= Self.noiseInputEpsilon ? 0 : value; isGestureInProgress = !final
         case .cycleTexture:
             guard var value = style else { return }
-            if value.noiseFactor == 0 { value.texture = .grain; value.noiseFactor = 0.8 }
+            if value.noiseFactor <= Self.noiseInputEpsilon { value.texture = .grain; value.noiseFactor = 0.8 }
             else if value.texture == .tweed { value.noiseFactor = 0 }
             else if let index = SpaceStyleTexture.allCases.firstIndex(of: value.texture) {
                 value.texture = SpaceStyleTexture.allCases[index + 1]; value.noiseFactor = 0.8

@@ -4,10 +4,11 @@ import OpenModel
 
 @MainActor
 public final class PresetStripView: NSView {
-    public let previous = ThemeEditorButton(symbol: "chevron.left", label: "Previous color presets", pointSize: 16)
-    public let next = ThemeEditorButton(symbol: "chevron.right", label: "Next color presets", pointSize: 16)
+    public let previous = ThemeEditorButton(symbol: "chevron.left", label: "Previous color presets", pointSize: 16, weight: .semibold, glyphOffset: CGSize(width: 0, height: 1))
+    public let next = ThemeEditorButton(symbol: "chevron.right", label: "Next color presets", pointSize: 16, weight: .semibold, glyphOffset: CGSize(width: 0, height: 1))
     public let viewport = NSView(frame: CGRect(x: 48, y: 0, width: 260, height: 32))
     public let swatches: [PresetSwatchView] = SpaceStylePresets.all.enumerated().map { PresetSwatchView(index: $0.offset, preset: $0.element) }
+    public var renderScale: CGFloat = 1 { didSet { positionSwatches() } }
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
     public private(set) var page = 0
     private let strip = PresetFlippedView()
@@ -23,10 +24,10 @@ public final class PresetStripView: NSView {
         next.frame = CGRect(x: 315, y: 0, width: 32, height: 32)
         strip.frame = CGRect(x: 0, y: 0, width: 1322, height: 32)
         for (i, swatch) in swatches.enumerated() {
-            swatch.frame = CGRect(x: Double(i / 9) * 265.5 + Double(i % 9) * 29.5, y: 4, width: 24, height: 24)
             strip.addSubview(swatch)
             swatch.onPress = { [weak self] in self?.onAction?(.selectPreset(index: i)) }
         }
+        positionSwatches()
         previous.onPress = { [weak self] in guard let self else { return }; onAction?(.setPresetPage(page - 1)) }
         next.onPress = { [weak self] in guard let self else { return }; onAction?(.setPresetPage(page + 1)) }
         apply(page: 0)
@@ -48,6 +49,13 @@ public final class PresetStripView: NSView {
         }
         previous.enabled = page > 0; next.enabled = page < 4
         for (i, swatch) in swatches.enumerated() { swatch.setAccessibilityElement(i / 9 == page) }
+    }
+    private func positionSwatches() {
+        let scale = Double(max(1, renderScale))
+        for (i, swatch) in swatches.enumerated() {
+            let x = Double(i / 9) * 265.5 + floor(Double(i % 9) * 29.5 * scale) / scale
+            swatch.frame = CGRect(x: x, y: 4, width: 24, height: 24)
+        }
     }
     public override func scrollWheel(with event: NSEvent) {
         guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { super.scrollWheel(with: event); return }
@@ -76,29 +84,29 @@ public final class PresetSwatchView: NSView {
         layer?.addSublayer(art); art.frame = bounds; art.cornerRadius = 12; art.masksToBounds = true
         let colors = ThemeColorMath.harmony(key: ThemeColorMath.toP3(preset.style.keyColor), count: preset.style.colorCount, wheel: preset.style.wheel)
         func color(_ c: P3) -> CGColor { CGColor(colorSpace: CGColorSpace(name: CGColorSpace.displayP3)!, components: [c.r, c.g, c.b, 1])! }
-        if colors.count == 3 {
+        if index / SpaceStylePresets.swatchesPerPage == 1 {
             // Session 2 item 17 frame 0016: measured sRGB stops are facts;
             // this is our own axial gradient, with no copied pixels or disc.
             let stops: [[UInt32]] = [
-                [0xD2D2CA, 0xD3D4CA, 0xC1BAB8],
-                [0xD3939D, 0xD39D90, 0xBE85A7],
-                [0x936883, 0x946874, 0x7A5E79],
-                [0xD37B5E, 0xCE9A5B, 0xBF6B86],
-                [0xDCA14E, 0xD4C949, 0xCC7A6D],
-                [0xBCCA53, 0x99D352, 0xBD8A54],
-                [0x34CCA9, 0x3FCAC8, 0x54B87F],
-                [0x6D8EC3, 0x7376C3, 0x5D94A1],
-                [0x685E7D, 0x735E7C, 0x59616F]
+                [0xD3D2CA, 0xD2D4CA, 0xD4CFCC],
+                [0xD3939C, 0xD39D8E, 0xD293B1],
+                [0x936882, 0x956874, 0x876984],
+                [0xD37B5E, 0xCF9B57, 0xD37C8C],
+                [0xDCA24E, 0xD3CC45, 0xE19274],
+                [0xBCCA53, 0x95D652, 0xCAA25B],
+                [0x35CCAA, 0x3FCACB, 0x5BCC98],
+                [0x6D8EC3, 0x7375C3, 0x699DB6],
+                [0x685E7D, 0x735D7C, 0x67687C],
             ]
             let gradient = CAGradientLayer(); gradient.frame = bounds
             gradient.colors = stops[index % 9].map { RGBA(hex: $0).cgColor }
             gradient.locations = [0, 0.5, 1]
-            gradient.startPoint = .zero; gradient.endPoint = CGPoint(x: 1, y: 1)
+            gradient.startPoint = CGPoint(x: 0.235, y: 0.235); gradient.endPoint = CGPoint(x: 0.765, y: 0.765)
             art.addSublayer(gradient)
         } else { art.backgroundColor = color(colors[0]) }
-        rim.frame = bounds; rim.path = CGPath(ellipseIn: bounds.insetBy(dx: 0.5, dy: 0.5), transform: nil)
-        rim.fillColor = nil; rim.lineWidth = 1
-        let c = colors[0]; authoredRim = color(P3(c.r * 0.9, c.g * 0.9, c.b * 0.9)); art.addSublayer(rim)
+        rim.frame = bounds; rim.path = CGPath(ellipseIn: bounds.insetBy(dx: 1, dy: 1), transform: nil)
+        rim.fillColor = nil; rim.lineWidth = 2
+        authoredRim = CGColor(gray: 0, alpha: 0.10); art.addSublayer(rim)
         refreshContrast()
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel("Set Space color to \(preset.name)")
         toolTip = preset.name

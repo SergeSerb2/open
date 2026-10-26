@@ -25,7 +25,7 @@ enum EditorChecks {
             check(image.width == Int(382 * scale) && image.height == Int(534 * scale), "E1 real panel raster size at \(Int(scale))x")
             scene.controller.close()
         }
-        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows(); try controls(); try reviewedControls()
+        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows(); try controls(); try reviewedControls(); try roundThreeControls()
     }
     static func drag() throws {
         let scene = try EditorScene()
@@ -233,7 +233,7 @@ enum EditorChecks {
                 guard let frame = frames[name] else { return false }
                 return zip([frame.minX, frame.minY, frame.width, frame.height], [expected.minX, expected.minY, expected.width, expected.height]).allSatisfy { abs($0 - $1) < 0.001 }
             } && (0..<9).allSatisfy {
-                frames["swatch-\($0)"] == CGRect(x: 48 + 29.5 * Double($0), y: 368, width: 24, height: 24)
+                frames["swatch-\($0)"] == CGRect(x: 48 + floor(29.5 * Double($0) * scale) / scale, y: 368, width: 24, height: 24)
             }, "E1 remaining control frames and nine swatches at \(Int(scale))x")
             scene.controller.close()
         }
@@ -247,7 +247,7 @@ enum EditorChecks {
         for page in 0..<5 {
             if page > 0 { scene.click(scene.view.presets.next) }
             allFrames = allFrames && scene.view.presets.page == page && (0..<9).allSatisfy {
-                scene.view.controlFrames["swatch-\($0)"] == CGRect(x: 48 + 29.5 * Double($0), y: 368, width: 24, height: 24)
+                scene.view.controlFrames["swatch-\($0)"] == CGRect(x: [48.0, 77, 107, 136, 166, 195, 225, 254, 284][$0], y: 368, width: 24, height: 24)
             }
             for (i, swatch) in scene.view.presets.visibleSwatches.enumerated() {
                 scene.click(swatch)
@@ -364,9 +364,9 @@ enum EditorChecks {
         check(endpoints.view.intensity.waveAmplitude == 0 && endpoints.view.intensity.thumbSize == CGSize(width: 12.2, height: 44.4),
               "E6 intensity zero draws a flat wave and the captured small rest thumb")
         endpoints.controller.apply(.setIntensity(1, final: true)); endpoints.controller.flushPreviewFrame()
-        check(endpoints.view.intensity.waveAmplitude == 14.4 && abs(endpoints.view.intensity.thumbSize.width - 27.05) < 1e-9
+        check(endpoints.view.intensity.waveAmplitude == 14.8 && abs(endpoints.view.intensity.thumbSize.width - 27.05) < 1e-9
               && abs(endpoints.view.intensity.thumbSize.height - 59.15) < 1e-9,
-              "E6 intensity one draws 14.4 pt amplitude and the captured 27.05 by 59.15 rest thumb")
+              "E6 intensity one draws 14.8 pt amplitude and the captured 27.05 by 59.15 rest thumb")
         endpoints.controller.close()
     }
     static func reviewedControls() throws {
@@ -448,4 +448,42 @@ enum EditorChecks {
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         check(scene.controller.commitCount == beforeClose + 1, "E6 close finishes one scroll and cancels its idle callback")
     }
+    static func roundThreeControls() throws {
+        var style = EditorScene.capturedStyle
+        style.intensityFactor = 1; style.noiseFactor = 0.5; style.texture = .denim; style.appearance = .light
+        let scene = try EditorScene(style: style, light: true), slider = scene.view.intensity, dial = scene.view.noise
+        scene.panel.setFrameOrigin(CGPoint(x: -20000, y: -20000)); scene.panel.orderBack(nil)
+        for point in [CGPoint(x: slider.thumbFrame.maxX - 0.5, y: 28), CGPoint(x: slider.thumbFrame.midX, y: -0.5)] {
+            scene.panel.makeFirstResponder(scene.view.modes.buttons[0])
+            scene.clickContent(CGPoint(x: slider.frame.minX + point.x, y: slider.frame.minY + point.y))
+            check(scene.panel.firstResponder === slider && slider.value == 1,
+                  "E6 panel.sendEvent routes the thumb overhang strip to the slider")
+        }
+        scene.mouse(.mouseMoved, at: CGPoint(x: slider.thumbFrame.midX, y: 28), in: slider)
+        scene.mouse(.mouseMoved, at: CGPoint(x: slider.thumbFrame.maxX + 0.25, y: 28), in: slider)
+        check(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion || slider.displayedThumbFrame.width > slider.thumbFrame.width,
+              "E6 hover remains active while the pointer is inside the grown thumb rim")
+        var fixedShadow = true
+        for noise in [0.0, 0.25, 0.5, 0.75] {
+            scene.controller.apply(.setNoise(noise, final: true)); scene.controller.flushPreviewFrame()
+            fixedShadow = fixedShadow && dial.tickLayerIsUnrotated && dial.tickShadowOffset == CGSize(width: 0, height: 2)
+        }
+        check(fixedShadow, "E6 tick rotates its path while its native shadow stays down at every angle")
+        scene.controller.apply(.setNoise(0.25, final: true)); scene.controller.flushPreviewFrame()
+        scene.mouse(.leftMouseDown, at: dial.ringPoint(angle: 90), in: dial)
+        scene.mouse(.leftMouseDragged, at: dial.ringPoint(angle: 360 * 1e-8), in: dial)
+        scene.mouse(.leftMouseUp, at: dial.ringPoint(angle: 360 * 1e-8), in: dial); scene.controller.flushPreviewFrame()
+        check(scene.space.theme.style?.noiseFactor == 0, "E6 ring drag snaps epsilon noise to exact none")
+        scene.click(dial.centerButton)
+        check(scene.space.theme.style?.texture == .grain && scene.space.theme.style?.noiseFactor == 0.8,
+              "E6 center after an epsilon-to-none drag restarts at grain")
+        scene.panel.orderOut(nil); scene.controller.close()
+        let empty = try EditorScene(style: nil), before = empty.space.theme
+        check(empty.view.intensity.isAccessibilityEnabled() && empty.view.noise.isAccessibilityEnabled()
+              && empty.view.noise.centerButton.isAccessibilityEnabled(), "E1 empty slider, dial, and Cycle-noise report AX enabled")
+        _ = empty.view.intensity.accessibilityPerformIncrement(); _ = empty.view.noise.centerButton.accessibilityPerformPress()
+        check(empty.space.theme == before, "E1 empty control actions preserve the unthemed Space")
+        empty.controller.close()
+    }
+
 }

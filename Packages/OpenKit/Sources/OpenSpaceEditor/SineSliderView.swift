@@ -8,7 +8,7 @@ public final class SineSliderView: NSView {
     public private(set) var value: Double = 0.8
     public private(set) var layoutPassCount = 0
     public var isThumbVisible: Bool { !thumb.isHidden }
-    public var waveAmplitude: Double { 14.4 * value }
+    public var waveAmplitude: Double { 14.8 * value }
     public var thumbSize: CGSize {
         if value <= 0.8 { return CGSize(width: 12.2 + 12.2 * value / 0.8, height: 44.4 + 11.6 * value / 0.8) }
         let t = (value - 0.8) / 0.2
@@ -17,6 +17,15 @@ public final class SineSliderView: NSView {
     public var thumbFrame: CGRect {
         CGRect(x: ThemeEditorMetrics.intensityThumbStart + ThemeEditorMetrics.intensityTravel * value - thumbSize.width / 2,
                y: 28 - thumbSize.height / 2, width: thumbSize.width, height: thumbSize.height)
+    }
+    public var displayedThumbFrame: CGRect {
+        let scale = thumb.transform.m11
+        return thumbFrame.insetBy(dx: thumbFrame.width * (1 - scale) / 2, dy: thumbFrame.height * (1 - scale) / 2)
+    }
+    public override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, alphaValue > 0 else { return nil }
+        if enabled && displayedThumbFrame.contains(convert(point, from: superview)) { return self }
+        return super.hitTest(point)
     }
     private let track = CAShapeLayer(), inactive = CAShapeLayer(), active = CAShapeLayer(), thumb = CAShapeLayer()
     private let activeMask = CALayer(), inactiveMask = CALayer()
@@ -95,7 +104,7 @@ public final class SineSliderView: NSView {
         let area = NSTrackingArea(rect: bounds.insetBy(dx: -16, dy: -8), options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited], owner: self)
         addTrackingArea(area); tracking = area
     }
-    public override func mouseMoved(with event: NSEvent) { hovered = thumbFrame.contains(convert(event.locationInWindow, from: nil)); updateScale() }
+    public override func mouseMoved(with event: NSEvent) { hovered = displayedThumbFrame.contains(convert(event.locationInWindow, from: nil)); updateScale() }
     public override func mouseExited(with event: NSEvent) { hovered = false; updateScale() }
     private func drag(_ event: NSEvent, final: Bool) {
         guard enabled else { return }; let point = convert(event.locationInWindow, from: nil)
@@ -106,7 +115,7 @@ public final class SineSliderView: NSView {
     }
     public override func mouseDown(with event: NSEvent) { guard enabled else { return }; finishScrollGesture(); window?.makeFirstResponder(self); pressed = true; drag(event, final: false) }
     public override func mouseDragged(with event: NSEvent) { drag(event, final: false) }
-    public override func mouseUp(with event: NSEvent) { guard pressed else { return }; pressed = false; drag(event, final: true); hovered = thumbFrame.contains(convert(event.locationInWindow, from: nil)); updateScale() }
+    public override func mouseUp(with event: NSEvent) { guard pressed else { return }; let inside = displayedThumbFrame.contains(convert(event.locationInWindow, from: nil)); pressed = false; drag(event, final: true); hovered = inside; updateScale() }
     public override func scrollWheel(with event: NSEvent) {
         guard enabled else { return }
         scrollGesture.update(event, change: { onChange?(value + Double(event.deltaY) * 0.02, false) },
@@ -121,7 +130,7 @@ public final class SineSliderView: NSView {
     public override func accessibilityValue() -> Any? { value * 100 }
     public override func accessibilityMinValue() -> Any? { 0 }
     public override func accessibilityMaxValue() -> Any? { 100 }
-    public override func isAccessibilityEnabled() -> Bool { enabled }
+    public override func isAccessibilityEnabled() -> Bool { true }
     public override func accessibilityPerformIncrement() -> Bool { guard enabled else { return false }; finishScrollGesture(); onChange?(value + 0.05, true); return true }
     public override func accessibilityPerformDecrement() -> Bool { guard enabled else { return false }; finishScrollGesture(); onChange?(value - 0.05, true); return true }
     public override var focusRingMaskBounds: NSRect { bounds }

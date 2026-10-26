@@ -70,6 +70,19 @@ public enum ThemeTexture {
                 marks[y * px + x] = 0.65 * smoothNoise(u, v, cell: 3) + 0.35 * smoothNoise(u, v, cell: 1.5)
             } }
         }
+        if t == .sand {
+            // Open art: sparse horizontal 2–3 pt dashes, not copied capture pixels.
+            marks = [Double](repeating: 0, count: px * px)
+            for gy in stride(from: 0.0, to: side, by: 3) { for gx in stride(from: 0.0, to: side, by: 4) {
+                let ix = Int(gx), iy = Int(gy)
+                guard random(ix, iy, 71) < 0.8 else { continue }
+                let x = gx + random(ix, iy, 72), y = gy + random(ix, iy, 73)
+                let length = 2 + random(ix, iy, 74), strength = 0.4 + 0.6 * random(ix, iy, 75)
+                for py in max(0, Int(y * outputScale))..<min(px, Int(ceil((y + 0.75) * outputScale))) {
+                    for px0 in max(0, Int(x * outputScale))..<min(px, Int(ceil((x + length) * outputScale))) { marks[py * px + px0] = strength }
+                }
+            } }
+        }
         let mean = marks.reduce(0, +) / Double(marks.count)
         let deviation = sqrt(marks.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(marks.count))
         let base: Double, contrast: Double, alpha: Double

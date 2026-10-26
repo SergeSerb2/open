@@ -41,6 +41,6 @@ public enum ThemeEditorMetrics {
     public static let intensityThumbStart: CGFloat = 7.8 // panel x = 13 + 18 + 7.8 = 38.8
     public static let intensityTravel: CGFloat = 208.4
     public static let noiseCenter = CGPoint(x: 40, y: 40) // content (298, 452)
-    public static let noiseRadius: CGFloat = 32.5
+    public static let noiseRadius: CGFloat = 32.0
     public static let noiseTickSize = CGSize(width: 8, height: 16)
 }

@@ -13,6 +13,8 @@ public final class NoiseDialView: NSView {
     public private(set) var layoutPassCount = 0
     public private(set) var previewCompositionCount = 0
     public var isTickVisible: Bool { !tick.isHidden }
+    public var tickShadowOffset: CGSize { tick.shadowOffset }
+    public var tickLayerIsUnrotated: Bool { CATransform3DIsIdentity(tick.transform) }
     public var tickAngle: Double { value * 360 }
     public var tickCenter: CGPoint {
         let point = ringPoint(angle: tickAngle), scale = max(1, renderScale)
@@ -62,7 +64,7 @@ public final class NoiseDialView: NSView {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for (index, dot) in dots.enumerated() {
             if dot.path == nil {
-                dot.bounds = CGRect(x: 0, y: 0, width: 4.5, height: 4.5)
+                dot.bounds = CGRect(x: 0, y: 0, width: 5, height: 5)
                 dot.path = CGPath(ellipseIn: dot.bounds, transform: nil)
             }
             dot.position = ringPoint(angle: Double(index) * 18); dot.isHidden = hidden(index)
@@ -70,12 +72,17 @@ public final class NoiseDialView: NSView {
             dot.lineWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0
             dot.strokeColor = ThemeEditorColors.glyph.cgColor(contentAppearance)
         }
-        if tick.path == nil {
-            tick.bounds = CGRect(origin: .zero, size: ThemeEditorMetrics.noiseTickSize)
-            tick.path = CGPath(roundedRect: tick.bounds, cornerWidth: 4, cornerHeight: 4, transform: nil)
-        }
-        tick.isHidden = !enabled
-        tick.position = tickCenter; tick.transform = CATransform3DMakeRotation(value * 2 * .pi, 0, 0, 1)
+        tick.bounds = CGRect(origin: .zero, size: ThemeEditorMetrics.noiseTickSize)
+        var rotation = CGAffineTransform(translationX: tick.bounds.midX, y: tick.bounds.midY)
+            .rotated(by: value * 2 * .pi).translatedBy(x: -tick.bounds.midX, y: -tick.bounds.midY)
+        let shape = CGPath(roundedRect: tick.bounds, cornerWidth: 4, cornerHeight: 4, transform: nil)
+        tick.path = shape.copy(using: &rotation)
+        tick.shadowPath = tick.path
+        tick.transform = CATransform3DIdentity
+        tick.isHidden = !enabled; tick.position = tickCenter
+        // Rotate the geometry, never the shadow: down stays down at every angle.
+        tick.shadowColor = CGColor(gray: contentAppearance == .light ? 0 : 1, alpha: 1)
+        tick.shadowOpacity = 0.06; tick.shadowRadius = 2; tick.shadowOffset = CGSize(width: 0, height: 2)
         tick.fillColor = ThemeEditorColors.thumb.cgColor(contentAppearance)
         tick.strokeColor = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? ThemeEditorColors.glyph.cgColor(contentAppearance)
             : nil
@@ -133,7 +140,7 @@ public final class NoiseDialView: NSView {
     public override func accessibilityValue() -> Any? { value * 100 }
     public override func accessibilityMinValue() -> Any? { 0 }
     public override func accessibilityMaxValue() -> Any? { 100 }
-    public override func isAccessibilityEnabled() -> Bool { enabled }
+    public override func isAccessibilityEnabled() -> Bool { true }
     public override func accessibilityPerformIncrement() -> Bool { guard enabled else { return false }; finishScrollGesture(); onAction?(.setNoise(value + 0.05, final: true)); return true }
     public override func accessibilityPerformDecrement() -> Bool { guard enabled else { return false }; finishScrollGesture(); onAction?(.setNoise(value - 0.05, final: true)); return true }
     public override var focusRingMaskBounds: NSRect { bounds }
@@ -173,7 +180,7 @@ public final class NoiseTextureButton: NSView {
         if event.keyCode == 36 || event.keyCode == 49 { if !event.isARepeat { _ = accessibilityPerformPress() } } else { super.keyDown(with: event) }
     }
     public override func accessibilityPerformPress() -> Bool { guard enabled else { return false }; onPress?(); return true }
-    public override func isAccessibilityEnabled() -> Bool { enabled }
+    public override func isAccessibilityEnabled() -> Bool { true }
     public override var focusRingMaskBounds: NSRect { bounds }
     public override func drawFocusRingMask() { NSBezierPath(ovalIn: bounds).fill() }
     public override func draw(_ dirtyRect: NSRect) { if window?.firstResponder === self { NSFocusRingPlacement.only.set(); drawFocusRingMask() } }
