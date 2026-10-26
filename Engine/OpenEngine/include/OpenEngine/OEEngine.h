@@ -123,13 +123,15 @@ OE_EXPORT @interface OEEngine : NSObject
 /// <userDataDirectory>/Default.
 @property(nonatomic, readonly) OEBrowserContext* defaultContext;
 
-/// The context stored in `directory` (at or under userDataDirectory),
+/// The context stored in `directory`, a direct child of userDataDirectory,
 /// created on first use and cached by `identifier`. Contexts have separate
 /// cookies, storage, cache, extensions, permissions, and history (Arc
 /// "Profiles"). The default context's directory returns defaultContext, so
-/// two contexts never share one Chromium profile folder.
-- (OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
-                                 directory:(NSURL*)directory
+/// two contexts never share one Chromium profile folder. Any other folder is
+/// refused (nil): Chromium would silently keep that profile in memory as an
+/// off-the-record profile of the default profile.
+- (nullable OEBrowserContext*)contextWithIdentifier:(NSString*)identifier
+                                          directory:(NSURL*)directory
     NS_SWIFT_NAME(context(identifier:directory:));
 
 /// Same, in <userDataDirectory>/<identifier>.

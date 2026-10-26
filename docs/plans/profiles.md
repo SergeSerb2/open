@@ -486,9 +486,10 @@ the default. Never hardcode the default outside `SnapshotStore` /
   State/
     browser.json                 app-wide snapshot (unchanged, §4)
     favicons.sqlite3             GLOBAL favicon cache (path fixed here; CLI already takes --db)
-  Engine/                        CefSettings.root_cache_path (§6.2; lead decision 2026-10-25)
-    Default/                     the default Profile's Chromium profile dir (CEF's global context)
-    <dataDirectoryName>/         every other Profile's Chromium profile dir (its context's cache_path)
+  Engine/                        CefSettings.root_cache_path (§6.2; lead decision 2026-10-25), mode 0700
+    .open-layout                 "2": the engine layout is done (EngineLayoutMigration)
+    Default/                     the default Profile's Chromium profile dir (CEF's global context), 0700
+    <dataDirectoryName>/         every other Profile's Chromium profile dir (its context's cache_path), 0700
     Local State, WidevineCdm/…   Chromium's installation-wide files
   Profiles/
     <dataDirectoryName>/         one directory per Profile; name from Profile.dataDirectoryName
@@ -506,6 +507,13 @@ the default. Never hardcode the default outside `SnapshotStore` /
           resources.txt          scriptlet/redirect resources (adblock-fork §9.3)
           engine.dat             browser-owned serialized engine; Swift never writes it
 ```
+
+Chromium keeps each Profile's HTTP and code caches outside the root when the
+root is under `~/Library/Application Support`: `Engine/<dir>` caches in
+`~/Library/Caches/<root name>/Engine/<dir>` (`chrome_paths_mac.mm`,
+`GetUserCacheDirectory`; any other root keeps them inside `Engine/<dir>`).
+`ProfileDirectories.engineCacheDirectory` computes it the same way.
+`Profiles/<dir>/` is created with mode 0700, as Chromium's profile folders are.
 
 Incognito gets **no** directory under `Profiles/` (D-P8). Its only disk
 trace is what CEF itself persists under `root_cache_path` as
@@ -527,6 +535,7 @@ public struct ProfileDirectories: Sendable {
 
     public func profileDirectory(dataDirectoryName: String) -> URL
     public func engineDirectory(dataDirectoryName: String) -> URL
+    public func engineCacheDirectory(dataDirectoryName: String) -> URL
     public func historyFileURL(dataDirectoryName: String) -> URL
     public func archiveFileURL(dataDirectoryName: String) -> URL
     public func sleepFileURL(dataDirectoryName: String) -> URL
@@ -562,7 +571,11 @@ Path rules (implement exactly; these are the §5.1 tree, nothing else):
   creates no files. Call sites: App after `createProfile` succeeds;
   `openkit profiles create`; App bootstrap for every loaded Profile
   (covers Profiles created before this plan shipped).
-- `deleteProfileData` removes the whole `profileDirectory` tree. It throws
+- `engineCacheDirectory` = Chromium's cache folder for `engineDirectory`:
+  the same path under `~/Library/Caches` for a root under
+  `~/Library/Application Support`, else `engineDirectory` itself (§5.1).
+- `deleteProfileData` removes the whole `profileDirectory` tree, the
+  Profile's `Engine/<dir>`, and its Chromium cache folder. It throws
   on failure and never touches any other Profile. Preconditions and
   ordering are §5.5 — the function itself only deletes.
 
@@ -714,7 +727,12 @@ delete, "Delete Profile data from disk" which the App runs in this order:
    Chromium Profile corrupts it.
 2. `ProfileDirectories.deleteProfileData(dataDirectoryName:)` with the name
    captured **before** the model delete (the Profile object is gone after).
-   It removes `Profiles/<dir>/` and `Engine/<dir>/`.
+   It removes `Profiles/<dir>/`, `Engine/<dir>/`, and the Profile's cache
+   folder (`~/Library/Caches/<root name>/Engine/<dir>`, §5.1): a deleted
+   Profile's browsing cache must not stay behind. Also unload the Chromium
+   Profile through the engine first and drop its `Local State` entry
+   (`releaseContext` completes when no page is left, not when Chromium's
+   Profile is destroyed; `docs/followups.md`).
 3. `SnapshotStore.saveNow` so a crash cannot resurrect a Profile whose
    directory is gone. (If it did resurrect, `repairMissing…` does not apply
    — the Profile exists; its stores simply recreate empty. The save-first
@@ -1527,7 +1545,14 @@ PRs. Steps 6–7 are engine/App PRs. Branch names follow the repo pattern
 
 ## Appendix — Lead decisions (2026-10-25)
 
-- Engine root (supersedes engine-patches lead decision 4, "default profile engine data at `Profiles/Default/`"): Chromium's profile data lives under one engine root, `<root>/Engine/` = `root_cache_path`. `Engine/Default` is the default Profile, `Engine/<dir>` every other Profile. Open's own per-Profile files stay in `Profiles/<dir>/`. A one-time, crash-safe move (`OpenStore/EngineLayoutMigration.swift`, run by `OpenDataRoot.prepare` before the engine starts) brings older data over: the default Profile's Chromium files are cloned from `Profiles/Default/` into a staging folder, compared, published as `Engine/Default`, and only then removed; installation-wide files in `Profiles/` move with single renames; empty `Profiles/<dir>/Engine/` folders go away. Verified by `tools/e2e/engine_e2e.py --only profiles` (relaunch, both-direction extension isolation, legacy migration, a crash at each step).
+- Engine root (supersedes engine-patches lead decision 4, "default profile engine data at `Profiles/Default/`"): Chromium's profile data lives under one engine root, `<root>/Engine/` = `root_cache_path`. `Engine/Default` is the default Profile, `Engine/<dir>` every other Profile. Open's own per-Profile files stay in `Profiles/<dir>/`. A one-time, crash-safe move (`OpenStore/EngineLayoutMigration.swift`) brings older data over. The App runs it as its own launch step (`OpenDataRoot.prepareEngineLayout`), before the snapshot loads and before the engine starts; it never runs inside `SnapshotStore.load()`.
+  - It runs only when `Engine/.open-layout` is absent and the old location holds a Chromium file (`Profiles/Default/Preferences` or `Profiles/Local State`). Fresh installs just write the marker.
+  - It renames the ~30 top-level entries (same volume: no copy, no per-file fsync). A journal (`Engine/.open-layout-journal.json`) written first lists every rename, so at any crash each entry is in exactly one place and the next launch finishes. The default Profile's entries gather in `Engine/.migrating-Default`, published as `Engine/Default` with one rename; installation-wide files in `Profiles/` move to `Engine/`.
+  - Before the publish, a failure (a locked entry, found by a pre-flight check, or a rename error) renames everything back. That launch uses the old layout (`root_cache_path` = `Profiles/`; other Profiles wait, never in a memory-only profile) and the next launch retries. A live owner of `Profiles/SingletonLock` also defers it.
+  - After the publish, the rest is best effort and logged: the cache folder moves from `~/Library/Caches/<root>/Profiles/Default` to `…/Engine/Default`, stale `Singleton*` links and empty `Profiles/<dir>/Engine/` folders go away.
+  - `Engine/Default` already holding a profile (anything but `.DS_Store`) is never mixed with the old one: the old files stay and the skip is logged (stderr and the system log, category `engine-layout`).
+  - 27,005 files move in about 6–12 ms (it was 13.7 s with the earlier clone-and-compare design).
+  Verified by `tools/e2e/engine_e2e.py --only profiles` (relaunch with persistent and session cookies, both-direction extension isolation with incognito access, disk profiles on disk, the legacy migration with a full file inventory, unreadable and locked files, a profile already in use, and a crash at each step).
 
 - Approved as written: deleting a Profile is refused while Spaces use it and always for the default Profile; Space→Profile moves allowed after a confirmation; `dataDirectoryName` is permanent; schema stays 1.
 - Q1 (named Arc profiles, StorableProfiles.json): keep the lenient parser; verify when a multi-profile Arc install is available.

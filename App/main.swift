@@ -65,8 +65,9 @@ let configuration = OEEngineConfiguration()
 // Engine/Default (CEF's fixed name for the global context); other profiles
 // use Engine/<dir> (EngineWebContentHostFactory.context(for:)). CEF loads a
 // disk profile only for a direct child of root_cache_path
-// (docs/plans/profiles.md §6.2). OpenDataRoot moved older data there.
-configuration.userDataDirectory = directories.engineRoot
+// (docs/plans/profiles.md §6.2). The launch's engine layout step moved older
+// data there; if it could not, this launch uses the old root (<root>/Profiles).
+configuration.userDataDirectory = appDelegate.engine.engineRoot
 configuration.logFile = directories.root.appendingPathComponent("State/engine.log")
 configuration.defaultRuntimeStyle = options.defaultStyle
 configuration.remoteDebuggingPort = options.remoteDebuggingPort

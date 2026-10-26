@@ -515,30 +515,33 @@ class OEDefaultClient : public CefClient,
                                  directory:(NSURL*)directory {
   // CEF loads a disk profile only when cache_path's parent is
   // root_cache_path, compared as strings (ChromeBrowserContext::
-  // InitializeAsync); anything else silently becomes an in-memory profile.
+  // InitializeAsync); anything else silently becomes an off-the-record
+  // profile of the default profile, whose extensions (if allowed in
+  // incognito) could see its tabs. Such a folder is refused here.
   // userDataDirectory is already resolved (/tmp -> /private/tmp), so name the
   // child through it.
   char resolved[PATH_MAX];
-  if (realpath(directory.URLByDeletingLastPathComponent.fileSystemRepresentation,
-               resolved) &&
-      [@(resolved) isEqualToString:_configuration.userDataDirectory.path]) {
-    directory = [_configuration.userDataDirectory
-        URLByAppendingPathComponent:directory.lastPathComponent
-                        isDirectory:YES];
-  } else {
-    NSLog(@"OEEngine: %@ is not a direct child of %@; Chromium keeps that "
-          @"profile in memory",
-          directory.path, _configuration.userDataDirectory.path);
+  if (!realpath(directory.URLByDeletingLastPathComponent.fileSystemRepresentation,
+                resolved) ||
+      ![@(resolved) isEqualToString:_configuration.userDataDirectory.path]) {
+    NSLog(@"OEEngine: refused context %@: %@ is not a direct child of %@",
+          identifier, directory.path, _configuration.userDataDirectory.path);
+    NSAssert(NO, @"context directory must be a direct child of "
+                 @"userDataDirectory");
+    return nil;
   }
-  NSString* path = directory.URLByStandardizingPath.path;
+  directory = [_configuration.userDataDirectory
+      URLByAppendingPathComponent:directory.lastPathComponent
+                      isDirectory:YES];
+  // Already resolved: no URLByStandardizingPath, which drops /private and
+  // would no longer match userDataDirectory.
+  NSString* path = directory.path;
   if ([identifier isEqualToString:@"Default"] ||
       [path isEqualToString:_defaultContextDirectory.path]) {
     return self.defaultContext;
   }
   OEBrowserContext* context = _contexts[identifier];
   if (!context) {
-    NSAssert([path hasPrefix:_configuration.userDataDirectory.path],
-             @"context directory must be inside userDataDirectory");
     context = [[OEBrowserContext alloc] initOEWithIdentifier:identifier
                                                     directory:directory
                                                        global:NO];

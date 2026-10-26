@@ -24,6 +24,22 @@ public struct ProfileDirectories: Sendable {
         Self.validate(dataDirectoryName)
         return engineRoot.appendingPathComponent(dataDirectoryName, isDirectory: true)
     }
+    /// Where Chromium keeps the profile's HTTP and code caches. A profile under
+    /// ~/Library/Application Support uses the same path under ~/Library/Caches;
+    /// any other profile keeps them inside its own folder
+    /// (chrome/common/chrome_paths_mac.mm, GetUserCacheDirectory).
+    public func engineCacheDirectory(dataDirectoryName: String) -> URL {
+        Self.chromiumCacheDirectory(forProfile: engineDirectory(dataDirectoryName: dataDirectoryName))
+    }
+    public static func chromiumCacheDirectory(forProfile profile: URL) -> URL {
+        let fm = FileManager.default
+        guard let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first,
+              let caches = fm.urls(for: .cachesDirectory, in: .userDomainMask).first else { return profile }
+        let base = support.standardizedFileURL.path + "/"
+        let path = profile.standardizedFileURL.path
+        guard path.hasPrefix(base) else { return profile }
+        return caches.appendingPathComponent(String(path.dropFirst(base.count)), isDirectory: true)
+    }
     private static func validate(_ name: String) {
         precondition(!name.isEmpty && name != "." && name != ".." && !name.contains("/"), "Invalid Profile directory name")
     }
@@ -36,10 +52,15 @@ public struct ProfileDirectories: Sendable {
     public func adBlockListsDirectory(dataDirectoryName: String) -> URL { adBlockDirectory(dataDirectoryName: dataDirectoryName).appendingPathComponent("lists", isDirectory: true) }
 
     /// Open's own directories. The engine creates `Engine/<dir>` when the
-    /// profile's context first loads.
+    /// profile's context first loads. A profile folder is private (0700), as
+    /// Chromium's are.
     public func ensureProfileDirectories(dataDirectoryName: String) throws {
+        let fm = FileManager.default
+        let profile = profileDirectory(dataDirectoryName: dataDirectoryName)
+        try fm.createDirectory(at: profile, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: profile.path)
         let paths = [historyFileURL(dataDirectoryName: dataDirectoryName).deletingLastPathComponent(), boostsFileURL(dataDirectoryName: dataDirectoryName).deletingLastPathComponent(), adBlockListsDirectory(dataDirectoryName: dataDirectoryName)]
-        for path in paths { try FileManager.default.createDirectory(at: path, withIntermediateDirectories: true) }
+        for path in paths { try fm.createDirectory(at: path, withIntermediateDirectories: true) }
     }
 
     public var retiredDirectoriesFileURL: URL { root.appendingPathComponent("State/retired-profile-dirs.json") }
@@ -65,9 +86,11 @@ public struct ProfileDirectories: Sendable {
     }
 
     /// Caller must tear down the engine first. Model deletion alone never calls this.
-    /// Removes Open's files and the profile's engine data.
+    /// Removes Open's files, the profile's engine data, and its Chromium cache.
     public func deleteProfileData(dataDirectoryName: String) throws {
         let engine = engineDirectory(dataDirectoryName: dataDirectoryName)
+        let cache = engineCacheDirectory(dataDirectoryName: dataDirectoryName)
+        if cache != engine, DurableFiles.exists(cache) { try FileManager.default.removeItem(at: cache) }
         if DurableFiles.exists(engine) { try FileManager.default.removeItem(at: engine) }
         try FileManager.default.removeItem(at: profileDirectory(dataDirectoryName: dataDirectoryName))
     }
@@ -77,6 +100,7 @@ public struct ProfileDirectories: Sendable {
 extension ProfileDirectories {
     public func profileDirectory(for profile: Profile) -> URL { profileDirectory(dataDirectoryName: profile.dataDirectoryName) }
     public func engineDirectory(for profile: Profile) -> URL { engineDirectory(dataDirectoryName: profile.dataDirectoryName) }
+    public func engineCacheDirectory(for profile: Profile) -> URL { engineCacheDirectory(dataDirectoryName: profile.dataDirectoryName) }
     public func historyFileURL(for profile: Profile) -> URL { historyFileURL(dataDirectoryName: profile.dataDirectoryName) }
     public func archiveFileURL(for profile: Profile) -> URL { archiveFileURL(dataDirectoryName: profile.dataDirectoryName) }
     public func sleepFileURL(for profile: Profile) -> URL { sleepFileURL(dataDirectoryName: profile.dataDirectoryName) }

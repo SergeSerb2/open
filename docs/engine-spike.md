@@ -57,7 +57,7 @@ What this means: everything that runs inside the extension system works in Alloy
 | Downloads | pass | destination from our delegate, progress events, file written |
 | User scripts (Boosts) | pass | CSS and JS injected before page scripts on the matched site only |
 | Request filter (ad-block hook) | pass | a matched request is blocked, then loads after the filter is cleared |
-| Profiles | pass | a second Space with a new profile "Work" gets its own context in `Profiles/<dir>/Engine` (the M5 layout): no cookie, no localStorage from Default |
+| Profiles | pass | a second Space with a new profile "Work" gets its own context in `Engine/<dir>` (the engine root layout, docs/plans/profiles.md §6.2; it was `Profiles/<dir>/Engine` in M5): no cookie, no localStorage from Default |
 | Ad-block control | pass | without extensions the ad URLs load (so the DNR result above is real) |
 | Codecs | pass (as expected) | VP9, AV1, Opus, MP3 yes; H.264, AAC, HEVC no in stock CEF (the fork's GN args turn on proprietary codecs: P4). Fork build: H.264, AAC, HEVC yes (`results-features-alloy-fork.json`) |
 | Widevine | pass, once the CDM is downloaded | Chromium's component updater fetched the Widevine CDM (4.10.3112.0) into `Profiles/WidevineCdm`; then EME was available and a Widevine-encrypted test stream played (123 frames in 5 s). In three earlier runs the CDM had not arrived within the 120 s wait and EME was unavailable. v1 does not ship Widevine by lead decision (`Engine/fork/gn/release.args.gn`: `enable_widevine=false`). |

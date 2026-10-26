@@ -80,6 +80,29 @@ public enum OpenDataRoot {
         public let migrationReport: ProfileMigrationReport
     }
 
+    /// The engine layout step's outcome; holds the data root lock.
+    public struct EnginePreparation: Sendable {
+        let lock: DataRootLock
+        public var root: URL { lock.root }
+        public let result: EngineLayoutResult
+        /// Chromium's root_cache_path for this launch: `<root>/Engine`, or
+        /// `<root>/Profiles` when the migration could not finish.
+        public var engineRoot: URL {
+            result.layout == .engine ? ProfileDirectories(root: root).engineRoot
+                : root.appendingPathComponent("Profiles", isDirectory: true)
+        }
+    }
+
+    /// Moves Chromium's data to `<root>/Engine` if it is still in the old
+    /// layout (EngineLayoutMigration). The App runs this as its own launch step,
+    /// before the snapshot loads and before the engine starts. A migration
+    /// problem never throws: it selects the legacy layout for this launch.
+    /// Throws only when the data root cannot be locked (another Open runs).
+    public static func prepareEngineLayout(root: URL) throws -> EnginePreparation {
+        let lock = try DataRootLock.acquire(root: root)
+        return EnginePreparation(lock: lock, result: EngineLayoutMigration.run(root: lock.root))
+    }
+
     nonisolated static func root(forStoreFileURL storeFileURL: URL) -> URL {
         let state = storeFileURL.deletingLastPathComponent()
         let profile = state.deletingLastPathComponent()
@@ -114,12 +137,10 @@ public enum OpenDataRoot {
         let directories = ProfileDirectories(root: root)
         var report = ProfileMigrationReport()
         if !DataRootLocks.isPrepared(root: root) {
+            // Open's own stores only. Chromium's data moves in its own launch
+            // step (prepareEngineLayout), never here: this runs inside
+            // SnapshotStore.load().
             report = try ProfileMigration.migrateSingleProfileLayout(root: root, profiles: model?.profiles ?? [])
-            // Before any engine start: Chromium's data moves to <root>/Engine.
-            let engine = try EngineLayoutMigration.migrate(
-                root: root, profileDirectoryNames: Set((model?.profiles ?? []).map(\.dataDirectoryName)))
-            report.moved += engine.moved
-            report.skipped += engine.skipped
             DataRootLocks.markPrepared(root: root)
             for line in report.moved { FileHandle.standardError.write(Data("migration moved \(line)\n".utf8)) }
             for line in report.skipped { FileHandle.standardError.write(Data("migration skipped \(line)\n".utf8)) }

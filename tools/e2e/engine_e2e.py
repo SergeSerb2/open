@@ -21,6 +21,7 @@ import base64
 import json
 import math
 import glob
+import hashlib
 import re
 import os
 import shutil
@@ -2380,7 +2381,8 @@ def startup_failure_checks(factory, results, tmp):
 
 def profiles_checks(factory, results, tmp, config):
     """Two launches on one data root, then the legacy layout and its
-    migration, including crashes at each migration step."""
+    migration: a plain move, unreadable and locked files, a profile already
+    in use, and a crash at each step."""
     root = None
     default_url, work_url = "https://example.com/?profile=default", "https://example.com/?profile=work"
 
@@ -2388,49 +2390,104 @@ def profiles_checks(factory, results, tmp, config):
         return app.eval(tab, "document.cookie")
 
     def probe_view(app):
-        """URLs and window ids the tabs probe sees from the focused profile.
-        Chrome loads --load-extension into each profile when it starts."""
+        """URLs and window ids the tabs probe sees from the focused profile,
+        and whether it may run in incognito. Chrome loads --load-extension
+        into each profile when it starts."""
         wait_until(lambda: any(e["id"] == PROBE for e in app.call("extensions")["installed"]), timeout=30)
-        pop = app.call("popup", extension=PROBE)["identifier"]
+
+        def open_popup():
+            try:
+                return app.call("popup", extension=PROBE)["identifier"]
+            except RuntimeError:
+                return None  # the action is not ready for this tab yet
+        pop = wait_until(open_popup, timeout=20)
+        if pop is None:
+            raise RuntimeError("tabs probe popup did not open")
         wait_until(lambda: app.eval(pop, "window.currentTab !== undefined"), timeout=20)
-        seen = app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll()]).then(([ts, ws]) =>"
-                             " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id)}))")
+        seen = app.eval(pop, "Promise.all([chrome.tabs.query({}), chrome.windows.getAll(),"
+                             " chrome.extension.isAllowedIncognitoAccess()]).then(([ts, ws, incognito]) =>"
+                             " ({urls: ts.map(t => t.url || t.pendingUrl), windows: ws.map(w => w.id), incognito}))")
         app.call("popup-close")
         return seen
 
+    def allow_probe_in_incognito(app):
+        """The E5 threat: a default-profile extension allowed in incognito.
+        Set through Chrome's own extensions page in the default profile."""
+        page = new_tab(app, "chrome://extensions")
+        wait_until(lambda: app.eval(page, "typeof chrome.developerPrivate") == "object", timeout=20)
+        answer = app.eval(page, "new Promise(done => chrome.developerPrivate.updateExtensionConfiguration("
+                                "{extensionId: '%s', incognitoAccess: true}, () =>"
+                                " done(chrome.runtime.lastError ? chrome.runtime.lastError.message : 'ok')))" % PROBE)
+        app.call("close", tab=page)
+        return answer
+
+    def mode(*parts):
+        return oct(os.stat(os.path.join(root, *parts)).st_mode & 0o777)
+
+    # First launch: the default profile's page and the incognito grant (the
+    # grant reloads the extension; the next launch starts with it).
     app = factory(urls=(), fresh=True)
     try:
         root = app.user_data
         a = new_tab(app, default_url)
         app.eval(a, 'document.cookie = "oe_default=1; max-age=86400"; localStorage.setItem("oe", "default"); 1')
+        incognito_set = allow_probe_in_incognito(app)
+        app.call("save")
+    finally:
+        app.quit()
+    app = factory(urls=())
+    try:
+        a = [t["id"] for t in app.call("tabs") if t["url"] == default_url][0]
+        app.call("select", tab=a)
+        app.call("wait", tab=a)
         home = [x for x in app.call("spaces") if x["focused"]][0]["id"]
         work = app.call("space-create", title="Work", profile="Work")
         b = new_tab(app, work_url)
         work_dir = app.page(b)["context"]
-        app.eval(b, 'document.cookie = "oe_work=1; max-age=86400"; localStorage.setItem("oe", "work"); 1')
+        app.eval(b, 'document.cookie = "oe_work=1; max-age=86400"; document.cookie = "oe_session=1";'
+                    ' localStorage.setItem("oe", "work"); 1')
+        work_hosted = app.page(b).get("chromeWindowId", -1)
         work_view = probe_view(app)
         app.call("space", space=home)
         app.call("select", tab=a)
+        app.call("wait", tab=a)
         default_view = probe_view(app)
+        # With incognito access, an off-the-record fallback of the Work
+        # profile (the E5 leak) would show Work's tab here.
         results["extension_isolation"] = {
-            "ok": default_url in default_view["urls"] and work_url not in default_view["urls"]
+            "ok": incognito_set == "ok" and default_view["incognito"] is True
+                  and default_url in default_view["urls"] and work_url not in default_view["urls"]
                   and work_url in work_view["urls"] and default_url not in work_view["urls"]
                   and not set(default_view["windows"]) & set(work_view["windows"]),
-            "default_profile_probe_sees": default_view, "work_profile_probe_sees": work_view}
+            "incognito_access": incognito_set, "default_profile_probe_sees": default_view,
+            "work_profile_probe_sees": work_view}
         app.call("save")
     finally:
         app.quit()
+    # Every disk context is a real disk profile, never Chromium's in-memory
+    # (off-the-record) fallback: Chromium wrote its Preferences there,
+    # registered it in Local State, and gave its tab a Chrome window.
+    local_state = json.load(open(os.path.join(root, "Engine", "Local State")))
+    registered = sorted(local_state.get("profile", {}).get("info_cache", {}))
+    results["disk_profiles_on_disk"] = {
+        "ok": all(os.path.isfile(os.path.join(root, "Engine", d, "Preferences")) for d in ("Default", work_dir))
+              and work_dir in registered and work_hosted != -1,
+        "info_cache": registered, "work_chrome_window": work_hosted}
     layout = {
         "engine_default_cookies": os.path.exists(os.path.join(root, "Engine", "Default", "Cookies")),
         "engine_work_cookies": os.path.exists(os.path.join(root, "Engine", work_dir, "Cookies")),
         "local_state": os.path.exists(os.path.join(root, "Engine", "Local State")),
         "profiles_default": sorted(x for x in os.listdir(os.path.join(root, "Profiles", "Default")) if not x.startswith(".")),
+        "layout_marker": os.path.exists(os.path.join(root, "Engine", ".open-layout")),
+        "modes": {p: mode(*p.split("/")) for p in ("Engine", "Engine/Default", "Engine/" + work_dir,
+                                                  "Profiles/Default", "Profiles/" + work_dir)},
     }
     results["engine_layout"] = {"ok": layout["engine_default_cookies"] and layout["engine_work_cookies"]
-                                      and layout["local_state"] and layout["profiles_default"] == ["AdBlock", "Boosts", "State"],
+                                      and layout["local_state"] and layout["profiles_default"] == ["AdBlock", "Boosts", "State"]
+                                      and layout["layout_marker"] and set(layout["modes"].values()) == {"0o700"},
                                 "layout": layout, "work_dir": work_dir}
 
-    def check_cookies(app, label):
+    def check_cookies(app, label, work_loads=True):
         tabs = {t["url"]: t["id"] for t in app.call("tabs")}
         app.call("select", tab=tabs[default_url])
         app.call("wait", tab=tabs[default_url])
@@ -2438,79 +2495,216 @@ def profiles_checks(factory, results, tmp, config):
         app.call("space", space=work)
         work_tab = [t["id"] for t in app.call("tabs") if t["url"] == work_url][0]
         app.call("select", tab=work_tab)
+        if not work_loads:
+            time.sleep(2)
+            page = app.page(work_tab)
+            app.call("space", space=home)
+            return {"default_cookie": default_cookie, "work_page_live": bool(page and page.get("live"))}
         app.call("wait", tab=work_tab)
         work_cookie, work_storage = cookie(app, work_tab), app.eval(work_tab, 'localStorage.getItem("oe")')
         app.call("space", space=home)
         return {"default_cookie": default_cookie, "work_cookie": work_cookie, "work_storage": work_storage}
 
-    # Relaunch: each profile keeps its own cookie and storage.
+    # Relaunch: each profile keeps its own cookies (persistent and session)
+    # and storage.
     app = factory(urls=())
     try:
         got = check_cookies(app, "relaunch")
     finally:
         app.quit()
     results["durable_second_profile"] = {
-        "ok": "oe_work=1" in got["work_cookie"] and "oe_default" not in got["work_cookie"]
+        "ok": "oe_work=1" in got["work_cookie"] and "oe_session=1" in got["work_cookie"]
+              and "oe_default" not in got["work_cookie"]
               and got["work_storage"] == "work" and "oe_default=1" in got["default_cookie"]
               and "oe_work" not in got["default_cookie"], **got}
 
     # The old layout: root_cache_path was Profiles/. The default profile's
     # Chromium files sat in Profiles/Default next to Open's folders,
-    # installation files in Profiles/, and other profiles kept nothing.
+    # installation files in Profiles/, the cache in ~/Library/Caches/<root>/
+    # Profiles/Default, and other profiles kept nothing.
+    caches = os.path.join(os.path.expanduser("~/Library/Caches"), os.path.basename(root))
+
     def make_legacy():
         engine, profiles = os.path.join(root, "Engine"), os.path.join(root, "Profiles")
         for name in os.listdir(os.path.join(engine, "Default")):
             shutil.move(os.path.join(engine, "Default", name), os.path.join(profiles, "Default", name))
         shutil.rmtree(os.path.join(engine, "Default"))
-        shutil.rmtree(os.path.join(engine, work_dir))
+        shutil.rmtree(os.path.join(engine, work_dir), ignore_errors=True)
         os.makedirs(os.path.join(profiles, work_dir, "Engine"), exist_ok=True)
         os.makedirs(os.path.join(profiles, "Default", "Engine"), exist_ok=True)
         for name in os.listdir(engine):
-            if not name.startswith("Singleton"):
+            if not name.startswith(("Singleton", ".")):
                 shutil.move(os.path.join(engine, name), os.path.join(profiles, name))
         shutil.rmtree(engine)
+        os.symlink("%s-999999" % socket.gethostname(), os.path.join(profiles, "SingletonLock"))  # a dead owner
+        old_cache, new_cache = os.path.join(caches, "Profiles", "Default"), os.path.join(caches, "Engine", "Default")
+        shutil.rmtree(old_cache, ignore_errors=True)
+        if os.path.isdir(new_cache):
+            os.makedirs(os.path.dirname(old_cache), exist_ok=True)
+            shutil.move(new_cache, old_cache)
+        os.makedirs(old_cache, exist_ok=True)
+        open(os.path.join(old_cache, "open-e2e-cache-marker"), "w").write("cache")
+
+    def inventory(base, skip=("State", "Boosts", "AdBlock", "Engine")):
+        out = {}
+        for top in os.listdir(base):
+            if top in skip or top.startswith("."):
+                continue
+            path = os.path.join(base, top)
+            walk = [(path, top)] if not os.path.isdir(path) else [
+                (os.path.join(d, f), os.path.relpath(os.path.join(d, f), base)) for d, _, fs in os.walk(path) for f in fs]
+            for file, rel in walk:
+                info = os.lstat(file)
+                try:
+                    digest = hashlib.sha256(open(file, "rb").read()).hexdigest()[:16]
+                except (PermissionError, IsADirectoryError, OSError):
+                    digest = "unreadable"
+                out[rel] = (info.st_size, digest)
+        return out
 
     binary = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+    browser_json = os.path.join(root, "State", "browser.json")
 
-    def crash_at(point):
-        env = dict(os.environ, OPEN_USER_DATA=root, OPENKIT_DEBUG_MIGRATION_CRASH=point)
-        with open(os.path.join(tmp, "crash-%s.log" % point), "w") as log:
-            return subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
+    def run_binary(label, **env_extra):
+        """One launch of the real app; returns its exit code and output."""
+        env = dict(os.environ, OPEN_USER_DATA=root, **env_extra)
+        path = os.path.join(tmp, "migration-%s.log" % label)
+        with open(path, "w") as log:
+            code = subprocess.run([binary, "--use-mock-keychain"], env=env, stdout=log, stderr=subprocess.STDOUT,
                                   timeout=60).returncode
+        return code, open(path).read()
 
-    def migrated(label):
+    def migrate_only(label):
+        """The launch's layout step alone: the app exits before the engine
+        starts, so the moved files are exactly what was on disk."""
+        before = open(browser_json, "rb").read()
+        code, text = run_binary(label, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1")
+        return code, text, open(browser_json, "rb").read() == before
+
+    def migrated_layout():
+        return {"marker": os.path.exists(os.path.join(root, "Engine", ".open-layout")),
+                "journal": os.path.exists(os.path.join(root, "Engine", ".open-layout-journal.json")),
+                "profiles_default": sorted(x for x in os.listdir(os.path.join(root, "Profiles", "Default"))
+                                           if not x.startswith(".")),
+                "local_state_moved": os.path.exists(os.path.join(root, "Engine", "Local State"))
+                                     and not os.path.exists(os.path.join(root, "Profiles", "Local State")),
+                "old_engine_folder_gone": not os.path.exists(os.path.join(root, "Profiles", work_dir, "Engine")),
+                "singletons_gone": not any(n.startswith("Singleton") for n in os.listdir(os.path.join(root, "Profiles"))),
+                "cache_moved": os.path.exists(os.path.join(caches, "Engine", "Default", "open-e2e-cache-marker"))
+                               and not os.path.exists(os.path.join(caches, "Profiles", "Default"))}
+
+    def layout_ok(state):
+        return (state["marker"] and not state["journal"] and state["profiles_default"] == ["AdBlock", "Boosts", "State"]
+                and state["local_state_moved"] and state["old_engine_folder_gone"] and state["singletons_gone"]
+                and state["cache_moved"])
+
+    def launch_and_check(label):
         app = factory(urls=())
         try:
-            got = check_cookies(app, label)
+            return check_cookies(app, label, work_loads=False)
         finally:
             app.quit()
-        profiles_default = sorted(x for x in os.listdir(os.path.join(root, "Profiles", "Default")))
-        engine_default = os.path.join(root, "Engine", "Default")
-        return {"ok": "oe_default=1" in got["default_cookie"] and os.path.exists(os.path.join(engine_default, "Cookies"))
-                      and profiles_default == ["AdBlock", "Boosts", "State"]
-                      and not os.path.exists(os.path.join(engine_default, ".open-engine-migration.json"))
-                      and not os.path.exists(os.path.join(root, "Profiles", "Local State"))
-                      and os.path.exists(os.path.join(root, "Engine", "Local State"))
-                      and not os.path.exists(os.path.join(root, "Profiles", work_dir, "Engine")),
-                "default_cookie": got["default_cookie"], "profiles_default": profiles_default}
 
+    # A plain move: every file arrives unchanged, the snapshot is untouched.
     make_legacy()
-    results["migration_from_legacy"] = migrated("legacy")
+    before = inventory(os.path.join(root, "Profiles", "Default"))
+    code, text, same_snapshot = migrate_only("legacy")
+    after = inventory(os.path.join(root, "Engine", "Default"))
+    state = migrated_layout()
+    got = launch_and_check("legacy")
+    results["migration_from_legacy"] = {
+        "ok": code == 0 and before == after and same_snapshot and layout_ok(state) and "oe_default=1" in got["default_cookie"],
+        "files": len(after), "inventory_equal": before == after, "snapshot_byte_identical": same_snapshot,
+        "layout": state, "default_cookie": got["default_cookie"]}
 
-    # A crash at each step resumes on the next launch; the originals stay
-    # until the copy is published.
-    for point in ("engine-copied", "engine-staged", "engine-published", "engine-cleanup"):
+    # Unreadable files (top level and nested) and a nested locked file do not
+    # block renames: the migration finishes on the first launch.
+    make_legacy()
+    unreadable = os.path.join(root, "Profiles", "Default", "Open E2E unreadable.bin")
+    nested = os.path.join(root, "Profiles", "Default", "Open E2E", "nested", "unreadable.bin")
+    nested_locked = os.path.join(root, "Profiles", "Default", "Open E2E", "nested", "locked.bin")
+    os.makedirs(os.path.dirname(nested))
+    for path in (unreadable, nested, nested_locked):
+        open(path, "w").write("open e2e")
+    os.chmod(unreadable, 0)
+    os.chmod(nested, 0)
+    subprocess.run(["chflags", "uchg", nested_locked], check=True)
+    before = inventory(os.path.join(root, "Profiles", "Default"))
+    code, text, same_snapshot = migrate_only("unreadable")
+    after = inventory(os.path.join(root, "Engine", "Default"))
+    got = launch_and_check("unreadable")
+    subprocess.run(["chflags", "nouchg", os.path.join(root, "Engine", "Default", "Open E2E", "nested", "locked.bin")])
+    results["migration_unreadable_files"] = {
+        "ok": code == 0 and before == after and same_snapshot and layout_ok(migrated_layout())
+              and "oe_default=1" in got["default_cookie"],
+        "inventory_equal": before == after, "snapshot_byte_identical": same_snapshot,
+        "unreadable_entries": sorted(k for k, v in after.items() if v[1] == "unreadable")}
+    for path in ("Open E2E unreadable.bin", "Open E2E"):
+        target = os.path.join(root, "Engine", "Default", path)
+        subprocess.run(["chmod", "-R", "u+rwX", target])
+        shutil.rmtree(target) if os.path.isdir(target) else os.remove(target)
+
+    # A Finder-locked top-level file blocks its rename: this launch uses the
+    # old layout (the default profile works, other profiles wait), nothing
+    # moves, and the next launch after unlocking finishes the migration.
+    make_legacy()
+    locked = os.path.join(root, "Profiles", "Default", "Open E2E locked.bin")
+    open(locked, "w").write("open e2e")
+    subprocess.run(["chflags", "uchg", locked], check=True)
+    before = inventory(os.path.join(root, "Profiles", "Default"))
+    code, text, same_snapshot = migrate_only("locked")
+    untouched = inventory(os.path.join(root, "Profiles", "Default")) == before \
+        and not os.path.exists(os.path.join(root, "Engine", "Default")) \
+        and os.path.exists(os.path.join(root, "Profiles", "Local State"))
+    got = launch_and_check("locked-legacy-launch")
+    subprocess.run(["chflags", "nouchg", locked], check=True)
+    # The legacy launch ran Chromium on Profiles/Default: compare from here.
+    before = inventory(os.path.join(root, "Profiles", "Default"))
+    code2, text2, same_snapshot2 = migrate_only("unlocked")
+    after = inventory(os.path.join(root, "Engine", "Default"))
+    results["migration_locked_file"] = {
+        "ok": code == 0 and same_snapshot and untouched and "legacy layout for this launch" in text
+              and "oe_default=1" in got["default_cookie"] and not got["work_page_live"]
+              and code2 == 0 and same_snapshot2 and before == after and layout_ok(migrated_layout()),
+        "first_launch": {"exit": code, "untouched": untouched, "snapshot_byte_identical": same_snapshot,
+                         "log": [line for line in text.splitlines() if "engine layout" in line][:3],
+                         "default_cookie": got["default_cookie"], "work_page_live": got["work_page_live"]},
+        "after_unlock": {"exit": code2, "inventory_equal": before == after, "snapshot_byte_identical": same_snapshot2}}
+    os.remove(os.path.join(root, "Engine", "Default", "Open E2E locked.bin"))
+
+    # A crash at each step: at the crash every file is in exactly one place,
+    # and the next launch finishes.
+    for point in ("engine-journaled", "engine-moved", "engine-installation", "engine-staged",
+                  "engine-published", "engine-cleanup"):
         make_legacy()
-        code = crash_at(point)
-        state = {"exit": code,
-                 "original_cookies_kept": os.path.exists(os.path.join(root, "Profiles", "Default", "Cookies")),
-                 "published": os.path.exists(os.path.join(root, "Engine", "Default"))}
-        after = migrated(point)
-        published_expected = point in ("engine-published", "engine-cleanup")
+        before = inventory(os.path.join(root, "Profiles", "Default"))
+        code, _ = run_binary("crash-" + point, OPENKIT_DEBUG_MIGRATION_CRASH=point)
+        places = {}
+        for base in ("Profiles/Default", "Engine/.migrating-Default", "Engine/Default"):
+            if os.path.isdir(os.path.join(root, base)):
+                for rel in inventory(os.path.join(root, base)):
+                    places.setdefault(rel, []).append(base)
+        one_place = set(places) == set(before) and all(len(v) == 1 for v in places.values())
+        local_state = sum(os.path.exists(os.path.join(root, d, "Local State")) for d in ("Profiles", "Engine"))
+        code2, _, _ = migrate_only("after-" + point)
+        after = inventory(os.path.join(root, "Engine", "Default"))
         results["migration_crash_" + point.split("-")[1]] = {
-            "ok": code == 86 and state["published"] == published_expected
-                  and (state["original_cookies_kept"] or point == "engine-cleanup") and after["ok"],
-            "at_crash": state, "after_relaunch": after}
+            "ok": code == 86 and one_place and local_state == 1 and code2 == 0 and before == after
+                  and layout_ok(migrated_layout()),
+            "at_crash": {"exit": code, "each_file_in_one_place": one_place, "local_state_copies": local_state},
+            "after_relaunch": {"exit": code2, "inventory_equal": before == after}}
+
+    # The new folder already holds a profile: the old one is left in place
+    # and reported, never mixed in.
+    make_legacy()
+    os.makedirs(os.path.join(root, "Engine", "Default"))
+    open(os.path.join(root, "Engine", "Default", "Preferences"), "w").write("{}")
+    code, text, same_snapshot = migrate_only("in-use")
+    results["migration_engine_in_use"] = {
+        "ok": code == 0 and same_snapshot and "Engine/Default is in use" in text
+              and os.path.exists(os.path.join(root, "Profiles", "Default", "Cookies"))
+              and os.path.exists(os.path.join(root, "Engine", ".open-layout")),
+        "log": [line for line in text.splitlines() if "engine layout" in line][:3]}
 
 
 # ----------------------------------------------------------------------------
@@ -2628,9 +2822,14 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
+    # Chromium keeps profile caches in ~/Library/Caches/<root name>.
+    user_caches = os.path.join(os.path.expanduser("~/Library/Caches"), os.path.basename(user_data))
+    shutil.rmtree(user_caches, ignore_errors=True)
+
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
+            shutil.rmtree(user_caches, ignore_errors=True)
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
