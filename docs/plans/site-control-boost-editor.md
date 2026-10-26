@@ -1182,3 +1182,20 @@ Page", "Show Developer Tools", "Hide Developer Tools", "your css here", "your ja
 Rewritten in Open's words: the three ad-block tooltips (§3.4), every alert body, the notices and
 banners (§3.5, §4.1, §4.3, §4.8), the interstitial body (§4.9), the Library empty-state body
 (§4.11). Arc's JS sharing banner and "Report Boost…" are dropped.
+
+## Appendix — Lead decisions (2026-10-25)
+
+- Approved as the Site Control Center and Boost editor plan.
+- Q1 The panel is an in-window view, not a system popover. It keeps Arc's look (no Liquid Glass), and the window stays key.
+- Q2 The Developer Mode row stays hidden until docs/plans/page-platform.md (in progress) defines Developer Mode. Then show it as that plan specifies.
+- Q3 The per-site Preview row stays hidden until Previews stores per-site state.
+- Q4 Colors use CSS filters only in v1. Add a tint later, and only if it passes a scroll-performance check.
+- Q5 The ad-block tile shows On/Off only, with no blocked count (Arc parity).
+- Q6 Boost editing is disabled in private windows.
+- Q7 After a setting change, show a "Reload" row. Never reload automatically.
+- Q8 Holding Option does nothing in v1. Revisit after capture #22.
+- Q9 Ad-block paths: `AdBlockStore`'s path is the one path. Remove the `ProfileDirectories` duplicate in the first step that touches ad-block storage, and migrate if any file exists at the old path.
+- Q10 The Zap list lives in the editor.
+- Q11 Cmd+E is decided in docs/plans/extensions-ui.md.
+- The engine needs E1–E6 go into the engine lead's queue after P2. The stopgaps in this plan ship first.
+- Captures #21 and #22 go into the user's single combined Arc capture session.
