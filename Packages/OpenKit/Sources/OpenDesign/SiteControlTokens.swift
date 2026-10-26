@@ -38,6 +38,14 @@ public enum BoostEditorColors {           // BO-22 values (facts); usage per §4
     public static let accents: [DesignColor] = [0x300EFF, 0x55B948, 0xDD0EFF, 0xFF560E, 0xFF0E82, 0x860EFF, 0xFF0E0E, 0xF1A23C]
         .enumerated().map { DesignColor(RGBA(hex: UInt32($0.element), [1, 7].contains($0.offset) ? .displayP3 : .sRGB)) }
 }
+public enum SiteControlColors {
+    // OpenSidebar's tooltip fallback when no Space palette is supplied.
+    public static let tooltipFill = RGBA(hex: 0x1C1B22), tooltipText = RGBA(hex: 0xF4F4F6)
+}
+public enum SiteControlTooltipMetrics {
+    public static let titleBaseline: CGFloat = 18, extraPadding: CGFloat = 1, keyPadding: CGFloat = 8, shadowOffset: CGFloat = 3, shadowRadius: CGFloat = 12
+    public static let keyAlpha: CGFloat = 0.18
+}
 extension Motion { public static let popoverOpen: CFTimeInterval = 0.18, popoverClose: CFTimeInterval = 0.12 }
 extension Typography {
     public static let siteControlTitle = FontToken(14, .semibold), sectionTitle = FontToken(12, .semibold)
@@ -54,4 +62,15 @@ public extension SiteControlMetrics {
     static let footerInset: CGFloat = 10, footerButton: CGFloat = 28, footerY: CGFloat = 8
     static let securityPadding: CGFloat = 6, securityGlyph: CGFloat = 12, securityRadius: CGFloat = 6
     static let moreGlyph: CGFloat = 13, focusWidth: CGFloat = 2
+    static let sectionBodyGap: CGFloat = 2, sectionChevron: CGFloat = 9
+    static let tileIconInset: CGFloat = 10, tileGlyph: CGFloat = 14
+    static let tileTextX: CGFloat = 46, tileTitleBaseline: CGFloat = 21, tileSubtitleBaseline: CGFloat = 36, tileTextTrailing: CGFloat = 8
+    static let inUseDot: CGFloat = 6, inUseGap: CGFloat = 4
+    static let boostIcon: CGFloat = 18, boostTextX: CGFloat = 42, boostTitleBaseline: CGFloat = 18, boostSubtitleBaseline: CGFloat = 32
+    static let switchSize = CGSize(width: 26, height: 16), switchKnob: CGFloat = 12, switchInset: CGFloat = 2
+    static let editButton: CGFloat = 24, editGap: CGFloat = 6, editGlyph: CGFloat = 13
+    static let globalOffHeight: CGFloat = 28, globalOffAlpha: CGFloat = 0.5
+    static let focusOutset: CGFloat = 2, closeScale: CGFloat = 0.96, openScale: CGFloat = 0.66
+    static let switchDuration: CFTimeInterval = 0.12
+    static let captionSize: CGFloat = 11, bodySize: CGFloat = 12, accessoryGap: CGFloat = 6
 }

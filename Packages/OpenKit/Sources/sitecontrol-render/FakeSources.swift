@@ -2,6 +2,7 @@ import AppKit
 import OpenModel
 import OpenBoosts
 import OpenSiteControl
+import OpenWeb
 
 @MainActor
 final class FakeSource: SiteControlDataSource, SiteControlActions {
@@ -14,9 +15,47 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
         value = SiteControlSnapshot(context: SiteControlContext(tabID: tabID, profileID: profileID,
             url: URL(string: "https://news.example.com/")!, displayHost: "news.example.com", security: .secure))
     }
+    func configure(_ state: String) {
+        value?.tiles = [
+            SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers", subtitle: "On", state: .on, symbol: "hand.raised.fill", help: "The built-in ad blocker is on for this site."),
+            SiteSettingTile(id: "permission.camera", kind: .permission(.camera), title: "Camera", subtitle: "Allowed", state: .on, symbol: "video.fill", inUse: true),
+            SiteSettingTile(id: "permission.notifications", kind: .permission(.notifications), title: "Notifications", subtitle: "Blocked", state: .off, symbol: "bell.fill")]
+        value?.boosts = [Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000001"), name: "Calm news", siteMatch: SiteMatch(domain: "example.com")),
+                         Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000002"), name: "Larger type", siteMatch: SiteMatch(domain: "news.example.com"), isEnabled: false)]
+        value?.extensions = (0..<3).map { ExtensionActionInfo(extensionID: "fixture.\($0)", title: "Extension \($0 + 1)", iconPNG: nil, badgeText: nil, isEnabled: true, hasPopup: true) }
+        switch state {
+        case "scc-insecure": value?.context.url = URL(string: "http://news.example.com/")!; value?.context.security = .insecure
+        case "scc-adblock-excluded": value?.tiles[0].state = .off; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off for this site."
+        case "scc-adblock-unavailable": value?.tiles[0].state = .unavailable; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off. You can turn it on in Settings."
+        case "scc-no-boosts": value?.boosts = []
+        case "scc-boosts-off": value?.boostsGloballyEnabled = false
+        case "scc-incognito": value?.context.isIncognito = true
+        case "scc-internal-page": value?.context.url = URL(string: "open://settings")!; value?.context.displayHost = "Settings"; value?.context.security = .insecure
+        case "scc-many":
+            let names = ["Camera", "Microphone", "Location", "Notifications", "Clipboard", "MIDI Devices", "Screen Sharing", "Automatic Downloads", "Storage Access", "Window Management", "Fonts", "Idle Detection"]
+            let blocking = value!.tiles[0]
+            value?.tiles = [blocking] + SitePermission.allCases.prefix(11).enumerated().map { i, kind in
+                SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: "checkmark") }
+            value?.boosts = (0..<20).map { Boost(id: BoostID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0 + 1)), name: "Boost \($0 + 1)", siteMatch: SiteMatch(domain: "example.com")) }
+            value?.extensions = (0..<30).map { ExtensionActionInfo(extensionID: "many.\($0)", title: "Extension \($0)", iconPNG: nil, badgeText: nil, isEnabled: true, hasPopup: false) }
+        default: break
+        }
+    }
     func snapshot(for tabID: ItemID) -> SiteControlSnapshot? { tabID == self.tabID ? value : nil }
-    func toggle(_ tile: SiteSettingTile, tabID: ItemID) { calls.append("toggle:" + tile.id) }
-    func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) { calls.append("boost:\(id):\(enabled)") }
+    func toggle(_ tile: SiteSettingTile, tabID: ItemID) {
+        calls.append("toggle:" + tile.id)
+        if let index = value?.tiles.firstIndex(where: { $0.id == tile.id }) {
+            let on = tile.state != .on
+            value?.tiles[index].state = on ? .on : .off
+            value?.tiles[index].subtitle = tile.kind == .contentBlocking ? (on ? "On" : "Off") : (on ? "Allowed" : "Blocked")
+        }
+        onChange?(tabID)
+    }
+    func setBoostEnabled(_ id: BoostID, enabled: Bool, tabID: ItemID) {
+        calls.append("boost:\(id):\(enabled)")
+        if let index = value?.boosts.firstIndex(where: { $0.id == id }) { value?.boosts[index].isEnabled = enabled }
+        onChange?(tabID)
+    }
     func openEditor(boostID: BoostID?, tabID: ItemID, mode: BoostEditorMode) { calls.append("editor:\(boostID?.description ?? "new")") }
     func perform(command: String, tabID: ItemID, anchor: NSRect?) { calls.append(command) }
     func runExtension(_ id: String, tabID: ItemID, anchor: NSRect) { calls.append("extension:" + id) }
