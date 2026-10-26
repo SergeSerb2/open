@@ -182,7 +182,7 @@ had #93 and ad-block Steps 1–3 applied, and of the crate source in
 | F-19 | CEF's override: non-CEF profiles go straight to Chrome (`:499-510`); then Chrome's `WillCreateURLLoaderFactory` runs (`:536-541`); then CEF appends `net_service::ProxyURLLoaderFactory` (`:568-571`). Chrome installs the WebRequest proxy first (`chrome_content_browser_client.cc:6811-6827`), then enterprise-header, sign-in and other proxies. Content appends DevTools interceptors after all embedder ones (`content/browser/loader/url_loader_factory_utils.cc:245-267`). Chain today: WebRequest → Chrome proxies → CEF proxy → DevTools → network service | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc:482-572`; `chrome/browser/chrome_content_browser_client.cc:6794-6886` |
 | F-20 | CEF's proxy runs on the **IO thread** (`CreateProxy` posts `CreateOnIOThread`), re-implements parts of CORS, and never sees CORS preflights: "CORS preflight requests are handled in the network process" | `cef/libcef/browser/net_service/proxy_url_loader_factory.cc:1451-1477`, `:495-591`, `:203-204` |
 | F-21 | WebRequest's proxy is **UI-thread**; it exists only while an extension with webRequest or declarativeNetRequest is enabled (or for WebView embedders); it expresses a changed URL as a synthetic `307` with `Non-Authoritative-Reason: WebRequest API` | `extensions/browser/api/web_request/web_request_proxying_url_loader_factory.cc:1573,1617`, `:733-765`; `web_request_api.cc:849-876` |
-| F-22 | Factory call sites (not exhaustive; revised 2026-10-26, review r1 finding 16): document subresources and the fetch-keepalive factory (`content/browser/renderer_host/render_frame_host_impl.cc:14255-14268`, `:8469-8477`); dedicated and shared worker subresources (`content/browser/worker_host/dedicated_worker_host.cc:726`, `content/browser/worker_host/shared_worker_host.cc:529`); worker main scripts (`content/browser/worker_host/worker_script_fetcher.cc:523`); service worker scripts and fetches (`content/browser/service_worker/embedded_worker_instance.cc:385,399`); the service-worker context wrapper's script factory (`content/browser/service_worker/service_worker_context_wrapper.cc:1998-2004`, `kServiceWorkerScript`, frame null); service-worker navigation preload (`content/browser/service_worker/service_worker_client.cc:1424-1434`, `kNavigation`, `factory_override` null); network navigations (`content/browser/loader/navigation_url_loader_impl.cc:2309-2322`); WebUI navigations (`navigation_url_loader_impl.cc:711`); DevTools (`content/browser/devtools/protocol/network_handler.cc:4154`). WebUI and other non-network scheme factories are also wrapped as `kDocumentSubResource` (`render_frame_host_impl.cc:12860-12875`, `:12985-13005`). Early hints (`content/browser/renderer_host/navigation_request.cc:5704`) are labeled `kEarlyHints` but never call the hook (§7.2) | `grep -rn 'URLLoaderFactoryType::k' content/browser` |
+| F-22 | Factory call sites (not exhaustive; revised 2026-10-26, review r1 finding 16): document subresources and the fetch-keepalive factory (`content/browser/renderer_host/render_frame_host_impl.cc:14255-14268`, `:8469-8477`); dedicated and shared worker subresources (`content/browser/worker_host/dedicated_worker_host.cc:726`, `content/browser/worker_host/shared_worker_host.cc:529`); worker main scripts (`content/browser/worker_host/worker_script_fetcher.cc:523`); service worker scripts and fetches (`content/browser/service_worker/embedded_worker_instance.cc:385,399`); the service-worker context wrapper's script factory (`content/browser/service_worker/service_worker_context_wrapper.cc:1998-2004`, `kServiceWorkerScript`, frame null); service-worker navigation preload (`content/browser/service_worker/service_worker_client.cc:1424-1434`, `kNavigation`, `factory_override` null); network navigations (`content/browser/loader/navigation_url_loader_impl.cc:2309-2322`); WebUI navigations (`navigation_url_loader_impl.cc:711`); DevTools (`content/browser/devtools/protocol/network_handler.cc:4154`; built with `CreatePendingRemote` and no `ContentClientParams`, so like early hints it never calls the hook — the outcome "not proxied" is the same, §7.2). WebUI and other non-network scheme factories are also wrapped as `kDocumentSubResource` (`render_frame_host_impl.cc:12860-12875`, `:12985-13005`). Early hints (`content/browser/renderer_host/navigation_request.cc:5704`) are labeled `kEarlyHints` but never call the hook (§7.2) | `grep -rn 'URLLoaderFactoryType::k' content/browser` |
 | F-23 | WebSocket: content calls `WillInterceptWebSocket(frame)` and, if true, gives the connection to `CreateWebSocket(frame, factory, url, site_for_cookies, user_agent, handshake_client, options)`. `frame` can be null (workers). Chrome returns true only for a frame that has WebRequest proxies and proxies in `CreateWebSocket`. A handshake fails with `WebSocketHandshakeClient::OnFailure(message, net_error, response_code)`. CEF overrides none of these | `content/browser/websockets/websocket_connector_impl.cc:146-150`; `chrome_content_browser_client.cc:6960-6980`, `:6998-7021`; `services/network/public/mojom/websocket.mojom:71` |
 | F-24 | WebTransport: content calls `WillCreateWebTransport(process_id, frame_routing_id, url, initiator_origin, handshake_client, callback)` before it connects. The callback takes an optional `WebTransportError`; an error refuses the connection. Chrome forwards to WebRequest. CEF does not override it | `content/browser/webtransport/web_transport_connector_impl.cc:297-301`; `chrome_content_browser_client.cc:7023-7055` |
 | F-25 | Type signals on `network::ResourceRequest`: `is_fetch_like_api` marks fetch and XHR, and WebRequest maps it to XHR before it looks at the destination; `keepalive` with `kEmpty` is a ping; `mode` (`kNoCors` default, `kCors`, …) | `extensions/browser/api/web_request/web_request_info.cc:176-230`; `resource_request.h:236,250,267` |
@@ -215,7 +215,7 @@ had #93 and ad-block Steps 1–3 applied, and of the crate source in
 | # | Decision | Rejected alternative | Reason |
 |---|---|---|---|
 | D-1 | Rust enters **only** via `gnrt` vendoring (fork-infra D-6). The C++ side links the generated `//third_party/rust/adblock/v0:lib` target through our own shim crate (§5) | Brave-style "run cargo, link a prebuilt `libadblock.a`" (adblock-design's first sketch) | The Chromium way survives rebases, uses the pinned toolchain (F-12 in fork-infra), and generates the `README.chromium` license records. fork-infra §7 already superseded the build mechanics; this plan follows it |
-| D-2 | The FFI is **one CXX bridge** in `//open/adblock/rust`. All Rust types cross as strings, string vectors, one enum and flat structs (§5.2, final surface). Superseded 2026-10-26 by D-14: "the browser renders CSS text in Rust; C++ never sees a selector container" no longer holds; selectors cross as sanitized vectors | Hand-written `extern "C"` with manual memory management; returning `UrlSpecificResources` field-by-field to C++ | CXX is the tree's supported bridge (F-7). Pre-rendered strings keep the C++ cosmetic code to "insert this text" and keep crate-type churn inside the shim on crate bumps |
+| D-2 | The FFI is **one CXX bridge** in `//open/adblock/rust`. All Rust types cross as strings, string vectors, one enum and flat structs (§5.2, final surface). Superseded 2026-10-26 by D-14: "the browser renders CSS text in Rust; C++ never sees a selector container" no longer holds; selectors cross as sanitized vectors | Hand-written `extern "C"` with manual memory management; returning `UrlSpecificResources` field-by-field to C++ | CXX is the tree's supported bridge (F-7). Flat strings, vectors and structs keep crate-type churn inside the shim on crate bumps; C++ builds one rule per sanitized selector (D-14) |
 | D-3 | Shim features: `default-features = false`, features `embedded-domain-resolver`, `full-regex-handling`, `resource-assembler`. **Off:** `object-pooling`, `unsync-regex-caching` (keeps `Engine: Send + Sync`, F-9), `css-validation`, `content-blocking` | Default features | A non-`Sync` engine forces a mutex around every 2 µs check and serializes all tabs in a Profile. Pooling/caching are micro-optimizations; thread-safety is the design's core assumption. `resource-assembler` is on so the shim can parse uBlock Origin's resources format (§9.3). Correction 2026-10-26 (review 98-7): the crate takes its own per-engine mutex on every check (F-30), so checks of one engine are serialized whatever these features are. Open accepts that and runs all engine calls on one sequence (D-12). Regex features: see D-12 and review 97-1 |
 | D-4 | Service ownership: one `open::OpenAdBlockService` per `CefBrowserContext`, owned by a new `std::unique_ptr` member on `CefBrowserContext` itself (small `cef/` patch, §6.1) | `BrowserContextKeyedServiceFactory` registration in Chrome's profile-service list; a global `BrowserContext* → service` map | CEF registers no keyed services (F-13); a global map needs its own shutdown observer and leaks on context churn. A member dies exactly with the context, in both Alloy and Chrome runtimes, and every caller already knows how to reach the context (F-13) |
 | D-5 | **Superseded 2026-10-26 by D-11.** Was: throttle creation in a new `ChromeContentBrowserClientCef::CreateURLLoaderThrottles` override | — | That hook sees only browser-initiated requests (F-16) |
@@ -291,7 +291,7 @@ Engine/fork/
   adblock/
     list-pins.txt                  # official URL + SHA-256 per bundled file (§9.1)
     catalog.json                   # the 46-list catalog with upstream URLs (§9.4, generated once, then committed data)
-    bench/corpus-manifest.json     # Step 4: corpus count, percentiles, SHA-256s; never the URLs (§7.8)
+    bench/corpus-manifest.json     # Step 4: corpus count, percentiles, SHA-256s; never corpus URLs (§7.8)
     resources-pins.txt             # uBlock Origin resources URL + SHA-256 (§9.3)
   licenses/
     THIRD_PARTY.md                 # + rows (§4.5)
@@ -332,7 +332,7 @@ committed).
 |---|---|---|---|
 | P-1 `0001-adblock-vendor.patch` | `rust` | `third_party/rust/**` (generated) | `gnrt vendor` + `gen` output for the §4 closure. Generated, never hand-edited (Step 1) |
 | P-2 `0001-open-adblock-service-owner.patch` | `cef` | `cef/libcef/browser/browser_context.h`, `cef/libcef/browser/browser_context.cc` | `open_adblock_service()` accessor + member + shutdown hook (§6.1) |
-| P-3 `03xx-open-adblock-network-hooks.patch` (revised 2026-10-26) | `cef` | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.h`, `.cc` only | One call at the top of the CEF branch of `WillCreateURLLoaderFactory`; one line in `ExposeInterfacesToRenderer`; three new one-line overrides `WillInterceptWebSocket`, `CreateWebSocket`, `WillCreateWebTransport` that forward to `open_engine::` free functions; one include (§7.1, §8.2). Budget: about +45/−0 lines. `//open/adblock` already reaches `libcef_static` through `open_libcef_deps` (Step 3 as built), so no `cef/BUILD.gn` hunk |
+| P-3 `03xx-open-adblock-network-hooks.patch` (revised 2026-10-26) | `cef` | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.h`, `.cc` only (plus `cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.h`, `.cc` only if Step 5 builds the §7.6 priority lane) | One call at the top of the CEF branch of `WillCreateURLLoaderFactory`; one line in `ExposeInterfacesToRenderer`; three new one-line overrides `WillInterceptWebSocket`, `CreateWebSocket`, `WillCreateWebTransport` that forward to `open_engine::` free functions; one include (§7.1, §8.2). With the lane only: a `PostDestroyThreads()` override that stops the lane thread (§7.6 lane rule 3). Budget: about +45/−0 lines (about +10 more with the lane). `//open/adblock` already reaches `libcef_static` through `open_libcef_deps` (Step 3 as built), so no `cef/BUILD.gn` hunk |
 | P-4 `03xx-open-adblock-renderer-hook.patch` (revised 2026-10-26) | `cef` | `cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc` only | In `RenderFrameCreated` (`:41-50`), one line after the `CefRenderFrameObserver` is made: `new open_engine::OpenAdBlockRendererAgent(render_frame);  // Deletes itself.`, plus one include (§8.3). The agent is its own `content::RenderFrameObserver`. Budget: about +3/−0 lines. **No** `cef.mojom`, `frame_host_impl`, `frame_impl` or `render_frame_observer` change |
 | P-5 `0004-open-adblock-cef-api.patch` | `cef` | `cef/include/cef_request_context.h`, `cef/include/cef_browser.h`, `cef/libcef/browser/request_context_impl.h/.cc`, `cef/libcef/browser/browser_host_base.h/.cc` + translator output under `cef/include/capi/`, `cef/libcef_dll/` | The §11 Step 6 API. Translator output files **are** committed in the tree and therefore appear in this patch; regenerate, never hand-edit them |
 | P-6 `0005-open-adblock-cefsimple-smoke.patch` | `cef` | `cef/tests/cefsimple/simple_app.cc`, `cef/tests/cefsimple/simple_handler.cc/.h` | **Test-only.** Switch-gated harness (§13.1). Keep last in the series so it can be dropped without touching P-2…P-5 |
@@ -652,20 +652,15 @@ from Rust, redirect URLs for every type).
   the bottom of `lib.rs`: `fn _assert() { fn is_send_sync<T: Send + Sync>() {} is_send_sync::<OpenAdblockEngine>(); }`.
   If this fails to compile, a feature crept back on — fix the §4.2
   fragment, not this assertion (D-3, F-9).
-- **R-2 (resources).** In `open_adblock_build`, when `resources_text` is
-  non-empty, parse it with the `resource-assembler` API
-  (`adblock::resources::resource_assembler`, enabled by D-3) and call
-  `engine.use_resources(vec)` before returning. If parsing yields zero
-  resources, log and continue with no resources — scriptlets then no-op
-  and `$redirect` rules produce `has_redirect = false`. Never panic:
-  wrap resource parsing so any error path degrades to "no resources".
-  The exact assembler entry point in 0.8.11 takes file **paths**
-  (`assemble_scriptlet_resources(path)`); if no text-based entry exists,
-  the C++ side passes the manifest-verified resources path inside the selected
-  generation (§9.2), without rewriting the immutable input, and the shim takes
-  `resources_path: &str` instead of `resources_text: &str`. Pick the
-  path form if the text form needs new parsing code — record the choice
-  in the PR. Do not write a resources.txt parser.
+- **R-2 (resources; revised in review r2, N-10, to the as-built form).**
+  `open_adblock_build` takes `resources_json`, the crate's own serialized
+  `Vec<Resource>` (§5.2, §9.3). When it is non-empty, the shim decodes it
+  with `serde_json` and calls `engine.use_resources(vec)` before
+  returning (#98 as built). A decode error or zero resources: log,
+  report it in the build report (`resources_error`, `resources_loaded`),
+  and continue with no resources, so `$redirect` rules produce
+  `has_redirect = false`. Never panic. The browser never runs the
+  crate's assembler; only the offline Step 7 driver does (§9.3).
 - **R-3 (no panics across FFI).** Every `Request::new` failure (malformed
   URL from the network stack) returns a default allow result
   (`matched = false`, all strings empty). Every `url` that fails to parse
@@ -810,6 +805,16 @@ namespace open {
 // Site Control Center's single number.
 enum class AdBlockStopKind { kBlocked, kRedirected };
 
+// How one LoadFromDirectory() ended. Its `done` callback always gets
+// exactly one value (#100 review R2-5, as built).
+enum class AdBlockLoadResult {
+  kLoaded,     // the new engine is installed
+  kFailed,     // the load failed; the old engine stays (status last_error)
+  kStale,      // a newer load started first; this result was dropped
+  kCancelled,  // Shutdown() ran or the service was destroyed before the
+               // result arrived, or the load was asked for after Shutdown()
+};
+
 // Immutable snapshot handed to OpenEngine for the panel / debug info.
 // Value type, no pointers into the engine.
 struct AdBlockStatus {
@@ -857,9 +862,18 @@ class OpenAdBlockService {
   bool IsExcludedOnUi(std::string_view top_site) const;  // UI mirror, factory-time skip (§7.2)
 
   // §9.2 load on the process-wide build runner (§6.6); the result is
-  // posted to the matcher as SetEngine().
+  // posted to the matcher as SetEngine(). `done` (optional) runs exactly
+  // once, on the UI thread, with the load's AdBlockLoadResult (§6.2):
+  // kLoaded or kFailed for a load that finished, kStale for a load that
+  // a newer one replaced, kCancelled after Shutdown() or the service's
+  // destruction. A load asked for after Shutdown() runs `done` with
+  // kCancelled before LoadFromDirectory returns (as built), so callers
+  // must not assume `done` is always asynchronous.
   void LoadFromDirectory(base::FilePath adblock_root, bool prefer_dat,
-                         base::OnceClosure done = {});
+                         base::OnceCallback<void(AdBlockLoadResult)> done = {});
+  // Loads the root of the last LoadFromDirectory() again, with no `done`
+  // (as built); no root set: no-op. Callers learn the outcome from the
+  // status callback.
   void ReloadLists();
 
   AdBlockStatus GetStatus() const;
@@ -923,15 +937,19 @@ posting `SetEngine` to the matcher (§6.3) instead of a locked swap.
 3. Serialize into that generation's `engine.dat` and write its bound receipt,
    using atomic replacement and fsync. A cache write/serialize failure is logged
    and does not discard the valid in-memory engine. See §9.2 for torn pairs.
-4. Publish: post to the UI thread (`GetUIThreadTaskRunner` equivalent in
-   CEF: `CefCurrentlyOn(UIT)` posting via the existing CEF task helpers —
-   in `//open` code, use `content::GetUIThreadTaskRunner({})`), run
-   `SwapEngine`, update `status_` (`engine_loaded`, `list_count`,
-   `last_build_ms`, clear `last_error`), and notify OpenEngine through
-   the status callback the CEF layer registers (§11 Step 6 — a
+4. Publish (revised 2026-10-26 with #100 review R2-5): the build runner
+   replies to the UI thread (`PostTaskAndReplyWithResult`, as built). If
+   the service is gone or shut down, the reply frees the engine off the
+   UI thread and runs `done(kCancelled)`. If a newer load started, it
+   frees the engine and runs `done(kStale)`. Otherwise it updates
+   `status_` (`engine_loaded`, `list_count`, `last_build_ms`,
+   `last_error`), posts `SetEngine` to the matcher (§6.3) when an engine
+   was built, notifies OpenEngine through the status callback the CEF
+   layer registers (§11 Step 6 — a
    `base::RepeatingCallback<void(const AdBlockStatus&)>` set by
    `CefRequestContextImpl`; no callback = no-op, which is the
-   `cefsimple` case).
+   `cefsimple` case), and then runs `done(kLoaded)`, or `done(kFailed)`
+   when no engine was built (the old engine stays).
 
 Timing instrumentation: wrap steps 1–3 in `base::ElapsedTimer` and store
 the total in `last_build_ms`. Also emit one `VLOG(1)` line per load:
@@ -1079,10 +1097,10 @@ named):**
 | Measure | Budget | Basis | Gated at |
 |---|---|---|---|
 | One EasyList + EasyPrivacy engine, steady state, with the D-12 regex features | ≤ 40 MiB | 32 MiB measured standalone (F-35); the in-tree allocator and the regex lazy-DFA caches can add some (guess) | Step 4 (single context, `cefsimple`) |
-| Second Profile with the same lists | ≤ +2 MiB, and the second Profile's status shows `engine_shared=1` | Shared engine; only matcher state (exclusions, toggle) is per Profile | Step 8 (two request contexts need the app or the test host; `cefsimple` has one context, §13.1; review r1 finding 9) |
+| Second Profile with the same lists | ≤ +2 MiB over the window below, and the second Profile's status shows `engine_shared=1` | Shared engine; only matcher state (exclusions, toggle) is per Profile. **Window (review r2 N-8):** create both request contexts first and take the baseline; the measure is the delta from the second context's `LoadFromDirectory` to its `engine_shared=1` status. The cost of creating a context itself is not in this budget | Step 8 (two request contexts need the app or the test host; `cefsimple` has one context, §13.1; review r1 finding 9) |
 | Text build transient | ≤ +100 MiB above steady state, back to steady state ≤ 5 s after the swap | 80 MiB measured | Step 9 |
 | All 5 generic + privacy lists enabled | Record only (no gate in v1) | R-7; decides whether any non-default list becomes a default | Step 9 |
-| Renderer, worst-case cosmetic payload: the initial sheet at the 256 KiB cap plus 64 generic sheets of 500 rules (guess: about 45,000 user-origin rules) | Record only in v1: renderer `phys_footprint` delta and style-recalc time with that payload | Review r1 finding 14: the rule count has no other bound | Step 5 |
+| Renderer, worst-case cosmetic payload: the initial sheet at the 256 KiB cap plus 64 generic sheets of 500 rules (about 163,000 user-origin rules at most: the cap bounds bytes, so the shortest selectors give the largest count — 256 KiB / 2 B ≈ 131k, plus 64 × 500 generic; review r2 N-7) | Record only in v1: renderer `phys_footprint` delta and style-recalc time with that payload | Review r1 finding 14: the rule count has no other bound | Step 5 |
 
 Lead ruling 8 (2026-10-26) confirms engine sharing between Profiles,
 with this note kept.
@@ -1101,7 +1119,8 @@ engine lead owns the code; this is the contract):
 
 - Matcher state per Profile moves into `open_engine::OpenAdBlockMatcher`,
   a `base::RefCountedThreadSafe` object whose mutable state is touched
-  only on the matcher sequence (`SEQUENCE_CHECKER`). It holds the
+  only on the matcher sequence (`SEQUENCE_CHECKER`; a thread checker if
+  the §7.6 priority lane is built). It holds the
   current engine (`std::shared_ptr<const EngineHolder>`), the enabled
   flag, the normalized exclusion set, and per-Profile counters. Proxies
   and the cosmetics host keep a `scoped_refptr` to it, which fixes 100-8
@@ -1114,7 +1133,8 @@ engine lead owns the code; this is the contract):
 - The per-service `build_runner_` is replaced by the one process-wide
   build runner that the registry owns (§6.6). The matcher sequence is
   also process-wide (D-12). Both are ThreadPool sequences: creating one
-  starts no thread. The service makes its matcher in its constructor
+  starts no thread (the §7.6 priority lane, built only if a Step 5 gate
+  fails, is the one exception: one dedicated thread). The service makes its matcher in its constructor
   (disabled, no engine), so the §8.2 binder always has one; with
   blocking off the matcher sequence runs only the null replies of §8.2.
 - Exclusion matching follows Swift's rule (review 100-4): an entry
@@ -1207,7 +1227,15 @@ Each hunk calls one free function from the overlay header
      (`services/network/public/mojom/web_transport.mojom:24-39`).
    Socket checks run on the matcher sequence through
    `PostTaskAndReplyWithResult` (UI → matcher → UI). Sockets are rare
-   per page, so one round trip each is acceptable.
+   per page, so one round trip each is acceptable. **Frame lifetime
+   (review r2 N-9):** never carry the raw `RenderFrameHost*` across the
+   hop. Capture its `content::GlobalRenderFrameHostId` (and every other
+   argument by value or move); on the UI reply, re-look the frame up
+   with `RenderFrameHost::FromID` (`content/public/browser/render_frame_host.h:169`; the id comes from `GetGlobalId()`, `:285`).
+   If it is gone, drop the factory and the handshake client without
+   running either continuation — the frame that asked is dead, so no
+   socket may start for it. `WillCreateWebTransport` already receives a
+   process and routing id, so it needs no pointer rule beyond this one.
 4. **Include.** `#include "open/adblock/open_adblock_hooks.h"` in the `.cc`.
 
 **`factory_override` and the builder chain (review r1 finding 5).** Open's
@@ -1286,7 +1314,7 @@ when any of these holds:
 | `kEarlyHints` | **never reaches the hook** (revised 2026-10-26) | The early-hints factory is built with no `ContentClientParams`, so `WillCreateURLLoaderFactory` never runs for it (`content/browser/renderer_host/navigation_request.cc:5701-5707`, with Chromium's own TODO "Support DevTools instrumentation and extension's WebRequest API"; default `content_client_params = std::nullopt`, `url_loader_factory_utils.h:218-223`; the hook runs only from `ContentClientParams::Run`, `url_loader_factory_utils.cc:178-190`). Early hints exist only for outermost main frames (`navigation_url_loader_impl.cc:1413-1419`). Known gap R-14 below |
 | `kDownload` | no | A user action |
 | `kPrefetch` | no | Speculation-rules prefetch of documents, which are main-frame loads |
-| `kDevTools` | no | DevTools-initiated loads |
+| `kDevTools` | no — and it **never reaches the hook** | Like early hints, this factory is built with `CreatePendingRemote` and no `ContentClientParams` (`content/browser/devtools/protocol/network_handler.cc:4154`), so `WillCreateURLLoaderFactory` never runs for it. The outcome is the wanted one (DevTools-initiated loads are not proxied); this row records why, so nobody looks for a skip branch that does not exist |
 
 The factory context is captured on the UI thread and is immutable:
 
@@ -1525,7 +1553,7 @@ with the §7.7 cap and a compile budget of 10 ms (the G-6 ceiling for any
 one check; the worst real-list regex compiles in 6.78 ms, F-35):
 
 - **v1, FIFO:** wait ≤ (queued checks × 1 ms worst per check at the cap,
-  G-3) + 10 ms (one compile) + the query itself (66 µs mean as built). On
+  G-3) + 10 ms (one compile) + the query itself (77–79 µs as built, sorted output included). On
   realistic URLs a check costs about 5–10 µs (F-35, G-2), so three pages
   that load at once (about 600 queued checks) add about 3–6 ms (guess),
   and the worst case is bounded only by the queue length.
@@ -1543,7 +1571,69 @@ one check; the worst real-list regex compiles in 6.78 ms, F-35):
   the one engine call that is running: ≤ 1 ms at the cap, or ≤ 10 ms for a
   compile, plus its own query. The cost is one idle thread (no timers, so
   idle CPU stays near zero). Step 5 builds it only if the gate fails, and
-  records the before and after numbers.
+  records the before and after numbers. Note what the lane bound does not
+  prove: a cosmetic call can still wait ≤ 10 ms behind one compile, so
+  C-G1's p99 ≤ 3 ms holds with the lane only if stalls over 3 ms sit
+  ahead of fewer than 1 % of cosmetic calls. Gate G-6 (≤ 1 check
+  > 1 ms per 1,000, none > 10 ms) is the supporting rate; if G-6 is near
+  its limit the lane can still fail C-G1, and §8.2 rules 4–5 then apply.
+
+*Lane mechanics (review r2 N-3; specified now so the lane is not a Step 5
+design spike).* Three rules, all part of the escalation:
+
+1. **Checker.** Two `TaskQueue`s on one thread are two sequences, so the
+   matcher's `SEQUENCE_CHECKER` (§6.3, §6.7) would fire when the other
+   queue touches the same state. In lane mode every matcher-state checker
+   becomes a thread checker (`THREAD_CHECKER` /
+   `DCHECK_CALLED_ON_VALID_THREAD`, `base/threading/thread_checker.h:82-83`)
+   bound to the dedicated thread. Both queues run on that thread, so the
+   checker still proves single-threaded access.
+2. **Runners.** The process-wide matcher owner has two accessors from
+   Step 4 on: `open_engine::AdBlockCosmeticsTaskRunner()` and
+   `open_engine::AdBlockMatcherTaskRunner()`. Without the lane, both
+   return the one matcher-sequence runner, so no call site changes when
+   the lane is built. With the lane, the first returns the **high**
+   queue's runner and the second the **normal** queue's runner. Every
+   caller uses exactly one of them:
+   - **High:** the `AdBlockCosmetics` binder and receiver of §8.2
+     (`registry->AddInterface` takes `AdBlockCosmeticsTaskRunner()`), so
+     `GetDocumentCosmetics` and `GetGenericSelectors` never queue behind
+     request checks. The service's `SetEngine` / `SetEnabled` /
+     `SetExclusions` posts (§6.7) also use the high runner. They make no
+     engine call, so they cost a cosmetic call almost nothing, and on
+     the normal queue a cosmetic call could overtake a pending toggle or
+     exclusion change and answer the next navigation with the old state
+     (§1.1 "next navigation" rule).
+   - **Normal:** `OpenAdBlockURLLoaderFactory::Bind` and its loaders, the
+     socket checks' `PostTaskAndReplyWithResult` (§7.1), the G-4
+     histogram feeds, and all bench work (the G-2/G-3 bench and the C-G2
+     bench load of §11 Step 5). Bench load must contend like request
+     traffic, never preempt cosmetics.
+3. **Stop.** The dedicated thread belongs to the same process-wide
+   matcher owner, which creates it on first use. It is stopped with
+   `base::Thread::Stop` (which joins it) from one named place: a new
+   `ChromeBrowserMainExtraPartsCef::PostDestroyThreads()` override that
+   calls `open_engine::StopAdBlockMatcherThread()`. That hunk goes into
+   P-3 (`cef/libcef/browser/chrome/chrome_browser_main_extra_parts_cef.{h,cc}`,
+   added to P-3's file list and manifest block) only if the lane is
+   built. The hook runs after Profile teardown
+   (`chrome/browser/chrome_browser_main.cc:2291`, inside
+   `PostMainMessageLoopRun`), after render-process cleanup and
+   `ThreadPoolInstance::Shutdown()` (`content/browser/browser_main_loop.cc:1245`,
+   `:1305`), from `BrowserMainLoop::ShutdownThreadsAndCleanUp`
+   (`browser_main_loop.cc:1349-1350` → `chrome_browser_main.cc:2309-2310`),
+   where joining a thread is allowed (`:1211`). Unlike a
+   `SKIP_ON_SHUTDOWN` sequence, the lane keeps running tasks until that
+   stop. That is safe: each task holds its own references to the matcher
+   and the engine, and an engine whose last reference drops after
+   ThreadPool shutdown leaks at exit (shutdown rule 3 below). `Stop()`
+   drops the queued tasks and disconnects the pipes bound on the lane. By
+   then no render process host is left, so no renderer can still wait in
+   the sync cosmetics call; if one did, it would get the failed call of
+   shutdown rule 1 below ("no cosmetics for this load"). A dropped
+   `SetEngine` is a no-op (the process is exiting). A socket check whose
+   reply never runs starts no socket (§7.1 frame rule). Nothing waits for
+   the lane thread from the lane thread itself.
 
 **Shutdown (review r1 finding 11).** Three lifetimes meet at quit:
 
@@ -1590,6 +1680,9 @@ once with `--open-adblock-bench-cap=16384`. The PR records both result
 sets. The cap stays 16 KiB unless a gate fails at 16 KiB. If one fails,
 the constant becomes 8,192, and the PR records the failing gate and both
 sets of numbers. If a gate also fails at 8 KiB, the lead decides (§13.5).
+Only the gated (post-warm-up) numbers of §7.8 feed this choice: a regex
+first-compile in the excluded first pass can fail neither cap and can
+never force the 8 KiB fallback (review r2 N-2).
 
 Effect on filter correctness:
 
@@ -1649,10 +1742,33 @@ machine, with the §13.3 CDP driver and a stock-behaving `cefsimple`
    `as=` value. Write `<url> <as> <page origin>` lines to
    `.re/adblock-corpus/early-hints.txt` (git-ignored), one per page and
    URL. Early hints exist only for outermost main frames (§7.2), so these
-   come from the front pages themselves. Guess: CEF's DevTools emits this
-   event for main-frame navigations; if no page in the list sends one,
-   note it in the manifest (`"early_hints_seen": false`) and the PR, and
-   the trigger below cannot fire on that corpus.
+   come from the front pages themselves. The event exists in this tree
+   (`NetworkHandler::OnResponseReceivedEarlyHints`,
+   `content/browser/devtools/protocol/network_handler.cc:4080-4089`,
+   needs the Network domain enabled before navigation), and CEF's CDP
+   serves the same agents; whether the run's pipeline delivers it is
+   proved, not assumed. **Positive control (review r2 N-4):** before the
+   first corpus page, the same `cefsimple` process and CDP session load
+   the local N-21 server's `early-hints.html` (§13.2), which always sends
+   a `103` with one `Link: rel=preload`. The control passes only if that
+   load produces a `responseReceivedEarlyHints` event that carries the
+   control's own preload URL. If it does not, the capture is
+   **invalid**: stop, fix the pipeline, and do not record
+   `"early_hints_seen": false`. Without the control, "no site sent 103"
+   and "CDP never delivered the event" look the same. With the control
+   passed, a corpus in which no page sends `103` records
+   `"early_hints_seen": false` in the manifest and the PR, and the
+   trigger below cannot fire on that corpus.
+   The local server speaks HTTP/1.1, so the capture runs with
+   `--enable-features=EnableEarlyHintsOnHttp11`. That feature is not
+   local-only: it makes Chromium accept `103` on **every** HTTP/1.1
+   connection, HTTPS included (`EarlyHintsAreAllowedOn`,
+   `net/http/http_network_transaction.cc:130-142`; HTTP/2 and HTTP/3
+   accept `103` with or without it). Stock Open ignores `103` on
+   HTTP/1.1, so the capture drops every corpus `103` whose document
+   arrived over HTTP/1.1 (the `response.protocol` of the page's
+   `Network.responseReceived` event for the same `requestId` is
+   `http/1.1`) and states the number dropped in the PR.
 5. Write the union of step 3 to `.re/adblock-corpus/corpus.txt`: one URL
    per line, fragments removed, de-duplicated, sorted byte-wise
    (git-ignored, AGENTS.md rule 2). At least 2,000 lines.
@@ -1664,23 +1780,34 @@ machine, with the §13.3 CDP driver and a stock-behaving `cefsimple`
    `font` → `Font`, `fetch` → `Xmlhttprequest`, anything else → `Other`).
    A preload counts as blocked when `matched` is true.
 
-*Manifest (committed, never the URLs).*
+*Manifest (committed, never corpus URLs; the `pages` list holds the
+public front-page URLs of step 1, which the capture needs to be
+reproducible and which hold no user data).*
 `Engine/fork/adblock/bench/corpus-manifest.json`, written by the Step 4
 PR: `{ "version", "captured", "cefsimple_build", "pages": [front-page
 URLs], "url_count", "length_bytes": { "p50", "p90", "p99", "max" },
 "third_party_share", "corpus_sha256", "sample_rule", "samples": {
 "0": sha256, "1": sha256, "2": sha256 }, "early_hints": {
-"early_hints_seen", "pages_with_103", "preload_urls",
-"blocked_preload_urls", "pages_with_blocked_preload",
-"pages_with_blocked_preload_share" } }`. `corpus_sha256` is the
-SHA-256 of `corpus.txt` as written in step 5. `pages_with_blocked_preload`
-counts pages with at least one blocked 103-preload URL; its share is
-that count divided by the number of pages in the list.
+"early_hints_control_seen", "early_hints_seen", "pages_with_103",
+"http11_hints_dropped", "preload_urls", "blocked_preload_urls",
+"pages_with_blocked_preload", "pages_with_blocked_preload_share" } }`.
+`corpus_sha256` is the SHA-256 of `corpus.txt` as written in step 5.
+`pages_with_blocked_preload` counts pages with at least one blocked
+103-preload URL; its share is that count divided by the number of pages
+in the list. Neither counts the HTTP/1.1 `103`s that step 4 drops
+(`http11_hints_dropped`). `early_hints_control_seen` records the step 4
+positive control; a manifest with it false is invalid and is never
+committed.
 
-*R-14 trigger.* If `pages_with_blocked_preload_share` is **2 % or more**,
-the main-frame factory wrap (R-14) goes back to the lead **before Step 8**
-starts; the Step 4 PR states the numbers and flags the trigger. With a
-20–49-page list, one affected page is already above 2 %. Any later run (rebase,
+*R-14 trigger (restated as a page count, review r2 N-4; lead ruling
+2026-10-26).* The trigger fires if `pages_with_blocked_preload` is
+**2 or more**, that is, if at least two corpus pages each have at least
+one blocked `103` preload. Then the main-frame factory wrap (R-14) goes
+back to the lead **before Step 8** starts. The Step 4 PR states the
+count, the share (`pages_with_blocked_preload_share`, reported for
+context; it is not the trigger) and whether the trigger fired. The old
+"2 % of pages" form fired on one page at any corpus size of 20–49
+pages, which is not what the ruling meant. Any later run (rebase,
 another machine) first checks its `corpus.txt` against `corpus_sha256`;
 a mismatch means a new corpus version and a new manifest, never a silent
 swap. Third-party share uses the crate's own rule (request host vs
@@ -1705,11 +1832,11 @@ medians unless stated:
 
 | ID | Measure | Method | Pass |
 |---|---|---|---|
-| G-1 | No engine call on the UI or IO thread (run at both caps, §7.7) | `DCHECK_CALLED_ON_VALID_SEQUENCE` on every matcher entry point; in non-official builds also `CHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI) && !content::BrowserThread::CurrentlyOn(content::BrowserThread::IO))` in the C++ check wrapper. The self-test prints the matcher thread name once | No CHECK during N-1…N-18 and the Step 9 soak; the name is a ThreadPool worker |
-| G-2 | Check cost on real URLs, at both caps | `--open-adblock-selftest --open-adblock-bench=<corpus file> --open-adblock-bench-cap=<8192\|16384>` (non-official only): each corpus URL 10× through the real shim on the matcher sequence, real lists | at each cap: mean ≤ 8 µs, p99 ≤ 60 µs, max ≤ 1 ms |
-| G-3 | Long URLs, at both caps | same bench with synthetic 8 KiB, 16 KiB, 100 KiB and 2 MiB URLs (path of random letters) | each ≤ 1 ms, at each cap |
-| G-4 | Added request latency | one **process-wide** histogram on the matcher sequence (fixed log-scale buckets from 1 µs to 100 ms, no locks), fed by every factory with the time from `CreateLoaderAndStart` arrival to the forward; printed once at `--v=1` on process exit and by the self-test. Runs: `corpus.html?sample=0`, five loads | p50 ≤ 50 µs, p99 ≤ 500 µs over all requests of the five loads |
-| G-5 | Page wall time | `corpus.html?sample=0` (exactly 200 requests), `performance.now()` at `load` over CDP, real lists, blocking on vs off | median delta ≤ 5 ms; matcher busy time ≤ 3 ms per load |
+| G-1 | No engine call on the UI or IO thread (run at both caps, §7.7) | `DCHECK_CALLED_ON_VALID_SEQUENCE` on every matcher entry point; in non-official builds also `CHECK(!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI) && !content::BrowserThread::CurrentlyOn(content::BrowserThread::IO))` in the C++ check wrapper. The self-test prints the matcher thread name once. If Step 5 builds the §7.6 priority lane, the sequence checks become thread checks (lane rule 1) and the CHECK stays | No CHECK during N-1…N-18 and the Step 9 soak; the name is a ThreadPool worker (the lane's own thread name if the lane is built) |
+| G-2 | Check cost on real URLs, at both caps | `--open-adblock-selftest --open-adblock-bench=<corpus file> --open-adblock-bench-cap=<8192\|16384>` (non-official only): each corpus URL 10× through the real shim on the matcher sequence, real lists. **Warm-up (review r2 N-2):** repetition 1 of every URL is warm-up and is left out of mean, p99 and max, because a first-use regex compile can hold the engine for up to 6.78 ms (F-35) whatever the cap is. The bench prints the first-pass max on its own line; no gate reads it (G-6 still counts such stalls in page loads) | at each cap, over repetitions 2–10: mean ≤ 8 µs, p99 ≤ 60 µs, max ≤ 1 ms |
+| G-3 | Long URLs, at both caps | same bench with synthetic 8 KiB, 16 KiB, 100 KiB and 2 MiB URLs (path of random letters), each checked 10× under the same warm-up rule as G-2 (repetition 1 excluded, first-pass max reported apart), so G-3 measures the cap, not a first compile | each ≤ 1 ms over repetitions 2–10, at each cap |
+| G-4 | Added request latency | one **process-wide** histogram (fixed log-scale buckets from 1 µs to 100 ms, atomic counters, no locks), fed by every factory on the matcher sequence with the time from `CreateLoaderAndStart` arrival to the forward. **Print site (review r2 N-9):** printed at `--v=1` synchronously on the UI thread from `OpenAdBlockService::Shutdown()` (§6.3), once per process (the first `Shutdown()` prints; `cefsimple` has one context). A normal quit after the loads therefore always prints it, where a matcher task could be dropped by `SKIP_ON_SHUTDOWN` (§7.6); the self-test bench also prints it at the end of its own run. Runs: `corpus.html?sample=0`, five loads in one process (the G-5 on-launch), then quit normally and read the print. G-4 keeps load 1: a first regex compile delays one request of about 1,000, so it moves p99 only if more than 1 % of requests compile, and G-6 counts those stalls | p50 ≤ 50 µs, p99 ≤ 500 µs over all requests of the five loads |
+| G-5 | Page wall time | `corpus.html?sample=0` (exactly 200 requests), `performance.now()` at `load` over CDP, real lists, blocking on vs off. **Process and warm-up (review r2 N-2):** the five loads of each condition share one `cefsimple` process (two launches: on, then off). That is how the harness really runs them: one CDP target reloads the page, and G-4's process-wide histogram is fed by the same on-loads. Five fresh processes would fold process start and first regex compiles into wall time, which is not the per-page cost this gate prices (real browsing is warm). Load 1 of each condition is warm-up: its wall time and busy time are reported apart, and the gate reads loads 2–5 only | median delta (on minus off, loads 2–5) ≤ 5 ms; median matcher busy time of loads 2–5 ≤ 3 ms per load |
 | G-6 | Stalls | log every check > 1 ms with its URL length and duration (no cause: the shim cannot see a regex compile inside the crate) during the G-5 runs and the Step 9 soak | ≤ 1 per 1,000 checks; none > 10 ms |
 | G-7 | Off costs nothing | the same page in a Profile with blocking off vs a build without P-3 | delta within run-to-run spread; report both medians |
 
@@ -1862,7 +1989,7 @@ Renderer main thread, each frame document with an http(s) URL
     -> [Sync] AdBlockCosmetics.GetDocumentCosmetics(document_url, top_origin)
          browser, matcher sequence (never the UI thread):
            matcher off, or top site excluded  -> null
-           engine cosmetic query(document_url)   (66 µs mean as built, Step 3)
+           engine cosmetic query(document_url)   (77–79 µs as built, Step 3, sorted output included)
          <- AdBlockDocumentCosmetics? (sanitized hide selectors, §8.3)
     -> WebDocument::InsertStyleSheet(hide rules, kUser)    one rule per selector
     -> if !generichide:
@@ -1933,8 +2060,9 @@ process must belong to one Profile. That holds in this tree:
    `IsSuitableHost` returns false on a different context
    (`render_process_host_impl.cc:4946-4951`); the spare renderer is used
    only for the same context
-   (`content/browser/renderer_host/spare_render_process_host_manager_impl.cc:473`); process-per-site
-   lookup checks it too (`render_process_host_impl.cc:1921`).
+   (`content/browser/renderer_host/spare_render_process_host_manager_impl.cc:473`); the
+   initial-WebUI scan for an existing process compares the context too
+   (`render_process_host_impl.cc:1921`; label corrected in review r2).
    Single-process mode supports one context only (`:4940-4944`).
 3. CEF maps one `BrowserContext` to one `CefBrowserContext` by identity
    (`cef/libcef/browser/browser_context.cc:100-113`). Request contexts
@@ -1956,8 +2084,11 @@ as `GetNewBrowserInfo(render_frame_token)` does (`cef.mojom:138-140`).
   URL is `http`/`https`, and the registrable domain (or host) of
   `top_origin` is not excluded. Else run the shim's cosmetic query and
   convert the vectors to the mojom struct. No UI-thread step, no file I/O.
-- `GetGenericSelectors`: cap the input at 500 classes plus 500 IDs per
-  call (drop the rest), run `HiddenSelectors`, reply.
+- `GetGenericSelectors`: cap the input at **500 tokens in total**
+  (classes plus IDs) per call, drop the rest, run `HiddenSelectors`,
+  reply. This is the one batch limit, shared with the observer in §8.3
+  (review r2 N-9), so a reply holds at most 500 selectors and becomes
+  one generic sheet (§8.3).
 - Trust: the renderer supplies `top_origin`. A compromised renderer can
   ask for any site's rules (public list data) and learn whether a site is
   on this Profile's exclusion list. Accepted under the browser's threat
@@ -1972,7 +2103,8 @@ races a frame broker reset (D-13).
 
 **Cost and the no-block rule (lead ruling 5, 2026-10-26).** One sync round
 trip per http(s) document: IPC to the matcher sequence, queue time, the
-query (66 µs mean as built), and the reply. Guess: 0.1–0.3 ms per document
+query (77–79 µs as built, with the shim's always-sorted hide selectors;
+§13.4 budget ≤ 100 µs), and the reply. Guess: 0.1–0.3 ms per document
 on an idle machine, also when blocking is off (the browser answers null).
 CEF already makes a sync call for each new browser on the same kind of
 pipe (F-28). Gates C-G1 (blocking on) and C-G2 (blocking off) in §11
@@ -1983,9 +2115,20 @@ Step 5 measure it. Rules:
    gets no cosmetic hiding. The agent checks both the call's return value
    and the reply for null before it touches the payload (§7.6 shutdown).
    Network blocking still applies.
-2. The gates measure the **contended** case: at least three corpus pages
-   load at the same time (§11 Step 5, review r1 finding 3). Expected wait:
-   §7.6 "Cosmetic calls in the queue".
+2. The gates measure the **contended** case (review r1 finding 3). For
+   C-G1 (on), at least three corpus pages load at the same time. For
+   C-G2 (off), that setup alone contends nothing: off factories wrap
+   nothing, so the matcher queue stays empty (review r2 N-1). C-G2
+   therefore uses **injected bench load** (lead ruling, review r2): the
+   non-official switch `--open-adblock-bench-load` (§13.1) drives the
+   matcher with synthetic checks, one task per check, at the rate of
+   three concurrent corpus page loads, while the measured context has
+   blocking off (§11 Step 5). Expected wait: §7.6 "Cosmetic calls in the
+   queue". The `cefsimple` harness has one request context, so Step 5
+   cannot run the real cross-Profile case, an off-Profile document that
+   waits behind another Profile's checks; the bench load stands in for
+   those checks. The real cross-Profile wait is measured again at
+   Step 8, where two request contexts exist (§11 Step 8, R-9).
 3. If the contended C-G1 or C-G2 fails, Step 5 builds the named
    escalation first: the **priority lane** (§7.6), then measures again.
 4. If C-G2 still fails with the lane, Step 5 ships the **no-wait
@@ -2051,10 +2194,21 @@ non-null:
    one more sheet of at most 500 rules. A document gets at most 64 generic
    sheets; after that the agent stops asking and logs once at `--v=1`.
    Several insertions in one task cost one style recalc. Guesses, measured
-   at Step 5 (C-G3). Worst case per document: the capped initial sheet
-   plus 64 × 500 generic rules (guess: about 45,000 user-origin rules);
-   Step 5 records renderer memory and style-recalc time for that payload
-   (§6.6, record only in v1).
+   at Step 5 (C-G3). Worst case per document (revised, review r2 N-7):
+   the capped initial sheet plus 64 × 500 generic rules. The cap bounds
+   bytes, not rules, so the most rules come from the shortest
+   selectors: 256 KiB / 2 B ≈ 131,000, plus 32,000 generic, so at most
+   about **163,000** user-origin rules (the old figure, 45,000, assumed
+   20-byte selectors). This is an upper bound: the crate returns
+   distinct selectors (`HashSet`,
+   `adblock-0.8.11/src/cosmetic_filter_cache.rs:25`), so only a few
+   thousand can be 2 bytes long, and a real fill lands lower (guess:
+   about 90,000 in the initial sheet). Generic sheets are capped by
+   count, not bytes: at the 2,048-byte limit (sanitizer rule 4),
+   32,000 generic selectors could carry about 62 MiB of text. Real
+   generic selectors are short, and v1 measures the rule-count case
+   only. Step 5 records renderer memory and style-recalc time for the
+   synthetic short-selector fill (§6.6, §11 Step 5; record only in v1).
 3. Why the user origin: a user `!important` declaration beats an author
    `!important` declaration in the cascade, so a page cannot undo the
    hiding with its own `!important`. The sheets are not in the document's
@@ -2089,7 +2243,8 @@ is a `content::RenderFrameObserver` and implements
    `third_party/blink/renderer/bindings/core/v8/v8_binding_for_core.cc:734-737`),
    and context creation calls `DidCreateScriptContext(context, world_id)`
    on every frame observer synchronously, before it returns
-   (`local_window_proxy.cc:243`, `:300-308`).
+   (`third_party/blink/renderer/bindings/core/v8/local_window_proxy.cc:243`,
+   `:300-308`).
 2. In its own `DidCreateScriptContext`, for that world id only, the agent
    installs `__openAdBlock` and sets a per-document flag
    `binding_installed_`.
@@ -2102,10 +2257,39 @@ is a `content::RenderFrameObserver` and implements
    and then `OpenAdBlock: observer started`, once per document; Step 5
    checks that order on every page (§11).
 
+*Binding lifecycle (review r2 N-6).* A co-tenant can create the world's
+context before `DidCreateDocumentElement`, and the agent's
+`DidCreateScriptContext` then runs early, before the payload exists.
+Three rules make every order safe:
+
+1. **Install is idempotent.** `binding_installed_` means "the frame's
+   current context of this world holds `__openAdBlock`". Steps 2 and 3
+   install only when it is false. So an early callback installs once,
+   and step 3 then finds the flag true and does nothing (the log says
+   `callback`).
+2. **The flag follows the context, not the navigation.** The agent keeps
+   the context it installed into as a `v8::Global<v8::Context>`. The
+   flag turns false only in `WillReleaseScriptContext(context, world_id)`
+   (`content/public/renderer/render_frame_observer.h:141`) for that same
+   context. A new document that gets a new context therefore installs
+   again. If Blink keeps the window and its contexts for the next
+   document (the initial empty document case), the binding stays and
+   stays valid, because of rule 3. The per-document payload is cleared
+   in `DidCreateNewDocument()` (`:128`) and set again by the sync call
+   in `DidCreateDocumentElement`.
+3. **The binding reads the payload lazily.** The two native functions
+   hold a `base::WeakPtr` to the agent and read the agent's current
+   payload each time they are called. Nothing from the payload is
+   captured at install. Before the payload arrives, after a null reply,
+   or after the agent is gone, `exceptions()` returns an empty array and
+   `report()` does nothing. `report()` also does nothing when the
+   payload says `generichide`.
+
 The observer collects `class` and `id` tokens from the document and
 from a `MutationObserver` on `document.documentElement` (`subtree`,
 `childList`, `attributes: ["class", "id"]`), debounces 100 ms, sends at
-most 500 new tokens per batch, and never sends a token twice per
+most 500 new tokens per batch (classes and IDs together: the one batch
+limit of §8.2, review r2 N-9), and never sends a token twice per
 document.
 
 The page cannot see the isolated world's objects, and v1 adds no
@@ -2403,20 +2587,29 @@ silently keep the old semantics (review 100-1(a)). Rules:
 
 ### 9.3 Redirect resources (uBlock Origin)
 
-**Revised 2026-10-26 (D-15, lead rulings 6 and 7).** These rules replace
-the paragraphs below where they conflict. v1 runs no scriptlets, so in v1
-resources serve **only** `$redirect` stub responses (§7.4 rule 3).
+**Revised 2026-10-26 (D-15, lead rulings 6 and 7).** These rules are the
+final form; review r2 (N-10) removed the pre-revision paragraphs they
+used to override. v1 runs no scriptlets, so in v1 resources serve
+**only** `$redirect` stub responses (§7.4 rule 3).
 
 - **Format.** The shim takes the crate's own serialized `Vec<Resource>`
   as JSON (Step 2 as built in #98), not a path, because the crate's
   assembler reads only paths, has a deprecated scriptlet entry point and
   panics on malformed files. The runtime file is `resources.json`.
 - **Production.** Step 7 makes `resources.json` at build time on the
-  developer machine: fetch the pinned uBlock Origin `assets/resources/`
-  sources from the official repository host, run the crate's assembler
-  offline in a throwaway Cargo driver under `/tmp` (never in the browser),
-  and pin the **output** SHA-256 in `resources-pins.txt` next to the
-  source pin. v1 keeps only resources whose kind supports redirects
+  developer machine: fetch the pinned uBlock Origin sources from the
+  official repository host, run the crate's assembler offline in a
+  throwaway Cargo driver under `/tmp` (never in the browser), and pin
+  the **output** SHA-256 in `resources-pins.txt` next to the source pin.
+  The driver calls `assemble_web_accessible_resources(web_accessible_resource_dir,
+  redirect_resources_path)` (`adblock-0.8.11/src/resources/resource_assembler.rs:267-280`):
+  uBlock Origin's web-accessible-resources directory plus its
+  `redirect-resources.js` index (guess for the paths in the uBlock
+  Origin repository: `src/web_accessible_resources/` and
+  `src/js/redirect-resources.js`; Step 7 confirms them). It never calls
+  the deprecated `assemble_scriptlet_resources` (`:293-297`). Do not
+  hand-convert uBlock Origin resources to JSON; the assembler exists so
+  we do not. v1 keeps only resources whose kind supports redirects
   (`ResourceType::supports_redirect()`, `adblock-0.8.11/src/resources/mod.rs:187-189`)
   and leaves out scriptlet templates, so no scriptlet code ships in v1.
   `tools/fetch-adblock-lists.sh` stages it under `Vendor/adblock/`; it is
@@ -2430,27 +2623,19 @@ resources serve **only** `$redirect` stub responses (§7.4 rule 3).
   with an app update, never from the network. In v1 they are stub bodies
   for `$redirect`; post-v1 scriptlets would make them main-world code on
   every page (§8.5), which is one more reason to keep them app-bound.
-  The old "Versioning: resources update with the lists" paragraph below
-  is void; §9.5 no longer fetches resources.
+  §9.5 does not fetch resources.
 - **Version.** The resources version is its pinned SHA-256. Debug info
   (AD-8) reports the first 12 hex digits and `resources_loaded`.
 
 File: `Engine/fork/adblock/resources-pins.txt`, same one-line format as
-§9.1 (name, URL, sha256). Local name: `resources.txt`. Source (official
-uBlock Origin assets, as consumed by the crate's `resource-assembler`,
-D-3): use the resources file the `adblock` crate's assembler documents
-for 0.8.11 — at Step 7, read
-`~/.cargo/registry/src/*/adblock-0.8.11/src/resources/resource_assembler.rs`
-and take the input format it actually parses (in 0.8.11:
-`assemble_scriptlet_resources` reads uBlock Origin's `scriptlets.js`
--style directory/file layout). Pin **that** upstream file (gorhill/uBlock
-`assets/resources/` on the project's official repository host) with its
-SHA-256, fetched by the same script with an added entry. If the
-assembler wants a directory rather than one file, stage the directory
-under `Vendor/adblock/resources/` and change the service's reserved
-name in §6.3.2 step 2 from `resources.txt` to that directory — record
-the final form in the PR and in this file's errata. Do not hand-convert
-uBO resources to JSON; the assembler exists so we do not.
+§9.1 (name, URL, sha256). It holds the source pin (the upstream
+revision of the assembler's inputs; one archive line or one line per
+input file, Step 7 chooses and records it) and the output pin
+(`resources.json` and its SHA-256). The build and the manifest verify
+only the output pin. The assembler inputs exist only in the `/tmp`
+driver's workspace: the browser reads `resources.json` alone, so the
+service has no reserved resources name to change (the old "stage a
+directory and rename the reserved name" path is void).
 
 Licensing: uBlock Origin resources are GPL-3.0 code/data. Add a
 `THIRD_PARTY.md`-adjacent note in `resources-pins.txt` header
@@ -2459,10 +2644,10 @@ required before any public release — same gate as MPL-2.0, fork-infra
 Q-2.`). The pin lands in the same Step 7 PR; the counsel gate blocks
 external release, not local development (fork-infra §14 Q-2 default).
 
-Versioning: resources update **with** the lists (§9.5 same schedule,
-own ETag). `AdBlockStatus` gains no resources field in v1; debug info
-(§12.2) reports the resources file's byte size + first-line version
-comment if present.
+Versioning: see the **Version** bullet above (the pinned SHA-256; an
+app update is the only way it changes). Tombstone: the pre-revision
+"resources update with the lists on the §9.5 schedule" rule is
+superseded by lead ruling 7.
 
 ### 9.4 The 46-list catalog (committed data file)
 
@@ -2690,6 +2875,12 @@ Acceptance:
       ≤ 1000 ms, and on second run with `engine.dat` present
       `engine_from_dat=1`). Remove or keep the selftest behind the
       switch — keeping it is preferred (it is the §13 regression gate).
+- [ ] Load results (#100 review R2-5, as built): the self-test waits on
+      the load's `done` result, not on a status poll, and expects
+      `kLoaded`. It also checks the other three paths of §6.2:
+      `kCancelled` for a load whose service is destroyed first and for a
+      load asked for after `Shutdown()`, and `kStale` for a load that a
+      newer load replaced.
 - [ ] Shutdown cleanliness: quit `cefsimple` mid-build (start a load,
       quit within 1 s) five times; no crash, no hang, no leftover
       renderer processes (`pgrep -f cefsimple` empty).
@@ -2702,11 +2893,14 @@ Entry gate (stop if any is false):
 
 - #97, #98 and #100 are merged, and these review fixes are in: 97-1
   (regex features; confirmed by lead ruling 3, Step 4 depends on it);
-  98-3 (4-byte DAT
-  guard); 100-1(a) (`engineFormat` in the receipt); 100-2 (engines freed
-  off the UI thread); 100-3 (switches out of official builds); 100-4
-  (exclusion matching). This step lands the §5.5 rows whose owner is
-  "Step 4" unless the #98 fix PR already did; then it verifies them.
+  100-2 (engines freed off the UI thread); 100-3 (switches out of
+  official builds); 100-4 (exclusion matching).
+- Not entry conditions (review r2 N-5): 98-3 (4-byte DAT guard) and
+  100-1(a) (`open_adblock_engine_format()` and `engineFormat` in the
+  receipt) are §5.5 rows owned by Step 4. This step lands every row
+  whose owner is "Step 4" unless the #98 or #100 fix PR already did,
+  and its acceptance verifies all of them (§5.5: gates verify, they do
+  not assign).
 - No build is running (§Prerequisite gate).
 
 Work, in this order:
@@ -2719,12 +2913,15 @@ Work, in this order:
    path and that the CSP edit reaches `ParseHeaders` (§7.1). Record the
    spike result in the PR. If it fails, stop and switch the subframe path
    to the named throttle fallback (§7.1) before going on.
-2. Shim rows owned by Step 4 (§5.5): edit
-   `Engine/fork/src/open/adblock/rust/src/lib.rs` (enum, cap and
-   `truncated`, all-type `redirect_data_url`, 4-byte DAT guard, build
-   report, `open_adblock_engine_format()`).
+2. Shim rows owned by Step 4 (§5.5), each unless the #98 or #100 fix PR
+   already landed it: edit `Engine/fork/src/open/adblock/rust/src/lib.rs`
+   (enum, cap and `truncated`, all-type `redirect_data_url`, 4-byte DAT
+   guard, build report, `open_adblock_engine_format()`). The PR lists
+   which rows it landed and which it only verified.
 3. §6.6 and §6.7: matcher state on the matcher sequence, process-wide
-  build runner and engine registry, build-runner deleter, caps.
+   build runner and engine registry, build-runner deleter, caps, and
+   the two runner accessors of §7.6 lane rule 2 (both return the one
+   matcher-sequence runner until a lane exists).
 4. Overlay `open_adblock_matcher.*`, `open_adblock_engine_registry.*`,
    `open_adblock_url_loader_factory.*`, `open_adblock_socket_hooks.*`,
    `open_adblock_hooks.*`, `open_adblock_tab_helper.*`, `BUILD.gn` source
@@ -2732,8 +2929,9 @@ Work, in this order:
 5. Patch P-3 without the `ExposeInterfacesToRenderer` line (Step 5 adds
    it to the same patch).
 6. Self-test bench switches `--open-adblock-bench=<file>` and
-   `--open-adblock-bench-cap=<bytes>` (non-official only), and the
-   process-wide G-4 histogram (§7.8).
+   `--open-adblock-bench-cap=<bytes>` (non-official only; repetition 1
+   is warm-up, §7.8 G-2), and the process-wide G-4 histogram with its
+   print in `OpenAdBlockService::Shutdown()` (§7.8).
 7. Corpus capture (§7.8) and the committed
    `Engine/fork/adblock/bench/corpus-manifest.json`.
 8. Smoke harness P-6 in its §13.1 form (switches + load-end count
@@ -2759,9 +2957,15 @@ Acceptance (record CDP output and the gate table in the PR):
       `corpus.txt` matched `corpus_sha256` of the committed manifest, and
       that every `corpus.html` run used one 200-URL sample.
 - [ ] The manifest's `early_hints` block is filled (§7.8 capture steps 4
-      and 6). The PR states `pages_with_blocked_preload` and its share,
-      and whether the R-14 trigger (≥ 2 % of corpus pages) fired; if it
-      did, the PR asks the lead to rule on the wrap before Step 8.
+      and 6), and the capture's positive control passed
+      (`early_hints_control_seen: true`; the PR quotes the control's
+      `responseReceivedEarlyHints` event). The PR states
+      `pages_with_blocked_preload`, its share, `http11_hints_dropped`,
+      and whether the R-14 trigger (**2 or more** corpus pages with a
+      blocked `103` preload) fired; if it did, the PR asks the lead to
+      rule on the wrap before Step 8.
+- [ ] G-2, G-3 and G-5 report their warm-up pass apart (first-pass max;
+      load 1 wall and busy time) next to the gated numbers (§7.8).
 - [ ] `phys_footprint` of the browser with one engine (single context in
       `cefsimple`): within the §6.6 budget. The two-Profile footprint and
       `engine_shared=1` are Step 8 checks (review r1 finding 9).
@@ -2773,18 +2977,26 @@ test-only and called out as such).
 
 ### Step 5 — Cosmetic filtering (§8; revised 2026-10-26)
 
-Entry gate: the §5.5 cosmetic row (sanitized vectors, review 98-1 and
-98-2) exists in the shim. If #98 merged with the combined `hide_css`
-output, this step does not start until the vector output replaces it.
+Entry gate: Step 4 is merged and no build is running. The §5.5 cosmetic
+row (sanitized vectors, review 98-1 and 98-2) is **not** an entry
+condition (review r2 N-5): Step 5 owns it. This step lands it unless
+the #98 fix PR already did (as of 2026-10-26 the #98 branch has the
+sorted, sanitized vectors), and its acceptance verifies it. If the
+combined `hide_css` output is still in the shim, this step replaces it
+with the vector output before any renderer work.
 
 Work: the §5.5 cosmetic row in `Engine/fork/src/open/adblock/rust/src/lib.rs`
 (sanitized vectors, 256 KiB cap) unless the #98 fix PR already landed it;
 overlay `mojom/` (interface + `BUILD.gn`), `open_adblock_cosmetics_host.*`,
 `renderer/open_adblock_renderer_agent.*`, `renderer/open_adblock_page_script.*`
 (the class/ID observer only); the `ExposeInterfacesToRenderer` line in
-P-3; patch P-4 (one line in the renderer client). No scriptlet,
-`:style()`, `:remove*()` or procedural code (lead ruling 6; post-v1 design
-in §8.5). The priority lane (§7.6) only if the contended gates fail.
+P-3; patch P-4 (one line in the renderer client); in P-6, the
+non-official switches `--open-adblock-off` and `--open-adblock-bench-load`
+(§13.1) for C-G2. No scriptlet, `:style()`, `:remove*()` or procedural
+code (lead ruling 6; post-v1 design in §8.5). The priority lane (§7.6)
+only if the contended gates fail, built to lane rules 1–3 (thread
+checkers, the two named runners, the `PostDestroyThreads()` stop hunk
+in P-3).
 
 Acceptance (§13.3 C-1…C-10 and the gates below; real output in the PR):
 
@@ -2797,17 +3009,38 @@ Acceptance (§13.3 C-1…C-10 and the gates below; real output in the PR):
       at once, while a fourth target loads `index.html` **100 times**.
       Guess: CEF's Chrome style honors `Target.createTarget`; if it does
       not, use `contended.html`, a page with three cross-site iframes
-      (`a.corpus.test`, `b.corpus.test`, `c.corpus.test`, mapped by
-      `--host-resolver-rules`), so site isolation puts them in separate
-      renderer processes. The renderer logs each sync call's time at
+      on three different sites (`corpus-a.test`, `corpus-b.test`,
+      `corpus-c.test`, mapped by `--host-resolver-rules`). Different
+      sites get separate renderer processes under site isolation;
+      subdomains of one site (the old `a.corpus.test` form) are one
+      site and may share a process (review r2 N-10). Either way, the
+      three loads contend the browser-side matcher queue, which is what
+      C-G measures. The renderer logs each sync call's time at
       `--v=1`. The first call in each renderer process (pipe setup) is
       reported separately and left out of the percentiles (review r1
       finding 12).
 - [ ] **C-G1 (blocking on), contended:** over the 100 `index.html`
       documents: p50 ≤ 0.5 ms, p99 ≤ 3 ms (guesses; F-28 precedent, query
-      66 µs as built; §7.6 bounds the expected wait).
-- [ ] **C-G2 (blocking off), contended:** the same with blocking off:
-      p50 ≤ 0.3 ms.
+      77–79 µs as built with the shim's always-sorted hide selectors;
+      §7.6 bounds the expected wait).
+- [ ] **C-G2 (blocking off), contended by injected bench load (review r2
+      N-1, lead ruling):** `cefsimple --open-adblock-dir=<staged lists>
+      --open-adblock-off --open-adblock-bench-load=<corpus file>
+      --open-adblock-bench-load-rate=<R>`. The lists load, the toggle
+      stays off, so every factory is unwrapped and every cosmetic reply
+      is null. The bench load posts synthetic checks of the URLs of
+      samples 0–2, one task per check, to `AdBlockMatcherTaskRunner()`
+      (§7.6 lane rule 2), at rate R = 600 / T checks per second, where
+      600 is three concurrent `corpus.html` loads of 200 requests and T
+      is the median on-load wall time of loads 2–5 from Step 4's G-5
+      (in seconds). The bench calls `OpenAdBlockMatcher::Check` directly:
+      the toggle gates factories and cosmetic replies (§7.2, §8.2), not
+      `Check` itself. The three looping corpus targets still run (they
+      add renderer and IPC load) while the fourth target loads
+      `index.html` 100 times. The PR states T, R and the number of bench
+      checks that ran. Pass: p50 ≤ 0.3 ms over the 100 documents. The
+      real cross-Profile wait (an off context behind an on context) is
+      measured again at Step 8.
 - [ ] If either fails: build the priority lane (§7.6) and measure again.
       If C-G2 still fails, Step 5 ships the no-wait fallback of §8.2
       rule 4 (lead ruling 5): a load whose reply has not arrived at
@@ -2831,17 +3064,28 @@ Acceptance (§13.3 C-1…C-10 and the gates below; real output in the PR):
       the staged real lists, `cefsimple --host-resolver-rules="MAP * 127.0.0.1:8931"`
       loads `http://www.gamedev.net/`; the throwaway server answers any
       path with a small HTML page, so the cosmetic query runs for that
-      real host name. The `--v=1` log records the selector count.
-- [ ] **Worst-case payload (review r1 finding 14), record only:**
-      renderer `phys_footprint` delta and style-recalc time for the §8.3
-      worst case (a synthetic list that fills the 256 KiB cap plus 64
-      generic sheets of 500 rules).
+      real host name. The `--v=1` log records the selector count. If the
+      real lists give that host fewer than 400 selectors, C-G3 uses the
+      first 400 selectors of the worst-case fill below instead, and the
+      PR says so.
+- [ ] **Worst-case payload (review r1 finding 14, review r2 N-7), record
+      only:** renderer `phys_footprint` delta and style-recalc time for
+      the §8.3 worst case. The synthetic list fills the 256 KiB cap with
+      the **shortest** distinct valid selectors, shortest first (1-byte,
+      then 2-byte, then 3-byte type selectors that are not HTML element
+      names, so they match nothing on the test page), as
+      `127.0.0.1##<selector>` rules; plus a fixture page with 32,000
+      distinct class tokens and one generic `##.<token>` rule each, so
+      the observer fills 64 generic sheets of 500 rules. The `--v=1` log
+      records the kept initial-sheet count and `dropped_over_cap`.
 - [ ] No page-visible `__openAdBlock*` global, and `document.styleSheets`
       unchanged by Open (CDP enumerates both).
 
-PR: P-4 + the P-3 line + overlay files + `open/adblock/rust/src/lib.rs`
-(if Step 5 owns the cosmetic row). One PR. The PR quotes the sanitizer
-rules as implemented (security callout, 98-2).
+PR: P-4 + the P-3 line (and the lane's `PostDestroyThreads()` hunk, if
+the lane is built) + the P-6 switches + overlay files +
+`open/adblock/rust/src/lib.rs` (if this step landed the cosmetic row;
+otherwise the PR states that it verified the #98 form). One PR. The PR
+quotes the sanitizer rules as implemented (security callout, 98-2).
 
 ### Step 6 — CEF C API + translator (patch P-5)
 
@@ -2980,6 +3224,11 @@ PR: P-5 + `expected-symbols.txt`. One PR.
 
 ### Step 7 — Bundled lists, catalog, resources (§9.1, §9.3, §9.4)
 
+Entry gate (revised in review r2, N-5): Step 6 is merged and no build is
+running. The §5.5 deserialize row (resources after deserialize, review
+98-4) is **not** an entry condition: Step 7 owns it, lands it unless
+the #98 fix PR already did, and its acceptance (N-19) verifies it.
+
 Work: `tools/fetch-adblock-lists.sh`, `Engine/fork/adblock/list-pins.txt`,
 `resources-pins.txt`, `catalog.json` (one-time transform); the §5.5
 resources-after-deserialize row in `Engine/fork/src/open/adblock/rust/src/lib.rs`
@@ -3014,10 +3263,9 @@ Acceptance:
       `redirect-list.txt` generation loads from its DAT on the second run
       and N-19 passes there.
 
-Entry gate (revised 2026-10-26): the §5.5 deserialize row (resources
-after deserialize, review 98-4) exists before this step starts.
-
-PR: tools + `Engine/fork/adblock/**` + the Swift manifest change. One PR.
+PR: tools + `Engine/fork/adblock/**` + `open/adblock/rust/src/lib.rs`
+(if this step landed the deserialize row; otherwise the PR states that
+it verified the #98 form) + the Swift manifest change. One PR.
 
 ### Step 8 — OpenEngine ObjC API + Swift contract (§12)
 
@@ -3050,10 +3298,22 @@ Acceptance:
       `SystemInfo.getProcessInfo`, or the PIDs that the CEF layer logs
       at `--v=1`). This proves the §8.2 one-pipe-per-process reasoning end
       to end.
-- [ ] **Two Profiles, memory (moved from Step 4, review r1 finding 9).**
-      With the same lists in both contexts: the second context's status
-      shows `engine_shared=1`, and the browser's `phys_footprint` grows
-      by at most 2 MiB (§6.6).
+- [ ] **Two Profiles, memory (moved from Step 4, review r1 finding 9;
+      window from review r2 N-8).** Create both request contexts first,
+      with the same lists configured but the second not yet loaded, and
+      sample the browser's `phys_footprint` (baseline). Then run the
+      second context's `LoadFromDirectory` and sample again when its
+      status shows `engine_shared=1`. Pass: that delta is at most 2 MiB
+      (§6.6). The cost of creating a context is outside the window.
+- [ ] **Cross-Profile cosmetic wait (review r2 N-1; measured again from
+      Step 5).** Context A has blocking on and runs the Step 5 contended
+      load (three looping `corpus.html?sample=0..2` targets); context B
+      has blocking off and loads `index.html` 100 times at the same
+      time. B's sync calls wait behind A's real checks on the shared
+      matcher sequence (or the lane, if Step 5 built it). Pass: B's
+      p50 ≤ 0.3 ms (C-G2), first call per renderer process reported
+      apart. The PR compares the number with Step 5's injected-load
+      C-G2. If it fails, the §8.2 rules 3–5 apply as at Step 5.
 - [ ] No CEF type crosses into Swift (grep the Swift surface).
 
 PR: `Engine/OpenEngine/**` (+ Swift target files if applicable). One PR.
@@ -3223,14 +3483,28 @@ in `SimpleApp::OnContextInitialized`, before browser creation):
 ```text
 --open-adblock-dir=<path>       adblock root (current.json → generation, §9.2) to load
 --open-adblock-exclude=<domain> repeatable; seed exclusions
---open-adblock-selftest         Step 3 mode: load dir, poll status until
-                                engine_loaded (10 s timeout), print status
-                                lines, exit 0/1 without opening a window
+--open-adblock-selftest         Step 3 mode: load dir, wait for the load's
+                                done result (§6.2; as built since #100
+                                review R2-5), print status lines, exit 0/1
+                                without opening a window
 --open-adblock-bench=<file>     added 2026-10-26, with --open-adblock-selftest:
                                 check every URL of <file> (one per line,
                                 optional "<type> <source-origin>" columns)
-                                10x on the matcher sequence, print mean,
-                                p50, p99, max and the matcher thread name (G-1..G-3)
+                                10x on the matcher sequence; repetition 1 is
+                                warm-up: print its max on its own line, then
+                                mean, p50, p99, max over repetitions 2-10,
+                                and the matcher thread name (G-1..G-3)
+--open-adblock-off              added in review r2, with --open-adblock-dir:
+                                load the lists but leave the master toggle
+                                off (C-G2)
+--open-adblock-bench-load=<file>  added in review r2 (C-G2): post synthetic
+                                checks of the URLs of <file> (samples 0-2),
+                                one task per check, to AdBlockMatcherTaskRunner()
+                                (§7.6), calling OpenAdBlockMatcher::Check
+                                directly, in 10 ms ticks, until exit; print
+                                the number of checks run at exit
+--open-adblock-bench-load-rate=<checks/s>  rate for the switch above
+                                (R = 600 / T, §11 Step 5)
 --remote-debugging-port=9222    stock CEF switch; the §13.3 driver uses it
 --host-resolver-rules="MAP * 127.0.0.1:8931"   stock Chromium switch; G-5 and
                                 C-G1 corpus runs keep real host names local
@@ -3307,7 +3581,7 @@ tests its suppression.
   `$important`), `<script src="/ads/redir.js">` (redirect to the
   `noop.js` resource: the page sets `window.__redirLoaded` only if the
   replacement script runs — the resources payload for the test is a
-  `resources.txt` beside `testlist.txt` defining `noop.js` as a script
+  `resources.json` beside `testlist.txt` defining `noop.js` as a script
   containing `window.__redirLoaded = true;`),
   `<img src="http://127.0.0.2:8932/track/pixel.gif">` (third-party
   block), `<img src="/track/pixel.gif">` (first-party allow),
@@ -3327,12 +3601,10 @@ tests its suppression.
   `.late-ad` is domain-specific so it hides at document start only if
   present then; dynamic insertion tests the token flow. Give the late
   node class `late-ad generic-ad` so both channels are exercised),
-- the scriptlet target: rule `##+js(open-test-scriptlet)` + a
-  `resources.txt` scriptlet named `open-test-scriptlet` whose body is
-  `window.__openTestScriptlet = 1;`. Revised 2026-10-26: v1 must **not**
-  run it (C-5); the rule stays as a must-drop case. The test
-  `resources.json` holds only `noop.js`, because v1 resources exclude
-  scriptlet templates (§9.3).
+- the scriptlet target: rule `##+js(open-test-scriptlet)`, with **no**
+  resource of that name. v1 must **not** run it (C-5); the rule stays as
+  a must-drop case. The test `resources.json` holds only `noop.js`,
+  because v1 resources exclude scriptlet templates (§9.3).
 
 `generichide.html`: contains `<div class="generic-ad">` (must stay
 **visible** — generic hide suppressed) and `<div class="ad-slot">`
@@ -3344,10 +3616,11 @@ on disk proves blocks are ours, not 404s), `track/pixel.gif` (a real
 1×1 GIF — generate with
 `printf 'GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b' > track/pixel.gif`
 at Step 4; verify with `file`), `api/data.json` (`{}`).
-`resources.txt` format: whatever §9.3's assembler decision produced —
-for the test, author it in that format with the two resources above.
-Revised 2026-10-26: the file is `resources.json` (§9.3), listed in the
-fixture manifest as `_resources`.
+`resources.json` format: the crate's serialized `Vec<Resource>` (§9.3),
+with one entry, `noop.js`. Make it with the Step 7 `/tmp` driver from a
+one-file input, or write it by hand in the crate's serde form; it is
+Open's own test data, not converted uBlock Origin content. It is listed
+in the fixture manifest as `_resources`.
 
 **Additions 2026-10-26** (Steps 4–5). New lines at the end of
 `testlist.txt`:
@@ -3457,7 +3730,7 @@ Network cases (Steps 4+; N-9…N-21 added 2026-10-26):
 | N-18 | WebTransport | **Hook reachability only; error-object correctness unverified** (review r1 finding 15), unless the PR stands up a local HTTP/3 endpoint (then also assert the page's `WebTransport.ready` rejects and the endpoint saw no session). Default check: `new WebTransport('https://127.0.0.2:8933/x')` on a test rule `\|\|127.0.0.2:8933^` logs one block at `--v=1`. The PR template carries the bold label |
 | N-19 | Step 7+: `redirect-list.txt` generation, second run (DAT load) | status `engine_from_dat=1 resources_loaded ≥ 1`; `redir.js` completes from the `noop.js` stub and `window.__redirLoaded == true` (resources re-applied after deserialize, review 98-4) |
 | N-20 | Step 6+: mid-page exclusion through the CEF API (review r1 finding 15) | (1) Load `index.html`, not excluded: `fetch('/ads/banner.js')` from the page is blocked. (2) Add `127.0.0.1` with `SetOpenAdBlockExcludedDomains`; fetch again from the same page: it loads (the proxied factory re-checks per request, §7.4 rule 1). (3) Remove the exclusion; fetch again from the same page: blocked (same proxied factory). (4) Add the exclusion, navigate to `excluded-start.html` (its factory is made while excluded, so it is not proxied, §7.2 rule 2), remove the exclusion, call `window.__fetchBanner()`: it loads, because that factory stays unproxied until the next navigation. (5) Reload: blocked |
-| N-21 | `early-hints.html` after a page on the excluded `127.0.0.2` (`--open-adblock-exclude=127.0.0.2`, `--enable-features=EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`) | The server answers `early-hints.html` with `103` and `Link: </ads/banner.js>; rel=preload; as=script`, then `200`. The page's own `<script src="/ads/banner.js">` fails with `net::ERR_BLOCKED_BY_CLIENT` (its factory's top site is the new page, not the excluded previous one, §7.2). The PR records whether the server log shows the preload `GET /ads/banner.js` (expected: yes; known gap R-14, preloads never reach the hook) |
+| N-21 | `early-hints.html` after a page on the excluded `127.0.0.2` (`--open-adblock-exclude=127.0.0.2`, `--enable-features=EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`) | The server answers `early-hints.html` with `103` and `Link: </ads/banner.js>; rel=preload; as=script`, then `200`. The page's own `<script src="/ads/banner.js">` fails with `net::ERR_BLOCKED_BY_CLIENT` (its factory's top site is the new page, not the excluded previous one, §7.2). The PR records whether the server log shows the preload `GET /ads/banner.js` (expected: yes; known gap R-14, preloads never reach the hook). **Validity (review r2 N-4):** the CDP log must show `Network.responseReceivedEarlyHints` for `early-hints.html` with the `/ads/banner.js` preload (the same check as the §7.8 capture control). Without that event N-21 is **invalid**, not passed, because the `103` path never ran |
 
 Cosmetic cases (Step 5+; revised 2026-10-26):
 
@@ -3502,7 +3775,7 @@ median reported. Machine: record `sysctl -n machdep.cpu.brand_string`.
 | Text build (cold) | delete `engine.dat`; same measure | ≤ 1500 ms added, and the first page still paints during it (§10 rule 1 — assert the page's `load` event fires before the status shows `engine_loaded` if the build is slow; if it does not, that is a finding, not a failure) |
 | Page overhead | Revised 2026-10-26: gate G-5 (§7.8) on `corpus.html?sample=0`, exactly 200 real corpus URLs (review r1 finding 4), replacing the short-path `many.html` | ≤ 5 ms added per load; matcher busy ≤ 3 ms per load |
 | Request checks | gates G-1…G-4, G-6, G-7 (§7.8) | as stated there |
-| Cosmetic query | time 100 cosmetic queries on the matcher sequence in the selftest on the real lists and print the mean; plus the renderer-side sync call (C-G1, C-G2) | ≤ 100 µs/page query (as built: 66 µs); C-G1/C-G2 as in §11 Step 5 |
+| Cosmetic query | time 100 cosmetic queries on the matcher sequence in the selftest on the real lists and print the mean; plus the renderer-side sync call (C-G1, C-G2) | ≤ 100 µs/page query (as built: 77–79 µs; hide selectors are always sorted in the shim, and that sort is inside the measured cost); C-G1/C-G2 as in §11 Step 5 |
 | Memory | §6.6 budgets: one engine, a second Profile with the same lists, text-build transient | as in §6.6 |
 | Idle CPU | loaded test page, 30 s idle, `top -pid` sample | ≈ 0% (no timers, no observers firing — the token observer is DOM-mutation driven only) |
 | Startup regression (app-level) | when the Open app exists: cold launch to first paint, blocking on (DAT warm) vs off | within the architecture 700 ms budget; report both numbers |
@@ -3535,14 +3808,14 @@ and states what ran instead. Never substitute a unit test.
 | R-6 | Revised 2026-10-26: v1 runs no scriptlets (lead ruling 6), so ads that only a scriptlet can stop are not blocked (guess: some in-video ads served from the site's own host). Scriptlet staleness is a post-v1 risk (§8.5) | Documented in §8.4; per-site toggle is the user escape for breakage; **no** shipped pre-emptive allowlist (adblock-design Risk 4 — Arc's YouTube entry is for uBlock, not proven for this engine) |
 | R-7 | Full 46-list memory: two lists = 6.78 MiB DAT; regional sets grow it | v1 defaults stay at two lists; Step 9 records DAT size + browser RSS with all generic+privacy lists enabled before any regional default is considered. 2026-10-26: shared engines and caps (§6.6) bound the per-Profile part |
 | R-8 | Head-of-line blocking on the one matcher sequence (a regex compile, a long URL) delays every request in the process | Input cap (§7.7); regex features (97-1); G-6 counts stalls; remedy is a longer regex discard time, never a second matcher sequence (the crate mutex serializes anyway, F-30) |
-| R-9 | The sync cosmetics call adds latency to every http(s) document, also with blocking off, and waits behind queued network checks (review r1 finding 3) | Contended C-G1/C-G2 gates (§11 Step 5); expected wait bounded in §7.6; named escalation: the priority lane (§7.6); then, for C-G2, the no-wait fallback (lead ruling 5): no cosmetic hiding for that load, never a blocked renderer (§8.2) |
+| R-9 | The sync cosmetics call adds latency to every http(s) document, also with blocking off, and waits behind queued network checks (review r1 finding 3) | Contended C-G1/C-G2 gates (§11 Step 5); C-G2 is contended by injected bench load, because off factories queue no checks and `cefsimple` has one request context (review r2 N-1); expected wait bounded in §7.6; named escalation: the priority lane (§7.6, lane rules 1–3); then, for C-G2, the no-wait fallback (lead ruling 5): no cosmetic hiding for that load, never a blocked renderer (§8.2). At Step 5 the real cross-Profile wait (an off-Profile document behind another Profile's checks) is bounded only by §7.6; it is measured again at Step 8 with two request contexts (§11 Step 8) |
 | R-10 | Open's proxy is outermost, so extension blockers and DNR "allow" rules cannot see or unblock what Open blocks | Intended (§7.9, same as Brave, F-33); the per-site toggle is the override. Lead may revisit if an extension's documented feature breaks |
 | R-11 | Sanitizer drops valid list rules (long selectors, unbalanced-looking escapes); v1 also drops all `:style()`, `:remove*()` and scriptlet rules by design | Counted in status (`cosmetic_dropped_*`); Step 5 reports the counts on 20 corpus pages; loosen a rule only with a new review of 98-2 |
 | R-12 | P-3 hunk position in CEF's `WillCreateURLLoaderFactory` moves on a CEF bump | Rebase note (§11 Step 9): the Open call stays first in the CEF branch; N-15 proves the order after every rebase |
 | R-13 | Worker WebSockets and frameless sockets are not checked | Known v1 gap (§7.2); Brave needed a content patch for it (F-33) |
-| R-14 | Early-hints (`103`) preloads never reach `WillCreateURLLoaderFactory` (§7.2, F-22), so a preload of a blocked URL still goes to the network before the page commits (review r1 finding 6) | **Accepted gap for v1 (lead ruling, 2026-10-26).** Reason: the fix costs one extra hop on every main-frame load, while the leak is only the network fetch. The page's own request for the preloaded URL is still checked and blocked (N-21), so the page never uses the preloaded response. Post-v1 fix (not built in v1): wrap main-frame navigation factories as well, only to drop blocked `Link: rel=preload` entries in `OnReceiveEarlyHints` (`navigation_url_loader_impl.cc:1390-1432`). Chromium has no switch that turns early-hints preloads off (only `EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`). Measured: the Step 4 corpus capture counts blocked 103-preload URLs (§7.8). **Trigger:** if blocked 103-preload URLs appear on 2 % or more of corpus pages, the wrap goes back to the lead before Step 8. Tracked in `docs/followups.md` |
+| R-14 | Early-hints (`103`) preloads never reach `WillCreateURLLoaderFactory` (§7.2, F-22), so a preload of a blocked URL still goes to the network before the page commits (review r1 finding 6) | **Accepted gap for v1 (lead ruling, 2026-10-26).** Reason: the fix costs one extra hop on every main-frame load, while the leak is only the network fetch. The page's own request for the preloaded URL is still checked and blocked (N-21), so the page never loads the preloaded response as a page resource. The preload fetch itself is not blocked: `NavigationEarlyHintsManager` fetches it through the same unhooked factory (`content/browser/loader/navigation_early_hints_manager.cc:405-462`), so it reaches the network with the user's cookies and may fill the HTTP cache. That fetch is the accepted leak, and N-21 records it (review r2 wording note). Post-v1 fix (not built in v1): wrap main-frame navigation factories as well, only to drop blocked `Link: rel=preload` entries in `OnReceiveEarlyHints` (`navigation_url_loader_impl.cc:1390-1432`). Chromium has no switch that turns early-hints preloads off (only `EnableEarlyHintsOnHttp11`, `net/base/features.cc:433`). Measured: the Step 4 corpus capture counts blocked 103-preload URLs (§7.8), with a local positive control that makes a broken CDP pipeline an invalid capture, never a zero. **Trigger (page count, review r2 N-4):** if **2 or more** corpus pages each have at least one blocked 103 preload, the wrap goes back to the lead before Step 8; the share is reported too. Tracked in `docs/followups.md` |
 | Q-1 | Does the app milestone want `OpenFeatures` created by Step 8 or later? | Step 8 decides by target existence (§11 Step 8); the §12.3 contract is normative either way |
-| Q-2 | Exact uBO resources input format for crate 0.8.11's assembler | Resolved by reading the crate source at Step 7 (§9.3); if it needs a directory, the reserved-name change there applies |
+| Q-2 | Exact uBO resources input format for crate 0.8.11's assembler | Resolved: the offline driver calls `assemble_web_accessible_resources` with a directory and an index file (§9.3); the browser reads only `resources.json`, so no reserved name changes (review r2 N-10) |
 | Q-3 | Arc's factory default (on/off), exact scope-dialog labels, update interval | Unproven Arc facts (AD-6/§7.4 of features-advanced). Open's choices (on, "this site" default, 24 h) are product decisions recorded in §9.5/§12.2; the lead may revisit after runtime observation of Arc per AGENTS.md RE rules |
 
 2026-10-26: Q-2 is answered (resources cross as the crate's JSON,
@@ -3772,6 +4045,9 @@ committed manifest carries the count and the number of affected pages
 (§7.8). Trigger: blocked 103-preload URLs on 2 % or more of corpus pages
 send the wrap back to the lead before Step 8. Where: R-14; §7.8 capture
 steps 4 and 6, manifest, trigger; Step 4 acceptance; `docs/followups.md`.
+Restated in review r2 (lead ruling): the trigger is a page count, 2 or
+more corpus pages with a blocked 103 preload, because 2 % of a
+20–49-page corpus is less than one page; the share is still reported.
 
 New facts this round (read-only, same tree): early hints build their
 factory without `ContentClientParams` and exist only for outermost main
@@ -3780,6 +4056,30 @@ initiator and isolation info (§7.2); `GetScriptContextFromWorldId` forces
 isolated-context creation and `DidCreateScriptContext` runs synchronously
 (§8.3); navigation factories pass `factory_override = nullptr` (§7.1); a
 render process keeps one `BrowserContext` (§8.2).
+
+### Review r2 changes (2026-10-26): plan re-check of PR #105 at `056b5bf`
+
+The re-check (`.re/reviews/pr105-adblock-plan-r2.md`, git-ignored) gave
+**APPROVE AFTER CHANGES**: 5 required changes and recommended ones
+(N-1…N-10), no architecture change. The lead chose where the review
+left options. Every item is fixed in the text:
+
+| # | Finding | Fix (lead ruling where one applies) | Where |
+|---|---|---|---|
+| N-1 (required 2) | C-G2 with blocking off had nothing to contend with | **Injected bench load** (lead): `--open-adblock-bench-load` posts synthetic checks, one task each, to the matcher's normal runner at R = 600 / T (three concurrent 200-request loads per median load time), while `--open-adblock-off` keeps the measured context off. The real cross-Profile wait is measured again at Step 8 | §8.2 rule 2; §11 Step 5 C-G2; §13.1; §11 Step 8; R-9 |
+| N-2 (required 1) | A first regex compile could fail G-2's `max ≤ 1 ms` at both caps and force the 8 KiB fallback | Repetition 1 is warm-up, left out of mean, p99 and max; its max is printed apart (lead). G-3 follows the same rule. G-5: the five loads of each condition share one process, which is how the harness runs; load 1 is warm-up and reported apart. G-4 keeps load 1, with the reason | §7.7; §7.8 G-2…G-5; §13.1; Step 4 |
+| N-3 (required 5) | The priority lane was named but not buildable without design work | Lane rules 1–3: thread checkers in lane mode; two named runner accessors from Step 4 on (cosmetics and state updates on the high queue; factories, sockets, histogram and bench on the normal queue); stop in a new `ChromeBrowserMainExtraPartsCef::PostDestroyThreads()`, after Profile teardown and ThreadPool shutdown. The lane meets C-G1's p99 only under G-6's stall rate. The lane stays the named escalation (lead) | §7.6; §6.7; §3.3 P-3; §7.8 G-1; Step 4 Work 3; Step 5 |
+| N-4 (required 3) | The 2 % trigger fired on one page, and a zero could come from a broken pipeline | Trigger is a **page count**: 2 or more pages with a blocked 103 preload; share reported (lead). The N-21 server is a positive control in the capture: no control event means an invalid capture (lead). New fact: `EnableEarlyHintsOnHttp11` affects every HTTP/1.1 connection (`net/http/http_network_transaction.cc:130-142`), so HTTP/1.1 `103`s are dropped from the counts (`http11_hints_dropped`). N-21 is invalid without its own event | §7.8 step 4, manifest, trigger; Step 4 acceptance; N-21; R-14; Appendix R-14 ruling; `docs/followups.md` |
+| N-5 (required 4) | Step 4/5/7 entry gates contradicted §5.5 ownership | Each step lands its own §5.5 rows unless the #98 or #100 fix PR already did; its acceptance verifies; the entry gate keeps only real preconditions (lead). `lib.rs` added to Step 7's PR line | §11 Steps 4, 5, 7 |
+| N-6 | Binding lifecycle around a pre-created isolated context | Idempotent install; the flag follows the installed context (cleared in `WillReleaseScriptContext`); the payload is cleared in `DidCreateNewDocument` and read lazily through a `WeakPtr` | §8.3 "Binding lifecycle" |
+| N-7 | The 45,000-rule worst case was not the worst case | Upper bound about 163,000 rules (shortest selectors); note on distinct selectors and on generic bytes; the Step 5 fill uses the shortest distinct selectors | §6.6; §8.3 insertion 2; Step 5 |
+| N-8 | The +2 MiB gate had no window | Baseline after both contexts exist; the delta runs from the second context's `LoadFromDirectory` to `engine_shared=1` | §6.6; Step 8 |
+| N-9 | Socket frame lifetime, G-4 print site, two batch caps | `GlobalRenderFrameHostId` captured and re-looked-up with `RenderFrameHost::FromID`, dropped if gone; G-4 prints from `OpenAdBlockService::Shutdown()`; one limit of 500 tokens in total | §7.1 hook 3; §7.8 G-4; §8.2; §8.3 |
+| N-10 | Leftovers | D-2 reason updated; §9.3 pre-revision paragraphs replaced (the driver calls `assemble_web_accessible_resources`); §5.3 R-2, §13.2 fixtures and Q-2 moved to `resources.json`; `kDevTools` marked never-hooked (F-22, §7.2); the contended fallback uses three different sites; cite fixes (`render_process_host_impl.cc:1921` label, `local_window_proxy.cc` path) | D-2; §5.3; §9.3; §13.2; §14 Q-2; F-22; §7.2; §8.2; §8.3; Step 5 |
+| R-14 wording | "the page never uses the preloaded response" | The page never loads it as a page resource; the preload fetch, with cookies, reaches the network and may fill the HTTP cache, and that is the accepted leak | R-14 |
+| #100 R2-5 (lead, added) | `done` ran without a result | `AdBlockLoadResult` (`kLoaded`, `kFailed`, `kStale`, `kCancelled`) with one line per value; the result-form signature; `ReloadLists()` as built; §6.3.2 publish step; Step 3 self-test; §13.1 | §6.2; §6.3; §6.3.2; Step 3; §13.1 |
+| Sorted selectors (lead, added) | Cost of the always-sorted hide selectors | Cosmetic query 77–79 µs as built, sort included, under the 100 µs budget | §7.6; §8.1; §8.2; Step 5 C-G1; §13.4 |
+| r1 F4 nit | "never the URLs" vs the committed front-page list | "Never corpus URLs"; the `pages` list holds public front pages only | §3.1; §7.8 manifest |
 
 ### Swift-slice implementation notes (2026-10-25)
 
