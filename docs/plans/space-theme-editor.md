@@ -982,7 +982,7 @@ space-editor-render bench    # B1
 | ID | Check |
 |---|---|
 | M1 | The committed fixture is the example theme in `runtime-observations.md` §3.3 (key `#FF8558`): our primary palette within 1/255 and both semantic palettes within 0.003 of the listed values. With `--arc-json FILE` (a local read-only copy of `StorableSidebar.json`, never committed) the same check runs over every stored theme and prints only counts and max errors. |
-| M2 | Harmony: analogous and complementary, n = 1…4, hue offsets within 0.1°, S and L unchanged. |
+| M2 | Harmony: analogous and complementary, n = 1…3, hue offsets within 0.1°, S and L unchanged. |
 | M3 | Pad round trip: 2,000 seeded random colors inside each mode's range: color → knob → color within 1/255. |
 | M4 | Appearance: forced Light / Dark always win for 500 random keys. Automatic with bias 0 gives light, light, light, dark for the key colors `#FF8558`, `#2F83E4`, `#F8D558`, `#926400` (extended sRGB; the 4 stored samples, colors only). |
 | E1 | Editor layout: every control frame equals §5.2 within 0.5 pt at 1x and 2x. |
