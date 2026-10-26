@@ -1,5 +1,11 @@
 {
   "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+  },
   "sidebar": {
     "background_space_window_open": {
       "child": {
@@ -9,7 +15,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "FDFA54A2-F63F-4DAE-AAA2-13A494AF952A",
+        "id": "01FD9314-CE7A-4681-876A-E07C9C067783",
         "loaded": true,
         "loading": false,
         "page": {
@@ -18,13 +24,13 @@
           "browserIndex": 0,
           "browserPinned": false,
           "canGoBack": false,
-          "context": "Profile-66866190",
+          "context": "Profile-C9F735F2",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "FDFA54A2-F63F-4DAE-AAA2-13A494AF952A",
+          "hostTab": "01FD9314-CE7A-4681-876A-E07C9C067783",
           "identifier": 12,
           "kind": "tab",
           "live": true,
@@ -37,12 +43,12 @@
           "url": "about:blank",
           "zoom": 0
         },
-        "profile": "B2C10518-F9A6-4EF2-A9C8-AEE8FFBBAC49",
+        "profile": "15E28247-AA7C-498F-913B-CA319E6F23A5",
         "progress": 1,
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "8E94502F-2543-44CC-966A-AE37793720F4",
+        "space": "4EDAF0D9-5C7C-405E-9D73-DFA3F77BBE3C",
         "title": "Background child",
         "url": "about:blank",
         "visible": true
@@ -295,15 +301,15 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": false,
-        "id": "0CCC8FE2-1DC1-4A03-9EB2-7D494E17BD49",
+        "id": "E46D7C9F-AEDF-4B8B-93E8-BBE4FDB159D4",
         "loaded": false,
         "loading": false,
-        "profile": "B2C10518-F9A6-4EF2-A9C8-AEE8FFBBAC49",
+        "profile": "15E28247-AA7C-498F-913B-CA319E6F23A5",
         "progress": 0,
         "section": "today",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "8E94502F-2543-44CC-966A-AE37793720F4",
+        "space": "4EDAF0D9-5C7C-405E-9D73-DFA3F77BBE3C",
         "title": "Profile background",
         "url": "data:text/html,%3Ctitle%3EProfile%20background%3C/title%3E%3Ch1%3EProfile%20background%3C/h1%3E",
         "visible": false
@@ -327,6 +333,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 22:05:11",
+  "started": "2026-10-25 23:27:57",
   "style": "alloy"
 }

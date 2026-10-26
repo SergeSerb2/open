@@ -1,5 +1,11 @@
 {
   "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+  },
   "peek": {
     "close_promoted_releases_host": {
       "after": {
@@ -23,17 +29,17 @@
       "ok": true,
       "strip": [
         {
-          "active": "7EC9BD99-3DA7-420B-849A-49E3A0FE941E",
+          "active": "FB04E496-934C-4D8F-8D72-B1CFA35AD8CC",
           "activeIsMember": true,
           "contents": [
             1,
             2
           ],
           "context": "Default",
-          "profile": "17C35E1D-E52D-4FB2-9A25-906BE2A5F21E",
+          "profile": "C03CE021-1F1A-4B58-BE69-C9DFA64FADDE",
           "tabs": [
-            "1A0465FC-94D9-417D-9CAF-C0C29E70914E",
-            "7EC9BD99-3DA7-420B-849A-49E3A0FE941E"
+            "67F54526-6B2C-4CA2-96D2-3E88BAA68767",
+            "FB04E496-934C-4D8F-8D72-B1CFA35AD8CC"
           ]
         }
       ]
@@ -51,7 +57,7 @@
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "366AC357-3C88-42E6-8712-B0EDFCF4B389",
+        "hostTab": "4E2F1CA1-98AE-4066-9A8B-5B0F9DF68B03",
         "identifier": 1,
         "kind": "tab",
         "live": true,
@@ -81,15 +87,15 @@
       "ok": true,
       "strip": [
         {
-          "active": "1A0465FC-94D9-417D-9CAF-C0C29E70914E",
+          "active": "67F54526-6B2C-4CA2-96D2-3E88BAA68767",
           "activeIsMember": true,
           "contents": [
             1
           ],
           "context": "Default",
-          "profile": "17C35E1D-E52D-4FB2-9A25-906BE2A5F21E",
+          "profile": "C03CE021-1F1A-4B58-BE69-C9DFA64FADDE",
           "tabs": [
-            "1A0465FC-94D9-417D-9CAF-C0C29E70914E"
+            "67F54526-6B2C-4CA2-96D2-3E88BAA68767"
           ]
         }
       ]
@@ -103,6 +109,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 22:05:20",
+  "started": "2026-10-25 23:28:05",
   "style": "alloy"
 }
