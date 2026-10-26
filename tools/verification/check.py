@@ -447,6 +447,8 @@ def main():
     elif name == "space-legacy":
         legacy_space_fixture(cli, root)
         space_icon_import(cli)
+    elif name == "space-editor":
+        all_passed(run(str(root / "Packages/OpenKit/.build/release/space-editor-render"), "check"))
     elif name == "roundtrip":
         data = seed_snapshot(cli, seed)
         shutil.copytree(seed, "data")
