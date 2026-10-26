@@ -330,7 +330,7 @@ What Import from Arc must read: `StorableSidebar.json` → `sidebar.containers[1
 
 ## 7. States not observed and how to capture them
 
-These states need input, which only the user may give. Use the recorder:
+These states need input, which only the user may give. The last column says where each state is now captured (session 1: `interaction-states.md` §1–§18; session 2: §20 there, and §9 below). Use the recorder:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/capture-loop.sh -i 1 -l <label>      # AX + screenshots every 1 s, Ctrl-C to stop
@@ -347,30 +347,30 @@ Before you start:
 3. Click into Arc once so the window is active, then start the recorder.
 4. Hold each state for at least 2 seconds.
 
-| # | State | What it gives us | Steps for the user (label) |
-|---|---|---|---|
-| 1 | Active window | Traffic light colors, glyph opacity when active | Click Arc's sidebar background. Wait 3 s. (`active`) |
-| 2 | Selected tab | Selected row fill (theme `focus`?), radius, inset, shadow | Click a pinned tab. Then click a favorite tile. (`selected`) |
-| 3 | Hover states | Row hover fill (`hover`?), close "x" button, tile hover, toolbar button hover, Space "More" button | Hover over a tab row, a tile, each toolbar button, the Space title, and each bottom-bar item, 2 s each. (`hover`) |
-| 4 | Loaded web page | Real panel radius and shadow over page content, and whether the panel is solid | Open any neutral page (for example a public docs site) in the current Space. (`webpage`) |
-| 5 | Today section | Pinned/Today divider, "Clear" button, Today row style, section gaps | Press Cmd+T, type a neutral URL, press Return. Do this 3 times. (`today`) |
-| 6 | Folders and split row | Folder row, chevron, indent step, expanded vs collapsed, split-view row | Switch to the untitled 4th Space (it has a folder with a split). Collapse and expand the folder. (`folders`) |
-| 7 | Command bar | Panel frame, row height, fonts, selection fill | Press Cmd+T, wait, type 3 letters, wait, press Esc. Repeat with Cmd+L. (`command-bar`) |
-| 8 | Space switch | Slide direction, duration, gradient cross-fade | Use `-i 0.2 -A`. Press Ctrl+1 then Ctrl+2, or click the switcher icons. (`space-switch`) |
-| 9 | Split View | Divider width, pane gap, pane radius | Drag a tab onto the web content, or use the split shortcut from `menus-and-hotkeys.md`. (`split`) |
-| 10 | Peek | Peek window frame, chrome, shadow | From a pinned tab, open a link to another domain. (`peek`) |
-| 11 | Little Arc | Window size and chrome | Press Cmd+Opt+N, or open a link from another app. (`little-arc`) |
-| 12 | Context menus | Menu items and order | Right-click a tab, a favorite, the Space title, a folder, and empty sidebar space, one at a time. (`menus`) |
-| 13 | Sidebar hidden and reveal | Collapsed layout, hover-reveal overlay | Press Cmd+S. Move the pointer to the left edge. Press Cmd+S again. (`sidebar-toggle`) |
-| 14 | Sidebar width limits | Minimum and maximum width | Drag the sidebar edge to its narrowest, then its widest stop. (`sidebar-resize`) |
-| 15 | Theme editor | Picker layout, knobs, how `noiseFactor` and `intensityFactor` change | Right-click the Space title and choose the theme or color item. Change color, grain, and intensity. (`theme-editor`) |
-| 16 | Light/dark and a dark Space | When `contentOverBackgroundAppearance` flips | Switch macOS to Light, then back to Dark. Set one Space to a dark color. (`appearance`) |
-| 17 | Settings window | Tabs, layout, fonts | Press Cmd+, and click each tab. (`settings`) |
-| 18 | Library / Home | The Home button target | Click the bottom-left Home button. (`library`) |
-| 19 | Toasts and Site Control Center | Toast style, Site Control popover | Press Cmd+Shift+C (copy URL) on a page. Then open the site controls from the URL field (hover it to find the control). (`toasts`) |
-| 20 | Second window | Multi-window titles, `StorableWindows` with 2 windows | Press Cmd+N, then switch Space in the new window. (`two-windows`) |
-| 21 | Boost editor | Editor window frame, wheel, font picker, tool buttons, Zap shelf, code mode | On a neutral public site, open the site controls from the URL field and click New Boost. Drag the color wheel, open the advanced color controls, pick two fonts, click the text size and case buttons, Zap one element, then open the code view and type one CSS rule. Hold each state 2 s. (`boost-editor`) |
-| 22 | Site Control Center, full | Popover frame, section headers on hover, tiles, footer menu | On a site with one Boost and a granted camera permission, open the site controls. Hover each section header, hover a tile, then click the ⋯ button. Repeat with Option held. (`site-controls`) |
+| # | State | What it gives us | Steps for the user (label) | Status (2026-10-26) |
+|---|---|---|---|---|
+| 1 | Active window | Traffic light colors, glyph opacity when active | Click Arc's sidebar background. Wait 3 s. (`active`) | Captured, session 2 item 3 (`interaction-states.md` §20.1) |
+| 2 | Selected tab | Selected row fill (theme `focus`?), radius, inset, shadow | Click a pinned tab. Then click a favorite tile. (`selected`) | Captured, session 1 (F0014–F0018). Dark selected tile and inactive fills: session 2 (§20.3) |
+| 3 | Hover states | Row hover fill (`hover`?), close "x" button, tile hover, toolbar button hover, Space "More" button | Hover over a tab row, a tile, each toolbar button, the Space title, and each bottom-bar item, 2 s each. (`hover`) | Captured, session 1. "More" alone: session 2 (§20.3). Tile hover: not isolated |
+| 4 | Loaded web page | Real panel radius and shadow over page content, and whether the panel is solid | Open any neutral page (for example a public docs site) in the current Space. (`webpage`) | Captured, session 1 (F0015, F0036–F0039) |
+| 5 | Today section | Pinned/Today divider, "Clear" button, Today row style, section gaps | Press Cmd+T, type a neutral URL, press Return. Do this 3 times. (`today`) | Captured, session 1 (F0041–F0068) |
+| 6 | Folders and split row | Folder row, chevron, indent step, expanded vs collapsed, split-view row | Switch to the untitled 4th Space (it has a folder with a split). Collapse and expand the folder. (`folders`) | Captured, session 1. Peeking child and folder hover: session 2 (§20.4) |
+| 7 | Command bar | Panel frame, row height, fonts, selection fill | Press Cmd+T, wait, type 3 letters, wait, press Esc. Repeat with Cmd+L. (`command-bar`) | Captured, session 1. Completion, Site Search, (i) footer: session 2 (§20.9) |
+| 8 | Space switch | Slide direction, duration, gradient cross-fade | Use `-i 0.2 -A`. Press Ctrl+1 then Ctrl+2, or click the switcher icons. (`space-switch`) | Captured, session 1 (progress). Timing: session 2 video (§20.12) |
+| 9 | Split View | Divider width, pane gap, pane radius | Drag a tab onto the web content, or use the split shortcut from `menus-and-hotkeys.md`. (`split`) | Captured, session 1 (two panes) |
+| 10 | Peek | Peek window frame, chrome, shadow | From a pinned tab, open a link to another domain. (`peek`) | Captured, session 1 (static). Motion: not captured |
+| 11 | Little Arc | Window size and chrome | Press Cmd+Opt+N, or open a link from another app. (`little-arc`) | Captured, session 2 item 19 (§20.10) |
+| 12 | Context menus | Menu items and order | Right-click a tab, a favorite, the Space title, a folder, and empty sidebar space, one at a time. (`menus`) | Captured, session 1. Favorite tile menu and ⌥ alternates: session 2 (§20.3, §20.4) |
+| 13 | Sidebar hidden and reveal | Collapsed layout, hover-reveal overlay | Press Cmd+S. Move the pointer to the left edge. Press Cmd+S again. (`sidebar-toggle`) | Captured, sessions 1 and 2 (§13, §20.2) |
+| 14 | Sidebar width limits | Minimum and maximum width | Drag the sidebar edge to its narrowest, then its widest stop. (`sidebar-resize`) | Captured, session 2 item 6: 164 to 500 (§20.1) |
+| 15 | Theme editor | Picker layout, knobs, how `noiseFactor` and `intensityFactor` change | Right-click the Space title and choose the theme or color item. Change color, grain, and intensity. (`theme-editor`) | Captured, session 2 item 17 (§20.8) |
+| 16 | Light/dark and a dark Space | When `contentOverBackgroundAppearance` flips | Switch macOS to Light, then back to Dark. Set one Space to a dark color. (`appearance`) | Captured, session 2 item 20 (§20.11) |
+| 17 | Settings window | Tabs, layout, fonts | Press Cmd+, and click each tab. (`settings`) | Captured, session 1. Fresh-Profile rows and the Previews sheet: session 2 (§20.13) |
+| 18 | Library / Home | The Home button target | Click the bottom-left Home button. (`library`) | Not captured |
+| 19 | Toasts and Site Control Center | Toast style, Site Control popover | Press Cmd+Shift+C (copy URL) on a page. Then open the site controls from the URL field (hover it to find the control). (`toasts`) | Toasts: session 1. Site Control Center: session 2 items 9 and 11 (§20.5) |
+| 20 | Second window | Multi-window titles, `StorableWindows` with 2 windows | Press Cmd+N, then switch Space in the new window. (`two-windows`) | Captured, session 1 (F0157–F0160) |
+| 21 | Boost editor | Editor window frame, wheel, font picker, tool buttons, Zap shelf, code mode | On a neutral public site, open the site controls from the URL field and click New Boost. Drag the color wheel, open the advanced color controls, pick two fonts, click the text size and case buttons, Zap one element, then open the code view and type one CSS rule. Hold each state 2 s. (`boost-editor`) | Captured, session 2 item 10 (§20.6). The code editor body: not captured |
+| 22 | Site Control Center, full | Popover frame, section headers on hover, tiles, footer menu | On a site with one Boost and a granted camera permission, open the site controls. Hover each section header, hover a tile, then click the ⋯ button. Repeat with Option held. (`site-controls`) | Captured, session 2 item 11 (§20.5), without camera or microphone. ⌥ did not open the panel |
 
 After each session, copy `StorableWindows.json` and `StorableSidebar.json` again (read-only) into `.re/runtime/appsupport/<label>/` to see what changed.
 
@@ -383,3 +383,34 @@ After each session, copy `StorableWindows.json` and `StorableSidebar.json` again
 | `~/Library/Caches/OpenRE/scripts/capture-loop.sh` | Recorder from §7. |
 | `~/Library/Caches/OpenRE/scripts/axflat.py` | Prints an AX dump as an outline. |
 | `~/Library/Caches/OpenRE/scripts/analysis/` | Color conversion, text matching, schema and redaction helpers used for this file. |
+
+## 9. Capture session 2 (2026-10-26)
+
+A second, user-driven session ran on 2026-10-26 (09:59–10:48 PDT), with the same recorder and one screen video. The measured results are in `interaction-states.md` §20; the routing to plans and PRs is in `capture-session-2-results.md`.
+
+| Item | Value |
+|---|---|
+| Display | AW2726DM, 2560 x 1440, scale 1.0. No 2x display. |
+| Appearance | macOS Dark, multicolor accent (`defaults read -g AppleAccentColor` absent). Item 20 in macOS Light. |
+| Window | One browser window, 1728 x 1084 at screen (445, 222). It did not move during the session. |
+| Content | Two new test Spaces ("Capture A", "Capture B") on a new test Profile ("TestHome"), public sites only. |
+| Frames | `.re/runtime/sessions/20261026-*-<item>/` (20 folders, items 01–20 with 14b; no 15 and no 22). |
+| Video | `.re/runtime/video/21-motion.mov`, 95 s, variable rate (240 Hz timebase, about 32 frames/s on average). |
+| Data copies | `.re/runtime/appsupport/s2-*` (Windows and Sidebar per area; `s2-final` holds every `Storable*.json` except the account and key files). |
+| Notes | `.re/runtime/sessions/s2-notes.txt` (timeline and live observations). |
+
+Two recorder facts matter for anyone who reads these frames:
+
+1. `screencapture -l <id>` of a panel that belongs to the browser window (the Site Control Center, the plus menu, the theme editor) returns the whole composited browser window. Read such panels from `win-<browser window id>.png`. Separate top-level windows (the Boost editor, PiP, Little Arc, native menus, tooltips) have their own images.
+2. AX does not list the Site Control Center window or the theme editor's window; the theme editor appears as an `AXPopover` inside the browser window, and native menus as `AXMenu` inside it.
+
+Data-file facts from the copies (structure only; values redacted):
+
+| File | Fact | Copy |
+|---|---|---|
+| `StorableWindows.json` | A Little Arc window is a `windows[]` entry with `style.little`: `modalState`, `downloads`, `shouldShowProfileIndicators`, `profile`, and `session {id, entryPoint {externalLink}, preferredFrame {anchor {topRight: [x, y]}, size: [w, h]}, startTime}`. The anchor (2544, 1394) and size (500, 300) are in bottom-left screen coordinates; the window itself measured 490 x 329 with its top-right corner at (2540, 50) in top-left coordinates. | `s2-little-arc-open` |
+| `StorableWindows.json` | A collapsed folder that shows one child stores `expandedItems: [folderID, {peeked: {_0: [childID]}}]` (an expanded folder stores `{expanded: {}}`). | `s2-little-arc-open` |
+| `StorableSidebar.json` | A Space on a non-default Profile stores `profile: {custom: {_0: {directoryBasename, machineID}}}`. | `s2-final` |
+| `StorableSidebar.json` | A one-color theme: `background.single._0.style.color._0.blendedSingleColor._0 {color, modifiers {intensityFactor, overlay: "grain", noiseFactor}, translucencyStyle}`. No key for the editor's Light / Dark / Automatic mode was found. | `s2-final` |
+| `StorableKeyBindings.*.json` | Arc keeps timestamped copies next to `StorableKeyBindings.json` (two in this install, both from 10:05 on the session day). guess: a backup on Profile creation. | `s2-final` (names only) |
+| `StorableBoostsData.json` | Not present: the test Boost was deleted before the final copy. Its shape stays open (`data-model.md` §6 item 2). | — |
