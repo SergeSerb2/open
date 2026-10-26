@@ -129,6 +129,39 @@ mode_skip() {
 }
 ready() { [[ -f "$STAMPS/$1.result" ]] && [[ $(cut -f1 "$STAMPS/$1.result") == PASS ]]; }
 reason() { cut -f2- "$STAMPS/$1.result"; }
+row() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$STAGE/acceptance.tsv"; }
+replace_row() {
+    sed "/^$1[[:space:]]/d" "$STAGE/acceptance.tsv" > "$STAGE/acceptance.tmp"
+    mv "$STAGE/acceptance.tmp" "$STAGE/acceptance.tsv"
+    row "$@"
+}
+print_acceptance_table() {
+    printf '\n%-7s %-12s %s\n' CHECK RESULT EVIDENCE
+    while IFS=$'\t' read -r id status evidence; do printf '%-7s %-12s %s\n' "$id" "$status" "$evidence"; done < <(LC_ALL=C sort -t $'\t' -k1.3n "$STAGE/acceptance.tsv")
+}
+require_release_inputs() {
+    local missing=0 id status evidence
+    for file in "$ROOT/tools/release-locales.txt" "$ROOT/docs/release/notes/$VERSION.md" "$ROOT/tools/generate-acknowledgements.py"; do
+        [[ -f "$file" ]] || missing=1
+    done
+    [[ $missing == 1 ]] || return 0
+    PHASE=required-inputs
+    : > "$STAGE/acceptance.tsv"
+    for id in {1..15}; do
+        status=NOT-RUN evidence='blocked by missing required release inputs'
+        case "$id" in
+            8) if [[ ! -f "$ROOT/tools/release-locales.txt" ]]; then status=FAIL; evidence='Step 3 missing: tools/release-locales.txt'; fi ;;
+            12) if [[ ! -f "$ROOT/docs/release/notes/$VERSION.md" ]]; then status=FAIL; evidence="Step 9/version bump missing: docs/release/notes/$VERSION.md"; fi ;;
+            14) if [[ ! -f "$ROOT/tools/generate-acknowledgements.py" ]]; then status=FAIL; evidence='Step 9 missing: tools/generate-acknowledgements.py'; fi ;;
+        esac
+        row "A-$id" "$status" "$evidence"
+    done
+    printf 'FAIL\tmissing required release inputs\n' > "$STAMPS/12-summary.result"
+    rm -f "$STAMPS/12-summary.stamp"
+    print_acceptance_table
+    die 'required input files are missing; see FAIL rows above'
+}
+require_release_inputs
 # Source prerequisite checks are data, not edits to files owned by other steps.
 prerequisites=$(python3 - <<'PY'
 import plistlib,re
@@ -162,7 +195,6 @@ if [[ $DRY == 0 ]]; then
     TEAM=$(printf '%s\n' "$IDENTITY" | sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p')
     [[ -n "$TEAM" ]] || die 'cannot read Team ID from identity'
 fi
-[[ -f tools/release-locales.txt ]] || die 'Step 3 tools/release-locales.txt is required'
 LOCALES=$(python3 - <<'PY'
 import re
 from pathlib import Path
@@ -196,12 +228,12 @@ BASE=$(printf '%s\n' "$source_hash" "$MODE" "$CHANNEL" "$SKIP_ENGINE" "$SKIP_NOT
 CHAIN=$BASE
 run_phase() {
     PHASE=$1
-    local fn=$2 want got stamp="$STAMPS/$1.stamp" result_file="$STAMPS/$1.result" outputs="$STAMPS/$1.outputs"
-    want=$(printf '%s\n%s\n%s\n' "$BASE" "$CHAIN" "$PHASE" | shasum -a 256 | awk '{print $1}')
+    local fn=$2 extra_input=${3:-} want got stamp="$STAMPS/$1.stamp" result_file="$STAMPS/$1.result" outputs="$STAMPS/$1.outputs"
+    want=$(printf '%s\n%s\n%s\n%s\n' "$BASE" "$CHAIN" "$PHASE" "$extra_input" | shasum -a 256 | awk '{print $1}')
     if [[ -f "$stamp" && -f "$outputs" && -f "$result_file" ]] && [[ $(head -1 "$stamp") == "$want" ]]; then
         local paths=()
         while IFS= read -r path; do paths+=("$path"); done < "$outputs"
-        got=$(digest "${paths[@]}")
+        got=$(digest ${paths[@]+"${paths[@]}"})
         if [[ "$got" == "$(sed -n '2p' "$stamp")" ]]; then
             log "NO-OP (stamp): $(cat "$result_file")"
             CHAIN=$(digest "$stamp")
@@ -215,7 +247,7 @@ run_phase() {
     "$fn"
     local paths=()
     while IFS= read -r path; do paths+=("$path"); done < "$outputs"
-    got=$(digest "${paths[@]}")
+    got=$(digest ${paths[@]+"${paths[@]}"})
     printf '%s\n%s\n' "$want" "$got" > "$stamp.tmp"
     mv "$stamp.tmp" "$stamp"
     CHAIN=$(digest "$stamp")
@@ -224,7 +256,7 @@ run_phase() {
 preflight() {
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 ]] || die 'macOS arm64 required'
     [[ $(sw_vers -productVersion | cut -d. -f1) -ge 26 ]] || die 'macOS 26 or newer required'
-    for tool in xcodebuild xcodegen python3 ditto hdiutil codesign xcrun curl xmllint openssl swift; do
+    for tool in xcodebuild xcodegen python3 ditto hdiutil codesign xcrun curl xmllint openssl swift lipo; do
         command -v "$tool" >/dev/null || die "missing $tool"
     done
     xcodebuild -version
@@ -289,17 +321,59 @@ PY
     [[ -n $(find "$REL/symbols" -type f -print -quit) ]] || die 'no release symbols found for the local archive'
     output "$STAGE/engine-status.txt" "$REL/symbols" "$official_fw" "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework"
 }
+prepare_notes_inputs() {
+    # Observe external inputs before consulting the notes stamp. Preserve the
+    # snapshot bytes/mtime when unchanged so an identical run remains a no-op.
+    PHASE=03-notes-inputs
+    local status fetch_exit=0
+    status=$(curl -sS -L --connect-timeout 5 --max-time 15 -o "$STAGE/current-feed.fetch" -w '%{http_code}' "https://sergeserb2.github.io/open/$FEED" 2>/dev/null) || fetch_exit=$?
+    python3 - "$ROOT/build/release" "$REL" "$BUILD" "$CHANNEL" "$MODE" "$FEED" "${status:-offline}" "$fetch_exit" <<'PY'
+from pathlib import Path
+import hashlib,json,sys
+base,current,build,channel,mode,feed,status,exit_code=sys.argv[1:]
+stage=Path(current)/'.staging'
+def sha(p):
+ h=hashlib.sha256()
+ with p.open('rb') as f:
+  for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
+ return h.hexdigest()
+def save(name,data):
+ p=stage/name
+ if not p.is_file() or p.read_bytes()!=data:p.write_bytes(data)
+present=status=='200' and exit_code=='0'
+body=(stage/'current-feed.fetch').read_bytes() if present else b''
+feed_digest=hashlib.sha256(body).hexdigest() if present else 'absent'
+save('current-feed.xml',body)
+save('feed-fetch.txt',(('present' if present else 'absent')+'\nHTTP '+status+'; curl exit '+exit_code+'\n').encode())
+candidates=[]
+for p in Path(base).glob('*/RELEASE-MANIFEST.txt'):
+ if str(p.parent)==current:continue
+ values=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('SHA256'))
+ if values.get('channel')==channel and values.get('mode')==mode and values.get('build','').isdigit() and int(values['build'])<int(build):
+  d=p.parent/('Open-'+values.get('marketing','')+'.dmg')
+  if d.is_file():candidates.append((int(values['build']),str(d)))
+previous={'sha256':'absent'}
+previous_text=''
+if candidates:
+ b,name=max(candidates);d=Path(name);previous_feed=d.parent/feed
+ previous={'build':b,'path':name,'sha256':sha(d),'feed_sha256':sha(previous_feed) if previous_feed.is_file() else 'absent'}
+ previous_text=str(b)+'\n'+name+'\n'
+save('previous.txt',previous_text.encode())
+inputs={'feed_sha256':feed_digest,'predecessor':previous}
+save('notes-live-inputs.json',(json.dumps(inputs,sort_keys=True,indent=2)+'\n').encode())
+print('Live notes inputs: feed='+feed_digest+'; predecessor='+previous['sha256'])
+PY
+    rm -f "$STAGE/current-feed.fetch"
+}
 notes() {
+    require_release_inputs
     local source="$ROOT/docs/release/notes/$VERSION.md"
-    [[ -f "$source" ]] || die "missing Step 9/version-bump notes: $source"
     if grep -Eq '<[^>]+>|release-notes template' "$source"; then
         [[ $DRY == 1 ]] || die 'replace release-note template placeholders before production'
         log 'WARN: release notes are an explicitly labeled local template'
     fi
     cp "$source" "$REL/release-notes.md"
-    local status
-    status=$(curl -sS -L --connect-timeout 5 --max-time 15 -o "$STAGE/current-feed.xml" -w '%{http_code}' "https://sergeserb2.github.io/open/$FEED" 2>/dev/null || true)
-    if [[ "$status" == 200 ]]; then
+    if [[ $(head -1 "$STAGE/feed-fetch.txt") == present ]]; then
         python3 - "$STAGE/current-feed.xml" "$BUILD" <<'PY'
 import sys,xml.etree.ElementTree as E
 root=E.parse(sys.argv[1]).getroot();ns='{http://www.andymatuschak.org/xml-namespaces/sparkle}'
@@ -308,25 +382,13 @@ if versions and int(sys.argv[2])<=max(versions):raise SystemExit('build number m
 print('Build exceeds current feed:',max(versions) if versions else 'empty')
 PY
     else
-        log "WARN: current feed unavailable (HTTP ${status:-offline}); build monotonicity needs confirmation before publish"
+        log "WARN: current feed unavailable ($(tail -1 "$STAGE/feed-fetch.txt")); build monotonicity needs confirmation before publish"
     fi
-    python3 - "$ROOT/build/release" "$REL" "$BUILD" "$CHANNEL" "$MODE" <<'PY' > "$STAGE/previous.txt"
-from pathlib import Path
-import sys
-base,current,build,channel,mode=sys.argv[1:];candidates=[]
-for p in Path(base).glob('*/RELEASE-MANIFEST.txt'):
- if str(p.parent)==current:continue
- values=dict(l.split('=',1) for l in p.read_text().splitlines() if '=' in l and not l.startswith('SHA256'))
- if values.get('channel')==channel and values.get('mode')==mode and values.get('build','').isdigit() and int(values['build'])<int(build):
-  d=p.parent/('Open-'+values.get('marketing','')+'.dmg')
-  if d.is_file():candidates.append((int(values['build']),str(d)))
-if candidates:
- b,p=max(candidates);print(b);print(p)
-PY
     [[ -s "$STAGE/previous.txt" ]] || log 'No previous same-channel local DMG: no delta will be generated'
-    output "$REL/release-notes.md" "$STAGE/previous.txt"
+    output "$REL/release-notes.md" "$STAGE/previous.txt" "$STAGE/current-feed.xml" "$STAGE/feed-fetch.txt" "$STAGE/notes-live-inputs.json"
 }
 acknowledgements() {
+    require_release_inputs
     if [[ -z "$ENGINE_STAMP" ]]; then mode_skip 'Step 6 OpenEngineStamp is not present in App/Info.plist'; return; fi
     if ! ready 02-engine; then mode_skip "$(reason 02-engine)"; return; fi
     python3 tools/generate-acknowledgements.py "$STAGE/credits/Credits.rtf" --text-output "$REL/Acknowledgements.txt" --marketing-version "$VERSION" --build-number "$BUILD" --engine-stamp "$ENGINE_STAMP" --require-cef-credits
@@ -357,6 +419,13 @@ for k,v in [('CFBundleIdentifier','io.github.sergeserb2.open'),('CFBundleShortVe
 if stamp!=f'Chromium {chromium} · CEF {cef[:7]}':raise SystemExit('engine display stamp differs from VERSIONS')
 if p.get('SUFeedURL')!='https://sergeserb2.github.io/open/appcast.xml':raise SystemExit('unexpected update feed URL')
 fw=a/'Contents/Frameworks/Chromium Embedded Framework.framework'
+binaries=[a/'Contents/MacOS/Open',a/'Contents/Frameworks/OpenEngine.framework/OpenEngine',fw/'Chromium Embedded Framework']
+for name in ['Open Helper','Open Helper (GPU)','Open Helper (Renderer)','Open Helper (Plugin)','Open Helper (Alerts)']:
+ binaries.append(a/'Contents/Frameworks'/(name+'.app')/'Contents/MacOS'/name)
+for binary in binaries:
+ archs=subprocess.check_output(['lipo','-archs',str(binary)],text=True).split()
+ if archs!=['arm64']:raise SystemExit('expected arm64-only binary: '+str(binary)+'; got '+repr(archs))
+print('Architecture: arm64 only (app, five helpers, OpenEngine, CEF)')
 actual=sorted(x.name[:-6] for x in (fw/'Resources').glob('*.lproj'))
 if actual!=locales.split():raise SystemExit('locale mismatch: '+repr(actual))
 for f in a.rglob('*'):
@@ -460,6 +529,11 @@ notarize() {
     # ZIP container metadata can change between attempts. Bind app rejection
     # protection to the unchanged signed app, rather than its transport ZIP.
     [[ "$label" != app ]] || hash=$(digest "$APP")
+    # hdiutil image bytes are not reproducible. A rejected DMG stays blocked
+    # until its stapled app, background or volume name changes.
+    if [[ "$label" == dmg ]]; then
+        hash=$(printf '%s\n%s\n%s\n' "$(digest "$APP")" "$(digest "$ROOT/assets/release/dmg-background.png")" "Open $VERSION" | shasum -a 256 | awk '{print $1}')
+    fi
     if [[ -f "$failed" && $(cat "$failed") == "$hash" ]]; then die "unchanged $label was rejected previously; inspect saved log and fix it before resubmitting"; fi
     local submit_exit=0
     xcrun notarytool submit "$target" --keychain-profile open-notary --wait --output-format json > "$receipt" || submit_exit=$?
@@ -513,7 +587,7 @@ dmg() {
     mkdir -p "$staging/.background"
     ditto "$APP" "$staging/Open.app"
     ln -s /Applications "$staging/Applications"
-    cp "$ROOT/assets/release/dmg-background.png" "$staging/.background/background.png"
+    install -m 0644 "$ROOT/assets/release/dmg-background.png" "$staging/.background/background.png"
     log 'DMG background/icon layout: Open-owned placeholder; Finder geometry/positions are not configured in v1'
     hdiutil create -volname "Open $VERSION" -srcfolder "$staging" -ov -format UDZO "$DMG"
     if [[ $DRY == 1 || $SKIP_NOTARY == 1 ]]; then
@@ -699,7 +773,6 @@ with e.with_suffix('.log').open('w') as log:
 e.write_text(json.dumps(result,indent=2)+'\n');print(e.read_text())
 PY
 }
-row() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >> "$STAGE/acceptance.tsv"; }
 summary() {
     : > "$STAGE/acceptance.tsv"
     if ready 02-engine; then row A-1 PASS 'official args, matching distrib binary/commits, engine-status --strict'; else row A-1 mode-SKIP "$(reason 02-engine)"; fi
@@ -743,14 +816,16 @@ summary() {
         row A-6 mode-SKIP "$MODE; no notarized app/DMG available"
     fi
     if ready 10-appcast; then
-        row A-12 PASS 'XML and current item fields verified; dry-run URLs are not publication evidence'
+        local feed_status=PASS feed_evidence='XML and current item fields verified; dry-run URLs are not publication evidence'
         if [[ $DRY == 0 && $SKIP_NOTARY == 0 ]]; then
             local url="https://github.com/SergeSerb2/open/releases/download/$TAG/Open-$VERSION.dmg"
             if ! curl -fsIL --connect-timeout 5 --max-time 20 "$url" >/dev/null; then
-                row A-12 FAIL 'post-publication enclosure URL is not yet reachable; assets must precede feed'
+                feed_status=FAIL
+                feed_evidence='post-publication enclosure URL is not yet reachable; assets must precede feed'
             fi
         fi
-    else row A-12 mode-SKIP "$(reason 10-appcast)"; fi
+        replace_row A-12 "$feed_status" "$feed_evidence"
+    else replace_row A-12 mode-SKIP "$(reason 10-appcast)"; fi
     if [[ $DRY == 1 || $SKIP_NOTARY == 1 ]]; then
         row A-13 mode-SKIP "$MODE; no real-update claim"
     else
@@ -783,9 +858,7 @@ PY
 )
             if [[ -n "$update_result" ]]; then
                 # Replace the pending row only after exact-artifact evidence.
-                sed '/^A-13[[:space:]]/d' "$STAGE/acceptance.tsv" > "$STAGE/acceptance.tmp"
-                mv "$STAGE/acceptance.tmp" "$STAGE/acceptance.tsv"
-                if [[ "$update_result" == updated ]]; then row A-13 PASS 'lead real-update receipt bound to final DMG'; else row A-13 mode-SKIP 'first release: lead recorded no shipped predecessor, with evidence bound to final DMG'; fi
+                if [[ "$update_result" == updated ]]; then replace_row A-13 PASS 'lead real-update receipt bound to final DMG'; else replace_row A-13 mode-SKIP 'first release: lead recorded no shipped predecessor, with evidence bound to final DMG'; fi
             fi
         fi
     else row A-14 mode-SKIP "$(reason 04-acknowledgements); app unavailable pending Steps 2/4–8/10"; fi
@@ -802,8 +875,7 @@ for p in r.rglob('*'):
 print('Ignored outputs; no private key files or PEM private keys: PASS')
 PY
     row A-15 PASS 'outputs ignored; no private-key files/PEM; no temporary seed retained'
-    printf '\n%-7s %-12s %s\n' CHECK RESULT EVIDENCE
-    while IFS=$'\t' read -r id status evidence; do printf '%-7s %-12s %s\n' "$id" "$status" "$evidence"; done < <(LC_ALL=C sort -t $'\t' -k1.3n "$STAGE/acceptance.tsv")
+    print_acceptance_table
     if [[ $DRY == 0 && $SKIP_NOTARY == 0 && -f "$DMG" && -f "$REL/$FEED" ]]; then
         log 'PREPARED ONLY. Publish needs explicit user approval. Assets first; feed last. Never upload symbols/. Replace tag for beta as shown.'
         local tag="v$VERSION" asset
@@ -814,7 +886,24 @@ PY
         [[ "$CHANNEL" != beta ]] || printf ' --prerelease'
         for asset in "$DMG" "$DMG.sha256" "$REL/"*.delta "$REL/Acknowledgements.txt" "$REL/CREDITS.html"; do [[ ! -f "$asset" ]] || printf ' %q' "$asset"; done
         printf '\n'
-        log "Then publish $REL/$FEED and notes HTML to gh-pages. Verify feed HTTP 200, enclosure URLs, and the real update before announcing. No upload or tag is run here."
+        log 'After the approved asset upload, publish the feed last. U-8 must first confirm the public hosting target for origin and these URLs.'
+        local pages="$REL/gh-pages-publish"
+        printf 'git -C %q fetch origin\n' "$ROOT"
+        printf 'if git -C %q show-ref --verify --quiet refs/remotes/origin/gh-pages; then\n' "$ROOT"
+        printf '  git -C %q worktree add --detach %q origin/gh-pages\n' "$ROOT" "$pages"
+        printf 'else\n'
+        printf '  git -C %q worktree add --detach %q HEAD\n' "$ROOT" "$pages"
+        printf '  git -C %q switch --orphan %q\n' "$pages" "open-feed-$VERSION-$BUILD"
+        printf 'fi\n'
+        printf 'cp %q %q\n' "$REL/$FEED" "$pages/$FEED"
+        printf 'mkdir -p %q\n' "$pages/release-notes"
+        printf 'cp %q %q\n' "$REL/Open-$VERSION.html" "$pages/release-notes/$VERSION.html"
+        printf 'git -C %q add -- %q %q\n' "$pages" "$FEED" "release-notes/$VERSION.html"
+        printf 'git -C %q commit -m %q\n' "$pages" "Publish Open $VERSION ($BUILD) $CHANNEL feed"
+        printf 'git -C %q push origin HEAD:gh-pages\n' "$pages"
+        printf 'git -C %q worktree remove %q\n' "$ROOT" "$pages"
+        printf 'curl -fsI %q\n' "https://sergeserb2.github.io/open/$FEED"
+        log 'Verify enclosure URLs and the real update before announcing. No upload, worktree, commit or tag is run here.'
         log 'release-body.md includes the post-stapling DMG SHA-256; review it before the approved upload.'
     else log "$MODE: local preparation only; no publish commands or trust-root operations"; fi
     if grep -q $'\tFAIL\t' "$STAGE/acceptance.tsv"; then
@@ -824,7 +913,8 @@ PY
 }
 run_phase 01-preflight preflight
 run_phase 02-engine engine
-run_phase 03-version-notes notes
+prepare_notes_inputs
+run_phase 03-version-notes notes "$(digest "$STAGE/notes-live-inputs.json")"
 run_phase 04-acknowledgements acknowledgements
 run_phase 05-app-build app_build
 run_phase 06-hygiene hygiene
