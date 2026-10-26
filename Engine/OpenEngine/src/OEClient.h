@@ -47,6 +47,12 @@ class OEClient : public CefClient,
                                 CefRefPtr<CefProcessMessage> message) override;
 
   // CefLifeSpanHandler
+  void OnBeforeDevToolsPopup(CefRefPtr<CefBrowser> browser,
+                             CefWindowInfo& windowInfo,
+                             CefRefPtr<CefClient>& client,
+                             CefBrowserSettings& settings,
+                             CefRefPtr<CefDictionaryValue>& extra_info,
+                             bool* use_default_window) override;
   bool OnBeforePopup(CefRefPtr<CefBrowser> browser,
                      CefRefPtr<CefFrame> frame,
                      int popup_id,
@@ -196,5 +202,7 @@ class OEClient : public CefClient,
  private:
   __weak OEWebContent* view_;
   bool closing_ = false;
+  // The shell was told about a close it did not start (oe_requestClose).
+  bool close_requested_ = false;
   IMPLEMENT_REFCOUNTING(OEClient);
 };

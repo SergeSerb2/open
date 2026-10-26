@@ -1,0 +1,81 @@
+plain baseline 1 p95 2.92
+plain head 1 p95 1.67
+plain head 2 p95 2.76
+plain baseline 2 p95 2.66
+plain baseline 3 p95 1.48
+plain head 3 p95 1.51
+plain head 4 p95 1.58
+plain baseline 4 p95 2.99
+plain baseline 5 p95 2.79
+plain head 5 p95 2.71
+plain head 6 p95 2.33
+plain baseline 6 p95 3.18
+mixed baseline 1 p95 4.07
+mixed head 1 p95 4.14
+mixed head 2 p95 3.36
+mixed baseline 2 p95 2.53
+mixed baseline 3 p95 2.01
+mixed head 3 p95 2.69
+mixed head 4 p95 2.03
+mixed baseline 4 p95 2.89
+mixed baseline 5 p95 2.11
+mixed head 5 p95 3.39
+mixed head 6 p95 3.02
+mixed baseline 6 p95 1.91
+{
+  "plain": {
+    "baseline": {
+      "runs": [
+        2.92,
+        2.66,
+        1.48,
+        2.99,
+        2.79,
+        3.18
+      ],
+      "median_p95_ms": 2.855,
+      "mean_p95_ms": 2.67
+    },
+    "head": {
+      "runs": [
+        1.67,
+        2.76,
+        1.51,
+        1.58,
+        2.71,
+        2.33
+      ],
+      "median_p95_ms": 2.0,
+      "mean_p95_ms": 2.0933333333333333
+    },
+    "mean_delta_ms": -0.5766666666666667
+  },
+  "mixed": {
+    "baseline": {
+      "runs": [
+        4.07,
+        2.53,
+        2.01,
+        2.89,
+        2.11,
+        1.91
+      ],
+      "median_p95_ms": 2.32,
+      "mean_p95_ms": 2.5866666666666664
+    },
+    "head": {
+      "runs": [
+        4.14,
+        3.36,
+        2.69,
+        2.03,
+        3.39,
+        3.02
+      ],
+      "median_p95_ms": 3.19,
+      "mean_p95_ms": 3.105
+    },
+    "mean_delta_ms": 0.5183333333333335
+  }
+}
+artifacts /private/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-row-media-interleaved-nz8tia87
