@@ -1,77 +1,77 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44AF-5555-3144-A125-A9B605CA36B0",
-    "embeddedUUID": "4C4C44AF-5555-3144-A125-A9B605CA36B0",
+    "distributionUUID": "4C4C4438-5555-3144-A119-7620FA245AE0",
+    "embeddedUUID": "4C4C4438-5555-3144-A119-7620FA245AE0",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793005822"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793034098"
   },
-  "started": "2026-10-26 02:16:59",
-  "style": "alloy",
+  "started": "2026-10-26 11:14:46",
+  "style": "chrome",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
+          "active": "0B02CAF3-E700-4965-A1E6-6E817037E6B6",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "7B15EAA6-6A47-4E59-B986-EA60144028BF",
           "tabs": [
-            "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-            "51180145-6F85-4177-BFE5-739B1A8F06AF"
+            "0B02CAF3-E700-4965-A1E6-6E817037E6B6",
+            "C301F84E-DD03-423D-97FD-F8373DE3FCCA"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
+          "active": "0B02CAF3-E700-4965-A1E6-6E817037E6B6",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "7B15EAA6-6A47-4E59-B986-EA60144028BF",
           "tabs": [
-            "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-            "51180145-6F85-4177-BFE5-739B1A8F06AF"
+            "0B02CAF3-E700-4965-A1E6-6E817037E6B6",
+            "C301F84E-DD03-423D-97FD-F8373DE3FCCA"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+          "active": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "7B15EAA6-6A47-4E59-B986-EA60144028BF",
           "tabs": [
-            "51180145-6F85-4177-BFE5-739B1A8F06AF",
-            "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "C301F84E-DD03-423D-97FD-F8373DE3FCCA",
+            "D3380BDC-01DD-4669-A72E-101B39BB55DE"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+          "active": "C301F84E-DD03-423D-97FD-F8373DE3FCCA",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "7B15EAA6-6A47-4E59-B986-EA60144028BF",
           "tabs": [
-            "51180145-6F85-4177-BFE5-739B1A8F06AF",
-            "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "C301F84E-DD03-423D-97FD-F8373DE3FCCA",
+            "D3380BDC-01DD-4669-A72E-101B39BB55DE"
           ]
         }
       ]
@@ -80,20 +80,20 @@
       "ok": true
     },
     "card_edges_1x": {
-      "corner_symmetry_max": 0.067,
+      "corner_symmetry_max": 0.093,
       "corners": {
         "bottom_left": {
           "antialiased_rows": 11,
           "corner_alpha": -0.016,
           "edge_by_row": [
-            8.19,
-            5.97,
-            4.43,
-            3.32,
-            2.42,
+            8.2,
+            6.0,
+            4.45,
+            3.33,
+            2.45,
             1.83,
             1.19,
-            0.8,
+            0.81,
             0.0,
             0.0,
             0.0,
@@ -135,11 +135,11 @@
         },
         "bottom_right": {
           "antialiased_rows": 11,
-          "corner_alpha": -0.015,
+          "corner_alpha": -0.02,
           "edge_by_row": [
-            8.15,
-            5.95,
-            4.41,
+            8.18,
+            5.96,
+            4.42,
             3.31,
             2.42,
             1.75,
@@ -186,16 +186,16 @@
         },
         "top_left": {
           "antialiased_rows": 11,
-          "corner_alpha": -0.016,
+          "corner_alpha": -0.01,
           "edge_by_row": [
-            8.18,
-            5.96,
-            4.42,
+            8.19,
+            5.98,
+            4.44,
             3.32,
             2.44,
-            1.81,
-            1.18,
-            0.8,
+            1.82,
+            1.19,
+            0.83,
             0.0,
             0.0,
             0.0,
@@ -237,16 +237,16 @@
         },
         "top_right": {
           "antialiased_rows": 11,
-          "corner_alpha": -0.015,
+          "corner_alpha": -0.01,
           "edge_by_row": [
-            8.17,
-            5.95,
-            4.42,
-            3.33,
-            2.43,
-            1.76,
+            8.19,
+            5.97,
+            4.43,
+            3.34,
+            2.42,
+            1.75,
             1.12,
-            0.74,
+            0.73,
             0.0,
             0.0,
             0.0,
@@ -290,10 +290,10 @@
       "low_contrast": false,
       "ok": true,
       "right_shadow_profile": [
-        0.922,
+        0.923,
         0.941,
         0.953,
-        0.969,
+        0.972,
         0.976,
         0.984,
         0.988,
@@ -306,62 +306,62 @@
       "scale": 1.0,
       "sides": {
         "bottom": {
-          "contrast": 112.1,
+          "contrast": 111.5,
           "expected": [
-            110,
-            101,
-            115
+            109,
+            102,
+            116
           ],
-          "shadow_1px": 0.919,
+          "shadow_1px": 0.917,
           "stroke": [
-            110,
+            109,
             101,
             115
           ],
           "stroke_ok": true
         },
         "left": {
-          "contrast": 109.8,
+          "contrast": 111.1,
           "expected": [
-            105,
-            102,
-            115
+            104,
+            103,
+            116
           ],
-          "shadow_1px": 0.92,
+          "shadow_1px": 0.96,
           "stroke": [
-            105,
-            102,
+            106,
+            101,
             115
           ],
           "stroke_ok": true
         },
         "right": {
-          "contrast": 251.9,
+          "contrast": 250.8,
           "expected": [
-            112,
+            113,
             101,
-            115
+            114
           ],
-          "shadow_1px": 0.922,
+          "shadow_1px": 0.923,
           "stroke": [
-            112,
-            102,
+            113,
+            101,
             115
           ],
           "stroke_ok": true
         },
         "top": {
-          "contrast": 112.2,
+          "contrast": 111.7,
           "expected": [
             107,
             102,
             116
           ],
-          "shadow_1px": 0.92,
+          "shadow_1px": 0.938,
           "stroke": [
-            107,
-            102,
-            116
+            108,
+            101,
+            115
           ],
           "stroke_ok": true
         }
@@ -371,19 +371,19 @@
       "ok": true,
       "rows": {
         "dark": {
-          "corner_symmetry_max": 0.067,
+          "corner_symmetry_max": 0.093,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
               "corner_alpha": -0.016,
               "edge_by_row": [
-                8.18,
+                8.22,
                 5.97,
                 4.44,
-                3.32,
-                2.43,
+                3.34,
+                2.44,
                 1.83,
-                1.18,
+                1.2,
                 0.81,
                 0.0,
                 0.0,
@@ -426,13 +426,13 @@
             },
             "bottom_right": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.016,
+              "corner_alpha": -0.02,
               "edge_by_row": [
-                8.15,
-                5.96,
-                4.42,
-                3.31,
-                2.42,
+                8.21,
+                5.97,
+                4.43,
+                3.33,
+                2.43,
                 1.75,
                 1.12,
                 0.74,
@@ -477,16 +477,16 @@
             },
             "top_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.016,
+              "corner_alpha": -0.01,
               "edge_by_row": [
-                8.18,
-                5.96,
-                4.42,
+                8.19,
+                5.98,
+                4.44,
                 3.32,
                 2.44,
-                1.81,
+                1.82,
                 1.18,
-                0.8,
+                0.83,
                 0.0,
                 0.0,
                 0.0,
@@ -528,16 +528,16 @@
             },
             "top_right": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.015,
+              "corner_alpha": -0.01,
               "edge_by_row": [
-                8.17,
-                5.96,
+                8.19,
+                5.95,
                 4.43,
                 3.32,
-                2.44,
-                1.76,
+                2.43,
+                1.75,
                 1.12,
-                0.74,
+                0.73,
                 0.0,
                 0.0,
                 0.0,
@@ -581,10 +581,10 @@
           "low_contrast": false,
           "ok": true,
           "right_shadow_profile": [
-            0.922,
+            0.923,
             0.941,
             0.953,
-            0.969,
+            0.972,
             0.976,
             0.984,
             0.988,
@@ -599,83 +599,83 @@
             "bottom": {
               "contrast": 110.4,
               "expected": [
-                110,
-                101,
-                115
+                109,
+                102,
+                116
               ],
-              "shadow_1px": 0.921,
+              "shadow_1px": 0.937,
               "stroke": [
-                110,
+                109,
                 101,
                 115
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 109.8,
+              "contrast": 111.1,
               "expected": [
-                105,
-                102,
-                115
+                104,
+                103,
+                116
               ],
-              "shadow_1px": 0.92,
+              "shadow_1px": 0.96,
               "stroke": [
-                105,
-                102,
+                106,
+                101,
                 115
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 251.9,
+              "contrast": 250.8,
               "expected": [
-                112,
+                113,
                 101,
-                115
+                114
               ],
-              "shadow_1px": 0.922,
+              "shadow_1px": 0.923,
               "stroke": [
-                112,
-                102,
+                113,
+                101,
                 115
               ],
               "stroke_ok": true
             },
             "top": {
-              "contrast": 112.2,
+              "contrast": 111.7,
               "expected": [
                 107,
                 102,
                 116
               ],
-              "shadow_1px": 0.92,
+              "shadow_1px": 0.938,
               "stroke": [
-                107,
-                102,
-                116
+                108,
+                101,
+                115
               ],
               "stroke_ok": true
             }
           }
         },
         "light": {
-          "corner_symmetry_max": 0.843,
+          "corner_symmetry_max": 0.75,
           "corners": {
             "bottom_left": {
-              "antialiased_rows": 9,
-              "corner_alpha": -0.564,
+              "antialiased_rows": 8,
+              "corner_alpha": -0.592,
               "edge_by_row": [
-                7.99,
-                7.28,
-                4.3,
-                3.15,
-                2.22,
+                7.96,
+                7.33,
+                4.31,
+                3.16,
+                2.2,
                 null,
-                2.47,
-                0.91,
+                2.48,
+                0.81,
                 0.0,
-                4.74,
-                4.74,
+                4.72,
+                4.75,
                 0.0,
                 0.0,
                 0.0,
@@ -686,7 +686,7 @@
                 0.0,
                 0.0
               ],
-              "max_error_px": 4.61,
+              "max_error_px": 4.62,
               "monotonic": false,
               "reference": [
                 8.57,
@@ -714,13 +714,13 @@
             },
             "bottom_right": {
               "antialiased_rows": 8,
-              "corner_alpha": -0.876,
+              "corner_alpha": -0.833,
               "edge_by_row": [
-                7.98,
-                7.29,
-                4.25,
-                3.15,
-                2.22,
+                8.02,
+                7.28,
+                4.28,
+                3.17,
+                2.23,
                 null,
                 0.0,
                 0.0,
@@ -764,31 +764,31 @@
               "rows": 19
             },
             "top_left": {
-              "antialiased_rows": 6,
-              "corner_alpha": -0.974,
+              "antialiased_rows": 7,
+              "corner_alpha": -0.905,
               "edge_by_row": [
-                7.92,
+                7.9,
+                7.32,
+                4.2,
+                3.13,
+                2.26,
                 null,
-                4.17,
-                3.14,
-                2.29,
                 null,
-                null,
-                0.69,
+                0.72,
                 0.0,
                 null,
                 null,
+                null,
+                null,
+                null,
                 0.0,
                 null,
                 null,
-                0.0,
-                0.0,
-                0.0,
                 null,
                 0.0,
                 0.0
               ],
-              "max_error_px": 0.5,
+              "max_error_px": 0.51,
               "monotonic": true,
               "reference": [
                 8.57,
@@ -812,18 +812,18 @@
                 0.0,
                 0.0
               ],
-              "rows": 12
+              "rows": 10
             },
             "top_right": {
-              "antialiased_rows": 7,
-              "corner_alpha": 0,
+              "antialiased_rows": 8,
+              "corner_alpha": -1.061,
               "edge_by_row": [
-                7.94,
+                7.99,
                 null,
-                4.23,
-                3.13,
-                2.29,
-                null,
+                4.26,
+                3.14,
+                2.27,
+                0.0,
                 0.53,
                 0.0,
                 0.0,
@@ -839,8 +839,8 @@
                 0.0,
                 0.0
               ],
-              "max_error_px": 0.81,
-              "monotonic": true,
+              "max_error_px": 1.6,
+              "monotonic": false,
               "reference": [
                 8.57,
                 6.19,
@@ -863,16 +863,16 @@
                 0.0,
                 0.0
               ],
-              "rows": 18
+              "rows": 19
             }
           },
           "low_contrast": true,
           "ok": true,
           "right_shadow_profile": [
-            0.922,
+            0.923,
             0.941,
             0.953,
-            0.969,
+            0.972,
             0.976,
             0.984,
             0.988,
@@ -885,7 +885,7 @@
           "scale": 1.0,
           "sides": {
             "bottom": {
-              "contrast": 9.8,
+              "contrast": 12.1,
               "expected": [
                 240,
                 240,
@@ -894,19 +894,19 @@
               "shadow_1px": 0.923,
               "stroke": [
                 240,
-                239,
-                244
+                240,
+                243
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 10.0,
+              "contrast": 11.2,
               "expected": [
                 242,
                 242,
                 244
               ],
-              "shadow_1px": 0.924,
+              "shadow_1px": 0.925,
               "stroke": [
                 242,
                 241,
@@ -915,17 +915,17 @@
               "stroke_ok": true
             },
             "right": {
-              "contrast": 22.2,
+              "contrast": 22.1,
               "expected": [
-                242,
+                241,
                 240,
                 244
               ],
-              "shadow_1px": 0.922,
+              "shadow_1px": 0.923,
               "stroke": [
-                242,
+                241,
                 240,
-                245
+                244
               ],
               "stroke_ok": true
             },
@@ -934,7 +934,7 @@
               "expected": [
                 242,
                 242,
-                245
+                244
               ],
               "shadow_1px": 0.924,
               "stroke": [
@@ -1241,25 +1241,461 @@
           }
         },
         "space 1 (offscreen render, 2x)": {
-          "reason": "offscreen renderer gave no clean render in 10 tries (docs/design.md section 15.1)",
-          "renders": 19,
-          "status": "SKIP"
+          "corner_symmetry_max": 0.565,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.054,
+              "edge_by_row": [
+                18.47,
+                15.21,
+                13.16,
+                11.19,
+                9.75,
+                8.39,
+                7.3,
+                6.31,
+                5.44,
+                4.68,
+                4.01,
+                3.25,
+                2.77,
+                2.31,
+                1.79,
+                1.32,
+                1.07,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "bottom_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.085,
+              "edge_by_row": [
+                18.49,
+                15.2,
+                13.29,
+                11.19,
+                9.76,
+                8.44,
+                7.32,
+                6.31,
+                5.44,
+                4.69,
+                3.96,
+                3.36,
+                2.81,
+                2.13,
+                1.82,
+                1.4,
+                1.02,
+                0.79,
+                0.57,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_left": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.071,
+              "edge_by_row": [
+                18.46,
+                15.2,
+                13.3,
+                11.18,
+                9.76,
+                8.44,
+                7.3,
+                6.28,
+                5.43,
+                4.66,
+                4.04,
+                3.25,
+                2.76,
+                2.44,
+                1.79,
+                1.32,
+                1.1,
+                0.73,
+                0.5,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.052,
+              "edge_by_row": [
+                18.42,
+                15.2,
+                13.28,
+                11.18,
+                9.77,
+                8.44,
+                7.31,
+                6.32,
+                5.44,
+                4.68,
+                3.98,
+                3.37,
+                2.81,
+                2.13,
+                1.84,
+                1.43,
+                1.02,
+                0.8,
+                0.58,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.918,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.984,
+            0.992,
+            0.996,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 2,
+          "sides": {
+            "bottom": {
+              "contrast": 62.2,
+              "expected": [
+                240,
+                190,
+                172
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                240,
+                190,
+                172
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 53.0,
+              "expected": [
+                235,
+                194,
+                163
+              ],
+              "shadow_1px": 0.925,
+              "stroke": [
+                235,
+                193,
+                163
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 106.6,
+              "expected": [
+                244,
+                183,
+                178
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                245,
+                182,
+                178
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 62.3,
+              "expected": [
+                239,
+                192,
+                171
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                239,
+                191,
+                171
+              ],
+              "stroke_ok": true
+            }
+          }
         },
         "space 1 (window, 1x)": {
-          "corner_symmetry_max": 0.178,
+          "corner_symmetry_max": 0.71,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.053,
+              "corner_alpha": -0.054,
               "edge_by_row": [
-                8.12,
-                5.98,
-                4.38,
-                3.28,
-                2.38,
-                1.79,
-                1.22,
-                0.75,
+                7.96,
+                5.81,
+                4.26,
+                3.19,
+                2.26,
+                1.68,
+                1.13,
+                0.65,
                 0.0,
                 0.0,
                 0.0,
@@ -1301,16 +1737,16 @@
             },
             "bottom_right": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.085,
+              "corner_alpha": -0.083,
               "edge_by_row": [
-                8.1,
-                6.1,
-                4.38,
-                3.28,
-                2.38,
-                1.81,
-                1.42,
-                0.79,
+                8.18,
+                6.18,
+                4.44,
+                3.34,
+                2.48,
+                1.94,
+                1.93,
+                0.86,
                 0.0,
                 0.0,
                 0.0,
@@ -1324,7 +1760,7 @@
                 0.0,
                 0.0
               ],
-              "max_error_px": 0.5,
+              "max_error_px": 0.52,
               "monotonic": true,
               "reference": [
                 8.57,
@@ -1352,16 +1788,16 @@
             },
             "top_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.074,
+              "corner_alpha": -0.088,
               "edge_by_row": [
-                8.08,
-                6.06,
-                4.35,
-                3.27,
-                2.38,
-                1.77,
-                1.32,
-                0.76,
+                8.01,
+                5.89,
+                4.28,
+                3.18,
+                2.28,
+                1.63,
+                1.16,
+                0.65,
                 0.0,
                 0.0,
                 0.0,
@@ -1402,17 +1838,17 @@
               "rows": 20
             },
             "top_right": {
-              "antialiased_rows": 11,
-              "corner_alpha": -0.064,
+              "antialiased_rows": 12,
+              "corner_alpha": -0.065,
               "edge_by_row": [
-                8.09,
-                6.05,
-                4.36,
-                3.28,
-                2.4,
-                1.79,
-                1.35,
-                0.76,
+                8.12,
+                6.15,
+                4.46,
+                3.36,
+                2.47,
+                1.89,
+                1.57,
+                0.84,
                 0.0,
                 0.0,
                 0.0,
@@ -1456,14 +1892,14 @@
           "low_contrast": false,
           "ok": true,
           "right_shadow_profile": [
-            0.922,
-            0.945,
-            0.956,
-            0.968,
-            0.976,
-            0.982,
+            0.924,
+            0.942,
+            0.958,
+            0.972,
+            0.977,
+            0.984,
             0.988,
-            0.993,
+            0.994,
             0.994,
             1.0,
             1.0,
@@ -1472,62 +1908,62 @@
           "scale": 1.0,
           "sides": {
             "bottom": {
-              "contrast": 62.7,
+              "contrast": 65.0,
               "expected": [
                 240,
                 191,
-                173
-              ],
-              "shadow_1px": 0.919,
-              "stroke": [
-                240,
-                190,
                 172
+              ],
+              "shadow_1px": 0.93,
+              "stroke": [
+                242,
+                190,
+                173
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 53.9,
+              "contrast": 49.0,
               "expected": [
                 235,
-                194,
+                196,
                 163
               ],
-              "shadow_1px": 0.925,
+              "shadow_1px": 0.915,
               "stroke": [
-                235,
-                194,
-                163
+                236,
+                192,
+                159
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 35.8,
+              "contrast": 36.4,
               "expected": [
-                244,
+                245,
                 183,
                 177
               ],
-              "shadow_1px": 0.922,
+              "shadow_1px": 0.924,
               "stroke": [
                 245,
-                183,
+                185,
                 177
               ],
               "stroke_ok": true
             },
             "top": {
-              "contrast": 60.7,
+              "contrast": 61.0,
               "expected": [
-                239,
-                192,
-                171
+                238,
+                193,
+                170
               ],
-              "shadow_1px": 0.924,
+              "shadow_1px": 0.914,
               "stroke": [
                 239,
-                191,
-                170
+                190,
+                171
               ],
               "stroke_ok": true
             }
@@ -1743,7 +2179,7 @@
           },
           "low_contrast": false,
           "ok": true,
-          "renders": 4,
+          "renders": 5,
           "right_shadow_profile": [
             0.922,
             0.937,
@@ -1823,25 +2259,461 @@
           }
         },
         "space 2 (offscreen render, 2x)": {
-          "reason": "offscreen renderer gave no clean render in 10 tries (docs/design.md section 15.1)",
-          "renders": 12,
-          "status": "SKIP"
+          "corner_symmetry_max": 0.594,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 23,
+              "corner_alpha": -0.037,
+              "edge_by_row": [
+                18.5,
+                15.22,
+                13.18,
+                11.21,
+                9.8,
+                8.43,
+                7.31,
+                6.32,
+                5.45,
+                4.68,
+                4.05,
+                3.27,
+                2.79,
+                2.32,
+                1.82,
+                1.34,
+                1.05,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "bottom_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.066,
+              "edge_by_row": [
+                18.42,
+                15.12,
+                13.29,
+                11.17,
+                9.73,
+                8.45,
+                7.32,
+                6.28,
+                5.44,
+                4.67,
+                3.96,
+                3.36,
+                2.8,
+                2.13,
+                1.82,
+                1.44,
+                1.03,
+                0.79,
+                0.57,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_left": {
+              "antialiased_rows": 23,
+              "corner_alpha": -0.055,
+              "edge_by_row": [
+                18.68,
+                15.27,
+                13.37,
+                11.16,
+                9.8,
+                8.48,
+                7.31,
+                6.32,
+                5.42,
+                4.66,
+                4.09,
+                3.28,
+                2.75,
+                2.4,
+                1.81,
+                1.34,
+                1.08,
+                0.74,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.064,
+              "edge_by_row": [
+                18.37,
+                15.12,
+                13.39,
+                11.15,
+                9.75,
+                8.38,
+                7.27,
+                6.28,
+                5.43,
+                4.63,
+                3.99,
+                3.37,
+                2.82,
+                2.14,
+                1.84,
+                1.42,
+                1.04,
+                0.8,
+                0.61,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.918,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.984,
+            0.992,
+            0.996,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 2,
+          "sides": {
+            "bottom": {
+              "contrast": 72.4,
+              "expected": [
+                171,
+                189,
+                235
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                171,
+                189,
+                236
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 65.6,
+              "expected": [
+                167,
+                191,
+                228
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                168,
+                192,
+                228
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 113.0,
+              "expected": [
+                169,
+                181,
+                238
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                170,
+                182,
+                240
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 58.9,
+              "expected": [
+                170,
+                189,
+                232
+              ],
+              "shadow_1px": 0.923,
+              "stroke": [
+                168,
+                187,
+                230
+              ],
+              "stroke_ok": true
+            }
+          }
         },
         "space 2 (window, 1x)": {
-          "corner_symmetry_max": 0.151,
+          "corner_symmetry_max": 0.311,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.039,
+              "corner_alpha": -0.037,
               "edge_by_row": [
-                8.15,
-                6.07,
+                8.14,
+                6.06,
                 4.39,
-                3.3,
+                3.29,
                 2.4,
                 1.79,
                 1.23,
-                0.79,
+                0.76,
                 0.0,
                 0.0,
                 0.0,
@@ -1882,17 +2754,17 @@
               "rows": 20
             },
             "bottom_right": {
-              "antialiased_rows": 11,
-              "corner_alpha": -0.068,
+              "antialiased_rows": 12,
+              "corner_alpha": -0.073,
               "edge_by_row": [
-                8.13,
-                6.08,
+                8.11,
+                6.04,
                 4.36,
-                3.28,
+                3.29,
                 2.37,
-                1.79,
+                1.76,
                 1.35,
-                0.75,
+                0.73,
                 0.0,
                 0.0,
                 0.0,
@@ -1937,13 +2809,13 @@
               "corner_alpha": -0.065,
               "edge_by_row": [
                 8.14,
-                6.03,
+                6.05,
                 4.36,
                 3.26,
-                2.38,
-                1.75,
+                2.37,
+                1.77,
                 1.29,
-                0.77,
+                0.78,
                 0.0,
                 0.0,
                 0.0,
@@ -1984,17 +2856,17 @@
               "rows": 20
             },
             "top_right": {
-              "antialiased_rows": 11,
-              "corner_alpha": -0.081,
+              "antialiased_rows": 12,
+              "corner_alpha": -0.091,
               "edge_by_row": [
-                8.08,
-                6.16,
-                4.41,
+                8.03,
+                6.21,
+                4.44,
                 3.24,
-                2.4,
-                1.84,
-                1.4,
-                0.8,
+                2.39,
+                1.86,
+                1.58,
+                0.81,
                 0.0,
                 0.0,
                 0.0,
@@ -2038,15 +2910,15 @@
           "low_contrast": false,
           "ok": true,
           "right_shadow_profile": [
-            0.924,
+            0.926,
             0.944,
-            0.956,
+            0.957,
             0.968,
-            0.976,
-            0.983,
-            0.987,
-            0.993,
+            0.975,
+            0.984,
+            0.985,
             0.994,
+            0.997,
             1.0,
             1.0,
             1.0
@@ -2054,43 +2926,43 @@
           "scale": 1.0,
           "sides": {
             "bottom": {
-              "contrast": 69.0,
+              "contrast": 70.9,
               "expected": [
-                172,
+                170,
                 191,
                 237
               ],
-              "shadow_1px": 0.923,
+              "shadow_1px": 0.92,
               "stroke": [
-                169,
+                170,
                 186,
-                232
+                231
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 63.4,
+              "contrast": 66.0,
               "expected": [
-                168,
-                192,
+                167,
+                193,
                 228
               ],
-              "shadow_1px": 0.926,
+              "shadow_1px": 0.924,
               "stroke": [
-                168,
+                170,
                 193,
-                230
+                229
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 40.5,
+              "contrast": 41.0,
               "expected": [
-                171,
-                182,
-                240
+                170,
+                184,
+                239
               ],
-              "shadow_1px": 0.924,
+              "shadow_1px": 0.926,
               "stroke": [
                 171,
                 183,
@@ -2099,16 +2971,16 @@
               "stroke_ok": true
             },
             "top": {
-              "contrast": 68.5,
+              "contrast": 68.9,
               "expected": [
-                171,
+                170,
                 191,
                 234
               ],
               "shadow_1px": 0.922,
               "stroke": [
-                171,
-                191,
+                173,
+                189,
                 234
               ],
               "stroke_ok": true
@@ -2116,10 +2988,7 @@
           }
         }
       },
-      "skipped": [
-        "space 1 (offscreen render, 2x)",
-        "space 2 (offscreen render, 2x)"
-      ]
+      "skipped": []
     },
     "close_unloaded_pinned": {
       "after_close": {
@@ -2144,14 +3013,14 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 200,
-        "engineStarted": 281,
-        "firstContentfulPaint": 414,
-        "main": 124,
-        "modelLoaded": 126,
-        "sidebarDrawn": 199
+        "engineStart": 318,
+        "engineStarted": 433,
+        "firstContentfulPaint": 604,
+        "main": 151,
+        "modelLoaded": 154,
+        "sidebarDrawn": 317
       },
-      "ok": true,
+      "ok": false,
       "samples": 5
     },
     "comparison": {
@@ -2159,76 +3028,76 @@
       "elements": [
         {
           "delta_e00": 0.57,
-          "element": "background (sidebar column) (101 points, max \u0394E 0.85)",
+          "element": "background (sidebar column) (101 points, max \u0394E 1.11)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.52,
-          "element": "panel fill (empty state) (11 points, max \u0394E 0.95)",
+          "delta_e00": 0.4,
+          "element": "panel fill (empty state) (11 points, max \u0394E 1.13)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.78,
+          "delta_e00": 0.76,
           "element": "toolbar: sidebar toggle",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.25,
+          "delta_e00": 0.33,
           "element": "toolbar: back",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.29,
+          "delta_e00": 0.24,
           "element": "toolbar: forward",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.29,
+          "delta_e00": 0.18,
           "element": "toolbar: reload",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.37,
+          "delta_e00": 0.09,
           "element": "URL field fill",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.74,
+          "delta_e00": 0.54,
           "element": "URL field magnifier",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.43,
+          "delta_e00": 0.2,
           "element": "URL field placeholder",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.3,
+          "delta_e00": 0.11,
           "element": "favorite tile 1",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.47,
+          "delta_e00": 0.07,
           "element": "favorite tile 2",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.43,
+          "delta_e00": 0.28,
           "element": "favorite tile 3",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.44,
+          "delta_e00": 0.18,
           "element": "favorite tile 4",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.47,
+          "delta_e00": 0.09,
           "element": "favorite tile 5",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.6,
+          "delta_e00": 0.18,
           "element": "favorite tile 6",
           "position_pt": 0.0
         },
@@ -2238,77 +3107,77 @@
           "position_pt": 0.2
         },
         {
-          "delta_e00": 0.37,
+          "delta_e00": 0.15,
           "element": "Space title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.25,
+          "delta_e00": 0.24,
           "element": "row 1 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.44,
+          "delta_e00": 0.2,
           "element": "row 2 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.61,
+          "delta_e00": 0.05,
           "element": "row 3 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.68,
+          "delta_e00": 0.14,
           "element": "row 4 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.5,
+          "delta_e00": 0.26,
           "element": "row 5 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.67,
+          "delta_e00": 0.1,
           "element": "row 6 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.7,
+          "delta_e00": 0.12,
           "element": "row 7 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.73,
+          "delta_e00": 0.16,
           "element": "row 8 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.54,
+          "delta_e00": 0.11,
           "element": "row 9 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.74,
+          "delta_e00": 0.04,
           "element": "row 10 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.31,
+          "delta_e00": 1.34,
           "element": "New Tab plus",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.42,
+          "delta_e00": 0.35,
           "element": "New Tab label",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.53,
+          "delta_e00": 0.5,
           "element": "bottom: Home",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.57,
+          "delta_e00": 1.55,
           "element": "bottom: plus",
           "position_pt": 0.0
         }
@@ -2316,7 +3185,7 @@
       "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
       "ok": true,
       "private_artifacts": ".re/app-shell-comparison-window",
-      "worst_delta_e00": 1.57,
+      "worst_delta_e00": 1.55,
       "worst_position_pt": 1.0
     },
     "cpu_count": 18,
@@ -2333,19 +3202,19 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3229,
-        "engineInitialized": 3224,
-        "engineStart": 3144,
-        "engineStarted": 3221,
-        "firstContentfulPaint": 3366,
+        "didFinishLaunching": 3414,
+        "engineInitialized": 3412,
+        "engineStart": 3300,
+        "engineStarted": 3409,
+        "firstContentfulPaint": 3581,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3143,
-        "firstLoadEnd": 3339,
-        "firstPaintClockUncertaintyMs": 0.23,
+        "firstFrameWaitTimedOut": 3298,
+        "firstLoadEnd": 3564,
+        "firstPaintClockUncertaintyMs": 0.27,
         "kernelProcessStart": true,
-        "main": 68,
-        "modelLoaded": 69,
-        "windowShown": 122
+        "main": 167,
+        "modelLoaded": 170,
+        "windowShown": 257
       }
     },
     "frame_save_debounced": {
@@ -2376,19 +3245,19 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.524,
+      "dismissed_on_selection_s": 0.528,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.607
+      "revealed_s": 0.616
     },
     "hide_reveal": {
-      "dismissed_s": 0.529,
+      "dismissed_s": 0.565,
       "hidden": "hidden",
-      "left_s": 0.702,
+      "left_s": 0.69,
       "ok": true,
       "panel_x": 10,
-      "revealed_again_s": 0.611,
-      "revealed_s": 0.62,
+      "revealed_again_s": 0.615,
+      "revealed_s": 0.622,
       "selected": true
     },
     "html_fullscreen_from_window": {
@@ -2423,8 +3292,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1566,
-          799
+          1208,
+          104
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -2438,14 +3307,14 @@
         "fullscreenChanges": 4,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 298,
-        "number": 51453,
+        "id": "01A40566-C8BE-49AC-8195-E9C3412B157B",
+        "layoutPasses": 284,
+        "number": 80741,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "D3380BDC-01DD-4669-A72E-101B39BB55DE"
           }
         ],
         "panel": [
@@ -2462,7 +3331,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15576604165835306,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2471,15 +3340,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "D3380BDC-01DD-4669-A72E-101B39BB55DE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14",
         "titlebar": [
           0,
           0,
@@ -2559,36 +3428,36 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1866,
-          1079
+          1422,
+          787
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
         "frame": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "fullscreen": true,
         "fullscreenChanges": 3,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 276,
-        "number": 51453,
+        "id": "01A40566-C8BE-49AC-8195-E9C3412B157B",
+        "layoutPasses": 255,
+        "number": 80741,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "D3380BDC-01DD-4669-A72E-101B39BB55DE"
           }
         ],
         "panel": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "peekCreated": false,
         "reveal": {
@@ -2598,7 +3467,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15576604165835306,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2607,19 +3476,19 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "D3380BDC-01DD-4669-A72E-101B39BB55DE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14",
         "titlebar": [
           0,
           0,
-          1920,
+          2560,
           32
         ],
         "titled": true,
@@ -2646,15 +3515,15 @@
         "trafficLights": [
           [
             16,
-            1032
+            1392
           ],
           [
             39,
-            1032
+            1392
           ],
           [
             62,
-            1032
+            1392
           ]
         ],
         "trafficLightsHidden": [
@@ -2696,36 +3565,36 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1866,
-          1079
+          1426,
+          785
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
         "frame": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "fullscreen": true,
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 170,
-        "number": 51453,
+        "id": "01A40566-C8BE-49AC-8195-E9C3412B157B",
+        "layoutPasses": 206,
+        "number": 80741,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "D3380BDC-01DD-4669-A72E-101B39BB55DE"
           }
         ],
         "panel": [
           228,
           10,
-          1682,
-          1060
+          2322,
+          1420
         ],
         "peekCreated": false,
         "reveal": {
@@ -2735,7 +3604,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15576604165835306,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2744,19 +3613,19 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "D3380BDC-01DD-4669-A72E-101B39BB55DE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14",
         "titlebar": [
           0,
           0,
-          1920,
+          2560,
           32
         ],
         "titled": true,
@@ -2783,15 +3652,15 @@
         "trafficLights": [
           [
             16,
-            1032
+            1392
           ],
           [
             39,
-            1032
+            1392
           ],
           [
             62,
-            1032
+            1392
           ]
         ],
         "trafficLightsHidden": [
@@ -2832,36 +3701,36 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1866,
-          1079
+          1426,
+          785
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
         "frame": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "fullscreen": true,
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 168,
-        "number": 51453,
+        "id": "01A40566-C8BE-49AC-8195-E9C3412B157B",
+        "layoutPasses": 199,
+        "number": 80741,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "D3380BDC-01DD-4669-A72E-101B39BB55DE"
           }
         ],
         "panel": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "peekCreated": false,
         "reveal": {
@@ -2871,7 +3740,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15576604165835306,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2880,19 +3749,19 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "D3380BDC-01DD-4669-A72E-101B39BB55DE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14",
         "titlebar": [
           0,
           0,
-          1920,
+          2560,
           32
         ],
         "titled": true,
@@ -2919,15 +3788,15 @@
         "trafficLights": [
           [
             16,
-            1032
+            1392
           ],
           [
             39,
-            1032
+            1392
           ],
           [
             62,
-            1032
+            1392
           ]
         ],
         "trafficLightsHidden": [
@@ -2953,11 +3822,11 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14"
       },
       "ok": true,
       "restored": {
@@ -2967,11 +3836,11 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14"
       }
     },
     "last_window_reopen": {
@@ -2983,11 +3852,11 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -2998,183 +3867,183 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+        "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 233,
-          "engineInitialized": 227,
-          "engineStart": 145,
-          "engineStarted": 225,
-          "firstContentfulPaint": 360,
+          "didFinishLaunching": 444,
+          "engineInitialized": 439,
+          "engineStart": 318,
+          "engineStarted": 434,
+          "firstContentfulPaint": 604,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 351,
-          "firstPaintClockUncertaintyMs": 0.08,
+          "firstLoadEnd": 572,
+          "firstPaintClockUncertaintyMs": 0.14,
           "kernelProcessStart": true,
-          "main": 64,
-          "modelLoaded": 65,
-          "sidebarDrawn": 144,
-          "windowShown": 115
+          "main": 151,
+          "modelLoaded": 154,
+          "sidebarDrawn": 317,
+          "windowShown": 240
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 242,
-          "engineInitialized": 238,
-          "engineStart": 155,
-          "engineStarted": 236,
-          "firstContentfulPaint": 371,
+          "didFinishLaunching": 401,
+          "engineInitialized": 398,
+          "engineStart": 267,
+          "engineStarted": 393,
+          "firstContentfulPaint": 569,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 359,
+          "firstLoadEnd": 549,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 146,
+          "modelLoaded": 148,
+          "sidebarDrawn": 266,
+          "windowShown": 215
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 357,
+          "engineInitialized": 353,
+          "engineStart": 249,
+          "engineStarted": 350,
+          "firstContentfulPaint": 504,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 473,
           "firstPaintClockUncertaintyMs": 0.09,
           "kernelProcessStart": true,
-          "main": 68,
-          "modelLoaded": 70,
-          "sidebarDrawn": 155,
-          "windowShown": 125
+          "main": 134,
+          "modelLoaded": 137,
+          "sidebarDrawn": 249,
+          "windowShown": 206
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 291,
-          "engineInitialized": 287,
-          "engineStart": 201,
-          "engineStarted": 283,
-          "firstContentfulPaint": 433,
+          "didFinishLaunching": 439,
+          "engineInitialized": 436,
+          "engineStart": 328,
+          "engineStarted": 433,
+          "firstContentfulPaint": 604,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 420,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 584,
+          "firstPaintClockUncertaintyMs": 0.1,
           "kernelProcessStart": true,
-          "main": 125,
-          "modelLoaded": 126,
-          "sidebarDrawn": 200,
-          "windowShown": 173
+          "main": 169,
+          "modelLoaded": 171,
+          "sidebarDrawn": 327,
+          "windowShown": 265
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 288,
-          "engineInitialized": 283,
-          "engineStart": 200,
-          "engineStarted": 281,
-          "firstContentfulPaint": 414,
+          "didFinishLaunching": 459,
+          "engineInitialized": 454,
+          "engineStart": 344,
+          "engineStarted": 447,
+          "firstContentfulPaint": 632,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 401,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 611,
+          "firstPaintClockUncertaintyMs": 0.35,
           "kernelProcessStart": true,
-          "main": 125,
-          "modelLoaded": 126,
-          "sidebarDrawn": 199,
-          "windowShown": 173
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 298,
-          "engineInitialized": 295,
-          "engineStart": 208,
-          "engineStarted": 289,
-          "firstContentfulPaint": 432,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 419,
-          "firstPaintClockUncertaintyMs": 0.08,
-          "kernelProcessStart": true,
-          "main": 124,
-          "modelLoaded": 126,
-          "sidebarDrawn": 207,
-          "windowShown": 179
+          "main": 175,
+          "modelLoaded": 178,
+          "sidebarDrawn": 343,
+          "windowShown": 262
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 297,
-          "engineInitialized": 290,
-          "engineStart": 208,
-          "engineStarted": 287,
-          "firstContentfulPaint": 435,
+          "didFinishLaunching": 318,
+          "engineInitialized": 313,
+          "engineStart": 207,
+          "engineStarted": 310,
+          "firstContentfulPaint": 456,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 424,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 433,
+          "firstPaintClockUncertaintyMs": 0.13,
           "kernelProcessStart": true,
-          "main": 123,
-          "modelLoaded": 124,
-          "sidebarDrawn": 207,
-          "windowShown": 178
+          "main": 79,
+          "modelLoaded": 81,
+          "sidebarDrawn": 206,
+          "windowShown": 157
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 291,
-          "engineInitialized": 286,
-          "engineStart": 204,
-          "engineStarted": 281,
-          "firstContentfulPaint": 423,
+          "didFinishLaunching": 302,
+          "engineInitialized": 296,
+          "engineStart": 189,
+          "engineStarted": 294,
+          "firstContentfulPaint": 450,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 413,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 421,
+          "firstPaintClockUncertaintyMs": 0.1,
           "kernelProcessStart": true,
-          "main": 122,
-          "modelLoaded": 124,
-          "sidebarDrawn": 203,
-          "windowShown": 175
+          "main": 82,
+          "modelLoaded": 84,
+          "sidebarDrawn": 188,
+          "windowShown": 148
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 238,
-          "engineInitialized": 233,
-          "engineStart": 151,
-          "engineStarted": 228,
-          "firstContentfulPaint": 374,
+          "didFinishLaunching": 364,
+          "engineInitialized": 356,
+          "engineStart": 255,
+          "engineStarted": 352,
+          "firstContentfulPaint": 500,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 365,
-          "firstPaintClockUncertaintyMs": 0.08,
+          "firstLoadEnd": 478,
+          "firstPaintClockUncertaintyMs": 0.1,
           "kernelProcessStart": true,
-          "main": 68,
-          "modelLoaded": 70,
-          "sidebarDrawn": 150,
-          "windowShown": 122
+          "main": 140,
+          "modelLoaded": 143,
+          "sidebarDrawn": 253,
+          "windowShown": 208
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 240,
-          "engineInitialized": 234,
-          "engineStart": 154,
-          "engineStarted": 231,
-          "firstContentfulPaint": 370,
+          "didFinishLaunching": 316,
+          "engineInitialized": 312,
+          "engineStart": 212,
+          "engineStarted": 310,
+          "firstContentfulPaint": 481,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 361,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 466,
+          "firstPaintClockUncertaintyMs": 0.13,
           "kernelProcessStart": true,
-          "main": 67,
-          "modelLoaded": 69,
-          "sidebarDrawn": 153,
-          "windowShown": 120
+          "main": 88,
+          "modelLoaded": 90,
+          "sidebarDrawn": 211,
+          "windowShown": 150
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 239,
-          "engineInitialized": 231,
-          "engineStart": 150,
-          "engineStarted": 229,
-          "firstContentfulPaint": 376,
+          "didFinishLaunching": 358,
+          "engineInitialized": 350,
+          "engineStart": 246,
+          "engineStarted": 347,
+          "firstContentfulPaint": 526,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 368,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 510,
+          "firstPaintClockUncertaintyMs": 0.12,
           "kernelProcessStart": true,
-          "main": 69,
-          "modelLoaded": 70,
-          "sidebarDrawn": 149,
-          "windowShown": 119
+          "main": 102,
+          "modelLoaded": 104,
+          "sidebarDrawn": 245,
+          "windowShown": 203
         }
       ]
     },
     "load_average": [
-      5.48388671875,
-      5.7900390625,
-      7.1005859375
+      9.08837890625,
+      11.53369140625,
+      10.89599609375
     ],
     "multiple_window_png": {
       "file": "window-multiple.png",
@@ -3184,12 +4053,12 @@
       "ok": true,
       "windows": [
         {
-          "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-          "number": 51448
+          "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+          "number": 80739
         },
         {
-          "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-          "number": 51453
+          "id": "01A40566-C8BE-49AC-8195-E9C3412B157B",
+          "number": 80741
         }
       ]
     },
@@ -3226,8 +4095,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1766,
-          899
+          1326,
+          245
         ],
         "engineSelected": 0,
         "engineURL": "",
@@ -3241,9 +4110,9 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "layoutPasses": 13,
-        "number": 51448,
+        "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+        "layoutPasses": 8,
+        "number": 80739,
         "pageFullscreen": false,
         "paneBackgrounds": [],
         "panel": [
@@ -3275,7 +4144,7 @@
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8",
+        "space": "1E7F91F0-4016-4B8B-BA41-6AF5073A83B0",
         "titlebar": [
           0,
           0,
@@ -3371,8 +4240,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1786,
-          759
+          1346,
+          105
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -3386,14 +4255,14 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "layoutPasses": 64,
-        "number": 51448,
+        "id": "684B71AD-15F8-4AFA-A6D4-837B48A34938",
+        "layoutPasses": 143,
+        "number": 80739,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "51180145-6F85-4177-BFE5-739B1A8F06AF"
+            "tab": "C301F84E-DD03-423D-97FD-F8373DE3FCCA"
           }
         ],
         "panel": [
@@ -3419,15 +4288,15 @@
           "zone": ""
         },
         "revealed": false,
-        "selected": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+        "selected": "C301F84E-DD03-423D-97FD-F8373DE3FCCA",
         "shownPages": [
-          "51180145-6F85-4177-BFE5-739B1A8F06AF"
+          "C301F84E-DD03-423D-97FD-F8373DE3FCCA"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 300,
-        "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8",
+        "space": "1E7F91F0-4016-4B8B-BA41-6AF5073A83B0",
         "titlebar": [
           0,
           0,
@@ -3486,7 +4355,7 @@
         228,
         790
       ],
-      "dwell_s": 0.151,
+      "dwell_s": 0.159,
       "edge_walk": [
         [
           2,
@@ -3594,7 +4463,7 @@
           0
         ]
       ],
-      "exit_to_idle_s": 0.174,
+      "exit_to_idle_s": 0.17,
       "held": {
         "card": [
           5,
@@ -3602,11 +4471,11 @@
           228,
           790
         ],
-        "dwell": 0.15076204166689422,
+        "dwell": 0.15945887500129174,
         "hides": 0,
         "offset": 0,
         "phase": "shown",
-        "pointerEvents": 24,
+        "pointerEvents": 35,
         "shows": 1,
         "zone": "innerEdge"
       },
@@ -3627,8 +4496,8 @@
       ],
       "ok": true,
       "pass_by_without_reveal": true,
-      "settled_s": 0.594,
-      "slide_out_s": 0.522
+      "settled_s": 0.623,
+      "slide_out_s": 0.51
     },
     "selected_only_0": {
       "ok": true,
@@ -3707,24 +4576,24 @@
     },
     "space_header_url_field": {
       "field_fill_hover": [
-        71,
         70,
-        86
+        70,
+        85
       ],
       "field_fill_rest": [
-        60,
+        59,
         59,
         76
       ],
       "header_fill_hover": [
-        61,
-        58,
-        75
+        62,
+        57,
+        76
       ],
       "header_fill_rest": [
-        40,
-        37,
-        55
+        41,
+        36,
+        56
       ],
       "header_hovered": {
         "favorites": [
@@ -3836,16 +4705,16 @@
       ],
       "drawn_launch": [
         [
-          20.0,
-          23.96
+          20.02,
+          23.72
         ],
         [
           43.0,
-          24.01
+          23.74
         ],
         [
-          66.0,
-          23.98
+          65.99,
+          23.72
         ]
       ],
       "expected_centers": [
@@ -3922,12 +4791,12 @@
     },
     "warm_existing_profile": {
       "median_ms": {
-        "engineStart": 154,
-        "engineStarted": 231,
-        "firstContentfulPaint": 376,
-        "main": 69,
-        "modelLoaded": 70,
-        "sidebarDrawn": 153
+        "engineStart": 212,
+        "engineStarted": 310,
+        "firstContentfulPaint": 481,
+        "main": 88,
+        "modelLoaded": 90,
+        "sidebarDrawn": 211
       },
       "ok": true,
       "samples": 5
@@ -3986,7 +4855,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+        "id": "C301F84E-DD03-423D-97FD-F8373DE3FCCA",
         "loaded": true,
         "loading": false,
         "page": {
@@ -3995,15 +4864,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": -1,
-          "chromeWindowId": -1,
+          "chromeTabId": 198200102,
+          "chromeWindowId": 198200094,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+          "hostTab": "C301F84E-DD03-423D-97FD-F8373DE3FCCA",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -4016,17 +4885,17 @@
             255
           ],
           "popup": false,
-          "style": "alloy",
+          "style": "chrome",
           "title": "Window A",
           "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
           "zoom": 0
         },
-        "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+        "profile": "7B15EAA6-6A47-4E59-B986-EA60144028BF",
         "progress": 1,
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8",
+        "space": "1E7F91F0-4016-4B8B-BA41-6AF5073A83B0",
         "title": "Window A",
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
         "visible": false
@@ -4034,56 +4903,56 @@
     },
     "window_persistence": {
       "expected": {
-        "668AD1D6-677C-41F7-AF55-84B59154F3D3": {
-          "frame": [
-            80,
-            60,
-            1000,
-            700
-          ],
-          "selected": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-          "sidebarMode": "hidden",
-          "sidebarWidth": 300,
-          "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8"
-        },
-        "8363EA3F-5BFC-4167-A192-E9F778E4697D": {
+        "01A40566-C8BE-49AC-8195-E9C3412B157B": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+          "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+          "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14"
+        },
+        "684B71AD-15F8-4AFA-A6D4-837B48A34938": {
+          "frame": [
+            80,
+            60,
+            1000,
+            700
+          ],
+          "selected": "0B02CAF3-E700-4965-A1E6-6E817037E6B6",
+          "sidebarMode": "hidden",
+          "sidebarWidth": 300,
+          "space": "1E7F91F0-4016-4B8B-BA41-6AF5073A83B0"
         }
       },
       "ok": true,
       "restored": {
-        "668AD1D6-677C-41F7-AF55-84B59154F3D3": {
-          "frame": [
-            80,
-            60,
-            1000,
-            700
-          ],
-          "selected": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-          "sidebarMode": "hidden",
-          "sidebarWidth": 300,
-          "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8"
-        },
-        "8363EA3F-5BFC-4167-A192-E9F778E4697D": {
+        "01A40566-C8BE-49AC-8195-E9C3412B157B": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+          "selected": "D3380BDC-01DD-4669-A72E-101B39BB55DE",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+          "space": "B0648881-2E34-477D-9C7A-22FCE5DF5C14"
+        },
+        "684B71AD-15F8-4AFA-A6D4-837B48A34938": {
+          "frame": [
+            80,
+            60,
+            1000,
+            700
+          ],
+          "selected": "0B02CAF3-E700-4965-A1E6-6E817037E6B6",
+          "sidebarMode": "hidden",
+          "sidebarWidth": 300,
+          "space": "1E7F91F0-4016-4B8B-BA41-6AF5073A83B0"
         }
       }
     },

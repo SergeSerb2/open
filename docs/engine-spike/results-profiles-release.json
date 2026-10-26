@@ -1,19 +1,19 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44F5-5555-3144-A143-53034578039A",
-    "embeddedUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "distributionUUID": "4C4C4438-5555-3144-A119-7620FA245AE0",
+    "embeddedUUID": "4C4C4438-5555-3144-A119-7620FA245AE0",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793034098"
   },
   "profiles": {
     "disk_profiles_on_disk": {
       "info_cache": [
         "Default",
-        "Profile-C33C0064"
+        "Profile-786D08D1"
       ],
       "ok": true,
-      "work_chrome_window": 1471762496
+      "work_chrome_window": 2394157
     },
     "durable_second_profile": {
       "default_cookie": "oe_default=1",
@@ -30,9 +30,9 @@
         "modes": {
           "Engine": "0o700",
           "Engine/Default": "0o700",
-          "Engine/Profile-C33C0064": "0o700",
+          "Engine/Profile-786D08D1": "0o700",
           "Profiles/Default": "0o700",
-          "Profiles/Profile-C33C0064": "0o700"
+          "Profiles/Profile-786D08D1": "0o700"
         },
         "profiles_default": [
           "AdBlock",
@@ -41,7 +41,7 @@
         ]
       },
       "ok": true,
-      "work_dir": "Profile-C33C0064"
+      "work_dir": "Profile-786D08D1"
     },
     "extension_isolation": {
       "default_profile_probe_sees": {
@@ -50,7 +50,7 @@
           "https://example.com/?profile=default"
         ],
         "windows": [
-          1471762500
+          2394161
         ]
       },
       "incognito_access": "ok",
@@ -61,7 +61,7 @@
           "https://example.com/?profile=work"
         ],
         "windows": [
-          1471762496
+          2394157
         ]
       }
     },
@@ -140,7 +140,7 @@
     "migration_engine_in_use": {
       "log": [
         "engine layout: moved 34 Chromium item(s) to Engine/",
-        "engine layout: moved cache /Users/serge/Library/Caches/Open-E2E-profiles-chrome/Profiles/Default -> /Users/serge/Library/Caches/Open-E2E-profiles-chrome/Engine/Default",
+        "engine layout: moved cache /Users/serge/Library/Caches/Open-E2E-profiles-chrome-83807-c72ada4a/Profiles/Default -> /Users/serge/Library/Caches/Open-E2E-profiles-chrome-83807-c72ada4a/Engine/Default",
         "engine layout: skipped Profiles/Default: Engine/Default is in use; 73 old Chromium item(s) left in Profiles/Default"
       ],
       "ok": true
@@ -176,7 +176,7 @@
         "exit": 0,
         "log": [
           "engine layout: legacy layout for this launch, retried next launch: Profiles/Default/Open E2E locked.bin: locked (immutable or append-only flag)",
-          "Open: engine layout legacy in 2.8 ms"
+          "Open: engine layout legacy in 5.1 ms"
         ],
         "snapshot_byte_identical": true,
         "untouched": true,
@@ -194,6 +194,6 @@
       ]
     }
   },
-  "started": "2026-10-26 09:51:00",
+  "started": "2026-10-26 11:27:15",
   "style": "chrome"
 }
