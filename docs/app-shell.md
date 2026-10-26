@@ -966,8 +966,8 @@ The exact two-tab diagnostic captured 400 native input steps with active/key sta
 at every before/after boundary. Focus acceptance remains pending the lead
 exclusive run. No timing budget or comparison tolerance changed.
 
-[Full three-run tables, six Release medians, command-bar timings and all verifier rows](engine-spike/step-c-main-recheck/final-summary.md).
-[Unresolved focus failure and diagnostic provenance](engine-spike/step-c-main-recheck/focus-readiness-unresolved.json).
+[Full three-run tables, six Release medians, command-bar timings and all verifier rows](engine-spike/step-c-main-recheck/post-a962f39/final-summary.md).
+[Unresolved focus failure and diagnostic provenance](engine-spike/step-c-main-recheck/post-a962f39/focus-readiness-unresolved.json).
 
 Earlier phases retain their code-4 fullscreen failure, Widevine download misses
 and command-bar timing misses with their original revisions. These did not recur

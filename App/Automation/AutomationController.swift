@@ -945,14 +945,22 @@
       // Make the requested window key again once activation has completed.
       target.makeKeyAndOrderFront(nil); NSApp.activate()
       let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-      while !NSApp.isActive || !target.isKeyWindow {
-        guard ContinuousClock.now < deadline else {
-          throw Failure(message: "key focus not ready: active=\(NSApp.isActive) target=\(target.windowNumber) key=\(NSApp.keyWindow?.windowNumber ?? 0)")
+      while true {
+        // Log the same predicate values that refused input. Re-reading only
+        // NSApp.keyWindow in the error can hide a changing native key flag.
+        let active = NSApp.isActive, targetIsKey = target.isKeyWindow
+        let keyWindow = NSApp.keyWindow
+        if active && targetIsKey {
+          nativeInputStart = ProcessInfo.processInfo.systemUptime
+          return
         }
-        if NSApp.isActive { target.makeKeyAndOrderFront(nil) }
+        guard ContinuousClock.now < deadline else {
+          let foreground = NSWorkspace.shared.frontmostApplication
+          throw Failure(message: "key focus not ready: active=\(active) target=\(target.windowNumber) targetIsKey=\(targetIsKey) key=\(keyWindow?.windowNumber ?? 0) keySameObject=\(keyWindow === target) frontmost=\(foreground?.localizedName ?? "unknown") frontmostPID=\(foreground?.processIdentifier ?? 0)")
+        }
+        if active { target.makeKeyAndOrderFront(nil) }
         try await Task.sleep(for: .milliseconds(10))
       }
-      nativeInputStart = ProcessInfo.processInfo.systemUptime
     }
 
     private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
