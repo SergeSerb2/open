@@ -5,9 +5,10 @@ public enum ThemeEditorColors {
     public static let padFill = DesignColor(light: .black(0.055), dark: .white(0.04))
     public static let dot = DesignColor(light: .black(0.14), dark: .white(0.20))
     public static let knobRing = DesignColor(.white(1))
-    public static let glyph = DesignColor(light: .black(0.55), dark: .white(0.50))
+    public static let glyph = DesignColor(light: .black(0.50), dark: .white(0.50))
     // F0137 Automatic core #C6C5C5 over the selected plate: white 0.50.
-    public static let glyphSelected = DesignColor(light: .black(0.55), dark: .white(0.50))
+    public static let glyphSelected = DesignColor(light: .black(0.50), dark: .white(0.50))
+    public static let disabledGlyphAlpha: CGFloat = 0.32
     public static let selectedPlate = DesignColor(light: .black(0.10), dark: .white(0.10))
     public static let hoverPlate = DesignColor(light: .black(0.11), dark: .white(0.11))
     public static let secondaryText = DesignColor(light: .black(0.74), dark: .white(0.90))

@@ -75,8 +75,8 @@ public final class ThemeEditorContentView: NSView {
     public let content: NSView = EditorFlippedView()
     public let pad = ColorPadView(frame: ThemeEditorMetrics.pad)
     public let modes = AppearanceModeBar(frame: ThemeEditorMetrics.modeBar)
-    public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color", pointSize: 16, glyphOffset: CGSize(width: 0, height: 1))
-    public let add = ThemeEditorButton(symbol: "plus", label: "Add color", pointSize: 16)
+    public let remove = ThemeEditorButton(symbol: "minus", label: "Remove color", pointSize: 16, weight: .semibold, glyphOffset: CGSize(width: 0, height: 1))
+    public let add = ThemeEditorButton(symbol: "plus", label: "Add color", pointSize: 16, weight: .semibold)
     private var keyViews: [NSView] = []
     public var onAction: (@MainActor (ThemeEditorAction) -> Void)?
     public private(set) var layoutPassCount = 0
