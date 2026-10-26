@@ -24,6 +24,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     private var changeObserver: SiteControlObservationToken?
     private var presentationGeneration = 0
     private var activeMenu: NSMenu?
+    private var menuActionInvoked = false
 
     public init(source: SiteControlDataSource, actions: SiteControlActions) {
         self.source = source; self.actions = actions
@@ -79,7 +80,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard let snapshot = source.snapshot(for: tabID), geometry?(anchor) != nil else { reportUnavailable(tabID); return }
         if !isPresented { previousResponder = view.window?.firstResponder }
         self.anchor = anchor; self.tabID = tabID
-        self.mode = mode == .extensionPicker && !view.panel.extensionsSectionVisible ? .standard : mode
+        self.mode = mode
         preferredMenuItemTitle = mode == .extensionPicker && !view.panel.extensionsSectionVisible ? "Add Extension…" : nil
         presentationGeneration += 1
         isPresented = true; view.isHidden = false; view.isActive = true
@@ -89,7 +90,12 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         guard isPresented else { return }
         unavailableTabs.remove(tabID)
         view.window?.makeFirstResponder(view)
-        if preferredMenuItemTitle != nil { view.panel.focus(view.panel.more) }
+        if mode == .extensionPicker {
+            if view.panel.extensionsSectionVisible {
+                // Picker item focus lands with OpenExtensionsUI.
+                // The harness deliberately fails until that focus path is wired.
+            } else { view.panel.focus(view.panel.more) }
+        }
         animateOpen(animated)
     }
     public func layout() {
@@ -137,6 +143,12 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     }
     @discardableResult public func handleKey(_ event: NSEvent) -> Bool {
         guard isPresented else { return false }
+        if let menu = activeMenu {
+            if event.keyCode == 53 { dismiss(reason: .menuCancelled,animated: false); return true }
+            if event.keyCode == 36, let item = menu.highlightedItem, item.isEnabled {
+                menu.performActionForItem(at: menu.index(of: item)); menu.cancelTrackingWithoutAnimation(); return true
+            }
+        }
         if event.keyCode == 53 { dismiss(reason: .escape); return true }
         if event.modifierFlags.contains(.command) { dismiss(reason: .command, animated: false); return false }
         let controls = view.panel.focusableControls
@@ -149,7 +161,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         }
         if event.keyCode == 36 && view.panel.editFocusedBoost() { return true }
         if event.keyCode == 36 || event.keyCode == 49 {
-            if let current { controls[current].performClick(nil) }; return true
+            guard let current else { return false }; controls[current].showsKeyboardFocus = true; controls[current].performClick(nil); return true
         }
         if [123, 124, 125, 126].contains(event.keyCode), let current {
             let button = controls[current], id = button.controlID
@@ -183,7 +195,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
         view.panel.apply(snapshot); configureKeys(); layout()
         guard isPresented else { return }
         if let focusedID {
-            if let button = view.panel.control(id: focusedID), button.isEnabled { view.panel.focus(button) }
+            if let button = view.panel.control(id: focusedID), button.isEnabled { view.panel.focus(button,keyboard: button.showsKeyboardFocus) }
             else { view.window?.makeFirstResponder(view) }
         }
         if animated, oldHeight != view.panel.frame.height {
@@ -221,6 +233,7 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     }
     @objc private func menuAction(_ sender: NSMenuItem) {
         guard sender.isEnabled, let id = sender.representedObject as? String, let tabID else { return }
+        menuActionInvoked = true
         switch id {
         case "clearCache", "clearCookies":
             actions.clearSiteData(id == "clearCache" ? .cache : .cookies, tabID: tabID)
@@ -235,11 +248,11 @@ public final class SiteControlController: NSObject, NSMenuDelegate {
     private func showMenu(from button: NSView) {
         guard button.window?.isVisible == true else { return }
         let menu = makeMenu(); menu.delegate = self
-        activeMenu = menu
-        let selected = menu.popUp(positioning: menu.items.first { $0.title == preferredMenuItemTitle },
+        activeMenu = menu; menuActionInvoked = false
+        let selected = menu.popUp(positioning: menu.items.first { $0.title == preferredMenuItemTitle } ?? menu.items.first { $0.isEnabled && !$0.isSeparatorItem },
                                   at: CGPoint(x: button.bounds.minX, y: button.bounds.maxY), in: button)
         activeMenu = nil
-        if !selected && isPresented { dismiss(reason: .menuCancelled, animated: false) }
+        if !selected && !menuActionInvoked && isPresented { dismiss(reason: .menuCancelled, animated: false) }
     }
     private func openSiteSettings(tabID: ItemID) {
         guard let context = source.snapshot(for: tabID)?.context,

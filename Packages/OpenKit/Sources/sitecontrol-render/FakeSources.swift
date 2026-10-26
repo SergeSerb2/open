@@ -40,7 +40,7 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
             let names = ["Camera", "Microphone", "Location", "Notifications", "Clipboard", "MIDI Devices", "Screen Sharing", "Automatic Downloads", "Storage Access", "Window Management", "Fonts", "Idle Detection"]
             let blocking = value!.tiles[0]
             value?.tiles = [blocking] + SitePermission.allCases.prefix(11).enumerated().map { i, kind in
-                SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: "checkmark") }
+                SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: ["video.fill","mic.fill","location.fill","bell.fill","doc.on.clipboard","pianokeys","rectangle.on.rectangle","arrow.down.circle","externaldrive","macwindow","textformat","clock"][i]) }
             value?.boosts = (0..<20).map { Boost(id: BoostID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0 + 1)), name: "Boost \($0 + 1)", siteMatch: SiteMatch(domain: "example.com")) }
         default: break
         }

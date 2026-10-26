@@ -100,8 +100,8 @@ enum Flows {
             let securityStage = Stage()
             securityStage.source.value?.context.url = URL(string: scheme+"://example.test/")!
             securityStage.source.changed()
-            let security = securityStage.controller.view.panel.controls.first { $0.controlID == "security" }!
-            checks.append(Check(name: "security label policy for \(scheme)",pass: security.isHidden == !["https","http"].contains(scheme) && (security.isHidden || security.title == (scheme == "https" ? "Secure" : "Insecure"))))
+            let security = securityStage.controller.view.panel.controls.first { $0.controlID == "security" }
+            checks.append(Check(name: "security label policy for \(scheme)",pass: (security == nil || security!.isHidden) == !["https","http"].contains(scheme) && (security == nil || security!.title == (scheme == "https" ? "Secure" : "Insecure"))))
         }
         let corner = Stage()
         for closing in [false,true] {
@@ -190,7 +190,7 @@ enum Flows {
         let scroll = many.controller.view.panel.subviews.compactMap { $0 as? NSScrollView }.first
         check("keyboard focus scrolls the long body", (scroll?.contentView.bounds.origin.y ?? 0) > 0 && many.controller.view.panelFrame.height == 640)
         basic.controller.present(anchor: .contentTopLeading, tabID: basic.source.tabID, mode: .extensionPicker, animated: false)
-        check("extension picker falls back to Add Extension in More", basic.controller.mode == .standard && basic.controller.preferredMenuItemTitle == "Add Extension…" && basic.focusedID == "more" && !basic.controller.view.panel.extensionsSectionVisible)
+        check("extension picker falls back to Add Extension in More", basic.controller.mode == .extensionPicker && basic.controller.preferredMenuItemTitle == "Add Extension…" && basic.focusedID == "more" && !basic.controller.view.panel.extensionsSectionVisible)
         let picker = Stage(state: "scc-no-boosts", open: false)
         let observation = MenuObservation()
         observation.picker = picker
@@ -226,6 +226,49 @@ enum Flows {
         check("Tab works after the focused Boost disappears", removal.focusedID == "action.share")
         let shortcut = Stage(); shortcut.key(code: 8, characters: "c", modifiers: [.command, .shift])
         check("Command shortcut dismisses and returns to normal routing", !shortcut.controller.isPresented && shortcut.source.calls.isEmpty)
+        check("picker item focus guard fails when Extensions UI lands", !basic.controller.view.panel.extensionsSectionVisible)
+        for code: UInt16 in [36,49] {
+            let command = Stage(); let target = command.controller.view.panel.control(id: "contentBlocking")!
+            command.window.makeFirstResponder(target); command.key(code: code,characters: code == 36 ? "\r" : " ",modifiers: .command)
+            check("Command+\(code) never activates a focused control", command.source.calls.isEmpty && !command.controller.isPresented)
+        }
+        let unfocused = Stage(); unfocused.key(code: 49,characters: " ")
+        check("Space with no focused control is passed to the page", unfocused.root.keys == [49])
+        let wrapped = Stage(state: "scc-many")
+        check("long tile titles use two full lines", wrapped.controller.view.panel.control(id: "contentBlocking")?.title == "Block Ads &\nTrackers")
+        check("private switches have half opacity", privatePage.controller.view.panel.control(id: "boost.\(ids[0]).switch")?.alphaValue == 0.5)
+        let axStage = Stage(); let nativeAX = accessibilityDump(axStage.controller.view.panel)
+        check("native AX puts actions before sections and host appears once", nativeAX.range(of: "AXButton label=Share").map { a in nativeAX.range(of: "AXScrollArea").map { a.lowerBound < $0.lowerBound } ?? false } == true && nativeAX.components(separatedBy: "news.example.com").count == 2 && nativeAX.contains("Site settings and Boosts"))
+        for selecting in [true,false] {
+            let native = Stage(); let observed = MenuObservation(); observed.picker = native
+            var dismissal: SiteControlDismissReason?; native.controller.onDismiss = { dismissal = $0 }
+            native.controller.onMenu = { menu,_ in
+                observed.menu = menu
+                let timer = Timer(timeInterval: 0.04,repeats: false) { _ in MainActor.assumeIsolated {
+                    observed.highlighted = observed.menu?.highlightedItem?.title
+                    observed.picker?.key(code: selecting ? 36 : 53,characters: selecting ? "\r" : "\u{1b}")
+                } }; observed.timer = timer; RunLoop.main.add(timer,forMode: .eventTracking)
+            }
+            native.tap("more")
+            if selecting { check("native tracked Return chooses Clear Cookies and keeps reload row", observed.highlighted == "Clear Cookies" && native.source.calls == ["clear:1"] && native.controller.isPresented && native.controller.view.panel.showsReload) }
+            else { check("native tracked Esc dismisses with menuCancelled", !native.controller.isPresented && dismissal == .menuCancelled) }
+            observed.timer?.invalidate(); native.controller.onMenu = nil
+        }
+        let rowCommand = Stage(); let row = rowCommand.controller.view.panel.control(id: "boost.\(ids[0]).switch")!.superview!
+        rowCommand.window.makeFirstResponder(row); rowCommand.key(code: 36,characters: "\r",modifiers: .command)
+        check("Command+Return on a Boost row cannot edit after dismissal", rowCommand.source.calls.isEmpty && !rowCommand.controller.isPresented)
+        let growth = Stage(); let lastRow = growth.controller.view.panel.control(id: "boost.\(ids[1]).switch")!.superview!
+        let oldY = lastRow.frame.minY
+        growth.tap("contentBlocking")
+        check("mouse activation does not show a keyboard focus ring", growth.controller.view.panel.control(id: "contentBlocking")?.showsKeyboardFocus == false)
+        let viewport = growth.controller.view.panel.subviews.compactMap { $0 as? NSScrollView }.first!
+        for _ in 0..<3 {
+            OffscreenRenderer.settle(growth.root); RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+            let y = lastRow.layer?.presentation()?.frame.minY ?? .infinity
+            let bottom = lastRow.layer?.presentation()?.frame.maxY ?? .infinity
+            let height = viewport.layer?.presentation()?.bounds.height ?? 0
+            check("reload growth moves content with its viewport without clipping the last row", y >= oldY && y < oldY+32 && bottom-viewport.contentView.bounds.minY <= height+0.5)
+        }
         return result
     }
     /// Traverse the actual AppKit AX children (including cells), not NSView.subviews.

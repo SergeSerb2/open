@@ -12,6 +12,8 @@ public class SiteControlButton: NSView {
     public var invoke: (() -> Void)?
     public var onKey: ((NSEvent) -> Bool)?
     public var statusOnly = false
+    public var showsKeyboardFocus = false
+    public var disabledOpacity = SiteControlMetrics.disabledAlpha
     public var title = "" { didSet { needsDisplay = true } }
     private var hoverText: String?
     public override var toolTip: String? { get { hoverText } set { hoverText = newValue } }
@@ -54,7 +56,7 @@ public class SiteControlButton: NSView {
     public override func accessibilityPerformPress() -> Bool { guard isEnabled else { return false }; performClick(nil); return true }
     public override func mouseDown(with event: NSEvent) {
         guard isEnabled else { return }; window?.makeFirstResponder(self)
-        hideTooltip(); isHighlighted = true; needsDisplay = true
+        hideTooltip(); showsKeyboardFocus = false; isHighlighted = true; needsDisplay = true
     }
     public override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
     public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
@@ -64,7 +66,7 @@ public class SiteControlButton: NSView {
     }
     public override func keyDown(with event: NSEvent) {
         if onKey?(event) == true { return }
-        if event.keyCode == 36 || event.keyCode == 49 { performClick(nil); return }
+        if !event.modifierFlags.contains(.command) && (event.keyCode == 36 || event.keyCode == 49) { showsKeyboardFocus = true; performClick(nil); return }
         super.keyDown(with: event)
     }
     public override var intrinsicContentSize: NSSize {
@@ -92,7 +94,7 @@ public class SiteControlButton: NSView {
     public override func updateLayer() {
         let m = SiteControlMetrics.self
         let resolved = tint.resolved(contentAppearance).nsColor
-        let color = resolved.withAlphaComponent(resolved.alphaComponent * (isEnabled || statusOnly ? 1 : m.disabledAlpha))
+        let color = resolved.withAlphaComponent(resolved.alphaComponent * (isEnabled || statusOnly ? 1 : disabledOpacity))
         let fill = hovered && isEnabled ? (isHighlighted ? SidebarColors.itemHoveredBackground : SidebarColors.itemBackground).cgColor(contentAppearance) : NSColor.clear.cgColor
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let radius = controlID == "security" ? m.securityRadius : m.actionRadius
@@ -107,10 +109,10 @@ public class SiteControlButton: NSView {
         let font = NSFont.systemFont(ofSize: m.bodySize, weight: controlID == "security" ? .medium : .semibold)
         let captionSize = CGSize(width: max(0, bounds.width - captionX), height: bounds.height)
         captionLayer.frame = CGRect(origin: CGPoint(x: captionX, y: 0), size: captionSize)
-        captionLayer.contents = SiteControlDrawing.caption(title, size: captionSize, font: font, color: color, centered: symbol.isEmpty)
+        captionLayer.contents = SiteControlDrawing.caption(title, size: captionSize, font: font, color: color, centered: symbol.isEmpty, baseline: controlID == "reload" ? 20 : nil)
         buttonFocus.frame = bounds
         buttonFocus.path = CGPath(roundedRect: bounds.insetBy(dx: m.focusWidth / 2, dy: m.focusWidth / 2), cornerWidth: radius + m.focusOutset, cornerHeight: radius + m.focusOutset, transform: nil)
-        buttonFocus.strokeColor = window?.firstResponder === self ? Core.focusRing.cgColor(contentAppearance) : nil
+        buttonFocus.strokeColor = showsKeyboardFocus && window?.firstResponder === self ? Core.focusRing.cgColor(contentAppearance) : nil
         CATransaction.commit()
     }
 
@@ -123,23 +125,35 @@ enum SiteControlDrawing {
     private static var pixels: [SymbolKey: CGImage] = [:]
     private struct TextKey: Hashable { let text: String; let width: CGFloat; let font: NSFont; let color: NSColor }
     private static var lines: [TextKey: CTLine] = [:]
-    private struct CaptionKey: Hashable { let title: String; let size: CGSize; let font: NSFont; let color: NSColor; let centered: Bool }
+    private struct CaptionKey: Hashable { let title: String; let size: CGSize; let font: NSFont; let color: NSColor; let centered: Bool; let baseline: CGFloat? }
     private static var captions: [CaptionKey: CGImage] = [:]
-    static func caption(_ title: String, size: CGSize, font: NSFont, color: NSColor, centered: Bool) -> CGImage? {
+    static func caption(_ title: String, size: CGSize, font: NSFont, color: NSColor, centered: Bool, baseline: CGFloat? = nil) -> CGImage? {
         guard !title.isEmpty, size.width > 0, size.height > 0 else { return nil }
-        let key = CaptionKey(title: title, size: size, font: font, color: color, centered: centered)
+        let key = CaptionKey(title: title, size: size, font: font, color: color, centered: centered, baseline: baseline)
         if let cached = captions[key] { return cached }
         guard let context = CGContext(data: nil, width: Int(ceil(size.width * 2)), height: Int(ceil(size.height * 2)), bitsPerComponent: 8, bytesPerRow: 0,
                                       space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.scaleBy(x: 2, y: 2); context.translateBy(x: 0, y: size.height); context.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        text(title, x: 0, baseline: (size.height + font.ascender + font.descender) / 2, width: size.width, font: font, color: color, alignment: centered ? .center : .left)
+        text(title, x: 0, baseline: baseline ?? (size.height + font.ascender + font.descender) / 2, width: size.width, font: font, color: color, alignment: centered ? .center : .left)
         NSGraphicsContext.restoreGraphicsState()
         guard let image = context.makeImage() else { return nil }
         if captions.count >= 32 { captions.removeAll(keepingCapacity: true) }; captions[key] = image; return image
     }
     private struct TileLabelKey: Hashable { let title: String; let subtitle: String; let inUse: Bool; let appearance: ContentAppearance }
     private static var tileLabels: [TileLabelKey: CGImage] = [:]
+    static func titleLines(_ text: String, width: CGFloat) -> [String] {
+        let attributed = NSAttributedString(string: text,attributes: [.font: Typography.tileTitle.font])
+        let typesetter = CTTypesetterCreateWithAttributedString(attributed)
+        let string = text as NSString
+        var lines: [String] = [], start = 0
+        while start < string.length && lines.count < 2 {
+            let count = CTTypesetterSuggestLineBreak(typesetter,start,Double(width))
+            guard count > 0 else { break }
+            lines.append(string.substring(with: NSRange(location: start,length: count)).trimmingCharacters(in: .whitespaces)); start += count
+        }
+        return lines
+    }
     static func labels(for tile: SiteSettingTile, appearance: ContentAppearance) -> CGImage? {
         let key = TileLabelKey(title: tile.title, subtitle: tile.subtitle, inUse: tile.inUse, appearance: appearance)
         if let cached = tileLabels[key] { return cached }
@@ -149,8 +163,13 @@ enum SiteControlDrawing {
         context.scaleBy(x: 2, y: 2); context.translateBy(x: 0, y: m.tile.height); context.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         let width = m.tile.width - m.tileTextX - m.tileTextTrailing
-        text(tile.title, x: m.tileTextX, baseline: m.tileTitleBaseline, width: width - (tile.inUse ? m.inUseDot + m.inUseGap : 0), font: Typography.tileTitle.font, color: Core.foregroundPrimary.resolved(appearance).nsColor)
-        text(tile.subtitle, x: m.tileTextX, baseline: m.tileSubtitleBaseline, width: width, font: Typography.tileSubtitle.font, color: Core.foregroundSecondary.resolved(appearance).nsColor)
+        let titleLines = self.titleLines(tile.title,width: width-(tile.inUse ? m.inUseDot+m.inUseGap : 0))
+        if titleLines.count > 1 {
+            for (i,line) in titleLines.enumerated() { text(line,x: m.tileTextX,baseline: i == 0 ? 19 : 33,width: width,font: Typography.tileTitle.font,color: Core.foregroundPrimary.resolved(appearance).nsColor) }
+        } else {
+            text(tile.title,x: m.tileTextX,baseline: m.tileTitleBaseline,width: width,font: Typography.tileTitle.font,color: Core.foregroundPrimary.resolved(appearance).nsColor)
+            text(tile.subtitle,x: m.tileTextX,baseline: m.tileSubtitleBaseline,width: width,font: Typography.tileSubtitle.font,color: Core.foregroundSecondary.resolved(appearance).nsColor)
+        }
         if tile.inUse {
             context.setFillColor(Core.brandBlue.cgColor(appearance))
             let titleWidth = (tile.title as NSString).size(withAttributes: [.font: Typography.tileTitle.font]).width
@@ -222,7 +241,7 @@ enum SiteControlDrawing {
         bitmap(raster.image, in: CGRect(x: rect.midX - raster.size.width / 2, y: rect.midY - raster.size.height / 2, width: raster.size.width, height: raster.size.height))
     }
     static func focus(_ view: NSView, radius: CGFloat) {
-        guard view.window?.firstResponder === view else { return }
+        guard view.window?.firstResponder === view, (view as? SiteControlButton)?.showsKeyboardFocus == true else { return }
         Core.focusRing.resolved(view.contentAppearance).nsColor.setStroke()
         let shape = NSBezierPath(roundedRect: view.bounds.insetBy(dx: SiteControlMetrics.focusWidth / 2, dy: SiteControlMetrics.focusWidth / 2), xRadius: radius, yRadius: radius)
         shape.lineWidth = SiteControlMetrics.focusWidth; shape.stroke()
@@ -258,6 +277,7 @@ final class SiteControlTileButton: SiteControlButton {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     func apply(_ tile: SiteSettingTile, animated: Bool) {
         self.tile = tile
+        title = SiteControlDrawing.titleLines(tile.title,width: SiteControlMetrics.tile.width-SiteControlMetrics.tileTextX-SiteControlMetrics.tileTextTrailing-(tile.inUse ? SiteControlMetrics.inUseDot+SiteControlMetrics.inUseGap : 0)).joined(separator: "\n")
         setAccessibilityLabel(tile.title)
         setAccessibilityRole(tile.state == .unavailable ? .button : .checkBox)
         setAccessibilityValue(tile.state == .on ? 1 : 0)
@@ -290,7 +310,7 @@ final class SiteControlTileButton: SiteControlButton {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         layer?.backgroundColor = fill; layer?.cornerRadius = m.tileRadius; layer?.cornerCurve = .continuous
         focusRing.path = CGPath(roundedRect: bounds.insetBy(dx: m.focusWidth / 2, dy: m.focusWidth / 2), cornerWidth: m.tileRadius + m.focusOutset, cornerHeight: m.tileRadius + m.focusOutset, transform: nil)
-        focusRing.strokeColor = window?.firstResponder === self ? Core.focusRing.cgColor(contentAppearance) : nil
+        focusRing.strokeColor = showsKeyboardFocus && window?.firstResponder === self ? Core.focusRing.cgColor(contentAppearance) : nil
         CATransaction.commit()
     }
 }
@@ -352,6 +372,8 @@ final class SiteControlSwitch: SiteControlButton {
     var isOn = false { didSet { setAccessibilityValue(isOn ? 1 : 0); updateKnob(animated: oldValue != isOn) } }
     init(id: String, label: String) {
         super.init(id: id, label: label, symbol: "", pointSize: 0)
+        knob.shadowColor = NSColor.black.cgColor; knob.shadowOpacity = 0.2; knob.shadowRadius = 1; knob.shadowOffset = CGSize(width: 0,height: 0.5)
+        knob.borderColor = NSColor.black.withAlphaComponent(0.08).cgColor; knob.borderWidth = 0.25
         knob.backgroundColor = NSColor.white.cgColor; knob.cornerRadius = SiteControlMetrics.switchKnob / 2
         layer?.addSublayer(knob)
         setAccessibilityRole(.checkBox)
@@ -427,7 +449,7 @@ final class SiteControlBoostRow: NSView {
     }
     override func keyDown(with event: NSEvent) {
         if onKey?(event) == true { return }
-        if event.keyCode == 36 && edit.isEnabled { onEdit?(); return }
+        if !event.modifierFlags.contains(.command) && event.keyCode == 36 && edit.isEnabled { onEdit?(); return }
         super.keyDown(with: event)
     }
     override func layout() {

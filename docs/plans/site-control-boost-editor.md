@@ -1206,3 +1206,10 @@ banners (§3.5, §4.1, §4.3, §4.8), the interstitial body (§4.9), the Library
 - Q11 Cmd+E is decided in docs/plans/extensions-ui.md.
 - The engine needs E1–E6 go into the engine lead's queue after P2. The stopgaps in this plan ship first.
 - Captures #21 and #22 go into the user's single combined Arc capture session.
+
+### Round-2 lead clarifications (2026-10-26)
+
+Long Setting tile titles wrap to two lines (baselines 19 and 33), omitting the subtitle.
+Reload and global-off note baselines are row top + 20. Focus rings indicate keyboard focus only.
+Fill, edge, clip and shadow use one continuous r16 path. Geometry and palette remain guesses
+until capture session 2; F0137 supplies geometry only.
