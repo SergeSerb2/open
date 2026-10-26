@@ -349,7 +349,7 @@ sources only.
 | Recording source | Microphone `[6]` (`mic.fill` / `mic.slash.fill`), Camera `[34]` (`video.fill` / `video.slash.fill`), 14 pt; no play group, no volume | Shown only for actions the page offers (EM-1 `toggleMicrophone`, `toggleCamera`). Tooltips "Toggle Microphone", "Toggle Camera". |
 | Glyph color | `SidebarRole.mediaControlGlyph` = `CommandBarColors.accessoryForeground` (black 0.50 / white 0.66) | Same values as Arc `PlaybackControlForeground` (design-tokens §1.8). Hover: plate `SidebarRole.buttonHover` 24×24 radius 6. Pressed: `SidebarRole.buttonPressed`. |
 | Tooltips | Above the card (`placement: .above`), delay 0.45 s (`MiniPlayerMetrics.tooltipDelay`, from code, PP-6) | |
-| Volume drawer | Adds a 28 pt row `[0, 68, cardW, 28]`: `speaker.wave.1.fill` 12 pt at `[9, 74, 16, 16]` (click toggles mute), slider track `[31, 80, cardW − 62, 4]` radius 2, track `SidebarColors.separator`, fill `SidebarRole.mediaControlGlyph`, knob 12 pt white circle with `SidebarColors.tabShadowSelected` shadow; `speaker.wave.3.fill` 12 pt at `[cardW − 25, 74, 16, 16]` (click sets 100 %) | Card height becomes 96. Drawer opens and closes with `Motion.miniPlayerResize` (0.2 s ease-in-out). Values 0…1 in steps of 0.05. Guess layout (PP-16 names the parts). |
+| Volume drawer | Adds a 28 pt row `[0, 68, cardW, 28]`: `speaker.wave.1.fill` 12 pt at `[9, 74, 16, 16]` (click toggles mute), slider track `[31, 80, cardW − 62, 4]` radius 2, track `SidebarColors.separator`, fill `SidebarRole.mediaControlGlyph`, knob 12 pt white circle with `SidebarColors.tabShadowSelected` shadow; `speaker.wave.3.fill` 12 pt at `[cardW − 25, 74, 16, 16]` (click sets 100%) | Card height becomes 96. Drawer opens and closes with `Motion.miniPlayerResize` (0.2 s ease-in-out). Values 0…1 in steps of 0.05. Guess layout (PP-16 names the parts). |
 
 Click targets: the title row and empty parts of the controls row select
 the source tab ("Back to Tab": selects the tab in its window, switches
@@ -361,7 +361,7 @@ select.
 | State | Layout |
 |---|---|
 | One source | One card. `stackHeight = 68` (96 with the drawer). |
-| Several, pointer outside the container | The front card (most recent) is laid out as above. Card `i` (1, 2) sits behind it, offset up by `5·i` pt, inset `6·i` pt on each side, opacity `1 − 0.3·i`. Only its top 5 pt show. `stackHeight = 68 + 5·(n − 1)`. Guess from `MiniPlayerViewState{yOffset, widthOffset, opacity}` (PP-14). |
+| Several, pointer outside the container | The front card (most recent) is laid out as above. Card `i` (1, 2) sits behind it, offset up by `5·i` pt, inset `6·i` pt on each side, opacity `1 − 0.3·i`. Only its top 5 pt show. Each back card has a 0.5 pt top edge in `SidebarColors.separator` at the card opacity (review-r1 guess; confirm S6). `stackHeight = 68 + 5·(n − 1)`. Guess from `MiniPlayerViewState{yOffset, widthOffset, opacity}` (PP-14). |
 | Several, pointer over the container | Cards lay out top to bottom, oldest on top, front card at the bottom, 6 pt apart. `stackHeight = Σ heights + 6·(n − 1)`. Expand at once on pointer enter; collapse 0.3 s after pointer exit (Arc has an immediate and a debounced hover-off; values guessed). Spring `Motion.miniPlayerStack` (response 0.3, damping 1.0). The pager shrinks with it. |
 
 #### 4.2.5 Marquee title
@@ -718,7 +718,7 @@ Chromium's).
 | Mini player card | Group; label "<tab title>, <host>, Playing" / "Paused" / "Muted"; role description "media controls". Identifier `media.miniPlayer.<tabID>` (automation). |
 | Card title row | Button "Back to Tab, <tab title>". |
 | Card buttons | Labels = tooltips: "Previous Track", "Play", "Pause", "Next Track", "Adjust Tab Volume", "Open Picture in Picture", "Close Mini Player", "Toggle Microphone", "Toggle Camera". |
-| Volume slider | Slider "Tab Volume", value "NN %", increment 10 %. |
+| Volume slider | Slider "Tab Volume", value "NN%", increment 10 %. |
 | PiP window | Title "Picture in Picture"; every control is an AX button with its tooltip as label; the scrubber is a slider "Playback position" with value "m:ss of m:ss"; controls stay reachable when hidden visually. |
 | Reduce Motion | No marquee, no stack spring, no symbol transition, PiP opens and closes with fades (§4.2.7, §4.4.7). |
 | Increase Contrast | Card gets a 1 pt `SidebarColors.separator` stroke; PiP plates go to black 0.6. |
