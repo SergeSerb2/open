@@ -68,6 +68,9 @@ enum CompletionChecks {
         click(pinned)
         for _ in 0..<3 { key(125, .shift) }
         check(context.selection.ids == Array(space.pinned.prefix(4).map(\.id)), "MS5 Shift+Down three times selects four rows")
+        let selectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.pinned[1].id.description)!, makeIfNecessary: true)!
+        let unselectedRow = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: space.today[0].id.description)!, makeIfNecessary: true)!
+        check(selectedRow.isAccessibilitySelected() && !unselectedRow.isAccessibilitySelected(), "MS5 accessibility exposes selected and unselected real rows")
         key(53)
         check(context.selection.isEmpty, "MS5 Escape clears selection")
         key(125, .shift); key(126)
@@ -84,6 +87,13 @@ enum CompletionChecks {
         click(child.id, .command)
         model.setExpanded(folderID: folder.id, expanded: false); pump()
         check(!context.selection.contains(child.id), "MS3 collapse prunes selected descendants")
+        model.setExpanded(folderID: folder.id, expanded: true); pump()
+        click(pinned); click(folder.id, .command); click(child.id, .command)
+        model.setExpanded(folderID: folder.id, expanded: false); pump()
+        check(context.selection.anchor == folder.id, "MS3 lost anchor moves to the nearest kept row")
+        key(125, .shift)
+        let next = order()[order().firstIndex(of: folder.id)! + 1]
+        check(context.selection.ids == [pinned, folder.id, next], "MS3 Shift+Down after anchor collapse extends from the nearest kept row")
         click(pinned); click(today, .shift)
         check(!context.selection.contains(child.id) && context.selection.contains(folder.id), "MS3 range skips collapsed children and includes the folder")
         model.setPinnedSectionCollapsed(spaceID: space.id, collapsed: true); pump()
@@ -310,11 +320,23 @@ extension CompletionChecks {
         }
         let ids = [space.pinned[1].id, space.pinned[3].id, space.today[1].id]
         select(ids)
+        model.tab(id: ids[0])?.live.hasWebContent = true
+        context.forcedHover = .row(ids[0]); pump()
+        let row = outline.rowView(atRow: sidebar.displayedRows.firstIndex(of: ids[0].description)!, makeIfNecessary: true)!
+        func controls(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(controls) }
+        if let button = controls(row).first(where: { $0.accessibilityLabel()?.lowercased() == "unload tab" || $0.accessibilityLabel()?.lowercased() == "close tab" }) {
+            let point = button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil)
+            let down = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1)!
+            let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: 0.01, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 0)!
+            delegate.log = []; NSApp.postEvent(up, atStart: true); outline.mouseDown(with: down); pump()
+            check(!delegate.log.contains(where: { if case .select = $0 { true } else { false } }) && !(host.firstResponder is NSTextView), "MS7 selected accessory press neither activates nor renames")
+        } else { check(false, "MS7 selected row exposes its accessory control") }
+        context.forcedHover = nil; select(ids)
         let menu = sidebar.contextMenu(nodeID: ids[1])!
-        check(titles(menu) == ["Copy Links", "Copy Links as Markdown", "—", "New Folder with 3 Items", "Move to", "—", "Pin Tabs", "Duplicate", "—", "Archive Items"],
+        check(titles(menu) == ["Copy Links", "Copy links as Markdown", "—", "New Folder with 3 Items", "Move to", "—", "Pin Tabs", "Duplicate", "—", "Archive Items"],
               "MS7 tabs selection menu order and titles")
         delegate.log = []
-        perform(menu, "Copy Links as Markdown")
+        perform(menu, "Copy links as Markdown")
         check(delegate.log == [.copyLinks(ids: ids, markdown: true)] && context.selection.ids == ids,
               "MS7 Copy Links passes ordered IDs to the App and preserves selection")
         let newSpace = menu.item(withTitle: "Move to")!.submenu!
@@ -342,7 +364,7 @@ extension CompletionChecks {
         model.moveNode(id: nested.id, to: .folder(group.id), at: nil); pump()
         select([ids[0], group.id])
         let mixed = sidebar.contextMenu(nodeID: group.id)!
-        check(titles(mixed) == ["Copy Links", "Copy Links as Markdown", "—", "New Folder with 2 Items", "Move to", "—", "Duplicate", "—", "Archive Items", "Delete"] &&
+        check(titles(mixed) == ["Copy Links", "Copy links as Markdown", "—", "New Folder with 2 Items", "Move to", "—", "Duplicate", "—", "Archive Item", "Delete"] &&
               !titles(mixed).contains(where: { $0.contains("Archive Folder") }), "MS7 mixed menu has Delete only and no pin action")
         delegate.log = []
         perform(mixed, "Delete")
@@ -350,6 +372,14 @@ extension CompletionChecks {
               "MS7 Delete requests the App confirmation; no premature model or selection change")
         delegate.log = []; key(51)
         check(delegate.log == [.deleteFolders(ids: [ids[0], group.id])], "Delete on a mixed selection requests one confirmation for one eventual bulk archive")
+        select([ids[0], group.id])
+        perform(sidebar.contextMenu(nodeID: group.id)!, "Archive Item")
+        check(model.node(id: ids[0]) == nil && context.selection.ids == [group.id], "MS9 mixed Archive Item preserves its untouched selected folder")
+        undo.undo(); pump()
+        let secondFolder = model.createFolder(in: .spacePinned(space.id), title: "Other folder")!
+        select([group.id, secondFolder.id])
+        check(!titles(sidebar.contextMenu(nodeID: group.id)!).contains(where: { $0.hasPrefix("Archive Item") }), "MS7 folders-only selection hides Archive Item")
+        undo.undo(); pump()
         context.selection.clear()
         let folderMenu = sidebar.contextMenu(nodeID: group.id)!
         check(titles(folderMenu).contains("Turn “Action folder” into Space") && !titles(folderMenu).contains("Archive Folder"), "curly folder title and Q1 Delete-only menu")
@@ -403,6 +433,12 @@ extension CompletionChecks {
         drag.draggingPasteboard.clearContents(); drag.draggingPasteboard.writeObjects(writers)
         let payload = drag.draggingPasteboard.pasteboardItems?.compactMap { $0.string(forType: .init("com.open.sidebar.node")) } ?? []
         check(writerIDs == ordered && payload == ordered.map(\.description), "MS12 native selectedRowIndexes and production writers yield three ordered pasteboard items")
+        context.selection.clear(); pump()
+        let singleWriter = outline.dataSource?.outlineView?(outline, pasteboardWriterForItem: model.tab(id: ordered[0])!)
+        let singleDrag = SidebarDragEvent(ids: [], window: host)
+        if let singleWriter { singleDrag.draggingPasteboard.writeObjects([singleWriter]) }
+        check(outline.dataSource?.outlineView?(outline, acceptDrop: singleDrag, item: group, childIndex: -1) == true && model.parent(of: ordered[0]) == .folder(group.id), "MS12 unselected-row writer/drop works with an empty selection")
+        undo.undo(); pump(); select(ordered)
         let beforeDrag = space.today.map(\.id)
         changes = []
         let data = outline.dataSource!
@@ -458,9 +494,11 @@ extension CompletionChecks {
         check(sidebar.clearControl?.title == "Clear" && TooltipController.shared.visibleOrPendingTooltip?.title == "Clear Today tabs", "CU1 Clear label and real scheduled tooltip at rest")
         let option = NSEvent.keyEvent(with: .flagsChanged, location: clearPoint, modifierFlags: .option, timestamp: 0,
                                       windowNumber: host.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 58)!
-        outline.flagsChanged(with: option); pump()
-        check(sidebar.clearControl?.title == "Clear unselected" && TooltipController.shared.visibleOrPendingTooltip?.title == "Clear unselected Today tabs",
-              "CU1 Q14 Option updates label and tooltip without pointer movement")
+        NSApp.sendEvent(option); pump()
+        check(sidebar.clearControl?.title == "Clear" && TooltipController.shared.visibleOrPendingTooltip?.title == "Clear unselected Today tabs",
+              "CU1 Q14 Option changes only the tooltip without pointer movement")
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: host); pump()
+        check(!context.isOptionHeld && sidebar.clearControl?.title == "Clear", "CU1 window resignation clears monitored Option state")
         let beforeClear = space.today.map(\.id)
         changes = []
         let down = NSEvent.mouseEvent(with: .leftMouseDown, location: clearPoint, modifierFlags: .option, timestamp: 0,

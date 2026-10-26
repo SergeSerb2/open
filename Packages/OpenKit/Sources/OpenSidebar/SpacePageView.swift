@@ -181,11 +181,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// True when the change touched this page.
     @discardableResult
     func apply(_ change: TreeChange) -> Bool {
-        defer { pruneSelection() }
         switch change {
         case .insert(let p, _, _), .remove(let p, _, _), .reload(let p):
-            return sync(parent: p)
+            let touched = sync(parent: p)
+            if touched { pruneSelection() }
+            return touched
         case .move(let from, _, let to, _, let nodeID):
+            defer { if displayedItem(for: from) != nil || displayedItem(for: to) != nil { pruneSelection() } }
             if from != to, let src = displayedItem(for: from), let dst = displayedItem(for: to),
                src.isFolder || dst.isFolder, moveDirect(nodeID: nodeID, from: src, to: dst) {
                 return true
@@ -406,14 +408,14 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private func pruneSelection() {
         guard !applyingBulk, context.focusedSpace?.id == space.id, !context.selection.isEmpty else { return }
         let order = selectableOrder
-        context.selection.prune(keeping: Set(order))
+        context.selection.prune(keeping: Set(order), order: order)
         let ordered = order.filter { context.selection.contains($0) }
         if context.selection.ids != ordered { context.selection.select(ordered, anchor: context.selection.anchor) }
         syncSelectionIndexes()
     }
 
     func syncSelectionIndexes() {
-        guard !applyingBulk, !mirroringSelection else { return }
+        guard !applyingBulk, !mirroringSelection, draggingIDs.isEmpty, !outline.dragWasStarted else { return }
         let wanted = IndexSet(context.selection.ids.compactMap { id in
             guard let object = context.model.node(id: id)?.object else { return nil }
             let row = outline.row(forItem: object)
@@ -659,6 +661,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         draggingIDs = []
+        outline.dragWasStarted = false
+        syncSelectionIndexes()
         updateRowStates(animated: false)
     }
 
@@ -739,6 +743,16 @@ final class SidebarOutlineView: NSOutlineView {
         dragWasStarted = false
         let pressedRow = row(at: convert(event.locationInWindow, from: nil))
         let pressedItem = pressedRow >= 0 ? item(atRow: pressedRow) : nil
+        let pressedControl: NSView? = {
+            guard pressedRow >= 0, let row = rowView(atRow: pressedRow, makeIfNecessary: false), let parent = row.superview else { return nil }
+            var hit = row.hitTest(parent.convert(event.locationInWindow, from: nil))
+            while let view = hit, view !== row {
+                if view is PlateButton || view is NSControl { return view }
+                hit = view.superview
+            }
+            return nil
+        }()
+        if let pressedControl { pressedControl.mouseDown(with: event); return }
         if let page {
             let row = row(at: convert(event.locationInWindow, from: nil))
             if row >= 0, let item = item(atRow: row), page.modifySelection(item: item, modifiers: event.modifierFlags) {
@@ -754,7 +768,7 @@ final class SidebarOutlineView: NSOutlineView {
         super.mouseDown(with: event)
         // AppKit can omit its action for a row that was already in the mirrored
         // native selection. Preserve drag tracking, then handle a plain release.
-        if !didActivateMouseDown, !dragWasStarted, let pressedItem {
+        if !didActivateMouseDown, !dragWasStarted, pressedControl == nil, let pressedItem {
             if event.clickCount >= 2 { page?.beginRename(item: pressedItem as AnyObject) }
             else { page?.activate(item: pressedItem) }
         }
@@ -776,9 +790,11 @@ final class SidebarOutlineView: NSOutlineView {
         case 125, 126: // Down, Up: focus only, leaving selection in the model.
             let extending = event.modifierFlags.contains(.shift)
             let selection = page.context.selection
+            let oldCount = selection.ids.count
             var from = current
             let candidates = extending ? rows.filter { itemID(of: item(atRow: $0)) != nil } : rows
             if extending {
+                if from < 0, let id = selection.anchor, let object = page.context.model.node(id: id)?.object { from = row(forItem: object) }
                 if from < 0, let id = page.context.selectedID(in: page.space.id), let object = page.context.model.node(id: id)?.object { from = row(forItem: object) }
                 if from < 0 { from = candidates.first ?? -1 }
                 if selection.isEmpty, let id = itemID(of: item(atRow: from)) { selection.select([id], anchor: id) }
@@ -786,6 +802,7 @@ final class SidebarOutlineView: NSOutlineView {
             let next = event.keyCode == 125 ? candidates.first(where: { $0 > from }) : candidates.last(where: { $0 < (from < 0 ? numberOfRows : from) })
             if let next { keyboardItem = item(atRow: next) as AnyObject?; scrollRowToVisible(next) }
             if extending, let id = itemID(of: keyboardItem) { selection.extend(to: id, order: page.selectableOrder) }
+            if extending, selection.ids.count != oldCount { NSAccessibility.post(element: self, notification: .selectedRowsChanged) }
         case 53: // Escape
             page.context.selection.clear()
         case 36, 49, 76: // Return, Space, keypad Enter

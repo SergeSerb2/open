@@ -18,6 +18,7 @@ enum RenderCLI {
         case "compare": try Compare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
+        case "divider-check": try DividerChecks.run(rest)
         default: throw CLIError(description: usage)
         }
     }
