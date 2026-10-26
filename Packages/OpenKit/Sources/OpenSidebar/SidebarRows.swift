@@ -11,25 +11,25 @@ import OpenModel
 
 // MARK: - Row view (fill, hover, selection)
 
-/// The row container. Draws the hover and selected fills as layers; the cell
-/// view on top draws the content. NSTableView selection is not used: the
-/// "current" row follows the model's selected node.
+/// The row container. Draws the hover and selected fills as one layer; the cell
+/// on top draws the content. NSTableView selection is not used: the current row
+/// follows the model's selected node.
 @MainActor
 final class SidebarRowView: NSTableRowView {
+    static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
-    private var tracking: NSTrackingArea?
-    var onHoverChange: ((Bool) -> Void)?
-
-    /// The row shows the selected (current) fill.
-    var isCurrent = false { didSet { if isCurrent != oldValue { updateFill(animated: true); notifyCell() } } }
-    var isHovered = false { didSet { if isHovered != oldValue { updateFill(animated: true); notifyCell(); onHoverChange?(isHovered) } } }
+    weak var page: SpacePageView?
     /// Rows without a fill (spacer, divider) never highlight.
-    var allowsHighlight = true
-    /// Drop target highlight while dragging into a folder.
+    var allowsHighlight = true { didSet { if allowsHighlight != oldValue { updateFill(animated: false) } } }
+    /// Leading inset of the fill for indented rows (folder children).
+    var fillIndent: CGFloat = 0 { didSet { if fillIndent != oldValue { needsLayout = true } } }
+    var isCurrent = false { didSet { if isCurrent != oldValue { updateFill(animated: true); notifyCell() } } }
+    var isHovered = false { didSet { if isHovered != oldValue { updateFill(animated: true); notifyCell() } } }
     var isDropTarget = false { didSet { if isDropTarget != oldValue { updateFill(animated: true) } } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
+        identifier = Self.identifier
         wantsLayer = true
         fill.cornerCurve = .continuous
         fill.opacity = 0
@@ -42,15 +42,19 @@ final class SidebarRowView: NSTableRowView {
     override func drawBackground(in dirtyRect: NSRect) {}
     override func drawSelection(in dirtyRect: NSRect) {}
     override func drawSeparator(in dirtyRect: NSRect) {}
+    override var isEmphasized: Bool { get { false } set {} }
 
     override func layout() {
         super.layout()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let m = SpaceListMetrics.self
-        fill.frame = CGRect(x: m.rowFillInsetX, y: m.rowFillInsetTop, width: bounds.width - 2 * m.rowFillInsetX, height: m.rowFillHeight)
+        let rect = CGRect(x: m.rowFillInsetX + fillIndent, y: m.rowFillInsetTop,
+                          width: bounds.width - 2 * m.rowFillInsetX - fillIndent, height: m.rowFillHeight)
+        fill.frame = rect
         fill.cornerRadius = m.rowFillCornerRadius
-        fill.shadowPath = CGPath(roundedRect: fill.bounds, cornerWidth: m.rowFillCornerRadius, cornerHeight: m.rowFillCornerRadius, transform: nil)
+        fill.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: rect.size), cornerWidth: m.rowFillCornerRadius,
+                                 cornerHeight: m.rowFillCornerRadius, transform: nil)
         CATransaction.commit()
     }
 
@@ -71,12 +75,9 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(isCurrent ? Motion.selectionFade : Motion.hoverFade)
         if allowsHighlight && isCurrent {
-            fill.backgroundColor = SidebarRole.rowSelected.cgColor(appearance)
-            let shadow = SidebarRole.rowSelectedShadow.resolved(appearance)
-            fill.shadowColor = CGColor(gray: 0, alpha: 1)
-            fill.shadowOpacity = Float(shadow.alpha)
-            fill.shadowRadius = SelectionShadow.radius
-            fill.shadowOffset = CGSize(width: 0, height: SelectionShadow.offsetY)
+            let style = page?.style
+            fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
+            SelectionShadow.apply(to: fill, appearance: appearance)
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
             fill.backgroundColor = (isDropTarget ? SidebarColors.itemHoveredBackground : SidebarRole.rowHover).cgColor(appearance)
@@ -89,42 +90,43 @@ final class SidebarRowView: NSTableRowView {
         CATransaction.commit()
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
-        addTrackingArea(t)
-        tracking = t
-    }
-
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
-
     override func prepareForReuse() {
         super.prepareForReuse()
         isHovered = false
         isCurrent = false
         isDropTarget = false
+        fillIndent = 0
     }
 }
 
-/// Selected-row shadow. Measured: the fill's diff box reaches 1 pt above and
-/// 3 pt below the 36 pt fill. Tuned by the comparison loop (docs/design.md).
+/// Selected-row and selected-tile shadow. Measured below a selected light row:
+/// 14 % darker 1 px below the fill, 5.5 % at 2 px, 2 % at 3 px, 1 % 1 px above
+/// (F0014). Fitted by the comparison loop (docs/design.md). Dark content: none.
 enum SelectionShadow {
     static let radius: CGFloat = 1.5
     static let offsetY: CGFloat = 1
+
+    @MainActor static func apply(to layer: CALayer, appearance: ContentAppearance) {
+        let shadow = SidebarRole.rowSelectedShadow.resolved(appearance)
+        layer.shadowColor = CGColor(gray: 0, alpha: 1)
+        layer.shadowOpacity = Float(shadow.alpha)
+        layer.shadowRadius = radius
+        // Rows are flipped views: +y is down on screen.
+        layer.shadowOffset = CGSize(width: 0, height: (layer.superlayer?.contentsAreFlipped() ?? true) ? offsetY : -offsetY)
+    }
 }
 
 // MARK: - Cell views
 
 @MainActor
 class SidebarCellView: NSView {
-    weak var context: SidebarContext?
+    weak var page: SpacePageView?
     var depth = 0 { didSet { if depth != oldValue { needsLayout = true } } }
     var indent: CGFloat { CGFloat(depth) * SpaceListMetrics.indentPerLevel }
     var rowView: SidebarRowView? { superview as? SidebarRowView }
+    var context: SidebarContext? { page?.context }
 
-    override init(frame: NSRect) {
+    required override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
     }
@@ -133,6 +135,63 @@ class SidebarCellView: NSView {
 
     override var isFlipped: Bool { true }
     func rowStateChanged() {}
+
+    func titleColor() -> NSColor {
+        guard let page else { return .labelColor }
+        return page.style.titleColor(page.contentAppearanceForSpace).nsColor
+    }
+
+    /// Inline title editor (double-click or "Rename…").
+    private var editor: NSTextField?
+    func beginEditing(text: String, frame: NSRect, font: NSFont, commit: @escaping @MainActor (String) -> Void) {
+        let field = RenameField(frame: frame)
+        field.stringValue = text
+        field.font = font
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.textColor = titleColor()
+        field.cell?.isScrollable = true
+        field.onEnd = { [weak self, weak field] value in
+            field?.removeFromSuperview()
+            self?.editor = nil
+            self?.subviews.forEach { if $0 is TextLabel { $0.isHidden = false } }
+            if let value { commit(value) }
+        }
+        subviews.forEach { if $0 is TextLabel { $0.isHidden = true } }
+        addSubview(field)
+        editor = field
+        window?.makeFirstResponder(field)
+        field.currentEditor()?.selectAll(nil)
+    }
+}
+
+/// Text field that reports commit (Return, focus loss) or cancel (Escape).
+@MainActor
+final class RenameField: NSTextField, NSTextFieldDelegate {
+    var onEnd: (@MainActor (String?) -> Void)?
+    private var ended = false
+
+    required override init(frame: NSRect) {
+        super.init(frame: frame)
+        delegate = self
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        if selector == #selector(NSResponder.cancelOperation(_:)) { finish(nil); return true }
+        if selector == #selector(NSResponder.insertNewline(_:)) { finish(stringValue); return true }
+        return false
+    }
+
+    func controlTextDidEndEditing(_ obj: Notification) { finish(stringValue) }
+
+    private func finish(_ value: String?) {
+        guard !ended else { return }
+        ended = true
+        onEnd?(value)
+    }
 }
 
 /// Tab row: favicon, title, audio indicator, and the close (×) or unload (−) button.
@@ -141,20 +200,25 @@ final class TabCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("tab")
     let favicon = FaviconView()
     let title = TextLabel()
-    let audio = GlyphView()
+    let audio = PlateButton(glyph: .audioPlaying)
     let accessory = PlateButton(glyph: .rowClose)
+    private let slash = CALayer()
     weak var tab: Tab? { didSet { bind() } }
-    var isPinned = false
 
-    override init(frame: NSRect) {
+    required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         title.font = Typography.tabTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
-        accessory.plateRadius = 6
+        title.inset = SpaceListMetrics.textInset
         accessory.isHidden = true
+        accessory.plateRadius = 6
+        accessory.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
+        accessory.plateColor = { _ in SidebarRole.rowPressed }
         audio.isHidden = true
-        accessory.glyphView.tint = { SidebarRole.rowAccessory.nsColor }
+        audio.showsHoverPlate = false
+        audio.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
+        layer?.addSublayer(slash)
         addSubview(favicon); addSubview(title); addSubview(audio); addSubview(accessory)
     }
 
@@ -165,67 +229,87 @@ final class TabCellView: SidebarCellView {
         title.color = { [weak self] in self?.titleColor() ?? .labelColor }
         accessory.action = { [weak self] in
             guard let self, let tab = self.tab else { return }
-            if self.showsUnload { self.context?.send(.unload(tabID: tab.id)) } else { self.context?.send(.close(nodeID: tab.id)) }
+            self.context?.send(self.showsUnload ? .unload(tabID: tab.id) : .close(nodeID: tab.id))
         }
+        audio.action = { [weak self] in
+            guard let self, let tab = self.tab else { return }
+            self.context?.send(.toggleMute(tabID: tab.id))
+        }
+        rowStateChanged()
         needsLayout = true
     }
 
-    private func titleColor() -> NSColor {
-        guard let context, let page = enclosingPage else { return .labelColor }
-        return context.style(for: page.space).titleColor(page.contentAppearanceForSpace).nsColor
+    var isPinned: Bool {
+        guard let tab, let context else { return false }
+        return context.model.isPinned(tabID: tab.id)
     }
 
-    private var enclosingPage: SpacePageView? {
-        var v = superview
-        while let s = v { if let p = s as? SpacePageView { return p }; v = s.superview }
-        return nil
-    }
-
+    /// A loaded pinned tab shows "−" (close and keep pinned), measured on a
+    /// selected pinned row (F0014). Today tabs show "×".
     private var showsUnload: Bool {
-        guard isPinned, let tab, let context else { return false }
+        guard let tab, let context, isPinned else { return false }
         return context.isTabLoaded(tab)
     }
 
     override func rowStateChanged() {
         let row = rowView
-        let visible = (row?.isHovered ?? false)
+        let visible = (row?.isHovered ?? false) || (row?.isCurrent ?? false)
         accessory.glyphView.glyph = showsUnload ? .rowUnload : .rowClose
-        accessory.isHidden = !visible
-        needsLayout = true
+        if accessory.isHidden == visible {
+            accessory.isHidden = !visible
+            needsLayout = true
+        }
     }
 
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
         let x0 = indent
-        favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconOffsetY, width: m.faviconSize, height: m.faviconSize)
-        let trailing = bounds.width - m.titleTrailingInset
-        let accessoryW = m.accessorySize
-        accessory.frame = CGRect(x: bounds.width - m.rowFillInsetX - 6 - accessoryW, y: 20 - accessoryW / 2, width: accessoryW, height: accessoryW)
-        // Observation-tracked reads: audio state comes from the live tab.
-        let audible = tab?.live.isAudible ?? false
-        let muted = tab?.isMuted ?? false
+        // Observation-tracked reads: audio and pinned-URL state.
+        let (audible, muted, leftPinned) = tracked({ (tab?.live.isAudible ?? false, tab?.isMuted ?? false, tab?.hasLeftPinnedURL ?? false) }) {
+            [weak self] in self?.needsLayout = true
+        }
+        favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
+        let a = m.accessorySize
+        accessory.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
+        var titleX = m.titleX + x0
+        // A pinned tab away from its pinned URL shows "/" before the title (A0414). guess: 4 pt shift.
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        slash.isHidden = !leftPinned
+        if leftPinned {
+            slash.frame = CGRect(x: titleX - 2, y: 13, width: 1.2, height: 15)
+            slash.backgroundColor = SidebarRole.pinnedSlash.cgColor(contentAppearance)
+            slash.setAffineTransform(CGAffineTransform(rotationAngle: 0.3))
+            titleX += 4
+        }
+        CATransaction.commit()
+        var titleRight = accessory.isHidden ? bounds.width - m.titleTrailingInset : accessory.frame.minX
         let showAudio = audible || muted
         audio.isHidden = !showAudio
-        audio.glyph = muted ? .audioMuted : .audioPlaying
-        audio.tint = { SidebarRole.rowAccessory.nsColor }
-        var titleRight = accessory.isHidden ? trailing : accessory.frame.minX - 4
         if showAudio {
-            let w: CGFloat = 18
-            let titleW = min(title.textWidth, titleRight - (m.titleX + x0) - w - 4)
-            audio.frame = CGRect(x: m.titleX + x0 + max(titleW, 0) + 4, y: 11, width: w, height: 18)
-            titleRight = min(titleRight, audio.frame.minX - 2)
+            audio.glyphView.glyph = muted ? .audioMuted : .audioPlaying
+            let w: CGFloat = 20
+            let titleW = min(title.textWidth, titleRight - titleX - w - 2)
+            audio.frame = CGRect(x: titleX + max(titleW, 0) + 2, y: 10, width: w, height: 20)
+            titleRight = min(titleRight, audio.frame.minX)
         }
-        title.frame = CGRect(x: m.titleX + x0, y: 0, width: max(0, titleRight - m.titleX - x0), height: m.rowHeight)
+        title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
     }
 
-    override func rightMouseDown(with event: NSEvent) {
-        guard let tab, let page = enclosingPage, let menu = page.menu(forTab: tab, pinned: isPinned) else { return }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
+    func beginRename() {
+        guard let tab else { return }
+        let id = tab.id
+        beginEditing(text: tab.displayTitle, frame: title.frame.insetBy(dx: -2, dy: 0).offsetBy(dx: 0, dy: 0).with(y: 10, height: 20),
+                     font: title.font) { [weak self] value in self?.context?.send(.rename(nodeID: id, title: value)) }
     }
 }
 
-/// Folder row: folder icon (closed or open), title. Children are indented rows.
+extension NSRect {
+    func with(y: CGFloat, height: CGFloat) -> NSRect { NSRect(x: origin.x, y: y, width: width, height: height) }
+}
+
+/// Folder row: folder glyph (closed or open, Space accent), 14 Semibold title.
+/// Children are indented 16 pt per level (F0072, F0079).
 @MainActor
 final class FolderCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("folder")
@@ -233,54 +317,46 @@ final class FolderCellView: SidebarCellView {
     let title = TextLabel()
     weak var folder: Folder? { didSet { bind() } }
 
-    override init(frame: NSRect) {
+    required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         title.font = Typography.folderTitle.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
+        title.inset = SpaceListMetrics.textInset
         addSubview(icon); addSubview(title)
     }
 
     private func bind() {
         icon.folder = folder
-        icon.context = context
+        icon.cell = self
         title.text = { [weak self] in self?.folder?.title ?? "" }
         title.color = { [weak self] in self?.titleColor() ?? .labelColor }
-    }
-
-    private func titleColor() -> NSColor {
-        var v = superview
-        while let s = v { if let p = s as? SpacePageView, let c = context { return c.style(for: p.space).titleColor(p.contentAppearanceForSpace).nsColor }; v = s.superview }
-        return .labelColor
     }
 
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
-        icon.frame = CGRect(x: m.faviconX + indent - 1, y: m.faviconOffsetY - 1, width: m.faviconSize + 2, height: m.faviconSize + 2)
+        icon.frame = CGRect(x: m.faviconX + indent - 1, y: m.faviconY - 1, width: m.faviconSize + 2, height: m.faviconSize + 2)
         title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, bounds.width - m.titleTrailingInset - m.titleX - indent), height: m.rowHeight)
     }
 
-    override func rightMouseDown(with event: NSEvent) {
-        guard let folder, let page = enclosingPage(), let menu = page.menu(forFolder: folder) else { return }
-        NSMenu.popUpContextMenu(menu, with: event, for: self)
-    }
-
-    private func enclosingPage() -> SpacePageView? {
-        var v = superview
-        while let s = v { if let p = s as? SpacePageView { return p }; v = s.superview }
-        return nil
+    func beginRename() {
+        guard let folder else { return }
+        let id = folder.id
+        beginEditing(text: folder.title, frame: title.frame.with(y: 10, height: 20), font: title.font) { [weak self] value in
+            self?.context?.send(.rename(nodeID: id, title: value))
+        }
     }
 }
 
-/// Our own folder art: a closed folder (filled) or an open folder (back panel
-/// plus a skewed front). Tinted with the Space accent. Drawn in code.
+/// Our own folder art, drawn in code: a closed folder (filled) or an open folder
+/// (back panel plus a skewed front), tinted with the Space accent.
 @MainActor
 final class FolderIconView: NSView {
     weak var folder: Folder? { didSet { needsDisplay = true } }
-    weak var context: SidebarContext?
+    weak var cell: SidebarCellView?
 
-    override init(frame: NSRect) {
+    required override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .onSetNeedsDisplay
@@ -292,113 +368,63 @@ final class FolderIconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let folder else { return }
-        let open = folder.isExpanded // observation-tracked
-        let accent = accentColor()
-        let r = bounds.insetBy(dx: 2, dy: 3)
-        let back = NSBezierPath()
-        let tabW = r.width * 0.38
-        back.move(to: NSPoint(x: r.minX + 1.5, y: r.minY))
-        back.line(to: NSPoint(x: r.minX + tabW - 1, y: r.minY))
-        back.line(to: NSPoint(x: r.minX + tabW + 1.5, y: r.minY + 2.2))
-        back.line(to: NSPoint(x: r.maxX - 1.5, y: r.minY + 2.2))
-        back.curve(to: NSPoint(x: r.maxX, y: r.minY + 3.7), controlPoint1: NSPoint(x: r.maxX - 0.6, y: r.minY + 2.2), controlPoint2: NSPoint(x: r.maxX, y: r.minY + 2.8))
-        back.line(to: NSPoint(x: r.maxX, y: r.maxY - 1.5))
-        back.curve(to: NSPoint(x: r.maxX - 1.5, y: r.maxY), controlPoint1: NSPoint(x: r.maxX, y: r.maxY - 0.6), controlPoint2: NSPoint(x: r.maxX - 0.6, y: r.maxY))
-        back.line(to: NSPoint(x: r.minX + 1.5, y: r.maxY))
-        back.curve(to: NSPoint(x: r.minX, y: r.maxY - 1.5), controlPoint1: NSPoint(x: r.minX + 0.6, y: r.maxY), controlPoint2: NSPoint(x: r.minX, y: r.maxY - 0.6))
-        back.line(to: NSPoint(x: r.minX, y: r.minY + 1.5))
-        back.curve(to: NSPoint(x: r.minX + 1.5, y: r.minY), controlPoint1: NSPoint(x: r.minX, y: r.minY + 0.6), controlPoint2: NSPoint(x: r.minX + 0.6, y: r.minY))
-        back.close()
-        if open {
-            accent.withAlphaComponent(0.55).setFill()
-            back.fill()
-            let front = NSBezierPath()
-            let top = r.minY + r.height * 0.36
-            front.move(to: NSPoint(x: r.minX + 2.5, y: top))
-            front.line(to: NSPoint(x: r.maxX + 1, y: top))
-            front.line(to: NSPoint(x: r.maxX - 2, y: r.maxY))
-            front.line(to: NSPoint(x: r.minX, y: r.maxY))
-            front.close()
-            accent.setFill()
-            front.fill()
-        } else {
-            accent.setFill()
-            back.fill()
-            NSColor.white.withAlphaComponent(0.22).setFill()
-            NSRect(x: r.minX, y: r.minY + 3.6, width: r.width, height: 0.8).fill()
-        }
-    }
-
-    private func accentColor() -> NSColor {
-        var v = superview
-        while let s = v {
-            if let p = s as? SpacePageView, let c = context, let palette = c.style(for: p.space).palette(for: p.contentAppearanceForSpace) {
-                return palette.foregroundSecondary.nsColor
-            }
-            v = s.superview
-        }
-        return Core.brandBlue.nsColor
+        let open = tracked({ folder.isExpanded }) { [weak self] in self?.needsDisplay = true }
+        let accent = cell?.page.map { $0.style.accentColor($0.contentAppearanceForSpace).nsColor } ?? Core.brandBlue.nsColor
+        CustomIcon.folder(open: open, in: bounds.insetBy(dx: 1.5, dy: 2.5), color: accent)
     }
 }
 
-/// Split row: favicons and titles of every pane in one row, separated by a slash.
+/// Split row: every pane's favicon and title in one row, with a thin vertical
+/// divider between cells (F0079: icons x 33 / 129, titles x 61 / 157, 56 pt wide).
 @MainActor
 final class SplitCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("split")
-    weak var split: Split? { didSet { rebuild() } }
+    weak var split: Split? { didSet { paneIDs = []; needsLayout = true } }
+    private var paneIDs: [ItemID] = []
     private var favicons: [FaviconView] = []
     private var titles: [TextLabel] = []
-    private var slashes: [CALayer] = []
+    private var dividers: [CALayer] = []
 
-    override init(frame: NSRect) {
+    required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
     }
 
-    private func rebuild() {
-        favicons.forEach { $0.removeFromSuperview() }; titles.forEach { $0.removeFromSuperview() }; slashes.forEach { $0.removeFromSuperlayer() }
-        favicons = []; titles = []; slashes = []
-        guard let split else { return }
-        for (i, pane) in split.panes.enumerated() {
+    private func rebuild(_ panes: [Tab]) {
+        favicons.forEach { $0.removeFromSuperview() }; titles.forEach { $0.removeFromSuperview() }; dividers.forEach { $0.removeFromSuperlayer() }
+        favicons = []; titles = []; dividers = []
+        for (i, pane) in panes.enumerated() {
             let f = FaviconView(); f.tab = pane; f.context = context
-            let t = TextLabel(); t.font = Typography.tabTitle.font; t.baseline = SpaceListMetrics.titleBaselineOffset
+            let t = TextLabel(); t.font = Typography.tabTitle.font; t.baseline = SpaceListMetrics.titleBaselineOffset; t.inset = SpaceListMetrics.textInset
             t.text = { [weak pane] in pane?.displayTitle ?? "" }
             t.color = { [weak self] in self?.titleColor() ?? .labelColor }
             addSubview(f); addSubview(t)
             favicons.append(f); titles.append(t)
-            if i > 0 {
-                let s = CALayer(); layer?.addSublayer(s); slashes.append(s)
-            }
+            if i > 0 { let d = CALayer(); layer?.addSublayer(d); dividers.append(d) }
         }
-        needsLayout = true
-    }
-
-    private func titleColor() -> NSColor {
-        var v = superview
-        while let s = v { if let p = s as? SpacePageView, let c = context { return c.style(for: p.space).titleColor(p.contentAppearanceForSpace).nsColor }; v = s.superview }
-        return .labelColor
     }
 
     override func layout() {
         super.layout()
+        guard let split else { return }
+        let panes = tracked({ split.panes }) { [weak self] in self?.needsLayout = true }
+        if panes.map(\.id) != paneIDs { paneIDs = panes.map(\.id); rebuild(panes) }
         guard !favicons.isEmpty else { return }
         let m = SpaceListMetrics.self
-        let left = m.faviconX + indent, right = bounds.width - m.titleTrailingInset
-        let gap: CGFloat = 14
-        let each = (right - left - gap * CGFloat(favicons.count - 1)) / CGFloat(favicons.count)
-        let slashColor = SidebarColors.tabSlash.cgColor(contentAppearance)
+        let n = CGFloat(favicons.count)
+        let pitch = (bounds.width - 2 * m.rowFillInsetX - indent - 4) / n
+        let x0 = m.faviconX + indent
+        CATransaction.begin(); CATransaction.setDisableActions(true)
         for i in favicons.indices {
-            let x = left + CGFloat(i) * (each + gap)
-            favicons[i].frame = CGRect(x: x, y: m.faviconOffsetY, width: m.faviconSize, height: m.faviconSize)
-            titles[i].frame = CGRect(x: x + m.faviconSize + 8, y: 0, width: max(0, each - m.faviconSize - 8), height: m.rowHeight)
+            let x = x0 + CGFloat(i) * pitch
+            favicons[i].frame = CGRect(x: x, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
+            titles[i].frame = CGRect(x: x + 28, y: 0, width: max(0, pitch - 40), height: m.rowHeight)
             if i > 0 {
-                CATransaction.begin(); CATransaction.setDisableActions(true)
-                slashes[i - 1].frame = CGRect(x: x - gap / 2 - 0.5, y: 12, width: 1, height: 16)
-                slashes[i - 1].backgroundColor = slashColor
-                slashes[i - 1].setAffineTransform(CGAffineTransform(rotationAngle: 0.26))
-                CATransaction.commit()
+                dividers[i - 1].frame = CGRect(x: x - 10, y: 12, width: m.splitDividerWidth, height: 17)
+                dividers[i - 1].backgroundColor = SidebarRole.pinnedSlash.cgColor(contentAppearance)
             }
         }
+        CATransaction.commit()
     }
 }
 
@@ -409,13 +435,14 @@ final class NewTabCellView: SidebarCellView {
     let plus = GlyphView()
     let title = TextLabel()
 
-    override init(frame: NSRect) {
+    required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         plus.glyph = .newTabPlus
-        plus.tint = { SidebarRole.secondaryText.nsColor }
+        plus.tint = { SidebarRole.newTabGlyph.nsColor }
         title.font = Typography.newTab.font
         title.baseline = SpaceListMetrics.titleBaselineOffset
+        title.inset = SpaceListMetrics.textInset
         title.text = { "New Tab" }
         title.color = { SidebarRole.secondaryText.nsColor }
         addSubview(plus); addSubview(title)
@@ -424,32 +451,36 @@ final class NewTabCellView: SidebarCellView {
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
-        plus.frame = CGRect(x: m.faviconX, y: m.faviconOffsetY, width: m.faviconSize, height: m.faviconSize)
+        plus.frame = CGRect(x: m.faviconX, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
         title.frame = CGRect(x: m.titleX, y: 0, width: bounds.width - m.titleX - m.titleTrailingInset, height: m.rowHeight)
     }
 }
 
-/// Pinned/Today divider: a hairline and the "Clear" control.
+/// Pinned/Today divider: a hairline, and "↓ Clear" while the pointer is near (F0041, F0066).
 @MainActor
 final class DividerCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("divider")
     private let line = CALayer()
-    let clear = TextLabel()
-    var onClear: (() -> Void)?
+    let clearLabel = TextLabel()
+    let clearArrow = GlyphView()
+    var showsClear = false { didSet { if showsClear != oldValue { needsLayout = true } } }
+    private var pointerOnClear = false { didSet { if pointerOnClear != oldValue { clearLabel.needsDisplay = true; clearArrow.needsDisplay = true } } }
     private var tracking: NSTrackingArea?
-    private var hoverClear = false { didSet { needsDisplay = true; clear.needsDisplay = true } }
 
-    override init(frame: NSRect) {
+    required init(frame: NSRect) {
         super.init(frame: frame)
         identifier = Self.identifier
         layer?.addSublayer(line)
-        clear.font = Typography.dividerLabel.font
-        clear.text = { "Clear" }
-        clear.alignment = .right
-        clear.color = { [weak self] in
-            (self?.hoverClear == true ? SidebarColors.foregroundDarker : SidebarRole.dividerLabel).nsColor
+        clearLabel.font = Typography.clearLabel.font
+        clearLabel.text = { "Clear" }
+        clearLabel.baseline = SpaceListMetrics.clearLabelBaseline
+        let color: @MainActor () -> NSColor = { [weak self] in
+            ((self?.pointerOnClear ?? false) ? SidebarRole.dividerLabelHover : SidebarRole.dividerLabel).nsColor
         }
-        addSubview(clear)
+        clearLabel.color = color
+        clearArrow.glyph = .clearArrow
+        clearArrow.tint = color
+        addSubview(clearLabel); addSubview(clearArrow)
     }
 
     override var wantsUpdateLayer: Bool { true }
@@ -460,34 +491,31 @@ final class DividerCellView: SidebarCellView {
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
-        let labelW = clear.textWidth
-        let labelRight = bounds.width - m.dividerLabelTrailingInset
-        clear.frame = CGRect(x: labelRight - labelW - 2, y: 0, width: labelW + 2, height: bounds.height)
-        clear.baseline = DividerMetrics.labelBaseline
+        let w = bounds.width
+        clearLabel.isHidden = !showsClear
+        clearArrow.isHidden = !showsClear
+        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w, dy: 0)
+        clearLabel.frame = CGRect(x: w + m.clearLabelX, y: 0, width: 29, height: bounds.height)
+        let end = showsClear ? w + m.clearLineEnd : w - m.dividerLineInset
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        line.frame = CGRect(x: m.dividerLineX, y: DividerMetrics.lineY, width: max(0, clear.frame.minX - DividerMetrics.lineToLabelGap - m.dividerLineX), height: 1)
+        line.frame = CGRect(x: m.dividerLineInset, y: m.dividerLineY, width: max(0, end - m.dividerLineInset), height: 1)
         CATransaction.commit()
     }
+
+    private var clearRect: NSRect { NSRect(x: bounds.width + SpaceListMetrics.clearArrowFrame.minX - 2, y: 0, width: 50, height: bounds.height) }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
         let t = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect], owner: self)
-        addTrackingArea(t); tracking = t
+        addTrackingArea(t)
+        tracking = t
     }
 
-    override func mouseMoved(with event: NSEvent) {
-        hoverClear = clear.frame.insetBy(dx: -4, dy: 0).contains(convert(event.locationInWindow, from: nil))
-    }
-    override func mouseExited(with event: NSEvent) { hoverClear = false }
+    override func mouseMoved(with event: NSEvent) { pointerOnClear = showsClear && clearRect.contains(convert(event.locationInWindow, from: nil)) }
+    override func mouseExited(with event: NSEvent) { pointerOnClear = false }
     override func mouseDown(with event: NSEvent) {
-        if clear.frame.insetBy(dx: -4, dy: 0).contains(convert(event.locationInWindow, from: nil)) { onClear?() }
+        guard showsClear, clearRect.contains(convert(event.locationInWindow, from: nil)), let page else { return }
+        page.context.send(.clearToday(space: page.space.id))
     }
-}
-
-/// Divider geometry inside its row. Measured from the Today capture; refined by the loop.
-enum DividerMetrics {
-    static let lineY: CGFloat = 15
-    static let labelBaseline: CGFloat = 20
-    static let lineToLabelGap: CGFloat = 10
 }

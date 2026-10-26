@@ -2,17 +2,20 @@ import AppKit
 import OpenDesign
 import OpenModel
 
-/// One-line text drawn at a fixed baseline with tail truncation. Content and
-/// color come from closures read inside `draw(_:)`, so AppKit's automatic
-/// observation tracking (macOS 26) redraws the label when the model changes.
+/// One-line text drawn with Core Text at an exact baseline, with tail
+/// truncation. Content and color come from closures read inside `draw(_:)`
+/// under Observation tracking, so the label redraws when the model values it
+/// read change.
 @MainActor
 final class TextLabel: NSView {
-    var text: () -> String = { "" } { didSet { needsDisplay = true } }
-    var color: () -> NSColor = { .labelColor } { didSet { needsDisplay = true } }
+    var text: @MainActor () -> String = { "" } { didSet { needsDisplay = true } }
+    var color: @MainActor () -> NSColor = { .labelColor } { didSet { needsDisplay = true } }
     var font: NSFont = Typography.tabTitle.font { didSet { needsDisplay = true } }
     /// Baseline, in points from the top of this view.
     var baseline: CGFloat = 15 { didSet { needsDisplay = true } }
-    var alignment: NSTextAlignment = .left
+    /// Text origin inside the view (Arc's text fields draw 2 pt inside their frame).
+    var inset: CGFloat = 0 { didSet { needsDisplay = true } }
+    var alignment: NSTextAlignment = .left { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -28,29 +31,37 @@ final class TextLabel: NSView {
 
     /// Width of the current text at this font (for layout of trailing items).
     var textWidth: CGFloat {
-        ceil((text() as NSString).size(withAttributes: [.font: font]).width)
+        ceil((text() as NSString).size(withAttributes: [.font: font]).width) + inset
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let string = text()
-        guard !string.isEmpty else { return }
-        let style = NSMutableParagraphStyle()
-        style.lineBreakMode = .byTruncatingTail
-        style.alignment = alignment
-        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color(), .paragraphStyle: style]
-        let lineTop = baseline - font.ascender
-        let rect = NSRect(x: 0, y: lineTop, width: bounds.width, height: ceil(font.ascender - font.descender) + 2)
-        (string as NSString).draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
+        let (string, textColor) = tracked({ (text(), color()) }) { [weak self] in self?.needsDisplay = true }
+        guard !string.isEmpty, let ctx = NSGraphicsContext.current?.cgContext else { return }
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: textColor]
+        var line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
+        let available = bounds.width - inset
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        if width > available, available > 0 {
+            let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: attrs))
+            line = CTLineCreateTruncatedLine(line, available, .end, token) ?? line
+        }
+        let lineWidth = CTLineGetTypographicBounds(line, nil, nil, nil)
+        var x = inset
+        if alignment == .right { x = bounds.width - lineWidth } else if alignment == .center { x = (bounds.width - lineWidth) / 2 }
+        ctx.saveGState()
+        ctx.textMatrix = CGAffineTransform(scaleX: 1, y: -1)
+        ctx.textPosition = CGPoint(x: x, y: baseline)
+        CTLineDraw(line, ctx)
+        ctx.restoreGState()
     }
 }
 
-/// Template glyph tinted with a token color, drawn as layer contents.
+/// Template glyph tinted with a token color.
 @MainActor
 final class GlyphView: NSView {
-    var glyph: Glyph? { didSet { needsDisplay = true } }
-    var image: () -> NSImage? = { nil } { didSet { needsDisplay = true } }
-    var tint: () -> NSColor? = { nil } { didSet { needsDisplay = true } }
-    var opacity: CGFloat = 1 { didSet { needsDisplay = true } }
+    var glyph: Glyph? { didSet { if glyph != oldValue { needsDisplay = true } } }
+    var image: @MainActor () -> NSImage? = { nil } { didSet { needsDisplay = true } }
+    var tint: @MainActor () -> NSColor? = { nil } { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -64,31 +75,43 @@ final class GlyphView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let img = glyph?.image ?? image() else { return }
+        let (img, color) = tracked({ (glyph?.image ?? image(), tint()) }) { [weak self] in self?.needsDisplay = true }
+        guard let img else { return }
         let size = img.size
-        let rect = NSRect(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2, width: size.width, height: size.height)
-        if img.isTemplate, let color = tint() {
-            img.tinted(color).draw(in: rect.integralIfNeeded, from: .zero, operation: .sourceOver, fraction: opacity)
+        let nudge = glyph?.spec.offset ?? .zero
+        let rect = backingAlignedRect(NSRect(x: (bounds.width - size.width) / 2 + nudge.width, y: (bounds.height - size.height) / 2 + nudge.height,
+                                             width: size.width, height: size.height), options: .alignAllEdgesNearest)
+        if img.isTemplate, let color {
+            img.drawTinted(in: rect, color: color)
         } else {
-            img.draw(in: rect.integralIfNeeded, from: .zero, operation: .sourceOver, fraction: opacity)
+            img.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
     }
 }
 
-extension NSRect {
-    /// Pixel-aligns an origin at 1x when the size is whole points.
-    var integralIfNeeded: NSRect {
-        NSRect(x: origin.x.rounded(), y: origin.y.rounded(), width: width, height: height)
+extension NSImage {
+    /// Draws a template image filled with `color` into the current context.
+    @MainActor func drawTinted(in rect: NSRect, color: NSColor) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+        ctx.saveGState()
+        ctx.beginTransparencyLayer(in: rect, auxiliaryInfo: nil)
+        draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        ctx.setBlendMode(.sourceIn)
+        ctx.setFillColor(color.cgColor)
+        ctx.fill(rect)
+        ctx.endTransparencyLayer()
+        ctx.restoreGState()
     }
 }
 
-/// Favicon for a tab: custom icon (emoji / SF Symbol), engine favicon, or a
-/// fallback. Reads model state in `draw`, so AppKit redraws it on change.
+/// Favicon for a tab: custom icon (emoji or SF Symbol), engine favicon, or a
+/// letter fallback. Reads model state in `draw` under Observation tracking.
 @MainActor
 final class FaviconView: NSView {
-    weak var tab: Tab? { didSet { needsDisplay = true } }
+    weak var tab: Tab? { didSet { if tab !== oldValue { needsDisplay = true } } }
     weak var context: SidebarContext?
-    var inkSize: CGFloat = 16
+    var inkSize: CGFloat = SpaceListMetrics.faviconInk
+    var fallbackTint: @MainActor () -> NSColor = { SidebarRole.secondaryText.nsColor }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -103,33 +126,62 @@ final class FaviconView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let tab else { return }
-        let ink = NSRect(x: (bounds.width - inkSize) / 2, y: (bounds.height - inkSize) / 2, width: inkSize, height: inkSize)
-        if let icon = tab.customIcon, !icon.isEmpty {
+        let (icon, png, host, tint) = tracked({ (tab.customIcon, tab.live.faviconPNG, tab.displayHost, fallbackTint()) }) { [weak self] in
+            self?.needsDisplay = true
+        }
+        let ink = backingAlignedRect(NSRect(x: (bounds.width - inkSize) / 2, y: (bounds.height - inkSize) / 2, width: inkSize, height: inkSize),
+                                     options: .alignAllEdgesNearest)
+        if let icon, !icon.isEmpty {
             if let symbol = NSImage(systemSymbolName: icon, accessibilityDescription: nil) {
-                let tinted = symbol.withSymbolConfiguration(.init(pointSize: inkSize - 2, weight: .regular)) ?? symbol
-                tinted.isTemplate = true
-                tinted.tinted(SidebarRole.secondaryText.nsColor).draw(in: ink)
+                let img = symbol.withSymbolConfiguration(.init(pointSize: inkSize - 3, weight: .medium)) ?? symbol
+                let s = img.size
+                img.drawTinted(in: NSRect(x: ink.midX - s.width / 2, y: ink.midY - s.height / 2, width: s.width, height: s.height), color: tint)
             } else {
-                drawEmoji(icon, in: ink)
+                EmojiRenderer.draw(icon, in: ink)
             }
             return
         }
-        if let image = context?.faviconProvider?(tab) ?? FaviconCache.image(for: tab.live.faviconPNG) {
-            image.draw(in: ink, from: .zero, operation: .sourceOver, fraction: 1)
+        if let image = context?.faviconProvider?(tab) ?? FaviconCache.image(for: png) {
+            image.draw(in: ink, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             return
         }
-        if let globe = Glyph.globe.image {
-            let s = globe.size
-            let r = NSRect(x: ink.midX - s.width / 2, y: ink.midY - s.height / 2, width: s.width, height: s.height)
-            globe.tinted(SidebarRole.secondaryText.nsColor).draw(in: r.integralIfNeeded)
-        }
+        CustomIcon.letterFavicon(host.first.map(String.init) ?? "·", size: inkSize,
+                                 fill: tint.withAlphaComponent(0.25), text: tint).draw(in: ink, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
+}
 
-    private func drawEmoji(_ emoji: String, in rect: NSRect) {
-        let font = NSFont.systemFont(ofSize: rect.height * 0.86)
+/// Emoji drawn to fit a box (Space icons, emoji tab icons).
+@MainActor
+enum EmojiRenderer {
+    /// Draws `emoji` at `fontSize`, centered on its typographic box in `rect`.
+    static func draw(_ emoji: String, fontSize: CGFloat? = nil, in rect: NSRect) {
+        let font = NSFont.systemFont(ofSize: fontSize ?? rect.height * 0.82)
         let s = NSAttributedString(string: emoji, attributes: [.font: font])
         let b = s.size()
         s.draw(at: NSPoint(x: rect.midX - b.width / 2, y: rect.midY - b.height / 2))
+    }
+
+    private static var grayCache: [String: NSImage] = [:]
+
+    /// The emoji drawn into a gray + alpha bitmap (inactive switcher items are
+    /// desaturated). Drawing color into a gray context converts it to luminance.
+    static func grayscale(_ emoji: String, size: CGFloat) -> NSImage? {
+        let key = "\(emoji)|\(size)"
+        if let i = grayCache[key] { return i }
+        let scale: CGFloat = 2
+        let px = Int(size * 1.4 * scale)
+        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 2,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+        ctx.scaleBy(x: scale, y: scale)
+        draw(emoji, fontSize: size, in: NSRect(x: 0, y: 0, width: size * 1.4, height: size * 1.4))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let cg = ctx.makeImage() else { return nil }
+        let image = NSImage(cgImage: cg, size: NSSize(width: size * 1.4, height: size * 1.4))
+        if grayCache.count > 64 { grayCache.removeAll() }
+        grayCache[key] = image
+        return image
     }
 }
 
@@ -148,27 +200,38 @@ enum FaviconCache {
     }
 }
 
-/// A plate button: glyph centered in a square, hover plate, click action.
-/// Used for the toolbar (32×32), the bottom bar, and row accessories.
+/// A plate button: glyph centered in a frame, a hover plate, a click action,
+/// an optional menu and tooltip. Used for the toolbar, the bottom bar, the URL
+/// field accessories, and row accessories.
 @MainActor
 class PlateButton: NSView {
     let glyphView = GlyphView()
-    private let plate = CALayer()
-    var action: (() -> Void)?
-    var menuProvider: (() -> NSMenu?)?
-    var isEnabled: () -> Bool = { true } { didSet { needsDisplay = true } }
-    var plateInset: CGFloat = 0
-    var plateRadius: CGFloat = 8
+    let plate = CALayer()
+    var action: (@MainActor () -> Void)?
+    var menuProvider: (@MainActor () -> NSMenu?)?
+    var tooltip: (@MainActor () -> Tooltip?)?
+    var isEnabled: @MainActor () -> Bool = { true } { didSet { needsDisplay = true } }
+    var glyphTint: @MainActor (_ enabled: Bool) -> NSColor = { enabled in
+        (enabled ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
+    } { didSet { needsDisplay = true } }
+    var plateColor: @MainActor (_ pressed: Bool) -> DesignColor = { pressed in pressed ? SidebarRole.buttonPressed : SidebarRole.buttonHover }
+    var plateRect: @MainActor (NSRect) -> NSRect = { $0 }
+    var plateRadius: CGFloat = ChromeMetrics.buttonPlateRadius
     var showsHoverPlate = true
-    private(set) var isPressed = false { didSet { updatePlate() } }
-    var isHovered = false { didSet { if isHovered != oldValue { updatePlate() } } }
+    /// Forced hover key for renders; compared against `SidebarContext.forcedHover`.
+    var hoverKey: SidebarHoverTarget?
+    weak var context: SidebarContext?
+    private(set) var isPressed = false { didSet { needsDisplay = true } }
+    private var pointerInside = false { didSet { if pointerInside != oldValue { needsDisplay = true; hoverChanged() } } }
     private var tracking: NSTrackingArea?
 
     init(glyph: Glyph?) {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.addSublayer(plate)
+        layerContentsRedrawPolicy = .onSetNeedsDisplay
         plate.opacity = 0
+        plate.cornerCurve = .continuous
+        layer?.addSublayer(plate)
         glyphView.glyph = glyph
         addSubview(glyphView)
     }
@@ -178,37 +241,35 @@ class PlateButton: NSView {
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
 
+    var isHovered: Bool {
+        if let key = hoverKey, let forced = context?.forcedHover { return forced == key }
+        return pointerInside
+    }
+
     override func layout() {
         super.layout()
         glyphView.frame = bounds
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        plate.frame = bounds.insetBy(dx: plateInset, dy: plateInset)
+        plate.frame = plateRect(bounds)
         plate.cornerRadius = plateRadius
-        plate.cornerCurve = .continuous
         CATransaction.commit()
     }
 
     override func updateLayer() {
-        // Observation-tracked read: the enabled state comes from the model.
-        let enabled = isEnabled()
-        glyphView.alphaValue = 1
-        glyphView.tint = { [weak self] in self?.glyphColor(enabled: enabled) }
-        updatePlate()
-    }
-
-    func glyphColor(enabled: Bool) -> NSColor {
-        (enabled ? SidebarRole.toolbarGlyph : SidebarRole.toolbarGlyphDisabled).nsColor
-    }
-
-    private func updatePlate() {
+        let (enabled, hovered) = tracked({ (isEnabled(), isHovered) }) { [weak self] in self?.needsDisplay = true }
+        glyphView.tint = { [glyphTint] in glyphTint(enabled) }
         let appearance = contentAppearance
-        let show = showsHoverPlate && isEnabled() && (isHovered || isPressed)
-        plate.backgroundColor = (isPressed ? SidebarColors.itemHoveredBackground : SidebarRole.toolbarHover).cgColor(appearance)
         CATransaction.begin()
         CATransaction.setAnimationDuration(Motion.hoverFade)
-        plate.opacity = show ? 1 : 0
+        plate.backgroundColor = plateColor(isPressed).cgColor(appearance)
+        plate.opacity = showsHoverPlate && enabled && (hovered || isPressed) ? 1 : 0
         CATransaction.commit()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 
     override func updateTrackingAreas() {
@@ -219,27 +280,36 @@ class PlateButton: NSView {
         tracking = t
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true }
-    override func mouseExited(with event: NSEvent) { isHovered = false }
+    override func mouseEntered(with event: NSEvent) { pointerInside = true }
+    override func mouseExited(with event: NSEvent) { pointerInside = false }
+
+    private func hoverChanged() {
+        guard let tooltip else { return }
+        if pointerInside, let tip = tooltip() { TooltipController.shared.schedule(tip, for: self) } else { TooltipController.shared.cancel(for: self) }
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard isEnabled() else { return }
+        TooltipController.shared.cancel(for: self)
         isPressed = true
     }
 
     override func mouseUp(with event: NSEvent) {
         guard isPressed else { return }
         isPressed = false
-        if bounds.contains(convert(event.locationInWindow, from: nil)) {
-            if let menu = menuProvider?() {
-                menu.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.maxY + 4), in: self)
-            } else {
-                action?()
-            }
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else { return }
+        if let menu = menuProvider?() {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: bounds.maxY + 4), in: self)
+        } else {
+            action?()
         }
     }
 
     override func rightMouseDown(with event: NSEvent) {
         if let menu = menuProvider?() { NSMenu.popUpContextMenu(menu, with: event, for: self) } else { super.rightMouseDown(with: event) }
     }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityPerformPress() -> Bool { action?(); return action != nil }
 }

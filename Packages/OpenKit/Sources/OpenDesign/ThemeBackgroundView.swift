@@ -8,91 +8,170 @@ import QuartzCore
 /// Cost: the field is a 64×64 float image stretched by the GPU, rebuilt only when
 /// the theme, the active state, or the window aspect changes. Grain is one 100 pt
 /// tile repeated by replicator layers (shared contents, no large bitmaps).
+///
+/// Space switches cross-fade two theme layers. `beginTransition(to:)` +
+/// `setTransitionProgress(_:)` drive it from a swipe; `crossfade(to:)` animates it.
 @MainActor
 public final class ThemeBackgroundView: NSView {
-    public var style: SpaceThemeStyle = .defaultTheme(system: .light) {
-        didSet { if style != oldValue { invalidateField(animated: true) } }
+    public var style: SpaceThemeStyle {
+        get { current.theme }
+        set { crossfade(to: newValue, animated: false) }
     }
     public var isWindowActive: Bool = true {
-        didSet { if isWindowActive != oldValue { invalidateField(animated: false) } }
+        didSet { if isWindowActive != oldValue { refresh() } }
     }
+    /// Scale used for the grain tile. Set by renderers without a window.
+    public var renderScale: CGFloat? { didSet { refresh() } }
 
-    private let fieldLayer = CALayer()
-    private let grainColumns = CAReplicatorLayer()
-    private let grainRows = CAReplicatorLayer()
-    private let grainTile = CALayer()
-    private var fieldKey: FieldKey?
-    private var grainKey: GrainKey?
-
-    private struct FieldKey: Equatable { var style: SpaceThemeStyle; var active: Bool; var aspect: Int }
-    private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat }
+    private var current = ThemeLayer(style: .defaultTheme(system: .light))
+    private var incoming: ThemeLayer?
 
     public override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         layerContentsRedrawPolicy = .never
-        fieldLayer.contentsGravity = .resize
-        fieldLayer.magnificationFilter = .linear
-        fieldLayer.minificationFilter = .linear
-        fieldLayer.needsDisplayOnBoundsChange = false
-        grainRows.addSublayer(grainTile)
-        grainColumns.addSublayer(grainRows)
-        grainColumns.isHidden = true
-        layer?.addSublayer(fieldLayer)
-        layer?.addSublayer(grainColumns)
+        layer?.addSublayer(current)
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     public override var isFlipped: Bool { true }
     public override var wantsUpdateLayer: Bool { true }
+    private var scale: CGFloat { renderScale ?? window?.backingScaleFactor ?? 2 }
 
     public override func layout() {
         super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        fieldLayer.frame = bounds
-        layoutGrain()
-        CATransaction.commit()
-        updateField(animated: false)
+        refresh()
     }
 
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        needsLayout = true
+        refresh()
     }
 
-    /// Scale used for the grain tile. Set by renderers without a window.
-    public var renderScale: CGFloat?
-    private var scale: CGFloat { renderScale ?? window?.backingScaleFactor ?? 2 }
-
-    private func invalidateField(animated: Bool) {
-        updateField(animated: animated)
-        needsLayout = true
-    }
-
-    private func updateField(animated: Bool) {
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        // Rebuild when the aspect ratio moves by more than 0.5 %.
-        let key = FieldKey(style: style, active: isWindowActive, aspect: Int((bounds.width / bounds.height * 200).rounded()))
-        guard key != fieldKey else { return }
-        fieldKey = key
-        let image = ThemeField.makeImage(style: style, windowSize: bounds.size, isActive: isWindowActive)
-        if animated && fieldLayer.contents != nil {
-            let fade = CATransition()
-            fade.type = .fade
-            fade.duration = Motion.themeCrossfade
-            fade.timingFunction = Motion.easeInOut
-            fieldLayer.add(fade, forKey: "theme")
-        }
+    private func refresh() {
         CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
-        fieldLayer.contents = image
+        CATransaction.setDisableActions(true)
+        for l in [current, incoming].compactMap({ $0 }) {
+            l.frame = bounds
+            l.update(size: bounds.size, active: isWindowActive, scale: scale)
+        }
         CATransaction.commit()
     }
 
-    private func layoutGrain() {
-        let noise = style.noiseFactor
+    /// Starts an interactive cross-fade to `style` at progress 0.
+    public func beginTransition(to style: SpaceThemeStyle) {
+        if let incoming, incoming.theme == style { return }
+        incoming?.removeFromSuperlayer()
+        let l = ThemeLayer(style: style)
+        l.opacity = 0
+        layer?.addSublayer(l)
+        incoming = l
+        refresh()
+    }
+
+    /// Sets the incoming theme's opacity (0…1) without animation.
+    public func setTransitionProgress(_ progress: Double) {
+        guard let incoming else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        incoming.opacity = Float(min(max(progress, 0), 1))
+        CATransaction.commit()
+    }
+
+    /// Finishes or cancels an interactive transition, animating the rest.
+    public func endTransition(commit: Bool, duration: CFTimeInterval = Motion.themeCrossfade) {
+        guard let incoming else { return }
+        if commit { finish(to: incoming, duration: duration) } else {
+            animateOpacity(incoming, to: 0, duration: duration) { [weak self] in
+                incoming.removeFromSuperlayer()
+                if self?.incoming === incoming { self?.incoming = nil }
+            }
+        }
+    }
+
+    /// Cross-fades to `style`. Without animation it swaps at once.
+    public func crossfade(to style: SpaceThemeStyle, animated: Bool, duration: CFTimeInterval = Motion.themeCrossfade) {
+        if incoming == nil, current.theme == style { return }
+        if !animated {
+            incoming?.removeFromSuperlayer(); incoming = nil
+            current.theme = style
+            refresh()
+            return
+        }
+        beginTransition(to: style)
+        if let incoming { finish(to: incoming, duration: duration) }
+    }
+
+    private func finish(to layer: ThemeLayer, duration: CFTimeInterval) {
+        animateOpacity(layer, to: 1, duration: duration) { [weak self] in
+            guard let self, self.incoming === layer else { return }
+            self.current.removeFromSuperlayer()
+            self.current = layer
+            self.incoming = nil
+        }
+    }
+
+    private func animateOpacity(_ layer: CALayer, to value: Float, duration: CFTimeInterval, completion: @escaping @MainActor () -> Void) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(duration)
+        CATransaction.setAnimationTimingFunction(Motion.easeInOut)
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
+        let a = CABasicAnimation(keyPath: "opacity")
+        a.fromValue = layer.presentation()?.opacity ?? layer.opacity
+        a.toValue = value
+        layer.opacity = value
+        layer.add(a, forKey: "opacity")
+        CATransaction.commit()
+    }
+}
+
+/// One theme: the gradient field plus the grain tile layers.
+final class ThemeLayer: CALayer {
+    var theme: SpaceThemeStyle { didSet { if theme != oldValue { fieldKey = nil; grainKey = nil } } }
+    private let field = CALayer()
+    private let grainColumns = CAReplicatorLayer()
+    private let grainRows = CAReplicatorLayer()
+    private let grainTile = CALayer()
+    private var fieldKey: FieldKey?
+    private var grainKey: GrainKey?
+
+    private struct FieldKey: Equatable { var active: Bool; var aspect: Int }
+    private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat }
+
+    init(style: SpaceThemeStyle) {
+        self.theme = style
+        super.init()
+        anchorPoint = .zero
+        field.contentsGravity = .resize
+        field.magnificationFilter = .linear
+        field.minificationFilter = .linear
+        field.anchorPoint = .zero
+        grainRows.addSublayer(grainTile)
+        grainColumns.addSublayer(grainRows)
+        grainColumns.isHidden = true
+        grainColumns.masksToBounds = true
+        addSublayer(field)
+        addSublayer(grainColumns)
+    }
+
+    override init(layer: Any) {
+        theme = (layer as? ThemeLayer)?.theme ?? .defaultTheme(system: .light)
+        super.init(layer: layer)
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    @MainActor func update(size: CGSize, active: Bool, scale: CGFloat) {
+        guard size.width > 0, size.height > 0 else { return }
+        field.frame = CGRect(origin: .zero, size: size)
+        // Rebuild when the aspect ratio moves by more than 0.5 %.
+        let key = FieldKey(active: active, aspect: Int((size.width / size.height * 200).rounded()))
+        if key != fieldKey {
+            fieldKey = key
+            field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
+        }
+        let noise = theme.noiseFactor
         guard noise > 0 else { grainColumns.isHidden = true; return }
         let gkey = GrainKey(noise: noise, scale: scale)
         if gkey != grainKey {
@@ -102,13 +181,12 @@ public final class ThemeBackgroundView: NSView {
         }
         let t = Grain.tilePoints
         grainTile.frame = CGRect(x: 0, y: 0, width: t, height: t)
-        grainRows.frame = CGRect(x: 0, y: 0, width: t, height: bounds.height)
-        grainRows.instanceCount = Int((bounds.height / t).rounded(.up))
+        grainRows.frame = CGRect(x: 0, y: 0, width: t, height: size.height)
+        grainRows.instanceCount = Int((size.height / t).rounded(.up))
         grainRows.instanceTransform = CATransform3DMakeTranslation(0, t, 0)
-        grainColumns.frame = bounds
-        grainColumns.instanceCount = Int((bounds.width / t).rounded(.up))
+        grainColumns.frame = CGRect(origin: .zero, size: size)
+        grainColumns.instanceCount = Int((size.width / t).rounded(.up))
         grainColumns.instanceTransform = CATransform3DMakeTranslation(t, 0, 0)
-        grainColumns.masksToBounds = true
         grainColumns.isHidden = false
     }
 }

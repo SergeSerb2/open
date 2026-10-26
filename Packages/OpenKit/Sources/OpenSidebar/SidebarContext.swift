@@ -4,21 +4,28 @@ import OpenDesign
 import OpenModel
 
 /// Shared state for every sidebar view: the model, the window it shows, and
-/// view-only state (hover, window active) that is not part of the model.
+/// view-only state that is not part of the model (window active, command bar
+/// open, forced states for the renderer).
 @MainActor
 @Observable
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
-    /// Key/main state of the host window. Drives the theme underlay and glyph tone.
+    /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
-    /// macOS appearance, used only by Spaces without a stored theme.
+    /// macOS appearance. Only Spaces without a stored theme follow it.
     public var systemAppearance: ContentAppearance = .light
-    /// Whether a tab has live web content. Pinned tabs with content show "−"
-    /// (close and keep pinned) instead of "×". Supplied by the App (engine state).
-    @ObservationIgnored public var isTabLoaded: (Tab) -> Bool = { _ in false }
+    /// True while the command bar is open for a new tab (Cmd+T). The "New Tab"
+    /// row then shows the selected fill (F0040, F0063; not with Cmd+L).
+    public var isNewTabCommandBarOpen: Bool = false
+    /// Forced hover for offscreen rendering and checks. Nil follows the pointer.
+    public var forcedHover: SidebarHoverTarget?
+
+    /// Whether a tab has live web content. A loaded pinned tab shows "−" (close
+    /// and keep pinned) instead of "×". Supplied by the App (engine state).
+    @ObservationIgnored public var isTabLoaded: @MainActor (Tab) -> Bool = { _ in false }
     /// Optional favicon override (for example an engine-side cache).
-    @ObservationIgnored public var faviconProvider: ((Tab) -> NSImage?)?
+    @ObservationIgnored public var faviconProvider: (@MainActor (Tab) -> NSImage?)?
     @ObservationIgnored weak var sidebar: SidebarView?
 
     public init(model: BrowserModel, windowID: WindowID) {
@@ -33,6 +40,8 @@ public final class SidebarContext {
         return model.space(id: w.focusedSpaceID) ?? model.spaces.first
     }
 
+    public var sidebarWidth: CGFloat { CGFloat(window?.sidebarWidth ?? Double(WindowMetrics.defaultSidebarWidth)) }
+
     public func selectedID(in space: SpaceID) -> ItemID? { window?.selectedNodeBySpace[space] }
 
     /// The selected tab of the focused Space (a favorite, a tab, or a split's focused pane).
@@ -45,8 +54,14 @@ public final class SidebarContext {
         }
     }
 
+    /// Favorites shown in this window: the focused Space's profile.
+    public var favoritesProfile: Profile? {
+        guard let space = focusedSpace else { return model.profiles.first }
+        return model.profile(id: space.profileID) ?? model.profiles.first
+    }
+
     public func style(for space: Space) -> SpaceThemeStyle {
-        SpaceThemeStyle(theme: space.theme, system: systemAppearance)
+        StyleCache.style(for: space.theme, system: systemAppearance)
     }
 
     public func appearance(for space: Space) -> ContentAppearance {
@@ -66,51 +81,35 @@ public final class SidebarContext {
     }
 }
 
-/// Re-arming `withObservationTracking` loop. Calls `changed` on the main actor
-/// after any property read in `read` changes, coalescing bursts into one call.
-@MainActor
-final class ObservationLoop {
-    private let read: @MainActor () -> Void
-    private let changed: @MainActor () -> Void
-    private var cancelled = false
-
-    init(read: @escaping @MainActor () -> Void, changed: @escaping @MainActor () -> Void) {
-        self.read = read
-        self.changed = changed
-        arm()
-    }
-
-    private func arm() {
-        withObservationTracking { read() } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, !self.cancelled else { return }
-                self.changed()
-                self.arm()
-            }
-        }
-    }
-
-    func cancel() { cancelled = true }
+/// What a forced hover points at.
+public enum SidebarHoverTarget: Hashable, Sendable {
+    case row(ItemID)
+    case newTab
+    case divider
+    case header
+    case favorite(ItemID)
+    case urlField
+    case toolbar(ToolbarButtonKind)
+    case home
+    case plus
+    case switcher(SpaceID)
 }
 
-extension SidebarNode {
-    var object: AnyObject {
-        switch self {
-        case .tab(let t): t
-        case .folder(let f): f
-        case .split(let s): s
-        }
-    }
-}
+public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, forward, reload }
 
-/// Model ID of an outline item, if it is a model object.
+/// Parsing a theme costs a JSON decode; cache by value.
 @MainActor
-func itemID(of item: Any?) -> ItemID? {
-    switch item {
-    case let t as Tab: t.id
-    case let f as Folder: f.id
-    case let s as Split: s.id
-    default: nil
+enum StyleCache {
+    private static var cache: [Key: SpaceThemeStyle] = [:]
+    private struct Key: Hashable { var theme: SpaceTheme; var system: ContentAppearance }
+
+    static func style(for theme: SpaceTheme, system: ContentAppearance) -> SpaceThemeStyle {
+        let key = Key(theme: theme, system: system)
+        if let s = cache[key] { return s }
+        let s = SpaceThemeStyle(theme: theme, system: system)
+        if cache.count > 64 { cache.removeAll() }
+        cache[key] = s
+        return s
     }
 }
 
@@ -120,5 +119,11 @@ extension Tab {
         var host = url.host() ?? url.absoluteString
         if host.hasPrefix("www.") { host.removeFirst(4) }
         return host
+    }
+
+    /// A pinned tab that navigated away from its pinned URL shows a "/" mark.
+    var hasLeftPinnedURL: Bool {
+        guard let pinned = pinnedURL else { return false }
+        return pinned.host() != url.host() || pinned.path() != url.path()
     }
 }

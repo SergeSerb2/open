@@ -44,13 +44,15 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     public var isVibrant: Bool
     public var lightPalette: SemanticPalette?
     public var darkPalette: SemanticPalette?
+    /// `primaryColorPalette.shaded`: the theme's strong accent. Nil for the default theme.
+    public var accent: RGBA?
 
     public init(fill: Fill, noiseFactor: Double = 0, intensityFactor: Double = 0.8, translucency: Translucency = .light,
                 contentAppearance: ContentAppearance? = .light, isVibrant: Bool = true,
-                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil) {
+                lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil) {
         self.fill = fill; self.noiseFactor = noiseFactor; self.intensityFactor = intensityFactor
         self.translucency = translucency; self.contentAppearance = contentAppearance; self.isVibrant = isVibrant
-        self.lightPalette = lightPalette; self.darkPalette = darkPalette
+        self.lightPalette = lightPalette; self.darkPalette = darkPalette; self.accent = accent
     }
 
     /// Content appearance after applying the system fallback.
@@ -61,11 +63,34 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     }
 
     /// Tab and folder title color. Measured: fully covered title pixels equal the
-    /// theme's `title` for the content appearance.
+    /// theme's `title` for the content appearance (#320E00 in Space 1). Without a
+    /// theme: measured on the default dark Space (F0072), see `DefaultThemeText`.
     public func titleColor(_ appearance: ContentAppearance) -> RGBA {
         if let p = palette(for: appearance) { return p.title }
-        return Core.foregroundPrimary.resolved(appearance)
+        return DefaultThemeText.title.resolved(appearance)
     }
+
+    /// Selected row and selected favorite tile fill. Light content: the theme's
+    /// `light.background`, opaque (measured #F6EBE7 / #F7E8E2 against #F6EAE4; a
+    /// white overlay does not fit, F0014, F0016). Dark content: white 0.20 (F0084, F0161).
+    public func selectedFill(_ appearance: ContentAppearance) -> RGBA {
+        if appearance == .light, let p = lightPalette { return p.background.withAlpha(1) }
+        return SidebarRole.rowSelected.resolved(appearance)
+    }
+
+    /// Folder glyph and other accent marks. Default theme: measured #1E29FF on
+    /// the default dark Space (F0079) → `BrandBlue`. Themes: guess `shaded`.
+    public func accentColor(_ appearance: ContentAppearance) -> RGBA {
+        accent ?? Core.brandBlue.resolved(appearance)
+    }
+
+    /// Tooltip capsule fill: the theme's `light.title`, opaque (exact match, F0021–F0033).
+    /// Without a theme: guess, a neutral near-black.
+    public var tooltipFill: RGBA { lightPalette?.title.withAlpha(1) ?? RGBA(hex: 0x1C1B22) }
+    /// Tooltip text: light and tinted. guess: the theme's `light.background`.
+    public var tooltipText: RGBA { lightPalette?.background.withAlpha(1) ?? RGBA(hex: 0xF4F4F6) }
+    /// Keycap plate inside a tooltip. guess: tooltip text at 18 %.
+    public var tooltipKeycap: RGBA { tooltipText.withAlpha(0.18) }
 
     // MARK: Default theme
 
@@ -138,13 +163,15 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         }
 
         let appearance = (single["contentOverBackgroundAppearance"] as? String).flatMap(ContentAppearance.init(rawValue:))
+        let primary = root["primaryColorPalette"] as? [String: Any]
+        let shaded = (primary?["shaded"] as? [String: Any]).flatMap(RGBA.init(arcColor:))
         self.init(fill: fill,
                   noiseFactor: (modifiers["noiseFactor"] as? NSNumber)?.doubleValue ?? 0,
                   intensityFactor: (modifiers["intensityFactor"] as? NSNumber)?.doubleValue ?? 0.8,
                   translucency: translucency,
                   contentAppearance: appearance ?? .light,
                   isVibrant: single["isVibrant"] as? Bool ?? true,
-                  lightPalette: palette("light"), darkPalette: palette("dark"))
+                  lightPalette: palette("light"), darkPalette: palette("dark"), accent: shaded)
     }
 }
 
@@ -157,4 +184,10 @@ extension RGBA {
     }
 
     init(rgba c: RGBAColor) { self.init(c.red, c.green, c.blue, c.alpha, .extendedSRGB) }
+}
+
+/// Text colors for Spaces without a stored theme (they follow the macOS appearance).
+public enum DefaultThemeText {
+    /// Tab title. Dark: measured on F0072 (default Space, macOS Dark). Light: guess.
+    public static let title = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9, .displayP3), dark: .white(0.92))
 }

@@ -100,30 +100,60 @@ public enum MenuColors {
 }
 
 /// Role-based tokens the sidebar actually paints, mapped to the catalog tokens
-/// above by measurement. One place to change a role.
+/// above by measurement (docs/re/runtime-observations.md §3.2,
+/// docs/re/interaction-states.md §3–§6). One place to change a role.
+/// Theme-driven roles (tab title, selected fill, tooltip) live on `SpaceThemeStyle`.
 public enum SidebarRole {
-    /// Space title: measured black 0.48 → `GrayA10`.
-    public static let spaceTitle = GrayScale.a(10)
-    /// URL placeholder, "New Tab" label and its plus glyph.
-    public static let secondaryText = CommandBarColors.textSecondary
+    /// Space title. Fitted on F0001: black 0.45 → `SidebarForegroundDarker`
+    /// (black 0.48 / `GrayA10` gave ΔE 1.8).
+    public static let spaceTitle = SidebarColors.foregroundDarker
+    /// URL placeholder and the "New Tab" label. Fitted on F0001: black 0.30 →
+    /// `SidebarForeground` (0.33 / `CommandBarTextSecondary` gave ΔE 1.9–2.1).
+    public static let secondaryText = SidebarColors.foreground
+    /// "New Tab" plus glyph: measured peak black 0.48 → `GrayA10`.
+    public static let newTabGlyph = GrayScale.a(10)
+    /// URL field magnifier: core pixels black ≈ 0.38 (F0001). No catalog token fits
+    /// our SF glyph's stroke; 0.40 is fitted. Dark: guess, white at the same alpha.
+    public static let magnifier = DesignColor(light: .black(0.40), dark: .white(0.40))
+    /// URL field host text once a page is loaded. guess: `CommandBarPlaceholderText` (black 0.60).
+    public static let urlText = CommandBarColors.placeholderText
     /// Toolbar glyphs when the button is disabled: measured peak black 0.22 → `GrayA8`.
     public static let toolbarGlyphDisabled = GrayScale.a(8)
-    /// Toolbar glyphs when enabled. guess: `GrayA11`; verify on a 2x capture.
+    /// Toolbar glyphs when enabled, and the sidebar toggle always: core pixels
+    /// black ≈ 0.56 on F0001 → `GrayA11` (Arc's AX reports the toggle disabled, but it draws enabled).
     public static let toolbarGlyph = GrayScale.a(11)
-    /// Toolbar button hover/press plate. guess from the same family as row hover.
-    public static let toolbarHover = SidebarColors.itemBackground
-    /// URL field and favorite tile resting fill.
+    /// Toolbar and bottom-bar hover plate: measured black ≈ 0.067–0.07 → `GrayA4`.
+    public static let buttonHover = GrayScale.a(4)
+    public static let buttonPressed = GrayScale.a(6)
+    /// URL field and favorite tile resting fill: measured black 0.045 → `SidebarItemBackground`.
     public static let fieldFill = SidebarColors.itemBackground
+    /// guess: tiles darken like rows on hover (not captured).
     public static let tileHover = SidebarColors.itemHoveredBackground
+    /// Row and Space header hover: measured black 0.048 (light), white 0.10 (dark).
     public static let rowHover = SidebarColors.itemBackground
+    /// Selected row in dark content: measured white 0.20 → `TabCellBackgroundCurrent` dark.
+    /// Light content uses the theme's `light.background` (see `SpaceThemeStyle.selectedFill`).
     public static let rowSelected = SidebarColors.tabCurrent
     public static let rowSelectedShadow = SidebarColors.tabShadowSelected
     public static let rowPressed = SidebarColors.tabPressed
-    /// Pinned/Today divider line and the "Clear" label.
+    /// Pinned/Today divider line: measured black 0.15 → `SidebarSeparator`.
     public static let divider = SidebarColors.separator
+    /// "Clear" label and arrow: measured black ≈ 0.3 → `SidebarForeground`.
     public static let dividerLabel = SidebarColors.foreground
-    /// Close (×) and unload (−) glyphs on a hovered or selected row.
-    public static let rowAccessory = Core.foregroundSecondary
-    /// Space switcher icons that are not current. Measured visually as faded.
-    public static let switcherInactiveOpacity: Double = 0.45
+    public static let dividerLabelHover = SidebarColors.foregroundDarker
+    /// Close (×) and unload (−) glyphs on a hovered or selected row: core pixels
+    /// black ≈ 0.56 (F0013, F0015) → `GrayA11`.
+    public static let rowAccessory = GrayScale.a(11)
+    /// Bottom-bar plus: core pixels black ≈ 0.55 (F0001) → `GrayA11`.
+    public static let bottomGlyph = GrayScale.a(11)
+    /// Bottom-bar Home (Library): core pixels black ≈ 0.52 (F0001), fitted for our
+    /// own glyph shape. Dark: guess, white at the same alpha.
+    public static let homeGlyph = DesignColor(light: .black(0.52), dark: .white(0.52))
+    /// Space switcher icons that are not current: grayscale at opacity ≈ 0.48
+    /// (fit on the darkest pixels of an inactive emoji, F0001).
+    public static let switcherInactiveOpacity: Double = 0.48
+    /// The "navigated away from the pinned URL" slash.
+    public static let pinnedSlash = SidebarColors.tabSlash
+    /// Drop target line while dragging rows.
+    public static let dropLine = Core.brandBlue
 }

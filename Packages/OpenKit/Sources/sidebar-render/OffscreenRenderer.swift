@@ -80,7 +80,8 @@ final class OffscreenRenderer {
         window.contentView = nil
         window.close()
 
-        // BGRA → RGBA, and flip rows: the texture's first row is the bottom of the layer tree.
+        // BGRA → RGBA, and flip rows: CARenderer draws with Core Animation's
+        // y-up convention, so texture row 0 is the bottom of the layer tree.
         var rgba = [UInt8](repeating: 0, count: w * h * 4)
         for y in 0..<h {
             let src = (h - 1 - y) * w * 4, dst = y * w * 4

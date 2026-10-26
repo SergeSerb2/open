@@ -1,6 +1,7 @@
 import AppKit
 import OpenDesign
 import OpenModel
+import OpenSidebar
 import OpenStore
 
 struct CLIError: Error, CustomStringConvertible { var description: String }
@@ -11,16 +12,27 @@ enum RenderCLI {
         guard let cmd = args.first else { throw CLIError(description: usage) }
         let rest = Array(args.dropFirst())
         switch cmd {
-        case "theme": try theme(rest)
-        case "probe": try probe(rest)
+        case "render": try render(rest)
+        case "synth": try synth(rest)
+        case "compare": try Compare.run(rest)
+        case "bench": try Bench.run(rest)
+        case "check": try Checks.run(rest)
         default: throw CLIError(description: usage)
         }
     }
 
     static let usage = """
     usage:
-      sidebar-render theme --snapshot DIR --space N --size WxH [--inactive] [--scale S] --out FILE.png
-      sidebar-render probe --out FILE.png
+      sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
+                            [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
+                            [--hidden] [--reveal] [--inactive] [--appearance light|dark]
+                            [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
+          ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
+          TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
+      sidebar-render synth --out DIR [--rows N]
+      sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
+      sidebar-render bench [--rows N]
+      sidebar-render check
     """
 
     static func value(_ args: [String], _ name: String) -> String? {
@@ -39,82 +51,101 @@ enum RenderCLI {
         return model
     }
 
-    /// Renders only the theme background for a Space at a window size.
-    static func theme(_ args: [String]) throws {
-        guard let dir = value(args, "--snapshot"), let out = value(args, "--out"),
-              let sz = size(value(args, "--size")) else { throw CLIError(description: usage) }
+    /// Resolves `pinned:N`, `today:N`, `favorite:N`, `folder:N/M` in the focused Space.
+    static func resolve(_ spec: String, context: SidebarContext) -> ItemID? {
+        let parts = spec.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let space = context.focusedSpace else { return nil }
+        switch parts[0] {
+        case "pinned": return Int(parts[1]).flatMap { space.pinned.indices.contains($0) ? space.pinned[$0].id : nil }
+        case "today": return Int(parts[1]).flatMap { space.today.indices.contains($0) ? space.today[$0].id : nil }
+        case "favorite": return Int(parts[1]).flatMap { i in context.favoritesProfile.flatMap { $0.favorites.indices.contains(i) ? $0.favorites[i].id : nil } }
+        case "folder":
+            let nm = parts[1].split(separator: "/").compactMap { Int($0) }
+            let folders = space.pinned.compactMap(\.folder)
+            guard nm.count == 2, folders.indices.contains(nm[0]), folders[nm[0]].children.indices.contains(nm[1]) else { return nil }
+            return folders[nm[0]].children[nm[1]].id
+        default: return nil
+        }
+    }
+
+    static func hoverTarget(_ spec: String, context: SidebarContext) -> SidebarHoverTarget? {
+        switch spec {
+        case "newtab": return .newTab
+        case "divider": return .divider
+        case "header": return .header
+        case "url": return .urlField
+        case "home": return .home
+        case "plus": return .plus
+        case "toolbar:back": return .toolbar(.back)
+        case "toolbar:forward": return .toolbar(.forward)
+        case "toolbar:reload": return .toolbar(.reload)
+        case "toolbar:toggle": return .toolbar(.sidebarToggle)
+        default:
+            if spec.hasPrefix("switcher:"), let i = Int(spec.dropFirst(9)), context.model.spaces.indices.contains(i) {
+                return .switcher(context.model.spaces[i].id)
+            }
+            if spec.hasPrefix("favorite:") { return resolve(spec, context: context).map { .favorite($0) } }
+            return resolve(spec, context: context).map { .row($0) }
+        }
+    }
+
+    /// Builds the context for a snapshot and applies the forced states.
+    static func makeContext(_ args: [String], model: BrowserModel) throws -> SidebarContext {
+        guard let window = model.windows.first else { throw CLIError(description: "snapshot has no window") }
+        if let n = value(args, "--space").flatMap(Int.init) {
+            guard model.spaces.indices.contains(n) else { throw CLIError(description: "no Space \(n)") }
+            window.focusedSpaceID = model.spaces[n].id
+        }
+        if let w = value(args, "--width").flatMap(Double.init) { window.sidebarWidth = w }
+        // Renders start with nothing selected, as in the idle captures.
+        for s in model.spaces { window.selectedNodeBySpace[s.id] = nil }
+        let context = SidebarContext(model: model, windowID: window.id)
+        context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
+        context.isWindowActive = !args.contains("--inactive")
+        context.isNewTabCommandBarOpen = args.contains("--new-tab-open")
+        if args.contains("--clear-today"), let s = context.focusedSpace { s.today = []; model.rebuildIndex() }
+        if args.contains("--collapse-folders") {
+            func walk(_ nodes: [SidebarNode]) { for case .folder(let f) in nodes { f.isExpanded = false; walk(f.children) } }
+            for s in model.spaces { walk(s.pinned); walk(s.today) }
+        }
+        if let sel = value(args, "--select") {
+            guard let id = resolve(sel, context: context), let space = context.focusedSpace else { throw CLIError(description: "no row \(sel)") }
+            window.selectedNodeBySpace[space.id] = id
+        }
+        if args.contains("--loaded") { context.isTabLoaded = { _ in true } }
+        if let h = value(args, "--hover") {
+            guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }
+            context.forcedHover = t
+        }
+        return context
+    }
+
+    static func render(_ args: [String]) throws {
+        guard let dir = value(args, "--snapshot"), let out = value(args, "--out") else { throw CLIError(description: usage) }
         let model = try loadModel(dir)
-        let index = Int(value(args, "--space") ?? "0") ?? 0
-        let space = model.spaces[index]
-        let view = ThemeBackgroundView(frame: CGRect(origin: .zero, size: sz))
-        view.style = SpaceThemeStyle(theme: space.theme, system: .dark)
-        view.isWindowActive = !args.contains("--inactive")
+        let context = try makeContext(args, model: model)
+        var options = RenderScene.Options()
+        if let s = size(value(args, "--size")) { options.size = s }
+        options.sidebarHidden = args.contains("--hidden") || args.contains("--reveal")
+        options.revealCard = args.contains("--reveal")
+        options.trafficLights = !args.contains("--no-lights")
+        options.emptyPanel = !args.contains("--page")
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
-        view.renderScale = scale
-        let image = OffscreenRenderer().render(view, scale: scale)
+        let delegate = RecordingDelegate()
+        let scene = RenderScene(context: context, options: options, delegate: delegate)
+        scene.background.renderScale = scale
+        var image = OffscreenRenderer().render(scene, scale: scale)
+        if let c = value(args, "--crop")?.split(separator: ",").compactMap({ Double($0) }), c.count == 4 {
+            image = image.cropping(to: CGRect(x: c[0] * scale, y: c[1] * scale, width: c[2] * scale, height: c[3] * scale)) ?? image
+        }
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
         print("wrote \(out) \(image.width)x\(image.height)")
     }
 
-    /// Checks windowless rendering of drawn text and an outline view.
-    static func probe(_ args: [String]) throws {
+    static func synth(_ args: [String]) throws {
         guard let out = value(args, "--out") else { throw CLIError(description: usage) }
-        let root = ProbeRoot(frame: CGRect(x: 0, y: 0, width: 228, height: 300))
-        let image = OffscreenRenderer().render(root, scale: 2)
-        func dump(_ l: CALayer, _ d: Int) {
-            print(String(repeating: "  ", count: d) + "\(type(of: l)) frame=\(l.frame) contents=\(l.contents != nil) delegate=\(l.delegate.map { String(describing: type(of: $0)) } ?? "-") hidden=\(l.isHidden)")
-            for s in l.sublayers ?? [] { dump(s, d + 1) }
-        }
-        dump(root.layer!, 0)
-        OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
-        print("wrote \(out) rows=\(root.outline.numberOfRows) rowViews=\(root.visibleRowViews())")
-    }
-}
-
-@MainActor
-final class ProbeRoot: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate {
-    let outline = NSOutlineView()
-    let scroll = NSScrollView()
-    override var isFlipped: Bool { true }
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.systemOrange.cgColor
-        let label = ProbeLabel(frame: CGRect(x: 10, y: 10, width: 200, height: 20))
-        addSubview(label)
-        scroll.frame = CGRect(x: 0, y: 40, width: 228, height: 260)
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = false
-        let col = NSTableColumn(identifier: .init("c"))
-        outline.addTableColumn(col)
-        outline.outlineTableColumn = col
-        outline.headerView = nil
-        outline.backgroundColor = .clear
-        outline.rowHeight = 41
-        outline.dataSource = self
-        outline.delegate = self
-        scroll.documentView = outline
-        addSubview(scroll)
-        outline.reloadData()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-    func visibleRowViews() -> Int { var n = 0; outline.enumerateAvailableRowViews { _, _ in n += 1 }; return n }
-    func outlineView(_ o: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int { item == nil ? 20 : 0 }
-    func outlineView(_ o: NSOutlineView, child index: Int, ofItem item: Any?) -> Any { "Row \(index)" as NSString }
-    func outlineView(_ o: NSOutlineView, isItemExpandable item: Any) -> Bool { false }
-    func outlineView(_ o: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
-        let l = ProbeLabel(frame: .zero); l.text = item as! String; return l
-    }
-}
-
-@MainActor
-final class ProbeLabel: NSView {
-    var text = "Hello Open — Search or Enter URL…"
-    override var isFlipped: Bool { true }
-    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
-    required init?(coder: NSCoder) { fatalError() }
-    override func draw(_ dirtyRect: NSRect) {
-        NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: NSColor.black])
-            .draw(at: NSPoint(x: 4, y: 2))
+        let model = Synthetic.model(bulkRows: value(args, "--rows").flatMap(Int.init))
+        Synthetic.write(model, to: URL(fileURLWithPath: out))
+        print("wrote synthetic snapshot to \(out): \(model.spaces.count) Spaces, \(model.index.count) nodes")
     }
 }

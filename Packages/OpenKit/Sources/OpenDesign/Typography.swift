@@ -35,18 +35,31 @@ enum FontCache {
 }
 
 public enum Typography {
-    /// Tab title and folder title: SF Pro 14 Regular (NCC 0.992–0.994).
+    /// Tab title: SF Pro 14 Regular (NCC 0.992–0.994).
     public static let tabTitle = FontToken(14, .regular)
+    /// Folder title: 14 Semibold (ink width 70 = SF 14 Semibold, F0079).
+    public static let folderTitle = FontToken(14, .semibold)
     /// "New Tab" label: 14 Regular.
     public static let newTab = FontToken(14, .regular)
     /// Space title in the header: 13 Semibold (NCC 0.994).
     public static let spaceTitle = FontToken(13, .semibold)
-    /// URL field placeholder and host: 13 Medium (NCC 0.991).
+    /// URL field placeholder: 13 Medium (NCC 0.991).
     public static let urlField = FontToken(13, .medium)
-    /// Pinned/Today divider "Clear" label. guess: 12 Semibold; verify.
-    public static let dividerLabel = FontToken(12, .semibold)
-    /// Bottom-bar emoji size for Space switcher icons. guess from 13–15 pt ink.
+    /// URL field host once a page is loaded: 13 Regular (ink width 59 vs 61 for Medium, F0015).
+    public static let urlHost = FontToken(13, .regular)
+    /// Pinned/Today "Clear": ink 27×8 → about 11 Semibold.
+    public static let clearLabel = FontToken(11, .semibold)
+    /// Tooltip label: AX text frame 15 pt tall → 13 pt. guess: Medium.
+    public static let tooltip = FontToken(13, .medium)
+    /// Tooltip second line ("Double-click to rename"): 14 pt frame → 12 pt. guess: Regular.
+    public static let tooltipSubtitle = FontToken(12, .regular)
+    /// Keycap glyphs in tooltips. guess.
+    public static let keycap = FontToken(12, .medium)
+    /// Command bar input and placeholder: 18 Medium. Row title and subtitle: 13 Medium.
+    public static let commandBarInput = FontToken(18, .medium)
+    public static let commandBarRow = FontToken(13, .medium)
+    /// Bottom-bar Space switcher emoji (font size). Ink 13–15 pt.
     public static let switcherEmoji = FontToken(14, .regular)
-    /// Space header emoji (ink ≈ 18×17 in a 26 pt frame).
-    public static let headerEmoji = FontToken(17, .regular)
+    /// Space header emoji (font size). Fitted by NCC on F0001: 14 pt, 1 pt above center (0.988).
+    public static let headerEmoji = FontToken(14, .regular)
 }

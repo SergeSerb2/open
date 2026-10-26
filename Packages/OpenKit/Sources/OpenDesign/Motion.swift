@@ -1,3 +1,4 @@
+import Foundation
 import QuartzCore
 
 /// Motion tokens. PROVISIONAL: Arc stores its spring and duration numbers in
@@ -26,19 +27,36 @@ public struct SpringToken: Sendable, Hashable {
     }
 }
 
+/// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
+/// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
 public enum Motion {
-    /// Space page slide after a click or shortcut. provisional.
-    public static let spaceSwitch = SpringToken(response: 0.32, dampingFraction: 1.0)
-    /// Snap after a two-finger swipe ends. provisional.
-    public static let spaceSwipeSnap = SpringToken(response: 0.28, dampingFraction: 0.9)
-    /// Row hover fill fade in/out. provisional.
-    public static let hoverFade: CFTimeInterval = 0.08
-    /// Selected fill moving to a new row. provisional.
-    public static let selectionFade: CFTimeInterval = 0.12
-    /// Folder expand/collapse and row insert/remove. provisional.
-    public static let rowStructure: CFTimeInterval = 0.2
-    /// Theme cross-fade on Space change (Arc's shader has a `progress` mix). provisional.
+    /// Space page slide after a click or shortcut. Visible part ≈ 0.2–0.35 s; the
+    /// slide leads the background fade (A0222: slide 0.65, fade 0.53).
+    public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)
+    /// Snap after a two-finger swipe ends.
+    public static let spaceSwipeSnap = SpringToken(response: 0.26, dampingFraction: 0.92)
+    /// Background cross-fade on a Space switch: same length as the slide, ease-in-out.
     public static let themeCrossfade: CFTimeInterval = 0.3
+    /// Row hover fill fade in and out.
+    public static let hoverFade: CFTimeInterval = 0.08
+    /// Selected fill moving to a new row.
+    public static let selectionFade: CFTimeInterval = 0.12
+    /// Folder expand and collapse, row insert and remove (< 0.5 s measured).
+    public static let rowStructure: CFTimeInterval = 0.22
+    /// Tooltip fade in and out.
+    public static let tooltipFade: CFTimeInterval = 0.12
+    /// Sidebar hide and show (Cmd+S) slide.
+    public static let sidebarToggle = SpringToken(response: 0.3, dampingFraction: 1.0)
     public static var easeInOut: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeInEaseOut) }
     public static var easeOut: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeOut) }
+
+    /// Spring progress at time `t` (critically damped or underdamped), 0 → 1.
+    /// Used by interactive drivers that step a spring per frame.
+    public static func springProgress(_ spring: SpringToken, at t: Double) -> Double {
+        let omega = 2 * Double.pi / spring.response
+        let zeta = spring.dampingFraction
+        if zeta >= 1 { return 1 - (1 + omega * t) * exp(-omega * t) }
+        let wd = omega * (1 - zeta * zeta).squareRoot()
+        return 1 - exp(-zeta * omega * t) * (cos(wd * t) + zeta * omega / wd * sin(wd * t))
+    }
 }

@@ -12,7 +12,7 @@ public enum CommandBarSource: Sendable, Equatable {
 /// Every user intent the sidebar can produce. The sidebar never changes the
 /// model or talks to the engine itself; it reports intents to its delegate.
 /// `ModelSidebarActions` maps the model-only intents to `BrowserModel` commands.
-public enum SidebarIntent: Equatable {
+public enum SidebarIntent: Equatable, Sendable {
     // Window chrome
     case toggleSidebar
     case goBack
@@ -31,6 +31,8 @@ public enum SidebarIntent: Equatable {
     case newSpace
     case newFolder(in: NodeParent)
     case manageSpaces
+    /// Space header chevron: collapse or expand the pinned section.
+    case setPinnedCollapsed(space: SpaceID, collapsed: Bool)
 
     // Row actions
     case close(nodeID: ItemID)
@@ -40,7 +42,6 @@ public enum SidebarIntent: Equatable {
     case resetToPinnedURL(tabID: ItemID)
     case replacePinnedURL(tabID: ItemID)
     case editPinnedURL(tabID: ItemID)
-    case beginRename(nodeID: ItemID)
     case rename(nodeID: ItemID, title: String)
     case setExpanded(folderID: ItemID, expanded: Bool)
     case pin(tabID: ItemID)
@@ -53,6 +54,7 @@ public enum SidebarIntent: Equatable {
     case customizePage(tabID: ItemID)
     case openInSplitView(tabID: ItemID)
     case addSplitView(tabID: ItemID)
+    case separateSplit(splitID: ItemID)
     case newNestedFolder(parentFolderID: ItemID)
     case turnFolderIntoSpace(folderID: ItemID)
     case deleteFolder(folderID: ItemID)
@@ -69,7 +71,7 @@ public enum SidebarIntent: Equatable {
 
     // Space header menu
     case changeSpaceIcon(SpaceID)
-    case renameSpace(SpaceID)
+    case renameSpace(SpaceID, title: String)
     case editSpaceTheme(SpaceID)
     case setSpaceProfile(space: SpaceID, profile: ProfileID)
     case newProfile(space: SpaceID)
@@ -77,9 +79,7 @@ public enum SidebarIntent: Equatable {
     case exportSpaceIntoFolder(space: SpaceID, destination: SpaceID)
     case deleteSpace(SpaceID)
     case moveSpace(SpaceID, toIndex: Int)
-}
-
-@MainActor
-public protocol SidebarDelegate: AnyObject {
-    func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent)
+    /// Bottom-bar plus menu.
+    case newTab
+    case newSplitView
 }
