@@ -3,6 +3,7 @@ import OpenDesign
 import OpenModel
 import OpenSidebar
 import OpenStore
+import OpenSpaceEditor
 
 struct CLIError: Error, CustomStringConvertible { var description: String }
 
@@ -10,10 +11,14 @@ struct CLIError: Error, CustomStringConvertible { var description: String }
 enum RenderCLI {
     static let usage = """
     space-editor-render math [--arc-json FILE]
+    space-editor-render editor --out FILE.png [--scale 1|2] [--appearance dark|light]
+                               [--style JSON] [--page N] [--hover CONTROL] [--backdrop RRGGBB] [--empty]
+                               [--pressed CONTROL] [--focus CONTROL]
     space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
                                [--provisional-import-intensity]
-    space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec window|theme-window --out DIR
+    space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec editor|window|theme-window|session2-editor --out DIR
+                                [--state empty|light|dark]
     space-editor-render check
     """
     static func value(_ args: [String], _ key: String) -> String? {
@@ -90,9 +95,12 @@ enum RenderCLI {
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
         case "window": try window(rest)
+        case "editor": try EditorScene.render(rest)
         case "compare":
-            guard ["window", "theme-window"].contains(value(rest, "--spec") ?? "") else { throw CLIError(description: "unknown comparison spec") }
-            try Compare.run(rest)
+            if value(rest, "--spec") == "session2-editor" { try SessionTwoCompare.run(rest) }
+            else if value(rest, "--spec") == "editor" { try EditorCompare.run(rest) }
+            else if ["window", "theme-window"].contains(value(rest, "--spec") ?? "") { try Compare.run(rest) }
+            else { throw CLIError(description: usage) }
         default: throw CLIError(description: usage)
         }
     }
