@@ -363,6 +363,10 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
   return _context;
 }
 
+- (BOOL)oe_isReady {
+  return _ready;
+}
+
 - (void)oe_whenReady:(dispatch_block_t)block {
   if (_ready) {
     block();

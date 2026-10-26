@@ -70,6 +70,8 @@ class OEClient;
 /// Runs `block` once the request context finished initializing (browsers
 /// created earlier lose their initial navigation).
 - (void)oe_whenReady:(dispatch_block_t)block;
+/// YES once the request context finished initializing.
+@property(nonatomic, readonly) BOOL oe_isReady;
 - (void)oe_contextInitialized;
 /// Serialized user scripts for the renderer (extra_info / process message).
 - (CefRefPtr<CefListValue>)oe_scriptsValue;
@@ -140,8 +142,10 @@ class OEClient;
 @end
 
 @interface OEExtensionActionMenu ()
+/// `menu`: the strip's menu id (CefTabStrip::GetExtensionActionMenu).
 - (instancetype)initOEWithBrowser:(OEBrowser*)browser
                         extension:(NSString*)extensionIdentifier
+                             menu:(int)menu
                             items:(NSArray<OEContextMenuItem*>*)items;
 @end
 
@@ -167,18 +171,12 @@ class OEClient;
 
 @interface OEExtensionAction ()
 - (instancetype)initOEWithExtension:(OEExtension*)extension;
-/// From Chrome's toolbar action model (fork patch P2;
-/// CefTabStrip::GetExtensionActionState).
+/// From Chrome's toolbar action model or the profile's action list (fork
+/// patch P2; CefTabStrip::GetExtensionActionState).
 - (instancetype)initOEWithIdentifier:(NSString*)identifier
                                state:(CefRefPtr<CefDictionaryValue>)state
                         toolbarImage:(nullable NSImage*)toolbarImage
                                 icon:(nullable NSImage*)icon;
-/// Live action state for the window's active tab (fork patch P1's tab
-/// strip; CefTabStrip::GetExtensionAction*).
-- (void)oe_applyBadgeText:(nullable NSString*)badgeText
-               badgeColor:(nullable NSColor*)badgeColor
-                    title:(nullable NSString*)title
-                  enabled:(BOOL)enabled;
 @end
 
 @interface OEExtension ()

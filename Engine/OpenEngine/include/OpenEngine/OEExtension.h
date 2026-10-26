@@ -39,17 +39,20 @@ typedef NS_ENUM(NSInteger, OEExtensionSiteAccess) {
   OEExtensionSiteAccessOnAllSites = 3,
   /// The user blocked all extensions on this site.
   OEExtensionSiteAccessBlocked = 4,
+  /// Granted for this tab only, until it navigates away (activeTab after a
+  /// click).
+  OEExtensionSiteAccessThisTab = 5,
 } NS_SWIFT_NAME(OEExtensionAction.SiteAccess);
 
 /// Immutable snapshot of one toolbar action (ADK ExtensionToolbarAction),
 /// for drawing our own button, for the window's active tab. Rebuilt whenever
 /// it changes; see -[OEBrowserDelegate browser:didUpdateExtensionAction:].
 ///
-/// With fork patch P2 (Chrome style windows) the values come from Chrome's
-/// toolbar action model, including chrome.action.setIcon/setTitle/
-/// setBadgeText/setPopup and per-tab state. Without it (Alloy style, or
-/// before the window has a tab) the snapshot comes from the manifest: title,
-/// icon, and popup are the manifest defaults, and badgeText is nil.
+/// With fork patch P2 the values come from Chrome's toolbar action model,
+/// including chrome.action.setIcon/setTitle/setBadgeText/setPopup and
+/// per-tab state (`live`). While the window has no live Chrome tab they come
+/// from the profile's action list: pins and the tab-independent defaults,
+/// and the action cannot run (`live` NO).
 NS_SWIFT_UI_ACTOR
 OE_EXPORT @interface OEExtensionAction : NSObject
 @property(nonatomic, readonly, copy) NSString* extensionIdentifier;
@@ -74,7 +77,8 @@ OE_EXPORT @interface OEExtensionAction : NSObject
 /// The action opens a popup page. NO means a click fires
 /// chrome.action.onClicked.
 @property(nonatomic, readonly) BOOL hasPopup;
-/// The manifest popup (without P2 only; nil with it).
+/// The manifest popup, for display only (a window whose profile the engine
+/// refused, OEBrowser.extensionActions); nil from Chrome's model.
 @property(nonatomic, readonly, copy, nullable) NSURL* popupURL;
 /// Pinned to the toolbar (the profile's extensions.pinned_extensions).
 @property(nonatomic, readonly, getter=isPinned) BOOL pinned;
@@ -84,6 +88,9 @@ OE_EXPORT @interface OEExtensionAction : NSObject
 @property(nonatomic, readonly) BOOL wantsToRun;
 @property(nonatomic, readonly) OEExtensionSiteAccess siteAccess;
 @property(nonatomic, readonly, getter=isShowingPopup) BOOL showingPopup;
+/// From the window's live toolbar model: per-tab state, and the action can
+/// run. NO for the profile's list (no live Chrome tab in the window).
+@property(nonatomic, readonly, getter=isLive) BOOL live;
 @end
 
 NS_SWIFT_UI_ACTOR

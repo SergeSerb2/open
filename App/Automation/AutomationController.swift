@@ -17,6 +17,8 @@
 
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
+    /// An action menu kept by `ext-menu keep`, for a later `stale` select.
+    private var staleMenu: OEExtensionActionMenu?
 
     init(app: AppDelegate) {
       self.app = app
@@ -350,7 +352,17 @@
             return nil
           }
           guard let item = find(menu.items) else { menu.cancel(); throw Failure(message: "no menu item \(title)") }
-          menu.select(command: item.commandIdentifier)
+          // `stale`: run the item on the menu kept earlier (`keep`), built
+          // before this one; this one is cancelled.
+          if a["stale"] as? Bool == true, let older = staleMenu {
+            staleMenu = nil
+            menu.cancel()
+            return ["items": listed, "ran": older.select(command: item.commandIdentifier)] as [String: Any]
+          }
+          return ["items": listed, "ran": menu.select(command: item.commandIdentifier)] as [String: Any]
+        } else if a["keep"] as? Bool == true {
+          // Kept open (not cancelled) for a later `stale` select.
+          staleMenu = menu
         } else {
           menu.cancel()
         }
@@ -359,7 +371,14 @@
         let browser = try focusedBrowser(w)
         guard let popup = browser.extensionPopup else { return ["open": false] as [String: Any] }
         return ["open": true, "page": describe(popup, in: w), "extension": browser.extensionPopupExtensionIdentifier ?? "",
-                "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue]] as [String: Any]
+                "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue],
+                "staysOpenOnBlur": browser.extensionPopupStaysOpenOnBlur] as [String: Any]
+      case "activate":
+        // Makes Open's window key (Chrome's "active window"), even with an
+        // action popup's panel in front.
+        NSApp.activate()
+        w.window?.makeKeyAndOrderFront(nil)
+        return ["key": w.window?.isKeyWindow ?? false]
 
       // Windows and pixels (Open's own windows only).
       case "windows":
@@ -675,7 +694,10 @@
     private func describe(_ action: OEExtensionAction) -> [String: Any] {
       func png(_ image: NSImage?) -> [String: Any] {
         guard let image, let data = EngineWebContentHostFactory.pngData(image) else { return ["bytes": 0] }
-        return ["bytes": data.count, "hash": data.hashValue, "width": image.size.width]
+        // Each representation's pixel size: 1x and 2x.
+        let reps = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }.sorted { $0[0] < $1[0] }
+        return ["bytes": data.count, "hash": data.hashValue, "width": image.size.width, "pixels": reps,
+                "object": ObjectIdentifier(image).hashValue]
       }
       func hex(_ color: NSColor?) -> Any {
         guard let c = color?.usingColorSpace(.sRGB) else { return NSNull() }
@@ -689,6 +711,7 @@
         "enabled": action.isEnabled, "hasPopup": action.hasPopup, "pinned": action.isPinned,
         "pinnedIndex": action.pinnedIndex, "wantsToRun": action.wantsToRun, "siteAccess": action.siteAccess.rawValue,
         "showingPopup": action.isShowingPopup, "toolbarImage": png(action.toolbarImage), "icon": png(action.icon),
+        "live": action.isLive,
       ]
     }
 

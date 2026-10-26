@@ -314,3 +314,37 @@ files byte-identical to before; a second run `0 applied, 3 already applied`
 with the patcher skipped. With only the CEF patch reversed, apply peeled both
 Open Chromium patches, ran the patcher, and re-applied them (same 10 files
 identical).
+
+## Rebase watch list
+
+Things Open copies from upstream or relies on without a patch, so no patch
+conflict flags them. `engine-rebase` step 6 points here: re-check each one
+against the new tree.
+
+### Extension actions and popups (P2 overlay, `src/open/browser/extensions/`)
+
+The overlay drives Chrome's toolbar model without Views and uses these
+Chrome and CEF internals directly:
+
+- `ExtensionsToolbarViewModel`, its `Delegate` and `Observer` interfaces,
+  and its registration as the window's `ExtensionsContainer`
+  (`ScopedUnownedUserData`).
+- `ExtensionActionViewModel::Create`, `ExtensionActionDelegate`,
+  `ToolbarActionViewModel::InvocationSource`, `GetIcon` (draws with
+  `IconWithBadgeImageSource`), and `GetContextMenu`: Open builds the
+  `ExtensionContextMenuModel` itself with the same arguments, so re-check
+  them.
+- `ExtensionView` and `ExtensionViewHost` (`set_view`, `SetCloseHandler`,
+  `CreateRendererSoon`, the popup's web-modal handler, Escape handling).
+- Rules Open copies from Chrome's Views popup and toolbar:
+  `ExtensionPopup::OnTabStripModelChanged` (close on a tab switch),
+  `ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog` (stay open on
+  blur), `ExtensionsToolbarDesktop::CanShowToolbarActionPopupForAPICall`
+  (`openPopup` guard), and the error texts in `extension_action_api.cc`
+  (the e2e expects "Failed to open popup.").
+- CEF: `ChromeBrowserDelegate::CreateBrowserHostForPopup` (private; patch
+  0304 makes the popup a friend) and
+  `CefBrowserContentsDelegate::HandleKeyboardEvent` (popup keys).
+- Chrome's popup size limits, 25×25 to 800×600 (`extension_popup_types.h`),
+  copied into `open_extension_popup.cc` and `OEBrowser.mm`.
+

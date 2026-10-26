@@ -267,6 +267,7 @@ static NSColor* OEColorFromARGB(int argb) {
     _wantsToRun = state->GetBool("wantsToRun");
     _siteAccess = static_cast<OEExtensionSiteAccess>(state->GetInt("siteAccess"));
     _showingPopup = state->GetBool("showingPopup");
+    _live = state->GetBool("live");
   }
   return self;
 }
@@ -274,18 +275,6 @@ static NSColor* OEColorFromARGB(int argb) {
 - (NSString*)description {
   return [NSString stringWithFormat:@"<OEExtensionAction %@ pinned=%d badge=%@>",
                                     _extensionIdentifier, _pinned, _badgeText];
-}
-
-- (void)oe_applyBadgeText:(NSString*)badgeText
-               badgeColor:(NSColor*)badgeColor
-                    title:(NSString*)title
-                  enabled:(BOOL)enabled {
-  _badgeText = badgeText.length ? [badgeText copy] : nil;
-  _badgeBackgroundColor = badgeColor;
-  if (title.length) {
-    _title = [title copy];
-  }
-  _enabled = _enabled && enabled;
 }
 
 @end

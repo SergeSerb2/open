@@ -29,18 +29,29 @@ For this plan:
 | P7 | Isolated-world scripts for Open's page runtimes | Zap picker and Boost applier out of the page's reach | 3–5 days | — |
 | P8 | Native ad-block engine | Already planned in [plans/adblock-fork.md](plans/adblock-fork.md); listed here only for order | see that plan | — |
 
-Proposed `Engine/fork/patches/cef/series` lines (all touched files are under `src/cef/` except where noted; new classes are overlay files):
+The series as built (P1 and P2). Two series with their own numbers:
+`Engine/fork/patches/chromium/series` for files outside `src/cef/`, and
+`Engine/fork/patches/cef/series` for files under it. New classes are overlay
+files (`Engine/fork/src/`), not patches; that includes the whole
+`CefTabStrip` API (`src/cef/include/cef_tab_strip.h`), whose C API and
+wrappers `engine-apply` regenerates.
 
 ```text
-0301-open-headless-browser-window.patch   # P1: macOS BrowserWindow without Views for hidden tab-strip Browsers
-0302-open-chrome-native-parent-mac.patch  # P1: Chrome-style tabs hosted in parent_view on macOS (tab_strip_id)
-0303-open-tab-strip-api.patch             # P1: CefTabStrip + CefTabStripHandler + translator output
-0304-open-extensions-container.patch      # P2: ExtensionsContainer/ExtensionActionDelegate/popup host on the hidden Browser
-0305-open-extension-action-api.patch      # P2: CefExtensionActionInfo/Handler + translator output
-0306-open-audible-state.patch             # P6: CefDisplayHandler::OnAudioStateChange
-0307-open-extension-manager-api.patch     # P3: list/install/enable/uninstall + registry events
-0308-open-extension-install-prompt.patch  # P3: install/uninstall/permission prompts to the client (also patches chrome/browser/ui/views/extensions/extension_install_dialog_view.cc, so it needs a chromium/series entry)
+# chromium/series
+0301-open-headless-browser-window.patch        # P1: Browser features without a BrowserView
+0302-open-hidden-browser-ui.patch              # P1: Chrome UI that assumes "no BrowserView => unit test"
+0303-open-hosted-tab-lifecycle.patch           # P1: hosted tabs are never discarded or moved
+# cef/series (starts at 0302)
+0302-open-hosted-tabs.patch                    # P1: hosted Chrome style tabs
+0303-open-context-menu-submenu-commands.patch  # P1: submenu commands with their own delegate
+0304-open-extension-popups.patch               # P2: popup browser hosts (ChromeBrowserDelegate friend)
 ```
+
+A new patch takes the next free number of its series, counting open PRs:
+#64 adds `chromium/0304-open-hidden-browser-no-tab-groups.patch`. Still
+planned: P3 (extension management API in the overlay; the install and
+uninstall prompts patch `chrome/browser/ui/views/extensions/`, so a
+Chromium series entry) and P6 (audible state, a CEF series entry).
 
 The keyboard hook needs no patch: `OEApplication.keyEquivalentHandler` plus CEF's `OnPreKeyEvent` cover app shortcuts (engine-spike.md, "Shell").
 

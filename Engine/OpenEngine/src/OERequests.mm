@@ -123,13 +123,31 @@
 
 @implementation OEContextMenuItem
 
+// Chromium menu labels mark a mnemonic with "&" and write a literal "&" as
+// "&&" (ui::RemoveAcceleratorChar). macOS menus have no mnemonics: keep the
+// literal ones only ("Tom && Jerry" is "Tom & Jerry").
+static NSString* OEMenuTitle(NSString* label) {
+  if ([label rangeOfString:@"&"].location == NSNotFound) {
+    return label;
+  }
+  NSMutableString* title = [NSMutableString stringWithCapacity:label.length];
+  for (NSUInteger i = 0; i < label.length; ++i) {
+    const unichar c = [label characterAtIndex:i];
+    if (c != '&') {
+      [title appendFormat:@"%C", c];
+    } else if (i + 1 < label.length && [label characterAtIndex:i + 1] == '&') {
+      [title appendString:@"&"];
+      ++i;
+    }
+  }
+  return title;
+}
+
 - (instancetype)initOEWithDictionary:(CefRefPtr<CefDictionaryValue>)item {
   if ((self = [super init])) {
     _separator = item->GetBool("separator");
     _commandIdentifier = item->GetInt("command");
-    _title = [OEString(item->GetString("label"))
-        stringByReplacingOccurrencesOfString:@"&"
-                                  withString:@""];
+    _title = OEMenuTitle(OEString(item->GetString("label")));
     _enabled = item->GetBool("enabled");
     _checked = item->GetBool("checked");
     NSMutableArray* sub = [NSMutableArray array];
@@ -151,9 +169,7 @@
     cef_menu_item_type_t type = model->GetTypeAt(index);
     _separator = type == MENUITEMTYPE_SEPARATOR;
     _commandIdentifier = model->GetCommandIdAt(index);
-    _title = [OEString(model->GetLabelAt(index))
-        stringByReplacingOccurrencesOfString:@"&"
-                                  withString:@""];
+    _title = OEMenuTitle(OEString(model->GetLabelAt(index)));
     _enabled = model->IsEnabledAt(index);
     _checked = model->IsCheckedAt(index);
     NSMutableArray* sub = [NSMutableArray array];

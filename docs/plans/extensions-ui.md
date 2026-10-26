@@ -352,7 +352,7 @@ Command results the shell must handle:
   through P1 (`browser(_:didOpen:active:)`); the shell adopts it as a
   selected Today tab (app-shell §4.13).
 - "Inspect Popup" → DevTools window (engine); the popup stays open while
-  DevTools is attached (§3.7 D1).
+  DevTools is attached (§3.7 D1, `extensionPopupStaysOpenOnBlur`).
 
 ### 3.7 Popup panel
 
@@ -411,24 +411,33 @@ Focus:
 
 - F1. On show, make the panel key and call `popup.focusPage()`. The
   browser window stays main.
-- F2. Keys while the panel is key: the page gets them first. An
-  unconsumed Esc (`webContent(_:handleUnconsumedKeyEvent:)`) closes the
-  popup. Cmd+W closes the popup, not the tab (guess). Every other app
-  shortcut goes through `OEApplication.keyEquivalentHandler` and the
-  main menu as usual and acts on the browser window.
+- F2. Keys while the panel is key: the page gets them first. Esc closes
+  the popup inside Chrome (`ExtensionViewHost`). Other keys the page does
+  not consume reach `webContent(_:handleUnconsumedKeyEvent:)`: Cmd+W there
+  closes the popup, not the tab (guess). There is no hook before the page
+  (engine-api.md). Every other app shortcut goes through
+  `OEApplication.keyEquivalentHandler` and the main menu as usual and acts
+  on the browser window.
 
 Dismissal (D rules; Chrome `ExtensionPopup` behavior unless marked):
 
 - D1. The panel resigns key to anything else (another Open window, the
-  browser window, another app) → close. Exception: DevTools is attached
-  to the popup ("Inspect Popup").
+  browser window, another app) → close, unless
+  `browser.extensionPopupStaysOpenOnBlur` is true at that moment: a
+  JavaScript dialog, a web-modal dialog of the popup (a WebAuthn or
+  passkey request), or DevTools on the popup ("Inspect Popup") is showing
+  (Chrome's `CloseUnlessBlockedByInspectionOrJSDialog`). The shell adds
+  its own JavaScript dialogs for tabs. Closing then would drop the
+  dialog's request (a Bitwarden passkey request).
 - D2. Click on the same action button → close. Click on another action →
   the engine closes the first and opens the second.
-- D3. Esc not consumed by the page → close.
+- D3. Esc → the engine closes the popup (`ExtensionViewHost`).
 - D4. `window.close()` in the popup → the engine reports
   `didCloseExtensionPopup`.
 - D5. The window's active tab changes (tab switch, Space switch, focused
-  pane change) → close.
+  pane change) → close. The engine closes the popup itself when
+  Chromium's active tab changes (Chrome's `ExtensionPopup`); the shell
+  still closes it for a change that does not reach the strip.
 - D6. The browser window closes, miniaturizes, or enters or leaves full
   screen → close.
 - D7. The sidebar hides (Cmd+S) while the anchor is in the sidebar →
@@ -1590,7 +1599,7 @@ measuring.
 | P2/P3 slip | Popups stay Alloy pages; no context menu; no prompts | Steps 1–4 do not need them (§10.4); `chrome://extensions` still manages |
 | `toolbarImage` font differs from Arc | Badge text looks a little different (Views `CONTEXT_BADGE` font on macOS) | Same Chromium code as Arc; compare with S-12 |
 | Hover-only slots hide badges | Users miss counts | Arc 1:1 per EX-1; Q2 lets the lead decide |
-| Popup focus and child windows | Some extensions open a native file picker or alert from the popup; focus moves and D1 closes the popup | Chrome has the same rule; keep it. Sheets from the popup attach to the panel |
+| Popup focus and child windows | Some extensions open a native file picker or a dialog from the popup; focus moves and D1 would close the popup | D1 reads `extensionPopupStaysOpenOnBlur` (JavaScript dialogs, web-modal dialogs such as WebAuthn, DevTools), as Chrome does. Sheets from the popup attach to the panel |
 | Extension shortcut conflicts with page shortcuts | Router order §6.2 (3) before the page may surprise | Matches Chrome; reported in Settings |
 | Many profiles | One `OEBrowser` per window and profile | Strips always follow the focused Space's profile |
 

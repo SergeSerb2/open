@@ -15,6 +15,8 @@
 #include "chrome/browser/devtools/devtools_toggle_action.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_view_host.h"
+#include "components/javascript_dialogs/app_modal_dialog_queue.h"
+#include "components/web_modal/web_modal_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -120,6 +122,14 @@ gfx::NativeView OpenExtensionPopup::native_view() const {
   return host_->host_contents()->GetNativeView();
 }
 
+bool OpenExtensionPopup::StaysOpenOnBlur() const {
+  content::WebContents* contents = host_->host_contents();
+  return javascript_dialogs::AppModalDialogQueue::GetInstance()
+             ->HasActiveDialog() ||
+         web_modal::WebContentsHasActiveWebModal(contents) ||
+         DevToolsWindow::GetInstanceForInspectedWebContents(contents);
+}
+
 gfx::NativeView OpenExtensionPopup::GetNativeView() {
   return native_view();
 }
@@ -145,8 +155,16 @@ void OpenExtensionPopup::RenderFrameCreated(
 bool OpenExtensionPopup::HandleKeyboardEvent(
     content::WebContents* source,
     const input::NativeWebKeyboardEvent& event) {
-  // Unhandled keys reach the embedder through the popup's CEF client.
-  return false;
+  // Keys the page did not consume (ExtensionViewHost already took Escape).
+  // ExtensionViewHost, not CEF, is the popup's WebContentsDelegate, so CEF
+  // never sees them on its own: hand them to the popup's CEF client
+  // (CefKeyboardHandler::OnKeyEvent), as for a tab. There is no pre-page
+  // hook (OnPreKeyEvent): ExtensionViewHost sends those to the Browser.
+  if (closing_ || !browser_) {
+    return false;
+  }
+  auto host = CefBrowserHostBase::FromBrowser(browser_);
+  return host && host->contents_delegate()->HandleKeyboardEvent(source, event);
 }
 
 void OpenExtensionPopup::OnLoaded() {

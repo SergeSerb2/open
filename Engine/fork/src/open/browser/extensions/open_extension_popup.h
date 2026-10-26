@@ -51,6 +51,11 @@ class OpenExtensionPopup : public extensions::ExtensionView,
 
   const std::string& action_id() const { return action_id_; }
   gfx::NativeView native_view() const;
+  // Chrome keeps a popup open on blur while one of these shows
+  // (ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog): an app-modal
+  // JavaScript dialog, a web-modal dialog of the popup (WebAuthn, passkeys),
+  // or DevTools inspecting the popup.
+  bool StaysOpenOnBlur() const;
 
   // extensions::ExtensionView:
   gfx::NativeView GetNativeView() override;

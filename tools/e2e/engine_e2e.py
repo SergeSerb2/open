@@ -2397,6 +2397,8 @@ def startup_failure_checks(factory, results, tmp):
 # --style chrome). Extensions: tools/e2e/fixtures/action-probe and Bitwarden.
 
 ACTION_PROBE = "jihnllejimhgcmfmcnchbekapeajboik"  # tools/e2e/fixtures/action-probe
+# The suite loads a copy of the probe from here, so it can update it on disk.
+ACTION_PROBE_COPY = None
 
 
 def actions_checks(app, results):
@@ -2436,10 +2438,13 @@ def actions_checks(app, results):
     app.call("select", tab=a)
     time.sleep(1)
     probe = action(ACTION_PROBE)
+    # Images: 28 pt (toolbar) and 16 pt (icon), each with a 1x and a 2x
+    # representation of the right pixel size.
     results["actions_list"] = {
         "ok": bool(ready) and bool(probe) and probe["name"] == "Open action probe" and probe["title"] == "Action probe"
-              and probe["hasPopup"] and probe["toolbarImage"]["bytes"] > 0 and probe["icon"]["bytes"] > 0
-              and probe["toolbarImage"]["width"] == 28 and probe["icon"]["width"] == 16,
+              and probe["hasPopup"] and probe["live"] and probe["toolbarImage"]["bytes"] > 0 and probe["icon"]["bytes"] > 0
+              and probe["toolbarImage"]["width"] == 28 and probe["icon"]["width"] == 16
+              and probe["toolbarImage"]["pixels"] == [[28, 28], [56, 56]] and probe["icon"]["pixels"] == [[16, 16], [32, 32]],
         "probe": probe, "ids": [x["id"] for x in actions()["actions"]]}
     # The popup is a Chrome extension popup: getViews lists it, its tab query
     # sees the page under it, and it reports ready and its size.
@@ -2492,6 +2497,25 @@ def actions_checks(app, results):
         "tab_a": on_a and {k: on_a[k] for k in ("badge", "badgeColor", "title", "enabled")},
         "tab_b": on_b and {k: on_b[k] for k in ("badge", "title", "enabled")}}
 
+    # Running the action while it is disabled (tab b) asks the shell for its
+    # context menu, as Chrome shows it, and opens no popup.
+    app.call("events")
+    ran_disabled = app.call("ext-run", extension=ACTION_PROBE)
+    asked = wait_until(lambda: [e for e in app.call("events") if e["type"] == "extensionMenuRequest"], timeout=5)
+    results["disabled_action_requests_menu"] = {
+        "ok": bool(asked) and asked[0]["extension"] == ACTION_PROBE and not app.call("ext-popup").get("open"),
+        "ran": ran_disabled, "requests": asked}
+
+    # An unchanged image is the same object after an update (the engine
+    # reads pixels and hashes them; no PNG round trip, no new image). The
+    # plain icon of tab b and the first tab is the default icon.
+    icon_b = action(ACTION_PROBE)["icon"]
+    app.call("select", tab=first)
+    on_first = wait_until(lambda: (lambda x: x if x and x["enabled"] else None)(action(ACTION_PROBE)), timeout=10)
+    results["action_image_cache"] = {
+        "ok": bool(on_first) and on_first["icon"]["hash"] == icon_b["hash"] and on_first["icon"]["object"] == icon_b["object"],
+        "tab_b": icon_b, "first": on_first and on_first["icon"]}
+
     # Running a popup-less action fires chrome.action.onClicked.
     app.call("select", tab=a)
     time.sleep(0.5)
@@ -2513,14 +2537,14 @@ def actions_checks(app, results):
               and clicks.get("clicks") == 1 and clicks.get("lastClickTab") == ids["a"],
         "popup_less_on_tab": bool(no_popup), "popup_opened": popup_after_click, "storage": clicks}
 
-    # chrome.action.openPopup(): Chrome opens the popup only for an active
-    # window. The suite does not activate Open (no focus change), so either
-    # the popup opens with source API (the window still counts as active), or
-    # the call is refused with Chrome's inactive-window message.
+    # chrome.action.openPopup() in the active window opens the popup with
+    # source API. Open's window is made key first (this shell's popup panel
+    # takes key; Chrome checks the window before anything else).
     api = {}
     if state:
-        popup_eval(state, "chrome.storage.session.set({openPopup: ''})"
-                          ".then(() => chrome.runtime.sendMessage('open-popup'))"
+        popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        api["key"] = app.call("activate")["key"]
+        popup_eval(state, "chrome.runtime.sendMessage('open-popup')"
                           ".then(() => { setTimeout(() => window.close(), 50); return true; })")
 
         def api_popup():
@@ -2537,10 +2561,26 @@ def actions_checks(app, results):
             state = open_popup(ACTION_PROBE)
             api["result"] = popup_eval(state, "chrome.storage.session.get('openPopup').then(r => r.openPopup)") if state else None
             close_popup()
-    results["open_popup_api"] = {
-        "ok": (api.get("source") == "api" and api.get("result") == "ok")
-              or (not api.get("source") and (api.get("result") or "").startswith("Cannot show popup for an inactive window")),
-        **api}
+    results["open_popup_api"] = {"ok": api.get("key") is True and api.get("source") == "api" and api.get("result") == "ok",
+                                 **api}
+
+    # While a popup is open, openPopup() is refused (as Chrome's desktop
+    # toolbar): "Failed to open popup.", and the open popup stays.
+    refusal = {}
+    state = open_popup(ACTION_PROBE)
+    if state:
+        popup_eval(state, "chrome.storage.session.set({openPopup: ''}).then(() => true)")
+        refusal["key"] = app.call("activate")["key"]
+        popup_eval(state, "chrome.runtime.sendMessage('open-popup-now').then(() => true)")
+        refusal["result"] = wait_until(lambda: popup_eval(state, "chrome.storage.session.get('openPopup')"
+                                                                 ".then(r => r.openPopup)"), timeout=6)
+        after = app.call("ext-popup")
+        refusal["same_popup"] = (after.get("open") and after["source"] == "user"
+                                 and after["page"]["identifier"] == state["page"]["identifier"])
+        close_popup()
+    results["open_popup_refused_while_open"] = {
+        "ok": refusal.get("key") is True and refusal.get("result") == "Failed to open popup." and bool(refusal.get("same_popup")),
+        **refusal}
     # Running the action whose popup is open closes it (Chrome's toolbar).
     if not app.call("ext-popup").get("open"):
         open_popup(ACTION_PROBE)
@@ -2548,12 +2588,21 @@ def actions_checks(app, results):
     toggled = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
     results["run_again_closes_popup"] = {"ok": bool(toggled)}
 
-    # window.close() in the popup closes it.
+    # window.close() in the popup page closes it.
     state = open_popup(ACTION_PROBE)
     if state:
         popup_eval(state, "setTimeout(() => window.close(), 50); true")
     closed = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
-    results["window_close_closes_popup"] = {"ok": bool(state) and bool(closed)}
+    results["page_close_closes_popup"] = {"ok": bool(state) and bool(closed)}
+
+    # A tab switch closes the popup (Chrome's ExtensionPopup does).
+    app.call("select", tab=a)
+    state = open_popup(ACTION_PROBE)
+    if state:
+        app.call("select", tab=b)
+    switched = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
+    app.call("select", tab=a)
+    results["tab_switch_closes_popup"] = {"ok": bool(state) and bool(switched)}
 
     # Pin and order: pinned actions first, in pinned order; moves and unpins.
     # Start from none pinned. (--load-extension installs come before Chrome's
@@ -2582,6 +2631,17 @@ def actions_checks(app, results):
         app.call("ext-menu", extension=ACTION_PROBE, select=unpin[0])
     unpinned = wait_until(lambda: (lambda x: x if x and not x["pinned"] else None)(action(ACTION_PROBE)), timeout=10)
     results["context_menu"] = {"ok": "Open action probe" in titles and bool(unpin) and bool(unpinned), "items": titles}
+
+    # Each menu keeps its own model: an item of an older menu still runs
+    # after a newer menu of the same action was built.
+    kept = app.call("ext-menu", extension=ACTION_PROBE, keep=True)
+    pin = [x["title"] for x in kept if not x["separator"] and x["title"].lower().startswith("pin")]
+    stale = app.call("ext-menu", extension=ACTION_PROBE, select=pin[0], stale=True) if pin else {}
+    repinned = wait_until(lambda: (lambda x: x if x and x["pinned"] else None)(action(ACTION_PROBE)), timeout=10)
+    results["menu_keeps_model"] = {"ok": bool(pin) and stale.get("ran") is True and bool(repinned),
+                                   "item": pin[:1], "ran": stale.get("ran")}
+    app.call("ext-pin", extension=ACTION_PROBE, pinned=False)
+    wait_until(lambda: (lambda x: x if x and not x["pinned"] else None)(action(ACTION_PROBE)), timeout=10)
 
     # Bitwarden's popup is a real popup now: it takes its fixed width.
     app.call("select", tab=a)
@@ -2634,6 +2694,163 @@ def actions_checks(app, results):
         app.call("ping")
         ran[prefix] = r
     results["action_menu_commands"] = {"ok": all(v["ok"] for v in ran.values()), "commands": ran}
+    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, a)
+
+
+def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, tab):
+    """What keeps a popup open on blur, and every way a popup goes away."""
+    def holds(expected, timeout=10):
+        return wait_until(lambda: (lambda s: s if s.get("open") and s.get("staysOpenOnBlur") is expected else None)(
+            app.call("ext-popup")), timeout=timeout)
+
+    app.call("select", tab=tab)
+    time.sleep(0.5)
+    # Chrome keeps the popup open on blur while a JavaScript dialog, a
+    # web-modal dialog of the popup (WebAuthn), or DevTools on it shows.
+    keep = {}
+    state = open_popup(ACTION_PROBE)
+    if state:
+        keep["idle"] = app.call("ext-popup").get("staysOpenOnBlur")
+        popup_eval(state, "setTimeout(() => alert('hold'), 10); true")
+        keep["alert"] = bool(holds(True))
+        # Answer Chrome's dialog the way DevTools does (it is Chrome's
+        # app-modal dialog: the popup's WebContents delegate is Chrome's).
+        try:
+            app.call("devtools", tab=state["page"]["identifier"], method="Page.handleJavaScriptDialog",
+                     params={"accept": True}, timeout=10)
+        except Exception as e:
+            keep["alert_answer"] = str(e)[:200]
+            keep["alert_dismissed"] = app.call("dismiss")
+        keep["after_alert"] = bool(holds(False))
+        app.call("devtools-open", tab=state["page"]["identifier"])
+        keep["devtools"] = bool(holds(True))
+        keep["devtools_dismissed"] = app.call("dismiss")
+        keep["after_devtools"] = bool(holds(False))
+        # A passkey request: the request must stay alive while its dialog
+        # shows (the popup is not closed under it).
+        app.call("focus", tab=state["page"]["identifier"])
+        popup_eval(state, "window.passkey = 'pending'; window.abortPasskey = new AbortController();"
+                          "navigator.credentials.get({publicKey: {challenge: new Uint8Array(32), timeout: 60000,"
+                          " userVerification: 'discouraged'}, signal: window.abortPasskey.signal})"
+                          ".then(() => window.passkey = 'resolved', e => window.passkey = e.name + ': ' + e.message);"
+                          "true")
+        keep["webauthn"] = bool(holds(True))
+        time.sleep(3)
+        after = app.call("ext-popup")
+        keep["webauthn_popup_still_open"] = bool(after.get("open")) and after["page"]["identifier"] == state["page"]["identifier"]
+        keep["webauthn_request"] = popup_eval(state, "window.passkey")
+        popup_eval(state, "window.abortPasskey.abort(); true")
+        keep["webauthn_aborted"] = wait_until(lambda: (lambda r: r if r != "pending" else None)(popup_eval(state, "window.passkey")),
+                                              timeout=10)
+        keep["after_webauthn"] = bool(holds(False))
+        app.call("dismiss")
+        close_popup()
+    results["popup_stays_open_on_blur"] = {
+        "ok": keep.get("idle") is False and keep.get("alert") and keep.get("after_alert") and keep.get("devtools")
+              and keep.get("after_devtools") and keep.get("webauthn") and keep.get("webauthn_popup_still_open")
+              and keep.get("webauthn_request") == "pending" and (keep.get("webauthn_aborted") or "").startswith("AbortError")
+              and keep.get("after_webauthn"),
+        **keep}
+
+    # Extension update and reload with the popup open: the popup closes, the
+    # action comes back (same pin), and the new version runs.
+    def reload_with_popup(bump):
+        r = {}
+        if bump:
+            manifest = os.path.join(ACTION_PROBE_COPY, "manifest.json")
+            data = json.load(open(manifest))
+            data["version"] = bump
+            with open(manifest, "w") as f:
+                json.dump(data, f, indent=2)
+        app.call("ext-pin", extension=ACTION_PROBE, pinned=True)
+        wait_until(lambda: (lambda x: x if x and x["pinned"] else None)(action(ACTION_PROBE)), timeout=10)
+        app.call("events")
+        state = open_popup(ACTION_PROBE)
+        r["opened"] = bool(state)
+        if state:
+            try:
+                popup_eval(state, "setTimeout(() => chrome.runtime.reload(), 50); true")
+            except RuntimeError:
+                pass
+        r["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
+        back = wait_until(lambda: (lambda x: x if x and x["live"] else None)(action(ACTION_PROBE)), timeout=20)
+        r["back"] = bool(back)
+        r["pinned"] = bool(back and back["pinned"])
+        installed = [e for e in app.call("extensions")["installed"] if e["id"] == ACTION_PROBE]
+        r["version"] = installed[0]["version"] if installed else None
+        again = open_popup(ACTION_PROBE)
+        r["popup_after"] = bool(again)
+        close_popup()
+        r["ok"] = (r["opened"] and r["closed"] and r["back"] and r["pinned"] and r["popup_after"]
+                   and (not bump or r["version"] == bump))
+        return r
+    results["extension_update_with_popup"] = reload_with_popup("1.1")
+    results["extension_reload_with_popup"] = reload_with_popup(None)
+
+    # The popup's renderer crashes: the popup closes and Chrome terminates
+    # the extension (its action goes away until it is reloaded); Open keeps
+    # running.
+    crash = {}
+    state = open_popup(ACTION_PROBE)
+    crash["opened"] = bool(state)
+    if state:
+        try:
+            app.call("devtools", tab=state["page"]["identifier"], method="Page.crash", timeout=5)
+        except Exception as e:  # the renderer dies before it answers
+            crash["crash_call"] = str(e)[:200]
+    crash["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
+    crash["action_gone"] = bool(wait_until(lambda: not action(ACTION_PROBE), timeout=10))
+    crash["alive"] = app.call("ping") is not None
+    results["popup_renderer_crash"] = {"ok": crash["opened"] and crash["closed"] and crash["action_gone"] and crash["alive"],
+                                       **crash}
+
+    # No live Chrome tab in the window: Chrome's model goes away (the shell
+    # hears it), the list is the profile's (pins kept, not live), and an
+    # action does not run (no manifest popup in a plain page). A new tab
+    # brings the live model back.
+    bitwarden = EXT["bitwarden"]
+    app.call("ext-pin", extension=bitwarden, pinned=True)
+    wait_until(lambda: (lambda x: x if x and x["pinned"] else None)(action(bitwarden)), timeout=10)
+    app.call("events")
+    for t in app.call("tabs"):
+        app.call("close", tab=t["id"])
+    gone = wait_until(lambda: (lambda r: r if not r["ready"] else None)(actions()), timeout=15)
+    told = [e for e in app.call("events")]
+    idle = {"not_ready": bool(gone)}
+    if gone:
+        listed = [x for x in gone["actions"] if x["id"] == bitwarden]
+        idle["listed"] = listed[0] if listed else None
+        idle["ran"] = app.call("ext-run", extension=bitwarden)
+        time.sleep(2)
+        idle["popup"] = app.call("ext-popup").get("open")
+    fresh = new_tab(app, "https://example.com/?live")
+    back = wait_until(lambda: (lambda r: r if r["ready"] and [x for x in r["actions"] if x["id"] == bitwarden and x["live"]]
+                               else None)(actions()), timeout=20)
+    idle["live_again"] = bool(back)
+    results["no_live_tab_actions"] = {
+        "ok": idle["not_ready"] and bool(idle.get("listed")) and idle["listed"]["pinned"] and not idle["listed"]["live"]
+              and idle.get("ran") is False and not idle.get("popup") and idle["live_again"],
+        **idle}
+
+    # Closing the Open window with a popup open closes the popup with it;
+    # the app keeps running, and a reopened window works.
+    app.call("select", tab=fresh)
+    time.sleep(0.5)
+    state = open_popup(bitwarden)
+    closing = {"opened": bool(state)}
+    popup_page = state["page"]["identifier"] if state else None
+    app.call("window-close")
+    closing["windows_after_close"] = wait_until(lambda: len(app.call("shell-windows")) == 0, timeout=10)
+    closing["alive"] = app.call("ping") is not None
+    app.call("window-reopen")
+    wait_until(lambda: app.call("shell-windows"), timeout=10)
+    closing["popup_page_gone"] = bool(wait_until(lambda: popup_page not in [p["identifier"] for p in app.call("pages")],
+                                                 timeout=10))
+    closing["new_window_popup"] = app.call("ext-popup").get("open")
+    results["window_close_with_popup"] = {
+        "ok": closing["opened"] and bool(closing["windows_after_close"]) and closing["alive"] and closing["popup_page_gone"]
+              and not closing["new_window_popup"],
+        **closing}
 
 
 # ----------------------------------------------------------------------------
@@ -2742,7 +2959,11 @@ def main():
             sys.exit("missing unpacked extensions in %s" % opts.extensions)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     if opts.only == "actions":
-        dirs = [os.path.join(ROOT, "tools", "e2e", "fixtures", "action-probe"), os.path.join(opts.extensions, "bitwarden")]
+        global ACTION_PROBE_COPY
+        ACTION_PROBE_COPY = os.path.join(tmp, "action-probe")
+        shutil.rmtree(ACTION_PROBE_COPY, ignore_errors=True)
+        shutil.copytree(os.path.join(ROOT, "tools", "e2e", "fixtures", "action-probe"), ACTION_PROBE_COPY)
+        dirs = [ACTION_PROBE_COPY, os.path.join(opts.extensions, "bitwarden")]
         if not all(os.path.isdir(d) for d in dirs):
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]

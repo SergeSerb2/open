@@ -5,6 +5,7 @@
 #ifndef OPEN_BROWSER_EXTENSIONS_OPEN_EXTENSIONS_TOOLBAR_H_
 #define OPEN_BROWSER_EXTENSIONS_OPEN_EXTENSIONS_TOOLBAR_H_
 
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -22,8 +23,10 @@
 #include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
 
 class Browser;
+class Profile;
 
 namespace extensions {
+class ExtensionContextMenuModel;
 class ExtensionViewHost;
 }
 
@@ -55,6 +58,15 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
   OpenExtensionsToolbar& operator=(const OpenExtensionsToolbar&) = delete;
   ~OpenExtensionsToolbar() override;
 
+  // CefTabStrip without a live model (no hidden Browser): the profile's
+  // action list, pins, and tab-independent defaults.
+  static std::vector<std::string> ProfileActionIds(Profile* profile);
+  static CefRefPtr<CefDictionaryValue> ProfileState(Profile* profile,
+                                                    const std::string& id);
+  static CefRefPtr<CefImage> ProfileImage(Profile* profile,
+                                          const std::string& id,
+                                          int size);
+
   // CefTabStrip, for this window.
   bool IsReady();
   std::vector<std::string> ActionIds();
@@ -64,8 +76,14 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
   void MovePinned(const std::string& id, int index);
   bool Execute(const std::string& id, int source);
   void ClosePopup();
-  CefRefPtr<CefListValue> Menu(const std::string& id, int source);
-  void RunMenuCommand(const std::string& id, int command_id);
+  bool PopupStaysOpenOnBlur() const;
+  CefRefPtr<CefListValue> Menu(const std::string& id, int source, int* menu_id);
+  bool RunMenuCommand(int menu_id, int command_id);
+  void ReleaseMenu(int menu_id);
+
+  // OpenTabStrip: the active tab changed. Closes the popup, as Chrome's
+  // ExtensionPopup::OnTabStripModelChanged does.
+  void OnActiveTabChanged();
 
   // OpenExtensionActionDelegate.
   void TriggerPopup(const std::string& id,
@@ -75,6 +93,8 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
                     ShowPopupCallback callback);
   bool IsShowingPopup(const std::string& id) const;
   gfx::NativeView PopupNativeView() const;
+  // A disabled action ran: Chrome shows its context menu instead.
+  void RequestMenu(const std::string& id);
 
   // OpenExtensionPopup.
   OpenTabStrip* strip() const { return strip_; }
@@ -100,8 +120,21 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
                                   content::WebContents* web_contents) override;
 
  private:
+  struct OpenMenu {
+    OpenMenu();
+    OpenMenu(OpenMenu&&);
+    OpenMenu& operator=(OpenMenu&&);
+    ~OpenMenu();
+    std::string action_id;
+    std::unique_ptr<extensions::ExtensionContextMenuModel> model;
+  };
+
   ToolbarActionViewModel* Action(const std::string& id) const;
   content::WebContents* ActiveContents() const;
+  // Closes the popup on a later turn (not inside the notification that
+  // asked), unless another popup took its place.
+  void ClosePopupSoon();
+  void DropMenusFor(const std::string& id);
   void ObserveIcon(const std::string& id);
   // Coalesced handler calls: at most one per action (and one list change)
   // per message loop turn.
@@ -119,12 +152,14 @@ class OpenExtensionsToolbar : public ExtensionsToolbarViewModel::Delegate,
   base::flat_map<std::string, base::CallbackListSubscription>
       icon_subscriptions_;
   std::unique_ptr<OpenExtensionPopup> popup_;
+  // Counts popups, so a deferred close cannot hit a later popup.
+  int popup_serial_ = 0;
   // The user source of the action that runs now (Execute); a popup that
   // Chromium triggers on its own comes from chrome.action.openPopup().
   int running_source_ = -1;
-  // GetExtensionActionMenu: the action whose menu was last returned.
-  std::string menu_action_;
-  raw_ptr<ui::MenuModel> menu_ = nullptr;
+  // GetExtensionActionMenu: each returned menu's own model, by menu id.
+  std::map<int, OpenMenu> menus_;
+  int next_menu_id_ = 1;
   bool list_changed_ = false;
   std::set<std::string> updated_;
   bool flush_scheduled_ = false;

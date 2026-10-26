@@ -898,6 +898,12 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
     popupPanel = nil
     record("extensionPopup", popup, ["open": false])
   }
+
+  /// A disabled action ran: Chrome shows its context menu (this shell only
+  /// records it).
+  func browser(_ browser: OEBrowser, requestsContextMenuForExtensionAction extensionIdentifier: String) {
+    record("extensionMenuRequest", nil, ["extension": extensionIdentifier])
+  }
 }
 
 // MARK: - OEBrowserDelegate (tab requests from Chromium, fork patch P1)

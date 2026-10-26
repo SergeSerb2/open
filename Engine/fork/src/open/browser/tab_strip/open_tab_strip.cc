@@ -60,6 +60,11 @@ OpenTabStrip::OpenTabStrip(CefRefPtr<CefRequestContextImpl> request_context,
 }
 
 OpenTabStrip::~OpenTabStrip() {
+  // No handler calls from here on: a call passes `this` as a
+  // CefRefPtr<CefTabStrip>, which would take a reference to an object whose
+  // count is already zero and delete it a second time (the toolbar closes an
+  // open popup and would report it).
+  handler_ = nullptr;
   toolbar_.reset();
   Strips().erase(id_);
   if (browser_) {
@@ -390,21 +395,32 @@ bool OpenTabStrip::AreExtensionActionsReady() {
   return toolbar_ && toolbar_->IsReady();
 }
 
+Profile* OpenTabStrip::GetProfile() const {
+  return browser_ ? browser_->GetProfile()
+                  : CefRequestContextImpl::GetProfile(request_context_);
+}
+
 void OpenTabStrip::GetExtensionActionIds(
     std::vector<CefString>& extension_ids) {
   CEF_REQUIRE_UIT_RETURN_VOID();
   extension_ids.clear();
-  if (toolbar_) {
-    for (const auto& id : toolbar_->ActionIds()) {
-      extension_ids.push_back(id);
-    }
+  const bool live = toolbar_ && toolbar_->IsReady();
+  for (const auto& id : live ? toolbar_->ActionIds()
+                             : OpenExtensionsToolbar::ProfileActionIds(
+                                   closed_ ? nullptr : GetProfile())) {
+    extension_ids.push_back(id);
   }
 }
 
 CefRefPtr<CefDictionaryValue> OpenTabStrip::GetExtensionActionState(
     const CefString& extension_id) {
   CEF_REQUIRE_UIT_RETURN(nullptr);
-  return toolbar_ ? toolbar_->State(extension_id) : nullptr;
+  if (toolbar_ && toolbar_->IsReady()) {
+    return toolbar_->State(extension_id);
+  }
+  return closed_ ? nullptr
+                 : OpenExtensionsToolbar::ProfileState(GetProfile(),
+                                                       extension_id);
 }
 
 CefRefPtr<CefImage> OpenTabStrip::GetExtensionActionImage(
@@ -412,7 +428,14 @@ CefRefPtr<CefImage> OpenTabStrip::GetExtensionActionImage(
     int size,
     bool toolbar) {
   CEF_REQUIRE_UIT_RETURN(nullptr);
-  return toolbar_ ? toolbar_->Image(extension_id, size, toolbar) : nullptr;
+  if (toolbar_ && toolbar_->IsReady()) {
+    return toolbar_->Image(extension_id, size, toolbar);
+  }
+  // Without the live model the toolbar image is the plain icon (no badge or
+  // decorations).
+  return closed_ ? nullptr
+                 : OpenExtensionsToolbar::ProfileImage(GetProfile(),
+                                                       extension_id, size);
 }
 
 void OpenTabStrip::SetExtensionActionPinned(const CefString& extension_id,
@@ -444,18 +467,31 @@ void OpenTabStrip::CloseExtensionPopup() {
   }
 }
 
-CefRefPtr<CefListValue> OpenTabStrip::GetExtensionActionMenu(
-    const CefString& extension_id,
-    int source) {
-  CEF_REQUIRE_UIT_RETURN(nullptr);
-  return toolbar_ ? toolbar_->Menu(extension_id, source) : nullptr;
+bool OpenTabStrip::ExtensionPopupStaysOpenOnBlur() {
+  CEF_REQUIRE_UIT_RETURN(false);
+  return toolbar_ && toolbar_->PopupStaysOpenOnBlur();
 }
 
-void OpenTabStrip::RunExtensionActionMenuCommand(const CefString& extension_id,
-                                                 int command_id) {
+CefRefPtr<CefListValue> OpenTabStrip::GetExtensionActionMenu(
+    const CefString& extension_id,
+    int source,
+    int& menu_id) {
+  menu_id = 0;
+  CEF_REQUIRE_UIT_RETURN(nullptr);
+  return toolbar_ && toolbar_->IsReady()
+             ? toolbar_->Menu(extension_id, source, &menu_id)
+             : nullptr;
+}
+
+bool OpenTabStrip::RunExtensionActionMenuCommand(int menu_id, int command_id) {
+  CEF_REQUIRE_UIT_RETURN(false);
+  return toolbar_ && toolbar_->RunMenuCommand(menu_id, command_id);
+}
+
+void OpenTabStrip::ReleaseExtensionActionMenu(int menu_id) {
   CEF_REQUIRE_UIT_RETURN_VOID();
   if (toolbar_) {
-    toolbar_->RunMenuCommand(extension_id, command_id);
+    toolbar_->ReleaseMenu(menu_id);
   }
 }
 
@@ -475,6 +511,12 @@ void OpenTabStrip::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+  if (toolbar_ && !tab_strip_model->empty() &&
+      selection.active_tab_changed()) {
+    // Also for the embedder's own ActivateTab, as Chrome closes the popup
+    // on any tab switch (ExtensionPopup::OnTabStripModelChanged).
+    toolbar_->OnActiveTabChanged();
+  }
   if (applying_ > 0 || closed_) {
     return;
   }
@@ -586,11 +628,28 @@ void OpenTabStrip::OnBrowserDidClose(BrowserWindowInterface* browser) {
     return;
   }
   // Chrome deletes the Browser (and its window) on the next turn.
+  const bool had_actions = toolbar_ && toolbar_->IsReady();
   toolbar_.reset();
   browser_->tab_strip_model()->RemoveObserver(this);
   did_close_subscription_ = {};
   browser_ = nullptr;
   window_ = nullptr;
+  if (had_actions) {
+    // The live model is gone: the embedder reads the profile's list now,
+    // and drops the old live state (badges, popups).
+    PostActionsChanged();
+  }
+}
+
+void OpenTabStrip::PostActionsChanged() {
+  CEF_POST_TASK(CEF_UIT, base::BindOnce(
+                             [](base::WeakPtr<OpenTabStrip> self) {
+                               if (self && self->handler_ && !self->closed_) {
+                                 self->handler_->OnExtensionActionsChanged(
+                                     CefRefPtr<CefTabStrip>(self.get()));
+                               }
+                             },
+                             weak_ptr_factory_.GetWeakPtr()));
 }
 
 content::WebContents* OpenTabStrip::ContentsFor(

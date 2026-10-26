@@ -147,11 +147,21 @@ class CefTabStripHandler : public virtual CefBaseRefCounted {
 
   ///
   /// The list, order, or pinning of the toolbar actions changed (install,
-  /// uninstall, enable, disable, pin, unpin, move, or the model became
-  /// ready). Read it with GetExtensionActionIds.
+  /// uninstall, enable, disable, pin, unpin, move), or the live model came
+  /// or went (AreExtensionActionsReady changed). Read it again with
+  /// GetExtensionActionIds.
   ///
   /*--cef()--*/
   virtual void OnExtensionActionsChanged(CefRefPtr<CefTabStrip> tab_strip) {}
+
+  ///
+  /// The user ran |extension_id|'s action while it is disabled for the
+  /// active tab. Chrome shows the action's context menu instead; show
+  /// GetExtensionActionMenu.
+  ///
+  /*--cef()--*/
+  virtual void OnExtensionActionMenuRequested(CefRefPtr<CefTabStrip> tab_strip,
+                                              const CefString& extension_id) {}
 
   ///
   /// Chromium is about to open the popup of |extension_id|'s action. Set
@@ -197,9 +207,9 @@ class CefTabStripHandler : public virtual CefBaseRefCounted {
                                      CefRefPtr<CefBrowser> browser) {}
 
   ///
-  /// The popup is closing (window.close(), CloseExtensionPopup, another
-  /// popup, or its page went away). Remove its view; the browser closes
-  /// after this call.
+  /// The popup is closing (window.close(), CloseExtensionPopup, Escape, the
+  /// active tab changed, the extension unloaded or crashed, or the window
+  /// closed). Remove its view; the browser closes after this call.
   ///
   /*--cef()--*/
   virtual void OnExtensionPopupClosed(CefRefPtr<CefTabStrip> tab_strip,
@@ -330,9 +340,11 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   virtual bool IsExtensionActionEnabled(const CefString& extension_id) = 0;
 
   ///
-  /// Returns true once Chrome's toolbar action model for this window is
-  /// ready (it needs a tab). Until then the GetExtensionAction* methods
-  /// return empty values.
+  /// Returns true while Chrome's toolbar action model for this window is
+  /// live: it needs the hidden Browser, which exists only while the strip
+  /// has tabs. Without it, GetExtensionActionIds, GetExtensionActionState
+  /// and GetExtensionActionImage read the profile's action list (pins and
+  /// tab-independent defaults, "live" false), and actions cannot run.
   ///
   /*--cef()--*/
   virtual bool AreExtensionActionsReady() = 0;
@@ -351,9 +363,10 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   /// "badgeText" (strings); "badgeBackgroundColor" (ARGB int, 0 when the
   /// extension set none); "badgeTextColor" (ARGB int, absent when
   /// automatic); "enabled", "hasPopup", "pinned", "wantsToRun",
-  /// "showingPopup" (bools); "pinnedIndex" (int, -1 when unpinned);
+  /// "showingPopup", "live" (bools); "pinnedIndex" (int, -1 when unpinned);
   /// "siteAccess" (int: 0 none, 1 on click, 2 on site, 3 on all sites,
-  /// 4 blocked for this site).
+  /// 4 blocked for this site, 5 granted for this tab only, as after an
+  /// activeTab click).
   ///
   /*--cef()--*/
   virtual CefRefPtr<CefDictionaryValue> GetExtensionActionState(
@@ -392,7 +405,8 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   /// its popup, or fires chrome.action.onClicked, and runs blocked scripts
   /// when the extension wants to run. |source| is 0 for a toolbar button, 1
   /// for a menu entry, 2 for a keyboard command. Returns false for an
-  /// unknown action.
+  /// unknown action or without a live model (AreExtensionActionsReady). A
+  /// disabled action calls OnExtensionActionMenuRequested instead.
   ///
   /*--cef()--*/
   virtual bool ExecuteExtensionAction(const CefString& extension_id,
@@ -405,25 +419,44 @@ class CefTabStrip : public virtual CefBaseRefCounted {
   virtual void CloseExtensionPopup() = 0;
 
   ///
+  /// Returns true while the open popup must stay open when it loses focus,
+  /// as in Chrome (ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog):
+  /// an app-modal JavaScript dialog is showing, a web-modal dialog of the
+  /// popup is showing (WebAuthn, passkeys), or DevTools inspects the popup.
+  /// False without a popup.
+  ///
+  /*--cef()--*/
+  virtual bool ExtensionPopupStaysOpenOnBlur() = 0;
+
+  ///
   /// Returns the context menu of |extension_id|'s action (Chrome's
   /// ExtensionContextMenuModel): a list of dictionaries with "command"
-  /// (int), "label" (string), "enabled", "checked", "separator" (bools), and
-  /// "submenu" (list, optional). |source| is 0 for a toolbar action and 1 for
-  /// a menu item. Run an item with RunExtensionActionMenuCommand; the menu is
-  /// valid until then or the next call.
+  /// (int), "label" (string, "&&" for a literal "&"), "enabled", "checked",
+  /// "separator" (bools), and "submenu" (list, optional). |source| is 0 for
+  /// a toolbar action and 1 for a menu item. |menu_id| receives the menu's
+  /// id: the strip keeps this menu's model until
+  /// RunExtensionActionMenuCommand or ReleaseExtensionActionMenu with that
+  /// id, the action goes away, or the live model goes away. Returns nullptr
+  /// (|menu_id| 0) for an unknown action or without a live model.
   ///
   /*--cef()--*/
   virtual CefRefPtr<CefListValue> GetExtensionActionMenu(
       const CefString& extension_id,
-      int source) = 0;
+      int source,
+      int& menu_id) = 0;
 
   ///
-  /// Runs |command_id| of the menu GetExtensionActionMenu last returned for
-  /// |extension_id|.
+  /// Runs |command_id| of menu |menu_id| and releases the menu. Returns false
+  /// if the menu is gone or has no enabled item |command_id|.
   ///
   /*--cef()--*/
-  virtual void RunExtensionActionMenuCommand(const CefString& extension_id,
-                                             int command_id) = 0;
+  virtual bool RunExtensionActionMenuCommand(int menu_id, int command_id) = 0;
+
+  ///
+  /// Releases menu |menu_id| without running a command.
+  ///
+  /*--cef()--*/
+  virtual void ReleaseExtensionActionMenu(int menu_id) = 0;
 
   ///
   /// Closes the remaining tabs and the hidden window. The object is invalid

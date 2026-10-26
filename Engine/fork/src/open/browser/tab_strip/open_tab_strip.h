@@ -16,6 +16,7 @@
 
 class Browser;
 class BrowserWindowInterface;
+class Profile;
 class CefBrowserHostBase;
 class CefBrowserPlatformDelegate;
 class CefBrowserPlatformDelegateNative;
@@ -129,10 +130,12 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   bool ExecuteExtensionAction(const CefString& extension_id,
                               int source) override;
   void CloseExtensionPopup() override;
+  bool ExtensionPopupStaysOpenOnBlur() override;
   CefRefPtr<CefListValue> GetExtensionActionMenu(const CefString& extension_id,
-                                                 int source) override;
-  void RunExtensionActionMenuCommand(const CefString& extension_id,
-                                     int command_id) override;
+                                                 int source,
+                                                 int& menu_id) override;
+  bool RunExtensionActionMenuCommand(int menu_id, int command_id) override;
+  void ReleaseExtensionActionMenu(int menu_id) override;
   void Close() override;
 
   // TabStripModelObserver:
@@ -162,6 +165,11 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
 
   Browser* EnsureBrowser();
   void OnBrowserDidClose(BrowserWindowInterface* browser);
+  // The profile, for the action list without a live model; nullptr if the
+  // context is not ready.
+  Profile* GetProfile() const;
+  // CefTabStripHandler::OnExtensionActionsChanged on a later turn.
+  void PostActionsChanged();
   content::WebContents* ContentsFor(CefRefPtr<CefBrowser> browser) const;
   void PostRequest(Request request,
                    content::WebContents* contents,
@@ -192,7 +200,7 @@ class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
   int applying_ = 0;
   bool closed_ = false;
   // Chrome's toolbar action model for the Browser (fork patch P2); exists
-  // with the Browser.
+  // with the Browser. The embedder hears when it comes and goes.
   std::unique_ptr<OpenExtensionsToolbar> toolbar_;
 
   IMPLEMENT_REFCOUNTING(OpenTabStrip);
