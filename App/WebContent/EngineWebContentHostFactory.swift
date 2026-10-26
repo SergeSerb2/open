@@ -527,7 +527,7 @@ extension EngineWebContentHostFactory {
           let page = page ?? selectedContent, selectedContent === page else { return false }
     let responder = window.firstResponder
     let view = responder as? NSView
-    guard responder == nil || responder === window
+    guard responder === window
       || view.map({ $0 === page.view || $0.isDescendant(of: page.view) }) == true else { return false }
     if resetResponder { window.makeFirstResponder(nil) }
     page.focusPage()
