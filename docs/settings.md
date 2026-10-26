@@ -239,3 +239,14 @@ The lead chose **Icon** as the tab/window title (the stored pane ID and commands
 Import graph assembly remains on the main actor. `ArcImporter.importAll(sidebar:)` walks the parsed item/Space/Profile graph and constructs actor-isolated OpenModel objects. Moving that work requires a separate Sendable intermediate model or a change to model isolation; this is not a cheap Settings-only move. The remaining walk is proportional to imported nodes and can pause the window for a very large sidebar. This PR claims off-main file/JSON parsing and count reads, not fully off-main model assembly or a large-import latency result.
 
 Additional states: [suggestion notice](settings/sheet-suggestion-notice@1x.png), [engine-ready Passwords copy](settings/import-passwords-ready@1x.png), [search-engine edit form](settings/sheet-search-engine-edit@1x.png), [invalid rule](settings/sheet-link-rule-invalid@1x.png), each with a matching @2x PNG. The engine-ready copy render stops before consent or import. It never requests a consent token or accesses Keychain.
+
+
+## Round-3 polish
+
+| Item | Change | Proof |
+|---|---|---|
+| Pop-up trailing edges | Sleep and Little Open archive intervals use SettingsPopUp, with the native control itself sized to 150/155 pt and ending at x 610 | advanced-sleep-data and links-rules at 1x/2x |
+| Empty rule hint | Empty or whitespace-only Host contains patterns show “Enter a site to match.” | sheet-link-rule-invalid at 1x/2x |
+| Engine edit labels | Name, Keyword, and URL stay visible beside their fields | sheet-search-engine-edit at 1x/2x |
+
+All affected PNGs were re-rendered and inspected at both scales. The release build and all 28 settings-preview checks pass. The PR contains the full verify-all summary for its head.
