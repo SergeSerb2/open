@@ -186,6 +186,13 @@ public final class SidebarContext {
             selection.select(previousIDs, anchor: previousAnchor)
             sidebar?.pager.currentPage?.syncSelectionIndexes()
             manager?.syncSelectionIndexes()
+        } else if accepted, case .archiveNodes = intent {
+            let outline = sidebar?.pager.currentPage?.outline ?? focusedSpace.flatMap { manager?.outline(spaceID: $0.id) }
+            let visible = Set((0..<(outline?.numberOfRows ?? 0)).compactMap { itemID(of: outline?.item(atRow: $0)) })
+            let kept = previousIDs.filter { visible.contains($0) && model.node(id: $0) != nil }
+            selection.select(kept, anchor: previousAnchor.flatMap { kept.contains($0) ? $0 : nil } ?? kept.first)
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
         }
         return accepted
     }

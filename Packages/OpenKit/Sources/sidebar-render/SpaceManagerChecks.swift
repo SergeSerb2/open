@@ -22,14 +22,26 @@ enum SpaceManagerChecks {
         manager.onIntent = { intent in intents.append(intent); return ModelSidebarActions(context: context).perform(intent) }
         manager.frame = CGRect(x: 0, y: 0, width: 900, height: 700)
         let host = OffscreenRenderer.host(manager, scale: 1)
+        host.orderFront(nil)
         defer { host.contentView = nil; host.close() }
         func pump() { OffscreenRenderer.settle(manager, runLoop: 0.002) }
         check(manager.columnOrder == original && original.enumerated().allSatisfy { i, id in
             manager.columnFrame(spaceID: id) == CGRect(x: 16 + CGFloat(i) * 256, y: 16, width: 244, height: 668)
         }, "SM1 real Library columns follow model order and 244/16/12 geometry")
         let controls = manager.controls(spaceID: original[0])!
-        check(controls.displayedTitle == "Studio" && !controls.showsProfileChip && controls.grabber.frame == CGRect(x: 8, y: 10, width: 24, height: 24),
+        check(controls.displayedTitle == "Studio" && !controls.showsProfileChip && controls.grabber.frame == CGRect(x: 186, y: 10, width: 24, height: 24),
               "SM2 real header title, grabber, and one-Profile chip suppression")
+        let gripPoint = controls.grabber.convert(CGPoint(x: 12, y: 12), to: nil)
+        controls.grabber.mouseMoved(with: NSEvent.mouseEvent(with: .mouseMoved, location: gripPoint, modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!)
+        check(controls.grabber.toolTip == nil && TooltipController.shared.visibleOrPendingTooltip?.title == "Drag to Reorder Space", "SM2 grabber uses the shared capsule tooltip")
+        host.orderOut(nil)
+        let outlineBeforeHidden = manager.outline(spaceID: original[0])!, rowsBeforeHidden = outlineBeforeHidden.numberOfRows
+        let hiddenTab = model.newTab(in: original[0], url: Synthetic.url("hidden-manager"), title: "Hidden edit")
+        pump()
+        check(outlineBeforeHidden.numberOfRows == rowsBeforeHidden, "SM1 hidden Manager defers structural outline work")
+        let hiddenReloads = SidebarDiagnostics.fullReloads
+        host.orderFront(nil); manager.needsLayout = true; pump()
+        check(outlineBeforeHidden.row(forItem: hiddenTab) >= 0 && SidebarDiagnostics.fullReloads == hiddenReloads, "SM1 showing Manager reconciles final lists without reloadData")
         let second = model.createProfile(name: "Work")!
         model.updateSpace(id: original[0], profileID: second.id); pump()
         check(controls.showsProfileChip && controls.displayedProfile == "Work", "SM2 two Profiles show the Space's real Profile chip")
@@ -135,7 +147,7 @@ enum SpaceManagerChecks {
         let host = OffscreenRenderer.host(manager, scale: 1)
         let elapsed = CACurrentMediaTime() - started
         defer { host.contentView = nil; host.close() }
-        Checks.check(elapsed <= 0.120 && manager.builtColumnIDs.count <= 4, "SM6 10×100 Library build \(Bench.ms(elapsed)) ≤ 120 ms; only \(manager.builtColumnIDs.count) visible columns built")
+        Checks.check(elapsed <= 0.120 && manager.builtColumnIDs.count <= 4, "SM6 10×100 Library to first layout \(Bench.ms(elapsed)) ≤ 120 ms; only \(manager.builtColumnIDs.count) visible columns built")
         let loaded = manager.builtColumnIDs, reloads = SidebarDiagnostics.fullReloads
         manager.scrollView.contentView.scroll(to: CGPoint(x: 1700, y: 0))
         manager.scrollView.reflectScrolledClipView(manager.scrollView.contentView)

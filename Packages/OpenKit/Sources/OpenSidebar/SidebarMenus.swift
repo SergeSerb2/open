@@ -70,7 +70,7 @@ struct SidebarMenus {
         let tabs = ids.filter { context.model.node(id: $0).map { $0.folder == nil } ?? false }
         var items: [NSMenuItem] = [
             item("Copy Links", .copyLinks(ids: ids, markdown: false)),
-            item("Copy Links as Markdown", .copyLinks(ids: ids, markdown: true)),
+            item("Copy links as Markdown", .copyLinks(ids: ids, markdown: true)),
             .separator(),
             item("New Folder with \(ids.count) Items", .newFolderFromSelection(ids: ids)),
             moveTo(ids),
@@ -80,8 +80,8 @@ struct SidebarMenus {
             let unpin = ids.allSatisfy { context.model.isPinned(tabID: $0) }
             items.append(item(unpin ? "Unpin Tabs" : "Pin Tabs", .setPinned(ids: ids, pinned: !unpin)))
         }
-        items += [item("Duplicate", .duplicateNodes(ids: ids)), .separator(),
-                  item("Archive Items", enabled: !tabs.isEmpty, .archiveNodes(ids: tabs))]
+        items += [item("Duplicate", .duplicateNodes(ids: ids)), .separator()]
+        if !tabs.isEmpty { items.append(item(tabs.count == 1 ? "Archive Item" : "Archive Items", .archiveNodes(ids: tabs))) }
         if !folders.isEmpty { items.append(item("Delete", .deleteFolders(ids: folders))) }
         return menu(items)
     }

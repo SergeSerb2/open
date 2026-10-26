@@ -591,6 +591,11 @@ with the later App lane.
 
 ### 17.1 Durable 13-state comparison
 
+Lead waiver (review finding S1-1; originally §16.1 before the chrome merge):
+S1 retains byte-identical tables as a stricter interim rule. S4 (#99) replaces
+it with the lead gate in §15.1; SHA identity then becomes informational.
+S1 ships only as the base of S2 (#91), whose press/drag handling completes S1-5.
+
 The old git-ignored runners were lost. The committed replacement is
 `tools/verification/sidebar-compare-states.sh`, with a Python helper next to it.
 It reconstructs §15.1 with one state per render process, using absolute private
@@ -680,8 +685,9 @@ animation is outside that command-work measurement. Menu actions have separate
 functional checks. Selection toggle p95 was 0.22 ms with zero row layouts; scroll
 p95 was 2.74 ms in that local cohort. These are load-dependent measurements.
 
-Option changes the label to **Clear unselected** (lead Q14), widens the control
-leftward, and updates its tooltip without pointer movement. Its action keeps the
+Lead Q14 clarification: Option changes only the tooltip to **Clear unselected
+Today tabs**. The label remains **↓ Clear** and its width never changes. The
+tooltip updates without pointer movement and resets when the window resigns key. Its action keeps the
 current row and selected rows through `clearToday(space:keeping:)`. The Today
 menu's Archive Other Tabs is a native Option alternate immediately after Archive
 Item. A per-window local flags monitor keeps this correct when web content has
@@ -695,7 +701,9 @@ The drag fixture supplies event metadata; it does not create a global desktop
 drag session. `sidebar-render bench --rows 1000 --selection --bulk 50` enforces
 the selection and bulk budgets and verifies row consistency with no full reload.
 The 13-state runner from §17.1 remains the visual regression gate. CU5 additionally
-compares synthetic divider renders at rest and with Clear against main. Native
+runs the committed `sidebar-render divider-check` command against the baseline
+release renderer: synthetic divider pixels at rest and with Clear must match.
+All bounded paired attempts remain in the comparison output directory. Native
 App flow E1–E4 and alert/clipboard/form integration remain with the App lane.
 
 ## 19. Sidebar completion S3 (2026-10-26)
@@ -705,12 +713,15 @@ The title reserves 6 pt before it; hover and Peek take priority. A collapsed
 folder summarizes unread tabs at any depth, including split panes. Expansion
 returns the badge to the visible child. Geometry and accent choice are guesses
 from sidebar-completion §2.7 and [SC §9](re/sidebar-completion.md#9-unread-badge).
+Design R1 keeps the geometry but uses shadedDark in light Spaces and a lighter
+accent in dark Spaces (at least 3:1 in the real light/dark row checks; guess
+pending C5). Folder glyph colors remain unchanged.
 The spring uses response 0.2 / damping 0.8; clear fades for 0.12 s. Reduce Motion
-suppresses the spring. Theme changes update the accent of an existing dot.
+suppresses both. Theme changes update the accent of an existing dot.
 
-A navigated pinned row swaps its favicon for a 22 pt reset plate on favicon
+A navigated pinned row swaps its favicon for a 20 pt reset plate on favicon
 hover. Its 11 pt Semibold SF Symbol is `arrow.uturn.backward`; Option changes it
-to `arrow.up.forward.square` and "Separate From Pinned Tab" (lead Q10). Normal
+to `arrow.up.forward` and "Separate From Pinned Tab" (lead Q10). Normal
 activation sends reset through the model. Separate stays App-owned for live host
 handoff. The glyph swap fades over 0.08 s. Ordinary pinned rows have no plate.
 
@@ -792,6 +803,16 @@ identical positions and ink boxes. Full evidence is under
 `/tmp/open-sidebar-s4/fixed-main`. That result prompted the lead gate above.
 `verify-all` accepts `SIDEBAR_BASELINE_REF` and `SIDEBAR_BASELINE_RENDERER` to
 name this renderer-only main dependency explicitly until #92 merges.
+
+S4 review R1: the grabber uses the shared capsule tooltip. Header icon/title align
+with the sidebar (13/41 pt), with the grabber at W−58. Lift transforms the content
+about the column center; `--lift-column` captures an actual tracking frame.
+Manager renders use LibraryContent’s `SettingsTokens.content` background in both
+appearances. Dark columns have a 1 pt white 0.30 rim (guess pending C2).
+Hidden Managers keep one dirty flag; visibility reconciles cached final parent
+lists in one bulk native update, without reloadData or a queued event history.
+The earlier SM6 number means **36 ms to first layout**, excluding GPU snapshot
+and real favicon loading. C2/C5/C7 values remain guesses until capture session 2.
 
 ## 21. Sidebar completion S5 (2026-10-26)
 

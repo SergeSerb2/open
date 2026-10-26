@@ -44,7 +44,10 @@ public final class SpaceManagerView: NSView {
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
         observer = context.model.addObserver { [weak self] change in self?.apply(change) }
         loop = ObservationLoop(read: { [weak self] in _ = self?.context.model.spaces.map(\.id) }) { [weak self] in self?.syncColumns() }
-        syncColumns()
+        syncColumns(force: true)
+        for name in [NSWindow.didUpdateNotification, NSWindow.didExposeNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(windowUpdated(_:)), name: name, object: nil)
+        }
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -56,9 +59,30 @@ public final class SpaceManagerView: NSView {
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
 
-    private func syncColumns() {
+    private var visibilityDirty = false
+    func deferHiddenUpdates() -> Bool {
+        guard !visibleForUpdates else { return false }
+        visibilityDirty = true
+        return true
+    }
+    private var visibleForUpdates: Bool { window?.isVisible == true && !isHiddenOrHasHiddenAncestor }
+    public override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); refreshVisibleColumns() }
+    public override func viewDidUnhide() { super.viewDidUnhide(); refreshVisibleColumns() }
+    @objc private func windowUpdated(_ note: Notification) {
+        if let host = note.object as? NSWindow, host === window { refreshVisibleColumns() }
+    }
+    private func refreshVisibleColumns() {
+        guard visibilityDirty, visibleForUpdates else { return }
+        visibilityDirty = false
+        syncColumns(force: true)
+        for column in columns.values { column.page?.resyncAfterVisibility() }
+        if let id = pendingRename { pendingRename = nil; renameInsertedNode(id) }
+    }
+    private func syncColumns(force: Bool = false) {
+        if !force, !visibleForUpdates { visibilityDirty = true; return }
         let live = Set(context.model.spaces.map(\.id))
-        for (id, column) in columns where !live.contains(id) { column.removeFromSuperview(); columns[id] = nil }
+        let stale = columns.keys.filter { !live.contains($0) }
+        for id in stale { columns.removeValue(forKey: id)?.removeFromSuperview() }
         if context.managerSpaceID.map({ !live.contains($0) }) == true { context.managerSpaceID = context.model.spaces.first?.id; context.selection.clear() }
         for space in context.model.spaces where columns[space.id] == nil {
             let column = SpaceManagerColumn(manager: self, space: space)
@@ -70,6 +94,7 @@ public final class SpaceManagerView: NSView {
 
     public override func layout() {
         super.layout()
+        refreshVisibleColumns()
         scrollView.frame = bounds
         let m = SpaceManagerMetrics.self
         strip.frame.size = CGSize(width: max(bounds.width, m.inset * 2 + CGFloat(columns.count) * m.columnWidth + CGFloat(max(0, columns.count - 1)) * m.gap), height: max(0, scrollView.contentSize.height))
@@ -116,15 +141,18 @@ public final class SpaceManagerView: NSView {
         updateDepth -= 1
         guard updateDepth == 0 else { return }
         let batch = changes; changes = []
-        for column in columns.values { column.page?.applyBulk(batch) }
-        if let id = pendingRename { pendingRename = nil; renameInsertedNode(id) }
+        if visibleForUpdates { for column in columns.values { column.page?.applyBulk(batch) } }
+        else { visibilityDirty = true }
+        if visibleForUpdates, let id = pendingRename { pendingRename = nil; renameInsertedNode(id) }
     }
     private func apply(_ change: TreeChange) {
+        guard visibleForUpdates else { visibilityDirty = true; return }
         if updateDepth > 0 { changes.append(change); return }
         for column in columns.values { column.page?.apply(change) }
     }
     func syncSelectionIndexes() { for column in columns.values { column.page?.syncSelectionIndexes() } }
     func renameInsertedNode(_ id: ItemID) {
+        guard visibleForUpdates else { visibilityDirty = true; pendingRename = id; return }
         if updateDepth > 0 { pendingRename = id; return }
         for column in columns.values where (column.page?.outline.row(forItem: context.model.node(id: id)?.object) ?? -1) >= 0 {
             column.page?.layoutSubtreeIfNeeded(); column.page?.beginRename(nodeID: id)
@@ -157,7 +185,7 @@ public final class SpaceManagerView: NSView {
                 column.layer?.shadowOpacity = 0.25
                 column.layer?.shadowRadius = 8
                 column.layer?.shadowOffset = CGSize(width: 0, height: 4)
-                column.layer?.setAffineTransform(CGAffineTransform(scaleX: 1.02, y: 1.02))
+                column.setLifted(true)
                 context.haptics.endDrag()
             }
             guard var state = reorder else { continue }
@@ -175,6 +203,7 @@ public final class SpaceManagerView: NSView {
                 for _ in 0..<crossed { context.haptics.perform(.alignment) }
                 placeColumns(animated: true)
             }
+            SidebarDiagnostics.spaceReorderFrame?()
         }
         finishReorder(commit: false)
     }
@@ -185,7 +214,7 @@ public final class SpaceManagerView: NSView {
         context.suppressPreviews(.drag, false)
         if let column = columns[state.id] {
             column.layer?.zPosition = 0; column.layer?.shadowOpacity = 0
-            column.layer?.setAffineTransform(.identity)
+            column.setLifted(false)
         }
         if commit, context.model.spaces.firstIndex(where: { $0.id == state.id }) != state.slot {
             _ = context.send(.moveSpace(state.id, toIndex: state.slot))
@@ -246,10 +275,19 @@ private final class SpaceManagerColumn: NSView {
         self.page = page; content.addSubview(page)
         updateTheme(); needsLayout = true
     }
+    func setLifted(_ lifted: Bool) {
+        let scale: CGFloat = lifted ? 1.02 : 1
+        var transform = CATransform3DMakeTranslation(bounds.midX, bounds.midY, 0)
+        transform = CATransform3DScale(transform, scale, scale, 1)
+        layer?.sublayerTransform = CATransform3DTranslate(transform, -bounds.midX, -bounds.midY, 0)
+    }
     private func updateTheme() {
         let context = manager.context
         background?.style = context.style(for: space)
-        appearance = context.appearance(for: space).nsAppearance
+        let appearance = context.appearance(for: space)
+        self.appearance = appearance.nsAppearance
+        content.layer?.borderWidth = appearance == .dark ? 1 : 0
+        content.layer?.borderColor = NSColor.white.withAlphaComponent(0.30).cgColor
     }
     override func layout() {
         super.layout()
@@ -258,4 +296,9 @@ private final class SpaceManagerColumn: NSView {
         controls.frame = CGRect(x: 0, y: 0, width: bounds.width, height: SpaceManagerMetrics.headerHeight)
         page?.frame = CGRect(x: 0, y: SpaceManagerMetrics.headerHeight, width: bounds.width, height: max(0, bounds.height - SpaceManagerMetrics.headerHeight))
     }
+}
+
+@MainActor extension SidebarDiagnostics {
+    /// Optional capture of the real native reorder presentation, used by the harness.
+    public static var spaceReorderFrame: (@MainActor () -> Void)?
 }
