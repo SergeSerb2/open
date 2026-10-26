@@ -107,6 +107,7 @@ enum Checks {
             for count in 1...3 {
                 let expected: [Double] = wheel == .analogous ? [0, 40, -40] : count == 2 ? [0, 180] : [0, 150, 210]
                 let colors = ThemeColorMath.harmony(key: key, count: count, wheel: wheel)
+                if colors.count != count { hueError = .infinity }
                 for (i, color) in colors.enumerated() {
                     let result = ThemeColorMath.hsl(color)
                     let difference = abs((result.h - input.h) * 360 - expected[i]).truncatingRemainder(dividingBy: 360)
@@ -115,7 +116,7 @@ enum Checks {
                 }
             }
         }
-        check(hueError <= 0.1 && slError < 1e-9, String(format: "M2 harmony n=1...3 hueMax=%.8f slMax=%.8f", hueError, slError))
+        check(hueError <= 0.1 && slError < 1e-9, String(format: "M2 preserved analogous and complementary offsets (180 / 150,210), n=1...3 hueMax=%.8f slMax=%.8f", hueError, slError))
         var random = Random(), maxError = 0.0
         for mode in SpaceStyleAppearance.allCases {
             let range = ThemeColorMath.lightnessRange(mode)
