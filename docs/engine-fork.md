@@ -278,6 +278,7 @@ The app now builds against the fork by default (`tools/fetch-cef.sh`,
 | chromium | `0304-open-hidden-browser-no-tab-groups.patch` | +10/−2 | `chrome/browser/ui/browser.cc` (includes the overlay's `tab_groups.h` only) |
 | cef | `0302-open-hosted-tabs.patch` | +79/−6 | `BUILD.gn`, `browser_host_base.h`, `browser_info_manager.cc`, `browser_platform_delegate_create.cc`, `chrome/chrome_browser_delegate.cc`, `chrome/chrome_browser_host_impl.cc` |
 | cef | `0303-open-context-menu-submenu-commands.patch` | +15/−1 | `chrome/chrome_context_menu_handler.cc` |
+| rust | `0001-adblock-vendor.patch` (ad-block Step 1, 2026-10-26) | 11.3 MB, generated | `third_party/rust/**`: `gnrt vendor` + `gen` output for the adblock 0.8.11 closure, the merged `Cargo.toml` and `gnrt_config.toml`, three crate patches (docs/engine-patches.md P8 "Security review") |
 
 Overlay: `open/browser/tab_strip/*` and `open/open_libcef_sources.gni`
 (about 1,600 lines, compiled into `libcef_static`), and the API header

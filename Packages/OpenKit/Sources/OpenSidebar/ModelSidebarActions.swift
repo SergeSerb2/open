@@ -18,6 +18,7 @@ public struct ModelSidebarActions {
     @discardableResult
     public func perform(_ intent: SidebarIntent) -> Bool {
         switch intent {
+        case .media: return false
         case .select(let id, let space):
             if case .splitPane(let splitID) = model.parent(of: id) {
                 model.focusSplitPane(splitID: splitID, tabID: id)

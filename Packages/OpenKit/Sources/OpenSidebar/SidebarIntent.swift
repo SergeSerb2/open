@@ -34,6 +34,8 @@ public enum SidebarIntent: Equatable, Sendable {
     /// Space header chevron: collapse or expand the pinned section.
     case setPinnedCollapsed(space: SpaceID, collapsed: Bool)
 
+    case media(MediaIntent)
+
     // Row actions
     case close(nodeID: ItemID)
     /// "Close and keep pinned": drop the web content, keep the pinned entry.
@@ -109,4 +111,12 @@ public enum SidebarIntent: Equatable, Sendable {
     /// Bottom-bar plus menu.
     case newTab
     case newSplitView
+}
+
+
+/// Media intents are handled by the App; drawer state stays in the view (PP-15/16).
+public enum MediaIntent: Equatable, Sendable {
+    case play(ItemID), pause(ItemID), previousTrack(ItemID), nextTrack(ItemID), toggleMute(ItemID)
+    case setVolume(ItemID, Double), toggleVolumeDrawer(ItemID), openPictureInPicture(ItemID)
+    case close(ItemID), backToTab(ItemID), toggleMicrophone(ItemID), toggleCamera(ItemID)
 }

@@ -187,6 +187,73 @@ User Boost JavaScript runs in the main world on purpose (docs/boosts.md). Open's
 
 Planned in full in [plans/adblock-fork.md](plans/adblock-fork.md) (adblock-rust in `//open/adblock`, a `URLLoaderThrottle`, cosmetic delivery over `cef.mojom`). Until it lands, `OEBrowserContext.requestFilter` is the stepping stone that plan names (D-5): it calls a block on the network thread for every request (`CefRequestContextHandler::GetResourceRequestHandler`), works end to end (`request_filter` in results-features-alloy.json), and gives allowed requests no per-request handler.
 
+### Security review (Step 1, 2026-10-26)
+
+The engine parses filter lists in the browser process, which is the most privileged process. These are the decisions that let it build there, and the limits on its input. Lead decisions of 2026-10-26.
+
+**Crate overrides** (`patches/rust/0001-adblock-vendor.patch`, intent in `src/third_party/rust/chromium_crates_io/*.open`):
+
+| Crate | Chromium 156 | Open | Why |
+|---|---|---|---|
+| `regex` 1.13.1 | `group = 'test'`, imported only for the libafl fuzzer (Chromium commit `e8fac8e9`, 2026-05-11) | `group = 'safe'` (shipped, security critical). `allow_first_party_usage` stays false | `adblock` cannot work without it: it is not an optional dependency. regex is one of the most widely audited Rust crates, and Brave ships the same setup in its browser process. Approved. |
+| `regex` features | `default` (all `perf-*`), because of libafl | `std`, `unicode`, `perf-dfa`, `perf-onepass`, `perf-backtrack`, `perf-cache`, `perf-inline`; **not** `perf-literal`. Crate patches `adblock-v0_8` and `libafl-v0_15` set `default-features = false` and this list on their regex dependency (Cargo unifies features across the tree, so both are needed) | Engine review r1 (97-1): the first config (`std` + `unicode` only) left only the PikeVM, about 6 times slower on realistic URLs (table below). The slow part was losing regex-automata's lazy DFA, one-pass and backtracking engines, not aho-corasick, and those engines live in `regex-automata`, which Chromium already builds with `allow_unsafe = true` (`hybrid`, `dfa-onepass` and `nfa-backtrack` are back in its `BUILD.gn`). Only `perf-literal` pulls in aho-corasick, so aho-corasick stays out of the GN graph (no `BUILD.gn` depends on it; `regex_automata/v0_4/BUILD.gn` lists only its prefilter source file). Hostile list regexes such as `\w{300}` now fail regex's size limit and are dropped instead of compiling to a slow PikeVM. regex's guarantees stay: worst-case `O(m * n)` search (`regex-v1/src/lib.rs:6-7`) and the compiled-size limit (`builders.rs:53`). adblock compiles list patterns with plain `Regex::new` / `RegexSet::new` and handles errors (`src/filters/network.rs:1228,1236`). |
+| `aho-corasick` | `safe`, `allow_unsafe = false` | Unchanged, and not built | Chromium's config. With the features above the `allow_unsafe = true` fallback is not needed. |
+| `itertools` | One unversioned config, `allow_unsafe = true` | Per-epoch configs: `itertools@v0_10` (adblock) `allow_unsafe = false`, `@v0_14` keeps `true` | 0.10.5 has no `unsafe` code (review 97-3). gnrt allows either one unversioned config or per-epoch configs, not both. |
+| `thiserror`, `idna` | One unversioned config each | Per-epoch configs: `thiserror@v1` (adblock) and `@v2`; `idna@v0_2` (adblock, no `unsafe`) and `@v1` (via `url` 2.5, uses `unsafe`) | The unversioned config gave thiserror 1 a build-script output that only 2 has, and gave idna 1 `allow_unsafe = false`. |
+| New crates | — | `allow_unsafe` as `gnrt vendor` set it from its scan: `true` for adblock, url, idna 1, percent-encoding, form_urlencoded, unicode-bidi, unicode-normalization, rmp, rmp-serde, seahash; `false` for the rest | Tool output. Every crate has a row in `Engine/fork/licenses/THIRD_PARTY.md`. |
+| `seahash` 3.0.7 | — | Crate patch adds upstream's MIT license text | Published without a license file; upstream added it later (gitlab.redox-os.org/redox-os/seahash commit `3088c5c9`). |
+| `rmp` | — | Pinned `=0.8.11` | `rmp-serde` 0.15 needs it; gnrt would pick 0.8.15 (adblock-design §Benchmark). |
+
+**Cost of the regex features** (re-measured after engine review r1, 97-1). The first measurement used 15 short URLs and reported 1.65 µs (`perf`) against 2.90 µs (`std` + `unicode`); real ad-tech URLs are longer, and the cost grows with URL length. Re-measured on the six ad-tech URL shapes of the review's `realurl` probe (58 to 2,040 characters), through the shim's check (URL parse and the 8 KiB match cap included), with the current official EasyList + EasyPrivacy, on an Apple M5 Pro at load average about 10:
+
+| Measure | `std` + `unicode` (first config) | Shipped: + `perf-dfa`, `perf-onepass`, `perf-backtrack`, `perf-cache`, `perf-inline` | adblock-fork budget |
+|---|---|---|---|
+| Network check, mean of the six shapes (standalone, system allocator) | 29.3 µs | 5.5 µs | §7.8 gates G-1 to G-7 (Step 4) |
+| Network check, mean of the six shapes (in-tree build, cefsimple self-test) | — | 6.0 µs (2.2 to 11.5 µs per shape) | — |
+| A 2 MB URL (standalone; the shim matches its first 8 KiB) | 1,000 µs | 91 µs | — |
+| Cosmetic query per page, nytimes.com (in-tree; sanitized vectors since #98 r1) | — | 56 µs | ≤ 100 µs |
+| Engine build from text, then serialize and write the DAT (in-tree, two lists) | — | 213 to 282 ms | ≤ 1500 ms |
+| DAT load (in-tree) | — | 52 to 62 ms | ≤ 250 ms |
+
+The review's own probe gave the same picture: 28.8 µs against 4.9 µs on realistic URLs, and a hostile rule such as `\w{300}` compiled to a slow PikeVM before and now fails regex's size limit. At 200 requests a page, the shipped config costs about 1.2 ms of matching. `openkit adblock perf` (Swift allowlist lookups, not regex) stays at p95 0.11 ms per 1,000 lookups (budget 1 ms).
+
+**Untrusted input.** Filter lists (EasyList, EasyPrivacy and the 46-list catalog) are untrusted network input. The engine parses them in the browser process (`FilterSet::add_filter_list`, `Engine::from_filter_set`), and it reads the serialized engine (DAT) back from disk (`Engine::deserialize`). The limits that exist today, in the Swift store (docs/adblock-lists.md):
+- A source is capped at 16 MiB, and a combined list at 64 MiB. The cap is enforced while streaming, and the advertised size is checked.
+- Downloads are HTTPS only. Redirects stay on the source host unless the catalog allows the destination.
+- Each list generation has SHA-256 receipts. They are verified before every load, and a mismatch causes a fresh fetch.
+- Bundled seeds are pinned by SHA-256 (`tools/fetch-adblock-lists.sh`, also `--max-filesize 16 MiB`).
+- The engine is given only verified generation files, read with a size bound.
+
+The parsers are memory-safe Rust apart from the `unsafe` crates listed above. A crate call that returns a `Result` can still panic on hostile input, and a panic ends the browser process (`-Cpanic=abort`): `Engine::deserialize` panicked on a DAT of 4 bytes (review 98-3, now guarded in the shim), and `rmp-serde` resizes a buffer to a stream-controlled length of up to 4 GiB (`decode.rs:870`). The DAT receipt proves integrity at rest only: a same-user writer can forge a matching DAT and receipt, which the threat model accepts. Follow-up (`docs/followups.md`): fuzz list parsing, resources parsing and DAT deserialization, and add a parse time and memory limit, before the first public release. adblock, regex, aho-corasick, the psl crate's embedded Public Suffix List data, and three RustSec advisories (`idna` 0.2.3 RUSTSEC-2024-0421, `rmp-serde` 0.15.5 RUSTSEC-2022-0092, `paste` 1.0.15 RUSTSEC-2024-0436; impact notes in docs/release/licenses.md) are on the release license and security review list (U-6).
+
+**Vendored crate checksums** (review 97-4). Chromium's `Cargo.lock` has no checksums and gnrt empties `.cargo-checksum.json`, so this table records the crates.io SHA-256 of each new crate's `.crate` file. Each value was checked against the downloaded `.crate` file in the local Cargo cache (`shasum -a 256 ~/.cargo/registry/cache/*/<name>-<version>.crate`, 23 of 23 equal, 2026-10-26). The vendored sources are those tarballs, byte for byte, except the documented crate patches (adblock and libafl `Cargo.toml` regex features, the seahash `LICENSE`) and gnrt's generated `OWNERS` files.
+
+```text
+adblock 0.8.11 30742f71bef6ec01923b2d37ac2f02bf3d4f83ac0af5dca1268902e1c777528e
+addr 0.14.0 c54ccac949a2afafdfc889e15c753bbc6ee8783e026bbe3d057b00b13907db70
+base64 0.13.1 9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8
+bitflags 1.3.2 bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a
+form_urlencoded 1.2.2 cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf
+idna 0.2.3 418a0a6fab821475f634efe3ccc45c013f742efe03d853e8d3355d5cb850ecf8
+idna 1.1.0 3b0875f23caa03898994f6ddc501886a45c7d3d62d04d2d90788d47be1b1e4de
+idna_adapter 1.2.2 cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714
+itertools 0.10.5 b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473
+matches 0.1.10 2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5
+paste 1.0.15 57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a
+percent-encoding 2.3.2 9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220
+psl 2.1.245 46cce9bc841c0eeb395275a775d11e3cc91b904e6ab370a9a42369e111b3038e
+psl-types 2.0.11 33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac
+rmp 0.8.11 44519172358fd6d58656c86ab8e7fbc9e1490c3e8f14d35ed78ca0dd07403c9f
+rmp-serde 0.15.5 723ecff9ad04f4ad92fe1c8ca6c20d2196d9286e9c60727c4cb5511629260e9d
+seahash 3.0.7 58f57ca1d128a43733fd71d583e837b1f22239a37ebea09cde11d8d9a9080f47
+thiserror 1.0.69 b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52
+thiserror-impl 1.0.69 4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1
+tinyvec 1.13.3 fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee
+unicode-bidi 0.3.18 5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5
+unicode-normalization 0.1.26 75cd3fb03d5288b3ba9a1ee103ac7e9cbb59f0b03d64f8ddfcc04dd42758a85d
+url 2.5.8 ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed
+```
+
 ## Decisions for the lead
 
 1. Spaces and windows in `chrome.windows`: one Chrome window per Open window (proposed), or one per Space? Arc: per window (`ArcBrowser` has a `windowIdentifier`, docs/re/arccore-engine.md §4.3).

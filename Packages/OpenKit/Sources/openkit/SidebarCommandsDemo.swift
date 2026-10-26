@@ -130,6 +130,8 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
         }
     }
     a.customTitle = "Custom A"; a.customIcon = "star"; a.isMuted = true
+    a.iconOverride = .emoji("🧭"); nested.iconOverride = .named("planet")
+    p1.iconOverride = .symbol("heart"); b.iconOverride = .named("leaf")
     reset()
     let copies = model.duplicateNodes(ids: [a.id, split.id, nested.id, fav.id])
     let copiedTab = copies.first.flatMap { model.tab(id: $0) }
@@ -137,6 +139,8 @@ func runSidebarCommandsDemo(root: URL, check: (Bool, String) -> Void) async thro
     let copiedFolder = copies.dropFirst(2).first.flatMap { model.node(id: $0)?.folder }
     check(copies.count == 4 && inserts() == copies && copiedTab?.pinnedURL == a.pinnedURL
           && copiedTab?.url == a.url && copiedTab?.customTitle == a.customTitle && copiedTab?.customIcon == a.customIcon && copiedTab?.isMuted == true
+          && copiedTab?.iconOverride == a.iconOverride && copiedFolder?.iconOverride == nested.iconOverride
+          && copiedSplit?.panes.first?.iconOverride == p1.iconOverride && copiedFolder?.children.first?.tab?.iconOverride == b.iconOverride
           && copiedSplit?.panes.count == 2 && copiedSplit?.panes.first?.id != p1.id
           && copiedSplit?.orientation == .vertical && copiedSplit?.fractions == [0.25, 0.75]
           && copiedSplit?.focusedPaneID == copiedSplit?.panes[1].id
