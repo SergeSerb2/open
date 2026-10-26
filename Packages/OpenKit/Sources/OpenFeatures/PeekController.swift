@@ -83,7 +83,8 @@ public final class PeekController {
         guard let space = splitController.space else { return }
         dismissGeneration += 1; isDismissing = false; overlay.setOpacity(1, animated: false)
         if stack.count >= 5 { stack.last?.host?.load(url); return }
-        let hostID = ItemID(), host = factory.makeHost(tabID: hostID, profileID: space.profileID, url: nil)
+        let hostID = ItemID()
+        guard let host = factory.makeHost(tabID: hostID, profileID: space.profileID, url: nil) else { return }
         let item = PeekItem(id: UUID(), url: url, sourceTabID: sourceTabID, hostTabID: hostID, host: host)
         stack.append(item)
         let itemID = item.id

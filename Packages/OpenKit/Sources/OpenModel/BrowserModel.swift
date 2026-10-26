@@ -1531,6 +1531,36 @@ public final class BrowserModel {
 
     // MARK: Focus / selection
 
+    @discardableResult
+    public func createWindow(focusedSpaceID: SpaceID) -> BrowserWindowState? {
+        guard space(id: focusedSpaceID) != nil else { return nil }
+        let state = BrowserWindowState(focusedSpaceID: focusedSpaceID)
+        windows.append(state)
+        registerChange(undo: { [weak self] in self?.windows.removeAll { $0.id == state.id } },
+                       redo: { [weak self] in self?.windows.append(state) })
+        return state
+    }
+
+    public func closeWindow(windowID: WindowID) {
+        guard let index = windows.firstIndex(where: { $0.id == windowID }) else { return }
+        let state = windows.remove(at: index)
+        registerChange(undo: { [weak self] in guard let self else { return }; self.windows.insert(state, at: min(index, self.windows.count)) },
+                       redo: { [weak self] in self?.windows.removeAll { $0.id == windowID } })
+    }
+
+    public func setSidebarWidth(windowID: WindowID, width: Double) {
+        guard width.isFinite, let state = windows.first(where: { $0.id == windowID }) else { return }
+        let old = state.sidebarWidth, value = min(500, max(228, width))
+        guard value != old else { return }; state.sidebarWidth = value
+        registerChange(undo: { state.sidebarWidth = old }, redo: { state.sidebarWidth = value })
+    }
+
+    public func setSidebarMode(windowID: WindowID, mode: SidebarMode) {
+        guard let state = windows.first(where: { $0.id == windowID }), state.sidebarMode != mode else { return }
+        let old = state.sidebarMode; state.sidebarMode = mode
+        registerChange(undo: { state.sidebarMode = old }, redo: { state.sidebarMode = mode })
+    }
+
     public func focusSpace(windowID: WindowID, spaceID: SpaceID) {
         guard let window = windows.first(where: { $0.id == windowID }) else { return }
         let old = window.focusedSpaceID
