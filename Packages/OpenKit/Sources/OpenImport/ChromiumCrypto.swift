@@ -65,6 +65,8 @@ public func fetchKeychainPassword(service: String, account: String, consent: Sec
 
 /// Consent still gates this metadata probe. It must not cause a second prompt.
 public func keychainItemExists(service: String, account: String, consent: SecretsImportConsent) -> Bool {
+    // interactionNotAllowed on the authentication context replaces the deprecated
+    // kSecUseAuthenticationUIFail: the query fails instead of showing any UI.
     let context = LAContext()
     context.interactionNotAllowed = true
     let query: [String: Any] = [
@@ -75,7 +77,6 @@ public func keychainItemExists(service: String, account: String, consent: Secret
         kSecReturnData as String: false,
         kSecMatchLimit as String: kSecMatchLimitOne,
         kSecUseAuthenticationContext as String: context,
-        kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
     ]
     return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
 }
