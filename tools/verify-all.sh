@@ -12,7 +12,7 @@ QUICK=0
 ONLY=
 ARC=0
 KEEP=0
-NAMES='commands-demo roundtrip suggest-check commands-dump route favicons sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render commandbar-render boosts import-arc'
+NAMES='commands-demo roundtrip suggest-check commands-dump route favicons sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render boosts import-arc'
 
 usage() {
     cat <<EOF
@@ -117,6 +117,16 @@ has_command() {
     LC_ALL=C grep -Eq "(^|[<|[:space:]])$1([>|[:space:]]|$)" "$LOG_DIR/openkit-usage.log"
 }
 available() {
+    if [ "$1" = sidebar-compare ]; then
+        if "$ROOT/tools/verification/sidebar-compare-states.sh" ${SIDEBAR_CAPTURE_ROOT:+"$SIDEBAR_CAPTURE_ROOT"} --probe; then
+            return 0
+        else
+            # Only missing private inputs permit SKIP. Other probe failures must
+            # reach run_check and fail there.
+            [ "$?" -ne 77 ]
+            return $?
+        fi
+    fi
     if [ "$1" = route ]; then
         for runner in "$ROOT/tools/route-check.sh" "$ROOT/tools/verify-routing.sh" \
                       "$ROOT/tools/verify-route.sh" "$BIN/route-check"; do

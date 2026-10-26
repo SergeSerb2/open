@@ -421,6 +421,16 @@ def main():
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
+    elif name == "sidebar-compare":
+        args = [str(root / "tools/verification/sidebar-compare-states.sh")]
+        if os.environ.get("SIDEBAR_CAPTURE_ROOT"):
+            args.append(os.environ["SIDEBAR_CAPTURE_ROOT"])
+        if os.environ.get("SIDEBAR_BASELINE_RENDERER"):
+            args += ["--baseline-renderer", os.environ["SIDEBAR_BASELINE_RENDERER"]]
+        # Renders can contain private titles. Keep them out of the normal log
+        # directory (which may be an artifact upload directory).
+        text = run(*args, timeout=1800)
+        matches(r"^tables identical: 13/13;", text)
     elif name == "boosts":
         boosts(root)
     elif name == "import-arc":

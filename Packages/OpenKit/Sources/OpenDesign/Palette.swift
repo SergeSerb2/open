@@ -135,6 +135,7 @@ public enum SidebarRole {
     /// Selected row in dark content: measured white 0.20 → `TabCellBackgroundCurrent` dark.
     /// Light content uses the theme's `light.background` (see `SpaceThemeStyle.selectedFill`).
     public static let rowSelected = SidebarColors.tabCurrent
+    public static let rowMultiselected = SidebarColors.tabMultiselected
     public static let rowSelectedShadow = SidebarColors.tabShadowSelected
     public static let rowPressed = SidebarColors.tabPressed
     /// Pinned/Today divider line: measured black 0.15 → `SidebarSeparator`.

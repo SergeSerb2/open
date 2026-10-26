@@ -173,6 +173,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     /// True when the change touched this page.
     @discardableResult
     func apply(_ change: TreeChange) -> Bool {
+        defer { pruneSelection() }
         switch change {
         case .insert(let p, _, _), .remove(let p, _, _), .reload(let p):
             return sync(parent: p)
@@ -318,9 +319,36 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             }
         }
         walk(rootItems)
+        pruneSelection()
     }
 
     // MARK: Row states
+
+    /// Built only for an input event or a structure change, never during drawing.
+    var selectableOrder: [ItemID] {
+        (0..<outline.numberOfRows).compactMap { itemID(of: outline.item(atRow: $0)) }
+    }
+
+    private func pruneSelection() {
+        guard context.focusedSpace?.id == space.id, !context.selection.isEmpty else { return }
+        let order = selectableOrder
+        context.selection.prune(keeping: Set(order))
+        let ordered = order.filter { context.selection.contains($0) }
+        if context.selection.ids != ordered { context.selection.select(ordered, anchor: context.selection.anchor) }
+    }
+
+    func modifySelection(item: Any, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard let id = itemID(of: item), !modifiers.intersection([.command, .shift]).isEmpty else { return false }
+        let order = selectableOrder
+        let selection = context.selection
+        if selection.isEmpty, let current = context.selectedID(in: space.id), order.contains(current) {
+            selection.select([current], anchor: current)
+        }
+        if modifiers.contains(.command) { selection.toggle(id, order: order) }
+        else { selection.extend(to: id, order: order) }
+        TooltipController.shared.cancel(for: nil)
+        return true
+    }
 
     private var currentItem: AnyObject? {
         if context.isNewTabCommandBarOpen, context.focusedSpace?.id == space.id { return newTab }
@@ -405,6 +433,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     @discardableResult
     func activate(item: Any) -> Bool {
+        context.selection.clear()
         TooltipController.shared.cancel(for: nil)
         switch item {
         case let t as Tab: return context.send(.select(nodeID: t.id, space: space.id))
@@ -506,8 +535,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         configure(rowView, item: outlineView.item(atRow: row) as AnyObject?, current: currentItem, hover: hoverItem(), animated: false)
     }
 
-    func outlineViewItemDidExpand(_ notification: Notification) { updateRowStates(animated: false) }
-    func outlineViewItemDidCollapse(_ notification: Notification) { updateRowStates(animated: false) }
+    func outlineViewItemDidExpand(_ notification: Notification) { pruneSelection(); updateRowStates(animated: false) }
+    func outlineViewItemDidCollapse(_ notification: Notification) { pruneSelection(); updateRowStates(animated: false) }
 
     // MARK: Drag and drop
 
@@ -600,6 +629,14 @@ final class SidebarOutlineView: NSOutlineView {
 
     override func mouseDown(with event: NSEvent) {
         keyboardItem = nil
+        if let page {
+            let row = row(at: convert(event.locationInWindow, from: nil))
+            if row >= 0, let item = item(atRow: row), page.modifySelection(item: item, modifiers: event.modifierFlags) {
+                window?.makeFirstResponder(self)
+                return
+            }
+            page.context.selection.clear()
+        }
         page?.updateRowStates(animated: false)
         super.mouseDown(with: event)
     }
@@ -610,8 +647,20 @@ final class SidebarOutlineView: NSOutlineView {
         let current = keyboardItem.map { row(forItem: $0) } ?? -1
         switch event.keyCode {
         case 125, 126: // Down, Up: focus only, leaving selection in the model.
-            let next = event.keyCode == 125 ? rows.first(where: { $0 > current }) : rows.last(where: { $0 < (current < 0 ? numberOfRows : current) })
+            let extending = event.modifierFlags.contains(.shift)
+            let selection = page.context.selection
+            var from = current
+            let candidates = extending ? rows.filter { itemID(of: item(atRow: $0)) != nil } : rows
+            if extending {
+                if from < 0, let id = page.context.selectedID(in: page.space.id), let object = page.context.model.node(id: id)?.object { from = row(forItem: object) }
+                if from < 0 { from = candidates.first ?? -1 }
+                if selection.isEmpty, let id = itemID(of: item(atRow: from)) { selection.select([id], anchor: id) }
+            } else { selection.clear() }
+            let next = event.keyCode == 125 ? candidates.first(where: { $0 > from }) : candidates.last(where: { $0 < (from < 0 ? numberOfRows : from) })
             if let next { keyboardItem = item(atRow: next) as AnyObject?; scrollRowToVisible(next) }
+            if extending, let id = itemID(of: keyboardItem) { selection.extend(to: id, order: page.selectableOrder) }
+        case 53: // Escape
+            page.context.selection.clear()
         case 36, 49, 76: // Return, Space, keypad Enter
             if let keyboardItem { page.activate(item: keyboardItem) }
         case 123, 124: // Left, Right

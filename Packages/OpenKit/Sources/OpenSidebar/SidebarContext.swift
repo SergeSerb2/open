@@ -11,6 +11,7 @@ import OpenModel
 public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
+    public let selection = SidebarSelection()
     /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
@@ -117,6 +118,7 @@ public final class SidebarContext {
 
     @discardableResult
     func send(_ intent: SidebarIntent) -> Bool {
+        if case .select = intent { selection.clear() }
         guard let sidebar, let delegate = sidebar.delegate else { return false }
         return delegate.sidebar(sidebar, didRequest: intent)
     }

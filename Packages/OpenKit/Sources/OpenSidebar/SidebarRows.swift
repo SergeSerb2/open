@@ -19,7 +19,9 @@ final class SidebarRowView: NSTableRowView {
     static let identifier = NSUserInterfaceItemIdentifier("sidebarRow")
     private let fill = CALayer()
     private var keyboardRing: CAShapeLayer?
-    weak var representedItem: AnyObject?
+    weak var representedItem: AnyObject? {
+        didSet { if representedItem !== oldValue { needsDisplay = true } }
+    }
     var isKeyboardFocused = false {
         didSet {
             guard isKeyboardFocused != oldValue else { return }
@@ -50,6 +52,7 @@ final class SidebarRowView: NSTableRowView {
         super.init(frame: frame)
         identifier = Self.identifier
         wantsLayer = true
+        fill.name = "sidebar-row-fill"
         fill.cornerCurve = .continuous
         fill.opacity = 0
         layer?.addSublayer(fill)
@@ -93,6 +96,10 @@ final class SidebarRowView: NSTableRowView {
 
     func updateFill(animated: Bool) {
         let appearance = contentAppearance
+        let multiselected = tracked({
+            guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
+            return selection.rowState(for: id).isSelected
+        }) { [weak self] in self?.needsDisplay = true }
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(isCurrent ? Motion.selectionFade : Motion.hoverFade)
@@ -104,6 +111,10 @@ final class SidebarRowView: NSTableRowView {
             let style = page?.style
             fill.backgroundColor = (style?.selectedFill(appearance) ?? SidebarRole.rowSelected.resolved(appearance)).cgColor
             SelectionShadow.apply(to: fill, appearance: appearance)
+            fill.opacity = 1
+        } else if allowsHighlight && multiselected {
+            fill.backgroundColor = SidebarRole.rowMultiselected.cgColor(appearance)
+            fill.shadowOpacity = 0
             fill.opacity = 1
         } else if allowsHighlight && (isHovered || isDropTarget) {
             fill.backgroundColor = (isDropTarget ? SidebarColors.itemHoveredBackground : SidebarRole.rowHover).cgColor(appearance)

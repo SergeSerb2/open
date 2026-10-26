@@ -27,6 +27,7 @@ enum RenderCLI {
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
+                            [--multi-select ROW,ROW…]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
@@ -132,6 +133,13 @@ enum RenderCLI {
             window.selectedNodeBySpace[space.id] = id
         }
         if args.contains("--loaded") { for tab in model.index.values.compactMap(\.tab) { tab.live.hasWebContent = true } }
+        if let specs = value(args, "--multi-select") {
+            let ids = try specs.split(separator: ",").map { spec -> ItemID in
+                guard !spec.hasPrefix("favorite:"), let id = resolve(String(spec), context: context) else { throw CLIError(description: "no selectable row \(spec)") }
+                return id
+            }
+            context.selection.select(ids, anchor: ids.first)
+        }
         if let h = value(args, "--hover") {
             guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }
             context.forcedHover = t
