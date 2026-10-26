@@ -370,7 +370,7 @@ func runSuggestCheck(args: [String]) async {
               pinnedIDs.contains("unpin-tab") && !pinnedIDs.contains("pin-tab") && todayIDs.contains("pin-tab") && !todayIDs.contains("unpin-tab"),
               "pinned tab → \(pinnedIDs.sorted()); today tab → \(todayIDs.sorted())")
     if let s = await lastSnapshot(engine, "clear today", ctx) {
-        log.check("Arc trigger phrase \"clear today\" → Clear Unpinned Tabs", s.topHit?.actionID == "clear-unpinned-tabs", "top=\(describe(s.topHit))")
+        log.check("Search alias \"clear today\" → Clear Unpinned Tabs", s.topHit?.actionID == "clear-unpinned-tabs", "top=\(describe(s.topHit))")
     }
 
     // 18. Focus on <Space>.

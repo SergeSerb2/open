@@ -40,7 +40,7 @@ Packages/OpenKit/     SwiftPM package, engine-agnostic, one library per area:
   OpenWeb             Swift protocols over the engine (WebEngine, WebContent, ExtensionHost). App target bridges them to OpenEngine.
   OpenSidebar         Sidebar views, rows, favorites grid, folders, drag and drop, Space switcher
   OpenCommandBar      Command bar panel, search sources, ranking, actions
-  OpenFeatures        Split View, Peek, Little Arc, Boosts, Zap, Site Control Center, ad blocking, Air Traffic Control
+  OpenFeatures        Split View, Peek, Little Open, Boosts, Zap, Site Control Center, ad blocking, Air Traffic Control
   OpenImport          Import from Arc
 tools/                Build, run, fetch-cef, and rea scripts
 docs/                 Architecture, plans, RE reports, engine docs
@@ -81,7 +81,7 @@ Location: `~/Library/Application Support/Open/`.
 | Idle CPU (no media playing) | ≈ 0% |
 | Command bar open to first results | ≤ 50 ms |
 
-Tactics: build the window and sidebar from the snapshot before the engine finishes starting. Create web content only for visible or recently used tabs. Put tabs to sleep after a period without use (configurable). Load features on first use (command bar panel, settings, Little Arc, editors). Ship only the locales we need.
+Tactics: build the window and sidebar from the snapshot before the engine finishes starting. Create web content only for visible or recently used tabs. Put tabs to sleep after a period without use (configurable). Load features on first use (command bar panel, settings, Little Open, editors). Ship only the locales we need.
 
 ## Testing
 

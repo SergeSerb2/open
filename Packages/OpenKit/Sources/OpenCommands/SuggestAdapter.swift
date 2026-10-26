@@ -100,12 +100,12 @@ public extension CommandRegistry {
         "network-inspector", "allow-js-apple-events", "toggle-developer-mode",
         "tab-switcher-forward", "tab-switcher-backward", "cycle-tab-forward", "cycle-tab-backward",
         "peek-email", "join-meeting", "next-split-pane", "previous-split-pane", "show-shortcuts-overlay",
-        "little-arc-global", "getting-started", "contact-team", "release-notes", "help-center",
+        "little-open-global", "getting-started", "contact-team", "release-notes", "help-center",
     ]
 
     private static let symbols: [String: String] = [
         "new-tab": "plus", "new-window": "macwindow.badge.plus", "new-incognito-window": "eyeglasses",
-        "new-little-arc-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
+        "new-little-open-window": "macwindow.on.rectangle", "archive-tab": "archivebox",
         "restore-last-closed-tab": "arrow.uturn.backward", "print": "printer", "save-page-as": "square.and.arrow.down",
         "new-profile": "person.crop.circle.badge.plus", "new-boost": "paintbrush", "edit-boost": "paintbrush",
         "boost-gallery": "sparkles", "copy-url": "link", "copy-url-markdown": "text.badge.plus", "copy-url-quote": "quote.bubble",

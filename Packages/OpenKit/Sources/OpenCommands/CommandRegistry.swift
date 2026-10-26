@@ -60,9 +60,9 @@ public enum CommandRegistry {
                           aliases: ["Create Window", "Duplicate Window"]),
         CommandDefinition(id: "new-incognito-window", title: "New Incognito Window", menuPath: ["File"],
                           defaultShortcuts: [.cmdShift("n")], isCustomizable: true, aliases: ["Incognito", "Private Window"]),
-        CommandDefinition(id: "new-little-arc-window", title: "New Little Arc Window", menuPath: ["File"],
+        CommandDefinition(id: "new-little-open-window", title: "New Little Open Window", menuPath: ["File"],
                           defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.command, .option])],
-                          isCustomizable: true, aliases: ["Little Arc", "Quick Lookup", "Mini Window"]),
+                          isCustomizable: true, aliases: ["Little Open", "Little Arc", "Quick Lookup", "Mini Window"]),
         CommandDefinition(id: "blank-window", title: "Blank Window", menuPath: ["File"],
                           defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.command, .control])]),
         CommandDefinition(id: "close-window", title: "Close Window", menuPath: ["File"],
@@ -260,7 +260,7 @@ public enum CommandRegistry {
                           defaultShortcuts: [.cmdShift("e")]),
         CommandDefinition(id: "join-meeting", title: "Join Meeting", menuPath: ["Tabs"],
                           defaultShortcuts: [KeyboardShortcut(key: "j", modifiers: [.command, .control])]),
-        CommandDefinition(id: "open-in-current-space", title: "Open Little Arc or Peek in…", menuPath: ["Tabs"],
+        CommandDefinition(id: "open-in-current-space", title: "Move Little Open or Peek to Space…", menuPath: ["Tabs"],
                           defaultShortcuts: [.cmd("o")], enabledKey: EnabledKey.currentTab),
     ]
 
@@ -387,9 +387,9 @@ public enum CommandRegistry {
         CommandDefinition(id: "manage-passwords", title: "Manage Passwords", aliases: ["Passwords"]),
         CommandDefinition(id: "search-settings", title: "Search Settings",
                           aliases: ["Manage Search Settings", "Search Engine", "Default Search Engine"]),
-        CommandDefinition(id: "little-arc-global", title: "Show Little Arc (Global)",
+        CommandDefinition(id: "little-open-global", title: "Show Little Open (Global)",
                           defaultShortcuts: [KeyboardShortcut(key: "n", modifiers: [.command, .option])], scope: .global,
-                          aliases: ["Little Arc"]),
+                          aliases: ["Little Open", "Little Arc"]),
         CommandDefinition(id: "show-shortcuts-overlay", title: "Show Shortcuts While Holding Command", scope: .window),
     ] + (1...9).map { number in
         CommandDefinition(id: "go-to-tab-\(number)", title: "Go to Tab \(number)",
@@ -426,8 +426,8 @@ public enum CommandRegistry {
                           defaultShortcuts: [KeyboardShortcut(key: "g", modifiers: [.command, .option])], isReserved: true),
         CommandDefinition(id: "reserved-send-to-dia", title: "Send to Dia (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-view-easels-notes", title: "View Easels & Notes (reserved)", isReserved: true),
-        CommandDefinition(id: "reserved-export-arc-notes", title: "Export Arc Notes (reserved)", isReserved: true),
-        CommandDefinition(id: "reserved-share-arc", title: "Share Arc (reserved)", isReserved: true),
+        CommandDefinition(id: "reserved-export-arc-notes", title: "Export Notes (reserved)", isReserved: true),
+        CommandDefinition(id: "reserved-share-arc", title: "Share App (reserved)", isReserved: true),
         CommandDefinition(id: "reserved-sign-out", title: "Sign Out (reserved)", isReserved: true),
     ]
 }

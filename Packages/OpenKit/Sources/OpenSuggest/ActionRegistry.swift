@@ -49,7 +49,7 @@ public struct ActionRegistry: Sendable {
 
     public mutating func remove(id: String) { actions.removeAll { $0.id == id } }
 
-    /// Titles follow the Arc menu items in docs/re/menus-and-hotkeys.md, without a trailing "…".
+    /// Titles follow the menu items in docs/re/menus-and-hotkeys.md with Open naming, without a trailing "…".
     /// Aliases include the Arc menu trigger phrases (`ibExternalUserDefinedRuntimeAttributesLocalizableStrings`
     /// in `MainMenu.nib`, `.re/hotkeys/ib-localizable.txt`). Shortcuts are the nib key equivalents.
     /// Out of scope and left out: Easels, Notes, Arc Max, Dia, account items, Capture.
@@ -58,7 +58,7 @@ public struct ActionRegistry: Sendable {
         BrowserAction(id: "new-tab", title: "New Tab", aliases: ["Open New Tab", "Create Tab"], shortcut: "⌘T", symbol: "plus"),
         BrowserAction(id: "new-window", title: "New Window", aliases: ["Create Window", "Copy Window", "Duplicate Window"], shortcut: "⌘N", symbol: "macwindow.badge.plus"),
         BrowserAction(id: "new-incognito-window", title: "New Incognito Window", aliases: ["Incognito", "Private Window"], shortcut: "⇧⌘N", symbol: "eyeglasses"),
-        BrowserAction(id: "new-little-arc-window", title: "New Little Arc Window", aliases: ["Little Arc", "Quick Lookup", "Mini Window", "Floating Window"], shortcut: "⌥⌘N", symbol: "macwindow.on.rectangle"),
+        BrowserAction(id: "new-little-open-window", title: "New Little Open Window", aliases: ["Little Open", "Little Arc", "Quick Lookup", "Mini Window"], shortcut: "⌥⌘N", symbol: "macwindow.on.rectangle"),
         BrowserAction(id: "archive-tab", title: "Archive Tab", aliases: ["Close Tab", "Close Current Tab"], shortcut: "⌘W", symbol: "archivebox", requirement: .currentTab),
         BrowserAction(id: "restore-last-closed-tab", title: "Restore Last Closed Tab", aliases: ["Reopen Closed Tab"], shortcut: "⇧⌘T", symbol: "arrow.uturn.backward"),
         BrowserAction(id: "duplicate-tab", title: "Duplicate Current Tab", aliases: ["Duplicate Tab", "Duplicate"], symbol: "plus.square.on.square", requirement: .currentTab),
