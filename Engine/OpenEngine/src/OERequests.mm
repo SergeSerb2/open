@@ -1,5 +1,7 @@
 #import "OEInternal.h"
 
+#include <set>
+
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_jsdialog_handler.h"
 #include "include/cef_menu_model.h"
@@ -151,6 +153,25 @@
 
 @implementation OEContextMenu {
   CefRefPtr<CefRunContextMenuCallback> _callback;
+  // The command ids of the delivered items (submenus included): the only
+  // ids -selectCommand: runs. CEF would run any other id directly
+  // (RenderViewContextMenu::ExecuteCommand checks neither visibility nor
+  // enabled state), bypassing the allowlist.
+  std::set<int> _commands;
+}
+
+static void OECollectCommands(NSArray<OEContextMenuItem*>* items,
+                              std::set<int>* commands) {
+  for (OEContextMenuItem* item in items) {
+    if (item.isSeparator) {
+      continue;
+    }
+    if (item.submenu.count) {
+      OECollectCommands(item.submenu, commands);
+    } else if (item.isEnabled) {
+      commands->insert((int)item.commandIdentifier);
+    }
+  }
 }
 
 - (instancetype)initOEWithParams:(CefRefPtr<CefContextMenuParams>)params
@@ -211,15 +232,24 @@
                                                              index:i]];
     }
     _items = items;
+    OECollectCommands(items, &_commands);
   }
   return self;
 }
 
 - (void)selectCommand:(NSInteger)commandIdentifier {
-  if (_callback) {
-    _callback->Continue((int)commandIdentifier, EVENTFLAG_NONE);
-    _callback = nullptr;
+  if (!_callback) {
+    return;
   }
+  if (!_commands.count((int)commandIdentifier)) {
+    NSLog(@"OEContextMenu: refused command %ld: not an enabled item of this "
+          @"menu",
+          (long)commandIdentifier);
+    [self cancel];
+    return;
+  }
+  _callback->Continue((int)commandIdentifier, EVENTFLAG_NONE);
+  _callback = nullptr;
 }
 
 - (void)cancel {

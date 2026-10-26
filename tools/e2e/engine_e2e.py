@@ -1157,12 +1157,24 @@ CONTEXT_MENU_DROPPED = ("cast", "readingmode", "qrcode", "withgoogle", "lens", "
                         "importpasswords", "languagesettings", "sendto", "readinglist", "translate", "searchgoogle")
 CONTEXT_MENU_KEPT = {
     "page": ("Reload", "Save As…", "Print…", "View Page Source", "Inspect", "Tabs probe item"),
-    "link": ("Open Link in New Tab", "Open Link in New Window", "Save Link As…", "Copy Link Address", "Inspect"),
-    "image": ("Open Image in New Tab", "Save Image As…", "Copy Image", "Copy Image Address"),
-    "selection": ("Copy", "Copy Link to Highlight", "Look Up"),
-    "editable": ("Cut", "Copy", "Paste", "Paste and Match Style", "Select All"),
-    "video": ("Loop", "Show All Controls", "Picture in Picture", "Save Video As…", "Copy Video Address"),
+    "link": ("Open Link in New Tab", "Open Link in New Window", "Save Link As…", "Copy Link Address", "Inspect",
+             "Tabs probe item"),
+    "image": ("Open Image in New Tab", "Save Image As…", "Copy Image", "Copy Image Address", "Tabs probe item"),
+    "selection": ("Copy", "Copy Link to Highlight", "Look Up", "Tabs probe item"),
+    "editable": ("Cut", "Copy", "Paste", "Paste and Match Style", "Select All", "Tabs probe item"),
+    "video": ("Loop", "Show All Controls", "Picture in Picture", "Save Video As…", "Copy Video Address",
+              "Tabs probe item"),
 }
+
+
+def _command_id(name):
+    """A Chromium command id from CEF's generated header."""
+    header = os.path.join(ROOT, "Vendor", "cef", "include", "cef_command_ids.h")
+    for line in open(header):
+        parts = line.split()
+        if len(parts) == 3 and parts[:2] == ["#define", name]:
+            return int(parts[2])
+    raise RuntimeError("no %s in %s" % (name, header))
 
 
 def menu_key(title):
@@ -1311,6 +1323,22 @@ def context_menu_commands(app, results):
             report["targets"][target] = ran
             if crashed:
                 break
+        if not crashed:
+            hidden_id = _command_id("IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD")
+            # A hidden item cannot run either: the engine runs only ids of
+            # the delivered items, so selecting "Open Link in Incognito
+            # Window" by id is refused and opens no window.
+            home_ids = [x["id"] for x in app.call("shell-windows")]
+            app.call("events")
+            point = prepare("link")
+            app.call("policy", contextMenu="run:%d" % hidden_id)
+            right_click(point)
+            time.sleep(2)
+            report["hidden_command"] = {
+                "id": hidden_id,
+                "new_windows": [x for x in app.call("shell-windows") if x["id"] not in home_ids],
+                "window_requests": [e for e in app.call("events") if e["type"] == "window-request"],
+                "foreign_windows": app.call("dismiss")}
     except Exception as e:
         try:
             app.proc.wait(5)
@@ -1350,6 +1378,13 @@ def context_menu_commands(app, results):
     allow["ok"] = (len(menus) == len(CONTEXT_MENU_KEPT) - (0 if "video" in menus else 1)
                    and not allow["dropped_seen"] and not allow["kept_missing"] and not allow["separators"])
     results["context_menu_allowlist"] = allow
+    hidden = report.get("hidden_command") or {}
+    with open(app.log.name, errors="replace") as f:
+        log_text = f.read()
+    results["context_menu_hidden_command_refused"] = {
+        "ok": bool(hidden) and not hidden["new_windows"] and not hidden["window_requests"]
+              and not hidden["foreign_windows"] and ("refused command %d" % hidden.get("id")) in log_text,
+        **hidden}
 
 
 # ----------------------------------------------------------------------------
