@@ -1,0 +1,104 @@
+{
+  "config": "Debug",
+  "peek": {
+    "close_promoted_releases_host": {
+      "after": {
+        "created": 2,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "expand_rebinds_host": {
+      "after": {
+        "created": 2,
+        "engineContents": 2,
+        "retained": 2
+      },
+      "before": {
+        "created": 2,
+        "engineContents": 2,
+        "retained": 2
+      },
+      "ok": true,
+      "strip": [
+        {
+          "active": "DA476F76-76BD-4DC4-8ED0-2D68D489F8CB",
+          "activeIsMember": true,
+          "contents": [
+            1,
+            2
+          ],
+          "context": "Default",
+          "profile": "10ECF864-F37F-42D2-AE90-8219C4B26701",
+          "tabs": [
+            "D50BA260-DC60-47A7-96FA-31A8FE32156A",
+            "DA476F76-76BD-4DC4-8ED0-2D68D489F8CB"
+          ]
+        }
+      ]
+    },
+    "page_background_after_load": {
+      "host": {
+        "audible": false,
+        "browser": 1,
+        "browserIndex": 1,
+        "browserPinned": false,
+        "canGoBack": true,
+        "context": "Default",
+        "crash": 0,
+        "extension": "",
+        "favicon": false,
+        "fullscreen": false,
+        "hidden": false,
+        "hostTab": "015B00CA-1D78-4F44-83E0-983194B14FC4",
+        "identifier": 1,
+        "kind": "tab",
+        "live": true,
+        "loading": false,
+        "muted": false,
+        "pageBackground": [
+          30,
+          80,
+          120,
+          255
+        ],
+        "popup": false,
+        "style": "alloy",
+        "title": "Page color 2",
+        "url": "data:text/html,%3Ctitle%3EPage%20color%202%3C/title%3E%3Cbody%20style=%22background:rgb(30,80,120)%22%3E%3Ch1%3EPage%20color%202%3C/h1%3E",
+        "zoom": 0
+      },
+      "ok": true,
+      "pane_color": [
+        30,
+        80,
+        120,
+        255
+      ]
+    },
+    "peek_active_stays_model_tab": {
+      "ok": true,
+      "strip": [
+        {
+          "active": "D50BA260-DC60-47A7-96FA-31A8FE32156A",
+          "activeIsMember": true,
+          "contents": [
+            1
+          ],
+          "context": "Default",
+          "profile": "10ECF864-F37F-42D2-AE90-8219C4B26701",
+          "tabs": [
+            "D50BA260-DC60-47A7-96FA-31A8FE32156A"
+          ]
+        }
+      ]
+    },
+    "window_png": {
+      "file": "peek-promoted-window.png",
+      "ok": true
+    }
+  },
+  "started": "2026-10-25 21:48:59",
+  "style": "alloy"
+}

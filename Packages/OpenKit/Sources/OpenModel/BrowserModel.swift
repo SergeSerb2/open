@@ -1153,6 +1153,9 @@ public final class BrowserModel {
             _ = insertChild(.tab(pane), into: parent, at: removed.index + offset)
             parentByID[pane.id] = parent
         }
+        // A window that showed the split now shows its focused pane.
+        let survivor = split.focusedPaneID.flatMap { id in panes.first { $0.id == id } } ?? panes.first
+        let reselected = survivor.map { retargetSelection(from: splitID, to: $0.id) } ?? []
         emit(.reload(parent: parent))
         return { model in
             // Rejoin only panes still in place; auto-archive may have taken some.
@@ -1165,6 +1168,7 @@ public final class BrowserModel {
             model.index[splitID] = .split(split)
             model.parentByID[splitID] = parent
             for pane in present { model.parentByID[pane.id] = .splitPane(splitID) }
+            if let survivor { model.restoreSelection(reselected, from: survivor.id, to: splitID) }
             model.emit(.reload(parent: parent))
             return true
         }
@@ -1215,15 +1219,17 @@ public final class BrowserModel {
         // Point minimums depend on the current viewport; SplitLayout applies the
         // 200 pt clamp and narrow-window equal scaling to these normalized shares.
         if wasFocused { split.focusedPaneID = split.panes.first?.id }
-        let collapsedIn = collapseIfSinglePane(split)
+        let collapsed = collapseIfSinglePane(split)
         let paneIndex = removed.index
         return { model in
-            if let parent = collapsedIn {
+            if let collapsed {
+                let parent = collapsed.parent
                 guard let remaining = split.panes.first, model.parentByID[remaining.id] == parent,
                       model.replaceChild(remaining.id, in: parent, with: .split(split)) != nil else { return false }
                 model.index[split.id] = .split(split)
                 model.parentByID[split.id] = parent
                 model.parentByID[remaining.id] = .splitPane(split.id)
+                model.restoreSelection(collapsed.reselected, from: remaining.id, to: split.id)
                 model.emit(.reload(parent: parent))
             }
             guard model.attach(removed.node, to: .splitPane(split.id), at: paneIndex) != nil else { return false }
@@ -1233,15 +1239,40 @@ public final class BrowserModel {
         }
     }
 
-    /// Swaps a one-pane split for its tab. Returns the parent it collapsed in.
-    private func collapseIfSinglePane(_ split: Split) -> NodeParent? {
+    /// Swaps a one-pane split for its tab. Returns the parent it collapsed in and the
+    /// window selections that moved from the split to the remaining tab.
+    private func collapseIfSinglePane(_ split: Split) -> (parent: NodeParent, reselected: [SelectionSlot])? {
         guard split.panes.count == 1, let remaining = split.panes.first, let parent = parentByID[split.id],
               replaceChild(split.id, in: parent, with: .tab(remaining)) != nil else { return nil }
         index[split.id] = nil
         parentByID[split.id] = nil
         parentByID[remaining.id] = parent
+        let reselected = retargetSelection(from: split.id, to: remaining.id)
         emit(.reload(parent: parent))
-        return parent
+        return (parent, reselected)
+    }
+
+    /// One window's selection in one Space.
+    typealias SelectionSlot = (window: BrowserWindowState, space: SpaceID)
+
+    /// Every window that selected `oldID` (a split that is going away) selects `newID`
+    /// instead, so the window keeps showing a page. Returns the moved slots for undo.
+    private func retargetSelection(from oldID: ItemID, to newID: ItemID) -> [SelectionSlot] {
+        var moved: [SelectionSlot] = []
+        for window in windows {
+            for (space, id) in window.selectedNodeBySpace where id == oldID {
+                window.selectedNodeBySpace[space] = newID
+                moved.append((window, space))
+            }
+        }
+        return moved
+    }
+
+    /// Undoes `retargetSelection` where the selection still points at `newID`.
+    private func restoreSelection(_ slots: [SelectionSlot], from newID: ItemID, to oldID: ItemID) {
+        for slot in slots where slot.window.selectedNodeBySpace[slot.space] == newID {
+            slot.window.selectedNodeBySpace[slot.space] = oldID
+        }
     }
 
     // MARK: Pinned URL

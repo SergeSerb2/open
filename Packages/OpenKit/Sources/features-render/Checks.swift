@@ -23,7 +23,7 @@ enum FeatureChecks {
         model.selectNode(windowID: window.id, spaceID: space.id, nodeID: first.id)
         let store = SnapshotStore(root: temp), archive = ArchiveStore(fileURL: temp.appendingPathComponent("State/archive.sqlite3"))
         model.archiveSink = archive
-        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults, snapshotStore: store)
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, size: CGSize(width: 2216, height: 1394), defaults: defaults, snapshotStore: store)
         defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
         func settle() { OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
         settle()
@@ -252,7 +252,7 @@ enum FeatureChecks {
         c.peekController.openInSplitTop(); settle()
         check(c.splitController.split?.panes.count == 2 && !c.peekController.isOpen && c.container.host(for: c.context.currentTab!.id) === splitPeek, "P3 lead Q4 Split promotes same host beside source")
         let littleModel = FeatureCLI.synthetic(); littleModel.windows = []
-        let little = LittleOpenCoordinator(model: littleModel, archiveSink: archive) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil) as! FakeWebContentHost }
+        let little = LittleOpenCoordinator(model: littleModel, archiveSink: archive) { profile in factory.makeHost(tabID: ItemID(), profileID: profile, url: nil)! as! FakeWebContentHost }
         little.presentWindows = false; little.defaults = defaults
         defer { little.closeAll() }
         little.open(url: URL(string: "https://example.com/path#one")!, profileHint: nil)
@@ -334,7 +334,178 @@ enum FeatureChecks {
         check(sleeping.title == oldTitle, "C1 generation guard drops stale callback after eviction")
         let image = OffscreenRenderer().render(c.contentView, scale: 1)
         check(image.width == 2216 && image.height == 1394, "C1 real CARenderer scene snapshot")
+        try await visualFinish { check($0, $1) }
+        try await reviewRound1 { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
+    }
+
+    /// M4 visual finish: the Peek dim under the sidebar content, the badge and lighter
+    /// source row, sidebar clicks through a Peek, page-colored pane bars, Arc's
+    /// unfocused-pane controls, and narrow four-pane bars without overlap.
+    static func visualFinish(_ check: (Bool, String) -> Void) async throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
+        let window = model.windows[0], space = model.spaces[0]
+        let source = space.pinned[0].tab!, other = space.pinned[1].tab!
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: source.id)
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults)
+        defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
+        func settle() { OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
+        settle()
+        c.peekController.open(url: URL(string: "https://example.org/preview")!, sourceTabID: source.id)
+        try await FeatureCLI.waitForLoads(factory, root: c.contentView); settle()
+        let root = c.contentView, overlay = c.peekController.overlay
+        let order: [Int] = [c.container, overlay.backdrop, c.sidebar, overlay].map { v in root.subviews.firstIndex { $0 === v } ?? -1 }
+        check(order.allSatisfy { $0 >= 0 } && order == order.sorted(), "VF1 Peek dim sits above the pages and below the sidebar; panel and buttons above all")
+        check(c.context.shownPeek?.sourceNodeID == source.id && c.context.peekBadges[source.id]?.url.host() == "example.org", "VF2 sidebar gets the shown Peek and the source badge")
+        check(c.sidebar.displayedURLText == "example.org", "VF2 URL field shows the Peek host (F0090)")
+        let rowPoint: CGPoint = c.sidebar.rowFrame(nodeID: other.id).map { root.convert(CGPoint(x: $0.midX, y: $0.midY), from: c.sidebar) } ?? .zero
+        let marginPoint = CGPoint(x: c.container.frame.minX + 30, y: c.container.frame.midY)
+        let panelPoint = CGPoint(x: overlay.panel.frame.midX, y: overlay.panel.frame.midY)
+        check(root.hitTest(rowPoint)?.isDescendant(of: c.sidebar) == true, "VF3 a sidebar row takes clicks while a Peek is open")
+        check(root.hitTest(marginPoint) === overlay.backdrop, "VF3 the dimmed page area takes clicks on the backdrop")
+        check(root.hitTest(panelPoint)?.isDescendant(of: overlay) == true, "VF3 the Peek panel keeps its clicks")
+        let peekHost = c.peekController.stack.last?.host as? FakeWebContentHost
+        let png = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in NSColor.systemBlue.setFill(); r.fill(); return true }.tiffRepresentation
+        peekHost?.onFaviconChange?(png)
+        check(png != nil && c.context.peekBadges[source.id]?.faviconPNG == png, "VF4 the Peek page's favicon reaches the badge")
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: other.id, space: space.id)); settle()
+        check(!c.peekController.isShown && c.context.shownPeek == nil && c.context.peekBadges[source.id] != nil, "VF5 another selection hides the Peek and keeps the badge (F0101)")
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: source.id, space: space.id)); settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == source.id, "VF5 the source row brings its Peek back")
+        let event = NSEvent.mouseEvent(with: .leftMouseDown, location: marginPoint, modifierFlags: [], timestamp: 0, windowNumber: c.window!.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+        overlay.backdrop.mouseDown(with: event); settle()
+        check(c.peekController.stack.isEmpty && c.context.peekBadges.isEmpty && c.context.shownPeek == nil && overlay.backdrop.isHidden, "VF6 a click on the dim dismisses the Peek and its badge")
+
+        c.performCommand("add-split-view"); try await FeatureCLI.waitForLoads(factory, root: c.contentView); settle()
+        // The new pane starts blank (no host to show or copy); give it a page.
+        if let id = c.splitController.split?.panes.last?.id { (c.container.host(for: id) as? FakeWebContentHost)?.load(URL(string: "https://pane.example.net/")!) }
+        try await FeatureCLI.waitForLoads(factory, root: c.contentView); settle()
+        func buttons(_ slot: PaneSlotView) -> [String: NSButton] {
+            Dictionary(uniqueKeysWithValues: (slot.paneChrome?.subviews ?? []).compactMap { $0 as? NSButton }.map { ($0.toolTip ?? "", $0) })
+        }
+        let visible = c.container.slots.map { slot in Set(buttons(slot).filter { !$0.value.isHidden }.keys) }
+        let focusedIndex = c.container.slots.firstIndex { !$0.focusRing.isHidden } ?? -1
+        check(focusedIndex >= 0 && visible[1 - focusedIndex] == ["Go back", "Go forward", "Copy Current URL", "Close This Pane"] && visible[focusedIndex].count == 7,
+              "VF7 unfocused pane shows back, forward, copy, host, close; focused shows all (F0081) (focused \(focusedIndex): \(visible.map { $0.sorted().joined(separator: ",") }))")
+        let colorsMatch = c.container.slots.allSatisfy { slot in
+            guard let host = c.container.host(for: slot.tabID), let page = host.pageBackgroundColor?.cgColor, let bar = slot.paneChrome?.layer?.backgroundColor else { return false }
+            return bar == page
+        }
+        check(colorsMatch, "VF8 each pane bar takes its page's reported color")
+        guard let split = c.splitController.split else { check(false, "VF9 split exists"); return }
+        check(c.sidebar(c.sidebar, didRequest: .addTabToSplit(splitID: split.id)) && split.panes.count == 3, "VF9 split-row Add Tab… adds a pane through the window controller")
+        check(!c.sidebar(c.sidebar, didRequest: .addTabToSplit(splitID: other.id)), "VF9 Add Tab… refuses a node that is not a split")
+
+        // Narrow four-pane bars (1280×900, the synthetic screen): nothing overlaps.
+        let narrowModel = FeatureCLI.synthetic(), narrowFactory = FakeWebContentHostFactory()
+        let nw = narrowModel.windows[0], ns = narrowModel.spaces[0]
+        let tabs = (ns.pinned + ns.today).compactMap(\.tab)
+        let four = narrowModel.makeSplit(tabIDs: Array(tabs.prefix(4)).map(\.id))!
+        narrowModel.focusSplitPane(splitID: four.id, tabID: four.panes[2].id)
+        narrowModel.selectNode(windowID: nw.id, spaceID: ns.id, nodeID: four.id)
+        let n = BrowserWindowController(model: narrowModel, windowID: nw.id, factory: narrowFactory, size: CGSize(width: 1280, height: 900), defaults: defaults)
+        defer { n.container.closeAll(); n.window?.close() }
+        try await FeatureCLI.waitForLoads(narrowFactory, root: n.contentView); OffscreenRenderer.settle(n.contentView, runLoop: 0.01)
+        var overlaps = 0, outside = 0, truncated = 0
+        for slot in n.container.slots {
+            guard let bar = slot.paneChrome else { continue }
+            var frames = bar.subviews.filter { !$0.isHidden && ($0 is NSButton || $0 is NSTextField) }.map(\.frame)
+            if let label = bar.subviews.compactMap({ $0 as? NSTextField }).first, !label.isHidden, label.lineBreakMode == .byTruncatingTail { truncated += 1 }
+            outside += frames.filter { !bar.bounds.contains($0) }.count
+            while let f = frames.popLast() { overlaps += frames.filter { $0.intersects(f) }.count }
+        }
+        check(n.container.slots.count == 4 && overlaps == 0 && outside == 0, "VF10 four-pane bars at 1280 pt: no overlapping or clipped controls (\(overlaps) overlaps, \(outside) outside)")
+        check(truncated == 3, "VF10 narrow unfocused bars truncate their hosts; the focused bar drops the host group (\(truncated) truncated)")
+    }
+
+    /// PR #50 review round 1: a collapsing split hands its selection to the surviving
+    /// tab (model level, with undo); a Peek follows its source tab into and out of a
+    /// split; a late page color reaches the pane bar.
+    static func reviewRound1(_ check: (Bool, String) -> Void) async throws {
+        let model = FeatureCLI.synthetic(), factory = FakeWebContentHostFactory(), defaults = FeatureCLI.defaults()
+        let window = model.windows[0], space = model.spaces[0]
+        let undo = UndoManager(); undo.groupsByEvent = false
+        let c = BrowserWindowController(model: model, windowID: window.id, factory: factory, defaults: defaults)
+        defer { c.peekController.dismissAll(); c.container.closeAll(); c.window?.close() }
+        // Direct model edits schedule the controller's refresh on the main queue, which this
+        // task holds; refresh in place, as the other scenarios do.
+        func settle() async throws {
+            c.refresh(); try await FeatureCLI.waitForLoads(factory, root: c.contentView); OffscreenRenderer.settle(c.contentView, runLoop: 0.01)
+        }
+        func runMenu(_ split: Split, pane: Tab, item title: String) {
+            guard let menu = c.sidebar.contextMenu(nodeID: split.id), let paneTitle = menu.items.first(where: { $0.submenu?.item(withTitle: "Separate from Split View") != nil && $0.title.hasPrefix(String(pane.displayTitle.prefix(30))) }),
+                  let sub = paneTitle.submenu else { return }
+            sub.performActionForItem(at: sub.indexOfItem(withTitle: title))
+        }
+        func shows(_ tab: Tab) -> Bool {
+            c.context.currentTab?.id == tab.id && c.container.slots.count == 1 && c.container.slots[0].tabID == tab.id && c.container.slots[0].paneChrome == nil
+        }
+        let pinned = space.pinned.compactMap(\.tab)
+        for (label, title) in [("Separate from Split View", "Separate from Split View"), ("Archive Item", "Archive Item")] {
+            let a = model.newTab(in: space.id, url: URL(string: "https://pane-a.example.com/")!, title: "Pane A \(label)")
+            let b = model.newTab(in: space.id, url: URL(string: "https://pane-b.example.com/")!, title: "Pane B \(label)")
+            a.live.sleepPhase = .live; b.live.sleepPhase = .live
+            let split = model.makeSplit(tabIDs: [a.id, b.id])!
+            model.selectNode(windowID: window.id, spaceID: space.id, nodeID: split.id)
+            try await settle()
+            check(c.container.slots.count == 2, "RR1 \(label): a selected two-pane split shows two panes")
+            model.undoManager = undo
+            runMenu(split, pane: b, item: title); try await settle()
+            check(model.node(id: split.id) == nil && window.selectedNodeBySpace[space.id] == a.id && shows(a),
+                  "RR1 \(label) on a two-pane split selects the surviving tab and the container shows it")
+            undo.undo(); try await settle()
+            check(model.node(id: split.id)?.split?.panes.count == 2 && window.selectedNodeBySpace[space.id] == split.id && c.container.slots.count == 2,
+                  "RR1 \(label) undo restores the split and its selection")
+            undo.redo(); try await settle()
+            check(window.selectedNodeBySpace[space.id] == a.id && shows(a), "RR1 \(label) redo selects the surviving tab again")
+            model.undoManager = nil
+        }
+        // Separate All Tabs through the split-row menu: the focused pane stays selected.
+        let p = model.newTab(in: space.id, url: URL(string: "https://all-p.example.com/")!, title: "All P")
+        let q = model.newTab(in: space.id, url: URL(string: "https://all-q.example.com/")!, title: "All Q")
+        p.live.sleepPhase = .live; q.live.sleepPhase = .live
+        let all = model.makeSplit(tabIDs: [p.id, q.id])!
+        model.focusSplitPane(splitID: all.id, tabID: q.id)
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: all.id); try await settle()
+        // A Peek from the unfocused pane P.
+        c.peekController.open(url: URL(string: "https://peek-from-pane.example.org/")!, sourceTabID: p.id); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == all.id, "RR2 a Peek from a split pane belongs to the split row")
+        if let menu = c.sidebar.contextMenu(nodeID: all.id) { menu.performActionForItem(at: menu.indexOfItem(withTitle: "Separate All Tabs")) }
+        try await settle()
+        check(model.node(id: all.id) == nil && window.selectedNodeBySpace[space.id] == q.id && shows(q) && !c.peekController.isShown && c.peekController.isOpen,
+              "RR1 Separate All Tabs selects the focused pane; the Peek of pane P waits")
+        _ = c.sidebar(c.sidebar, didRequest: .select(nodeID: p.id, space: space.id)); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == p.id, "RR2 after Separate All Tabs, selecting the source tab shows its Peek again")
+        let esc = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: c.window!.windowNumber, context: nil,
+                                   characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
+        check(c.handleKeyDown(esc), "RR2 Escape reaches the Peek")
+        try await settle()
+        check(!c.peekController.isOpen && c.context.peekBadges.isEmpty, "RR2 Escape dismisses the Peek and its badge")
+        // A Peek from a tab, then a split made from that tab.
+        let t = pinned[2]; t.live.sleepPhase = .live
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: t.id); try await settle()
+        c.peekController.open(url: URL(string: "https://peek-from-tab.example.org/")!, sourceTabID: t.id); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == t.id, "RR2 a Peek from a tab shows on that tab")
+        let partner = model.newTab(in: space.id, url: URL(string: "https://partner.example.com/")!, title: "Partner"); partner.live.sleepPhase = .live
+        let made = model.makeSplit(tabIDs: [t.id, partner.id])!; try await settle()
+        model.selectNode(windowID: window.id, spaceID: space.id, nodeID: made.id); try await settle()
+        check(c.peekController.isShown && c.context.shownPeek?.sourceNodeID == made.id && c.context.peekBadges[t.id] != nil,
+              "RR2 after a split is made from the source tab, selecting the split shows the Peek again")
+        c.peekController.dismissAll(); try await settle()
+
+        // A page color that arrives after the URL callback reaches the pane bar.
+        guard let host = c.container.host(for: partner.id) as? FakeWebContentHost,
+              let slot = c.container.slots.first(where: { $0.tabID == partner.id }) else { check(false, "RR3 split pane host exists"); return }
+        let late = NSColor(srgbRed: 0.20, green: 0.40, blue: 0.80, alpha: 1)
+        FakeWebContentHost.pageColors["late-color.example.net"] = late
+        defer { FakeWebContentHost.pageColors["late-color.example.net"] = nil }
+        // No controller refresh here: only the host's callbacks may update the bar.
+        func settleCallbacksOnly() async throws { try await FeatureCLI.waitForLoads(factory, root: c.contentView); OffscreenRenderer.settle(c.contentView, runLoop: 0.01) }
+        host.load(URL(string: "https://late-color.example.net/")!); try await settleCallbacksOnly()
+        check(slot.paneChrome?.layer?.backgroundColor == late.cgColor, "RR3 a page color reported after the URL callback updates the pane bar")
+        let later = NSColor(srgbRed: 0.95, green: 0.85, blue: 0.20, alpha: 1)
+        host.simulatePageBackground(later); try await settleCallbacksOnly()
+        check(slot.paneChrome?.layer?.backgroundColor == later.cgColor, "RR3 a page that changes its color later updates the pane bar")
     }
 }

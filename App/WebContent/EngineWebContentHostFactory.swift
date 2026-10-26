@@ -29,6 +29,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   private var modelHostIDs: Set<ItemID> = []
   private(set) var contentCreationCount = 0
   private var queuedNavigations: [ItemID: URL] = [:]
+  private(set) var earlyHostRequestsRefused: Bool?
+  private(set) var treeChangeCount = 0
+  private(set) var mirrorSyncCount = 0
   var contents: [ItemID: OEWebContent] { hosts.filter { !$0.value.closed }.mapValues(\.content) }
   private lazy var mirror = TabStripMirror(owner: self)
   private var observerID: UUID?
@@ -56,7 +59,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   init(app: AppDelegate, state: BrowserWindowState) {
     self.app = app; windowState = state
     super.init()
-    observerID = model.addObserver { [weak self] _ in self?.treeChanged() }
+    observerID = model.addObserver { [weak self] change in self?.treeChanged(change) }
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   isolated deinit { if let observerID { model.removeObserver(observerID) } }
@@ -86,6 +89,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   #if OPEN_AUTOMATION
   func navigateBeforeEngineForAutomation(_ input: String) {
+    if !app.engineReady, let tab = selectedTab, let profile = focusedProfile {
+      let before = contentCreationCount
+      earlyHostRequestsRefused = context(for: profile.id) == nil && ensureContent(for: tab) == nil
+        && makeHost(tabID: tab.id, profileID: profile.id, url: nil) == nil && contentCreationCount == before
+    }
     addressField.stringValue = input; addressEntered(addressField)
   }
   #endif
@@ -112,9 +120,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func tabs(in profileID: ProfileID) -> [Tab] {
     (model.profile(id: profileID)?.favorites ?? []) + model.spaces.filter { $0.profileID == profileID }.flatMap { flattened($0.pinned) + flattened($0.today) }
   }
-  func context(for profileID: ProfileID) -> OEBrowserContext {
-    precondition(app.engineReady)
-    guard let profile = model.profile(id: profileID), profile.id != model.defaultProfile?.id else { return OEEngine.shared.defaultContext }
+  func space(for tabID: ItemID) -> Space? {
+    model.spaces.first { (flattened($0.pinned) + flattened($0.today)).contains { $0.id == tabID } }
+  }
+  func profile(for tabID: ItemID) -> Profile? {
+    if let space = space(for: tabID) { return model.profile(id: space.profileID) }
+    return model.profiles.first { $0.favorites.contains { $0.id == tabID } }
+  }
+  private func profile(for context: OEBrowserContext) -> Profile? {
+    context === OEEngine.shared.defaultContext ? model.defaultProfile : model.profiles.first { $0.dataDirectoryName == context.identifier }
+  }
+  func context(for profileID: ProfileID) -> OEBrowserContext? {
+    guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
+    if profile.id == model.defaultProfile?.id { return OEEngine.shared.defaultContext }
     return OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
   }
   var focusedBrowser: OEBrowser? {
@@ -125,10 +143,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     app.undoManager.disableUndoRegistration(); defer { app.undoManager.enableUndoRegistration() }; body()
   }
 
-  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost {
-    precondition(app.engineReady, "A page must not precede engine readiness")
+  func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
+    guard let context = context(for: profileID) else {
+      if let url, model.tab(id: tabID) != nil { queuedNavigations[tabID] = url }
+      return nil
+    }
     if let host = hosts[tabID], !host.closed { return host }
-    let config = OEWebContentConfiguration(context: context(for: profileID))
+    let config = OEWebContentConfiguration(context: context)
     config.runtimeStyle = app.options.defaultStyle; config.showsChromeToolbar = app.options.chromeToolbar
     if model.tab(id: tabID)?.url.scheme == "chrome" { config.runtimeStyle = .chrome }
     contentCreationCount += 1
@@ -145,33 +166,59 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func hostDidClose(_ host: EngineWebContentHost) {
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
     modelHostIDs.remove(host.tabID)
-    if let tab = model.tab(id: host.tabID) {
-      let otherLive = app.hostFactories.values.contains { $0.hosts[host.tabID].map { !$0.closed } == true }
-      tab.live.hasWebContent = otherLive
-      if !otherLive { tab.live.sleepPhase = .placeholder; tab.live.isLoading = false; tab.live.progress = 0; tab.live.isAudible = false }
-    }
     mirror.sync()
   }
+  func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
+    guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
+          profile(for: tabID)?.id == host.profileID else { return false }
+    if host.tabID != tabID {
+      let oldID = host.tabID
+      if let previous = hosts[tabID], previous !== host { controller?.container.closeHost(for: tabID); previous.close() }
+      if hosts[oldID] === host { hosts[oldID] = nil }
+      modelHostIDs.remove(oldID)
+      host.rebind(tabID: tabID, spaceID: space(for: tabID)?.id)
+      hosts[tabID] = host; modelHostIDs.insert(tabID)
+    }
+    mirror.sync(); return true
+  }
+  func didSyncMirror() { mirrorSyncCount += 1 }
+  func remainingLiveState(for tabID: ItemID) -> WebContentLiveState? {
+    app.hostFactories.values.compactMap { $0.hosts[tabID] }.first { !$0.closed }?.liveState
+  }
+  func tabStripState() -> [[String: Any]] { mirror.snapshot() }
   @discardableResult
-  func ensureContent(for tab: Tab) -> OEWebContent {
+  func ensureContent(for tab: Tab) -> OEWebContent? {
+    guard app.engineReady else { queuedNavigations[tab.id] = tab.url; return nil }
     if let host = hosts[tab.id] { return host.content }
-    let profileID = model.profiles.first { tabs(in: $0.id).contains { $0.id == tab.id } }?.id ?? focusedProfile!.id
+    guard let profileID = profile(for: tab.id)?.id else { return nil }
     tab.live.sleepPhase = .live
-    let host = makeHost(tabID: tab.id, profileID: profileID, url: nil) as! EngineWebContentHost
+    guard let host = makeHost(tabID: tab.id, profileID: profileID, url: nil) as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
     if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     host.load(tab.url)
     return host.content
   }
-  private func makeContent(for tab: Tab, url: URL?) -> OEWebContent {
+  private func makeContent(for tab: Tab, url: URL?, requestContext: OEBrowserContext? = nil) -> OEWebContent? {
+    guard app.engineReady else { queuedNavigations[tab.id] = url ?? tab.url; return nil }
+    guard let profile = profile(for: tab.id) ?? requestContext.flatMap({ self.profile(for: $0) }) else { return nil }
     tab.live.sleepPhase = .live
-    let host = makeHost(tabID: tab.id, profileID: focusedProfile!.id, url: nil) as! EngineWebContentHost
+    guard let host = makeHost(tabID: tab.id, profileID: profile.id, url: nil) as? EngineWebContentHost else { return nil }
     controller?.container.adopt(host, for: tab.id)
     if host.view.superview == nil { host.view.frame = contentContainer.bounds; contentContainer.addSubview(host.view) }
     if let url { host.load(url) }; mirror.sync(); return host.content
   }
   private func dropContent(id: ItemID, content: OEWebContent) { controller?.container.closeHost(for: id); hosts[id]?.close() }
-  private func treeChanged() {
+  private func treeChanged(_ change: TreeChange) {
+    treeChangeCount += 1
+    if case .spaceProfileChanged(let spaceID, _, _) = change, let space = model.space(id: spaceID) {
+      let ids = Set((flattened(space.pinned) + flattened(space.today)).map(\.id))
+      if let controller, controller.hasPeekController,
+         controller.peekController.stack.contains(where: { ids.contains($0.sourceTabID) || ($0.host as? EngineWebContentHost)?.spaceID == spaceID }) { controller.peekController.dismissAll() }
+      for (id, host) in hosts where ids.contains(id) || (model.tab(id: id) == nil && host.spaceID == spaceID) {
+        controller?.container.closeHost(for: id); host.close()
+      }
+      for id in ids { controller?.container.resetLiveState(for: id, includingFavicon: true) }
+    }
     // Peek hosts are transient until expanded into the model. A sidebar
     // mutation must not close them merely because they have no model row.
     modelHostIDs.formUnion(hosts.keys.filter { model.tab(id: $0) != nil })
@@ -181,7 +228,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     if let id = selectedNodeID, model.node(id: id) == nil, let space = focusedSpace {
       withoutUndo { model.selectNode(windowID: windowState.id, spaceID: space.id, nodeID: nil) }
     }
-    controller?.refresh(); mirror.sync()
+    if case .spaceProfileChanged(let id, _, _) = change, focusedSpace?.id == id { showSelection(focus: false) }
+    else { controller?.refresh(); mirror.sync() }
   }
   func showSelection(focus: Bool = true) {
     guard let controller else { return }
@@ -206,9 +254,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func adoptUnownedRequest(_ request: OEOpenRequest) -> OEWebContent? {
     guard app.engineReady else { return nil }
-    guard let space = focusedSpace else { return nil }
+    guard let profile = profile(for: request.context),
+      let space = focusedSpace.flatMap({ $0.profileID == profile.id ? $0 : nil }) ?? model.spaces.first(where: { $0.profileID == profile.id }) else { return nil }
     let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
-    let content = makeContent(for: tab, url: nil); select(nodeID: tab.id); return content
+    let content = makeContent(for: tab, url: nil, requestContext: request.context); focus(space: space); select(nodeID: tab.id); return content
   }
   func focus(space: Space) {
     withoutUndo { model.focusSpace(windowID: windowState.id, spaceID: space.id) }
@@ -279,7 +328,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     switch handle {
     case nil: return selectedContent
     case let text as String where text == "popup": return focusedBrowser?.extensionPopup
-    case let text as String: return UUID(uuidString: text).map { ItemID(rawValue: $0) }.flatMap { model.tab(id: $0) }.map { ensureContent(for: $0) }
+    case let text as String: return UUID(uuidString: text).map { ItemID(rawValue: $0) }.flatMap { model.tab(id: $0) }.flatMap { ensureContent(for: $0) }
     case let number as Int: return OEEngine.shared.webContent(identifier: number)
     default: return nil
     }
@@ -415,7 +464,7 @@ extension EngineWebContentHostFactory {
 
   @objc func addSplitView(_ sender: Any?) {
     guard let selected = selectedTab else { return }
-    if let split = controller?.splitController.split { model.unsplit(splitID: split.id); select(nodeID: selected.id) }
+    if let split = controller?.splitController.split { model.unsplit(splitID: split.id); showSelection() }
     else if let other = orderedTabs.first(where: { $0.id != selected.id && !model.isPinned(tabID: $0.id) }),
       let split = model.makeSplit(tabIDs: [selected.id, other.id]) { select(nodeID: split.id) }
     else { controller?.splitController.addEmptyPane(); showSelection() }
@@ -489,7 +538,7 @@ extension EngineWebContentHostFactory {
       guard app.engineReady else {
         tab.url = url; queuedNavigations[tab.id] = url; app.scheduleSave(); return
       }
-      ensureContent(for: tab).load(url)
+      ensureContent(for: tab)?.load(url)
       tab.url = url
       selectedContent?.focusPage()
     }
@@ -576,17 +625,19 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       record("open", popup, ["disposition": "popup", "url": request.url?.absoluteString ?? ""])
       return popup
     case .newWindow:
-      guard let controller = app.makeWindow(focusedSpaceID: focusedSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
+      let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      guard let controller = app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
       return target.adoptUnownedRequest(request)
     case .currentTab, .saveToDisk:
       return nil
     default:
-      guard let space = focusedSpace else { return nil }
       let opener = tabID(for: webContent)
+      let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
+      guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)
       tab.openerID = opener
-      let content = makeContent(for: tab, url: nil)
-      if request.disposition != .newBackgroundTab { select(nodeID: tab.id) }
+      let content = makeContent(for: tab, url: nil, requestContext: request.context)
+      if request.disposition != .newBackgroundTab { focus(space: space); select(nodeID: tab.id) }
       record(
         "open", content,
         ["disposition": request.disposition.rawValue, "url": request.url?.absoluteString ?? ""])

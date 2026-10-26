@@ -34,7 +34,7 @@ public protocol LittleOpenWebContentProviding: AnyObject {
 final class LittleHostFactory: WebContentHostFactory {
     let make: (ProfileID) -> any LittleOpenWebContentProviding
     init(_ make: @escaping (ProfileID) -> any LittleOpenWebContentProviding) { self.make = make }
-    func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> any WebContentHost {
+    func makeHost(tabID: ItemID, profileID: ProfileID, url: URL?) -> (any WebContentHost)? {
         let base = make(profileID)
         let host: any WebContentHost = LittleHostAdapter(base: base, tabID: tabID)
         if let url { host.load(url) }; return host
@@ -55,6 +55,10 @@ private final class LittleHostAdapter: WebContentHost {
     var onLoadingChange: ((Bool) -> Void)?
     var onFaviconChange: ((Data?) -> Void)?
     var shouldNavigate: ((URL, NSEvent.ModifierFlags) -> Bool)?
+    var pageBackgroundColor: NSColor? { (base as? any WebContentHost)?.pageBackgroundColor }
+    var onPageBackgroundChange: ((NSColor?) -> Void)?
+    var liveState: WebContentLiveState { (base as? any WebContentHost)?.liveState ?? WebContentLiveState() }
+    var onLiveStateChange: ((WebContentLiveState) -> Void)?
     init(base: any LittleOpenWebContentProviding, tabID: ItemID) {
         self.base = base; self.tabID = tabID
         base.onURLChange = { [weak self] in self?.onURLChange?($0) }
@@ -63,6 +67,8 @@ private final class LittleHostAdapter: WebContentHost {
             rich.onLoadingChange = { [weak self] in self?.onLoadingChange?($0) }
             rich.onFaviconChange = { [weak self] in self?.onFaviconChange?($0) }
             rich.shouldNavigate = { [weak self] url, flags in self?.shouldNavigate?(url, flags) ?? true }
+            rich.onPageBackgroundChange = { [weak self] in self?.onPageBackgroundChange?($0) }
+            rich.onLiveStateChange = { [weak self] in self?.onLiveStateChange?($0) }
         }
     }
     func load(_ url: URL) { base.load(url) }
@@ -75,6 +81,7 @@ private final class LittleHostAdapter: WebContentHost {
         base.onURLChange = nil; base.onTitleChange = nil
         (base as? any WebContentHost)?.close()
         onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
+        onPageBackgroundChange = nil
         view.removeFromSuperview()
     }
 }

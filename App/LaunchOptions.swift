@@ -66,6 +66,7 @@ final class LaunchTiming {
   let hasKernelProcessStart: Bool
   private let millisecondsPerTick: Double
   private(set) var marks: [(String, UInt64)] = []
+  private var firstFrameConfirmed: Bool?
 
   private init() {
     var timebase = mach_timebase_info_data_t()
@@ -86,7 +87,10 @@ final class LaunchTiming {
   func mark(_ name: String) {
     if !marks.contains(where: { $0.0 == name }) { marks.append((name, mach_continuous_time())) }
   }
-  var report: [String: Double] {
-    Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded()) })
+  func recordFirstFrame(confirmed: Bool) { firstFrameConfirmed = confirmed }
+  var report: [String: Any] {
+    var result: [String: Any] = Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded() as Any) })
+    if let firstFrameConfirmed { result["firstFrameConfirmed"] = firstFrameConfirmed }
+    return result
   }
 }

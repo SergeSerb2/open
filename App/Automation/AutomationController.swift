@@ -81,6 +81,34 @@
       // Model-level tabs (the sidebar).
       case "tabs":
         return w.orderedTabs.map { describe($0, in: w) }
+      case "tab-state":
+        return describe(try modelTab(a, w), in: w)
+      case "tab-strip":
+        return w.tabStripState()
+      case "frame-save-counters":
+        return ["captures": app.snapshotStore.captureCount, "scheduled": app.snapshotStore.scheduleCount,
+          "dirty": app.snapshotStore.isDirty, "treeChanges": w.treeChangeCount, "mirrorSyncs": w.mirrorSyncCount] as [String: Any]
+      case "space-profile":
+        guard let raw = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == raw }) else { throw Failure(message: "unknown Space") }
+        let name = a["profile"] as? String ?? "Default"
+        guard let profile = app.model.profiles.first(where: { $0.name == name }) ?? app.model.createProfile(name: name) else { throw Failure(message: "unknown Profile") }
+        try app.directories.ensureProfileDirectories(for: profile)
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .setSpaceProfile(space: space.id, profile: profile.id)) == true
+      case "peek-open":
+        let source = try modelTab(a, w)
+        guard let raw = a["url"] as? String, let url = URL(string: raw), let controller = w.controller else { throw Failure(message: "missing Peek URL") }
+        controller.peekController.open(url: url, sourceTabID: source.id); return true
+      case "peek-expand":
+        w.controller?.peekController.expandTop(); return true
+      case "peek-close":
+        w.controller?.peekController.dismissAll(); return true
+      case "peek-state":
+        guard let controller = w.controller, controller.hasPeekController else { return ["shown": false, "stack": []] as [String: Any] }
+        let peek = controller.peekController
+        return ["shown": peek.isShown, "expanding": peek.isExpanding, "stack": peek.stack.map { item in
+          ["source": item.sourceTabID.description, "originalHostTab": item.hostTabID.description,
+           "boundTab": item.host?.tabID.description ?? "", "content": (item.host as? EngineWebContentHost)?.content.identifier ?? 0] as [String: Any]
+        }] as [String: Any]
       case "spaces":
         return app.model.spaces.map { space in
           [
@@ -284,6 +312,8 @@
           "selected": w.selectedTab?.id.description ?? "", "space": w.windowState.focusedSpaceID.description,
           "engineURL": w.selectedContent?.url?.absoluteString ?? "",
           "engineSelected": w.selectedContent?.browser?.activeWebContent?.identifier ?? 0,
+          "paneBackgrounds": controller.container.slots.map { ["tab": $0.tabID.description,
+            "color": colorComponents($0.paneChrome?.layer?.backgroundColor.flatMap { NSColor(cgColor: $0) })] as [String: Any] },
           "shownPages": w.contents.filter { $0.value.view.window === win && !$0.value.view.isHiddenOrHasHiddenAncestor }.keys.map(\.description)] as [String: Any]
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
@@ -391,7 +421,9 @@
       case "timing":
         return await timing(w)
       case "startup":
-        return app.startupEvidence
+        var evidence = app.startupEvidence
+        if let probe = w.earlyHostRequestsRefused { evidence["earlyHostRequestsRefused"] = probe }
+        return evidence
       case "host-counts":
         return ["created": app.hostFactories.values.reduce(0) { $0 + $1.contentCreationCount },
                 "retained": app.hostFactories.values.reduce(0) { $0 + $1.contents.count },
@@ -425,7 +457,8 @@
     /// for the selected tab.
     private func content(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> OEWebContent {
       if let n = a["index"] as? Int {
-        return w.ensureContent(for: try modelTab(["index": n], w))
+        guard let page = w.ensureContent(for: try modelTab(["index": n], w)) else { throw Failure(message: "engine or profile is not ready") }
+        return page
       }
       guard let page = w.content(forAutomationHandle: a["tab"]) else {
         throw Failure(message: "no page for \(a["tab"] ?? "selected tab")")
@@ -459,6 +492,8 @@
         "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
         "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
         "favicon": tab.live.faviconPNG != nil, "sleepPhase": String(describing: tab.live.sleepPhase),
+        "progress": tab.live.progress, "canGoBack": tab.live.canGoBack, "canGoForward": tab.live.canGoForward,
+        "profile": w.profile(for: tab.id)?.id.description ?? "", "space": w.space(for: tab.id)?.id.description ?? "",
         "hasWebContent": tab.live.hasWebContent, "loaded": w.contents[tab.id] != nil,
       ]
       if let c = w.contents[tab.id] {
@@ -476,6 +511,7 @@
       } else if w.auxiliaryPages.contains(where: { $0.content === c }) {
         kind = "popup"
       }
+      let pageColor = w.hosts.values.first { $0.content === c }?.pageBackgroundColor
       return [
         "identifier": c.identifier, "kind": kind, "live": c.isLive, "url": c.url?.absoluteString ?? "",
         "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
@@ -486,6 +522,8 @@
         "browserIndex": c.browser?.webContents.firstIndex(of: c) ?? -1,
         "browserPinned": c.browser?.isPinned(c) ?? false,
         "extension": c.extensionPopupIdentifier ?? "",
+        "hostTab": w.tabID(for: c)?.description ?? "",
+        "pageBackground": colorComponents(pageColor),
       ]
     }
 
@@ -496,6 +534,10 @@
         "icon": e.icon.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "",
         "permissions": e.permissions, "hostPermissions": e.hostPermissions,
       ]
+    }
+    private func colorComponents(_ color: NSColor?) -> [Int] {
+      guard let color = color?.usingColorSpace(.sRGB) else { return [] }
+      return [color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent].map { Int(($0 * 255).rounded()) }
     }
 
     private func describe(_ w: NSWindow) -> [String: Any] {

@@ -5,7 +5,10 @@
 The real `OpenSidebar.SidebarView` draws from the snapshot before Chromium
 starts. The theme field is prepared before display. After the window transaction
 is flushed, a display-link callback must report a screen refresh later than
-submission. Only then is `sidebarDrawn` marked. The temporary AppKit runloop
+submission. Only then is `sidebarDrawn` marked. A three-second timeout continues
+startup with `firstFrameConfirmed=false` and `firstFrameWaitTimedOut`, without
+a `sidebarDrawn` mark. Off-screen, sleeping or locked displays must not prevent
+launch. The temporary AppKit runloop
 returns before `OEEngine.start`, so Chromium's observers first run in its own
 message loop. The same sidebar remains attached after engine readiness.
 
@@ -22,6 +25,9 @@ Today entries use `model.closeTab` and the archive sink.
   its client. That guard is the lead-approved minimal Engine/ exception.
 - Engine startup errors show an `NSAlert` with a plain message and a Quit button
   before exit 1. The real missing-library failure is exercised end to end.
+- A forced missing-display-link launch waits for the real three-second timer,
+  starts the engine, and shows the requested page. The first-frame wait is a
+  timing aid; only a termination request prevents engine startup on that path.
 - Address entry before readiness queues the URL in the model; direct page and
   context creation paths enforce readiness. Only the selected queued URL loads.
 - All launch marks use `mach_continuous_time`. The kernel process-start ticks
@@ -40,17 +46,17 @@ All values are ms from kernel process start, with the presented-frame mark.
 
 | Case | Sidebar median (≤250) | First paint median (≤700) | Slowest first paint | Verdict |
 |---|---:|---:|---:|---|
-| Fresh profile (5 launches) | 220 | 426 | 1837 | PASS |
-| Warm relaunch (5 launches) | 232 | 423 | 474 | PASS |
+| Fresh profile (5 launches) | 224 | 461 | 1798 | PASS |
+| Warm relaunch (5 launches) | 242 | 452 | 485 | PASS |
 
 Fresh means a new data root/profile, with OS caches left intact. Warm means a
 new process restoring the same profile and two-row snapshot. All 10 runs have a
 kernel process-start timestamp. The paint-clock uncertainty is at most 0.11 ms
-in this run. The first fresh launch took 1,837 ms to first paint; it remains in
+in the ten benchmark launches. The first fresh launch took 1,798 ms to first paint; it remains in
 the five-sample median. The plan's intermediate `main` and `modelLoaded` targets
-are still missed (122/132 ms and 123/134 ms respectively).
+are still missed (113/135 ms and 115/137 ms respectively).
 
-This was a loaded host (load averages 7.05/8.02/8.63), not a controlled idle
+This was a loaded host (load averages 6.61/7.14/7.54), not a controlled idle
 benchmark. An earlier review build measured 269/270 ms to the presented sidebar
 and 482/476 ms to paint; its sidebar budget misses are retained in
 [results-window-release-review-load.json](engine-spike/results-window-release-review-load.json).
@@ -61,6 +67,9 @@ is historical evidence only.
 Current raw samples, host counters, and lifecycle results:
 [results-window-step-a-release.json](engine-spike/results-window-step-a-release.json).
 Open's own window: [window-startup-step-a.png](engine-spike/window-startup-step-a.png).
+
+Merged `origin/main` through M4 visual finish `39fb0ed` before final builds,
+startup/shell checks and repository verification.
 
 ### End-to-end checks
 
@@ -73,11 +82,16 @@ Open's own window: [window-startup-step-a.png](engine-spike/window-startup-step-
 | Pre-engine native quit: snapshot flushed, no engine start, exit 0 | PASS |
 | Pre-engine address action: queued page shown, one host | PASS |
 | Real missing CEF library: native Quit alert, exit 1 | PASS |
+| Display link suppressed: timeout marked unconfirmed, engine and page start | PASS |
 | Debug shell regression suite | 6/6 PASS |
 | Debug and Release app builds | PASS; no Swift warnings |
 | `tools/verify-all.sh` after merging origin/main | 14 PASS, no SKIP |
 
-The Release window suite passes all 17 assertions. A test copy of Open.app has
+The Release window suite passes all 18 assertions. The forced timeout records
+3,215 ms to the unconfirmed timeout, 3,216 ms to engine start, and 3,380 ms to
+first paint; it creates one host and loads the requested page.
+
+A test copy of Open.app has
 its CEF library removed to exercise startup failure. The automation-only flags
 call Open's real terminate and address actions, and its own alert button; they
 are compiled out of ordinary Release builds.

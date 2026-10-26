@@ -48,12 +48,15 @@ if appDelegate.terminationRequested {
   FileHandle.standardError.write(Data("Open: termination before engine; timing \(LaunchTiming.shared.report)\n".utf8))
   exit(0)
 }
-guard firstFrame.presented else {
-  FileHandle.standardError.write(Data("Open: first window frame was not confirmed; engine not started\n".utf8))
-  appDelegate.saveState()
-  exit(1)
+LaunchTiming.shared.recordFirstFrame(confirmed: firstFrame.presented)
+if firstFrame.presented {
+  LaunchTiming.shared.mark("sidebarDrawn")
+} else {
+  // An off-screen/asleep display may never tick. Presentation confirmation
+  // is measurement evidence, not a requirement for starting the browser.
+  LaunchTiming.shared.mark("firstFrameWaitTimedOut")
+  FileHandle.standardError.write(Data("Open: first window frame unconfirmed; continuing engine startup\n".utf8))
 }
-LaunchTiming.shared.mark("sidebarDrawn")
 
 // Initialize outside the temporary AppKit runloop. Chromium installs native
 // runloop observers during start; those must first run in CefRunMessageLoop.
@@ -136,8 +139,14 @@ final class FirstWindowFrameObserver: NSObject {
   init(view: NSView?) { self.view = view }
   func start() {
     submittedAt = CACurrentMediaTime()
-    link = view?.displayLink(target: self, selector: #selector(frame(_:)))
-    link?.add(to: .main, forMode: .common)
+    var observeDisplay = true
+    #if OPEN_AUTOMATION
+    observeDisplay = ProcessInfo.processInfo.environment["OPEN_AUTOMATION_SKIP_DISPLAY_LINK"] != "1"
+    #endif
+    if observeDisplay {
+      link = view?.displayLink(target: self, selector: #selector(frame(_:)))
+      link?.add(to: .main, forMode: .common)
+    }
     timeout = Timer.scheduledTimer(withTimeInterval: 3, repeats: false) { [weak self] _ in
       MainActor.assumeIsolated { self?.timedOut = true; CFRunLoopStop(CFRunLoopGetMain()) }
     }

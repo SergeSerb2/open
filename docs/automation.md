@@ -128,6 +128,9 @@ tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idl
 Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
+`OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
+timer running without a display link. Engine startup must continue with
+`firstFrameConfirmed=false`, `firstFrameWaitTimedOut`, and no `sidebarDrawn` mark.
 `OPEN_AUTOMATION_QUIT_BEFORE_ENGINE=1` requests Open's native terminate action
 during the first-frame wait; `OPEN_AUTOMATION_EARLY_NAVIGATION=<URL>` submits
 Open's address action before readiness; `OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE=1`

@@ -104,7 +104,7 @@ Row controls:
 
 - **Close button** on hover and on the selected row: `[189, y+7, 26, 26]` (AX id `closeButton`, F0013, F0019, F0014). Its right edge is 4 pt inside the fill. The title frame shrinks from 168 to 146 wide while it shows (F0014).
 - **Pinned selected row** shows a horizontal bar glyph ("—") in the close slot, not "x" (F0014 crop). guess: "reset to pinned URL / unload" (`features-core.md`).
-- A pinned tab whose page moved away from its saved URL shows a "/" between icon and title (A0414, folder child). guess: the "navigated away from pinned URL" mark.
+- A pinned tab whose page moved away from its saved URL shows a "/" between icon and title (A0414, folder child). guess: the "navigated away from pinned URL" mark. Measured on F0090 and F0101 (depth 1): a 2 pt stroke about 14.5 pt tall (rows y+12 … y+26), about 8° from vertical (center x 57 at the top, 55 at the bottom), peak white ≈ 0.30 over the background (`TabCellSlash`). The title moves 2 pt to the right (AX title x 61 instead of 59).
 
 Sidebar URL field with a page loaded (F0014): the field text becomes the host (AX `commandBarPlaceholderTextField` `[20, 55, 196, 18]`, no magnifier). Two buttons sit at its right end: Copy Current URL `[158, 49, 30, 30]` and Site Control Center `[186, 49, 30, 30]`. They come and go between frames (F0019, F0035, F0123). guess: they show only while the pointer is over the sidebar top.
 
@@ -166,7 +166,8 @@ guess: dark Spaces use white at a similar alpha (rows use 0.10).
 | Collapse animation | Labels fade first. Icons slide up into the folder row. Done in < 0.5 s. | A0239 |
 | State on disk | `StorableWindows.windows[].expandedItems` gains `[folderId, {expanded:{}}]` (see `data-model.md`, "Archive and session files") | |
 | Split row (in a folder) | One 41 pt row with two cells: icon at x 33 and x 129, titles at x 61 and x 157, each 56 pt wide and truncated. A thin vertical divider between the cells. | F0079 AX and crop |
-| Split row (Today, selected) | A card at the bottom of Today with both cells shown as selected. | F0081 crop |
+| Split row (Today, selected) | The selected fill is a card `[8, y+2, 212, 36]` (white 0.20, `#50505F` on `#272438`). Inside it each pane has its own cell, 4 pt inside the card and 4 pt apart: `[12, y+6, 100, 28]` and `[116, y+6, 100, 28]`, corner ≈ 8 (row-by-row edge profile), white 0.07 over the card (`#5D5C6A`, `TabCellChildBackground`). No divider. Icons x 17 / 121, titles x 45 / 149, 64 wide, tail-truncated with "…". | F0081 AX and pixels |
+| Focused pane in the row | Not marked. Focus was on pane 2, yet the two cells are pixel-identical apart from their outer edges, and the titles have the same color (`#DBDBDE` / `#DADADD`). F0082 and the fast frames A0264–A0271 (the whole split, focus never moved) show the same. The `TabCellBackgroundContentVisible` guess for the focused cell does not hold in this capture. | F0081 pixel diff of the two cells |
 
 ## 8. Space header
 
@@ -233,12 +234,12 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 | Property | Measured | Evidence |
 |---|---|---|
 | Panes | Two panes `[228, 10, 984, 1374]` and `[1222, 10, 984, 1374]`. Gap 10 pt. Outer insets are the same as the single panel (10 pt top, right, bottom). Pane width = (content width − 10) / 2. | F0081 AX |
-| Pane top bar | Each pane has its own 32 pt bar `[x, 10, 984, 32]` (AX `topBarPanel`). Back `[x+5, 14, 32, 24]`, forward `[x+42, …]`, reload `[x+79, …]` (back/forward pitch 37). Host text centered with a 24x24 copy-link button before it. At the right: Site Control Center `[x+879, 12, 32, 28]`, Split View Menu `[x+915, 14, 32, 24]` (id `square.split.2x1`), Close pane `[x+947, 14, 32, 24]` (id `xmark`). The unfocused pane shows only the close button at the right. | F0081 AX |
-| Bar color | Takes the page's own background color (lavender page → `#DEDEFA` bar, white page → white bar). guess: page theme color sampling. | F0081 |
+| Pane top bar | Each pane has its own 32 pt bar `[x, 10, 984, 32]` (AX `topBarPanel`). Back `[x+5, 14, 32, 24]`, forward `[x+42, …]`, reload `[x+79, …]` (back/forward pitch 37). Host text centered with a 24x24 copy-link button before it. At the right: Site Control Center `[x+879, 12, 32, 28]`, Split View Menu `[x+915, 14, 32, 24]` (id `square.split.2x1`), Close pane `[x+947, 14, 32, 24]` (id `xmark`). The host group is centered on the bar: copy button 24 · 3 · host text · 3 · an empty 24 pt AX button (focused pane: x+425 / x+452 / x+535; unfocused: x+443 / x+470 / x+517). The unfocused pane shows back and forward (disabled here), the copy button, its host, and Close; it has no reload, Site Control Center, or Split View Menu. | F0081 AX and pixels |
+| Bar color | Takes the page's own background color (lavender page → `#DEDEFA` bar, white page → white bar). The lavender is not the pixels under the bar (`#A8AAC7` ± 13 there, page content), so it is a color the page reports. guess: the page's background or theme color. | F0081 |
 | Web area | Starts below the bar: `[x, 42, 984, 1342]` | F0081 AX |
 | Focus ring | 2 pt solid line inside the focused pane's edge, following its corners. Color `#3139FF` in the untheme'd Space 4 (guess: the Space accent). | F0081 rows 10–11, 1382–1383, cols 1222–1223, 2204–2205 |
 | Pane corner | ≈ 6 pt (same as the single panel) | F0081 corner map |
-| Sidebar | The URL field shows the focused pane's host. The split shows as one row with two cells (§7). | F0081 |
+| Sidebar | The URL field shows the focused pane's host. The split shows as one row with two cells (§7). The sidebar toolbar keeps only the toggle: back, forward, and reload are gone from AX and pixels while the split is selected (F0081, F0082) and come back with a tab (F0080, F0084). | F0081 |
 
 ## 12. Peek
 
@@ -248,11 +249,13 @@ The command bar is **not a separate window**. It is an overlay inside the browse
 | Frame | Web area `[427, 12, 1590, 1370]`. Width = 80% of (window width − sidebar width) = 0.8 × 1988 = 1590, centered in x 228 … 2216 (center 1222). Top and bottom 2 pt inside the content panel. | F0090 AX |
 | Corner | ≈ 6–7 pt | F0102 corner dump |
 | Chrome | No toolbar. Three round buttons outside the right edge: Close (`confirmCloseModal`, "Close"), Expand (`openInSpaceExpander`, "Enter Full Screen"), Split (`openInSplit`, "Square Split Two By One"). AX frames `[2030, 21, 35, 33]`, `[2030, 64, 35, 33]`, `[2030, 107, 34, 32]`: 13 pt right of the panel, 43 pt pitch. Drawn as dark circles ≈ 33 pt with a white glyph. | F0090 AX, F0102 pixels |
-| Backdrop | The whole window behind Peek (sidebar, margins, page) is dimmed. Fit against F0122: about 70% of a dark, theme-tinted color (≈ `#0E0019` in Space 4). guess: the scrim color comes from the Space theme. | F0102 vs F0122 |
+| Backdrop | The dim covers the window background, the margins, the page, the sidebar's toolbar row, and its bottom bar. It does not cover the URL field, Favorites, or the Space list: their text keeps its color (row titles `#D7D9F8` in F0090 and `#D8D9F9` in F0101), white 0.55 text only follows its darker background (Space title `#9A9AA3` → `#8D8D97`), and white-alpha fills composite over the darkened background (tile and URL field `#222234` = white 0.10 over `#0A0B1E`). Toolbar and bottom glyphs darken with the background (toggle `#A2A3AB` → `#464654`, Home `#9E9AA3` → `#514C5A`). Under the dim, back, forward, and reload draw in the same tone as the toggle (`#444452`–`#464654`) although AX reports them disabled. Background and glyph values fit a multiply of ≈ 0.165 in linear light (R, G), not one sRGB alpha. Background fit against F0122: about 70% of a dark, theme-tinted color (≈ `#0E0019` in Space 4). F0089 (loading) and F0108–F0114 (pointer over the Peek buttons) show the Peek without the dim. guess: the dim fades in after load and lifts while the pointer is on the buttons. | F0090, F0101, F0102, F0108, F0122 |
 | Shadow | Light, ≈ 16 pt wide on the sides (90 → 78 lum at the edge) | F0090 row profile |
 | Loading | A black panel with the three buttons shows before the page paints | F0089 |
 | Persistence | Peek belongs to its source tab. Selecting another tab hides it. Selecting the source tab again shows it. | F0101 → F0102 |
-| Sidebar mark | The source row shows a small square badge at its right end | F0090 crop |
+| Sidebar mark | The source row shows the Peek page's favicon (AX image `[W−35, y+11, 18, 18]`, 16 pt ink) on a 24 pt plate `[W−38, y+8, 24, 24]`, corner ≈ 6, white ≈ 0.07 (`TabCellChildBackground`: `#373647` on `#272438`; `#343343` on the row fill). The title then ends at W−39 (AX width 128 from x 61). The badge stays while another tab is selected and the Peek is hidden (F0101), and goes with the Peek (F0115). | F0089–F0114 AX, F0090 and F0101 pixels |
+| Source row fill | While its Peek shows, the source row draws white 0.10 instead of the 0.20 selected fill (`#232234` over `#0A0A1D`, F0090, F0102). Without the dim it is the usual 0.20 (F0089, F0108). | F0090, F0102 |
+| URL field and toolbar | The URL field shows the Peek page's host; back and forward follow the Peek's history (AX disabled). | F0090 AX |
 
 ## 13. Sidebar hide, hover-reveal, and width
 
@@ -299,7 +302,7 @@ Change Space Icon… · Rename Space… · Edit Theme Color… · Set Profile �
 **Folder** (F0119, F0134):
 Share Folder… · — · New Nested Folder… · Turn "<folder>" into Space · Copy All Links · Copy All Links as Markdown · — · Change Icon… · Rename… · — · Duplicate · Move to ▸ · — · Delete
 
-Not captured: Favorite tile, split row, bottom-bar Space icon.
+Not captured: Favorite tile, split row, bottom-bar Space icon. The split-row menu's items and order come from Arc's code instead (`menus-and-hotkeys.md`, "Split row menu").
 
 ## 16. Toasts
 

@@ -22,9 +22,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if let peekStorage { return peekStorage }
         let peek = PeekController(model: model, splitController: splitController, factory: factory, defaults: defaults)
         peekStorage = peek
+        root.addSubview(peek.overlay.backdrop, positioned: .below, relativeTo: sidebar)
         root.addSubview(peek.overlay, positioned: .below, relativeTo: toast)
         peek.onChange = { [weak self] in self?.changed() }
         peek.onToast = { [weak self] in self?.showToast($0, undo: $1) }
+        peek.onPageChange = { [weak self] in self?.syncPeekSidebar() }
         if let space = context.focusedSpace {
             let style = context.style(for: space)
             peek.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
@@ -158,7 +160,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let style = context.style(for: space)
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
         peekStorage?.overlay.scrimColor = style.darkPalette?.background.withAlpha(PeekMetrics.scrimAlpha).nsColor ?? PeekMetrics.defaultScrim.nsColor
-        splitController.refresh(); peekStorage?.refresh(); layoutContent(); onVisibilityChange?()
+        splitController.refresh()
+        // M4 refresh guarantees that every visible split pane is bound. Keep
+        // the single-pane path free of its former duplicate refresh.
+        if container.slots.count > 1 { container.refreshPlaceholders() }
+        peekStorage?.refresh(); layoutContent(); syncPeekSidebar(); onVisibilityChange?()
+    }
+    private func syncPeekSidebar() {
+        var badges: [ItemID: SidebarPeekBadge] = [:]
+        for item in peekStorage?.stack ?? [] { badges[item.sourceTabID] = SidebarPeekBadge(url: item.host?.currentURL ?? item.url, faviconPNG: item.faviconPNG) }
+        if context.peekBadges != badges { context.peekBadges = badges }
+        let shown: SidebarShownPeek?
+        if let peek = peekStorage, peek.isShown, let item = peek.stack.last {
+            shown = SidebarShownPeek(sourceNodeID: peek.sourceNodeID(of: item), url: item.host?.currentURL ?? item.url,
+                canGoBack: item.host?.canGoBack ?? false, canGoForward: item.host?.canGoForward ?? false, isLoading: item.host?.isLoading ?? false)
+        } else { shown = nil }
+        if context.shownPeek != shown { context.shownPeek = shown }
     }
     public func prepareForInitialDisplay() {
         root.layoutSubtreeIfNeeded()
@@ -196,6 +213,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         resizeHandle.isHidden = hidden
         resizeHandle.frame = CGRect(x: width - 2, y: 0, width: 4, height: size.height)
         if let overlay = peekStorage?.overlay {
+            overlay.backdrop.frame = root.bounds
             overlay.frame = root.bounds; overlay.contentRect = panelFrame
             overlay.baseWidth = hidden ? panelFrame.width : size.width - width; overlay.needsLayout = true
         }
@@ -265,7 +283,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         state.frameX = frame.minX; state.frameY = frame.minY
         state.frameWidth = frame.width; state.frameHeight = frame.height
     }
-    private func changed() { snapshotStore?.scheduleSave(model: model); peekStorage?.refresh(); onStateChange?(); onVisibilityChange?() }
+    private func changed() { snapshotStore?.scheduleSave(model: model); peekStorage?.refresh(); syncPeekSidebar(); onStateChange?(); onVisibilityChange?() }
     public func showToast(_ title: String, undo: (() -> Void)?) {
         toastTask?.cancel(); toastUndo = undo; toastLabel.stringValue = title
         undoButton.isHidden = undo == nil; toast.isHidden = title.isEmpty
@@ -320,12 +338,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         case .toggleSidebar: toggleSidebar(); return true
         case .openCommandBar(let source): dismissSidebarReveal(); onOpenCommandBar?(source, context.currentTab?.url); return onOpenCommandBar != nil
         case .newSplitView: splitController.addEmptyPane()
+        case .addTabToSplit(let id):
+            guard model.node(id: id)?.split != nil else { return false }
+            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }
+            splitController.addEmptyPane()
         case .openInSplitView(let id): splitController.openInSplit(id)
         case .addSplitView(let id):
             if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id) }; splitController.addEmptyPane()
-        case .separateSplit(let id):
-            let focused = model.node(id: id)?.split?.focusedPaneID; model.unsplit(splitID: id)
-            if let space = context.focusedSpace { model.selectNode(windowID: windowID, spaceID: space.id, nodeID: focused) }
         case .goBack: if peekController.isShown { peekController.stack.last?.host?.goBack() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goBack() }
         case .goForward: if peekController.isShown { peekController.stack.last?.host?.goForward() } else { context.currentTab.flatMap { container.host(for: $0.id) }?.goForward() }
         default: guard ModelSidebarActions(context: context).perform(intent) else { return false }
@@ -335,8 +354,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowWillClose(_ notification: Notification) { saveWindowState(); visibilityOverride = .closed; dismissSidebarReveal(); container.closeAll(); onClose?(); onVisibilityChange?() }
     public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undoManager }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
-    public func windowDidMove(_ notification: Notification) { saveWindowState(); changed() }
-    public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); changed() }
+    public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
+    public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true }
     public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
