@@ -49,6 +49,7 @@ public final class SidebarView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         context.sidebar = self
+        NotificationCenter.default.addObserver(self, selector: #selector(windowResignedKey(_:)), name: NSWindow.didResignKeyNotification, object: nil)
         modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
             MainActor.assumeIsolated {
                 if let self, event.window === self.window {
@@ -81,12 +82,17 @@ public final class SidebarView: NSView {
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
     isolated deinit {
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: nil)
         if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }
         if let observerID { context.model.removeObserver(observerID) }
         loops.forEach { $0.cancel() }
     }
 
     public override var isFlipped: Bool { true }
+
+    @objc private func windowResignedKey(_ notification: Notification) {
+        if let resigned = notification.object as? NSWindow, resigned === window { context.isOptionHeld = false }
+    }
 
     /// Window-level geometry for this sidebar's width.
     public var favoritesHeight: CGFloat {
@@ -366,6 +372,8 @@ extension SidebarView {
         guard let cell = cell(nodeID: nodeID), let dot = cell.layer?.sublayers?.first(where: { $0.name == "sidebar-unread-dot" }), dot.opacity > 0 else { return nil }
         return convert(dot.frame, from: cell)
     }
+
+    public func drawnTitle(tabID: ItemID) -> String? { (cell(nodeID: tabID) as? TabCellView)?.title.lastDrawnText }
 
     public func resetAction(tabID: ItemID) -> NSView? {
         guard let cell = cell(nodeID: tabID) as? TabCellView, let button = cell.resetButton, !button.isHidden else { return nil }

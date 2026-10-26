@@ -108,7 +108,7 @@ public enum SpaceListMetrics {
     public static let unreadDotSize: CGFloat = 6
     public static let unreadDotTrailingCenter: CGFloat = 26
     public static let unreadDotCenterY: CGFloat = 20
-    public static func resetGlyphPlate(indent: CGFloat) -> CGRect { CGRect(x: 15 + indent, y: 9, width: 22, height: 22) }
+    public static func resetGlyphPlate(indent: CGFloat) -> CGRect { CGRect(x: 16 + indent, y: 10, width: 20, height: 20) }
     /// Header band 36 pt: icon `[13, 5, 26, 26]`, title `[41, 9, W − 58, 18]`.
     public static let headerHeight: CGFloat = 36
     public static let headerIconFrame = CGRect(x: 13, y: 5, width: 26, height: 26)

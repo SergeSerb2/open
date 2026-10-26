@@ -21,8 +21,9 @@ final class SidebarRowView: NSTableRowView {
     private let fill = CALayer()
     private var animatesSelectionChange = false
     private var keyboardRing: CAShapeLayer?
+    private var selectionState: SidebarRowSelectionState?
     weak var representedItem: AnyObject? {
-        didSet { if representedItem !== oldValue { needsDisplay = true } }
+        didSet { if representedItem !== oldValue { selectionState = nil; needsDisplay = true } }
     }
     var isKeyboardFocused = false {
         didSet {
@@ -104,7 +105,9 @@ final class SidebarRowView: NSTableRowView {
         let appearance = contentAppearance
         let multiselected = tracked({
             guard let id = itemID(of: representedItem), let selection = page?.context.selection else { return false }
-            return selection.rowState(for: id).isSelected
+            let state = selection.rowState(for: id)
+            selectionState = state
+            return state.isSelected
         }) { [weak self] in
             self?.animatesSelectionChange = true
             self?.needsDisplay = true
@@ -148,6 +151,10 @@ final class SidebarRowView: NSTableRowView {
         }
     }
     override func isAccessibilityFocused() -> Bool { isKeyboardFocused }
+    override func isAccessibilitySelected() -> Bool {
+        guard let id = itemID(of: representedItem) else { return false }
+        return page?.context.selection.contains(id) ?? false
+    }
     override func isAccessibilityExpanded() -> Bool { (representedItem as? Folder)?.isExpanded ?? false }
     override func accessibilityPerformPress() -> Bool {
         guard let representedItem else { return false }
@@ -194,12 +201,12 @@ private final class SidebarUnreadDot {
         guard shown != self.shown else { return }
         self.shown = shown
         let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if reduced { layer.removeAnimation(forKey: "unread-in") }
+        if reduced { layer.removeAnimation(forKey: "unread-in"); layer.removeAnimation(forKey: "unread-out") }
         if shown && !reduced {
             let spring = Motion.unreadAppear.animation(keyPath: "transform.scale")
             spring.fromValue = 0; spring.toValue = 1
             layer.add(spring, forKey: "unread-in")
-        } else if !shown {
+        } else if !shown && !reduced {
             let fade = CABasicAnimation(keyPath: "opacity")
             fade.fromValue = 1; fade.toValue = 0; fade.duration = Motion.unreadClearFade
             layer.add(fade, forKey: "unread-out")
@@ -210,7 +217,7 @@ private final class SidebarUnreadDot {
 @MainActor
 private enum SidebarResetImages {
     private static let reset = make("arrow.uturn.backward")
-    private static let separate = make("arrow.up.forward.square")
+    private static let separate = make("arrow.up.forward")
     static func image(separate: Bool) -> NSImage? { separate ? self.separate : reset }
     private static func make(_ name: String) -> NSImage? {
         NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
@@ -338,7 +345,7 @@ final class TabCellView: SidebarCellView {
     private var faviconHovered = false
     private var resetShown = false
     private var resetSeparate = false
-    weak var tab: Tab? { didSet { bind() } }
+    weak var tab: Tab? { didSet { if tab !== oldValue { faviconHovered = false }; bind() } }
 
     required init(frame: NSRect) {
         super.init(frame: frame)
@@ -348,6 +355,10 @@ final class TabCellView: SidebarCellView {
         title.inset = SpaceListMetrics.textInset
         title.trailingInset = SpaceListMetrics.textTrailingInset
         addSubview(favicon); addSubview(title)
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse(); faviconHovered = false; tab = nil
     }
 
     private func bind() {
@@ -467,6 +478,7 @@ final class TabCellView: SidebarCellView {
     }
 
     override func rowStateChanged() {
+        if rowView?.isHovered != true, faviconHovered { faviconHovered = false; needsLayout = true }
         let unload = tracked({ showsUnload }) { [weak self] in self?.needsLayout = true }
         let visible = showsAccessory
         guard visible || accessory != nil else { return }
@@ -846,7 +858,7 @@ final class DividerCellView: SidebarCellView {
     private var pointerOnClear = false { didSet { if pointerOnClear != oldValue { clearLabel.needsDisplay = true; clearArrow.needsDisplay = true } } }
     private var tracking: NSTrackingArea?
     private var lastPointerLocation: NSPoint?
-    var clearTitle: String { context?.isOptionHeld == true ? "Clear unselected" : "Clear" }
+    var clearTitle: String { "Clear" }
     var clearTooltipTitle: String { context?.isOptionHeld == true ? "Clear unselected Today tabs" : "Clear Today tabs" }
 
     required init(frame: NSRect) {
@@ -874,13 +886,12 @@ final class DividerCellView: SidebarCellView {
         super.layout()
         let m = SpaceListMetrics.self
         let w = bounds.width
-        let option = tracked({ context?.isOptionHeld ?? false }) { [weak self] in self?.needsLayout = true }
-        let extra = option ? max(0, clearLabel.textWidth - 29) : 0
+        _ = tracked({ context?.isOptionHeld ?? false }) { [weak self] in self?.needsLayout = true }
         clearLabel.isHidden = !showsClear
         clearArrow.isHidden = !showsClear
-        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w - extra, dy: 0)
-        clearLabel.frame = CGRect(x: w + m.clearLabelX - extra, y: 0, width: 29 + extra, height: bounds.height)
-        let end = showsClear ? w + m.clearLineEnd - extra : w - m.dividerLineInset
+        clearArrow.frame = m.clearArrowFrame.offsetBy(dx: w, dy: 0)
+        clearLabel.frame = CGRect(x: w + m.clearLabelX, y: 0, width: 29, height: bounds.height)
+        let end = showsClear ? w + m.clearLineEnd : w - m.dividerLineInset
         CATransaction.begin(); CATransaction.setDisableActions(true)
         line.frame = CGRect(x: m.dividerLineInset, y: m.dividerLineY, width: max(0, end - m.dividerLineInset), height: 1)
         CATransaction.commit()
