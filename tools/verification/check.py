@@ -374,6 +374,8 @@ def main():
         route(cli, root, seed)
     elif name == "favicons":
         favicons(cli, seed)
+    elif name == "media-demo":
+        all_passed(run(cli, name))
     elif name == "sleep-demo":
         text = run(cli, name, str(Path("data").resolve()))
         all_passed(text)
