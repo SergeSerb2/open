@@ -183,6 +183,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             let a = sync(parent: from)
             let b = sync(parent: to)
             return a || b
+        case .spaceProfileChanged:
+            // Profile changes do not change this page's rows.
+            return false
         }
     }
 
