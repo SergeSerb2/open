@@ -74,24 +74,45 @@ func runFolderArchiveDemo(root: URL, check: (Bool, String) -> Void) async throws
     check(focusedRestored != nil && fallback.today.first?.id == folder.id && model.tab(id: b.id)?.pinnedURL == nil,
           "FA3 missing Space falls back to focused Today and clears pinned URLs")
 
+    let profileB = model.createProfile(name: "Profile B")!
+    let sourceB = model.createSpace(title: "B archive source", profileID: profileB.id)
+    let survivingB = model.createSpace(title: "B surviving Space", profileID: profileB.id)
+    let tabB = model.newTab(in: sourceB.id, url: url("Profile-B"), title: "Profile B tab")
+    let folderB = model.createFolder(in: .spacePinned(sourceB.id), title: "Profile B folder", withNodes: [tabB.id])!
+    _ = model.archiveFolder(id: folderB.id); sink.flushAll()
+    let profileBStore = sink.store(for: profileB.id)
+    let recordB = await profileBStore.record(id: folderB.id)!
+    model.deleteSpace(id: sourceB.id)
+    window.focusedSpaceID = fallback.id // Profile A is visible in the first window.
+    let restoredB = model.restoreArchivedFolder(recordB)
+    check(restoredB != nil && model.parent(of: folderB.id) == .spaceToday(survivingB.id)
+          && model.space(id: survivingB.id)?.profileID == profileB.id && window.focusedSpaceID == fallback.id,
+          "FA3 missing Space keeps the archived Profile B when the first window shows Profile A")
+
     _ = model.archiveFolder(id: folder.id); sink.flushAll()
     let duplicateRecord = await store.record(id: folder.id)!
     var existingA = duplicateRecord
     existingA.kind = .tab; existingA.id = a.id; existingA.url = a.url; existingA.payloadJSON = "{}"
     let liveA = model.restoreArchivedTab(existingA)
+    var existingPane = duplicateRecord
+    existingPane.kind = .tab; existingPane.id = b.id; existingPane.url = b.url; existingPane.payloadJSON = "{}"
+    let livePane = model.restoreArchivedTab(existingPane)
+    let companion = model.newTab(in: fallback.id, url: url("Live-pane-companion"))
+    let liveSplit = model.makeSplit(tabIDs: [livePane.id, companion.id])!
     let skipped = model.restoreArchivedFolder(duplicateRecord)
     check(skipped != nil && skipped?.children.map(\.id) == [deep.id] && model.tab(id: a.id) === liveA
-          && occurrences(of: a.id, in: model) == 1, "FA4 a live child ID is skipped without replacing or duplicating it")
+          && occurrences(of: a.id, in: model) == 1 && occurrences(of: b.id, in: model) == 1
+          && model.tab(id: b.id) === livePane && model.parent(of: b.id) == .splitPane(liveSplit.id)
+          && model.node(id: deep.id)?.folder?.children.first?.id == c.id && model.node(id: split.id) == nil,
+          "FA4 live child and live split pane are skipped; a single remaining archived pane restores as a tab")
     undo.removeAllActions(); events = []
     check(model.restoreArchivedFolder(duplicateRecord) == nil && events.isEmpty && !undo.canUndo,
           "FA4 live root refuses restore without undo or events")
     _ = model.archiveFolder(id: folder.id); sink.flushAll()
-    let archivedBefore = await store.recent()
     try snapshots.saveNow(model: model)
     let reloaded = try snapshots.load()!
-    let archivedAfter = await store.recent()
-    check(SnapshotMapper.structurallyEqual(model, reloaded) && archivedBefore.map(\.payloadJSON) == archivedAfter.map(\.payloadJSON)
-          && archivedBefore.map(\.kind) == archivedAfter.map(\.kind), "FA7 snapshot roundtrip leaves archived records unchanged")
+    check(SnapshotMapper.structurallyEqual(model, reloaded) && reloaded.node(id: folder.id) == nil,
+          "FA7 snapshot roundtrip preserves the live tree with the archived folder absent")
 
     // Open a genuine pre-kind SQLite archive, including an old folderDeleted TAB row.
     let legacyRoot = root.appendingPathComponent("Legacy")
