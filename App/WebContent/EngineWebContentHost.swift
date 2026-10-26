@@ -56,6 +56,7 @@ final class EngineWebContentHost: NSObject, WebContentHost, OEWebContentDelegate
     cancelBackgroundRead()
     onURLChange = nil; onTitleChange = nil; onLoadingChange = nil; onFaviconChange = nil; shouldNavigate = nil
     onPageBackgroundChange = nil; onLiveStateChange = nil
+    owner?.pageWillClose(content)
     content.delegate = nil; content.close(); content.view.removeFromSuperview()
     owner?.hostDidClose(self)
   }

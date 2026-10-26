@@ -5,6 +5,7 @@ import OpenEngine
 /// The borderless panel/radius is a guess; no extension-popup Arc capture is supplied.
 @MainActor
 final class ExtensionPopupPresenter {
+  var onWillDismiss: ((OEWebContent) -> Void)?
   private weak var browser: OEBrowser?
   private weak var parent: NSWindow?
   private(set) var panel: ExtensionPopupPanel?
@@ -50,7 +51,7 @@ final class ExtensionPopupPresenter {
     let top = panel.frame.maxY
     panel.setFrame(CGRect(x: panel.frame.minX, y: top - size.height, width: size.width, height: size.height), display: true)
   }
-  func dismiss() { browser?.closeExtensionPopup(); cleanup() }
+  func dismiss() { if let content { onWillDismiss?(content) }; browser?.closeExtensionPopup(); cleanup() }
   func cleanup() {
     if let pointerMonitor { NSEvent.removeMonitor(pointerMonitor) }; pointerMonitor = nil
     if let resignationObserver { NotificationCenter.default.removeObserver(resignationObserver) }; resignationObserver = nil

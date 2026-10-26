@@ -69,6 +69,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   private var findBar: FindBarView?
   private weak var findPage: OEWebContent?
+  private var findQuery = ""
+  private var activatedFindMatch = false
   private var dialogPresenter: PageDialogPresenter?
   private var permissionPresenter: PermissionPromptPresenter?
   private var downloadsPresenter: DownloadsPopoverController?
@@ -127,6 +129,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
 
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
+    extensionPopup.onWillDismiss = { [weak self] page in self?.pageWillClose(page) }
     controller.onTextUndoManager = { [weak self] window in
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
     }
@@ -248,8 +251,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return host
   }
   func hostDidClose(_ host: EngineWebContentHost) {
-    if contextMenuSession?.belongs(to: host.content) == true { contextMenuSession?.cancel() }
-    dialogPresenter?.cancel(page: host.content); permissionPresenter?.cancel(page: host.content)
+    pageWillClose(host.content)
     closeRequests[host.tabID]?.cancel(); closeRequests[host.tabID] = nil
     commandBarNavigationFocus.remove(host.tabID)
     if hosts[host.tabID] === host { hosts[host.tabID] = nil }
@@ -415,7 +417,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard model.tab(id: id) != nil, !isClosing else { return }
     // OEWebContent.close is a force-close. Page.close is the existing public
     // OpenEngine DevTools path that lets Chromium run beforeunload first.
-    guard let page = hosts[id]?.content, page.isLive else { finishCloseTab(id: id); return }
+    guard let page = hosts[id]?.content, page.isLive, page.crashState == .none else { finishCloseTab(id: id); return }
     guard closeRequests[id] == nil, app.engineReady else { return }
     dialogPresenter?.cancel(page: page); permissionPresenter?.cancel(page: page)
     closeRequests[id] = Task { @MainActor [weak self, weak page] in
@@ -479,9 +481,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     event["content"] = content?.identifier ?? 0; event["time"] = Date().timeIntervalSince1970
     events.append(event); if events.count > 2000 { events.removeFirst(events.count - 2000) }
   }
+  func pageWillClose(_ page: OEWebContent) {
+    if contextMenuSession?.belongs(to: page) == true { contextMenuSession?.cancel() }
+    dialogPresenter?.cancel(page: page); permissionPresenter?.cancel(page: page)
+  }
   func pageURLChanged(_ page: OEWebContent) {
     permissionPresenter?.cancel(page: page)
-    if findPage === page { findBar?.update(count: 0, active: 0) }
+    if findPage === page { findBar?.update(count: 0, active: 0); activatedFindMatch = false }
   }
   func drainEvents() -> [[String: Any]] { defer { events.removeAll() }; return events }
   func completePendingDialog(accept: Bool, text: String?) -> Bool {
@@ -717,14 +723,26 @@ extension EngineWebContentHostFactory {
     focus(space: model.spaces[(i + delta + model.spaces.count) % model.spaces.count])
   }
 
+  func handlePageChromeKey(_ event: NSEvent) -> Bool {
+    guard event.type == .keyDown else { return false }
+    if event.keyCode == 53, extensionPopup.panel?.isKeyWindow == true { extensionPopup.dismiss(); return true }
+    guard event.window === window, window?.isKeyWindow == true, findFieldCreated, findBar?.isHidden == false,
+          window?.firstResponder === findField || window?.firstResponder === findField.currentEditor(),
+          event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return false }
+    if event.keyCode == 36 || event.keyCode == 76 { searchFind(forward: !event.modifierFlags.contains(.shift)); return true }
+    if event.keyCode == 53 { hideFind(); return true }
+    return false
+  }
   @objc func showFind(_ sender: Any?) {
     guard app.engineReady, !isClosing, selectedContent != nil else { return }
-    _ = findField; findBar?.isHidden = false; findField.isHidden = false; layoutViews()
+    _ = findField
+    if let findBar { controller?.contentView.addSubview(findBar, positioned: .above, relativeTo: nil) }
+    findBar?.isHidden = false; findField.isHidden = false; layoutViews()
     findPage = selectedContent; window?.makeFirstResponder(findField); findField.selectText(nil)
   }
   func hideFind() {
     guard findFieldCreated else { return }
-    findPage?.stopFinding(clearSelection: true); findPage = nil
+    findPage?.stopFinding(clearSelection: true); findPage = nil; findQuery = ""; activatedFindMatch = false
     findField.stringValue = ""; findField.isHidden = true; findBar?.isHidden = true
     findBar?.update(count: 0, active: 0); layoutViews()
     // This is an explicit user dismissal, never an async load completion.
@@ -732,7 +750,10 @@ extension EngineWebContentHostFactory {
   }
   private func searchFind(forward: Bool) {
     guard app.engineReady, !isClosing, findFieldCreated, !findField.stringValue.isEmpty, let page = selectedContent else { return }
-    if findPage !== page { findPage?.stopFinding(clearSelection: true); findBar?.update(count: 0, active: 0); findPage = page }
+    if findPage !== page || findQuery != findField.stringValue {
+      findPage?.stopFinding(clearSelection: true); findBar?.update(count: 0, active: 0)
+      findPage = page; findQuery = findField.stringValue; activatedFindMatch = false
+    }
     page.find(findField.stringValue, forward: forward, caseSensitive: false)
   }
   func findPrevious() { searchFind(forward: false) }
@@ -924,8 +945,24 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
   func webContent(_ webContent: OEWebContent, didUpdateFindResult result: OEFindResult) {
     lastFindResult = result
-    if result.isFinal, findFieldCreated, webContent === findPage {
-      findBar?.update(count: result.matchCount, active: result.activeMatchIndex)
+    record("findResult", webContent, ["count": result.matchCount, "active": result.activeMatchIndex, "final": result.isFinal])
+    if findFieldCreated, webContent === findPage, findBar?.isHidden == false {
+      let count = result.matchCount >= 0 ? result.matchCount : findBar?.matchCount ?? 0
+      let active = count == 0 ? 0 : result.activeMatchIndex > 0 ? result.activeMatchIndex : findBar?.matchIndex ?? 0
+      findBar?.update(count: count, active: active)
+      // Count and active-match callbacks can arrive separately. If the first
+      // completed count has no active match, ask the engine to select one;
+      // never synthesize an ordinal in the UI.
+      if result.isFinal, count > 0, active == 0, !activatedFindMatch {
+        activatedFindMatch = true
+        let query = findField.stringValue
+        DispatchQueue.main.async { [weak self, weak webContent] in
+          guard let self, let webContent, !self.isClosing, self.app.engineReady,
+                self.findPage === webContent, self.findField.stringValue == query,
+                self.findBar?.isHidden == false else { return }
+          webContent.find(query, forward: true, caseSensitive: false)
+        }
+      }
     }
   }
 
@@ -975,7 +1012,8 @@ extension EngineWebContentHostFactory: OEBrowserDelegate {
   }
 
   func browser(_ browser: OEBrowser, didOpenExtensionPopup popup: OEWebContent, for action: OEExtensionAction) {
-    guard !isClosing, let window else { browser.closeExtensionPopup(); return }
+    guard !isClosing, let window, NSApp.isActive,
+          window.isKeyWindow || popupPanel?.isKeyWindow == true else { browser.closeExtensionPopup(); return }
     popup.delegate = self
     let button = extensionBar.arrangedSubviews.first { $0.identifier?.rawValue == action.extensionIdentifier }
     extensionPopup.show(popup, browser: browser, parent: window, anchor: button, title: action.title)
@@ -1193,13 +1231,12 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     let name = URL(fileURLWithPath: suggestedFilename).lastPathComponent
     let filename = name.isEmpty || name == "." ? "download" : name
     if downloadDirectory == nil, profile?.settings.askWhereToSaveEachFile == true, let window {
-      let id = UUID(), choice = DownloadDestinationChoice(completion: completion)
-      let panel = choice.panel; downloadSavePanels[id] = choice
-      panel.nameFieldStringValue = filename
-      panel.beginSheetModal(for: window) { [weak self, choice] response in
+      let id = UUID()
+      let choice = DownloadDestinationChoice { [weak self] url in
         self?.downloadSavePanels[id] = nil
-        choice.finish(self?.isClosing == false && response == .OK ? panel.url : nil)
+        completion(self?.isClosing == false ? url : nil)
       }
+      downloadSavePanels[id] = choice; choice.present(in: window, filename: filename)
     } else {
       let path = (profile?.settings.downloadDirectory ?? "~/Downloads") as NSString
       let dir = downloadDirectory ?? URL(fileURLWithPath: path.expandingTildeInPath, isDirectory: true)

@@ -112,7 +112,7 @@ private final class PermissionPromptView: NSView {
     message.font = .systemFont(ofSize: 13); message.textColor = .secondaryLabelColor
     remember.font = .systemFont(ofSize: 12)
     for v in [origin, message, remember, allow, block, close] { addSubview(v) }
-    allow.keyEquivalent = "\r"; block.keyEquivalent = "\u{1b}"
+    allow.keyEquivalent = "\r"; close.keyEquivalent = "\u{1b}"
   }
   @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
   override func layout() {

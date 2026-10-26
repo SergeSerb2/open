@@ -20,6 +20,7 @@ enum MainMenu {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     app.prepareCommandServices()
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
+      if factory.handlePageChromeKey(event) { return true }
       return factory.controller?.handleKeyDown(event) == true
     }
     let context = RoutingContext(isAppActive: NSApp.isActive,

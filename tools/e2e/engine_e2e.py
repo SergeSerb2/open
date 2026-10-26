@@ -626,7 +626,7 @@ def page_chrome_checks(factory, results, tmp):
 
         # A split changes the actual focused engine pane, not merely the sidebar row.
         peer_tab=app.call('open',url=origin+'/link')['id'];app.call('wait',tab=peer_tab)
-        app.call('split');app.call('menu-perform',id='focus-split-pane-2')
+        app.call('split');key('2',modifiers=['ctrl','shift'])
         focused=app.call('window-state');key('f',modifiers=['cmd']);key(text='needle')
         expected_count=1 if focused['engineURL']==origin+'/link' else 3
         split_find=wait_until(lambda:find_state()['count']==expected_count and find_state()['page']==focused['engineSelected'],timeout=5,step=.02)
@@ -662,7 +662,9 @@ def page_chrome_checks(factory, results, tmp):
             if app.call('downloads-state')['visible']:app.call('downloads-show')
             app.call('focus',tab=tab)
         else:
-            results['extension_popup_pending']={'status':'BLOCKED','reason':'pending #93: fixture action not published by current engine','engineActions':app.call('extensions')['actions']}
+            installed=app.call('extensions')
+            assert any(e['name']=='Open page chrome fixture' for e in installed['installed']), installed
+            results['extension_popup_pending']={'status':'BLOCKED','reason':'pending #93: installed fixture action not published by current engine','engineActions':installed['actions']}
         results['extension_chrome_model_pending']={'status':'BLOCKED','reason':'pending #93: native Chrome toolbar action/popup implementation is not on main'}
 
         def start_dialog(script):
