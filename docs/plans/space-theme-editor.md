@@ -404,7 +404,9 @@ field rebuild per preset style at 250 ms; strict B1 stays in Step 5.
 Lead design decision (2026-10-26): D-8 keeps grain strength and monochrome
 bytes unchanged. F0139's noise-0.45 strength gap and per-channel grain are
 Step 9 calibration items. No strength or chromatic adjustment lands here.
-Fill colors alone clamp to sRGB 0…1 at render time; stored extended keys
+New editor-style fill colors clamp to sRGB 0…1 at render time; legacy
+imports/stops keep their original extended-color and exact-noise grain
+render path to satisfy §3.4. Stored extended keys
 and primary/semantic palette derivation remain unchanged. F0139 is checked
 with `compare --spec theme-window` over six background-only regions.
 
@@ -1294,3 +1296,12 @@ and the table above make the refusal reproducible without exporting private
 images. The corpus harness lands in Step 4 because it also measures the
 real preset chevrons introduced there; this Step 3 entry owns the token
 contract and records the lead's required fallback.
+
+
+Round-3 compatibility correction: main's new paired sidebar capture gate
+exposed two accidental legacy-path changes: the editor fill clamp reached
+imported extended colors, and the texture cache quantized imported noise
+to 0.05 buckets. Legacy (`style == nil`) themes now retain their original
+field inputs, 0.64 opacity, and exact `Grain.tile` path. Editor styles keep
+the F0139 clamp and bounded texture cache. This enforces §3.4's byte-identical
+legacy rendering requirement without changing any stored value or gate.

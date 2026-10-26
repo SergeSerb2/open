@@ -78,8 +78,10 @@ public enum ThemeField {
         let underlay: Double
 
         public init(style: SpaceThemeStyle, windowSize: CGSize, isActive: Bool) {
-            // Clamp only the render inputs. Stored extended keys and palette math stay intact.
+            // New editor styles clamp render inputs only. Imported/stops
+            // themes retain the original extended-color path byte for byte.
             func fill(_ color: RGBA) -> RGBA {
+                if style.usesLegacyIntensity { return color }
                 func channel(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
                 return RGBA(channel(color.red), channel(color.green), channel(color.blue), color.alpha)
             }
