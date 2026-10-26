@@ -17,6 +17,7 @@ Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 .re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}.
 """
 import argparse
+import atexit
 import base64
 import json
 import math
@@ -25,11 +26,13 @@ import hashlib
 import re
 import os
 import shutil
+import signal
 import socket
 import statistics
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from pathlib import Path
@@ -2790,6 +2793,37 @@ def engine_provenance(config):
             'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
 
 
+RUN_NAME = re.compile(r"^Open-E2E-[a-z]+-(?:alloy|chrome)-(\d+)-[0-9a-f]{8}(?:-scratch-.*)?$")
+
+
+def sweep_stale_runs():
+    """Removes the folders of runs whose process is gone (a killed run never
+    reaches its own cleanup). Only this harness's per-run names match; a live
+    run of another agent is never touched."""
+    bases = [os.path.expanduser("~/Library/Application Support"), os.path.expanduser("~/Library/Caches"),
+             tempfile.gettempdir()]
+    for base in bases:
+        try:
+            names = os.listdir(base)
+        except OSError:
+            continue
+        for name in names:
+            match = RUN_NAME.match(name)
+            if not match:
+                continue
+            try:
+                os.kill(int(match.group(1)), 0)
+                continue  # still running
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                continue
+            folder = os.path.join(base, name)
+            subprocess.run(["chflags", "-R", "nouchg", folder], capture_output=True)
+            subprocess.run(["chmod", "-R", "u+rwX", folder], capture_output=True)
+            shutil.rmtree(folder, ignore_errors=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
@@ -2798,14 +2832,37 @@ def main():
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
                                        "profiles"],
                     required=True)
+    ap.add_argument("--keep", action="store_true",
+                    help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     opts = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
-    tmp = os.path.join(ROOT, ".re", "e2e-%s-%s" % (opts.only, opts.style))
-    user_data = os.path.expanduser("~/Library/Application Support/Open-E2E-%s-%s" % (opts.only, opts.style))
-    shutil.rmtree(user_data, ignore_errors=True)
-    shutil.rmtree(tmp, ignore_errors=True)
-    os.makedirs(tmp)
+    # Every run is isolated: several agents run this harness at once, and two
+    # runs of one suite must never share a profile, a cache or a socket. The
+    # data root stays under Application Support so Chromium's cache rule
+    # applies as for users (~/Library/Caches/<root name>, docs/plans/profiles.md);
+    # its name is unique per run, so the cache root is too.
+    run_name = "Open-E2E-%s-%s-%d-%s" % (opts.only, opts.style, os.getpid(), os.urandom(4).hex())
+    sweep_stale_runs()
+    user_data = os.path.expanduser("~/Library/Application Support/" + run_name)
+    # Chromium keeps profile caches in ~/Library/Caches/<root name>.
+    user_caches = os.path.join(os.path.expanduser("~/Library/Caches"), run_name)
+    tmp = tempfile.mkdtemp(prefix=run_name + "-scratch-")
+    run_folders = [user_data, user_caches, tmp]
+
+    def remove_run_folders(*_):
+        if opts.keep:
+            print("kept: " + "  ".join(run_folders))
+            return
+        for folder in run_folders:
+            if os.path.isdir(folder):
+                subprocess.run(["chflags", "-R", "nouchg", folder], capture_output=True)
+                subprocess.run(["chmod", "-R", "u+rwX", folder], capture_output=True)
+            shutil.rmtree(folder, ignore_errors=True)
+    atexit.register(remove_run_folders)
+    # `timeout` and Ctrl-C end the run with a signal: still clean up.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: sys.exit(128 + 15))
     extra = ["--use-mock-keychain"]
     if opts.only == "extensions":
         dirs = [os.path.join(opts.extensions, d) for d in ("ublock-lite", "darkreader", "1password", "bitwarden")]
@@ -2821,10 +2878,6 @@ def main():
             sys.exit("missing extensions: %s" % dirs)
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
-
-    # Chromium keeps profile caches in ~/Library/Caches/<root name>.
-    user_caches = os.path.join(os.path.expanduser("~/Library/Caches"), os.path.basename(user_data))
-    shutil.rmtree(user_caches, ignore_errors=True)
 
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
         if fresh or snapshot:
