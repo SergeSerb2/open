@@ -12,6 +12,8 @@ typealias BrowserWindowController = OpenFeatures.BrowserWindowController
 final class AuxiliaryPage {
   let content: OEWebContent
   let panel: NSPanel
+  /// The panel's close button closes the page too.
+  var closeObserver: NSObjectProtocol?
   init(content: OEWebContent, panel: NSPanel) { self.content = content; self.panel = panel }
 }
 
@@ -181,6 +183,11 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func adoptHost(_ host: any WebContentHost, as tabID: ItemID) -> Bool {
     guard let host = host as? EngineWebContentHost, host.owner === self, !host.closed,
           profile(for: tabID)?.id == host.profileID else { return false }
+    // Sidebar tabs are tabs of the window's hidden Chrome window (fork patch
+    // P1); a Peek page is Alloy. Refusing closes it, and the container makes a
+    // Chrome host for the tab at its URL: one reload, accepted for v1
+    // (docs/m4.md, Peek expand).
+    if model.tab(id: tabID) != nil, host.content.runtimeStyle != app.options.defaultStyle { return false }
     if host.tabID != tabID {
       let oldID = host.tabID
       if let previous = hosts[tabID], previous !== host { controller?.container.closeHost(for: tabID); previous.close() }
@@ -336,7 +343,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   }
   func closeAll() {
     controller?.container.closeAll(); for host in Array(hosts.values) { host.close() }
-    for page in auxiliaryPages { page.content.close(); page.panel.close() }; auxiliaryPages.removeAll()
+    for page in auxiliaryPages { closeAuxiliary(page); page.panel.close() }
     popupPanel?.close(); mirror.close()
   }
   func content(forAutomationHandle handle: Any?) -> OEWebContent? {
@@ -589,9 +596,12 @@ extension EngineWebContentHostFactory {
   }
 
   func closeAuxiliary(_ page: AuxiliaryPage) {
+    guard auxiliaryPages.contains(where: { $0 === page }) else { return }
+    auxiliaryPages.removeAll { $0 === page }
+    if let observer = page.closeObserver { NotificationCenter.default.removeObserver(observer) }
+    page.closeObserver = nil
     page.content.close()
     page.panel.orderOut(nil)
-    auxiliaryPages.removeAll { $0 === page }
   }
 }
 
@@ -636,17 +646,38 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
       host(popup, in: panel)
       panel.center()
       present(panel)
-      auxiliaryPages.append(AuxiliaryPage(content: popup, panel: panel))
+      let page = AuxiliaryPage(content: popup, panel: panel)
+      page.closeObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.willCloseNotification, object: panel, queue: .main
+      ) { [weak self, weak page] _ in
+        MainActor.assumeIsolated { if let self, let page { self.closeAuxiliary(page) } }
+      }
+      auxiliaryPages.append(page)
       record("open", popup, ["disposition": "popup", "url": request.url?.absoluteString ?? ""])
       return popup
     case .newWindow:
       let sourceSpace = tabID(for: webContent).flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let controller = app.makeWindow(focusedSpaceID: sourceSpace?.id), let target = app.hostFactories[controller.windowID] else { return nil }
+      if webContent.runtimeStyle == .chrome, let url = request.url {
+        // The engine would make the page a tab of the opener window's hidden
+        // Chrome window (P1), which closes with that window. A new window
+        // needs no opener: open the URL as a new tab there instead.
+        target.openNewTab(url: url, background: false)
+        record("open", webContent, ["disposition": "newWindow", "url": url.absoluteString, "newTab": true])
+        return nil
+      }
       return target.adoptUnownedRequest(request)
     case .currentTab, .saveToDisk:
       return nil
     default:
       let opener = tabID(for: webContent)
+      if let opener, model.tab(id: opener) == nil, app.options.defaultStyle == .chrome, let url = request.url {
+        // A Peek page (a host that is not a model tab) is Alloy, and so would
+        // be the page it opens: not a chrome.tabs tab. Open the URL as a tab.
+        openNewTab(url: url, background: request.disposition == .newBackgroundTab)
+        record("open", webContent, ["disposition": request.disposition.rawValue, "url": url.absoluteString, "fromPeek": true])
+        return nil
+      }
       let source = opener.flatMap { space(for: $0) } ?? hosts.values.first { $0.content === webContent }?.spaceID.flatMap { model.space(id: $0) }
       guard let space = source ?? focusedSpace, space.profileID == profile(for: request.context)?.id else { return nil }
       let tab = model.newTab(in: space.id, url: request.url ?? URL(string: "about:blank")!, at: 0)

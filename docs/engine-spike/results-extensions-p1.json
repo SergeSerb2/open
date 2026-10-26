@@ -1,10 +1,10 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
-    "embeddedUUID": "4C4C44A1-5555-3144-A15F-FF6A38934DDF",
+    "distributionUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
+    "embeddedUUID": "4C4C4420-5555-3144-A124-50C9E706917C",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792999269"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793001810"
   },
   "extensions": {
     "chrome_extensions_page": {
@@ -16,7 +16,7 @@
     "content_scripts": {
       "darkreader": {
         "mode": "dynamic",
-        "styles": 26
+        "styles": 25
       },
       "isolated_worlds": [
         "1Password \u2013 Password Manager",
@@ -145,7 +145,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2094611961,
+            "current": 486481191,
             "windows": 1
           }
         },
@@ -169,7 +169,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2094611961,
+            "current": 486481191,
             "windows": 1
           }
         },
@@ -195,7 +195,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2094611961,
+            "current": 486481191,
             "windows": 1
           }
         },
@@ -219,7 +219,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2094611961,
+            "current": 486481191,
             "windows": 1
           }
         }
@@ -259,10 +259,10 @@
           "attachedSheet": 0,
           "class": "NativeWidgetMacNSWindow",
           "firstResponder": "BridgedContentView",
-          "frame": "{{1056, 910}, {448, 196}}",
+          "frame": "{{736, 640}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 31409,
+          "number": 38808,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -279,7 +279,7 @@
         ],
         [
           "NativeWidgetMacNSWindow",
-          "{{-224, 1278}, {448, 132}}"
+          "{{-224, 918}, {448, 132}}"
         ]
       ]
     },
@@ -292,10 +292,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 84056,
+    "pid": 45678,
     "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome",
     "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome/Profiles"
   },
-  "started": "2026-10-26 00:25:38",
+  "started": "2026-10-26 01:10:52",
   "style": "chrome"
 }
