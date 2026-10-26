@@ -1,77 +1,77 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44AF-5555-3144-A125-A9B605CA36B0",
-    "embeddedUUID": "4C4C44AF-5555-3144-A125-A9B605CA36B0",
+    "distributionUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "embeddedUUID": "4C4C44F5-5555-3144-A143-53034578039A",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793005822"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
   },
-  "started": "2026-10-26 02:16:59",
+  "started": "2026-10-26 09:53:27",
   "style": "alloy",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
+          "active": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
           "tabs": [
-            "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-            "51180145-6F85-4177-BFE5-739B1A8F06AF"
+            "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
+          "active": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
           "tabs": [
-            "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-            "51180145-6F85-4177-BFE5-739B1A8F06AF"
+            "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+          "active": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
           "tabs": [
-            "51180145-6F85-4177-BFE5-739B1A8F06AF",
-            "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
+            "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+          "active": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+          "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
           "tabs": [
-            "51180145-6F85-4177-BFE5-739B1A8F06AF",
-            "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
+            "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
           ]
         }
       ]
@@ -80,34 +80,34 @@
       "ok": true
     },
     "card_edges_1x": {
-      "corner_symmetry_max": 0.067,
+      "corner_symmetry_max": 9,
       "corners": {
         "bottom_left": {
-          "antialiased_rows": 11,
-          "corner_alpha": -0.016,
+          "antialiased_rows": 0,
+          "corner_alpha": 0,
           "edge_by_row": [
-            8.19,
-            5.97,
-            4.43,
-            3.32,
-            2.42,
-            1.83,
-            1.19,
-            0.8,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ],
-          "max_error_px": 0.5,
+          "max_error_px": 0.81,
           "monotonic": true,
           "reference": [
             8.57,
@@ -131,20 +131,20 @@
             0.0,
             0.0
           ],
-          "rows": 20
+          "rows": 1
         },
         "bottom_right": {
-          "antialiased_rows": 11,
-          "corner_alpha": -0.015,
+          "antialiased_rows": 3,
+          "corner_alpha": -0.003,
           "edge_by_row": [
-            8.15,
-            5.95,
-            4.41,
-            3.31,
-            2.42,
-            1.75,
-            1.12,
-            0.74,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             0.0,
             0.0,
             0.0,
@@ -182,34 +182,34 @@
             0.0,
             0.0
           ],
-          "rows": 20
+          "rows": 12
         },
         "top_left": {
-          "antialiased_rows": 11,
-          "corner_alpha": -0.016,
+          "antialiased_rows": 0,
+          "corner_alpha": 0,
           "edge_by_row": [
-            8.18,
-            5.96,
-            4.42,
-            3.32,
-            2.44,
-            1.81,
-            1.18,
-            0.8,
+            null,
+            null,
+            null,
+            null,
+            null,
             0.0,
             0.0,
+            null,
             0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
           ],
-          "max_error_px": 0.5,
+          "max_error_px": 1.6,
           "monotonic": true,
           "reference": [
             8.57,
@@ -233,21 +233,21 @@
             0.0,
             0.0
           ],
-          "rows": 20
+          "rows": 3
         },
         "top_right": {
-          "antialiased_rows": 11,
-          "corner_alpha": -0.015,
+          "antialiased_rows": 5,
+          "corner_alpha": 0.0,
           "edge_by_row": [
-            8.17,
-            5.95,
-            4.42,
-            3.33,
-            2.43,
-            1.76,
-            1.12,
-            0.74,
-            0.0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             0.0,
             0.0,
             0.0,
@@ -260,7 +260,7 @@
             0.0,
             0.0
           ],
-          "max_error_px": 0.5,
+          "max_error_px": 0.26,
           "monotonic": true,
           "reference": [
             8.57,
@@ -284,21 +284,21 @@
             0.0,
             0.0
           ],
-          "rows": 20
+          "rows": 11
         }
       },
-      "low_contrast": false,
-      "ok": true,
+      "low_contrast": true,
+      "ok": false,
       "right_shadow_profile": [
-        0.922,
-        0.941,
-        0.953,
-        0.969,
-        0.976,
-        0.984,
-        0.988,
-        0.992,
+        0.949,
+        0.965,
+        0.978,
+        0.985,
+        0.989,
+        0.994,
+        1.0,
         0.996,
+        1.0,
         1.0,
         1.0,
         1.0
@@ -306,62 +306,62 @@
       "scale": 1.0,
       "sides": {
         "bottom": {
-          "contrast": 112.1,
+          "contrast": 110.4,
           "expected": [
-            110,
-            101,
+            109,
+            102,
             115
           ],
-          "shadow_1px": 0.919,
+          "shadow_1px": 0.944,
           "stroke": [
-            110,
+            109,
             101,
             115
           ],
           "stroke_ok": true
         },
         "left": {
-          "contrast": 109.8,
+          "contrast": 3.7,
           "expected": [
-            105,
+            104,
             102,
             115
           ],
-          "shadow_1px": 0.92,
+          "shadow_1px": 1.497,
           "stroke": [
-            105,
-            102,
-            115
+            41,
+            36,
+            55
           ],
-          "stroke_ok": true
+          "stroke_ok": false
         },
         "right": {
-          "contrast": 251.9,
+          "contrast": 26.6,
           "expected": [
             112,
             101,
             115
           ],
-          "shadow_1px": 0.922,
+          "shadow_1px": 0.949,
           "stroke": [
-            112,
-            102,
-            115
+            238,
+            240,
+            239
           ],
-          "stroke_ok": true
+          "stroke_ok": false
         },
         "top": {
-          "contrast": 112.2,
+          "contrast": 110.5,
           "expected": [
             107,
             102,
-            116
+            115
           ],
-          "shadow_1px": 0.92,
+          "shadow_1px": 0.938,
           "stroke": [
             107,
-            102,
-            116
+            100,
+            115
           ],
           "stroke_ok": true
         }
@@ -371,20 +371,20 @@
       "ok": true,
       "rows": {
         "dark": {
-          "corner_symmetry_max": 0.067,
+          "corner_symmetry_max": 0.083,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.016,
+              "corner_alpha": -0.015,
               "edge_by_row": [
-                8.18,
-                5.97,
-                4.44,
+                8.24,
+                5.98,
+                4.45,
                 3.32,
-                2.43,
+                2.45,
                 1.83,
-                1.18,
-                0.81,
+                1.2,
+                0.82,
                 0.0,
                 0.0,
                 0.0,
@@ -428,11 +428,11 @@
               "antialiased_rows": 11,
               "corner_alpha": -0.016,
               "edge_by_row": [
-                8.15,
-                5.96,
-                4.42,
+                8.2,
+                5.98,
+                4.4,
                 3.31,
-                2.42,
+                2.43,
                 1.75,
                 1.12,
                 0.74,
@@ -477,16 +477,16 @@
             },
             "top_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.016,
+              "corner_alpha": -0.015,
               "edge_by_row": [
-                8.18,
-                5.96,
-                4.42,
-                3.32,
-                2.44,
-                1.81,
+                8.2,
+                5.98,
+                4.45,
+                3.3,
+                2.46,
+                1.8,
                 1.18,
-                0.8,
+                0.82,
                 0.0,
                 0.0,
                 0.0,
@@ -528,16 +528,16 @@
             },
             "top_right": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.015,
+              "corner_alpha": -0.01,
               "edge_by_row": [
-                8.17,
-                5.96,
-                4.43,
-                3.32,
+                8.16,
+                5.95,
+                4.42,
+                3.31,
                 2.44,
                 1.76,
                 1.12,
-                0.74,
+                0.73,
                 0.0,
                 0.0,
                 0.0,
@@ -583,11 +583,11 @@
           "right_shadow_profile": [
             0.922,
             0.941,
-            0.953,
+            0.955,
             0.969,
-            0.976,
-            0.984,
-            0.988,
+            0.977,
+            0.986,
+            0.992,
             0.992,
             0.996,
             1.0,
@@ -599,35 +599,35 @@
             "bottom": {
               "contrast": 110.4,
               "expected": [
-                110,
-                101,
+                109,
+                102,
                 115
               ],
-              "shadow_1px": 0.921,
+              "shadow_1px": 0.944,
               "stroke": [
-                110,
+                109,
                 101,
                 115
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 109.8,
+              "contrast": 111.1,
               "expected": [
-                105,
+                104,
                 102,
                 115
               ],
-              "shadow_1px": 0.92,
+              "shadow_1px": 0.921,
               "stroke": [
-                105,
-                102,
+                106,
+                101,
                 115
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 251.9,
+              "contrast": 250.8,
               "expected": [
                 112,
                 101,
@@ -642,40 +642,40 @@
               "stroke_ok": true
             },
             "top": {
-              "contrast": 112.2,
+              "contrast": 110.5,
               "expected": [
                 107,
                 102,
-                116
+                115
               ],
-              "shadow_1px": 0.92,
+              "shadow_1px": 0.938,
               "stroke": [
                 107,
-                102,
-                116
+                100,
+                115
               ],
               "stroke_ok": true
             }
           }
         },
         "light": {
-          "corner_symmetry_max": 0.843,
+          "corner_symmetry_max": 1.232,
           "corners": {
             "bottom_left": {
-              "antialiased_rows": 9,
-              "corner_alpha": -0.564,
+              "antialiased_rows": 16,
+              "corner_alpha": -0.52,
               "edge_by_row": [
-                7.99,
-                7.28,
-                4.3,
-                3.15,
-                2.22,
+                8.04,
+                7.37,
+                4.38,
+                3.16,
+                2.25,
                 null,
-                2.47,
-                0.91,
+                null,
+                1.33,
                 0.0,
-                4.74,
-                4.74,
+                4.69,
+                4.73,
                 0.0,
                 0.0,
                 0.0,
@@ -686,7 +686,7 @@
                 0.0,
                 0.0
               ],
-              "max_error_px": 4.61,
+              "max_error_px": 4.6,
               "monotonic": false,
               "reference": [
                 8.57,
@@ -710,17 +710,17 @@
                 0.0,
                 0.0
               ],
-              "rows": 19
+              "rows": 18
             },
             "bottom_right": {
               "antialiased_rows": 8,
-              "corner_alpha": -0.876,
+              "corner_alpha": -0.785,
               "edge_by_row": [
-                7.98,
-                7.29,
-                4.25,
-                3.15,
-                2.22,
+                8.01,
+                7.33,
+                4.27,
+                3.16,
+                2.26,
                 null,
                 0.0,
                 0.0,
@@ -764,31 +764,82 @@
               "rows": 19
             },
             "top_left": {
-              "antialiased_rows": 6,
-              "corner_alpha": -0.974,
+              "antialiased_rows": 7,
+              "corner_alpha": -0.946,
+              "edge_by_row": [
+                7.88,
+                7.33,
+                4.23,
+                3.14,
+                2.3,
+                null,
+                null,
+                0.82,
+                0.0,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0.0,
+                null,
+                null,
+                null,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.52,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 10
+            },
+            "top_right": {
+              "antialiased_rows": 8,
+              "corner_alpha": -1.061,
               "edge_by_row": [
                 7.92,
                 null,
-                4.17,
-                3.14,
-                2.29,
-                null,
-                null,
-                0.69,
-                0.0,
-                null,
-                null,
-                0.0,
-                null,
-                null,
+                4.2,
+                3.1,
+                2.31,
                 0.0,
                 0.0,
                 0.0,
-                null,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
                 0.0,
                 0.0
               ],
-              "max_error_px": 0.5,
+              "max_error_px": 1.6,
               "monotonic": true,
               "reference": [
                 8.57,
@@ -812,58 +863,7 @@
                 0.0,
                 0.0
               ],
-              "rows": 12
-            },
-            "top_right": {
-              "antialiased_rows": 7,
-              "corner_alpha": 0,
-              "edge_by_row": [
-                7.94,
-                null,
-                4.23,
-                3.13,
-                2.29,
-                null,
-                0.53,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
-              ],
-              "max_error_px": 0.81,
-              "monotonic": true,
-              "reference": [
-                8.57,
-                6.19,
-                4.67,
-                3.53,
-                2.63,
-                1.91,
-                1.33,
-                0.88,
-                0.52,
-                0.26,
-                0.09,
-                0.01,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-                0.0
-              ],
-              "rows": 18
+              "rows": 19
             }
           },
           "low_contrast": true,
@@ -871,11 +871,11 @@
           "right_shadow_profile": [
             0.922,
             0.941,
-            0.953,
+            0.955,
             0.969,
-            0.976,
-            0.984,
-            0.988,
+            0.977,
+            0.986,
+            0.992,
             0.992,
             0.996,
             1.0,
@@ -885,62 +885,62 @@
           "scale": 1.0,
           "sides": {
             "bottom": {
-              "contrast": 9.8,
+              "contrast": 12.1,
               "expected": [
                 240,
-                240,
-                244
-              ],
-              "shadow_1px": 0.923,
-              "stroke": [
-                240,
-                239,
-                244
-              ],
-              "stroke_ok": true
-            },
-            "left": {
-              "contrast": 10.0,
-              "expected": [
-                242,
-                242,
-                244
-              ],
-              "shadow_1px": 0.924,
-              "stroke": [
-                242,
-                241,
-                244
-              ],
-              "stroke_ok": true
-            },
-            "right": {
-              "contrast": 22.2,
-              "expected": [
-                242,
                 240,
                 244
               ],
               "shadow_1px": 0.922,
               "stroke": [
-                242,
                 240,
-                245
+                240,
+                243
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 11.8,
+              "expected": [
+                241,
+                242,
+                244
+              ],
+              "shadow_1px": 0.923,
+              "stroke": [
+                243,
+                241,
+                243
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 21.5,
+              "expected": [
+                241,
+                240,
+                244
+              ],
+              "shadow_1px": 0.922,
+              "stroke": [
+                241,
+                241,
+                244
               ],
               "stroke_ok": true
             },
             "top": {
-              "contrast": 7.5,
+              "contrast": 8.4,
               "expected": [
                 242,
                 242,
-                245
+                244
               ],
               "shadow_1px": 0.924,
               "stroke": [
-                242,
-                241,
-                245
+                243,
+                240,
+                246
               ],
               "stroke_ok": true
             }
@@ -1241,25 +1241,461 @@
           }
         },
         "space 1 (offscreen render, 2x)": {
-          "reason": "offscreen renderer gave no clean render in 10 tries (docs/design.md section 15.1)",
-          "renders": 19,
-          "status": "SKIP"
+          "corner_symmetry_max": 0.565,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.054,
+              "edge_by_row": [
+                18.47,
+                15.21,
+                13.16,
+                11.19,
+                9.75,
+                8.39,
+                7.3,
+                6.31,
+                5.44,
+                4.68,
+                4.01,
+                3.25,
+                2.77,
+                2.31,
+                1.79,
+                1.32,
+                1.07,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "bottom_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.085,
+              "edge_by_row": [
+                18.49,
+                15.2,
+                13.29,
+                11.19,
+                9.76,
+                8.44,
+                7.32,
+                6.31,
+                5.44,
+                4.69,
+                3.96,
+                3.36,
+                2.81,
+                2.13,
+                1.82,
+                1.4,
+                1.02,
+                0.79,
+                0.57,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_left": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.071,
+              "edge_by_row": [
+                18.46,
+                15.2,
+                13.3,
+                11.18,
+                9.76,
+                8.44,
+                7.3,
+                6.28,
+                5.43,
+                4.66,
+                4.04,
+                3.25,
+                2.76,
+                2.44,
+                1.79,
+                1.32,
+                1.1,
+                0.73,
+                0.5,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.052,
+              "edge_by_row": [
+                18.42,
+                15.2,
+                13.28,
+                11.18,
+                9.77,
+                8.44,
+                7.31,
+                6.32,
+                5.44,
+                4.68,
+                3.98,
+                3.37,
+                2.81,
+                2.13,
+                1.84,
+                1.43,
+                1.02,
+                0.8,
+                0.58,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.918,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.984,
+            0.992,
+            0.996,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 2,
+          "sides": {
+            "bottom": {
+              "contrast": 62.2,
+              "expected": [
+                240,
+                190,
+                172
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                240,
+                190,
+                172
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 53.0,
+              "expected": [
+                235,
+                194,
+                163
+              ],
+              "shadow_1px": 0.925,
+              "stroke": [
+                235,
+                193,
+                163
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 106.6,
+              "expected": [
+                244,
+                183,
+                178
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                245,
+                182,
+                178
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 62.3,
+              "expected": [
+                239,
+                192,
+                171
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                239,
+                191,
+                171
+              ],
+              "stroke_ok": true
+            }
+          }
         },
         "space 1 (window, 1x)": {
-          "corner_symmetry_max": 0.178,
+          "corner_symmetry_max": 0.204,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.053,
+              "corner_alpha": -0.052,
               "edge_by_row": [
                 8.12,
-                5.98,
-                4.38,
-                3.28,
-                2.38,
+                5.96,
+                4.37,
+                3.24,
+                2.36,
                 1.79,
-                1.22,
-                0.75,
+                1.21,
+                0.76,
                 0.0,
                 0.0,
                 0.0,
@@ -1301,16 +1737,16 @@
             },
             "bottom_right": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.085,
+              "corner_alpha": -0.086,
               "edge_by_row": [
                 8.1,
-                6.1,
-                4.38,
-                3.28,
-                2.38,
+                6.04,
+                4.36,
+                3.27,
+                2.37,
                 1.81,
-                1.42,
-                0.79,
+                1.44,
+                0.77,
                 0.0,
                 0.0,
                 0.0,
@@ -1352,15 +1788,15 @@
             },
             "top_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.074,
+              "corner_alpha": -0.082,
               "edge_by_row": [
-                8.08,
-                6.06,
-                4.35,
-                3.27,
+                8.14,
+                6.16,
+                4.36,
+                3.28,
                 2.38,
                 1.77,
-                1.32,
+                1.31,
                 0.76,
                 0.0,
                 0.0,
@@ -1406,13 +1842,13 @@
               "corner_alpha": -0.064,
               "edge_by_row": [
                 8.09,
-                6.05,
-                4.36,
-                3.28,
-                2.4,
-                1.79,
+                6.03,
+                4.39,
+                3.3,
+                2.39,
+                1.81,
                 1.35,
-                0.76,
+                0.81,
                 0.0,
                 0.0,
                 0.0,
@@ -1456,14 +1892,14 @@
           "low_contrast": false,
           "ok": true,
           "right_shadow_profile": [
-            0.922,
-            0.945,
-            0.956,
-            0.968,
+            0.924,
+            0.942,
+            0.954,
+            0.969,
             0.976,
-            0.982,
+            0.984,
             0.988,
-            0.993,
+            0.994,
             0.994,
             1.0,
             1.0,
@@ -1472,62 +1908,62 @@
           "scale": 1.0,
           "sides": {
             "bottom": {
-              "contrast": 62.7,
+              "contrast": 65.0,
               "expected": [
                 240,
                 191,
-                173
-              ],
-              "shadow_1px": 0.919,
-              "stroke": [
-                240,
-                190,
                 172
+              ],
+              "shadow_1px": 0.93,
+              "stroke": [
+                242,
+                190,
+                173
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 53.9,
+              "contrast": 52.3,
               "expected": [
                 235,
-                194,
+                196,
                 163
               ],
-              "shadow_1px": 0.925,
+              "shadow_1px": 0.915,
               "stroke": [
-                235,
+                237,
                 194,
-                163
+                162
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 35.8,
+              "contrast": 37.3,
               "expected": [
-                244,
+                245,
                 183,
                 177
               ],
-              "shadow_1px": 0.922,
+              "shadow_1px": 0.924,
               "stroke": [
-                245,
-                183,
+                248,
+                185,
                 177
               ],
               "stroke_ok": true
             },
             "top": {
-              "contrast": 60.7,
+              "contrast": 61.0,
               "expected": [
-                239,
-                192,
-                171
+                238,
+                193,
+                170
               ],
-              "shadow_1px": 0.924,
+              "shadow_1px": 0.914,
               "stroke": [
                 239,
-                191,
-                170
+                190,
+                171
               ],
               "stroke_ok": true
             }
@@ -1823,25 +2259,461 @@
           }
         },
         "space 2 (offscreen render, 2x)": {
-          "reason": "offscreen renderer gave no clean render in 10 tries (docs/design.md section 15.1)",
-          "renders": 12,
-          "status": "SKIP"
+          "corner_symmetry_max": 0.594,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 23,
+              "corner_alpha": -0.037,
+              "edge_by_row": [
+                18.5,
+                15.22,
+                13.18,
+                11.21,
+                9.8,
+                8.43,
+                7.31,
+                6.32,
+                5.45,
+                4.68,
+                4.05,
+                3.27,
+                2.79,
+                2.32,
+                1.82,
+                1.34,
+                1.05,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "bottom_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.066,
+              "edge_by_row": [
+                18.42,
+                15.12,
+                13.29,
+                11.17,
+                9.73,
+                8.45,
+                7.32,
+                6.28,
+                5.44,
+                4.67,
+                3.96,
+                3.36,
+                2.8,
+                2.13,
+                1.82,
+                1.44,
+                1.03,
+                0.79,
+                0.57,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_left": {
+              "antialiased_rows": 23,
+              "corner_alpha": -0.055,
+              "edge_by_row": [
+                18.68,
+                15.27,
+                13.37,
+                11.16,
+                9.8,
+                8.48,
+                7.31,
+                6.32,
+                5.42,
+                4.66,
+                4.09,
+                3.28,
+                2.75,
+                2.4,
+                1.81,
+                1.34,
+                1.08,
+                0.74,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.064,
+              "edge_by_row": [
+                18.37,
+                15.12,
+                13.39,
+                11.15,
+                9.75,
+                8.38,
+                7.27,
+                6.28,
+                5.43,
+                4.63,
+                3.99,
+                3.37,
+                2.82,
+                2.14,
+                1.84,
+                1.42,
+                1.04,
+                0.8,
+                0.61,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.918,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.984,
+            0.992,
+            0.996,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 2,
+          "sides": {
+            "bottom": {
+              "contrast": 72.4,
+              "expected": [
+                171,
+                189,
+                235
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                171,
+                189,
+                236
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 65.6,
+              "expected": [
+                167,
+                191,
+                228
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                168,
+                192,
+                228
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 113.0,
+              "expected": [
+                169,
+                181,
+                238
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                170,
+                182,
+                240
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 58.9,
+              "expected": [
+                170,
+                189,
+                232
+              ],
+              "shadow_1px": 0.923,
+              "stroke": [
+                168,
+                187,
+                230
+              ],
+              "stroke_ok": true
+            }
+          }
         },
         "space 2 (window, 1x)": {
-          "corner_symmetry_max": 0.151,
+          "corner_symmetry_max": 0.311,
           "corners": {
             "bottom_left": {
               "antialiased_rows": 11,
-              "corner_alpha": -0.039,
+              "corner_alpha": -0.037,
               "edge_by_row": [
-                8.15,
-                6.07,
+                8.14,
+                6.06,
                 4.39,
-                3.3,
+                3.29,
                 2.4,
                 1.79,
                 1.23,
-                0.79,
+                0.76,
                 0.0,
                 0.0,
                 0.0,
@@ -1882,17 +2754,17 @@
               "rows": 20
             },
             "bottom_right": {
-              "antialiased_rows": 11,
-              "corner_alpha": -0.068,
+              "antialiased_rows": 12,
+              "corner_alpha": -0.073,
               "edge_by_row": [
-                8.13,
-                6.08,
+                8.11,
+                6.04,
                 4.36,
-                3.28,
+                3.29,
                 2.37,
-                1.79,
+                1.76,
                 1.35,
-                0.75,
+                0.73,
                 0.0,
                 0.0,
                 0.0,
@@ -1937,13 +2809,13 @@
               "corner_alpha": -0.065,
               "edge_by_row": [
                 8.14,
-                6.03,
+                6.05,
                 4.36,
                 3.26,
-                2.38,
-                1.75,
+                2.37,
+                1.77,
                 1.29,
-                0.77,
+                0.78,
                 0.0,
                 0.0,
                 0.0,
@@ -1984,17 +2856,17 @@
               "rows": 20
             },
             "top_right": {
-              "antialiased_rows": 11,
-              "corner_alpha": -0.081,
+              "antialiased_rows": 12,
+              "corner_alpha": -0.091,
               "edge_by_row": [
-                8.08,
-                6.16,
-                4.41,
+                8.03,
+                6.21,
+                4.44,
                 3.24,
-                2.4,
-                1.84,
-                1.4,
-                0.8,
+                2.39,
+                1.86,
+                1.58,
+                0.81,
                 0.0,
                 0.0,
                 0.0,
@@ -2038,15 +2910,15 @@
           "low_contrast": false,
           "ok": true,
           "right_shadow_profile": [
-            0.924,
+            0.926,
             0.944,
-            0.956,
+            0.957,
             0.968,
-            0.976,
-            0.983,
-            0.987,
-            0.993,
+            0.975,
+            0.984,
+            0.985,
             0.994,
+            0.997,
             1.0,
             1.0,
             1.0
@@ -2054,43 +2926,43 @@
           "scale": 1.0,
           "sides": {
             "bottom": {
-              "contrast": 69.0,
+              "contrast": 70.9,
               "expected": [
-                172,
+                170,
                 191,
                 237
               ],
-              "shadow_1px": 0.923,
+              "shadow_1px": 0.92,
               "stroke": [
-                169,
+                170,
                 186,
-                232
+                231
               ],
               "stroke_ok": true
             },
             "left": {
-              "contrast": 63.4,
+              "contrast": 66.0,
               "expected": [
-                168,
-                192,
+                167,
+                193,
                 228
               ],
-              "shadow_1px": 0.926,
+              "shadow_1px": 0.924,
               "stroke": [
-                168,
+                170,
                 193,
-                230
+                229
               ],
               "stroke_ok": true
             },
             "right": {
-              "contrast": 40.5,
+              "contrast": 41.0,
               "expected": [
-                171,
-                182,
-                240
+                170,
+                184,
+                239
               ],
-              "shadow_1px": 0.924,
+              "shadow_1px": 0.926,
               "stroke": [
                 171,
                 183,
@@ -2099,16 +2971,16 @@
               "stroke_ok": true
             },
             "top": {
-              "contrast": 68.5,
+              "contrast": 68.9,
               "expected": [
-                171,
+                170,
                 191,
                 234
               ],
               "shadow_1px": 0.922,
               "stroke": [
-                171,
-                191,
+                173,
+                189,
                 234
               ],
               "stroke_ok": true
@@ -2116,10 +2988,7 @@
           }
         }
       },
-      "skipped": [
-        "space 1 (offscreen render, 2x)",
-        "space 2 (offscreen render, 2x)"
-      ]
+      "skipped": []
     },
     "close_unloaded_pinned": {
       "after_close": {
@@ -2144,14 +3013,14 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 200,
-        "engineStarted": 281,
-        "firstContentfulPaint": 414,
-        "main": 124,
-        "modelLoaded": 126,
-        "sidebarDrawn": 199
+        "engineStart": 271,
+        "engineStarted": 368,
+        "firstContentfulPaint": 538,
+        "main": 142,
+        "modelLoaded": 143,
+        "sidebarDrawn": 269
       },
-      "ok": true,
+      "ok": false,
       "samples": 5
     },
     "comparison": {
@@ -2159,76 +3028,76 @@
       "elements": [
         {
           "delta_e00": 0.57,
-          "element": "background (sidebar column) (101 points, max \u0394E 0.85)",
+          "element": "background (sidebar column) (101 points, max \u0394E 1.11)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.52,
-          "element": "panel fill (empty state) (11 points, max \u0394E 0.95)",
+          "delta_e00": 0.4,
+          "element": "panel fill (empty state) (11 points, max \u0394E 1.13)",
           "position_pt": null
         },
         {
-          "delta_e00": 0.78,
+          "delta_e00": 0.76,
           "element": "toolbar: sidebar toggle",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.25,
+          "delta_e00": 0.33,
           "element": "toolbar: back",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.29,
+          "delta_e00": 0.24,
           "element": "toolbar: forward",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.29,
+          "delta_e00": 0.18,
           "element": "toolbar: reload",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.37,
+          "delta_e00": 0.09,
           "element": "URL field fill",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.74,
+          "delta_e00": 0.54,
           "element": "URL field magnifier",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.43,
+          "delta_e00": 0.2,
           "element": "URL field placeholder",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.3,
+          "delta_e00": 0.11,
           "element": "favorite tile 1",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.47,
+          "delta_e00": 0.07,
           "element": "favorite tile 2",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.43,
+          "delta_e00": 0.28,
           "element": "favorite tile 3",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.44,
+          "delta_e00": 0.18,
           "element": "favorite tile 4",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.47,
+          "delta_e00": 0.09,
           "element": "favorite tile 5",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.6,
+          "delta_e00": 0.18,
           "element": "favorite tile 6",
           "position_pt": 0.0
         },
@@ -2238,77 +3107,77 @@
           "position_pt": 0.2
         },
         {
-          "delta_e00": 0.37,
+          "delta_e00": 0.15,
           "element": "Space title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.25,
+          "delta_e00": 0.24,
           "element": "row 1 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.44,
+          "delta_e00": 0.2,
           "element": "row 2 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.61,
+          "delta_e00": 0.05,
           "element": "row 3 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.68,
+          "delta_e00": 0.14,
           "element": "row 4 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.5,
+          "delta_e00": 0.26,
           "element": "row 5 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.67,
+          "delta_e00": 0.1,
           "element": "row 6 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.7,
+          "delta_e00": 0.12,
           "element": "row 7 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.73,
+          "delta_e00": 0.16,
           "element": "row 8 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.54,
+          "delta_e00": 0.11,
           "element": "row 9 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.74,
+          "delta_e00": 0.04,
           "element": "row 10 title",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.31,
+          "delta_e00": 1.34,
           "element": "New Tab plus",
           "position_pt": 1.0
         },
         {
-          "delta_e00": 0.42,
+          "delta_e00": 0.35,
           "element": "New Tab label",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 0.53,
+          "delta_e00": 0.5,
           "element": "bottom: Home",
           "position_pt": 0.0
         },
         {
-          "delta_e00": 1.57,
+          "delta_e00": 1.55,
           "element": "bottom: plus",
           "position_pt": 0.0
         }
@@ -2316,7 +3185,7 @@
       "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
       "ok": true,
       "private_artifacts": ".re/app-shell-comparison-window",
-      "worst_delta_e00": 1.57,
+      "worst_delta_e00": 1.55,
       "worst_position_pt": 1.0
     },
     "cpu_count": 18,
@@ -2333,19 +3202,19 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3229,
-        "engineInitialized": 3224,
-        "engineStart": 3144,
-        "engineStarted": 3221,
-        "firstContentfulPaint": 3366,
+        "didFinishLaunching": 3345,
+        "engineInitialized": 3340,
+        "engineStart": 3258,
+        "engineStarted": 3335,
+        "firstContentfulPaint": 3474,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3143,
-        "firstLoadEnd": 3339,
-        "firstPaintClockUncertaintyMs": 0.23,
+        "firstFrameWaitTimedOut": 3257,
+        "firstLoadEnd": 3461,
+        "firstPaintClockUncertaintyMs": 0.29,
         "kernelProcessStart": true,
-        "main": 68,
-        "modelLoaded": 69,
-        "windowShown": 122
+        "main": 149,
+        "modelLoaded": 151,
+        "windowShown": 215
       }
     },
     "frame_save_debounced": {
@@ -2376,23 +3245,50 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.524,
+      "dismissed_on_selection_s": 0.522,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.607
+      "revealed_s": 0.636
     },
     "hide_reveal": {
-      "dismissed_s": 0.529,
+      "dismissed_s": 0.53,
       "hidden": "hidden",
-      "left_s": 0.702,
+      "left_s": 0.7,
       "ok": true,
       "panel_x": 10,
-      "revealed_again_s": 0.611,
-      "revealed_s": 0.62,
+      "revealed_again_s": 0.614,
+      "revealed_s": 0.622,
       "selected": true
     },
     "html_fullscreen_from_window": {
       "after_exit": {
+        "appActive": true,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
         "chrome": {
           "favorites": [
             0,
@@ -2423,8 +3319,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1566,
-          799
+          2199,
+          412
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -2438,14 +3334,16 @@
         "fullscreenChanges": 4,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 298,
-        "number": 51453,
+        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "key": true,
+        "layoutPasses": 473,
+        "miniaturized": false,
+        "number": 68362,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
           }
         ],
         "panel": [
@@ -2462,7 +3360,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15376270833075978,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2471,15 +3369,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
         "titlebar": [
           0,
           0,
@@ -2487,6 +3385,50 @@
           32
         ],
         "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              12,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              35,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              58,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          }
+        ],
         "trafficLightFrames": [
           [
             13,
@@ -2521,14 +3463,44 @@
             24
           ]
         ],
+        "trafficLightsDimmed": true,
         "trafficLightsHidden": [
           false,
           false,
           false
-        ]
+        ],
+        "trafficLightsHovered": false,
+        "zoomed": false
       },
       "ok": true,
       "page_state": {
+        "appActive": true,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXZoomButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXZoomButton"
+          }
+        ],
         "chrome": {
           "favorites": [
             -228,
@@ -2559,36 +3531,38 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1866,
-          1079
+          2499,
+          1052
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
         "frame": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "fullscreen": true,
         "fullscreenChanges": 3,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 276,
-        "number": 51453,
+        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "key": true,
+        "layoutPasses": 448,
+        "miniaturized": false,
+        "number": 68362,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
           }
         ],
         "panel": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "peekCreated": false,
         "reveal": {
@@ -2598,7 +3572,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15376270833075978,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2607,22 +3581,66 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
         "titlebar": [
           0,
           0,
-          1920,
+          2560,
           32
         ],
         "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              8,
+              -24,
+              16,
+              16
+            ],
+            "hidden": true,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              31,
+              -24,
+              16,
+              16
+            ],
+            "hidden": true,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              54,
+              -24,
+              16,
+              16
+            ],
+            "hidden": true,
+            "role": "AXUnknown",
+            "subrole": ""
+          }
+        ],
         "trafficLightFrames": [
           [
             0,
@@ -2646,26 +3664,56 @@
         "trafficLights": [
           [
             16,
-            1032
+            1392
           ],
           [
             39,
-            1032
+            1392
           ],
           [
             62,
-            1032
+            1392
           ]
         ],
+        "trafficLightsDimmed": false,
         "trafficLightsHidden": [
           true,
           true,
           true
-        ]
+        ],
+        "trafficLightsHovered": false,
+        "zoomed": false
       }
     },
     "html_fullscreen_in_native": {
       "after_exit": {
+        "appActive": true,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXZoomButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXZoomButton"
+          }
+        ],
         "chrome": {
           "favorites": [
             0,
@@ -2696,36 +3744,38 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1866,
-          1079
+          2499,
+          1052
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
         "frame": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "fullscreen": true,
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
+        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "key": true,
         "layoutPasses": 170,
-        "number": 51453,
+        "miniaturized": false,
+        "number": 68362,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
           }
         ],
         "panel": [
           228,
           10,
-          1682,
-          1060
+          2322,
+          1420
         ],
         "peekCreated": false,
         "reveal": {
@@ -2735,7 +3785,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15376270833075978,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2744,22 +3794,66 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
         "titlebar": [
           0,
           0,
-          1920,
+          2560,
           32
         ],
         "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              8,
+              -56,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              31,
+              -56,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              54,
+              -56,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          }
+        ],
         "trafficLightFrames": [
           [
             0,
@@ -2783,25 +3877,55 @@
         "trafficLights": [
           [
             16,
-            1032
+            1392
           ],
           [
             39,
-            1032
+            1392
           ],
           [
             62,
-            1032
+            1392
           ]
         ],
+        "trafficLightsDimmed": false,
         "trafficLightsHidden": [
           false,
           false,
           false
-        ]
+        ],
+        "trafficLightsHovered": false,
+        "zoomed": false
       },
       "ok": true,
       "page_state": {
+        "appActive": true,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXZoomButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXZoomButton"
+          }
+        ],
         "chrome": {
           "favorites": [
             -228,
@@ -2832,36 +3956,38 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1866,
-          1079
+          2499,
+          1052
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
         "frame": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "fullscreen": true,
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-        "layoutPasses": 168,
-        "number": 51453,
+        "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+        "key": true,
+        "layoutPasses": 164,
+        "miniaturized": false,
+        "number": 68362,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "2F861D41-DB30-4338-8078-8FA7D564A60A"
+            "tab": "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
           }
         ],
         "panel": [
           0,
           0,
-          1920,
-          1080
+          2560,
+          1440
         ],
         "peekCreated": false,
         "reveal": {
@@ -2871,7 +3997,7 @@
             0,
             0
           ],
-          "dwell": 0.15823649999219924,
+          "dwell": 0.15376270833075978,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -2880,22 +4006,66 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "shownPages": [
-          "2F861D41-DB30-4338-8078-8FA7D564A60A"
+          "E7F95CAA-705B-42AE-BF7E-2320D55C745F"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E",
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12",
         "titlebar": [
           0,
           0,
-          1920,
+          2560,
           32
         ],
         "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              8,
+              -56,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              31,
+              -56,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 1,
+            "axDescription": "",
+            "axFrame": [
+              54,
+              -56,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          }
+        ],
         "trafficLightFrames": [
           [
             0,
@@ -2919,22 +4089,25 @@
         "trafficLights": [
           [
             16,
-            1032
+            1392
           ],
           [
             39,
-            1032
+            1392
           ],
           [
             62,
-            1032
+            1392
           ]
         ],
+        "trafficLightsDimmed": false,
         "trafficLightsHidden": [
           false,
           false,
           false
-        ]
+        ],
+        "trafficLightsHovered": false,
+        "zoomed": false
       }
     },
     "kernel_process_start": {
@@ -2953,11 +4126,11 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
       },
       "ok": true,
       "restored": {
@@ -2967,11 +4140,11 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
       }
     },
     "last_window_reopen": {
@@ -2983,11 +4156,11 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -2998,183 +4171,183 @@
           1000,
           700
         ],
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+        "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 233,
-          "engineInitialized": 227,
-          "engineStart": 145,
-          "engineStarted": 225,
-          "firstContentfulPaint": 360,
+          "didFinishLaunching": 368,
+          "engineInitialized": 365,
+          "engineStart": 263,
+          "engineStarted": 363,
+          "firstContentfulPaint": 534,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 351,
-          "firstPaintClockUncertaintyMs": 0.08,
+          "firstLoadEnd": 519,
+          "firstPaintClockUncertaintyMs": 0.26,
           "kernelProcessStart": true,
-          "main": 64,
-          "modelLoaded": 65,
-          "sidebarDrawn": 144,
-          "windowShown": 115
+          "main": 142,
+          "modelLoaded": 143,
+          "sidebarDrawn": 261,
+          "windowShown": 204
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 242,
-          "engineInitialized": 238,
-          "engineStart": 155,
-          "engineStarted": 236,
-          "firstContentfulPaint": 371,
+          "didFinishLaunching": 456,
+          "engineInitialized": 451,
+          "engineStart": 335,
+          "engineStarted": 446,
+          "firstContentfulPaint": 639,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 359,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 620,
+          "firstPaintClockUncertaintyMs": 0.11,
           "kernelProcessStart": true,
-          "main": 68,
-          "modelLoaded": 70,
-          "sidebarDrawn": 155,
-          "windowShown": 125
+          "main": 165,
+          "modelLoaded": 167,
+          "sidebarDrawn": 334,
+          "windowShown": 271
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 291,
-          "engineInitialized": 287,
-          "engineStart": 201,
-          "engineStarted": 283,
-          "firstContentfulPaint": 433,
+          "didFinishLaunching": 392,
+          "engineInitialized": 386,
+          "engineStart": 271,
+          "engineStarted": 381,
+          "firstContentfulPaint": 559,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 420,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 541,
+          "firstPaintClockUncertaintyMs": 0.16,
           "kernelProcessStart": true,
-          "main": 125,
-          "modelLoaded": 126,
-          "sidebarDrawn": 200,
-          "windowShown": 173
+          "main": 120,
+          "modelLoaded": 122,
+          "sidebarDrawn": 269,
+          "windowShown": 206
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 288,
-          "engineInitialized": 283,
-          "engineStart": 200,
-          "engineStarted": 281,
-          "firstContentfulPaint": 414,
+          "didFinishLaunching": 375,
+          "engineInitialized": 372,
+          "engineStart": 271,
+          "engineStarted": 368,
+          "firstContentfulPaint": 538,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 401,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 525,
+          "firstPaintClockUncertaintyMs": 0.22,
           "kernelProcessStart": true,
-          "main": 125,
-          "modelLoaded": 126,
-          "sidebarDrawn": 199,
-          "windowShown": 173
+          "main": 147,
+          "modelLoaded": 149,
+          "sidebarDrawn": 270,
+          "windowShown": 212
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 298,
-          "engineInitialized": 295,
-          "engineStart": 208,
-          "engineStarted": 289,
-          "firstContentfulPaint": 432,
+          "didFinishLaunching": 366,
+          "engineInitialized": 362,
+          "engineStart": 260,
+          "engineStarted": 358,
+          "firstContentfulPaint": 530,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 419,
-          "firstPaintClockUncertaintyMs": 0.08,
+          "firstLoadEnd": 511,
+          "firstPaintClockUncertaintyMs": 0.23,
           "kernelProcessStart": true,
-          "main": 124,
-          "modelLoaded": 126,
-          "sidebarDrawn": 207,
-          "windowShown": 179
+          "main": 133,
+          "modelLoaded": 135,
+          "sidebarDrawn": 259,
+          "windowShown": 215
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 297,
-          "engineInitialized": 290,
-          "engineStart": 208,
-          "engineStarted": 287,
-          "firstContentfulPaint": 435,
+          "didFinishLaunching": 463,
+          "engineInitialized": 458,
+          "engineStart": 346,
+          "engineStarted": 454,
+          "firstContentfulPaint": 645,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 424,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 632,
+          "firstPaintClockUncertaintyMs": 0.17,
           "kernelProcessStart": true,
-          "main": 123,
-          "modelLoaded": 124,
-          "sidebarDrawn": 207,
-          "windowShown": 178
+          "main": 178,
+          "modelLoaded": 180,
+          "sidebarDrawn": 345,
+          "windowShown": 282
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 291,
-          "engineInitialized": 286,
-          "engineStart": 204,
-          "engineStarted": 281,
-          "firstContentfulPaint": 423,
+          "didFinishLaunching": 413,
+          "engineInitialized": 407,
+          "engineStart": 292,
+          "engineStarted": 404,
+          "firstContentfulPaint": 567,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 413,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 546,
+          "firstPaintClockUncertaintyMs": 0.21,
           "kernelProcessStart": true,
-          "main": 122,
-          "modelLoaded": 124,
-          "sidebarDrawn": 203,
-          "windowShown": 175
+          "main": 152,
+          "modelLoaded": 153,
+          "sidebarDrawn": 291,
+          "windowShown": 239
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 238,
-          "engineInitialized": 233,
-          "engineStart": 151,
-          "engineStarted": 228,
-          "firstContentfulPaint": 374,
+          "didFinishLaunching": 430,
+          "engineInitialized": 424,
+          "engineStart": 315,
+          "engineStarted": 421,
+          "firstContentfulPaint": 585,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 365,
-          "firstPaintClockUncertaintyMs": 0.08,
+          "firstLoadEnd": 568,
+          "firstPaintClockUncertaintyMs": 0.13,
           "kernelProcessStart": true,
-          "main": 68,
-          "modelLoaded": 70,
-          "sidebarDrawn": 150,
-          "windowShown": 122
+          "main": 154,
+          "modelLoaded": 156,
+          "sidebarDrawn": 314,
+          "windowShown": 256
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 240,
-          "engineInitialized": 234,
-          "engineStart": 154,
-          "engineStarted": 231,
-          "firstContentfulPaint": 370,
+          "didFinishLaunching": 384,
+          "engineInitialized": 377,
+          "engineStart": 262,
+          "engineStarted": 369,
+          "firstContentfulPaint": 546,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 361,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 535,
+          "firstPaintClockUncertaintyMs": 0.39,
           "kernelProcessStart": true,
-          "main": 67,
-          "modelLoaded": 69,
-          "sidebarDrawn": 153,
-          "windowShown": 120
+          "main": 151,
+          "modelLoaded": 153,
+          "sidebarDrawn": 262,
+          "windowShown": 216
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 239,
-          "engineInitialized": 231,
-          "engineStart": 150,
-          "engineStarted": 229,
-          "firstContentfulPaint": 376,
+          "didFinishLaunching": 329,
+          "engineInitialized": 324,
+          "engineStart": 210,
+          "engineStarted": 321,
+          "firstContentfulPaint": 502,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 368,
-          "firstPaintClockUncertaintyMs": 0.09,
+          "firstLoadEnd": 488,
+          "firstPaintClockUncertaintyMs": 0.25,
           "kernelProcessStart": true,
-          "main": 69,
-          "modelLoaded": 70,
-          "sidebarDrawn": 149,
-          "windowShown": 119
+          "main": 92,
+          "modelLoaded": 94,
+          "sidebarDrawn": 209,
+          "windowShown": 168
         }
       ]
     },
     "load_average": [
-      5.48388671875,
-      5.7900390625,
-      7.1005859375
+      12.08447265625,
+      12.048828125,
+      11.50341796875
     ],
     "multiple_window_png": {
       "file": "window-multiple.png",
@@ -3184,18 +4357,45 @@
       "ok": true,
       "windows": [
         {
-          "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-          "number": 51448
+          "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+          "number": 68361
         },
         {
-          "id": "8363EA3F-5BFC-4167-A192-E9F778E4697D",
-          "number": 51453
+          "id": "8C7C2451-1AFD-4B4A-9216-DA3EB612890A",
+          "number": 68362
         }
       ]
     },
     "native_window": {
       "ok": true,
       "state": {
+        "appActive": false,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
         "chrome": {
           "favorites": [
             0,
@@ -3226,8 +4426,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1766,
-          899
+          2399,
+          512
         ],
         "engineSelected": 0,
         "engineURL": "",
@@ -3241,9 +4441,11 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "layoutPasses": 13,
-        "number": 51448,
+        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "key": false,
+        "layoutPasses": 8,
+        "miniaturized": false,
+        "number": 68361,
         "pageFullscreen": false,
         "paneBackgrounds": [],
         "panel": [
@@ -3275,7 +4477,7 @@
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8",
+        "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228",
         "titlebar": [
           0,
           0,
@@ -3283,6 +4485,50 @@
           32
         ],
         "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              12,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              35,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              58,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          }
+        ],
         "trafficLightFrames": [
           [
             13,
@@ -3317,11 +4563,14 @@
             24
           ]
         ],
+        "trafficLightsDimmed": true,
         "trafficLightsHidden": [
           false,
           false,
           false
-        ]
+        ],
+        "trafficLightsHovered": false,
+        "zoomed": false
       }
     },
     "navigation_before_engine": {
@@ -3341,6 +4590,33 @@
     "resize_300": {
       "ok": true,
       "state": {
+        "appActive": false,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "frame": [],
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
         "chrome": {
           "favorites": [
             0,
@@ -3371,8 +4647,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          1786,
-          759
+          2419,
+          372
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -3386,14 +4662,16 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "668AD1D6-677C-41F7-AF55-84B59154F3D3",
-        "layoutPasses": 64,
-        "number": 51448,
+        "id": "EE2CC786-7ED5-41D9-A4B0-09085C549F67",
+        "key": false,
+        "layoutPasses": 145,
+        "miniaturized": false,
+        "number": 68361,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "51180145-6F85-4177-BFE5-739B1A8F06AF"
+            "tab": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
           }
         ],
         "panel": [
@@ -3419,15 +4697,15 @@
           "zone": ""
         },
         "revealed": false,
-        "selected": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+        "selected": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
         "shownPages": [
-          "51180145-6F85-4177-BFE5-739B1A8F06AF"
+          "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 300,
-        "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8",
+        "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228",
         "titlebar": [
           0,
           0,
@@ -3435,6 +4713,50 @@
           32
         ],
         "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              12,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              35,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "axDescription": "",
+            "axFrame": [
+              58,
+              16,
+              16,
+              16
+            ],
+            "hidden": false,
+            "role": "AXUnknown",
+            "subrole": ""
+          }
+        ],
         "trafficLightFrames": [
           [
             13,
@@ -3469,11 +4791,14 @@
             24
           ]
         ],
+        "trafficLightsDimmed": true,
         "trafficLightsHidden": [
           false,
           false,
           false
-        ]
+        ],
+        "trafficLightsHovered": false,
+        "zoomed": false
       }
     },
     "resize_limits": {
@@ -3486,115 +4811,115 @@
         228,
         790
       ],
-      "dwell_s": 0.151,
+      "dwell_s": 0.152,
       "edge_walk": [
         [
           2,
           100,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           4,
           160,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           1,
           220,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           3,
           280,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           0,
           340,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           2,
           400,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           5,
           460,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           1,
           520,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           3,
           580,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           2,
           640,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           4,
           700,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           12,
           700,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           60,
           650,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           120,
           400,
           "shown",
-          1,
-          0
+          3,
+          2
         ],
         [
           2,
           300,
           "shown",
-          1,
-          0
+          3,
+          2
         ]
       ],
-      "exit_to_idle_s": 0.174,
+      "exit_to_idle_s": 0.001,
       "held": {
         "card": [
           5,
@@ -3602,12 +4927,12 @@
           228,
           790
         ],
-        "dwell": 0.15076204166689422,
-        "hides": 0,
+        "dwell": 0.15202712500467896,
+        "hides": 2,
         "offset": 0,
         "phase": "shown",
-        "pointerEvents": 24,
-        "shows": 1,
+        "pointerEvents": 42,
+        "shows": 3,
         "zone": "innerEdge"
       },
       "lights_hidden_while_hidden": true,
@@ -3625,10 +4950,10 @@
           29.0
         ]
       ],
-      "ok": true,
+      "ok": false,
       "pass_by_without_reveal": true,
-      "settled_s": 0.594,
-      "slide_out_s": 0.522
+      "settled_s": 0.613,
+      "slide_out_s": 0.469
     },
     "selected_only_0": {
       "ok": true,
@@ -3707,22 +5032,22 @@
     },
     "space_header_url_field": {
       "field_fill_hover": [
-        71,
         70,
-        86
+        70,
+        85
       ],
       "field_fill_rest": [
-        60,
         59,
-        76
-      ],
-      "header_fill_hover": [
-        61,
-        58,
+        60,
         75
       ],
+      "header_fill_hover": [
+        63,
+        57,
+        76
+      ],
       "header_fill_rest": [
-        40,
+        42,
         37,
         55
       ],
@@ -3819,6 +5144,652 @@
     "toggle_sidebar": {
       "ok": true
     },
+    "traffic_light_actions": {
+      "click_full_screen": true,
+      "dimmed_after_full_screen": true,
+      "full_screen_alpha": [
+        1,
+        1,
+        1
+      ],
+      "ok": true,
+      "option_click_restored": true,
+      "option_click_zoomed": [
+        0,
+        0,
+        2560,
+        1410
+      ],
+      "tiling_menu": {
+        "reason": "macOS opens it for the hardware pointer resting on the green button; synthetic events do not reach it",
+        "status": "SKIP"
+      }
+    },
+    "traffic_light_look": {
+      "ok": true,
+      "rows": {
+        "dark": {
+          "ax": [
+            [
+              "AXButton",
+              "AXCloseButton"
+            ],
+            [
+              "AXButton",
+              "AXMinimizeButton"
+            ],
+            [
+              "AXButton",
+              "AXFullScreenButton"
+            ],
+            [
+              "AXButton",
+              "AXFullScreenButton"
+            ]
+          ],
+          "card_look": [
+            {
+              "center": [
+                25,
+                29
+              ],
+              "core": [
+                105,
+                105,
+                115
+              ],
+              "expected": [
+                106,
+                104,
+                115
+              ],
+              "fill_error": 0.7,
+              "ok": true,
+              "ring": [
+                111,
+                68,
+                78
+              ],
+              "ring_error": 0.9,
+              "ring_expected": [
+                112,
+                68,
+                78
+              ]
+            },
+            {
+              "center": [
+                48,
+                29
+              ],
+              "core": [
+                107,
+                105,
+                115
+              ],
+              "expected": [
+                107,
+                104,
+                115
+              ],
+              "fill_error": 0.7,
+              "ok": true,
+              "ring": [
+                113,
+                93,
+                63
+              ],
+              "ring_error": 4.6,
+              "ring_expected": [
+                113,
+                94,
+                58
+              ]
+            },
+            {
+              "center": [
+                71,
+                29
+              ],
+              "core": [
+                109,
+                105,
+                115
+              ],
+              "expected": [
+                107,
+                104,
+                115
+              ],
+              "fill_error": 1.1,
+              "ok": true,
+              "ring": [
+                68,
+                95,
+                67
+              ],
+              "ring_error": 5.0,
+              "ring_expected": [
+                65,
+                95,
+                62
+              ]
+            }
+          ],
+          "dimmed_after_leaving": true,
+          "hidden_with_sidebar": [
+            true,
+            true,
+            true
+          ],
+          "hover_alpha": [
+            1,
+            1,
+            1
+          ],
+          "hover_changed_pixels": true,
+          "key_during_rest": true,
+          "not_key": {
+            "dimmed": true,
+            "key": false,
+            "look": [
+              {
+                "center": [
+                  20,
+                  24
+                ],
+                "core": [
+                  106,
+                  105,
+                  115
+                ],
+                "expected": [
+                  106,
+                  105,
+                  115
+                ],
+                "fill_error": 0.7,
+                "ok": true,
+                "ring": [
+                  111,
+                  71,
+                  80
+                ],
+                "ring_error": 3.2,
+                "ring_expected": [
+                  111,
+                  68,
+                  78
+                ]
+              },
+              {
+                "center": [
+                  43,
+                  24
+                ],
+                "core": [
+                  105,
+                  105,
+                  115
+                ],
+                "expected": [
+                  105,
+                  104,
+                  115
+                ],
+                "fill_error": 0.9,
+                "ok": true,
+                "ring": [
+                  113,
+                  96,
+                  67
+                ],
+                "ring_error": 8.2,
+                "ring_expected": [
+                  111,
+                  94,
+                  59
+                ]
+              },
+              {
+                "center": [
+                  66,
+                  24
+                ],
+                "core": [
+                  106,
+                  106,
+                  115
+                ],
+                "expected": [
+                  105,
+                  105,
+                  114
+                ],
+                "fill_error": 0.9,
+                "ok": true,
+                "ring": [
+                  68,
+                  97,
+                  67
+                ],
+                "ring_error": 5.7,
+                "ring_expected": [
+                  62,
+                  96,
+                  61
+                ]
+              }
+            ]
+          },
+          "ok": true,
+          "rest_alpha": [
+            0.001,
+            0.001,
+            0.001
+          ],
+          "rest_look": [
+            {
+              "center": [
+                20,
+                24
+              ],
+              "core": [
+                106,
+                105,
+                115
+              ],
+              "expected": [
+                106,
+                105,
+                115
+              ],
+              "fill_error": 0.7,
+              "ok": true,
+              "ring": [
+                111,
+                71,
+                80
+              ],
+              "ring_error": 3.2,
+              "ring_expected": [
+                111,
+                68,
+                78
+              ]
+            },
+            {
+              "center": [
+                43,
+                24
+              ],
+              "core": [
+                105,
+                105,
+                115
+              ],
+              "expected": [
+                105,
+                104,
+                115
+              ],
+              "fill_error": 0.9,
+              "ok": true,
+              "ring": [
+                113,
+                96,
+                67
+              ],
+              "ring_error": 8.2,
+              "ring_expected": [
+                111,
+                94,
+                59
+              ]
+            },
+            {
+              "center": [
+                66,
+                24
+              ],
+              "core": [
+                106,
+                106,
+                115
+              ],
+              "expected": [
+                105,
+                105,
+                114
+              ],
+              "fill_error": 0.9,
+              "ok": true,
+              "ring": [
+                68,
+                97,
+                67
+              ],
+              "ring_error": 5.7,
+              "ring_expected": [
+                62,
+                96,
+                61
+              ]
+            }
+          ]
+        },
+        "light": {
+          "ax": [
+            [
+              "AXButton",
+              "AXCloseButton"
+            ],
+            [
+              "AXButton",
+              "AXMinimizeButton"
+            ],
+            [
+              "AXButton",
+              "AXFullScreenButton"
+            ],
+            [
+              "AXButton",
+              "AXFullScreenButton"
+            ]
+          ],
+          "card_look": [
+            {
+              "center": [
+                25,
+                29
+              ],
+              "core": [
+                213,
+                212,
+                217
+              ],
+              "expected": [
+                214,
+                213,
+                217
+              ],
+              "fill_error": 1.3,
+              "ok": true,
+              "ring": [
+                238,
+                226,
+                231
+              ],
+              "ring_error": 1.5,
+              "ring_expected": [
+                237,
+                226,
+                230
+              ]
+            },
+            {
+              "center": [
+                48,
+                29
+              ],
+              "core": [
+                213,
+                212,
+                217
+              ],
+              "expected": [
+                213,
+                213,
+                216
+              ],
+              "fill_error": 0.7,
+              "ok": true,
+              "ring": [
+                236,
+                232,
+                229
+              ],
+              "ring_error": 3.0,
+              "ring_expected": [
+                235,
+                232,
+                226
+              ]
+            },
+            {
+              "center": [
+                71,
+                29
+              ],
+              "core": [
+                213,
+                212,
+                217
+              ],
+              "expected": [
+                213,
+                212,
+                218
+              ],
+              "fill_error": 1.2,
+              "ok": true,
+              "ring": [
+                228,
+                233,
+                230
+              ],
+              "ring_error": 3.0,
+              "ring_expected": [
+                225,
+                233,
+                229
+              ]
+            }
+          ],
+          "dimmed_after_leaving": true,
+          "hidden_with_sidebar": [
+            true,
+            true,
+            true
+          ],
+          "hover_alpha": [
+            1,
+            1,
+            1
+          ],
+          "hover_changed_pixels": true,
+          "key_during_rest": true,
+          "not_key": {
+            "dimmed": true,
+            "key": false,
+            "look": [
+              {
+                "center": [
+                  20,
+                  24
+                ],
+                "core": [
+                  214,
+                  213,
+                  217
+                ],
+                "expected": [
+                  214,
+                  213,
+                  218
+                ],
+                "fill_error": 0.9,
+                "ok": true,
+                "ring": [
+                  237,
+                  226,
+                  229
+                ],
+                "ring_error": 1.8,
+                "ring_expected": [
+                  237,
+                  226,
+                  231
+                ]
+              },
+              {
+                "center": [
+                  43,
+                  24
+                ],
+                "core": [
+                  213,
+                  213,
+                  217
+                ],
+                "expected": [
+                  214,
+                  213,
+                  217
+                ],
+                "fill_error": 1.7,
+                "ok": true,
+                "ring": [
+                  234,
+                  232,
+                  229
+                ],
+                "ring_error": 2.8,
+                "ring_expected": [
+                  237,
+                  232,
+                  226
+                ]
+              },
+              {
+                "center": [
+                  66,
+                  24
+                ],
+                "core": [
+                  213,
+                  213,
+                  217
+                ],
+                "expected": [
+                  213,
+                  213,
+                  216
+                ],
+                "fill_error": 1.4,
+                "ok": true,
+                "ring": [
+                  227,
+                  232,
+                  226
+                ],
+                "ring_error": 2.0,
+                "ring_expected": [
+                  225,
+                  234,
+                  226
+                ]
+              }
+            ]
+          },
+          "ok": true,
+          "rest_alpha": [
+            0.001,
+            0.001,
+            0.001
+          ],
+          "rest_look": [
+            {
+              "center": [
+                20,
+                24
+              ],
+              "core": [
+                214,
+                213,
+                217
+              ],
+              "expected": [
+                214,
+                213,
+                218
+              ],
+              "fill_error": 0.9,
+              "ok": true,
+              "ring": [
+                237,
+                226,
+                229
+              ],
+              "ring_error": 1.8,
+              "ring_expected": [
+                237,
+                226,
+                231
+              ]
+            },
+            {
+              "center": [
+                43,
+                24
+              ],
+              "core": [
+                213,
+                213,
+                217
+              ],
+              "expected": [
+                214,
+                213,
+                217
+              ],
+              "fill_error": 1.7,
+              "ok": true,
+              "ring": [
+                234,
+                232,
+                229
+              ],
+              "ring_error": 2.8,
+              "ring_expected": [
+                237,
+                232,
+                226
+              ]
+            },
+            {
+              "center": [
+                66,
+                24
+              ],
+              "core": [
+                213,
+                213,
+                217
+              ],
+              "expected": [
+                213,
+                213,
+                216
+              ],
+              "fill_error": 1.4,
+              "ok": true,
+              "ring": [
+                227,
+                232,
+                226
+              ],
+              "ring_error": 2.0,
+              "ring_expected": [
+                225,
+                234,
+                226
+              ]
+            }
+          ]
+        }
+      }
+    },
     "traffic_lights": {
       "after_fullscreen_exit": [
         [
@@ -3837,15 +5808,15 @@
       "drawn_launch": [
         [
           20.0,
-          23.96
+          24.0
         ],
         [
-          43.0,
+          42.99,
           24.01
         ],
         [
           66.0,
-          23.98
+          24.0
         ]
       ],
       "expected_centers": [
@@ -3922,14 +5893,14 @@
     },
     "warm_existing_profile": {
       "median_ms": {
-        "engineStart": 154,
-        "engineStarted": 231,
-        "firstContentfulPaint": 376,
-        "main": 69,
-        "modelLoaded": 70,
-        "sidebarDrawn": 153
+        "engineStart": 292,
+        "engineStarted": 404,
+        "firstContentfulPaint": 567,
+        "main": 152,
+        "modelLoaded": 153,
+        "sidebarDrawn": 291
       },
-      "ok": true,
+      "ok": false,
       "samples": 5
     },
     "window_before_engine_0": {
@@ -3986,7 +5957,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+        "id": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
         "loaded": true,
         "loading": false,
         "page": {
@@ -4003,7 +5974,7 @@
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "51180145-6F85-4177-BFE5-739B1A8F06AF",
+          "hostTab": "7C93BF6C-9DBB-4F7D-B59B-3765FC210D04",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -4021,12 +5992,12 @@
           "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
           "zoom": 0
         },
-        "profile": "FBD95C81-7EAC-4BD9-92CD-B67502529CC6",
+        "profile": "81021CB8-B94C-4D62-A3C8-50C90C78379F",
         "progress": 1,
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8",
+        "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228",
         "title": "Window A",
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
         "visible": false
@@ -4034,56 +6005,56 @@
     },
     "window_persistence": {
       "expected": {
-        "668AD1D6-677C-41F7-AF55-84B59154F3D3": {
-          "frame": [
-            80,
-            60,
-            1000,
-            700
-          ],
-          "selected": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-          "sidebarMode": "hidden",
-          "sidebarWidth": 300,
-          "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8"
-        },
-        "8363EA3F-5BFC-4167-A192-E9F778E4697D": {
+        "8C7C2451-1AFD-4B4A-9216-DA3EB612890A": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+          "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+          "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+        },
+        "EE2CC786-7ED5-41D9-A4B0-09085C549F67": {
+          "frame": [
+            80,
+            60,
+            1000,
+            700
+          ],
+          "selected": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+          "sidebarMode": "hidden",
+          "sidebarWidth": 300,
+          "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228"
         }
       },
       "ok": true,
       "restored": {
-        "668AD1D6-677C-41F7-AF55-84B59154F3D3": {
-          "frame": [
-            80,
-            60,
-            1000,
-            700
-          ],
-          "selected": "FA5FD0B5-2278-4558-AEBC-FE15225BFB88",
-          "sidebarMode": "hidden",
-          "sidebarWidth": 300,
-          "space": "200FF10B-65A0-47DC-B553-6526A68C1DC8"
-        },
-        "8363EA3F-5BFC-4167-A192-E9F778E4697D": {
+        "8C7C2451-1AFD-4B4A-9216-DA3EB612890A": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "2F861D41-DB30-4338-8078-8FA7D564A60A",
+          "selected": "E7F95CAA-705B-42AE-BF7E-2320D55C745F",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "1EE4BAA6-FBC8-49BC-A9B3-E1F76075871E"
+          "space": "0C7284A9-5DAB-4728-AF35-A97A98685D12"
+        },
+        "EE2CC786-7ED5-41D9-A4B0-09085C549F67": {
+          "frame": [
+            80,
+            60,
+            1000,
+            700
+          ],
+          "selected": "05A44995-733A-4B1A-8AC1-B574EBC230BC",
+          "sidebarMode": "hidden",
+          "sidebarWidth": 300,
+          "space": "E9F8C9B6-6F31-4D96-B75C-9F675BCBA228"
         }
       }
     },

@@ -572,7 +572,7 @@ The user decided that the window buttons use Arc's grey look in every window sta
 (a) has no public API: macOS picks the buttons' look from the app's and the window's active state. (a′) is the lightest approach that keeps every behavior, so Open uses it:
 
 - `DimmedTrafficLightsView` (OpenDesign) draws the three circles (CAShapeLayers, no `draw`), takes no clicks, and is no AX element. It sits in the title bar view, right under the buttons, and follows them: §16 geometry, +5/+5 on the hover-reveal card, hidden with them, the same slide.
-- At rest the system buttons have alpha 0: they stay in place for clicks and AX. Its tracking area (`.activeAlways`, the group's rect) swaps the alphas over 0.08 s when the pointer enters or leaves, also while Open is inactive.
+- At rest the system buttons have alpha 0.001: they stay in place for clicks and AX. Not 0: AppKit ignores a window button at alpha 0, so `performClose:`, `performZoom:`, and an AX press stop working (tested; the window suite's window-close checks failed that way); 0.001 draws nothing visible. Its tracking area (`.activeAlways`, the group's rect) swaps the alphas over 0.08 s when the pointer enters or leaves, also while Open is inactive.
 - AppKit can reset the buttons' alpha when it lays the title bar out; the placement pass after each layout puts it back. In full screen the system buttons show as they are.
 - Light or dark follows the Space's content appearance, as for the sidebar.
 

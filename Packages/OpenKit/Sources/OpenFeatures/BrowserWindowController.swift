@@ -141,8 +141,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         reveal.onChange = { [weak self] shown in self?.setRevealCard(shown) }
         // Another app took the pointer: no more pointer events will come to hide the card.
+        // Not while automation drives the pointer: then the hardware pointer is ignored, and
+        // a deactivation comes from someone using the Mac, not from the check.
         trafficLightObservers.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.dismissSidebarReveal() }
+            MainActor.assumeIsolated {
+                guard BrowserWindowController.pointerEventFilter == nil else { return }
+                self?.dismissSidebarReveal()
+            }
         })
         pointerMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
             MainActor.assumeIsolated {
@@ -329,14 +334,18 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         applyTrafficLightDim(animated: false)
     }
 
-    /// At rest the system buttons are transparent (still there for clicks and AX) and the
-    /// dimmed circles show; over the group, the reverse. AppKit may reset the buttons'
-    /// alpha when it lays the title bar out; this puts it back in the same pass.
+    /// At rest the system buttons are all but transparent (still there for clicks and AX)
+    /// and the dimmed circles show; over the group, the reverse. Not alpha 0: AppKit ignores
+    /// a window button at alpha 0, so `performClose:`, `performZoom:`, and an AX press would
+    /// stop working; 0.001 draws nothing visible (under 0.3 of one 8-bit level). AppKit may
+    /// reset the buttons' alpha when it lays the title bar out; this puts it back in the same pass.
+    private static let restButtonAlpha: CGFloat = 0.001
+
     private func applyTrafficLightDim(animated: Bool) {
         guard let window else { return }
         let buttons = Self.trafficLightKinds.compactMap { window.standardWindowButton($0) }
         let dim = !trafficLightsHovered && !fullscreenTransition && !window.styleMask.contains(.fullScreen)
-        let buttonAlpha: CGFloat = dim ? 0 : 1, circlesAlpha: CGFloat = dim ? 1 : 0
+        let buttonAlpha: CGFloat = dim ? Self.restButtonAlpha : 1, circlesAlpha: CGFloat = dim ? 1 : 0
         let changed = appliedTrafficLightDim != dim
         appliedTrafficLightDim = dim
         if animated && changed && window.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {

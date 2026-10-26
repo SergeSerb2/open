@@ -1857,22 +1857,33 @@ def card_pair(app, private, name):
     """Snapshot with the card settled and the same view after it left: (card PNG, base PNG, card frame).
 
     Both snapshots need the same window state: an inactive window lightens the theme
-    underlay, so the window is made key again right before each one."""
+    underlay, so the window is made key again right before each one, and the pair is taken
+    again (up to three times) when macOS left the two in different states."""
     wid = app.call("window-state")["id"]
-    settled = reveal_card_and_wait(app)
-    if not settled:
-        return None
-    card = settled["state"]["reveal"]["card"]
-    png = os.path.join(private, name + ".png")
-    app.call("mouse", action="move", x=120, y=400)
-    app.call("window-focus", id=wid, activate=True)
-    app.call("snapshot", path=png)
-    app.call("mouse", action="move", x=700, y=400)
-    wait_card(app, False)
-    base = os.path.join(private, name + "-base.png")
-    app.call("window-focus", id=wid, activate=True)
-    app.call("snapshot", path=base)
+    for _ in range(3):
+        settled = reveal_card_and_wait(app)
+        if not settled:
+            return None
+        card = settled["state"]["reveal"]["card"]
+        png = os.path.join(private, name + ".png")
+        app.call("mouse", action="move", x=120, y=400)
+        app.call("window-focus", id=wid, activate=True)
+        first = window_activity(app)
+        app.call("snapshot", path=png)
+        app.call("mouse", action="move", x=700, y=400)
+        wait_card(app, False)
+        base = os.path.join(private, name + "-base.png")
+        app.call("window-focus", id=wid, activate=True)
+        second = window_activity(app)
+        app.call("snapshot", path=base)
+        if first == second == window_activity(app):
+            break
     return png, base, card
+
+
+def window_activity(app):
+    st = app.call("window-state")
+    return st["key"], st["appActive"]
 
 
 # Arc's dimmed window buttons at rest (docs/design.md section 2.2, interaction-states section 0):
@@ -1911,7 +1922,8 @@ def traffic_light_look_checks(app, results, private, scale, wid):
     def buttons_ok(st, dimmed):
         alpha = [b["alpha"] for b in st["trafficLightButtons"]]
         ax = [(x["role"], x["subrole"]) for x in st["axWindowButtons"]]
-        return (st["trafficLightsDimmed"] == dimmed and all(abs(a - (0 if dimmed else 1)) < 0.01 for a in alpha) and len(alpha) == 3
+        # At rest 0.001, not 0: AppKit ignores a window button at alpha 0.
+        return (st["trafficLightsDimmed"] == dimmed and all(abs(a - (0.001 if dimmed else 1)) < 0.0005 for a in alpha) and len(alpha) == 3
                 and ax[:3] == [("AXButton", "AXCloseButton"), ("AXButton", "AXMinimizeButton"), ("AXButton", "AXFullScreenButton")]), alpha, ax
     rows = {}
     for mode in ("light", "dark"):
@@ -2096,6 +2108,7 @@ def window_chrome_checks(factory, results, tmp):
             and held["shows"] == shown["reveal"]["shows"] and held["hides"] == shown["reveal"]["hides"]
         card_png = os.path.join(private, "card.png")
         app.call("window-focus", id=wid, activate=True)
+        card_activity = window_activity(app)
         app.call("snapshot", path=card_png)
         t1 = time.time()
         app.call("mouse", action="move", x=700, y=400)
@@ -2105,13 +2118,21 @@ def window_chrome_checks(factory, results, tmp):
         base_png = os.path.join(private, "card-base.png")
         app.call("window-focus", id=wid, activate=True)
         app.call("snapshot", path=base_png)
+        base_activity = window_activity(app)
         results["reveal_timing"] = {"ok": lights_hidden and no_quick_reveal and bool(settled) and 0.13 <= dwell <= 0.35
                                     and lights_card_ok and no_flicker and bool(leaving) and 0.13 <= exit_s <= 0.6 and bool(gone),
                                     "lights_hidden_while_hidden": lights_hidden, "pass_by_without_reveal": no_quick_reveal,
                                     "dwell_s": round(dwell, 3), "settled_s": settled and settled["elapsed"],
                                     "card": card, "lights_on_card": lights_card, "edge_walk": samples, "held": held,
                                     "exit_to_idle_s": exit_s, "slide_out_s": gone and gone["elapsed"]}
-        results["card_edges_1x"] = card_edges(card_png, base_png, card, scale)
+        edges = card_edges(card_png, base_png, card, scale)
+        if not edges["ok"] and card_activity != base_activity:
+            # macOS changed the window's active state between the two snapshots (someone is
+            # using the Mac); take the pair again the paired way.
+            pair = card_pair(app, private, "card-retake")
+            edges = card_edges(*pair, scale) if pair else edges
+            edges["retaken"] = {"card": card_activity, "base": base_activity}
+        results["card_edges_1x"] = edges
         # Open's light and dark appearance (the default Space follows it).
         rows = {}
         for name in ("light", "dark"):
