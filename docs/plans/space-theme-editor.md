@@ -382,6 +382,19 @@ Tiles are generated lazily on first use, cached per (texture, noise bucket of
 0.05, scale), shared by all windows. `ThemeLayer` uses `ThemeTexture` instead
 of `Grain`. Cross-fades already cover texture changes (two layers).
 
+Review R1: the tile cache caps at 32 entries and evicts its oldest half.
+Grain image/mean pairs cache per (bucket, scale), bounded at 64 entries;
+normalized denim patterns are reused across buckets, bounded at four scales.
+The harness gates cold 2x tile generation at a loose 500 ms and a 64×64
+field rebuild per preset style at 250 ms; strict B1 stays in Step 5.
+
+Lead design decision (2026-10-26): D-8 keeps grain strength and monochrome
+bytes unchanged. F0139's noise-0.45 strength gap and per-channel grain are
+Step 9 calibration items. No strength or chromatic adjustment lands here.
+Fill colors alone clamp to sRGB 0…1 at render time; stored extended keys
+and primary/semantic palette derivation remain unchanged. F0139 is checked
+with `compare --spec theme-window` over six background-only regions.
+
 ### 4.5 Intensity
 
 `ThemeField.layerAlpha` becomes `ThemeField.layerAlpha(intensity:)`. Ship the
@@ -1066,6 +1079,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | Q2 | Which theme a brand-new Space starts with (not decoded). | Brand preset `spaces.count mod 9`, 1 color, Automatic, noise 0, intensity 0.8. Deterministic, and neighbors differ. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
 | Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
+| Q4 review capture detail | Intensity zero. | Capture intensity **0** explicitly and determine whether Arc keeps a visible tint. Keep Open's current gray-at-zero result and provisional law until Step 9. |
 | Q5 | Page 2 of the presets. | Brand 1–9 with 3 analogous colors. Evidence: 2 of 3 stored gradients are Brand5 / Brand6 with exactly ±40°. |
 | Q6 | New Space form placement. | Sidebar page (code evidence: 190 / 227 pt width breakpoints). Ask the user for a 30 s capture of "New Space…" before Step 7 if certainty is needed. |
 | Q7 | Where a new Space is inserted. | At the end of the Space list for every entry point. Arc supports "after Space X"; we can switch to "after the focused Space" with one parameter. |

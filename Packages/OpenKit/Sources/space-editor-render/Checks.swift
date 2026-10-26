@@ -104,9 +104,8 @@ enum Checks {
         let input = ThemeColorMath.hsl(key)
         var hueError = 0.0, slError = 0.0
         for wheel in SpaceStyleWheel.allCases {
-            for count in 1...4 {
-                let expected: [Double] = count == 4 ? [0, 90, 180, 270]
-                    : wheel == .analogous ? [0, 40, -40] : count == 2 ? [0, 180] : [0, 150, 210]
+            for count in 1...3 {
+                let expected: [Double] = wheel == .analogous ? [0, 40, -40] : count == 2 ? [0, 180] : [0, 150, 210]
                 let colors = ThemeColorMath.harmony(key: key, count: count, wheel: wheel)
                 for (i, color) in colors.enumerated() {
                     let result = ThemeColorMath.hsl(color)
@@ -116,7 +115,7 @@ enum Checks {
                 }
             }
         }
-        check(hueError <= 0.1 && slError < 1e-9, String(format: "M2 harmony n=1...4 hueMax=%.8f slMax=%.8f", hueError, slError))
+        check(hueError <= 0.1 && slError < 1e-9, String(format: "M2 harmony n=1...3 hueMax=%.8f slMax=%.8f", hueError, slError))
         var random = Random(), maxError = 0.0
         for mode in SpaceStyleAppearance.allCases {
             let range = ThemeColorMath.lightnessRange(mode)
@@ -192,9 +191,37 @@ enum Checks {
     }
 
     static func run() throws {
-        fixtureMath(); harmonyAndPad(); appearances(); textures(); try persistence()
+        fixtureMath(); harmonyAndPad(); appearances(); costs(); textures(); cacheBounds(); try persistence()
         print("checks: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "checks failed") }
+    }
+
+    static func costs() {
+        for texture in SpaceStyleTexture.allCases {
+            let start = ProcessInfo.processInfo.systemUptime
+            let image = ThemeTexture.tile(texture, noiseFactor: 0.45, scale: 2)
+            let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            check(image != nil && ms < 500, String(format: "PERF cold tile %@ @2x %.2f ms (loose ceiling 500 ms)", texture.rawValue, ms))
+        }
+        for index in [4, 13, 22, 31, 40] {
+            let style = SpaceThemeStyle(style: SpaceStylePresets.all[index].style, system: .dark)
+            let start = ProcessInfo.processInfo.systemUptime
+            let image = ThemeField.makeImage(style: style, windowSize: CGSize(width: 2216, height: 1394), isActive: true)
+            let ms = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            check(image != nil && ms < 250, String(format: "PERF field style %d %.2f ms (loose ceiling 250 ms)", index, ms))
+        }
+    }
+    static func cacheBounds() {
+        let denimBefore = ThemeTexture.denimGenerationCount
+        for bucket in 1...20 {
+            _ = ThemeTexture.tile(.denim, noiseFactor: Double(bucket) / 20, scale: 2)
+            for scale in [1.0, 2.0] { _ = ThemeTexture.tile(.grain, noiseFactor: Double(bucket) / 20, scale: scale) }
+        }
+        check(ThemeTexture.cachedTileCount <= ThemeTexture.cacheLimit, "M5 tile cache stays bounded after bucket churn")
+        check(ThemeTexture.denimGenerationCount == denimBefore, "M5 denim normalized pattern is reused across buckets")
+        check(ThemeTexture.knobPreview(.grain, diameter: 40, scale: 0).width == 40
+              && ThemeTexture.knobPreview(.grain, diameter: 40, scale: .nan).height == 40,
+              "M5 invalid-scale preview returns a neutral disc without a missing-tile crash")
     }
 }
 

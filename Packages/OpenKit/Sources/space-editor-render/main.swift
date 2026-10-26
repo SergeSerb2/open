@@ -13,7 +13,7 @@ enum RenderCLI {
     space-editor-render window --out FILE.png --snapshot DIR|--synthetic [--space N] [--style JSON]
                                [--size 2216x1394] [--width 228] [--scale 1|2] [--appearance dark|light]
                                [--provisional-import-intensity]
-    space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec window --out DIR
+    space-editor-render compare --arc CAPTURE.png --ours RENDER.png --spec window|theme-window --out DIR
     space-editor-render check
     """
     static func value(_ args: [String], _ key: String) -> String? {
@@ -91,7 +91,7 @@ enum RenderCLI {
         case "check": try Checks.run()
         case "window": try window(rest)
         case "compare":
-            guard value(rest, "--spec") == "window" else { throw CLIError(description: "this step implements the window comparison") }
+            guard ["window", "theme-window"].contains(value(rest, "--spec") ?? "") else { throw CLIError(description: "unknown comparison spec") }
             try Compare.run(rest)
         default: throw CLIError(description: usage)
         }
