@@ -33,16 +33,28 @@ struct DownloadFailure: Error {
 /// then on that queue. No URLSession cache: 304 evidence comes from the server, not local caching.
 private final class BoundedTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     let maximumBytes: Int
+    let allowedHosts: Set<String>
+    let debugLoopbackHTTP: Bool
     var data = Data()
     var response: HTTPURLResponse?
     var failure: DownloadFailure?
     var continuation: CheckedContinuation<DownloadResponse, any Error>?
 
-    init(maximumBytes: Int) { self.maximumBytes = maximumBytes }
+    init(maximumBytes: Int, allowedHosts: Set<String>, debugLoopbackHTTP: Bool) {
+        self.maximumBytes = maximumBytes; self.allowedHosts = allowedHosts
+        self.debugLoopbackHTTP = debugLoopbackHTTP
+    }
+
+    static func isLoopback(_ host: String) -> Bool {
+        ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host)
+    }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
                     didReceive response: URLResponse,
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        // URLSession delivers the rejected redirect response after completionHandler(nil).
+        // Preserve the policy error instead of replacing it with a generic HTTP 30x error.
+        guard failure == nil else { completionHandler(.cancel); return }
         guard let http = response as? HTTPURLResponse else {
             failure = DownloadFailure(message: "invalid HTTP response", retryable: false)
             completionHandler(.cancel); return
@@ -70,7 +82,12 @@ private final class BoundedTransfer: NSObject, URLSessionDataDelegate, @unchecke
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
                     completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-        guard request.url?.scheme == "https" else {
+        guard let host = request.url?.host()?.lowercased(), allowedHosts.contains(host) else {
+            failure = DownloadFailure(message: "cross-host redirect rejected (host is not in this list's CDN allowlist)", retryable: false)
+            completionHandler(nil); return
+        }
+        guard request.url?.scheme == "https" ||
+                (debugLoopbackHTTP && request.url?.scheme == "http" && Self.isLoopback(host)) else {
             failure = DownloadFailure(message: "non-HTTPS redirect rejected", retryable: false)
             completionHandler(nil); return
         }
@@ -96,10 +113,20 @@ struct ListDownloader: Sendable {
     /// A real HTTPS proxy can be supplied for diagnostics, including an unreachable-host check.
     let proxy: URL?
 
-    func fetch(url: URL, etag: String?, modified: String?) async throws -> (DownloadResponse, Int) {
+    func fetch(url: URL, etag: String?, modified: String?, redirectHosts: [String] = []) async throws -> (DownloadResponse, Int) {
+        var source = url
+        var debugLoopbackHTTP = false
+        if let raw = ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SOURCE_ROOT"] {
+            guard let root = URL(string: raw), root.scheme == "http", let host = root.host(),
+                  BoundedTransfer.isLoopback(host), root.port != nil, root.user == nil, root.password == nil else {
+                throw AdBlockError("debug source root must be an explicit loopback HTTP server with a port")
+            }
+            source = root.appendingPathComponent(url.path)
+            debugLoopbackHTTP = true
+        }
         for attempt in 1...policy.attempts {
             try Task.checkCancellation()
-            do { return (try await transfer(url: url, etag: etag, modified: modified), attempt) }
+            do { return (try await transfer(url: source, etag: etag, modified: modified, redirectHosts: redirectHosts, debugLoopbackHTTP: debugLoopbackHTTP), attempt) }
             catch let failure as DownloadFailure {
                 if !failure.retryable || attempt == policy.attempts {
                     throw AdBlockError("\(failure.message); attempts=\(attempt)")
@@ -111,8 +138,8 @@ struct ListDownloader: Sendable {
         throw AdBlockError("download failed")
     }
 
-    private func transfer(url: URL, etag: String?, modified: String?) async throws -> DownloadResponse {
-        guard url.scheme == "https" else { throw AdBlockError("HTTPS is required") }
+    private func transfer(url: URL, etag: String?, modified: String?, redirectHosts: [String], debugLoopbackHTTP: Bool) async throws -> DownloadResponse {
+        guard url.scheme == "https" || debugLoopbackHTTP else { throw AdBlockError("HTTPS is required") }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
@@ -126,7 +153,8 @@ struct ListDownloader: Sendable {
             configuration.connectionProxyDictionary = ["HTTPEnable": 1, "HTTPProxy": host, "HTTPPort": port,
                                                        "HTTPSEnable": 1, "HTTPSProxy": host, "HTTPSPort": port]
         }
-        let delegate = BoundedTransfer(maximumBytes: policy.maximumSourceBytes)
+        let allowedHosts = Set(redirectHosts.map { $0.lowercased() } + [url.host()?.lowercased() ?? ""])
+        let delegate = BoundedTransfer(maximumBytes: policy.maximumSourceBytes, allowedHosts: allowedHosts, debugLoopbackHTTP: debugLoopbackHTTP)
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: queue)

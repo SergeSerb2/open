@@ -1,7 +1,7 @@
 # Swift ad-block lists and settings
 
 `OpenAdBlock` is an engine-independent OpenKit library. It depends only on
-`OpenModel` and Apple frameworks. The real `openkit adblock` CLI exercises its
+`OpenModel`, `OpenRouting`, and Apple frameworks. The real `openkit adblock` CLI exercises its
 public store. This implements the Swift slice authorized by the Lead decisions
 appendix in [adblock-fork.md](plans/adblock-fork.md), not the engine milestones.
 No engine build, CEF integration, app UI, or blocking behavior is claimed here.
@@ -46,43 +46,54 @@ explicit root so it cannot change a user's app settings by default. Its default
 Profile UUID is `00000000-0000-0000-0000-000000000001`; `--profile UUID` selects
 another Profile.
 
+**Lead decision — 2026-10-25: generations replace the former list directory.**
+The normative engine directory contract is [plan §9.2](plans/adblock-fork.md#92-per-profile-storage-and-directory-contract).
+
 ```text
 <root>/
-  .adblock-lock                        process lease; concurrent writers fail
-  adblock-settings.json               { "nativeAdBlockEnabled": true }
-  Profiles/<UUID>/AdBlock/
-    catalog-state.json                catalogVersion, enabledBlockLists,
-                                      lists[id] receipts, lastError
-    exclusions.json                   sorted ASCII registrable-domain array
-    downloads/<listID>/<index>.body    verified source cache, outside engine input
-    lists/
-      <listID>.txt                     enabled lists only; atomic replacements
-      resources.txt                   reserved for the later resources stage
-      engine.dat                      browser-owned; Swift never writes it
+  .adblock-lock
+  adblock-settings.json
+  Profiles/<UUID>/adblock/
+    catalog-state.json
+    exclusions.json                   canonical Unicode sites; unbracketed IPs
+    downloads/<listID>/<index>.body    hash-checked source cache, never inputs
+    current.json                      live + previous {generation, manifestSHA256}
+    generations/<n>/
+      <listID>.txt                    complete enabled set, one file per list
+      manifest.json                   inventory, hashes, generation, state snapshot
+      engine.dat                      optional browser-owned, generation-bound
+      engine-inputs.json              browser DAT receipt, deferred integration
+    quarantine/<n>-<unique>/           rejected generation
 ```
 
-OpenEngine receives **`<root>/Profiles/<UUID>/AdBlock/lists/`**, not its parent.
-This follows the normative paragraph after the contradictory §9.2 diagram in
-the plan. The browser owns `lists/engine.dat`. Disabling a list removes its `.txt`
-file before the reload event. Swift does not create `resources.txt`; the assembler
-and its inputs belong to the deferred engine work.
+`listDirectory(for:)` and engine configure/reload events now pass the **adblock
+root**. The engine must resolve `current.json`, verify its manifest hash, and
+verify every manifest file's size and SHA-256 before loading. It reads only that
+inventory. Extra `.txt` files, old `lists/` directories, and unreferenced
+generations cannot become engine inputs. A cached DAT is valid only within the
+same generation with recorded input hashes equal to the manifest. The plan
+also specifies the DAT's own hash/size receipt. Swift never writes DAT.
 
-A list receipt holds its SHA-256, byte size, last-check time, and an ordered
-source-receipt array. Source receipts hold ETag, Last-Modified, SHA-256, and size.
-Dates use Foundation Codable's seconds since 2001 reference date. Catalog and
-pins are immutable package resources, not a remotely fetched manifest.
-The `enabledBlockLists` key is per Profile; `blockListsPerProfile` is represented
-by the Profile directory map rather than a second duplicate preferences file.
+Each manifest entry records `file`, `bytes`, `sha256`, `listID`, `sourceRevision`
+(ordered upstream SHA-256 revisions, or bundled pin), and `generation`.
+The manifest repeats the generation and includes its immutable enabled-list
+state and source receipts. Source receipts hold ETag, Last-Modified, hash, size;
+list receipts also hold last-check time. Dates use Foundation reference seconds.
 
-Settings write before in-memory changes are published. JSON and list writes use
-a temporary file and rename in the destination directory. A complete update
-batch stages outside `lists/`; network or validation failure discards the batch.
-Publication replaces each changed list atomically, then saves receipts and emits
-one reload event. A filesystem publication failure attempts to restore the old
-files and reports failure. A sudden process crash can interrupt a batch between
-individual file renames; every individual list remains complete, and hashes
-invalidate stale cache receipts on the next update. This is not a cross-file
-filesystem transaction.
+Enable, disable, and successful updates (including all-304) publish a new,
+complete generation. All files, the manifest, and their directories are fsynced;
+state is persisted **before** the temporary `current.json` is fsynced and renamed.
+The parent is then fsynced. Cleanup retains the live and previous generations.
+A failed batch leaves the live pointer unchanged. A crash before the rename
+leaves the old complete generation usable; the next open reconciles persisted
+state from its manifest and removes unreferenced generations.
+
+Every open hashes every live list before `configure`. A mismatch quarantines
+the generation and restores the previous one after verifying it. If none is
+valid, the store reseeds pinned defaults or refetches defaults. `lastError` reports
+the integrity failure and recovery. Legacy enabled settings and exclusions can
+migrate from `AdBlock/`; its list files are never trusted as engine inputs.
+The engine must repeat verification at load to cover changes after Swift opens.
 
 ## Pins, downloads, and offline use
 
@@ -125,7 +136,9 @@ URLSession delegate enforces the cap during streaming and checks advertised size
 The request idle timeout is 30 s; the resource timeout is 90 s. Network failures,
 HTTP 408/429, and HTTP 5xx get three attempts with 1 s then 2 s backoff. Header,
 size, and other HTTP failures do not retry. Cancellation stops work before
-publication. Redirects must stay on HTTPS. URLSession cache and cookies are off.
+publication. Redirects must stay on HTTPS and the original source host, unless that exact
+destination host is in the list's optional catalog `redirect_hosts` array.
+Cross-host rejection is non-retryable and names the CDN-allowlist policy. URLSession cache and cookies are off.
 Errors saved in `lastError` contain the list ID and operation/code, not page URLs,
 list contents, or paths. Copyable `debugInfo` also omits exclusions and Profile paths.
 
@@ -163,25 +176,31 @@ list must download before becoming an engine input. OpenEngine needs no CEF type
 in this contract. It binds the value-only `AdBlockEngineEvent` callback:
 
 - `configure` provides Profile ID, list directory, master state, and exclusions
-  after seeding. Attach the callback before opening Profiles.
+  after live-generation integrity verification/recovery. Attach the callback before opening Profiles.
 - `enabled` applies the master state to all open Profile controllers.
 - `exclusions` changes a Profile's in-memory exclusion set without rebuilding.
 - `reload` occurs once after a changed batch or list toggle, never for all-304.
 - `closed` lets the adapter release the engine before temporary files disappear.
 
 Profile operations cannot overlap. Scheduled updates start after 60 s and repeat
-at 24 h. Closing a Profile cancels its schedule; store destruction cancels remaining
+at 24 h. Busy or failed scheduled updates retry after 1 min, 5 min, 30 min,
+then 24 h. A successful attempt resets the ladder. `onScheduledUpdate` reports
+the outcome and the next nominal delay. Closing a Profile cancels its schedule; store destruction cancels remaining
 schedules. A failed update keeps old inputs and saves its error for Settings.
 
-Allowlist input is a host, not a URL. Normalize case, strip one trailing dot and
-optional `*.`, convert IDN to ASCII, then store the registrable domain using the
-full PSL, including private registries. A site covers that domain and subdomains
-at label boundaries. IP literals compare as hosts. Bare public suffixes, paths,
-ports, empty labels, and invalid host characters fail. There is no preloaded
-breakage allowlist. Exact-page session exceptions belong to the later UI contract.
-For the hot path, keep the immutable snapshot and call
-`isAllowlisted(normalizedHost:)` with an already normalized ASCII host. This does
-no disk IO or PSL traversal. `isAllowlisted(host:)` performs input normalization.
+Allowlist mutations accept hosts only, with optional `*.`. They share
+`OpenRouting.HostNormalizer.canonicalHostName`: percent-decoded UTF-8, Unicode
+NFC, Punycode decode, lowercase, trailing-dot removal, and unbracketed IPv6.
+This exposes the existing routing implementation; it does not copy or change
+routing-specific `www.` matching. PSL rules use the same Unicode form.
+Store the registrable domain using the full PSL including private registries.
+Subdomains match at label boundaries; IPs match exactly. Bare suffixes, paths,
+ports, empty labels, and invalid characters fail. The CLI `allowlist check`
+also accepts a URL, extracts `URL.host()`, and uses the same normalization.
+
+Cache the immutable site snapshot for navigation. The fast
+`isAllowlisted(normalizedHost:)` expects that shared canonical form and does no
+file IO or PSL traversal. `isAllowlisted(host:)` normalizes caller input.
 
 `incognito: true` requires bundled defaults, uses a fresh temporary root, does
 not read the supplied persistent root, and keeps settings in memory. Only the
@@ -189,7 +208,10 @@ engine's temporary list/cache files and lease use that root. Close removes the
 Profile directory; session end removes the temporary root. No persistent JSON
 preferences or user Profile directories are written.
 
-## CLI acceptance, 2026-10-25
+## Original CLI acceptance, 2026-10-25 (before review fixes)
+
+This historical pass used the former layout and timing boundary. The PR #31
+review-fix results below supersede its warm-open and directory claims.
 
 Host: Apple M5 Pro, macOS 27.2. Build from `Packages/OpenKit` only:
 `nice -n 10 swift build -c release -j 6`. Final verification ran after merging `origin/main` through `f4f87da` and retained
@@ -256,6 +278,55 @@ official host in 76.98 ms, verified the new pin, and replaced it. Offline seedin
 incognito cleanup, and the performance budget then passed on that final build.
 The ordinary build-time fetch also passed with the reviewed pins. All other
 adblock flows and the five required existing CLIs passed on the merged sources.
+
+## PR #31 review fixes — 2026-10-25
+
+The Lead's generation decision above supersedes the old layout. Verification
+uses the real release CLI in isolated temporary roots. The build command stays
+`nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`, in a separate
+process session. No unit tests, subagents, desktop automation, Arc launch,
+engine build/sync, or shared Chromium-tree changes ran.
+
+Diagnostic controls are opt-in environment variables on that same real CLI:
+
+- `OPEN_ADBLOCK_DEBUG_KILL_BEFORE_CURRENT=1`: SIGKILL after durable generation
+  and state writes, before the current-pointer rename. The process cannot fall
+  through while signal delivery is pending.
+- `OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE=0.002`: scale only timer sleeps; reports
+  retain their nominal seconds. `OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS=0.18`
+  holds the real manual operation's busy gate for the collision check.
+- `OPEN_ADBLOCK_DEBUG_SOURCE_ROOT=http://127.0.0.1:<port>`: direct source paths
+  to a real loopback HTTP fixture server. Only explicit loopback HTTP roots
+  with ports are accepted. Normal downloads and redirects require HTTPS.
+  The same URLSession delegate and per-list host policy run in both cases.
+
+`openkit adblock schedule --dir ROOT --seconds N` keeps the real store open
+with its scheduler and starts a competing manual update. Retry receipts come
+from `onScheduledUpdate`; success resets the retry ladder.
+
+| Finding | Fix | Real CLI result |
+|---|---|---|
+| 1 · P1: tampered lists load on warm open | Verify manifest hash and every listed size/SHA-256 before configure; quarantine and recover | **PASS**: flipped byte 500 in live EasyList; next `status` quarantined it and restored the verified previous generation with the proxy unreachable. Tampering the sole remaining generation reseeded pinned defaults offline. Manifest tampering also fell back. Failed recovery emitted no configure. |
+| 2 · P1: IPv6 / IDN canonical form | Share routing's canonical host-name function; store unbracketed IPv6 and Unicode NFC; canonicalize PSL rules | **PASS**: `allowlist add '[::1]'`, checks for `::1`, `[::1]`, and `http://[::1]:8080/x`; `::2` stayed blocked. Unicode, Punycode, NFD, percent encoding, case/trailing dots, private suffixes, exact IPs and domain boundaries passed across separate processes. |
+| 3: incomplete directory contract | Complete immutable generations; current pointer binds manifest; engine reads only listed inputs; DAT must bind the same generation/input hashes | **PASS (Swift contract)**: enable/disable and both 200/304 updates each published a complete new generation. Unlisted text, legacy lists, ahead-of-pointer settings, and unreferenced generations were ignored. The documented engine/DAT runtime implementation remains deferred. |
+| 4: publication/state ordering | Fsync generation, save state, then atomic current-pointer replacement; reconcile state from committed manifest | **PASS**: diagnostic SIGKILL exited **-9** after staging a disable and saving state. `current.json` and all old list bytes stayed intact. The next offline open kept both lists, restored old state, and removed the unreferenced generation. Corrupt catalog-state also recovered from the manifest. Only live + previous numeric generations remained. |
+| 5 · P2: redirects | Require same source host or exact per-list catalog `redirect_hosts`; retain the clear rejection reason | **PASS**: real loopback HTTP server's same-host redirect loaded. A redirect from `127.0.0.1` to `localhost` failed once with `cross-host redirect rejected`; the destination received no request. Production requires HTTPS. |
+| 6 · P3: scheduled collision/failure | Retry at 60 / 300 / 1,800 seconds, then 86,400; reset on success | **PASS**: real manual/scheduled collision reported `busy`, then retry delay **60**, then success. Real redirect failures reported **60, 300, 1800, 86400**. Timer scale 0.002 made the first minute 0.12 seconds. |
+| Earlier list/settings acceptance | Re-run catalog, official downloads/ETags, full-batch failures, multi-source concatenation, profile/global settings, allowlist, offline seed, and incognito cleanup | **PASS**: 46 entries with categories 3/2/5/35/1; two real 200s then two 304s with no body/reload; proxy and size failures preserved the live pointer/hashes; `fi` concatenation and 304/304 passed; profile isolation, toggles, invalid inputs and incognito cleanup passed. |
+| Earlier bundled repair acceptance | Preserve immutable release pins and reject moved upstream bytes | **PIN DRIFT / SAFE REJECTION**: official EasyList had moved; repair exited 1 with `downloaded bundle SHA-256 pin mismatch` and kept the damaged seed unmodified. A real loopback server serving the original official pinned bytes repaired it successfully. No pins were changed. |
+| Earlier 1 ms performance gate | Keep required warm-open verification and the unchanged benchmark/budget | **FAILED**: warm open + 1,000 lookups p95 **4.0620 ms**, budget 1 ms; 5,000/10,000 matches correct. Largest lookup-only group **0.2155 ms**. The old metric now includes integrity scanning of the default lists; no gate or timing boundary was relaxed. |
+| Required existing CLI regressions | Re-run final release commands and routing cases | **PASS**: `import-arc`, `roundtrip`, `commands-demo` **66/66**, `suggest-check` **31/31**, `commands-dump`, and route **A1–A17**; all exited 0. |
+
+Final release build completed with zero warnings and errors (7.80 seconds).
+The main adblock receipts are under
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-pr31-review-ansf6q0r`;
+regression receipts are under
+`/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-pr31-regressions-2x7v09ng`.
+Temporary drivers and raw receipts are not committed.
+
+The engine adapter and its DAT loader remain deferred. Manifest verification
+before configure and the on-disk engine contract are covered here; this CLI
+pass does not claim CEF/DAT runtime acceptance.
 
 ## Scope deviations and remaining integration
 

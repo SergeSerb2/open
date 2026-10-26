@@ -68,7 +68,8 @@ public enum HostNormalizer {
         return host.isEmpty ? nil : host
     }
 
-    private static func canonicalHostName(_ raw: String) -> String {
+    /// Shared DNS/IP spelling, without routing-specific www or wildcard removal.
+    public static func canonicalHostName(_ raw: String) -> String {
         var host = (raw.removingPercentEncoding ?? raw).precomposedStringWithCanonicalMapping.lowercased()
         if host.hasPrefix("["), host.hasSuffix("]") { host = String(host.dropFirst().dropLast()) }
         host = host.split(separator: ".", omittingEmptySubsequences: false).map { label in

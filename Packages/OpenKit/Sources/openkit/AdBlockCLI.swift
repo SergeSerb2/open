@@ -6,7 +6,7 @@ import OpenModel
 func runAdBlock(args: [String]) async throws {
     var positional: [String] = [], options: [String: String] = [:]
     var index = 0
-    let valued: Set<String> = ["--dir", "--profile", "--bundled-dir", "--proxy", "--timeout", "--max-bytes"]
+    let valued: Set<String> = ["--dir", "--profile", "--bundled-dir", "--proxy", "--timeout", "--max-bytes", "--seconds"]
     while index < args.count {
         let arg = args[index]
         if valued.contains(arg) {
@@ -19,7 +19,7 @@ func runAdBlock(args: [String]) async throws {
         index += 1
     }
     guard let action = positional.first else {
-        throw AdBlockError("usage: openkit adblock <catalog|update|bundle|status|allowlist|toggle|list|perf> [--dir ROOT] [--profile UUID]")
+        throw AdBlockError("usage: openkit adblock <catalog|update|bundle|status|allowlist|toggle|list|perf|schedule> [--dir ROOT] [--profile UUID]")
     }
     if action == "catalog" {
         let catalog = try AdBlockCatalog.load()
@@ -60,14 +60,28 @@ func runAdBlock(args: [String]) async throws {
     var reloads = 0
     store.onEngineEvent = { event in
         if case .reload = event { reloads += 1 }
+        if case .configure = event { print("configure_verified=true") }
     }
     if action == "bundle" {
         for result in try await store.prepareBundledDefaults(at: root) { printAdBlockResult(result) }
         return
     }
-    try await store.openProfile(profile, scheduleUpdates: false)
+    store.onScheduledUpdate = { outcome, delay in
+        print("scheduled_update=\(outcome) next_delay_seconds=\(Int(delay))")
+    }
+    try await store.openProfile(profile, scheduleUpdates: action == "schedule")
     defer { try? store.closeProfile(profile) }
+    if let warning = store.lastError(for: profile) { print("open_warning=\(warning)") }
     switch action {
+    case "schedule":
+        guard let raw = options["--seconds"], let seconds = Double(raw), seconds.isFinite, seconds > 0, seconds <= 120 else {
+            throw AdBlockError("schedule --seconds <1...120>; debug scale/delay are set via OPEN_ADBLOCK_DEBUG_* environment variables")
+        }
+        // The real manual update owns the same busy gate as the scheduled update.
+        let manual = Task { try await store.updateListsNow(profile: profile) }
+        try await Task.sleep(for: .seconds(seconds))
+        manual.cancel()
+        _ = await manual.result
     case "update":
         do { try await store.updateListsNow(profile: profile) }
         catch {
@@ -99,7 +113,10 @@ func runAdBlock(args: [String]) async throws {
         case "check":
             guard positional.count == 3 else { throw AdBlockError("allowlist check requires a host") }
             let snapshot = store.siteSnapshot(for: profile)
-            print("allowlisted=\(try snapshot.isAllowlisted(host: positional[2])) should_block=\(try snapshot.shouldBlock(host: positional[2]))")
+            let input = positional[2]
+            let host = input.contains("://") ? URL(string: input)?.host() : input
+            guard let host else { throw AdBlockError("invalid URL host") }
+            print("allowlisted=\(try snapshot.isAllowlisted(host: host)) should_block=\(try snapshot.shouldBlock(host: host))")
         default: throw AdBlockError("unknown allowlist action")
         }
     case "perf":
@@ -119,7 +136,7 @@ func runAdBlock(args: [String]) async throws {
             try seed.closeProfile(profile)
         }
         let hosts = (0..<1000).map { index in
-            ["news.example.com", "notexample.com", "xn--bcher-kva.de", "example.org"][index % 4]
+            ["news.example.com", "notexample.com", "bücher.de", "example.org"][index % 4]
         }
         var times: [Double] = [], loads: [Double] = [], lookups: [Double] = [], matches = 0
         for _ in 0..<10 {

@@ -48,6 +48,7 @@ private final class TemporaryRoot {
 public final class AdBlockStore {
     public let root: URL
     public let catalog: AdBlockCatalog
+    public var onScheduledUpdate: (@MainActor (_ outcome: String, _ nextDelay: TimeInterval) -> Void)?
     public var onEngineEvent: (@MainActor (AdBlockEngineEvent) -> Void)?
     public private(set) var isEnabled: Bool
     public private(set) var lastUpdateResults: [ProfileID: [AdBlockUpdateResult]] = [:]
@@ -81,11 +82,11 @@ public final class AdBlockStore {
     }
 
     public func listDirectory(for profile: ProfileID) -> URL {
-        profileDirectory(profile).appendingPathComponent("lists", isDirectory: true)
+        profileDirectory(profile)
     }
 
     private func profileDirectory(_ profile: ProfileID) -> URL {
-        root.appendingPathComponent("Profiles/\(profile.rawValue.uuidString)/AdBlock", isDirectory: true)
+        root.appendingPathComponent("Profiles/\(profile.rawValue.uuidString)/adblock", isDirectory: true)
     }
 
     public func openProfile(_ profile: ProfileID, scheduleUpdates: Bool = true) async throws {
@@ -93,27 +94,36 @@ public final class AdBlockStore {
         try begin(profile)
         defer { busy.remove(profile) }
         let directory = profileDirectory(profile)
-        var state = try repository.readState(directory: directory, catalog: catalog)
-        if repository.needsPreparation(directory: directory, state: state, catalog: catalog) {
-            state = try await repository.prepare(directory: directory, state: state, catalog: catalog)
-        }
-        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"), fallback: [])
+        let state = try await repository.open(directory: directory, catalog: catalog)
+        let legacy = directory.deletingLastPathComponent().appendingPathComponent("AdBlock/exclusions.json")
+        let domains = try readJSON([String].self, at: directory.appendingPathComponent("exclusions.json"),
+                                  fallback: readJSON([String].self, at: legacy, fallback: []))
         let normalized = try Set(domains.map { try AdBlockSites.shared.registrableDomain($0) })
-        if !FileManager.default.fileExists(atPath: listDirectory(for: profile).path) {
-            try FileManager.default.createDirectory(at: listDirectory(for: profile), withIntermediateDirectories: true)
-        }
         states[profile] = state; exclusions[profile] = normalized
         onEngineEvent?(.configure(profile: profile, listDirectory: listDirectory(for: profile),
                                  enabled: isEnabled, excludedDomains: normalized.sorted()))
         if scheduleUpdates {
+            let scale = Double(ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_SCHEDULE_SCALE"] ?? "1") ?? 1
+            guard scale.isFinite, scale > 0, scale <= 1 else { throw AdBlockError("invalid debug schedule scale") }
             schedules[profile] = Task { [weak self] in
+                var delay: TimeInterval = 60
+                var failures = 0
                 do {
-                    try await Task.sleep(for: .seconds(60))
                     while !Task.isCancelled {
+                        try await Task.sleep(for: .seconds(delay * scale))
                         try Task.checkCancellation()
-                        // Weak self is held only during each update, never during the 24-hour sleep.
-                        try? await self?.updateListsNow(profile: profile)
-                        try await Task.sleep(for: .seconds(24 * 60 * 60))
+                        guard self != nil else { return }
+                        let outcome: String
+                        do {
+                            try await self?.updateListsNow(profile: profile)
+                            failures = 0; delay = 24 * 60 * 60; outcome = "ok"
+                        } catch {
+                            if Task.isCancelled { return }
+                            outcome = (error as? AdBlockError)?.description == "profile operation is in progress" ? "busy" : "failed"
+                            delay = [60.0, 300, 1800, 86400][min(failures, 3)]
+                            failures += 1
+                        }
+                        self?.onScheduledUpdate?(outcome, delay)
                     }
                 } catch { /* session/profile closed */ }
             }
@@ -169,15 +179,9 @@ public final class AdBlockStore {
         if state.enabledBlockLists.contains(id) == on { return }
         try begin(profile)
         defer { busy.remove(profile) }
-        var next = state
-        if on {
-            // Download first. A failure leaves both the enabled set and engine inputs unchanged.
-            let (receipt, result) = try await repository.update(list, directory: profileDirectory(profile), previous: state.lists[id])
-            next.lists[id] = receipt
-            lastUpdateResults[profile] = [result]
-        }
-        next = try await repository.setEnabled(id, on: on, directory: profileDirectory(profile), state: next)
+        let (next, results) = try await repository.setEnabled(id, on: on, directory: profileDirectory(profile), state: state, catalog: catalog)
         states[profile] = next
+        lastUpdateResults[profile] = results
         onEngineEvent?(.reload(profile: profile, listDirectory: listDirectory(for: profile)))
     }
 
@@ -188,6 +192,10 @@ public final class AdBlockStore {
         defer { busy.remove(profile) }
         let results: [AdBlockUpdateResult]
         do {
+            if let raw = ProcessInfo.processInfo.environment["OPEN_ADBLOCK_DEBUG_UPDATE_DELAY_SECONDS"],
+               let delay = Double(raw), delay.isFinite, delay > 0, delay <= 60 {
+                try await Task.sleep(for: .seconds(delay))
+            }
             (state, results) = try await repository.updateBatch(catalog: catalog, directory: profileDirectory(profile), state: state)
         } catch {
             let message = (error as? AdBlockError)?.description ?? "list batch: file operation failed"
@@ -208,6 +216,8 @@ public final class AdBlockStore {
     public func prepareBundledDefaults(at destination: URL) async throws -> [AdBlockUpdateResult] {
         try await repository.repairBundle(catalog: catalog, destination: destination)
     }
+
+    public func lastError(for profile: ProfileID) -> String? { states[profile]?.lastError }
 
     public func debugInfo(profile: ProfileID) -> String {
         var lines = ["catalog_version=\(catalog.version)", "enabled=\(isEnabled)",

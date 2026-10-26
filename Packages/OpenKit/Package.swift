@@ -26,7 +26,7 @@ let package = Package(
         .target(name: "OpenSuggest", dependencies: ["OpenModel", "OpenStore"], resources: [.copy("Resources/public_suffix_list.dat")]),
         .target(name: "OpenCommands", dependencies: ["OpenModel", "OpenSuggest"], resources: [.copy("Resources/expected-menu.json")], linkerSettings: [.linkedFramework("Carbon")]),
         .target(name: "OpenScripting", dependencies: ["OpenModel", "OpenCommands"]),
-        .target(name: "OpenAdBlock", dependencies: ["OpenModel"], resources: [.copy("Resources")]),
+        .target(name: "OpenAdBlock", dependencies: ["OpenModel", "OpenRouting"], resources: [.copy("Resources")]),
         .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenAdBlock"]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
     ]

@@ -11,11 +11,13 @@ public struct BlockList: Codable, Sendable, Identifiable {
     public let bundled: Bool
     public let defaultEnabled: Bool
     public let unavailableReason: String?
+    public let redirectHosts: [String]?
 
     enum CodingKeys: String, CodingKey {
         case id, category, urls, bundled
         case displayName = "display_name", infoURL = "info_url"
         case defaultEnabled = "default_enabled", unavailableReason = "unavailable_reason"
+        case redirectHosts = "redirect_hosts"
     }
 }
 
@@ -39,7 +41,10 @@ public struct AdBlockCatalog: Codable, Sendable {
             guard !list.id.isEmpty, list.id.utf8.allSatisfy({
                 (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
             }), list.urls.allSatisfy({ $0.scheme == "https" && $0.host()?.contains(".") == true }),
-            !list.urls.isEmpty || list.unavailableReason != nil else {
+            (list.redirectHosts ?? []).allSatisfy({ host in
+                !host.isEmpty && host == host.lowercased() && !host.contains("/") && !host.contains(":") &&
+                host.split(separator: ".").count >= 2
+            }), !list.urls.isEmpty || list.unavailableReason != nil else {
                 throw AdBlockError("catalog: invalid list \(list.id)")
             }
         }
@@ -92,10 +97,23 @@ func checkedList(_ data: Data, id: String, limit: Int) throws {
     }
 }
 
-/// Foundation's atomic write stages beside the destination, then renames over it.
+/// Durable same-directory publication: complete bytes, fsync, rename, then fsync parent.
 func atomicWrite(_ data: Data, to url: URL) throws {
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url, options: .atomic)
+    let parent = url.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
+    let temp = parent.appendingPathComponent(".write-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: temp) }
+    try data.write(to: temp, options: .withoutOverwriting)
+    try syncPath(temp)
+    guard Darwin.rename(temp.path, url.path) == 0 else { throw AdBlockError("file rename failed (\(errno))") }
+    try syncPath(parent)
+}
+
+func syncPath(_ url: URL) throws {
+    let fd = Darwin.open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW)
+    guard fd >= 0 else { throw AdBlockError("file sync open failed (\(errno))") }
+    defer { Darwin.close(fd) }
+    guard fsync(fd) == 0 else { throw AdBlockError("file sync failed (\(errno))") }
 }
 
 func writeJSON<T: Encodable>(_ value: T, to url: URL) throws {
