@@ -455,10 +455,15 @@ click that toggles the anchor button closes the panel and is consumed.
 
 Scope menu (writes `siteMatch` through `BoostStore.upsert`, then refresh):
 
-- "All of <registrable domain>" — `SiteMatch(domain: registrableDomain)` (via `AdBlockSites.registrableDomain`; IP hosts list only the IP).
-- "<host> only" for each intermediate host between the page host (without `www.`) and the
+- "All of <registrable domain>" — `SiteMatch(domain: registrableDomain)` (via `AdBlockSites.registrableDomain`; omitted for IP hosts).
+- "<host> and subdomains" for each intermediate host between the page host (without `www.`) and the
   registrable domain — `SiteMatch(domain: thatHost)`.
-- "Only pages under <first path segment>" — `SiteMatch(domain: current.domain, pathPrefix: "/<segment>")`; hidden when the path is `/`.
+- "Only pages under /<segment>" — `SiteMatch(domain: current.domain, pathPrefix: "/<segment>")`; hidden when the path is `/`.
+- IP hosts offer one "<ip>" host item, without "and subdomains" or a registrable-domain item,
+  plus "Only pages under /<segment>" when the path is not `/`. A saved IP/path scope checks the
+  path item. Lead clarification: 2026-10-26 03:37 America/Vancouver.
+- The labels above follow the lead's 2026-10-25 23:46 America/Vancouver message: keep the
+  matcher unchanged because stored values retain their meaning; change the host labels instead.
 - The current choice has a checkmark. Default for a new Boost: host without `www.` (§3.5).
   Arc uses a host pattern only (`hostPattern`, BO-1); path prefixes are an Open addition the model
   already supports.
@@ -512,6 +517,17 @@ identity (→ colorAdjustment = nil, colorWheel = nil) when ρ < 0.02, !invertLi
   invert").
 - Analogous and complementary schemes (BO-17) are not built: a CSS filter has one hue rotation
   (Q4).
+
+Legacy filters (lead decision, 2026-10-26 03:21 America/Vancouver): a Boost with
+`colorAdjustment` but no `colorWheel` keeps that exact legacy filter until the first color edit.
+Before that edit the wheel shows the closest values it can represent and the 11 pt note
+"Custom colors — editing replaces them." beneath the ring, in place of the neutral-page hint.
+The displayed wheel preserves any representable hue and saturation, clamps brightness/contrast
+to their wheel ranges, and chooses the nearer invert endpoint (0.5 rounds up). These displayed
+values do not change the stored filter.
+The first color edit replaces the filter with wheel-derived values as one undoable operation.
+Undo restores the exact legacy `colorAdjustment` and leaves `colorWheel` nil. Non-color edits
+never convert the legacy filter. The legacy round-trip is checked through the editor and real store.
 
 ### 4.5 Font and text controls
 
@@ -883,6 +899,7 @@ public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(Item
     func setDevToolsVisible(_ visible: Bool, tabID: ItemID)
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?
+    func showBoostsLibrary(profileID: ProfileID)
 }
 ```
 
@@ -954,7 +971,8 @@ disabled, 3 extensions), `scc-insecure`, `scc-adblock-excluded`, `scc-adblock-un
 `scc-no-boosts` (menu shows Boost items), `scc-boosts-off`, `scc-incognito`, `scc-internal-page`,
 `scc-many` (scrolls), `scc-pane-anchor`, `scc-dark`, `editor-interstitial`, `editor-simple`,
 `editor-advanced-color`, `editor-neutral-page`, `editor-not-active`, `editor-zap-on` (3 Zaps),
-`editor-zap-blocked-p7`, `editor-code-css`, `editor-code-js-dirty`, `editor-menu`. (The Library
+`editor-zap-blocked-p7`, `editor-code-css`, `editor-code-js-dirty`, `editor-menu`, `editor-global-off`, and `editor-legacy` (legacy color migration). Step 4 adds the
+simple states; Zap and code states follow in Steps 6 and 7. (The Library
 section renders through `settings-preview`, not here.)
 
 Flows (each asserts the fake's recorded calls and the view state):

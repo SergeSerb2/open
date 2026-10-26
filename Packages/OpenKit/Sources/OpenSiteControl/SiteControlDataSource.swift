@@ -38,4 +38,5 @@ import OpenBoosts
     func setDevToolsVisible(_ visible: Bool, tabID: ItemID)
     func reload(tabID: ItemID)
     func currentURL(tabID: ItemID) -> URL?
+    func showBoostsLibrary(profileID: ProfileID)
 }

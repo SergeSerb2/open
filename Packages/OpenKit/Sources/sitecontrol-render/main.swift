@@ -14,7 +14,9 @@ struct CLIError: Error, CustomStringConvertible { let description: String }
 enum CLI {
     static let motionNames = ["open", "close", "grow", "shrink"]
     static let motionTimes = [0.0, 0.04, 0.08, 0.26]
-    static let names = ["scc-basic", "scc-insecure", "scc-adblock-excluded", "scc-adblock-unavailable", "scc-no-boosts", "scc-boosts-off", "scc-incognito", "scc-internal-page", "scc-many", "scc-pane-anchor", "scc-dark"]
+    static let sccNames = ["scc-basic", "scc-insecure", "scc-adblock-excluded", "scc-adblock-unavailable", "scc-no-boosts", "scc-boosts-off", "scc-incognito", "scc-internal-page", "scc-many", "scc-pane-anchor", "scc-dark"]
+    static let editorNames = ["editor-interstitial", "editor-simple", "editor-advanced-color", "editor-neutral-page", "editor-not-active", "editor-global-off", "editor-legacy", "editor-menu"]
+    static let names = sccNames + editorNames
     static func value(_ args: [String], _ name: String) -> String? {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
@@ -29,18 +31,18 @@ enum CLI {
         switch command {
         case "render":
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
-            let stage = Stage(state: state, scale: scale, appearance: appearance)
-            let image = stage.render(scale: scale)
+            let image: CGImage
+            if state.hasPrefix("editor-") { let editor = EditorStage(state: state,scale: scale,appearance: appearance); image = withExtendedLifetime(editor) { editor.render() } }
+            else { image = Stage(state: state, scale: scale, appearance: appearance).render(scale: scale) }
             OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
             print("wrote \(out) (\(image.width)×\(image.height))")
         case "ax":
-            let stage = Stage(state: state, scale: scale, appearance: appearance)
-            _ = stage.render(scale: scale)
-            print(Flows.accessibilityDump(stage.controller.view.panel), terminator: "")
-        case "flows": report(Flows.run())
+            if state.hasPrefix("editor-") { let stage = EditorStage(state: state,scale: scale,appearance: appearance); print(Flows.accessibilityDump(stage.view),terminator: "") }
+            else { let stage = Stage(state: state, scale: scale, appearance: appearance); _ = stage.render(scale: scale); print(Flows.accessibilityDump(stage.controller.view.panel), terminator: "") }
+        case "flows": report(Flows.run() + EditorFlows.run())
         case "check":
-            var checks = Flows.run()
-            for state in names { for appearance in [ContentAppearance.light, .dark] { for scale: CGFloat in [1, 2] {
+            var checks = Flows.run() + EditorFlows.run()
+            for state in sccNames { for appearance in [ContentAppearance.light, .dark] { for scale: CGFloat in [1, 2] {
                 autoreleasepool {
                 let stage = Stage(state: state, scale: scale, appearance: appearance)
                 let image = stage.render(scale: scale)
@@ -78,10 +80,11 @@ enum CLI {
                 checks.append(Flows.Check(name: "render \(state) \(appearance.rawValue) \(Int(scale))x (fill and glyph ink)", pass: image.width == Int(1000 * scale) && image.height == Int(760 * scale) && a != b && a.count == 4 && ink > 4))
                 }
             } } }
+            checks += EditorFlows.renders()
             checks.append(contentsOf: try receipts())
-            checks += Bench.run()
+            checks += Bench.run() + EditorBench.run()
             report(checks)
-        case "bench": report(Bench.run())
+        case "bench": report(Bench.run() + EditorBench.run())
         case "motion":
             guard let out = value(args, "--out") else { throw CLIError(description: "motion requires --out") }
             let directory = URL(fileURLWithPath: out)
@@ -107,13 +110,15 @@ enum CLI {
         case "screens":
             guard let out = value(args, "--out") else { throw CLIError(description: "screens requires --out") }
             let directory = URL(fileURLWithPath: out)
-            for state in names { for appearance in [ContentAppearance.light, .dark] { for scale: CGFloat in [1, 2] {
+            for state in (value(args,"--group") == "editor" ? editorNames : names) { for appearance in [ContentAppearance.light, .dark] { for scale: CGFloat in [1, 2] {
                 autoreleasepool {
-                let stage = Stage(state: state, scale: scale, appearance: appearance)
-                OffscreenRenderer.writePNG(stage.render(scale: scale), to: directory.appendingPathComponent("\(state)-\(appearance.rawValue)@\(Int(scale))x.png"))
+                let image: CGImage
+                if state.hasPrefix("editor-") { let editor = EditorStage(state: state,scale: scale,appearance: appearance); image = withExtendedLifetime(editor) { editor.render() } }
+                else { image = Stage(state: state,scale: scale,appearance: appearance).render(scale: scale) }
+                OffscreenRenderer.writePNG(image, to: directory.appendingPathComponent("\(state)-\(appearance.rawValue)@\(Int(scale))x.png"))
                 }
             } } }
-            print("wrote \(names.count * 4) renders to \(out)")
+            print("wrote \((value(args,"--group") == "editor" ? editorNames.count : names.count) * 4) renders to \(out)")
         default: throw CLIError(description: "unknown command \(command)")
         }
     }
@@ -150,10 +155,12 @@ enum CLI {
         while !FileManager.default.fileExists(atPath: root.appendingPathComponent("AGENTS.md").path) && root.path != "/" { root.deleteLastPathComponent() }
         let baseNames = Set(["scc-basic-light@1x.png", "scc-basic-light@2x.png", "scc-basic-dark@1x.png", "scc-basic-dark@2x.png"])
         let stepOne = try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-1"), required: baseNames)
-        let allNames = Set(names.flatMap { state in ["light", "dark"].flatMap { appearance in [1, 2].map { "\(state)-\(appearance)@\($0)x.png" } } })
+        let allNames = Set(sccNames.flatMap { state in ["light", "dark"].flatMap { appearance in [1, 2].map { "\(state)-\(appearance)@\($0)x.png" } } })
         let stepTwo = try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2"), required: allNames)
         let motionFiles = Set(motionNames.flatMap { name in motionTimes.map { String(format: "%@-%03.0fms.png", name, $0*1000) } })
-        return stepOne + stepTwo + (try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2/motion"), required: motionFiles))
+        let editorFiles = Set(editorNames.flatMap { state in ["light","dark"].flatMap { appearance in [1,2].map { "\(state)-\(appearance)@\($0)x.png" } } })
+        let stepFour = try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4"),required: editorFiles)
+        return stepFour + stepOne + stepTwo + (try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2/motion"), required: motionFiles))
     }
     static func receiptChecks(_ directory: URL, required: Set<String>) throws -> [Flows.Check] {
         let lines = try String(contentsOf: directory.appendingPathComponent("SHA256SUMS"), encoding: .utf8).split(separator: "\n")
