@@ -28,3 +28,9 @@ chrome.windows.onFocusChanged.addListener((windowId) => record("focus", { window
 
 chrome.action.setBadgeText({ text: "P1" });
 chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
+
+// One page context-menu item: Open's context-menu allowlist keeps
+// extension items (engine_e2e.py context_menu_allowlist).
+chrome.runtime.onInstalled.addListener(() =>
+  chrome.contextMenus.create({ id: "probe", title: "Tabs probe item", contexts: ["all"] }));
+chrome.contextMenus.onClicked.addListener((info) => record("menu", { id: info.menuItemId }));

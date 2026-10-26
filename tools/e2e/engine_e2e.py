@@ -1150,6 +1150,19 @@ def new_window_outlives_opener(app, results):
 # panel). Everything else Chromium puts in the menu runs.
 CONTEXT_MENU_SKIP_TITLES = ("Emoji & Symbols", "Show Spelling and Grammar")
 CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services")
+# Open's context-menu allowlist (docs/engine-api.md, "Context menu items"):
+# Chrome items that must be gone, as letter-only fragments of their titles,
+# and items each target must still show.
+CONTEXT_MENU_DROPPED = ("cast", "readingmode", "qrcode", "withgoogle", "lens", "splitview", "incognito",
+                        "importpasswords", "languagesettings", "sendto", "readinglist", "translate")
+CONTEXT_MENU_KEPT = {
+    "page": ("Reload", "Save As…", "Print…", "View Page Source", "Inspect", "Tabs probe item"),
+    "link": ("Open Link in New Tab", "Open Link in New Window", "Save Link As…", "Copy Link Address", "Inspect"),
+    "image": ("Open Image in New Tab", "Save Image As…", "Copy Image", "Copy Image Address"),
+    "selection": ("Copy", "Search Google for", "Look Up"),
+    "editable": ("Cut", "Copy", "Paste", "Paste and Match Style", "Select All"),
+    "video": ("Loop", "Show All Controls", "Picture in Picture", "Save Video As…", "Copy Video Address"),
+}
 
 
 def menu_key(title):
@@ -1229,6 +1242,7 @@ def context_menu_commands(app, results):
 
     tab = new_tab(app, index)
     report = {"targets": {}, "ran": 0, "skipped": [], "dismissed": [], "failures": []}
+    menus = {}
     home_windows = [x["id"] for x in app.call("shell-windows")]
 
     def close_new_windows():
@@ -1269,6 +1283,7 @@ def context_menu_commands(app, results):
             right_click(prepare(target))
             menu = wait_until(lambda: [e for e in app.call("events") if e["type"] == "contextMenu"], timeout=5)
             commands = menu[0].get("commands", []) if menu else []
+            menus[target] = menu[0].get("items", []) if menu else []
             ran = []
             for command in commands:
                 label = (command["submenu"] + " > " if command["submenu"] else "") + command["title"]
@@ -1315,6 +1330,26 @@ def context_menu_commands(app, results):
     report["video"] = video
     report["ok"] = not crashed and not report["failures"] and report["ran"] >= 20 and len(report["targets"]) == len(setups)
     results["context_menu_commands"] = report
+
+    # The allowlist: no dropped Chrome item, the kept ones, extension items,
+    # and no empty, leading, trailing or doubled separators.
+    allow = {"menus": menus, "dropped_seen": {}, "kept_missing": {}, "separators": {}}
+    for target, items in menus.items():
+        titles = [x for x in items if x]
+        seen = [x for x in titles if any(d in menu_key(x) for d in CONTEXT_MENU_DROPPED)]
+        missing = [k for k in CONTEXT_MENU_KEPT.get(target, ())
+                   if not any(menu_key(x).startswith(menu_key(k)) for x in titles)]
+        bad = (items[:1] == [""] or items[-1:] == [""]
+               or any(a == b == "" for a, b in zip(items, items[1:])))
+        if seen:
+            allow["dropped_seen"][target] = seen
+        if missing:
+            allow["kept_missing"][target] = missing
+        if bad:
+            allow["separators"][target] = items
+    allow["ok"] = (len(menus) == len(CONTEXT_MENU_KEPT) - (0 if "video" in menus else 1)
+                   and not allow["dropped_seen"] and not allow["kept_missing"] and not allow["separators"])
+    results["context_menu_allowlist"] = allow
 
 
 # ----------------------------------------------------------------------------
