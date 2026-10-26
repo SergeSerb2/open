@@ -3,6 +3,8 @@
 Small items found during review and verification. Each line: area — issue — where found.
 
 - Favicons — after a candidate is blocked as private (SSRF guard), the fetcher marks the origin failed instead of trying the same-origin `/favicon.ico` fallback. — lead check of PR #12, 2026-10-25
+- Engine (ad-block, before the first public release) — fuzz the browser-process parsers of untrusted list data: `FilterSet::add_filter_list` (list text), the uBlock Origin resources parser, and `Engine::deserialize` (the DAT on disk). Also add a parse time and memory limit per list build. Today only size caps (16 MiB per source, 64 MiB per list) and SHA-256 receipts bound the input (docs/engine-patches.md P8 "Security review"; release U-6). — lead decision, 2026-10-26
+- Engine (ad-block Step 7) — the EasyList/EasyPrivacy pins in `Packages/OpenKit/Sources/OpenAdBlock/Resources/list-pins.txt` are stale (2026-10-26: `tools/fetch-adblock-lists.sh` stops with an EasyList SHA-256 mismatch, as designed). Refresh them with `--update-pins` in a reviewed PR when the bundle is built. — engine lead, 2026-10-26
 - Engine — inject Open's page runtimes (Zap picker, Boost applier internals) in an isolated world (Chromium content-script world), so pages cannot reach the picker overlay or its bridge. Main-world injection is only for user Boost JS. — PR #23 review, 2026-10-25
 - Licensing — pre-release license review: adblock-rust (MPL-2.0), uBlock Origin resources/scriptlets (GPL-3.0), Public Suffix List (MPL-2.0), Chromium/CEF (BSD), proprietary codecs (H.264/AAC licensing) in release builds. — adblock plan, 2026-10-25
 - Release updater — `tools/release.sh` checks only the shape of `SUPublicEDKey` (base64, 32 bytes). It does not prove that the installed production signing key matches; A-13 catches a wrong key late. Add an earlier key-match proof before public distribution. — PR #57 Muse review round 1, 2026-10-25
@@ -39,3 +41,4 @@ Small items found during review and verification. Each line: area — issue — 
   the symbol/string evidence and confirm the tooltip text/case with S9.
 
 - Offscreen text anti-aliasing is nondeterministic between builds (row-title color metrics only); investigate font smoothing in the shared Renderer.
+- Site Control Center — the Boost row icon's sparkles and the Site Control button's sparkles twinkle in Arc, but session 2 cannot time them (frame pairs 1.6–2.5 s apart, no video of the panel). Open draws them static (Q15 ruling). Capture ≥ 30 fps video of the panel open on a Boosted site, measure period, fade curve, and per-sparkle phase, then add the animation as pure Core Animation (no timers, no main-thread work per frame, panel sparkles only while the panel is open, removed on close). — PR #107 lead ruling Q15, 2026-10-26

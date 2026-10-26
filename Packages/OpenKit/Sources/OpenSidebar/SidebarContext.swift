@@ -303,14 +303,19 @@ public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, fo
 @MainActor
 enum StyleCache {
     private static var cache: [Key: SpaceThemeStyle] = [:]
+    private static var order: [Key] = []
     private struct Key: Hashable { var theme: SpaceTheme; var system: ContentAppearance }
 
     static func style(for theme: SpaceTheme, system: ContentAppearance) -> SpaceThemeStyle {
         let key = Key(theme: theme, system: system)
         if let s = cache[key] { return s }
         let s = SpaceThemeStyle(theme: theme, system: system)
-        if cache.count > 64 { cache.removeAll() }
+        if cache.count >= 256 {
+            for old in order.prefix(128) { cache[old] = nil }
+            order.removeFirst(128)
+        }
         cache[key] = s
+        order.append(key)
         return s
     }
 }
