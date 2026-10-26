@@ -41,8 +41,6 @@ settings:
       # The automation socket (docs/automation.md) is compiled into Debug only,
       # unless OPEN_AUTOMATION=1 is passed to tools/build.sh for Release.
       SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG OPEN_AUTOMATION
-    Release:
-      ENABLE_HARDENED_RUNTIME: YES
 
 packages:
   # Engine-agnostic Swift packages (model, stores, web protocols).
