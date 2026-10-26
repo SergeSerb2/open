@@ -1,0 +1,261 @@
+{
+  "sourceHead": "cd78cef",
+  "purpose": "Diagnostic only; original debug-window-2 FAIL is not replaced",
+  "cycles": [
+    {
+      "cycle": 1,
+      "error": null
+    },
+    {
+      "cycle": 2,
+      "error": null
+    },
+    {
+      "cycle": 3,
+      "error": null
+    }
+  ],
+  "requests": [
+    {
+      "cycle": 1,
+      "tab": "881E95C3-D1E0-4DD3-A977-03CEB7971F71",
+      "error": null,
+      "result": "ok",
+      "livePagesBefore": [
+        {
+          "identifier": 1,
+          "live": true,
+          "hidden": true,
+          "browser": 1,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 2,
+          "live": true,
+          "hidden": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "crash": 0
+        },
+        {
+          "identifier": 3,
+          "live": true,
+          "hidden": false,
+          "browser": 2,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 4,
+          "live": true,
+          "hidden": true,
+          "browser": 2,
+          "browserIndex": 0,
+          "crash": 0
+        }
+      ]
+    },
+    {
+      "cycle": 1,
+      "tab": "881E95C3-D1E0-4DD3-A977-03CEB7971F71",
+      "error": null,
+      "result": "ok",
+      "livePagesBefore": [
+        {
+          "identifier": 1,
+          "live": true,
+          "hidden": true,
+          "browser": 1,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 2,
+          "live": true,
+          "hidden": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "crash": 0
+        },
+        {
+          "identifier": 3,
+          "live": true,
+          "hidden": false,
+          "browser": 2,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 4,
+          "live": true,
+          "hidden": true,
+          "browser": 2,
+          "browserIndex": 0,
+          "crash": 0
+        }
+      ]
+    },
+    {
+      "cycle": 2,
+      "tab": "177100E6-94B7-4C9D-A110-00C682A53718",
+      "error": null,
+      "result": "ok",
+      "livePagesBefore": [
+        {
+          "identifier": 1,
+          "live": true,
+          "hidden": true,
+          "browser": 1,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 2,
+          "live": true,
+          "hidden": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "crash": 0
+        },
+        {
+          "identifier": 3,
+          "live": true,
+          "hidden": false,
+          "browser": 2,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 4,
+          "live": true,
+          "hidden": true,
+          "browser": 2,
+          "browserIndex": 0,
+          "crash": 0
+        }
+      ]
+    },
+    {
+      "cycle": 2,
+      "tab": "177100E6-94B7-4C9D-A110-00C682A53718",
+      "error": null,
+      "result": "ok",
+      "livePagesBefore": [
+        {
+          "identifier": 1,
+          "live": true,
+          "hidden": true,
+          "browser": 1,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 2,
+          "live": true,
+          "hidden": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "crash": 0
+        },
+        {
+          "identifier": 3,
+          "live": true,
+          "hidden": false,
+          "browser": 2,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 4,
+          "live": true,
+          "hidden": true,
+          "browser": 2,
+          "browserIndex": 0,
+          "crash": 0
+        }
+      ]
+    },
+    {
+      "cycle": 3,
+      "tab": "804E5C94-8514-4C82-990A-0973C5ADF160",
+      "error": null,
+      "result": "ok",
+      "livePagesBefore": [
+        {
+          "identifier": 1,
+          "live": true,
+          "hidden": true,
+          "browser": 1,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 2,
+          "live": true,
+          "hidden": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "crash": 0
+        },
+        {
+          "identifier": 3,
+          "live": true,
+          "hidden": false,
+          "browser": 2,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 4,
+          "live": true,
+          "hidden": true,
+          "browser": 2,
+          "browserIndex": 0,
+          "crash": 0
+        }
+      ]
+    },
+    {
+      "cycle": 3,
+      "tab": "804E5C94-8514-4C82-990A-0973C5ADF160",
+      "error": null,
+      "result": "ok",
+      "livePagesBefore": [
+        {
+          "identifier": 1,
+          "live": true,
+          "hidden": true,
+          "browser": 1,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 2,
+          "live": true,
+          "hidden": false,
+          "browser": 1,
+          "browserIndex": 0,
+          "crash": 0
+        },
+        {
+          "identifier": 3,
+          "live": true,
+          "hidden": false,
+          "browser": 2,
+          "browserIndex": 1,
+          "crash": 0
+        },
+        {
+          "identifier": 4,
+          "live": true,
+          "hidden": true,
+          "browser": 2,
+          "browserIndex": 0,
+          "crash": 0
+        }
+      ]
+    }
+  ],
+  "conclusion": "Not reproduced in three diagnostic cycles. The original Debug window-2 failure is not cleared; why its browser was unavailable remains unconfirmed."
+}
