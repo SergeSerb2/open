@@ -204,16 +204,18 @@ The engine parses filter lists in the browser process, which is the most privile
 | `seahash` 3.0.7 | — | Crate patch adds upstream's MIT license text | Published without a license file; upstream added it later (gitlab.redox-os.org/redox-os/seahash commit `3088c5c9`). |
 | `rmp` | — | Pinned `=0.8.11` | `rmp-serde` 0.15 needs it; gnrt would pick 0.8.15 (adblock-design §Benchmark). |
 
-**Cost of regex without `perf`** (bench at `/tmp/adblock-bench-open`, adblock 0.8.11 with plan D-3 features, Chromium's toolchain `rustc 1.100.0`, current official EasyList + EasyPrivacy, Apple M5 Pro, load about 6, median of 5 runs). The same 8 of 15 requests are blocked in both configs, with the same selector counts:
+**Cost of the regex features** (re-measured after engine review r1, 97-1). The first measurement used 15 short URLs and reported 1.65 µs (`perf`) against 2.90 µs (`std` + `unicode`); real ad-tech URLs are longer, and the cost grows with URL length. Re-measured on the six ad-tech URL shapes of the review's `realurl` probe (58 to 2,040 characters), through the shim's check (URL parse and the 8 KiB match cap included), with the current official EasyList + EasyPrivacy, on an Apple M5 Pro at load average about 10:
 
-| Measure | regex `perf` | regex `std` + `unicode` (shipped) | adblock-fork budget |
+| Measure | `std` + `unicode` (first config) | Shipped: + `perf-dfa`, `perf-onepass`, `perf-backtrack`, `perf-cache`, `perf-inline` | adblock-fork budget |
 |---|---|---|---|
-| Network match per request | 1.65 µs | 2.90 µs (worst URL 5.8 µs) | §13.4: ≤ 5 ms added per 200 requests (this is about 0.6 ms) |
-| Cosmetic query per page | 27.1 µs | 27.0 µs | ≤ 100 µs |
-| Engine build from text | 70 ms | 72 ms | ≤ 1500 ms |
-| DAT deserialize | 32 ms | 33 ms | ≤ 250 ms |
+| Network check, mean of the six shapes (standalone, system allocator) | 29.3 µs | 5.5 µs | §7.8 gates G-1 to G-7 (Step 4) |
+| Network check, mean of the six shapes (in-tree build, cefsimple self-test) | — | 6.0 µs (2.2 to 11.5 µs per shape) | — |
+| A 2 MB URL (standalone; the shim matches its first 8 KiB) | 1,000 µs | 91 µs | — |
+| Cosmetic query per page, nytimes.com (in-tree; sanitized vectors since #98 r1) | — | 56 µs | ≤ 100 µs |
+| Engine build from text, then serialize and write the DAT (in-tree, two lists) | — | 213 to 282 ms | ≤ 1500 ms |
+| DAT load (in-tree) | — | 52 to 62 ms | ≤ 250 ms |
 
-The shipped config is slower than the design benchmark's ~2.15 µs reference (F-15) but well inside the pass/fail budget. `openkit adblock perf` (Swift allowlist lookups, not regex) stays at p95 0.11 ms per 1,000 lookups (budget 1 ms).
+The review's own probe gave the same picture: 28.8 µs against 4.9 µs on realistic URLs, and a hostile rule such as `\w{300}` compiled to a slow PikeVM before and now fails regex's size limit. At 200 requests a page, the shipped config costs about 1.2 ms of matching. `openkit adblock perf` (Swift allowlist lookups, not regex) stays at p95 0.11 ms per 1,000 lookups (budget 1 ms).
 
 **Untrusted input.** Filter lists (EasyList, EasyPrivacy and the 46-list catalog) are untrusted network input. The engine parses them in the browser process (`FilterSet::add_filter_list`, `Engine::from_filter_set`), and it reads the serialized engine (DAT) back from disk (`Engine::deserialize`). The limits that exist today, in the Swift store (docs/adblock-lists.md):
 - A source is capped at 16 MiB, and a combined list at 64 MiB. The cap is enforced while streaming, and the advertised size is checked.
