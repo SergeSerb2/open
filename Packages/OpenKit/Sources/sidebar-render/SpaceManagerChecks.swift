@@ -10,7 +10,8 @@ enum SpaceManagerChecks {
     static func run() {
         let check = Checks.check
         // Checks.run owns this per-run suite, never the shared sidebar-render domain.
-        SidebarHaptics.defaults.set(true, forKey: "open.advanced.hapticOnTabReorder")
+        let key = "open.advanced.hapticOnTabReorder", defaults = SidebarHaptics.defaults
+        defaults.set(true, forKey: key)
         let model = Synthetic.model()
         let window = model.windows[0], original = model.spaces.map(\.id)
         let undo = UndoManager(); undo.groupsByEvent = false; model.undoManager = undo
