@@ -9,6 +9,7 @@ DerivedData/
 xcuserdata/
 # Downloaded CEF binary distribution
 Vendor/cef/
+Vendor/adblock/
 
 # SwiftPM build output
 .build/
