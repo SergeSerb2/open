@@ -602,7 +602,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // The window is back at its frame; the pointer may or may not be over the buttons.
         dimmedLights.syncWithPointer()
     }
-    public func windowDidBecomeKey(_ notification: Notification) { context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?() }
+    public func windowDidBecomeKey(_ notification: Notification) {
+        context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?()
+        // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
+        dimmedLights.syncWithPointer()
+    }
     public func windowDidResignKey(_ notification: Notification) { context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }

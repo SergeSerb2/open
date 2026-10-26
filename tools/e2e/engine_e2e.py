@@ -2076,6 +2076,23 @@ def traffic_light_look_checks(app, results, private, scale, wid):
                                      full_screen_dimmed=bool(full) and full["trafficLightsDimmed"], exited=bool(back))
     stale["full_screen_exit"]["ok"] = (stale["full_screen_exit"]["ok"] and bool(full) and full_alpha == [1, 1, 1]
                                        and not full["trafficLightsDimmed"] and bool(back))
+    # (1b) The same, with the pointer left on the green button: the window comes back under
+    # it (a resting pointer), so the buttons show in color without any pointer event.
+    ensure_key(app, wid)
+    app.call("mouse", action="hover", x=66, y=24)
+    app.call("mouse", action="click", x=66, y=24)
+    full_over = state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
+    app.call("window-fullscreen")
+    back_over = state_when(app, lambda st: not st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
+    over = state_when(app, lambda st: st["trafficLightsHovered"] and not st["trafficLightsDimmed"], timeout=2) or state()
+    over_hue_ok, over_hue = colored_look(shot("stale-fullscreen-over"), scale, LIGHT_CENTERS)
+    app.call("mouse", action="hover", x=700, y=400)
+    over_left = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2)
+    stale["full_screen_exit_pointer_over"] = {"ok": bool(full_over) and bool(back_over) and over["trafficLightsHovered"]
+                                              and not over["trafficLightsDimmed"] and over["key"] and over_hue_ok and bool(over_left),
+                                              "entered": bool(full_over), "exited": bool(back_over), "hovered": over["trafficLightsHovered"],
+                                              "dimmed": over["trafficLightsDimmed"], "key": over["key"], "hue": over_hue,
+                                              "dimmed_after_leaving": bool(over_left)}
     # (2) A click on the yellow button minimizes; the pointer moves away; the Dock restores.
     ensure_key(app, wid)
     app.call("mouse", action="hover", x=43, y=24)

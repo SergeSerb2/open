@@ -239,13 +239,21 @@
           // hardware pointer of whoever uses the Mac cannot disturb a check.
           BrowserWindowController.pointerEventFilter = { $0.eventNumber == AutomationController.syntheticPointerTag }
           let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
-          // Known at once (the move event is queued), for state that reads where the pointer
-          // is rather than waiting for an event: the window buttons' hover.
-          BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
+          let location = NSPoint(x: point[0], y: target.frame.height - point[1])
           if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
           // Tracking areas follow the hardware pointer, so `hover` also delivers
-          // enter, move, and exit to the owners of the areas under the point.
-          if action == "hover" { return hover(target, at: NSPoint(x: point[0], y: target.frame.height - point[1])) }
+          // enter, move, and exit to the owners of the areas under the point. The automation
+          // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
+          // that re-reads the pointer then (the window buttons' hover) must still see the old
+          // point, so the enter and exit events drive the change, as real pointer motion does.
+          if action == "hover" {
+            let result = hover(target, at: location)
+            BrowserWindowController.automationPointer = (number, location)
+            return result
+          }
+          // Known at once (the move event is queued), for state that reads where the pointer
+          // is rather than waiting for an event: the window buttons' hover.
+          BrowserWindowController.automationPointer = (number, location)
         } else if action == "click" {
           // A click with modifiers (for example Option on the zoom button). Controls that
           // track the mouse wait for the mouse-up on the event queue, so it goes there first.
