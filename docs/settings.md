@@ -106,7 +106,7 @@ The import fixture contains two Spaces, three tabs, one skipped easel, and two c
 | Downloads progress, Retry/Reveal IDs, missing-file guard | PASS |
 | Captures thumbnail/Save As/delete file+index; profile History search/open | PASS |
 | Four Library empty states: native hosted AX labels and valid PNGs | PASS |
-| `settings-preview check` | PASS — 28 checks, 0 failed ([receipt](settings/checks.txt)) |
+| `settings-preview check` | PASS — 30 checks, 0 failed ([current receipt](first-run/checks.txt)); the original 28 Settings/Library flows are retained |
 | Renders | 86 PNGs: all panes/sections at both scales, General/Profiles in both appearances, distinct long-pane details, every requested sheet, import Choose/Review/Passwords/Report and engine-ready Passwords copy, Library empty states, shortcut states, suggestion notice, engine editor, and invalid rule |
 | `dump-keys` | PASS — synthetic-root guard; sorted persisted values |
 
@@ -118,7 +118,7 @@ No unit tests, desktop automation, engine build/sync, real import, or Keychain a
 
 The layout follows [interaction-states §18](re/interaction-states.md#18-settings-window), captured Settings frames F0147–F0151 and A0495–A0507 in the session index. Those reference images were viewed only. No reference image, artwork, icon, font, sound, or binary asset was copied. All committed screenshots below use the code-built synthetic fixture. Colors and typography use `OpenDesign`, with system grouped-control defaults where there is no Settings token.
 
-Every 1x and 2x pane and sheet was inspected locally. The final inventory has 86 PNGs. Switch bounds measure about 36×17 pt with `.mini`. Native controls render in their inactive appearance in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
+Every 1x and 2x pane and sheet was inspected locally. The final inventory has 86 PNGs. Switch bounds measure about 36×17 pt with `.mini`. The renderer supplies key state to the SwiftUI button style. Native switches stay inactive in the never-ordered offscreen window; a right-hand switch thumb means ON. Additional viewports expose the rest of the long panes. The Opus design review remains a lead-owned gate before merge.
 
 | Pane | 1x | 2x |
 |---|---|---|
@@ -250,3 +250,15 @@ Additional states: [suggestion notice](settings/sheet-suggestion-notice@1x.png),
 | Engine edit labels | Name, Keyword, and URL stay visible beside their fields | sheet-search-engine-edit at 1x/2x |
 
 All affected PNGs were re-rendered and inspected at both scales. The release build and all 28 settings-preview checks pass. The PR contains the full verify-all summary for its head.
+
+## Shared first-run probe and review round 1
+
+First-run Steps A/B replace the wizard's independent count reads with OpenImport.ArcProbe. It builds no BrowserModel. Both flows share the importer's Archive filters and full profile metadata merge, including unused profiles and a distinct named Default. Readable per-profile History and saved-item counts survive another profile's error and show “(partial)”. Space mapping labels load on the utility worker during `refreshCounts`, before Review is enabled, and stay out of probe receipts.
+
+The unavailable Passwords checkbox is disabled and excluded from selection in both flows. Capability-OFF consent renders are copy references only; capability-ON renders stop before consent. `ImportOutcome.didImportAnything` handles canonical adapter keys once for both flows. Default buttons use the prominent Settings style; General's Make Open your default and the wizard's Next/Import/Done/consent buttons use it too. Inactive windows retain the gray fill.
+
+All 86 Settings/Library PNGs were re-rendered and inspected at both scales, including General light/dark and Choose/Review/Passwords/Report. [SHA-256 receipts](settings/sha256.txt) bind them. The renderer supplies explicit key state for these never-ordered windows. See [first-run.md](first-run.md) for the 32-flow receipt, filtered-count parity, cancellation cleanup, WAL checks and 128 permanent first-run state PNGs. Real window integration and graph-build performance remain Steps C–F.
+
+## First-run review round 2
+
+All seven remaining Settings default buttons now explicitly use prominent SettingsButtonStyle: Ad Block Done, Previews Done, Profile Create/Save, This Profile Only, suggestion notice, Save Engine, and Save Rule. The standalone sheet renderer uses the same base SettingsButtonStyle as the app. Settings import shows “Search engine” in Choose and Report and formats count strings with the shared singular/plural helper. The adapter’s `Search settings` key is unchanged. All 86 Settings/Library PNGs and their SHA-256 receipts were refreshed.
