@@ -7,6 +7,7 @@ public struct AdBlockSites: Sendable {
     private let exact: Set<String>
     private let wildcard: Set<String>
     private let exceptions: Set<String>
+    private let hasCompleteSnapshot: Bool
 
     private init() {
         let url = try? AdBlockCatalog.resource("public_suffix_list.dat")
@@ -25,10 +26,13 @@ public struct AdBlockSites: Sendable {
             else { exact.insert(ascii) }
         }
         self.exact = exact; self.wildcard = wildcard; self.exceptions = exceptions
+        self.hasCompleteSnapshot = exact.contains("com") && exact.contains("github.io") &&
+            text.contains("// ===END PRIVATE DOMAINS===")
     }
 
     /// Accept a host only, with optional leading *. and one trailing dot. IDNs become ASCII.
     public func normalize(_ input: String) throws -> String {
+        guard hasCompleteSnapshot else { throw AdBlockError("allowlist: public suffix resource unavailable") }
         var host = input.lowercased()
         if host.hasPrefix("*.") { host.removeFirst(2) }
         if host.hasSuffix(".") { host.removeLast() }
@@ -52,6 +56,7 @@ public struct AdBlockSites: Sendable {
 
     /// Fast path for ASCII hosts already normalized at navigation time.
     public func registrableNormalized(_ host: String) throws -> String {
+        guard hasCompleteSnapshot else { throw AdBlockError("allowlist: public suffix resource unavailable") }
         if isIP(host) { return host }
         let labels = host.split(separator: ".")
         var suffix = 1 // PSL implicit * rule, also used for unknown registries.
