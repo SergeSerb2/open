@@ -19,6 +19,7 @@ import OpenWeb
         return delegate
     }
     static func apply(_ args: [String], context: SidebarContext) throws {
+        if args.contains("--media-increase-contrast") { SidebarDiagnostics.mediaIncreaseContrastOverride = true }
         if args.contains("--reduce-motion") { SidebarDiagnostics.mediaReduceMotionOverride = true }
         guard let spec = RenderCLI.value(args, "--media") else { return }
         // LayerCloner does not preserve the native RBSymbolLayer tint. Static SF glyphs
@@ -92,4 +93,28 @@ import OpenWeb
             }
         }
     }
+    static func captureInteraction(_ scene: RenderScene, args: [String], scale: CGFloat) throws -> CGImage {
+        let host = OffscreenRenderer.host(scene, scale: scale)
+        host.orderBack(nil)
+        defer { TooltipController.shared.visibleTooltipView?.removeFromSuperview(); host.contentView = nil; host.close() }
+        OffscreenRenderer.settle(scene, runLoop: 0.03)
+        let id = RenderCLI.value(args, "--media-button-hover") ?? "play"
+        guard let button = scene.sidebar.mediaControls.cards.first?.control(named: id)?.view else { throw CLIError(description: "unknown media button") }
+        func event(_ type: NSEvent.EventType) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: button.convert(CGPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil), modifierFlags: [], timestamp: 0,
+                              windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        button.mouseEntered(with: event(.mouseMoved))
+        if args.contains("--media-button-pressed") { button.mouseDown(with: event(.leftMouseDown)) }
+        OffscreenRenderer.settle(scene, runLoop: args.contains("--media-tooltip") ? 0.22 : 0.03)
+        if args.contains("--media-tooltip") {
+            guard let tooltip = TooltipController.shared.visibleTooltipView, let tipWindow = tooltip.window else { throw CLIError(description: "media tooltip did not appear") }
+            let screen = tipWindow.convertToScreen(tooltip.convert(tooltip.bounds, to: nil))
+            let frame = scene.convert(host.convertFromScreen(screen), from: nil)
+            tooltip.removeFromSuperview(); scene.addSubview(tooltip); tooltip.frame = frame
+        }
+        OffscreenRenderer.settle(scene)
+        return OffscreenRenderer().snapshot(scene, scale: scale)
+    }
+
 }

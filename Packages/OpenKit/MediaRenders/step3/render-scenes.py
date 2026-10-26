@@ -20,11 +20,23 @@ with tempfile.TemporaryDirectory(prefix='open-mini-scene-') as fixture:
     for width in [228, 500]:
         for appearance in ['light', 'dark']:
             for name, spec, extra in scenes:
-                command = [str(cli), 'render', '--snapshot', fixture, '--out', str(out / f'{name}-{appearance}-{width}.png'),
-                           '--size', '1280x900', '--width', str(width), '--appearance', appearance, '--scale', '2',
-                           '--media', spec, '--media-theme', 'default', '--crop-media-controls'] + extra
-                subprocess.run(command, check=True, stdout=subprocess.DEVNULL)
+                subprocess.run([str(cli), 'render', '--snapshot', fixture, '--out', str(out / f'{name}-{appearance}-{width}.png'),
+                                '--size', '1280x900', '--width', str(width), '--appearance', appearance, '--scale', '2',
+                                '--media', spec, '--media-theme', 'default', '--crop-media-controls', *extra], check=True, stdout=subprocess.DEVNULL)
     for appearance in ['light', 'dark']:
+        extras = [
+            ('themed', 228, 'today:0=playing:tracks', ['--media-theme', 'red']),
+            ('narrow-hover', 180, 'today:0=playing:video:long:tracks', ['--media-hover', 'card:0']),
+            ('narrow-drawer', 180, 'today:0=playing', ['--media-drawer', '0']),
+            ('button-hover', 228, 'today:0=playing:tracks', ['--media-button-hover', 'play']),
+            ('button-pressed', 228, 'today:0=playing:tracks', ['--media-button-hover', 'play', '--media-button-pressed']),
+            ('tooltip', 228, 'today:0=playing:tracks', ['--media-button-hover', 'play', '--media-tooltip']),
+            ('increase-contrast', 228, 'today:0=playing:tracks', ['--media-increase-contrast']),
+        ]
+        for name, width, spec, extra in extras:
+            subprocess.run([str(cli), 'render', '--snapshot', fixture, '--out', str(out / f'{name}-{appearance}-{width}.png'),
+                            '--size', '1280x900', '--width', str(width), '--appearance', appearance, '--scale', '2',
+                            '--media', spec, '--crop-media-controls', *([] if '--media-theme' in extra else ['--media-theme', 'default']), *extra], check=True, stdout=subprocess.DEVNULL)
         subprocess.run([str(cli), 'render', '--snapshot', fixture, '--out', str(out / f'full-sidebar-{appearance}-228.png'),
                         '--size', '1280x900', '--width', '228', '--appearance', appearance, '--scale', '2',
                         '--media', 'today:0=playing:tracks', '--media-theme', 'default'], check=True, stdout=subprocess.DEVNULL)

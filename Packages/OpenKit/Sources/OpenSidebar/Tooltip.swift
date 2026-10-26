@@ -101,7 +101,8 @@ public final class TooltipController {
     public private(set) var scheduleCount = 0
     public private(set) var showCount = 0
     /// Read-back for the real tooltip harness flow.
-    public var visibleTooltip: Tooltip? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first?.tooltip : nil }
+    public var visibleTooltipView: TooltipView? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first : nil }
+    public var visibleTooltip: Tooltip? { visibleTooltipView?.tooltip }
 
     func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
         if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }

@@ -40,12 +40,14 @@ import OpenModel
     private func sync() {
         let sources = context.media?.visibleSources(windowID: context.windowID, displayed: context.displayedTabIDs) ?? []
         let ids = sources.compactMap(\.tabID), wasEmpty = ordered.isEmpty
+        context.mediaDrawers.formIntersection(ids)
         let changed = ids != ordered || sources.contains { s in s.tabID.map { byID[$0]?.source !== s } ?? false }
         if changed {
             let previous = byID
             if !ids.isEmpty { holdingLastHeight = 0 }
             if ids.isEmpty && !ordered.isEmpty && animatesMediaChanges { holdingLastHeight = stackHeight }
             for (id, card) in previous where !sources.contains(where: { $0.tabID == id && $0 === card.source }) {
+                context.mediaDrawers.remove(id)
                 byID.removeValue(forKey: id); retire(card)
             }
             for source in sources {
@@ -68,6 +70,7 @@ import OpenModel
         measure(changed && (wasEmpty || ids.isEmpty) ? .structure : .stack)
     }
     private func retire(_ card: MiniPlayerCardView) {
+        card.isRetiring = true
         let identity = ObjectIdentifier(card)
         guard animatesMediaChanges else { card.removeFromSuperview(); return }
         retiring[identity] = card
@@ -111,6 +114,7 @@ import OpenModel
                 mask.path = CGPath(rect: CGRect(x: 0, y: 0, width: target.width, height: m.stackOffset), transform: nil)
                 card.layer?.mask = mask
             } else { card.layer?.mask = nil }
+            card.showsStackEdge = !isExpanded && i > 0
             card.marquee.isExposed = isExpanded || i == 0
             CATransaction.commit()
             if previous != .zero && previous != target && animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion {

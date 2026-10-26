@@ -12,7 +12,7 @@ python3 Packages/OpenKit/MediaRenders/step3/render-scenes.py
 python3 Packages/OpenKit/MediaRenders/step3/compare-bench.py --baseline-ref e44b40d4b1b1beda37673e7209bed958c79cbc11 --out /tmp/open-mini-comparison
 ```
 
-The check command passes 200/200, including MC1–MC8 and MC10. MC9 runs through
+The check command passes 208/208, including MC1–MC8 and MC10. MC9 runs through
 the real 1,000-row benchmark: six interleaved pairs, with alternate pair order,
 main without a card and head with one real paused card. Main median/mean p95
 are 2.130/1.982 ms; head median/mean are 1.975/1.875 ms. Deltas -0.155/-0.107 ms
@@ -56,3 +56,29 @@ only while the marquee can run.
 | card-hover | [PNG](card-hover-light-228.png) | [PNG](card-hover-dark-228.png) | [PNG](card-hover-light-500.png) | [PNG](card-hover-dark-500.png) |
 
 [Full light sidebar](full-sidebar-light-228.png), [full dark sidebar](full-sidebar-dark-228.png), [expired paused source](expired-dark-228.png).
+
+## Review r1 additions
+
+Drawer state is pruned when the source leaves, including identity replacement.
+The native flow closes the tab with its drawer open, restores it, and gets a
+fresh 68 pt card. Retiring cards retain their fade but reject hit tests; a click
+through the fading old card reaches the replacement host. The long-title check
+uses cacheDisplay on the live view and finds text ink, independent of the clone.
+
+The drawer knob stays inside the track with a 6 pt center inset. Back cards have
+an opacity-inherited .5 pt top separator edge (guess, pending S6). Copy uses 100%.
+The new tooltip capture moves the actual TooltipView from the shown offscreen
+child panel into the snapshot; it uses the real delayed tooltip and button hover.
+Increase Contrast uses a diagnostics override of the normal accessibility path.
+
+| Additional state | Light | Dark |
+|---|---|---|
+| themed | [PNG](themed-light-228.png) | [PNG](themed-dark-228.png) |
+| narrow-hover | [PNG](narrow-hover-light-180.png) | [PNG](narrow-hover-dark-180.png) |
+| narrow-drawer | [PNG](narrow-drawer-light-180.png) | [PNG](narrow-drawer-dark-180.png) |
+| button-hover | [PNG](button-hover-light-228.png) | [PNG](button-hover-dark-228.png) |
+| button-pressed | [PNG](button-pressed-light-228.png) | [PNG](button-pressed-dark-228.png) |
+| tooltip | [PNG](tooltip-light-228.png) | [PNG](tooltip-dark-228.png) |
+| increase-contrast | [PNG](increase-contrast-light-228.png) | [PNG](increase-contrast-dark-228.png) |
+
+57 PNGs total. [Review-r1 runtime receipt](evidence/review-r1-check.txt).

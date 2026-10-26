@@ -8,6 +8,9 @@ import Symbols
     public let source: MediaSource
     public let marquee = MarqueeLabel(frame: .zero)
     private let context: SidebarContext
+    private let stackEdge = CALayer()
+    public var isRetiring = false
+    public var showsStackEdge = false { didSet { if showsStackEdge != oldValue { needsLayout = true } } }
     private let favicon = FaviconView()
     private let titleHit = MiniPlayerTitleHitView(frame: .zero)
     private var buttons: [String: MediaControlButton] = [:]
@@ -36,6 +39,7 @@ import Symbols
         self.source = source; self.context = context
         super.init(frame: .zero); wantsLayer = true; layer?.cornerCurve = .continuous
         layer?.cornerRadius = MiniPlayerMetrics.cornerRadius
+        layer?.addSublayer(stackEdge)
         favicon.context = context; favicon.tab = source.tabID.flatMap { context.model.tab(id: $0) }
         addSubview(titleHit); titleHit.addSubview(favicon); titleHit.addSubview(marquee)
         titleHit.action = { [weak self] in self?.send(MediaIntent.backToTab) }
@@ -58,7 +62,7 @@ import Symbols
         makeButton("microphone", glyph: .mediaMicrophone, title: "Toggle Microphone") { [weak self] in self?.send(MediaIntent.toggleMicrophone) }
         makeButton("camera", glyph: .mediaCamera, title: "Toggle Camera") { [weak self] in self?.send(MediaIntent.toggleCamera) }
         makeButton("volumeLow", glyph: .mediaVolumeLow, title: "Mute") { [weak self] in self?.send(MediaIntent.toggleMute) }
-        makeButton("volumeHigh", glyph: .mediaVolumeHigh, title: "Set Tab Volume to 100 %") { [weak self] in self?.setVolume(1) }
+        makeButton("volumeHigh", glyph: .mediaVolumeHigh, title: "Set Tab Volume to 100%") { [weak self] in self?.setVolume(1) }
         slider.onValue = { [weak self] value in self?.setVolume(value) }; addSubview(slider)
         observation = ObservationLoop(read: { [weak self] in
             guard let self else { return }
@@ -74,7 +78,7 @@ import Symbols
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     isolated deinit { observation?.cancel() }
     public override var isFlipped: Bool { true }
-    public override func hitTest(_ point: NSPoint) -> NSView? { marquee.isExposed ? super.hitTest(point) : nil }
+    public override func hitTest(_ point: NSPoint) -> NSView? { !isRetiring && marquee.isExposed ? super.hitTest(point) : nil }
     private var tab: Tab? { source.tabID.flatMap { context.model.tab(id: $0) } }
     private var titleColor: NSColor {
         guard let space = context.focusedSpace else { return .labelColor }
@@ -131,15 +135,18 @@ import Symbols
         CATransaction.setDisableActions(!animatesMediaChanges)
         CATransaction.setAnimationDuration(Motion.hoverFade)
         layer?.backgroundColor = (isCardHovered ? SidebarRole.miniPlayerHoverFill : SidebarRole.miniPlayerFill).cgColor(contentAppearance)
-        layer?.borderWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0
+        layer?.borderWidth = SidebarDiagnostics.mediaIncreasesContrast ? 1 : 0
         layer?.borderColor = SidebarColors.separator.cgColor(contentAppearance)
         CATransaction.commit()
+        stackEdge.backgroundColor = SidebarColors.separator.cgColor(contentAppearance)
         needsLayout = true
     }
     public override func layout() {
         super.layout()
         let m = MiniPlayerMetrics.self, w = bounds.width, hovered = isCardHovered
         CATransaction.begin(); CATransaction.setDisableActions(true)
+        stackEdge.isHidden = !showsStackEdge
+        stackEdge.frame = CGRect(x: m.cornerRadius, y: 0, width: max(0, w - 2 * m.cornerRadius), height: m.stackEdge)
         titleHit.frame = CGRect(x: 0, y: 0, width: w, height: m.titleRowHeight)
         favicon.frame = m.favicon
         let closeWidth = hovered ? m.button : 0
@@ -250,9 +257,10 @@ import Symbols
     override func draw(_ dirtyRect: NSRect) {
         let track = CGRect(x: 0, y: MiniPlayerMetrics.drawerTrackY, width: bounds.width, height: MiniPlayerMetrics.drawerTrackHeight)
         SidebarColors.separator.nsColor.setFill(); NSBezierPath(roundedRect: track, xRadius: MiniPlayerMetrics.drawerTrackRadius, yRadius: MiniPlayerMetrics.drawerTrackRadius).fill()
-        var fill = track; fill.size.width *= min(1, max(0, value))
+        let knob = MiniPlayerMetrics.drawerKnob
+        let x = knob / 2 + CGFloat(min(1, max(0, value))) * max(0, bounds.width - knob)
+        var fill = track; fill.size.width = x
         SidebarRole.mediaControlGlyph.nsColor.setFill(); NSBezierPath(roundedRect: fill, xRadius: MiniPlayerMetrics.drawerTrackRadius, yRadius: MiniPlayerMetrics.drawerTrackRadius).fill()
-        let knob = MiniPlayerMetrics.drawerKnob, x = CGFloat(min(1, max(0, value))) * bounds.width
         let shadow = NSShadow(); shadow.shadowColor = SidebarColors.tabShadowSelected.nsColor; shadow.shadowBlurRadius = MiniPlayerMetrics.drawerShadowBlur; shadow.shadowOffset = MiniPlayerMetrics.drawerShadowOffset
         NSGraphicsContext.saveGraphicsState(); shadow.set(); SidebarRole.mediaDrawerKnob.nsColor.setFill()
         NSBezierPath(ovalIn: CGRect(x: x - knob / 2, y: bounds.midY - knob / 2, width: knob, height: knob)).fill(); NSGraphicsContext.restoreGraphicsState()
@@ -260,7 +268,7 @@ import Symbols
     private func change(_ event: NSEvent) {
         let x = convert(event.locationInWindow, from: nil).x
         let step = MiniPlayerMetrics.volumeStep
-        value = min(1, max(0, (Double(x / max(bounds.width, 1)) / step).rounded() * step)); onValue?(value)
+        value = min(1, max(0, (Double((x - MiniPlayerMetrics.drawerKnob / 2) / max(bounds.width - MiniPlayerMetrics.drawerKnob, 1)) / step).rounded() * step)); onValue?(value)
     }
     override func mouseDown(with event: NSEvent) { change(event) }
     override func mouseDragged(with event: NSEvent) { change(event) }
@@ -268,7 +276,7 @@ import Symbols
     override func accessibilityRole() -> NSAccessibility.Role? { .slider }
     override func isAccessibilityElement() -> Bool { true }
     override func accessibilityLabel() -> String? { "Tab Volume" }
-    override func accessibilityValue() -> Any? { "\(Int(value * 100)) %" }
+    override func accessibilityValue() -> Any? { "\(Int(value * 100))%" }
     override func accessibilityPerformIncrement() -> Bool { value = min(1, value + 0.1); onValue?(value); return true }
     override func accessibilityPerformDecrement() -> Bool { value = max(0, value - 0.1); onValue?(value); return true }
 }
