@@ -168,6 +168,7 @@ enum CompletionChecks {
         check(context.selection.isEmpty && state.selectedNodeBySpace[night.id] == model.profiles[0].favorites[0].id,
               "MS4 plain Favorite activation clears the row selection and selects the actual tab")
         runActions()
+        runRows()
     }
 }
 
@@ -185,6 +186,132 @@ private final class CompletionArchiveRecorder: ArchiveSink {
 }
 
 extension CompletionChecks {
+    static func runRows() {
+        let check = Checks.check, model = Synthetic.model(), undo = UndoManager()
+        undo.groupsByEvent = false; model.undoManager = undo
+        let state = model.windows[0], space = model.spaces[0]
+        let context = SidebarContext(model: model, windowID: state.id), delegate = RecordingDelegate()
+        var options = RenderScene.Options(); options.size = CGSize(width: 1000, height: 1100)
+        let scene = RenderScene(context: context, options: options, delegate: delegate), host = OffscreenRenderer.host(scene, scale: 1)
+        defer { host.contentView = nil; host.close() }
+        let sidebar = scene.sidebar, outline = sidebar.focusedOutline!
+        func pump() { OffscreenRenderer.settle(scene, runLoop: 0.001) }
+        let unread = model.newTab(in: space.id, url: Synthetic.url("unread"), title: "Background", unread: true)
+        pump()
+        let frame = sidebar.rowFrame(nodeID: unread.id)!
+        check(sidebar.unreadDotFrame(nodeID: unread.id) == CGRect(x: 199, y: frame.minY + 17, width: 6, height: 6), "UB1 unread dot is 6 pt at (W − 26, y + 20)")
+        let originalTheme = space.theme, originalAppearance = context.systemAppearance
+        for (name, appearance, themed) in [("themed light", ContentAppearance.light, true), ("unthemed light", .light, false), ("unthemed dark", .dark, false)] {
+            space.theme = themed ? originalTheme : SpaceTheme()
+            context.systemAppearance = appearance; pump()
+            let dot = sidebar.unreadDotFrame(nodeID: unread.id)!
+            let image = OffscreenRenderer().snapshot(scene, scale: 1)
+            let bytes = CFDataGetBytePtr(image.dataProvider!.data!)!
+            func luminance(_ p: CGPoint) -> Double {
+                let i = Int(p.y) * image.bytesPerRow + Int(p.x) * 4
+                let rgb = (0..<3).map { c -> Double in let x = Double(bytes[i+c])/255; return x <= 0.04045 ? x/12.92 : pow((x+0.055)/1.055,2.4) }
+                return rgb[0]*0.2126 + rgb[1]*0.7152 + rgb[2]*0.0722
+            }
+            let center = scene.convert(CGPoint(x: dot.midX, y: dot.midY), from: sidebar)
+            let ink = luminance(center), base = luminance(CGPoint(x: center.x-8,y: center.y))
+            let ratio = (max(ink,base)+0.05)/(min(ink,base)+0.05)
+            if !themed && appearance == .light {
+                let i = Int(center.y) * image.bytesPerRow + Int(center.x) * 4
+                check(bytes[i + 2] > bytes[i] + 40 && bytes[i + 2] > bytes[i + 1] + 40, "UB1 unthemed light dot keeps the passing blue Space accent in rendered ink")
+            }
+            check(ratio >= 3, "UB1 \(name) actual unread dot contrast \(String(format: "%.2f",ratio)):1 ≥ 3:1 (guess pending C5)")
+        }
+        space.theme = originalTheme; context.systemAppearance = originalAppearance; pump()
+        let snapshotRoot = FileManager.default.temporaryDirectory.appendingPathComponent("unread-relaunch-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: snapshotRoot) }
+        do {
+            let store = SnapshotStore(root: snapshotRoot)
+            try store.saveNow(model: model)
+            let restored = try store.load()!
+            let restoredContext = SidebarContext(model: restored, windowID: state.id)
+            let restoredDelegate = RecordingDelegate()
+            let restoredScene = RenderScene(context: restoredContext, options: options, delegate: restoredDelegate)
+            let restoredHost = OffscreenRenderer.host(restoredScene, scale: 1)
+            check(restored.tab(id: unread.id)?.isUnread == true && restoredScene.sidebar.unreadDotFrame(nodeID: unread.id) == sidebar.unreadDotFrame(nodeID: unread.id), "UB1 unread dot survives real SnapshotStore save/load and rebuilt sidebar")
+            restoredHost.contentView = nil; restoredHost.close()
+        } catch { check(false, "UB1 unread relaunch through SnapshotStore: \(error)") }
+        context.forcedHover = .row(unread.id); pump()
+        check(sidebar.unreadDotFrame(nodeID: unread.id) == nil && sidebar.tabAction(tabID: unread.id) != nil, "UB2 hover gives the dot slot to the close button")
+        context.forcedHover = nil
+        context.peekBadges = [unread.id: SidebarPeekBadge(url: Synthetic.url("preview"))]; pump()
+        check(sidebar.unreadDotFrame(nodeID: unread.id) == nil && sidebar.peekBadgeFrame(tabID: unread.id) != nil, "UB5 Peek badge wins over unread")
+        context.peekBadges = [:]; pump()
+        let layouts = SidebarDiagnostics.tabRowLayouts
+        let row = sidebar.displayedRows.firstIndex(of: unread.id.description)!
+        check(outline.rowView(atRow: row, makeIfNecessary: true)?.accessibilityPerformPress() == true, "UB3 real row activation selects the unread tab")
+        pump()
+        check(!unread.isUnread && sidebar.unreadDotFrame(nodeID: unread.id) == nil && SidebarDiagnostics.tabRowLayouts - layouts <= 1,
+              "UB3 selecting clears unread with at most its own row layout (\(SidebarDiagnostics.tabRowLayouts - layouts))")
+        let folder = model.createFolder(in: .spacePinned(space.id), title: "Unread folder")!
+        let child = model.newTab(in: space.id, url: Synthetic.url("nested-unread"), title: "Nested unread", unread: true)
+        model.moveNode(id: child.id, to: .folder(folder.id), at: nil); pump()
+        model.setExpanded(folderID: folder.id, expanded: false); pump()
+        check(sidebar.unreadDotFrame(nodeID: folder.id) != nil && sidebar.unreadDotFrame(nodeID: child.id) == nil, "UB4 collapsed folder summarizes an unread descendant")
+        model.setExpanded(folderID: folder.id, expanded: true); pump()
+        check(sidebar.unreadDotFrame(nodeID: folder.id) == nil && sidebar.unreadDotFrame(nodeID: child.id) != nil, "UB4 expanding moves unread back to its child")
+
+        let pinned = space.pinned[0].tab!
+        pinned.url = pinned.url.appendingPathComponent("later"); pump()
+        let pinnedFrame = sidebar.rowFrame(nodeID: pinned.id)!
+        let point = sidebar.convert(CGPoint(x: 26, y: pinnedFrame.minY + 20), to: nil)
+        let hover = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+                                       windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!
+        outline.enclosingScrollView!.superview!.mouseMoved(with: hover); pump()
+        let reset = sidebar.resetAction(tabID: pinned.id)
+        check(reset.map { sidebar.convert($0.bounds, from: $0) == CGRect(x: 16, y: pinnedFrame.minY + 10, width: 20, height: 20) } == true &&
+              TooltipController.shared.visibleOrPendingTooltip?.title == "Back to Pinned URL", "SP1 favicon hover shows reset plate and tooltip")
+        func glyphPixels() -> [UInt8] {
+            guard let reset = sidebar.resetAction(tabID: pinned.id) else { return [] }
+            let region = scene.convert(reset.bounds, from: reset).integral
+            let image = OffscreenRenderer().snapshot(scene, scale: 1), data = image.dataProvider!.data!, bytes = CFDataGetBytePtr(data)!
+            return (Int(region.minY)..<Int(region.maxY)).flatMap { y in
+                Array(UnsafeBufferPointer(start: bytes + y * image.bytesPerRow + Int(region.minX) * 4, count: Int(region.width) * 4))
+            }
+        }
+        let resetPixels = glyphPixels()
+        let option = NSEvent.keyEvent(with: .flagsChanged, location: point, modifierFlags: .option, timestamp: 0,
+                                      windowNumber: host.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 58)!
+        outline.flagsChanged(with: option); pump()
+        check(reset?.accessibilityLabel() == "Separate From Pinned Tab" && TooltipController.shared.visibleOrPendingTooltip?.title == "Separate From Pinned Tab" &&
+              glyphPixels() != resetPixels, "SP2 Option swaps the actual rendered glyph, label, and tooltip")
+        delegate.log = []; _ = reset?.accessibilityPerformPress()
+        check(delegate.log == [.separateFromPinned(tabID: pinned.id)] && pinned.url != pinned.pinnedURL,
+              "SP3 Option reset routes separate to the App without resetting the model early")
+        context.isOptionHeld = false; delegate.log = []; _ = reset?.accessibilityPerformPress(); pump()
+        check(delegate.log == [.resetToPinnedURL(tabID: pinned.id)] && pinned.url == pinned.pinnedURL, "SP3 normal reset routes through the real model")
+        check(sidebar.resetAction(tabID: pinned.id) == nil, "SP4 no reset plate when the pinned URL is current")
+
+        let tidy = model.newTab(in: space.id, url: URL(string: "https://mail.google.com/mail/u/0/#search")!, title: "Inbox (3) - reader@example.invalid - Gmail")
+        pump()
+        check(sidebar.drawnTitle(tabID: tidy.id) == "Inbox (3)", "TT1 the real Gmail row uses its tidy display title")
+        let titleLayouts = SidebarDiagnostics.tabRowLayouts
+        tidy.title = "Sent (4) - reader@example.invalid - Gmail"; pump()
+        check(sidebar.drawnTitle(tabID: tidy.id) == "Sent (4)" && SidebarDiagnostics.tabRowLayouts == titleLayouts,
+              "TT2 title change updates its row title without laying out any tab row")
+
+        let deep = model.createFolder(in: .folder(folder.id), title: "Never opened")!
+        let deepest = model.createFolder(in: .folder(deep.id), title: "Deepest")!
+        model.setExpanded(folderID: folder.id, expanded: false); model.setExpanded(folderID: deep.id, expanded: false); model.setExpanded(folderID: deepest.id, expanded: false); pump()
+        undo.removeAllActions()
+        let reloads = SidebarDiagnostics.fullReloads
+        let expanded = model.setAllFoldersExpanded(spaceID: space.id, expanded: true); pump()
+        check(expanded == 3 && [folder, deep, deepest].allSatisfy { outline.isItemExpanded($0) } && sidebar.displayedRows == Checks.expectedRows(context: context),
+              "EA1 Expand All loads and expands every depth, including previously hidden children")
+        undo.removeAllActions()
+        _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: false); pump()
+        check([folder, deep, deepest].allSatisfy { !$0.isExpanded } && sidebar.displayedRows == Checks.expectedRows(context: context), "EA2 Collapse All matches the model")
+        undo.undo(); pump()
+        check([folder, deep, deepest].allSatisfy { outline.isItemExpanded($0) } && !undo.canUndo, "EA2 one undo reopens all folders")
+        undo.removeAllActions()
+        check(model.setAllFoldersExpanded(spaceID: space.id, expanded: true) == 0 && !undo.canUndo && SidebarDiagnostics.fullReloads == reloads,
+              "EA3 same-value Expand All creates no undo or full reload")
+    }
+
     static func runActions() {
         let check = Checks.check
         let model = Synthetic.model(), undo = UndoManager()

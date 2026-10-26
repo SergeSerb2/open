@@ -104,6 +104,8 @@ public enum MenuColors {
 /// docs/re/interaction-states.md §3–§6). One place to change a role.
 /// Theme-driven roles (tab title, selected fill, tooltip) live on `SpaceThemeStyle`.
 public enum SidebarRole {
+    /// Guess pending C5: use the high-contrast Space accent (design review R1).
+    public static func unreadDot(style: SpaceThemeStyle, appearance: ContentAppearance) -> RGBA { style.contrastAccent(appearance) }
     /// Space title. Light: black 0.45 → `SidebarForegroundDarker` (fitted on F0001;
     /// 0.48 / `GrayA10` gave ΔE 1.8). Dark: white 0.55, fitted on the default dark Space (F0079).
     public static let spaceTitle = DesignColor(light: SidebarColors.foregroundDarker.light, dark: .white(0.55))

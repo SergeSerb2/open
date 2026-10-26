@@ -28,7 +28,7 @@ enum RenderCLI {
       sidebar-render render --snapshot DIR --out FILE.png [--size WxH] [--scale 1|2] [--space N]
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
-                            [--multi-select ROW,ROW…] [--option-held]
+                            [--multi-select ROW,ROW…] [--option-held] [--unread ROW,…] [--hover-favicon ROW]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
           --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
@@ -37,7 +37,7 @@ enum RenderCLI {
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--selection] [--bulk N] [--row-media mixed]
+      sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed]
       sidebar-render check
     """
 
@@ -142,6 +142,17 @@ enum RenderCLI {
                 return id
             }
             context.selection.select(ids, anchor: ids.first)
+        }
+        if let specs = value(args, "--unread") {
+            for spec in specs.split(separator: ",") {
+                guard let id = resolve(String(spec), context: context), let tab = model.tab(id: id) else { throw CLIError(description: "no unread tab \(spec)") }
+                tab.isUnread = true
+            }
+        }
+        if let spec = value(args, "--hover-favicon") {
+            guard let id = resolve(spec, context: context) else { throw CLIError(description: "no favicon row \(spec)") }
+            context.forcedFaviconHoverID = id
+            context.forcedHover = .row(id)
         }
         if let h = value(args, "--hover") {
             guard let t = hoverTarget(h, context: context) else { throw CLIError(description: "no hover target \(h)") }

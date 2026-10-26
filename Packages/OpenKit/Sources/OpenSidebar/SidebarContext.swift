@@ -15,6 +15,8 @@ public final class SidebarContext {
     /// Live Option state, also forced by the offscreen renderer. One window
     /// monitor updates this even while web content is first responder.
     public var isOptionHeld = false
+    /// Render-only hover of a navigated pinned row's favicon slot.
+    public var forcedFaviconHoverID: ItemID?
     /// Key/main state of the host window. Drives the theme underlay.
     public var isWindowActive: Bool = true
     /// macOS appearance. Only Spaces without a stored theme follow it.
