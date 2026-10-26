@@ -2045,6 +2045,7 @@ def window_chrome_checks(factory, results, tmp):
                                     "lights_hidden_while_hidden": lights_hidden, "pass_by_without_reveal": no_quick_reveal,
                                     "dwell_s": round(dwell, 3), "settled_s": settled and settled["elapsed"],
                                     "card": card, "lights_on_card": lights_card, "edge_walk": samples, "held": held,
+                                    "native_state_at_reveal": {k: shown[k] for k in ("appActive", "isKeyWindow", "firstResponder", "fullscreenTransition")},
                                     "exit_to_idle_s": exit_s, "slide_out_s": gone and gone["elapsed"]}
         results["card_edges_1x"] = card_edges(card_png, base_png, card, scale)
         # Open's light and dark appearance (the default Space follows it).
@@ -2057,6 +2058,7 @@ def window_chrome_checks(factory, results, tmp):
         app.call("appearance", name="system")
         results["card_edges_appearance"] = {"ok": all(v.get("ok") for v in rows.values()), "rows": rows}
     finally:
+        results["chrome_activation_events"] = app.call("activation-events")
         app.quit()
     themed_card_checks(factory, results, private)
 

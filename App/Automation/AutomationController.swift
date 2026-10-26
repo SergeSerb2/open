@@ -20,10 +20,25 @@
     unowned let app: AppDelegate
     private let blockCounter = BlockCounter()
     private var pointerRequestID = 0
+    private var applicationObservers: [NSObjectProtocol] = []
+    private var activationEvents: [[String: Any]] = []
 
     init(app: AppDelegate) {
       self.app = app
+      for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+        applicationObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+          let eventName = notification.name.rawValue
+          MainActor.assumeIsolated {
+            guard let self else { return }
+            self.activationEvents.append(["event": eventName,
+              "uptime": ProcessInfo.processInfo.systemUptime, "active": NSApp.isActive,
+              "keyWindow": NSApp.keyWindow?.windowNumber ?? 0])
+            if self.activationEvents.count > 256 { self.activationEvents.removeFirst() }
+          }
+        })
+      }
     }
+    isolated deinit { applicationObservers.forEach(NotificationCenter.default.removeObserver) }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -68,6 +83,7 @@
       case "menu-context":
         return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
           "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
+      case "activation-events": return activationEvents
       case "menu-state":
         NSApp.mainMenu?.update()
         return menuRows(NSApp.mainMenu)
@@ -280,6 +296,7 @@
         return true
       case "focus":
         let page = try content(a, w)
+        if let target = page.view.window { try await activateForInput(target) }
         page.focusPage()
         let deadline = ContinuousClock.now.advanced(by: .seconds(5))
         while ContinuousClock.now < deadline {
@@ -292,6 +309,7 @@
       case "mouse":
         let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
         guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
+        try await activateForInput(target)
         pointerRequestID += 1
         let motionTag = Self.syntheticPointerTag + pointerRequestID
         func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
