@@ -3,6 +3,7 @@
   import OpenEngine
   import OpenModel
   import OpenWeb
+  import OpenSidebar
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -110,13 +111,14 @@
           w.close(page: page)
           return true
         }
-        if a["tab"] != nil || a["index"] != nil { w.select(nodeID: try modelTab(a, w).id) }
-        w.closeTab(nil)
+        if a["tab"] != nil || a["index"] != nil {
+          let tab = try modelTab(a, w)
+          guard w.sidebarCloseForAutomation(tab.id, unload: false) else { throw Failure(message: "close refused") }
+        } else { w.closeTab(nil) }
         return true
       case "pin":
         let tab = try modelTab(a, w)
-        w.select(nodeID: tab.id)
-        w.togglePin(nil)
+        guard w.sidebarPinForAutomation(tab.id) else { throw Failure(message: "pin refused") }
         return describe(tab, in: w)
       case "split":
         w.addSplitView(nil)
@@ -318,6 +320,12 @@
         return await timing(w)
       case "startup":
         return app.startupEvidence
+      case "host-counts":
+        return ["created": app.windowControllers.reduce(0) { $0 + $1.contentCreationCount },
+                "retained": app.windowControllers.reduce(0) { $0 + $1.contents.count },
+                "engineContents": OEEngine.shared.allWebContents.count]
+      case "sidebar-unload":
+        return w.sidebarCloseForAutomation(try modelTab(a, w).id, unload: true)
       case "save":
         app.saveState()
         return app.snapshotStore.fileURL.path
@@ -571,16 +579,24 @@
 
     private func timing(_ w: BrowserWindowController) async -> [String: Any] {
       var out: [String: Any] = LaunchTiming.shared.report
+      out["clock"] = "mach_continuous_time; kernel ri_proc_start_abstime"
+      out["kernelProcessStart"] = LaunchTiming.shared.hasKernelProcessStart
       if let page = w.selectedContent {
-        let js =
-          "(() => { const p = performance.getEntriesByName('first-contentful-paint')[0]; return p ? performance.timeOrigin + p.startTime : null; })()"
-        if let fcpEpochMs = try? await page.evaluateJavaScript(js) as? Double {
-          let start = LaunchTiming.shared.processStart.timeIntervalSince1970 * 1000
-          out["firstContentfulPaint"] = (fcpEpochMs - start).rounded()
+        // Both page values use the renderer's monotonic Performance clock.
+        // Map that clock to process uptime at the CDP round-trip midpoint.
+        let before = LaunchTiming.shared.elapsedMilliseconds
+        let js = "(() => { const p = performance.getEntriesByName('first-contentful-paint')[0]; return p ? {now:performance.now(), paint:p.startTime} : null; })()"
+        if let values = try? await page.evaluateJavaScript(js) as? [String: Double],
+          let now = values["now"], let paint = values["paint"]
+        {
+          let after = LaunchTiming.shared.elapsedMilliseconds
+          out["firstContentfulPaint"] = ((before + after) / 2 + paint - now).rounded()
+          out["firstPaintClockUncertaintyMs"] = ((after - before) / 2 * 100).rounded() / 100
         }
       }
       return out
     }
+
   }
 
   /// Counts blocked requests. Touched from Chromium's network thread.

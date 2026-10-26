@@ -416,7 +416,9 @@ class OEDefaultClient : public CefClient,
   for (OEWebContent* webContent in self.allWebContents) {
     [webContent close];
   }
-  _defaultClient->CloseAll();
+  if (_defaultClient) {
+    _defaultClient->CloseAll();
+  }
   [self oe_quitIfDone];
   // Do not hang the user's quit if a renderer never answers.
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC),

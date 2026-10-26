@@ -58,36 +58,35 @@ struct LaunchOptions {
   }
 }
 
-/// Wall-clock marks for launch measurements (docs/engine-spike.md).
+/// Launch marks use one monotonic clock, including the kernel process start.
 @MainActor
 final class LaunchTiming {
   static let shared = LaunchTiming()
-
-  /// Process start, from the kernel.
-  let processStart: Date
-  private(set) var marks: [(String, Date)] = []
+  let processStartTicks: UInt64
+  let hasKernelProcessStart: Bool
+  private let millisecondsPerTick: Double
+  private(set) var marks: [(String, UInt64)] = []
 
   private init() {
-    var info = kinfo_proc()
-    var size = MemoryLayout<kinfo_proc>.stride
-    var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
-    sysctl(&mib, 4, &info, &size, nil, 0)
-    let tv = info.kp_proc.p_un.__p_starttime
-    processStart = Date(timeIntervalSince1970: Double(tv.tv_sec) + Double(tv.tv_usec) / 1_000_000)
+    var timebase = mach_timebase_info_data_t()
+    mach_timebase_info(&timebase)
+    millisecondsPerTick = Double(timebase.numer) / Double(timebase.denom) / 1_000_000
+    var info = rusage_info_v4()
+    let status = withUnsafeMutablePointer(to: &info) {
+      $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(getpid(), RUSAGE_INFO_V4, $0) }
+    }
+    // The kernel supplies mach_absolute_time ticks. Translate once to the
+    // continuous clock; marks then remain monotonic across sleep as well.
+    let absolute = mach_absolute_time(), continuous = mach_continuous_time()
+    hasKernelProcessStart = status == 0 && info.ri_proc_start_abstime > 0
+    processStartTicks = hasKernelProcessStart ? info.ri_proc_start_abstime + (continuous - absolute) : continuous
   }
 
+  var elapsedMilliseconds: Double { Double(mach_continuous_time() - processStartTicks) * millisecondsPerTick }
   func mark(_ name: String) {
-    if !marks.contains(where: { $0.0 == name }) {
-      marks.append((name, Date()))
-    }
+    if !marks.contains(where: { $0.0 == name }) { marks.append((name, mach_continuous_time())) }
   }
-
-  /// Milliseconds since process start for each mark.
   var report: [String: Double] {
-    var out: [String: Double] = [:]
-    for (name, date) in marks {
-      out[name] = (date.timeIntervalSince(processStart) * 1000).rounded()
-    }
-    return out
+    Dictionary(uniqueKeysWithValues: marks.map { ($0.0, (Double($0.1 - processStartTicks) * millisecondsPerTick).rounded()) })
   }
 }
