@@ -1892,10 +1892,12 @@ DIMMED_LOOK = {"light": ((0.0, 0.0, 0.0), 0.10, 0.06), "dark": ((243.0, 243.0, 2
 RING_COLORS = {"light": [(219, 59, 60), (212, 162, 1), (47, 181, 19)], "dark": [(254, 129, 121), (254, 206, 63), (112, 210, 73)]}
 
 
-def dimmed_look(png, scale, centers, mode):
+def dimmed_look(png, scale, centers, mode, ring=True):
     """Rest look at each button against the expected composite over the background sampled
     between buttons: the fill at the center (±5 levels) and, on dark content, the ring at
-    r 6.5 (±12 levels: an anti-aliased pixel; on light content the ring is only 0.06)."""
+    r 6.5: in an active window the colored ring (±12 levels: an anti-aliased pixel), in an
+    inactive one none (the pixel nearer the plain background than the colored ring). On light
+    content the ring is only 0.06, so it is not checked."""
     _, _, px = read_image(png)
     tok, fill_a, ring_a = DIMMED_LOOK[mode]
     rows, ok = [], True
@@ -1907,11 +1909,13 @@ def dimmed_look(png, scale, centers, mode):
         ring = px((cx - 6.5) * scale, cy * scale)
         ring_expected = [bg[k] * (1 - ring_a) + RING_COLORS[mode][index][k] * ring_a for k in range(3)]
         ring_err = max(abs(ring[k] - ring_expected[k]) for k in range(3))
-        good = fill_err <= 5 and (mode == "light" or ring_err <= 12)
+        plain_err = max(abs(ring[k] - bg[k]) for k in range(3))
+        ring_ok = mode == "light" or (ring_err <= 12 if ring else plain_err < ring_err)
+        good = fill_err <= 5 and ring_ok
         ok = ok and good
         rows.append({"center": [cx, cy], "core": [round(v) for v in core], "expected": [round(v) for v in expected],
                      "fill_error": round(fill_err, 1), "ring": list(ring), "ring_expected": [round(v) for v in ring_expected],
-                     "ring_error": round(ring_err, 1), "ok": good})
+                     "ring_error": round(ring_err, 1), "plain_error": round(plain_err, 1), "ring_expected_shown": ring, "ok": good})
     return ok, rows
 
 
@@ -1935,7 +1939,7 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         rest_ok, alpha, ax = buttons_ok(rest, True)
         png = os.path.join(private, "lights-%s-rest.png" % mode)
         app.call("snapshot", path=png)
-        look_ok, look = dimmed_look(png, scale, LIGHT_CENTERS, mode)
+        look_ok, look = dimmed_look(png, scale, LIGHT_CENTERS, mode, ring=rest["key"])
         app.call("mouse", action="hover", x=43, y=24)
         hover = state_when(app, lambda st: not st["trafficLightsDimmed"], timeout=2) or state()
         hover_ok, hover_alpha, _ = buttons_ok(hover, False)
@@ -1952,7 +1956,7 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         first = app.call("window-state", id=wid)
         npng = os.path.join(private, "lights-%s-notkey.png" % mode)
         app.call("snapshot", path=npng, window=first["number"])
-        notkey_ok, notkey = dimmed_look(npng, scale, LIGHT_CENTERS, mode)
+        notkey_ok, notkey = dimmed_look(npng, scale, LIGHT_CENTERS, mode, ring=first["key"])
         app.call("window-close")
         state_when(app, lambda st: st["id"] == wid)
         app.call("window-focus", id=wid, activate=True)
@@ -1964,8 +1968,8 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         app.call("mouse", action="move", x=150, y=400)
         cpng = os.path.join(private, "lights-%s-card.png" % mode)
         app.call("snapshot", path=cpng)
-        card_ok, card_look = dimmed_look(cpng, scale, [[x + 5, y + 5] for x, y in LIGHT_CENTERS], mode)
         card_state = state()
+        card_ok, card_look = dimmed_look(cpng, scale, [[x + 5, y + 5] for x, y in LIGHT_CENTERS], mode, ring=card_state["key"])
         app.call("mouse", action="move", x=700, y=400)
         wait_card(app, False)
         app.call("key", key="s", modifiers=["cmd"], route="app")

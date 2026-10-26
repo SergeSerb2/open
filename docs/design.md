@@ -38,7 +38,7 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | URL field and tile fill | `SidebarItemBackground` (`#0E0F10` 0.05 P3) | `#FAFBFF` 0.10 | ΔE ≤ 0.61 on 7 elements |
 | URL field under the pointer | `SidebarItemHoveredBackground` (`#0E0F10` 0.10 P3) | `#FAFBFF` 0.15 | F0033 vs F0032 (§16) |
 | Hover-reveal card stroke | `SidebarBorderColor` white 0.30 | same | F0129 `#696875` over `#272739` (§16) |
-| Window buttons at rest | `DimmedWindowControls` black 0.10; ring `#DB3B3C` / `#D4A201` / `#2FB513` at 0.06 | `DimmedWindowControls` `(0.953, 0.953, 0.918)` 0.33; ring `#FE8179` / `#FECE3F` / `#70D249` at 0.34 | F0001, F0129, F0131 (§17) |
+| Window buttons at rest | `DimmedWindowControls` black 0.10; ring (active window only) `#DB3B3C` / `#D4A201` / `#2FB513` at 0.06 | `DimmedWindowControls` `(0.953, 0.953, 0.918)` 0.33; ring (active only) `#FE8179` / `#FECE3F` / `#70D249` at 0.34 | F0001, F0129, F0131, session 2 03 (§17) |
 | Row hover, header hover, New Tab hover | `SidebarItemBackground` | same | F0013 ΔE 0.45, F0031 0.49, F0079 0.81 |
 | Button hover plate | black 0.07 `GrayA4` | `GrayA4` | F0024 ΔE 0.38, F0027 0.72 |
 | Selected row, selected tile, "New Tab" during Cmd+T | theme `light.background`, opaque | white 0.20 `TabCellBackgroundCurrent` | F0015 ΔE 1.05, F0016 1.15, F0063 2.00, F0066 2.03 |
@@ -59,7 +59,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 
 | Area | Value | Mark |
 |---|---|---|
-| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]` (AX), 12 pt circles centered at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden. At rest, in every window state, Arc's dimmed look: `DimmedWindowControls` over the background (0.10 light, 0.33 dark) with a faint 1 pt ring in each button's color; the pointer over the group shows the system buttons (colors, glyphs, the tiling menu). The system buttons stay for every behavior (§17) | measured (AX F0001, F0129, F0131; pixels F0001, F0129, F0131); ring fitted |
+| Traffic lights | 16 pt buttons `[12/35/58, 16, 16, 16]` (AX), 12 pt circles centered at x 20 / 43 / 66, y 24. On the hover-reveal card 5 pt further right and down; hidden while the sidebar is hidden. At rest, active or not, Arc's dimmed look: `DimmedWindowControls` over the background (0.10 light, 0.33 dark), with a faint 1 pt ring in each button's color only while the window is active; the pointer over the group shows the system buttons (colors, glyphs, the tiling menu); Back, Forward, and Reload hovers leave them grey. The system buttons stay for every behavior (§17) | measured (AX F0001, F0129, F0131, session 2 03; pixels F0001, F0129, F0131, session 2 03 frames 0003–0016); ring fitted |
 | Toolbar buttons | 32×32 at y 7; toggle x 77; back / forward / reload at x `W − 106 / W − 72 / W − 38` (pitch 34, reload 6 pt from the edge); hover plate = button frame, radius 6 | measured |
 | URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]`; hover darkens the fill, same frame | measured, text origin fitted |
 | Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (6 → 3 columns at width 228 and 500); no favorites: an 8 pt section | measured; rule for other counts guess; empty section fitted (§16) |
@@ -217,7 +217,7 @@ The host window owns a `ThemeBackgroundView` behind the sidebar and the web pane
 | Peek open | source row: badge with the Peek favicon (also while another row is selected); lighter fill while the Peek shows; URL field and toolbar follow the Peek page; toolbar row and bottom bar dimmed, URL field, Favorites, and list not dimmed | F0090, F0101 |
 | Space header hover | fill, chevron (collapses Pinned), "…" menu | A0413 |
 | URL field | placeholder with magnifier; with a page, the host; copy and Site Control buttons while the pointer is over the sidebar (guess); the fill darkens under the pointer | F0015, F0016, F0033 |
-| Inactive window | toolbar and bottom glyphs take the disabled tones; the theme underlay lightens | inactive capture |
+| Inactive window | toolbar and bottom glyphs take the disabled tones; the theme underlay lightens (light themes); the window buttons lose their colored rings | inactive capture; session 2 03 frame 0016 (the default dark theme darkens instead: not built, `docs/followups.md`) |
 | Switcher | current Space in color, others gray at 0.55 | F0001 |
 | Hidden sidebar / hover-reveal | host hides the sidebar and the traffic lights; `presentation = .floatingCard` draws the card (rounded clip, stroke, its own prepared background); the host adds `RevealCardShadowView` below it, slides both, and moves the lights onto the card | F0128–F0131 |
 
@@ -545,7 +545,7 @@ The two rewritten checks failed in about one run of two before (docs/followups.m
 
 ## 17. Window buttons: Arc's dimmed look (2026-10-26)
 
-The user decided that the window buttons use Arc's grey look in every window state, with the standard colors and glyphs only while the pointer is over the group.
+The user decided that the window buttons use Arc's grey look in every window state, with the standard colors and glyphs only while the pointer is over the group. Capture session 2 then showed it as Arc's own behavior in the active window (17.1).
 
 ### 17.1 How Arc does it (metadata only)
 
@@ -558,6 +558,7 @@ The user decided that the window buttons use Arc's grey look in every window sta
 | System button API | strings: `standardWindowButton:`, `standardWindowButton:forStyleMask:`, `performClose:`, `performMiniaturize:`, `performZoom:`, `zoom:`, `toggleFullScreen:` | Arc creates and drives system buttons |
 | Arc's custom control | `otool -ov`: `_TtC3Arc19WindowControlButton : NSControl` with `mouseEntered:`, `mouseExited:`, `mouseDown:`, `rightMouseDown:`, `mouseUp:`, `mouseDragged:`, `resetCursorRects`, `updateLayer`; fields `iconImageView`, `trackingArea`, `isHovered`, `isPressed`, `onClick`, `onRightClick`, `onDragBegin`, `cursor` | No AX override, so it cannot be the F0001 buttons. guess: other window controls (`LeftAccessoryType.windowControls`, `TopBarConfiguration.shouldShowWindowControls`). |
 | macOS's own inactive look differs | Open's window when not key (macOS 27) | `#E6A78E` over `#E49678` (lighter, light content); white ≈ 0.18 (dark) |
+| Active window, session 2 (fact) | `sessions/20261026-100848-03-active-window/` frames 0003–0019, ICC to sRGB | Active and key, pointer on the page: grey, fill alpha 0.326–0.331, colored rings. Pointer over the group: system colors and glyphs. Back / Forward / Reload hovers: grey. Inactive (Finder frontmost): same fill alpha over a darker underlay, no ring. Session 1's values equal the active ones, so its frames were active. |
 
 `rea inspect-native-dispatch-metadata` refused the 80 MB binary (its 64 MiB input budget), so the method lists come from `otool -ov`. No Ghidra analysis was run. guess: Arc dims system buttons with `DimmedWindowControls`; how it hides their color is not visible in metadata. The look while Arc is key is not captured.
 
@@ -575,6 +576,7 @@ The user decided that the window buttons use Arc's grey look in every window sta
 - At rest the system buttons have alpha 0.001: they stay in place for clicks and AX. Not 0: AppKit ignores a window button at alpha 0, so `performClose:`, `performZoom:`, and an AX press stop working (tested; the window suite's window-close checks failed that way); 0.001 draws nothing visible. Its tracking area (`.activeAlways`, the group's rect) swaps the alphas over 0.08 s when the pointer enters or leaves, also while Open is inactive.
 - AppKit can reset the buttons' alpha when it lays the title bar out; the placement pass after each layout puts it back. In full screen the system buttons show as they are.
 - Light or dark follows the Space's content appearance, as for the sidebar.
+- The colored rings show only while the window is key (`showsRing`), as in session 2: inactive Arc keeps the fill and drops the rings.
 
 ### 17.3 Comparison with Arc (§7 method)
 
@@ -591,6 +593,17 @@ Open's live window at 2216 × 1394 with the capture-time snapshot, sidebar 228 (
 | F0129 (dark, card) | close | `#686973` | `#6A6973` | 0.98 | `#5F404B` | `#63414C` | 1.09 | 3.8 |
 | F0129 | minimize | `#696A74` | `#6A6973` | 0.65 | `#5F543D` | `#635441` | 2.75 | 4.1 |
 | F0129 | zoom | `#6A6A74` | `#6A6973` | 0.66 | `#3B5540` | `#3F5642` | 1.34 | 4.4 |
+
+Against session 2 (03 frames, 1728 × 1084, default dark theme), offscreen renders of the same views at that size:
+
+| State | Button | Arc fill on bg | Open fill on bg | Fill alpha Arc / Open | Arc ring | Open ring | Ring ΔE00 |
+|---|---|---|---|---|---|---|---|
+| active (0003) | close | `#686973` on `#252538` | `#696973` on `#262538` | 0.329 / 0.330 | `#5F3F4A` | `#61404C` | 0.66 |
+| active (0003) | minimize | `#686973` on `#242538` | `#6A6973` on `#252538` | 0.329 / 0.331 | `#5E533C` | `#61543C` | 1.00 |
+| active (0003) | zoom | `#686973` on `#242538` | `#6A6973` on `#262538` | 0.330 / 0.330 | `#39543E` | `#3C553F` | 0.87 |
+| inactive (0016) | all three | `#565761` on `#0A0B1D` | `#696973` on `#262538` | 0.329 / 0.330 | none (`#202132`) | none (`#2A293C`) | — |
+
+Inactive, the fill alpha matches and both have no ring; the colors differ because Open's default dark theme does not darken when inactive (followup). The hover look is macOS's own: Arc's frame 0007 shows the system's hover state (body `#F04E43` / `#FCB900` / `#18BF00` with glyphs); the automation's synthetic pointer cannot put Open's same system buttons into that state (Open's synthetic-hover bodies `#E26456` / `#F3BE0B` / `#5ABC10` are the plain active buttons).
 
 ![Window buttons](design/window-buttons-dimmed.png)
 

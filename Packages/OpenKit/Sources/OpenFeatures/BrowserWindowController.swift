@@ -328,6 +328,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         dimmedLights.centers = buttons.map { CGPoint(x: $0.frame.midX - frame.minX, y: $0.frame.midY - frame.minY) }
         dimmedLights.groupRect = group.offsetBy(dx: -frame.minX, dy: -frame.minY)
         dimmedLights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
+        dimmedLights.showsRing = window.isKeyWindow
         let hidden = buttons[0].isHidden
         if dimmedLights.isHidden != hidden { dimmedLights.isHidden = hidden }
         if hidden, trafficLightsHovered { trafficLightsHovered = false }

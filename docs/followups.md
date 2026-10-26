@@ -37,3 +37,5 @@ Small items found during review and verification. Each line: area — issue — 
 - Media D8 (2026-10-26): decode the inline speaker-tooltip string and the
   `SpeakerIcon` timing values from the shared read-only RE snapshots. Cite
   the symbol/string evidence and confirm the tooltip text/case with S9.
+
+- Theme — Arc darkens the default dark theme when the window is inactive (capture session 2, 03 frames 0003 vs 0016: sidebar `#272538` → `#0B0B1C`, margins `#352337` → `#19091D`, about 26–28 levels on every channel; `docs/re/interaction-states.md` §13). Open's `.corners` default theme ignores the active state. Build the inactive variant in `ThemeField` / `SpaceThemeStyle.defaultTheme` and compare with frame 0016; the light default theme's inactive look is not captured. — window-buttons PR, 2026-10-26

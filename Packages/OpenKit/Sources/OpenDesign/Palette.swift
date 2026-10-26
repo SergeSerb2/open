@@ -62,9 +62,10 @@ public enum WindowControlColors {
     /// would need 0.295 on blue against 0.31 on red and green).
     public static let dimmed = DesignColor(light: .black(1), dark: RGBA(0.953, 0.953, 0.918))
     public static let fillOpacity = (light: 0.10, dark: 0.33)
-    /// A 1 pt ring just outside the 12 pt circle (r 6–7) in each button's color: F0001,
-    /// F0129, and F0131 show red, yellow, and green edges. Fitted alpha 0.06 (light) and 0.34
-    /// (dark; RMS 3.5–5.6 levels with the ring against 11.7–16.5 without it).
+    /// A 1 pt ring just outside the 12 pt circle (r 6–7) in each button's color, only while
+    /// the window is active: F0001, F0129, F0131, and capture session 2 (03, frames 0003–0005)
+    /// show red, yellow, and green edges; inactive Arc (frame 0016) shows none. Fitted alpha
+    /// 0.06 (light) and 0.34 (dark; RMS 3.5–5.6 levels with the ring against 11.7–16.5 without it).
     public static let ringOpacity = (light: 0.06, dark: 0.34)
     /// Ring colors, fitted by least squares at those alphas: dark from F0131 and F0129 (the
     /// two frames agree within 2 levels), light from F0001 (a faint ring, so less certain).

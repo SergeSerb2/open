@@ -52,6 +52,7 @@ final class RenderScene: NSView {
         let w = sidebar.context.sidebarWidth
         let context = sidebar.context
         lights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
+        lights.showsRing = context.isWindowActive
         background.frame = bounds
         panelHost.frame = bounds
         let hidden = options.sidebarHidden
@@ -90,7 +91,10 @@ final class TrafficLightsView: NSView {
         // The dimmed view is not flipped: measure its centers from the bottom.
         dimmed.centers = ChromeMetrics.trafficLightCenters.map { CGPoint(x: $0.x, y: bounds.height - $0.y) }
         dimmed.tone = tone
+        dimmed.showsRing = showsRing
     }
+    /// Rings only in an active window (renders with `--inactive` draw none).
+    var showsRing = true { didSet { needsLayout = true } }
 }
 
 /// Delegate for renders and checks: applies model intents, records the rest.

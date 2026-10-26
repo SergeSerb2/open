@@ -1,14 +1,18 @@
 import AppKit
 
 /// Arc's window buttons at rest: three muted circles that let the window background
-/// through (`WindowControlColors`), each with a faint ring in its button's color. It only
-/// draws; the system buttons above it do everything else. Clicks pass through.
+/// through (`WindowControlColors`), each with a faint ring in its button's color while the
+/// window is active. It only draws; the system buttons above it do everything else.
+/// Clicks pass through.
 @MainActor
 public final class DimmedTrafficLightsView: NSView {
     /// Button centers in this view's coordinates.
     public var centers: [CGPoint] = [] { didSet { if centers != oldValue { rebuild() } } }
     /// Light or dark content (the Space's text appearance, as for the sidebar).
     public var tone: ContentAppearance = .light { didSet { if tone != oldValue { rebuild() } } }
+    /// The colored rings show only while the window is active: inactive Arc draws the same
+    /// fill without them (capture session 2, 03 step 4).
+    public var showsRing = true { didSet { if showsRing != oldValue { circles.forEach { $0.ring.isHidden = !showsRing } } } }
     /// Called when the pointer enters or leaves the group (`groupRect`), also while the
     /// app is inactive.
     public var onHoverChange: ((Bool) -> Void)?
@@ -69,6 +73,7 @@ public final class DimmedTrafficLightsView: NSView {
             ring.path = annulus
             ring.fillRule = .evenOdd
             ring.fillColor = colors[index % colors.count].withAlpha(ringAlpha).cgColor
+            ring.isHidden = !showsRing
             layer.addSublayer(f); layer.addSublayer(ring)
             circles.append((f, ring))
         }
