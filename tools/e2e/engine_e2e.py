@@ -1964,6 +1964,24 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         else:
             app.call("snapshot", path=path, window=window)
         return path
+    def drawn_settled():
+        """Waits until the buttons are placed and one display cycle has drawn them (see
+        `click_button`), before a snapshot of the hover look."""
+        placed = state_when(app, lambda st: light_centers(st)[0], timeout=2)
+        time.sleep(0.15)
+        return bool(placed)
+    def click_button(x, y, modifiers=None):
+        """Hover, then click once the buttons are where the next frame draws them. A synthetic
+        enter on the title bar starts AppKit's own button layout, which can hold the buttons at
+        its default spots until a later layout pass; real input only arrives after display
+        cycles, which place them (the drawn centers stay at x 20 / 43 / 66, y 24)."""
+        app.call("mouse", action="hover", x=x, y=y)
+        placed = state_when(app, lambda st: light_centers(st)[0], timeout=2)
+        if modifiers:
+            app.call("mouse", action="click", x=x, y=y, modifiers=modifiers)
+        else:
+            app.call("mouse", action="click", x=x, y=y)
+        return bool(placed)
     rows = {}
     for mode in ("light", "dark"):
         app.call("appearance", name=mode)
@@ -1980,6 +1998,7 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         app.call("mouse", action="hover", x=43, y=24)
         hover = state_when(app, lambda st: not st["trafficLightsDimmed"], timeout=2) or state()
         hover_ok, hover_alpha, _ = buttons_ok(hover, False)
+        drawn_settled()
         hpng = shot("%s-hover" % mode)
         hue_ok, hue = colored_look(hpng, scale, LIGHT_CENTERS)
         app.call("mouse", action="hover", x=700, y=400)
@@ -2043,11 +2062,9 @@ def traffic_light_look_checks(app, results, private, scale, wid):
     # Actions on the real buttons: Option-click zoom zooms and restores.
     ensure_key(app, wid)
     before = state()
-    app.call("mouse", action="hover", x=66, y=24)
-    app.call("mouse", action="click", x=66, y=24, modifiers=["option"])
+    click_button(66, 24, ["option"])
     zoomed = state_when(app, lambda st: st["zoomed"] and not st["fullscreen"], timeout=4)
-    app.call("mouse", action="hover", x=66, y=24)
-    app.call("mouse", action="click", x=66, y=24, modifiers=["option"])
+    click_button(66, 24, ["option"])
     restored = state_when(app, lambda st: not st["zoomed"] and st["frame"] == before["frame"], timeout=4)
     app.call("mouse", action="hover", x=700, y=400)
     results["traffic_light_actions"] = {"ok": bool(zoomed) and bool(restored),
@@ -2061,30 +2078,35 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         return {"ok": st["trafficLightsDimmed"] and not st["trafficLightsHovered"] and ok, "dimmed": st["trafficLightsDimmed"],
                 "hovered": st["trafficLightsHovered"], "key": st["key"], "look": look}
     stale = {}
+    def brief(st):
+        return {k: st.get(k) for k in ("trafficLightsDimmed", "trafficLightsHovered", "key", "appActive", "fullscreen", "zoomed",
+                                        "miniaturized", "frame", "automationPointer", "trafficLightFrames")} | {"alpha": [b["alpha"] for b in st["trafficLightButtons"]]}
     app.call("appearance", name="dark")  # dark content: the rings are checked too
     # (1) A click on the green button enters full screen; the pointer moves away there; the
     # command exits full screen.
     ensure_key(app, wid)
     app.call("mouse", action="hover", x=66, y=24)
-    app.call("mouse", action="click", x=66, y=24)
+    pre_click = brief(state())
+    click_button(66, 24)
+    post_click = brief(state())
     full = state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
     full_alpha = full and [b["alpha"] for b in full["trafficLightButtons"]]
     app.call("mouse", action="move", x=700, y=400)
     app.call("window-fullscreen")
     back = state_when(app, lambda st: not st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
-    stale["full_screen_exit"] = dict(at_rest("stale-fullscreen"), entered=bool(full), full_screen_alpha=full_alpha,
+    stale["full_screen_exit"] = dict(at_rest("stale-fullscreen"), entered=bool(full), full_screen_alpha=full_alpha, before_click=pre_click, after_click=post_click,
                                      full_screen_dimmed=bool(full) and full["trafficLightsDimmed"], exited=bool(back))
     stale["full_screen_exit"]["ok"] = (stale["full_screen_exit"]["ok"] and bool(full) and full_alpha == [1, 1, 1]
                                        and not full["trafficLightsDimmed"] and bool(back))
     # (1b) The same, with the pointer left on the green button: the window comes back under
     # it (a resting pointer), so the buttons show in color without any pointer event.
     ensure_key(app, wid)
-    app.call("mouse", action="hover", x=66, y=24)
-    app.call("mouse", action="click", x=66, y=24)
+    click_button(66, 24)
     full_over = state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
     app.call("window-fullscreen")
     back_over = state_when(app, lambda st: not st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
     over = state_when(app, lambda st: st["trafficLightsHovered"] and not st["trafficLightsDimmed"], timeout=2) or state()
+    drawn_settled()
     over_hue_ok, over_hue = colored_look(shot("stale-fullscreen-over"), scale, LIGHT_CENTERS)
     app.call("mouse", action="hover", x=700, y=400)
     over_left = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2)
@@ -2095,8 +2117,7 @@ def traffic_light_look_checks(app, results, private, scale, wid):
                                               "dimmed_after_leaving": bool(over_left)}
     # (2) A click on the yellow button minimizes; the pointer moves away; the Dock restores.
     ensure_key(app, wid)
-    app.call("mouse", action="hover", x=43, y=24)
-    app.call("mouse", action="click", x=43, y=24)
+    click_button(43, 24)
     mini = state_when(app, lambda st: st["miniaturized"], timeout=5, step=0.1)
     app.call("mouse", action="move", x=700, y=400)
     app.call("window-deminiaturize")
@@ -2118,6 +2139,7 @@ def traffic_light_look_checks(app, results, private, scale, wid):
     ensure_key(app, wid)
     app.call("mouse", action="hover", x=43, y=24)
     again = state_when(app, lambda st: st["trafficLightsHovered"] and not st["trafficLightsDimmed"], timeout=2) or state()
+    drawn_settled()
     hue_ok, hue = colored_look(shot("stale-hide-rehover"), scale, LIGHT_CENTERS)
     app.call("mouse", action="hover", x=700, y=400)
     left = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2)

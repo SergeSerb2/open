@@ -254,6 +254,9 @@
           // Known at once (the move event is queued), for state that reads where the pointer
           // is rather than waiting for an event: the window buttons' hover.
           BrowserWindowController.automationPointer = (number, location)
+          // A move delivers no enter or exit, so the owners `hover` entered before may no longer
+          // hold the pointer; the next `hover` enters the owners under its point again.
+          hoveredOwners = [:]
         } else if action == "click" {
           // A click with modifiers (for example Option on the zoom button). Controls that
           // track the mouse wait for the mouse-up on the event queue, so it goes there first.
