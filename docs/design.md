@@ -470,7 +470,7 @@ The user tested the real window on `main` (app-shell #45 and #52) and reported t
 |---|---|
 | Traffic lights | §2.2 gave the 16 pt button frames (`[12/35/58, 16]`). The window placed the button *centers* there. AppKit then laid the title bar out again and put the buttons back at its own spots, (16, 16), (39, 16), (62, 16). Arc's circles are centered at (20, 24), (43, 24), (66, 24). |
 | Space title and URL field | With no favorites, the favorites section was 0 pt, so the Space header band began at y 82, where the URL field ends. Its hover fill touched the field. The offscreen compare passes because F0001 has six favorites. The real window has no title bar or safe-area offset: the URL field measures `[8, 46, 212, 36]` there, as in the renders. Arc also darkens the URL field on hover (F0033); Open did not. |
-| Hover reveal | The trigger was x 0…8 and the card starts at x 5, so a pointer at x < 5 sat outside the card: it hid after 0.25 s and the edge showed it again 0.35 s later, a loop. Any pointer event outside the zone cancelled a pending reveal; AppKit's mouse-moved event at the real pointer, sent after the sidebar hides, did that, which made the window suite's first reveal after a hide flaky. The card appeared without motion. Each reveal built a new theme background, which renders its field on the next display tick, so the first frame was empty. |
+| Hover reveal | The trigger was x 0…8 and the card starts at x 5, so a pointer at x < 5 sat outside the card: it hid after 0.25 s and the edge showed it again 0.35 s later, a loop. Any pointer event outside the zone cancelled a pending reveal. guess (not traced): a mouse-moved event at the real pointer, sent after the sidebar hides, did that, which made the window suite's first reveal after a hide flaky. The card appeared without motion. Each reveal built a new theme background, which renders its field on the next display tick, so the first frame was empty. |
 | Card edges | No shadow: AppKit owns the shadow of a view's backing layer, and the card layer clips. The system traffic lights stayed at their window position, on the card's corner and stroke. The corner was continuous radius 10; Arc's is circular radius 12 (§16.3). |
 
 ### 16.2 Changes
@@ -523,3 +523,20 @@ The F0001 static comparison (§8, 31 elements) is unchanged: it has six favorite
 | Space header without favorites | ours 8 pt below the URL field; A0361 1–3 pt | Fitted to Arc's 8 pt rhythm. Arc's real zero-favorites state is its favorites empty-state card (not captured); A0361 is the window-only sidebar, a different header. |
 | Card slide timing | — | Not captured between A0439 and A0440; the spring is `Motion.sidebarToggle`. |
 | Reveal zone unit and exit delay | — | Guesses: the unit (10) comes from a view-store value; the exit delay reuses the 0.15 s debounce. |
+
+### 16.5 Verification
+
+The real app (`OPEN_AUTOMATION=1 tools/build.sh Release`), driven only through the automation channel. New rows in the `window` suite (`tools/e2e/engine_e2e.py`):
+
+| Row | What it checks |
+|---|---|
+| `native_window` | launch traffic-light centers (20, 24), (43, 24), (66, 24) within 0.5 pt (was 12/35/58, 16) |
+| `traffic_lights` | frames at launch, after a resize, in a second (key) window and the first (not key), after full-screen exit; the drawn circle centers in the snapshot within 0.75 px |
+| `space_header_url_field` | no favorites: URL field `[8, 46, 212, 36]`, favorites section 8 pt, header band y 90, title baseline y 113, gap 8 pt; the field and the header keep their frames when hovered; both fills change under the pointer |
+| `reveal_timing` | lights hidden while hidden; a pass by the edge shorter than the dwell does not reveal; the dwell (0.13–0.35 s); the card settles; lights on the card at +5/+5; an edge walk (x 0…5 and into the card, 15 moves) and a 0.8 s rest never hide it; leaving hides it after the exit delay |
+| `card_edges_1x` | snapshot pixels against the same view without the card: corner pixels outside the card, anti-aliased, monotonic edges following a circular radius-12 corner (≤ 0.6 px along the normal), four corners alike, the stroke on all four sides, the shadow on all sides (0.88–0.96 at 1 pt over the page, gone by 9 pt) |
+| `card_edges_appearance` | the same in Open's light and dark appearance (light: the stroke is too faint to locate the corner, so stroke, shadow, and edges only) |
+| `card_edges_themed` | the same on the synthetic themed Spaces in the window, and in 1x and 2x offscreen renders of the same views (this display is 1x); a 2x row is SKIP when the harness renderer gives no clean render |
+| `hide_reveal`, `fullscreen_hover_reveal` | rewritten: condition waits on the card (settled, or gone) instead of fixed sleeps, each sub-condition and its time recorded |
+
+The two rewritten checks failed in about one run of two before (docs/followups.md, PR #53), always on the first reveal after a hide. The reveal itself was not slow. guess (not traced): a pointer event at the real pointer cancelled the pending reveal. Both possible causes are gone: synthetic pointer events carry a tag and the reveal follows only tagged events once a check moves the pointer, and the waits are conditions.
