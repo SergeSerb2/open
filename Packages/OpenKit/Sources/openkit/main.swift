@@ -18,7 +18,7 @@ do {
     case "bench":
         await runBench()
     case "commands-demo":
-        try await MainActor.run { try runCommandsDemo(args: rest) }
+        try await runCommandsDemo(args: rest)
     default:
         print("unknown command: \(command)")
         exit(2)

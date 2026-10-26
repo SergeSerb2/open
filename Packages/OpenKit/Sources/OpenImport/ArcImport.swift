@@ -446,16 +446,10 @@ public struct ArcImporter {
                     let destination: RoutingDestination
                     switch dest {
                     case .littleArc: destination = .littleArc
-                    case .mostRecentSpace: destination = .littleArc // rule to most-recent space: keep as littleArc? No: map below.
+                    case .mostRecentSpace: destination = .mostRecentSpace
                     case .space(let sid): destination = .space(sid)
                     }
-                    // Rules whose destination is mostRecent have no fixed Space; store as littleArc is wrong.
-                    // Instead skip fixed mapping: represent mostRecent rule destination as the first Space.
-                    let finalDestination: RoutingDestination
-                    if case .mostRecentSpace = dest {
-                        if let first = spaces.first { finalDestination = .space(first.id) } else { continue }
-                    } else { finalDestination = destination }
-                    rules.append(RoutingRule(match: match, destination: finalDestination))
+                    rules.append(RoutingRule(match: match, destination: destination))
                     importedRule = true
                 }
                 if !importedRule { report.skippedRoutingRules += 1 }
