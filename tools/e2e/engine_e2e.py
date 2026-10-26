@@ -19,6 +19,7 @@ Extensions are unpacked CRX folders (tools/crx-unpack.py) in
 import argparse
 import atexit
 import base64
+import ctypes
 import json
 import math
 import glob
@@ -39,6 +40,7 @@ from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
+_ACTIVE_FOCUS_TRACKER = None
 
 EXT = {
     "ublock": "ddkjiahejlhfcafbddmgiahcphecmpfh",
@@ -49,33 +51,136 @@ EXT = {
 CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 
+class FocusInterruption(RuntimeError):
+    def __init__(self, message, evidence):
+        super().__init__(message)
+        self.evidence = evidence
+
+
+class FocusTracker:
+    """Native input and every timed polling/capture interval keep separate trace bounds."""
+    def __init__(self):
+        self.apps = []
+        self.checkpoints = {}
+        self.timing_checkpoints = {}
+        self.observation_checkpoints = {}
+
+    def loss(self):
+        interruptions = []
+        for app in self.apps:
+            checkpoint = self.checkpoints.get(app.pid, 0)
+            steps = app.native_steps[checkpoint:] + [t["start"] for t in app.timing_steps[self.timing_checkpoints.get(app.pid, 0):]]
+            if not steps:
+                continue
+            events = app.activation_trace if app.closed else app.call("activation-events")
+            # Untimed pointer/model work may run in the background. Native
+            # input and timed intervals both retain their own trace bounds.
+            for event in events:
+                resigned = event["event"] == "NSApplicationDidResignActiveNotification"
+                outside = event["event"] == "frontmostChanged" and event.get("frontmostPID") not in (None, 0, app.pid)
+                if event["uptime"] >= min(steps) and (resigned or outside):
+                    interruptions.append(dict(event, openPID=app.pid))
+        return interruptions
+
+    def checkpoint(self, native_only=False):
+        self.checkpoints = {app.pid: len(app.native_steps) for app in self.apps}
+        if not native_only:
+            self.timing_checkpoints = {app.pid: len(app.timing_steps) for app in self.apps}
+            self.observation_checkpoints = {app.pid: len(app.observation_steps) for app in self.apps}
+
+    def begin_timed_poll(self):
+        for app in self.apps:
+            if not app.closed:
+                app.begin_timing("poll interval")
+
+
+class CheckedResults(dict):
+    def __init__(self, tracker):
+        super().__init__()
+        self.tracker = tracker
+
+    def __setitem__(self, key, value):
+        if isinstance(value, dict) and "ok" in value:
+            interruptions = self.tracker.loss()
+            if interruptions:
+                # Retain even a successful assertion as INTERRUPTED. It cannot
+                # count as a pass in this attempt. Retry from a fresh fixture,
+                # since a dispatched key may already have mutated its state.
+                super().__setitem__(key, {"status": "INTERRUPTED", "assertion": value, "focus": interruptions})
+                raise FocusInterruption("foreground lost during " + key, interruptions)
+            self.tracker.checkpoint()
+        super().__setitem__(key, value)
+
+
 class Open:
     def __init__(self, config, style, user_data, extra_args, log_path, urls=("about:blank",), extra_env=None):
+        if os.path.exists(os.path.join(ROOT, ".re", "hold-on-screen")):
+            raise RuntimeError("On-screen Open runs are held by the lead (.re/hold-on-screen)")
         self.user_data = user_data
+        self.config, self.style = config, style
         self.sock = os.path.join(user_data, "automation.sock")
         app = os.path.join(ROOT, "build", config, "Open.app", "Contents", "MacOS", "Open")
+        self.executable = app
+        self.bundle = os.path.dirname(os.path.dirname(os.path.dirname(app)))
+        activator_source = os.path.join(ROOT, "tools", "e2e", "activate-own-app.swift")
+        self.activator = os.path.join(ROOT, ".re", "e2e-tools", "activate-own-app")
+        if not os.path.exists(self.activator) or os.path.getmtime(self.activator) < os.path.getmtime(activator_source):
+            os.makedirs(os.path.dirname(self.activator), exist_ok=True)
+            subprocess.run(["nice", "-n", "10", "xcrun", "swiftc", "-O", "-swift-version", "6", "-parse-as-library",
+                            activator_source, "-o", self.activator], check=True)
+        self.pid = None
+        self.launch_waiter_ended_before_automation = False
+        self.closed = False
+        self.native_steps = []
+        self.timing_steps = []
+        self.observation_steps = []
+        self.activation_trace = []
+        self.focus_tracker = None
         env = dict(os.environ, OPEN_USER_DATA=user_data)
         env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
-        self.proc = subprocess.Popen(args, env=env, stdout=self.log, stderr=subprocess.STDOUT)
+        # A raw executable launch can have a visible window but no foreground
+        # activation grant. Launch the actual bundle through LaunchServices,
+        # just as a user does. -W tracks this new instance through app exit.
+        self.launch_log_path = log_path + ".launch-%d.log" % time.time_ns()
+        # The first-frame timeout fixture also uses open without -W. Its
+        # successful early launcher exit must not be mistaken for app exit.
+        wait_args = [] if (extra_env or {}).get("OPEN_E2E_NO_LAUNCH_WAIT") == "1" else ["-W"]
+        launch = ["/usr/bin/open", "-n"] + wait_args + [self.bundle,
+                  "--stdout", self.launch_log_path, "--stderr", self.launch_log_path]
+        for key, value in env.items():
+            if key.startswith("OPEN_") or key in (extra_env or {}):
+                launch += ["--env", key + "=" + value]
+        launch += ["--args"] + args[1:]
+        self.proc = subprocess.Popen(launch, stdout=self.log, stderr=subprocess.STDOUT)
         deadline = time.time() + 60
         while time.time() < deadline:
             try:
-                self.call("ping")
+                self.pid = self.call("ping")["pid"]
                 return
             except (OSError, json.JSONDecodeError):
                 time.sleep(0.1)
             if self.proc.poll() is not None:
-                self.log.close()
-                raise RuntimeError("Open exited before automation; see %s" % log_path)
+                # LaunchServices may fail its -W GetProcessPID wait independently
+                # of launching the app. Only the real socket establishes readiness.
+                self.launch_waiter_ended_before_automation = True
         self.proc.kill()
         self.proc.wait()
         self.log.close()
-        raise RuntimeError("Open did not start; see %s" % log_path)
+        raise RuntimeError("Open automation was not ready within 60 s (launcher exit %s); see %s" % (self.proc.returncode, log_path))
 
     def call(self, cmd, timeout=120, **args):
+        foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
+        if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
+            # `NSApp.activate()` is a request, not a grant. Renew the explicit
+            # foreground request if another app took focus. Address the exact
+            # verified PID; a bundle identifier can name another Open worktree.
+            activation = subprocess.run([self.activator, str(self.pid), self.executable], capture_output=True, text=True, timeout=10)
+            if activation.returncode:
+                native = self.call("native-focus-state")
+                raise FocusInterruption("Exact-PID activation refused: " + activation.stdout.strip() + " " + activation.stderr.strip(), [native])
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
         s.connect(self.sock)
@@ -88,9 +193,47 @@ class Open:
             buf += chunk
         s.close()
         resp = json.loads(buf)
+        if resp.get("observationStart", 0) > 0:
+            self.observation_steps.append(resp["observationStart"])
+            if cmd in ("snapshot", "metrics", "timing"):
+                self.timing_steps.append({"start": 0 if cmd == "timing" else resp["observationStart"], "label": cmd})
+        if foreground_input and resp.get("nativeInputStart", 0) > 0:
+            self.native_steps.append(resp["nativeInputStart"])
         if not resp.get("ok"):
+            if foreground_input:
+                native = self.call("native-focus-state")
+                if not native["active"] or native["frontmostPID"] != self.pid:
+                    raise FocusInterruption("%s: %s" % (cmd, resp.get("error")), [native])
             raise RuntimeError("%s: %s" % (cmd, resp.get("error")))
+        if cmd == "mouse" and self.focus_tracker:
+            # Pointer checks use the tagged virtual pointer and socket state,
+            # not application activation. A later native key/capture step
+            # establishes its own readiness grant and trace interval.
+            self.focus_tracker.checkpoint(native_only=True)
         return resp["result"]
+
+    def begin_timing(self, label):
+        if not self.focus_tracker:
+            return
+        checkpoint = self.focus_tracker.observation_checkpoints.get(self.pid, 0)
+        observations = self.observation_steps[checkpoint:]
+        start = observations[0] if observations else self.call("native-focus-state")["uptime"]
+        self.timing_steps.append({"start": start, "label": label})
+
+    def accept_owned_handoff(self, peer):
+        """An intentional control transition establishes the next check's background precondition."""
+        deadline = time.monotonic() + 5
+        while True:
+            state = self.call("native-focus-state")
+            events = self.call("activation-events")
+            observed = any(e["event"] == "frontmostChanged" and e.get("frontmostPID") == peer.pid for e in events)
+            if not state["active"] and state["frontmostPID"] == peer.pid and observed:
+                break
+            if time.monotonic() >= deadline:
+                raise FocusInterruption("owned peer is not the expected foreground process", [state])
+            time.sleep(.01)
+        if self.focus_tracker:
+            self.focus_tracker.checkpoint()
 
     def eval(self, tab, js, **kw):
         # A page that navigates (or an extension that reloads it) destroys
@@ -104,18 +247,61 @@ class Open:
                 time.sleep(1)
 
     def quit(self):
+        if self.closed:
+            return
         try:
-            self.call("quit")
+            self.activation_trace = self.call("activation-events")
         except Exception:
             pass
+        self.quit_report = {}
         try:
-            self.proc.wait(15)
+            self.quit_report["reply"] = self.call("quit")
+        except Exception as error:
+            self.quit_report["error"] = str(error)
+        # The launch waiter may have been interrupted independently of its app.
+        # Wait for the actual app PID too, and never kill another executable.
+        def still_ours():
+            if not self.pid:
+                return False
+            path = ctypes.create_string_buffer(4096)
+            libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+            size = libproc.proc_pidpath(self.pid, path, len(path))
+            actual = os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
+            if "observedExecutable" not in self.quit_report:
+                self.quit_report["observedExecutable"] = actual
+                self.quit_report["expectedExecutable"] = os.path.realpath(self.executable)
+            return size > 0 and actual == os.path.realpath(self.executable)
+        deadline = time.monotonic() + 15
+        while still_ours() and time.monotonic() < deadline:
+            time.sleep(.05)
+        self.quit_report["forced"] = still_ours()
+        if self.quit_report["forced"]:
+            os.kill(self.pid, signal.SIGKILL)
+        try:
+            self.proc.wait(2)
         except subprocess.TimeoutExpired:
             self.proc.kill()
+            self.proc.wait()
+        if os.path.exists(self.launch_log_path):
+            self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
         self.log.close()
+        self.closed = True
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
+
+    def foreground_peer(self):
+        """Foreground a second, owned Open instance without touching other apps."""
+        data = self.user_data + "-b"
+        shutil.rmtree(data, ignore_errors=True)
+        peer = Open(self.config, self.style, data, ["--use-mock-keychain"], data + ".log", urls=())
+        try:
+            self.call("yield-activation", pid=peer.pid)
+            peer.call("window-focus", id=peer.call("window-state")["id"], activate=True)
+            return peer
+        except Exception:
+            peer.quit()
+            raise
 
     def page(self, tab_id):
         return self.tab(tab_id).get("page", {})
@@ -126,6 +312,7 @@ def shot(app, name, window=None, max_px=1100):
     (includes Chrome-style child windows and real page pixels); other
     windows (panels, Chromium dialogs) use `screencapture -l <our window>`,
     falling back to the in-app snapshot."""
+    app.begin_timing("window capture")
     path = os.path.join(OUT, name)
     raw = path + ".raw.png"
     if window is None:
@@ -141,9 +328,11 @@ def shot(app, name, window=None, max_px=1100):
 
 
 def wait_until(fn, timeout=20, step=0.5):
-    deadline = time.time() + timeout
+    if _ACTIVE_FOCUS_TRACKER:
+        _ACTIVE_FOCUS_TRACKER.begin_timed_poll()
+    deadline = time.monotonic() + timeout
     last = None
-    while time.time() < deadline:
+    while time.monotonic() < deadline:
         last = fn()
         if last:
             return last
@@ -639,10 +828,16 @@ def shell_checks(app_factory, results, tmp):
         time.sleep(0.3)
         n0 = len(app.call("tabs"))
         route = {}
-        route["cmd_l_window"] = app.call("key", key="l", modifiers=["cmd"], route="window")["firstResponder"]
+        app.call("key", key="l", modifiers=["cmd"], route="window")
+        ready = state_when(app, lambda st: st["firstResponder"] in ("NSTextView", "CommandBarFieldEditor"))
+        route["cmd_l_window"] = ready["firstResponder"] if ready else app.call("window-state")["firstResponder"]
+        app.call("key", key="escape")
+        time.sleep(.3)
         app.call("focus", tab=c)
         time.sleep(0.2)
-        route["cmd_t_app"] = app.call("key", key="t", modifiers=["cmd"])["firstResponder"]
+        app.call("key", key="t", modifiers=["cmd"])
+        ready = state_when(app, lambda st: st["firstResponder"] in ("NSTextView", "CommandBarFieldEditor"))
+        route["cmd_t_app"] = ready["firstResponder"] if ready else app.call("window-state")["firstResponder"]
         app.call("key", text="example.net\r")
         time.sleep(2)
         tabs = app.call("tabs")
@@ -657,7 +852,7 @@ def shell_checks(app_factory, results, tmp):
         time.sleep(1.5)
         restored = [x for x in app.call("tabs") if new and x["id"] == new[0]["id"]]
         results["keyboard"] = {
-            "ok": route["cmd_l_window"] == "NSTextView" and route["cmd_t_app"] == "NSTextView"
+            "ok": route["cmd_l_window"] in ("NSTextView", "CommandBarFieldEditor") and route["cmd_t_app"] in ("NSTextView", "CommandBarFieldEditor")
                   and len(new) == 1 and n1 == n0 + 1 and n2 == n0 and len(restored) == 1,
             "routes": route, "tabs": [n0, n1, n2], "restored_same_id": bool(restored)}
 
@@ -667,9 +862,9 @@ def shell_checks(app_factory, results, tmp):
         time.sleep(2)
         pages = [x["page"] for x in app.call("tabs") if x["visible"] and x.get("page")]
         wins = app.call("windows")
+        split_png = shot(app, "shell-split-view.png")
         results["split_view"] = {"ok": len(panes) == 2 and len(pages) == 2 and all(p["live"] for p in pages),
-                                 "panes": [p["url"] for p in pages]}
-        results["split_view"]["screenshot"] = shot(app, "shell-split-view.png")
+                                 "panes": [p["url"] for p in pages], "screenshot": split_png}
         app.call("split")  # unsplit
 
         # Window PNG from inside the app (no screen-recording permission).
@@ -684,7 +879,6 @@ def shell_checks(app_factory, results, tmp):
         app.quit()
 
     # Relaunch: same tabs, same IDs, only the selected tab loads (lazy).
-    t0 = time.time()
     app = app_factory(urls=())
     try:
         time.sleep(2)
@@ -696,6 +890,7 @@ def shell_checks(app_factory, results, tmp):
                                   "tabs": len(got), "loaded_after_launch": loaded}
     finally:
         app.quit()
+    shutdown_order_checks(app_factory, results, tmp)
 
 
 # ----------------------------------------------------------------------------
@@ -1325,6 +1520,110 @@ def context_menu_commands(app, results):
 # Window startup checks (Step A; Step B extends this suite).
 
 
+def focus_restore_checks(factory, results, tmp):
+    """A real slow response keeps the exact command-bar load pending while focus moves."""
+    import http.server
+    import threading
+    started, release = threading.Event(), threading.Event()
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path.startswith('/slow'):
+                started.set(); release.wait(30)
+            body = ('<title>Focus ' + self.path + '</title><p>Focus regression</p>').encode()
+            self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    try:
+        for case in ('sidebar', 'find', 'inactive_load', 'inactive_dismiss'):
+            started.clear(); release.clear()
+            app = factory(urls=(origin + '/base',), fresh=True); peer = None
+            try:
+                w1 = app.call('window-state')['id']
+                if case == 'inactive_dismiss':
+                    app.call('menu-perform', id='new-window')
+                    w2 = next(w['id'] for w in app.call('shell-windows') if w['id'] != w1)
+                    app.call('window-focus', id=w1, activate=True)
+                tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
+                page_handle = app.page(tab)['identifier']
+                baseline = app.call('focus-state')['navigationDecisions']
+                app.call('key', key='l', modifiers=['cmd'])
+                assert wait_until(lambda: app.call('commandbar-state').get('presented'), timeout=3, step=.02)
+                path = '/slow-' + case; url = origin + path
+                app.call('key', text=url)
+                assert wait_until(lambda: app.call('commandbar-state').get('text') == url and app.call('commandbar-state').get('final'), timeout=5, step=.02)
+                app.call('key', key='return'); assert started.wait(10), 'controlled response did not start'
+                assert app.tab(tab)['loading'], 'response completed before the focus move'
+                if case == 'find':
+                    app.call('menu-perform', id='find'); app.call('key', text='keep-find-focus')
+                elif case == 'inactive_dismiss':
+                    app.call('key', key='l', modifiers=['cmd'])
+                    assert wait_until(lambda: app.call('commandbar-state').get('presented'), timeout=3, step=.02)
+                else:
+                    app.call('menu-perform', id='reveal-current-tab')
+                if case.startswith('inactive'):
+                    peer = app.foreground_peer(); app.accept_owned_handoff(peer)
+                before = app.call('focus-state', id=w1)
+                expected = 'find' if case == 'find' else 'commandbar' if case == 'inactive_dismiss' else 'sidebar'
+                assert before['owner'] == expected, before
+                release.set(); app.call('wait', tab=tab)
+                # A delivery counter is read only after the real load-end callback's
+                # next-turn decision. No sleep stands in for focus delivery.
+                delivered = wait_until(lambda: (lambda s: s if s['navigationDecisions'] > baseline else None)(app.call('focus-state', id=w1)), timeout=5, step=.02)
+                assert delivered, app.call('focus-state', id=w1)
+                if case == 'inactive_dismiss':
+                    app.call('window-focus', id=w2, activate=False)
+                    after = wait_until(lambda: (lambda s: s if s['owner'] != 'commandbar' else None)(app.call('focus-state', id=w1)), timeout=3, step=.02)
+                    expected = 'window'
+                else:
+                    after = app.call('focus-state', id=w1)
+                native = app.call('native-focus-state')
+                loaded = app.eval(page_handle, 'document.title') == 'Focus ' + path
+                preserved = bool(after) and after['owner'] == expected and not delivered['lastNavigationRestored']
+                if case == 'find': preserved = preserved and after['findText'] == 'keep-find-focus'
+                if peer: preserved = preserved and not native['active'] and native['frontmostPID'] == peer.pid
+                results['focus_preserves_' + case] = {'ok': loaded and preserved, 'before': before, 'after': after,
+                    'loadDelivery': delivered, 'native': native, 'peerPID': peer.pid if peer else None}
+            finally:
+                release.set(); app.quit()
+                if peer: peer.quit()
+    finally:
+        release.set(); server.shutdown()
+
+
+def shutdown_order_checks(factory, results, tmp):
+    """Real queued Save/background work is cancelled before the actual engine shutdown call."""
+    app = factory(urls=('data:text/html,<title>Quit ordering</title><h1>Quit ordering</h1>',), fresh=True,
+                  extra_env={'OPEN_AUTOMATION_SHUTDOWN_TRACE': '1', 'OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS': '30000'})
+    path = os.path.join(app.user_data, 'State', 'shutdown-order.json')
+    destination = os.path.join(tmp, 'cancelled-at-quit.mhtml')
+    try:
+        app.call('wait'); app.call('background-read')
+        app.call('menu-perform', id='save-page-as')
+        assert wait_until(lambda: app.call('save-page-state')['visible'], timeout=5, step=.02)
+        app.call('save-page-choose', path=destination)
+        pending = wait_until(lambda: (lambda s: s if s['captures'] > 0 and s['background'] > 0 else None)(app.call('async-engine-state')), timeout=5, step=.02)
+        assert pending, app.call('async-engine-state')
+    finally:
+        app.quit()
+    def completed_trace():
+        if not os.path.exists(path): return None
+        with open(path) as stream: value = json.load(stream)
+        return value if value and value[-1]['phase'] == 'engineShutdownEnd' else None
+    trace = wait_until(completed_trace, timeout=10, step=.02)
+    assert trace, {'quit': app.quit_report, 'traceExists': os.path.exists(path)}
+    phases = [r['phase'] for r in trace]
+    expected = ['prepare', 'hostsClosed', 'engineShutdownBegin', 'engineShutdownEnd']
+    closed = trace[1:]
+    results['quit_order_owned_work'] = {'ok': phases == expected and not app.quit_report.get('forced', False)
+        and trace[0]['captureTasks'] > 0 and trace[0]['backgroundTasks'] > 0
+        and all(r['captureTasks'] == r['backgroundTasks'] == r['selectionTasks'] == r['hosts'] == 0
+                and r['closedFactories'] == r['factories'] and r['lateAsyncEngineCalls'] == 0 for r in closed)
+        and all(a['uptime'] <= b['uptime'] for a, b in zip(trace, trace[1:]))
+        and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
+
+
 def window_checks(app_factory, results, tmp, config):
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
@@ -1403,6 +1702,7 @@ def window_checks(app_factory, results, tmp, config):
         app.quit()
     startup_failure_checks(app_factory, results, tmp)
     window_flow_checks(app_factory, results, tmp)
+    focus_restore_checks(app_factory, results, tmp)
     window_chrome_checks(app_factory, results, tmp)
     static_window_comparison(app_factory, results, tmp, "window")
 
@@ -1443,18 +1743,19 @@ def wait_card(app, shown, timeout=3.0, step=0.015):
     shown: the card is revealed and its on-screen offset (the slide's presentation value)
     stays within 0.5 pt of its place for three samples in a row. hidden: no card at all
     (the slide-out finished). Returns {"elapsed", "samples"} or None on timeout."""
-    start = time.time()
+    app.begin_timing("hover card settles")
+    start = time.monotonic()
     samples, still = [], 0
-    while time.time() - start < timeout:
+    while time.monotonic() - start < timeout:
         st = app.call("window-state")
         r = st["reveal"]
-        samples.append([round(time.time() - start, 3), r["phase"], r["offset"]])
+        samples.append([round(time.monotonic() - start, 3), r["phase"], r["offset"]])
         if shown:
             still = still + 1 if st["revealed"] and r["offset"] is not None and abs(r["offset"]) <= 0.5 else 0
             if still >= 3:
-                return {"elapsed": round(time.time() - start, 3), "samples": len(samples), "state": st}
+                return {"elapsed": round(time.monotonic() - start, 3), "samples": len(samples), "state": st}
         elif not st["revealed"] and r["offset"] is None:
-            return {"elapsed": round(time.time() - start, 3), "samples": len(samples), "state": st}
+            return {"elapsed": round(time.monotonic() - start, 3), "samples": len(samples), "state": st}
         time.sleep(step)
     return None
 
@@ -1522,6 +1823,22 @@ def window_flow_checks(factory, results, tmp):
                                   "hidden": hidden["sidebarMode"], "panel_x": hidden["panel"][0],
                                   "revealed_s": reveal and reveal["elapsed"], "dismissed_s": dismissed and dismissed["elapsed"],
                                   "selected": selected, "revealed_again_s": again and again["elapsed"], "left_s": left and left["elapsed"]}
+        # Yield only our own app. Tagged pointer handling must still work while
+        # another process is foreground; no input is sent to that process.
+        peer = app.foreground_peer()
+        try:
+            app.accept_owned_handoff(peer)
+            inactive = state_when(app, lambda st: not st["appActive"])
+            app.call("mouse", action="move", x=600, y=300)
+            app.call("mouse", action="move", x=3, y=300)
+            background_reveal = wait_card(app, True)
+            app.call("mouse", action="move", x=600, y=300)
+            background_hide = wait_card(app, False)
+            results["background_tagged_pointer"] = {"ok": bool(inactive) and bool(background_reveal) and bool(background_hide)
+                and not background_reveal["state"]["appActive"], "inactive": bool(inactive),
+                "revealed": bool(background_reveal), "hidden": bool(background_hide)}
+        finally:
+            peer.quit()
         app.call("key", key="s", modifiers=["cmd"], route="app")
         results["toggle_sidebar"] = {"ok": bool(sidebar_anchored(app))}
         app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
@@ -1941,12 +2258,13 @@ def colored_look(png, scale, centers):
 def ensure_key(app, wid, timeout=15):
     """Makes the window key; macOS refuses to activate an app while someone uses another one,
     so this asks again until it holds. Returns the state, key or not."""
-    deadline = time.time() + timeout
+    app.begin_timing("key-window readiness")
+    deadline = time.monotonic() + timeout
     while True:
         app.call("window-focus", id=wid, activate=True)
         time.sleep(0.25)
         st = app.call("window-state", id=wid)
-        if (st["key"] and st["appActive"]) or time.time() > deadline:
+        if (st["key"] and st["appActive"]) or time.monotonic() > deadline:
             return st
 
 
@@ -2262,10 +2580,11 @@ def window_chrome_checks(factory, results, tmp):
         app.call("window-focus", id=wid, activate=True)
         card_activity = window_activity(app)
         app.call("snapshot", path=card_png)
-        t1 = time.time()
+        app.begin_timing("reveal dismiss latency")
+        t1 = time.monotonic()
         app.call("mouse", action="move", x=700, y=400)
         leaving = state_when(app, lambda st: st["reveal"]["phase"] == "idle", timeout=2, step=0.01)
-        exit_s = round(time.time() - t1, 3)
+        exit_s = round(time.monotonic() - t1, 3)
         gone = wait_card(app, False)
         base_png = os.path.join(private, "card-base.png")
         app.call("window-focus", id=wid, activate=True)
@@ -2276,6 +2595,7 @@ def window_chrome_checks(factory, results, tmp):
                                     "lights_hidden_while_hidden": lights_hidden, "pass_by_without_reveal": no_quick_reveal,
                                     "dwell_s": round(dwell, 3), "settled_s": settled and settled["elapsed"],
                                     "card": card, "lights_on_card": lights_card, "edge_walk": samples, "held": held,
+                                    "native_state_at_reveal": {k: shown[k] for k in ("appActive", "isKeyWindow", "firstResponder", "fullscreenTransition")},
                                     "exit_to_idle_s": exit_s, "slide_out_s": gone and gone["elapsed"]}
         edges = card_edges(card_png, base_png, card, scale)
         if not edges["ok"] and card_activity != base_activity:
@@ -2295,6 +2615,7 @@ def window_chrome_checks(factory, results, tmp):
         app.call("appearance", name="system")
         results["card_edges_appearance"] = {"ok": all(v.get("ok") for v in rows.values()), "rows": rows}
     finally:
+        results["chrome_activation_events"] = app.call("activation-events")
         app.quit()
     themed_card_checks(factory, results, private)
 
@@ -2610,10 +2931,10 @@ def static_window_comparison(factory, results, tmp, suite):
 
 def startup_failure_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
-    app_path = app.proc.args[0]
+    app_path = app.executable
     app.quit()
     unconfirmed = factory(urls=("data:text/html,<title>Unconfirmed frame</title><h1>Unconfirmed frame</h1>",), fresh=True,
-                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1"})
+                          extra_env={"OPEN_AUTOMATION_SKIP_DISPLAY_LINK": "1", "OPEN_E2E_NO_LAUNCH_WAIT": "1"})
     try:
         tab = unconfirmed.call("tabs")[0]
         unconfirmed.call("wait", tab=tab["id"])
@@ -2623,6 +2944,11 @@ def startup_failure_checks(factory, results, tmp):
             and timing["engineStart"] >= timing["firstFrameWaitTimedOut"] and "engineStarted" in timing
             and unconfirmed.eval(tab["id"], "document.title") == "Unconfirmed frame",
             "timing": timing, "hosts": unconfirmed.call("host-counts")}
+        results["launch_waiter_early_exit"] = {"ok": unconfirmed.launch_waiter_ended_before_automation
+            and unconfirmed.proc.poll() == 0 and check_page(unconfirmed, tab["id"], "Unconfirmed frame"),
+            "launcherExit": unconfirmed.proc.returncode,
+            "waiterEndedBeforeAutomation": unconfirmed.launch_waiter_ended_before_automation,
+            "actualAppPID": unconfirmed.pid}
     finally:
         unconfirmed.quit()
     early_data = os.path.join(tmp, "early-quit")
@@ -3094,18 +3420,256 @@ def measure(app_factory, results, tmp):
     results["ok"] = True
 
 
-def engine_provenance(config):
-    def uuid(path):
-        result = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
-        match = re.search(r'UUID: ([0-9A-F-]+)', result.stdout)
-        return match.group(1) if match else ''
-    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
-    embedded = uuid(os.path.join(ROOT, 'build', config, 'Open.app/Contents/Frameworks', framework))
-    vendor = uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
-    stamp_file = Path(ROOT, 'Vendor/cef/.open-source')
-    stamp = stamp_file.read_text().strip() if stamp_file.exists() else ''
-    return {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed',
-            'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
+def commandbar_checks(factory, results, tmp, config):
+    import http.server
+    import threading
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = ("<!doctype html><title>Shell C %s</title><body style='background:#302d4a;color:white'>Shell C %s<p id=copy-source>PAGE COPY</p><input id=edit-input value=seed>"
+                    "<script>window.keys=[];document.addEventListener('keydown',e=>{window.keys.push(e.key);e.preventDefault()})</script>" % (self.path, self.path)).encode()
+            self.send_response(200); self.send_header('Content-Type', 'text/html'); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *args): pass
+    server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    origin = 'http://127.0.0.1:%d' % server.server_address[1]
+    app = factory(urls=(origin + '/start',), fresh=True)
+    state = lambda: app.call('commandbar-state')
+    def bar(key, route='app'):
+        routing = app.call('key', key=key, modifiers=['cmd'], route=route)
+        assert wait_until(lambda: state().get('presented'), timeout=3, step=.05), {'bar':state(),'routing':routing,'window':app.call('window-state'),'menu':[r for r in app.call('menu-state') if r['id'] in ('new-tab','show-fonts')]}
+        return state()
+    def type_query(text):
+        app.call('key', text=text)
+        return wait_until(lambda: state() if state().get('text') == text and state().get('final') else None, timeout=5, step=.05)
+    def press(key, **kw): return app.call('key', key=key, **kw)
+    try:
+        tab = app.call('tabs')[0]['id']
+        app.call('wait', tab=tab)
+        wait_until(lambda: app.eval(tab, 'document.title') == 'Shell C /start', step=.1)
+        app.call('suggest-remote', enabled=False)
+        assert wait_until(lambda: app.call('hotkey-state')['prepared'], timeout=5, step=.02), 'post-paint command preparation did not run'
+        results['lazy_commandbar'] = {'ok': state().get('created') is False}
+        app.call('focus', tab=tab)
+        opened = bar('t', 'window')
+        first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
+        results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
+        typed = type_query(origin.removeprefix('http://') + '/new')
+        press('return')
+        new = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/new'), None), step=.1)
+        assert new, app.call('tabs')
+        wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /new', step=.1)
+        results['typed_top_today'] = {'ok': app.call('tabs')[0]['id'] == new['id'] and app.eval(new['id'], 'document.title') == 'Shell C /new', 'tab': new['id']}
+        edited = bar('l', 'window')
+        results['cmd_l_selection'] = {'ok': edited['mode'] == 'editCurrentURL' and edited['text'] == origin + '/new' and edited['range'] == [0, len(origin + '/new')], 'state': edited}
+        type_query(origin + '/edited'); press('return')
+        correct = wait_until(lambda: app.eval(new['id'], 'document.title') == 'Shell C /edited', step=.1)
+        results['edit_current_tab'] = {'ok': bool(correct) and len(app.call('tabs')) == 2, 'title': app.eval(new['id'], 'document.title')}
+        app.call('focus', tab=new['id'])
+        app.eval(new['id'], "(() => {let r=document.createRange();r.selectNodeContents(document.querySelector('#copy-source'));let s=getSelection();s.removeAllRanges();s.addRange(r)})()")
+        app.call('pasteboard-write', text='COPY NOT RUN')
+        press('c', modifiers=['cmd'], route='window')
+        copied = wait_until(lambda: app.call('pasteboard') == 'PAGE COPY', step=.05)
+        results['page_copy_native_responder'] = {'ok': bool(copied), 'clipboard': app.call('pasteboard')}
+        app.call('click', tab=new['id'], selector='#edit-input')
+        press('a', modifiers=['cmd'], route='window')
+        selected = wait_until(lambda: app.eval(new['id'], "[document.querySelector('#edit-input').selectionStart,document.querySelector('#edit-input').selectionEnd]") == [0,4], step=.05)
+        results['page_select_all_native_responder'] = {'ok': bool(selected)}
+        press('v', modifiers=['cmd'], route='window')
+        pasted = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'PAGE COPY', step=.05)
+        results['page_paste_native_responder'] = {'ok': bool(pasted)}
+        press('z', modifiers=['cmd'], route='window')
+        undone = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'seed', step=.05)
+        results['page_undo_native_responder'] = {'ok': bool(undone) and app.call('window-state')['selected'] == new['id']}
+        press('a', modifiers=['cmd'], route='window'); press('x', modifiers=['cmd'], route='window')
+        cut = wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == '', step=.05)
+        results['page_cut_native_responder'] = {'ok': bool(cut) and app.call('pasteboard') == 'seed'}
+        press('z', modifiers=['cmd'], route='app')
+        wait_until(lambda: app.eval(new['id'], "document.querySelector('#edit-input').value") == 'seed', step=.05)
+        menu = app.call('menu-state')
+        native_ids = {'cut','copy','paste','paste-and-match-style','select-all','undo','redo','find','find-next','find-previous','quit-open','hide-open','hide-others','show-all','minimize-window','zoom-window','bring-all-to-front','close-window','toggle-full-screen','emoji-and-symbols','start-speaking','stop-speaking','show-fonts','font-bold','font-italic','font-underline'}
+        native_rows = [r for r in menu if r['id'] in native_ids]
+        results['system_menu_nil_targets'] = {'ok': {r['id'] for r in native_rows} == native_ids and all(r['targetNil'] and r['action'] for r in native_rows), 'rows': native_rows}
+        registered = app.call('menu-context')
+        results['native_menu_registration'] = {'ok': all(registered.values()), 'menus': registered}
+        results['native_font_traits'] = {'ok': any(r['id'] == 'font-bold' and r['action'] == 'addFontTrait:' and r['tag'] == 2 for r in menu) and any(r['id'] == 'font-italic' and r['action'] == 'addFontTrait:' and r['tag'] == 1 for r in menu)}
+        results['tabs_reveal_registered'] = {'ok': any(r['id'] == 'reveal-tab-in-sidebar' and r['title'] == 'Reveal Tab in Sidebar' and r['key'] == '' for r in menu)}
+        # Rename uses the existing live sidebar editor, not a nested modal loop.
+        app.eval(new['id'], 'window.renameTicks=0;window.renameTicker=setInterval(()=>window.renameTicks++,10);1')
+        app.call('menu-perform', id='rename-tab')
+        editor = wait_until(lambda: (lambda f: f if f['responder'] in ('NSTextView','FieldEditor') and not f['sheet'] else None)(app.call('focus-state')), timeout=3, step=.02)
+        assert editor, app.call('focus-state')
+        ticks = app.eval(new['id'], 'window.renameTicks')
+        engine_alive = wait_until(lambda: app.eval(new['id'], 'window.renameTicks') > ticks, timeout=3, step=.02)
+        press('text', text='Renamed through menu'); press('return')
+        renamed = wait_until(lambda: app.tab(new['id'])['title'] == 'Renamed through menu', timeout=3, step=.02)
+        app.call('menu-perform', id='rename-tab'); press('text', text='Cancelled rename'); press('escape')
+        cancelled = wait_until(lambda: app.call('focus-state')['responder'] not in ('NSTextView','FieldEditor'), timeout=3, step=.02)
+        results['rename_tab_inline'] = {'ok': bool(editor) and bool(engine_alive) and bool(renamed) and bool(cancelled)
+            and app.tab(new['id'])['title'] == 'Renamed through menu'
+            and app.eval(new['id'], 'document.title') == 'Shell C /edited', 'editor': editor, 'engineHeartbeatAdvanced': bool(engine_alive)}
+        app.eval(new['id'], 'clearInterval(window.renameTicker);1')
+        before_text_undo = len(app.call('tabs'))
+        bar('t'); type_query('word'); native_before = state(); native_route = press('z', modifiers=['cmd'])
+        native_undone = wait_until(lambda: state()['text'] == '', timeout=3, step=.05)
+        results['native_field_undo_preserves_model'] = {'ok': bool(native_undone) and state()['presented'] and len(app.call('tabs')) == before_text_undo, 'before':native_before, 'after':state(), 'route':native_route}
+        press('escape'); time.sleep(.25)
+        counts = app.call('host-counts')['created']; selected_before = app.call('window-state')['selected']
+        bar('t'); type_query(origin + '/background'); press('return', modifiers=['cmd'])
+        background = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/background'), None), step=.1)
+        assert background, app.call('tabs')
+        app.call('wait', tab=background['id'])
+        results['command_return_background'] = {'ok': app.call('window-state')['selected'] == selected_before and app.call('host-counts')['created'] == counts + 1 and app.eval(background['id'], 'document.title') == 'Shell C /background'}
+        for action, query, expected in [('pin-tab','Pin Tab','pinned'),('unpin-tab','Unpin Tab','today')]:
+            bar('t'); actions = type_query(query); assert actions, state()
+            index = next(i for i,r in enumerate(actions['rows']) if r['action'] == action)
+            selected = actions['selected']
+            while selected != index:
+                press('down' if selected < index else 'up'); selected = state()['selected']
+            press('return')
+            results['action_' + action] = {'ok': app.tab(new['id'])['section'] == expected and app.eval(new['id'], 'document.title') == 'Shell C /edited'}
+        bar('t'); calc = type_query('12*7'); assert calc, state()
+        rows = calc['rows']; index = next(i for i, r in enumerate(rows) if r['kind'] == 'calculator')
+        selected = calc['selected']
+        while selected != index:
+            press('down' if selected < index else 'up'); selected = state()['selected']
+        press('return')
+        results['calculator_copy'] = {'ok': app.call('pasteboard') == '84', 'clipboard': app.call('pasteboard')}
+        bar('t'); press('escape'); time.sleep(.3)
+        app.eval(new['id'], 'window.keys=[]')
+        press('escape', route='window'); time.sleep(.15)
+        results['escape_then_page'] = {'ok': not state()['presented'] and 'Escape' in app.eval(new['id'], 'window.keys'), 'keys': app.eval(new['id'], 'window.keys')}
+        mode = app.call('window-state')['sidebarMode']
+        press('s', modifiers=['cmd'], route='window'); hidden = app.call('window-state')['sidebarMode']
+        press('s', modifiers=['cmd'], route='window')
+        results['cmd_s_page_swallowing_keys'] = {'ok': mode != hidden and app.call('window-state')['sidebarMode'] == mode}
+        second_space = app.call('space-create', title='Cross Space', profile='Default')
+        target = app.call('open', url=origin + '/cross')
+        target = target['id'] if isinstance(target, dict) else target
+        app.call('wait', tab=target)
+        wait_until(lambda: app.eval(target, 'document.title') == 'Shell C /cross', step=.1)
+        first_space = next(s['id'] for s in app.call('spaces') if s['id'] != second_space)
+        app.call('space', space=first_space)
+        bar('t'); cross = type_query('Shell C /cross'); assert cross, state()
+        index = next(i for i, r in enumerate(cross['rows']) if r['tab'] == target)
+        selected = cross['selected']
+        while selected != index:
+            press('down' if selected < index else 'up'); selected = state()['selected']
+        return_routing = press('return')
+        switched = wait_until(lambda: app.call('window-state') if app.call('window-state')['space'] == second_space and app.call('window-state')['selected'] == target else None, timeout=3, step=.1)
+        results['switch_tab_across_spaces'] = {'ok': bool(switched) and app.eval(target, 'document.title') == 'Shell C /cross', 'state': app.call('window-state'), 'expectedSpace': second_space, 'expectedTab': target, 'rows': cross['rows'], 'barAfterReturn':state(), 'returnRouting':return_routing}
+        bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02)
+        results['first_results_budget'] = {'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
+        shot(app, 'commandbar-live-%s.png' % config.lower(), window=app.call('window-state')['number'])
+        press('escape'); time.sleep(.3)
+        other_profile_space = app.call('space-create', title='Isolated profile', profile='Commandbar Isolated')
+        app.call('suggest-remote', enabled=False)
+        isolated = bar('t'); isolated_rows = type_query('Shell C')
+        results['suggest_profile_isolation'] = {'ok': isolated['profile'] != opened['profile'] and all(r['tab'] not in (tab,new['id'],target) for r in isolated_rows['rows'])}
+        press('escape'); time.sleep(.2); app.call('space', space=second_space)
+        time.sleep(.1)
+        menu = app.call('menu-state')
+        results['dynamic_menus'] = {'ok': any(x['id'] == 'dynamic-space-' + second_space for x in menu) and any(x['id'] == 'dynamic-tab-' + target for x in menu), 'entries': len(menu)}
+        results['unsupported_disabled'] = {'ok': any(x['id'] == 'new-incognito-window' and not x['enabled'] for x in menu)}
+        before = app.call('host-counts'); tree = app.call('sidebar-tree'); app.call('menu-perform', id='duplicate-tab')
+        after = app.call('sidebar-tree'); copies = [x for x in after['today'] if x['id'] not in {n['id'] for n in tree['today']}]
+        results['duplicate_tab_lazy'] = {'ok': len(copies) == 1 and copies[0]['url'] == origin + '/cross' and not copies[0]['loaded'] and before['created'] == app.call('host-counts')['created'], 'copies': copies}
+        app.call('menu-perform', id='reveal-tab-in-sidebar'); app.call('menu-perform', id='undo'); results['duplicate_single_undo'] = {'ok': len(app.call('sidebar-tree')['today']) == len(tree['today'])}
+        other = app.call('open', url=origin + '/split')['id']
+        app.call('split')
+        split = next(n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split')
+        before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=split['id'])
+        splits = [n for n in app.call('sidebar-tree')['today'] if n['kind'] == 'split']
+        copied = next(n for n in splits if n['id'] != split['id'])
+        results['duplicate_split_lazy'] = {'ok': len(splits) == 2 and len(copied['children']) == 2 and all(not n['loaded'] for n in copied['children']) and {n['id'] for n in copied['children']}.isdisjoint(n['id'] for n in split['children']) and [n['url'] for n in copied['children']] == [n['url'] for n in split['children']] and before == app.call('host-counts')['created'], 'copy': copied}
+        app.call('menu-perform', id='reveal-tab-in-sidebar'); app.call('menu-perform', id='undo')
+        # Separate through the model-owned selection path before the folder flow.
+        app.call('menu-perform', id='separate-from-split-view')
+        app.call('select', tab=target)
+        bindings = Path(app.user_data, 'State/keybindings.json')
+        bindings.write_text(json.dumps({'version':1,'bindings':{'new-tab':{'shortcuts':[{'key':'o','modifiers':['command','option','control']}], 'priority':'browser'}}}))
+        app.call('reload-keybindings'); time.sleep(.1)
+        press('o', modifiers=['cmd','opt','ctrl'], route='window'); remapped = state()['presented']; press('escape'); time.sleep(.25)
+        menu = app.call('menu-state')
+        results['override_menu_and_router'] = {'ok': remapped and any(n['id'] == 'new-tab' and n['key'] == 'o' for n in menu)}
+        bindings.write_text(json.dumps({'version':1,'bindings':{'new-tab':{'shortcuts':[{'key':'t','modifiers':['command']}], 'priority':'site-then-browser'}}}))
+        app.call('reload-keybindings'); app.call('focus', tab=target); time.sleep(.1)
+        press('t', modifiers=['cmd'], route='window'); first = state()['presented']
+        press('t', modifiers=['cmd'], route='window'); second = state()['presented']
+        results['double_press_shared_router'] = {'ok': not first and second, 'first': first, 'second': second}
+        press('escape'); time.sleep(.25)
+        bindings.write_text('{broken'); app.call('reload-keybindings'); time.sleep(.1)
+        results['invalid_overrides_fallback'] = {'ok': any(n['id'] == 'new-tab' and n['key'] == 't' for n in app.call('menu-state'))}
+        bindings.unlink(); app.call('reload-keybindings')
+        folder = app.call('folder-create', title='Copy subtree')
+        app.call('sidebar-move', tab=target, folder=folder, index=0)
+        before = app.call('host-counts')['created']; app.call('sidebar-duplicate', id=folder)
+        folders = [n for n in app.call('sidebar-tree')['pinned'] if n['kind'] == 'folder']
+        results['duplicate_folder_lazy'] = {'ok': len(folders) == 2 and folders[0]['children'][0]['id'] != folders[1]['children'][0]['id'] and folders[1]['children'][0]['url'] == origin + '/cross' and not folders[1]['children'][0]['loaded'] and before == app.call('host-counts')['created'], 'folders': folders}
+        press(',', modifiers=['cmd'], route='window'); time.sleep(.2)
+        settings = app.call('settings-state'); app.call('menu-perform', id='settings'); time.sleep(.1)
+        shot(app, 'settings-live-%s.png' % config.lower(), window=settings['settings'])
+        results['settings_shared_window'] = {'ok': settings['settings'] > 0 and settings['settings'] == app.call('settings-state')['settings'] and settings['sameSnapshot']}
+        original_hotkey = app.call('hotkey-state')['enabled']
+        if not original_hotkey: app.call('settings-toggle', name='hotkey')
+        app.call('settings-toggle', name='hotkey'); off = app.call('hotkey-state')
+        app.call('settings-toggle', name='hotkey'); on = app.call('hotkey-state')
+        results['global_hotkey_toggle'] = {'ok': not off['enabled'] and not off['registered'] and on['enabled'] and on['attempts'] > off['attempts'] and (on['registered'] or bool(on['error'])), 'off': off, 'on': on}
+        if not original_hotkey: app.call('settings-toggle', name='hotkey')
+        press('l', modifiers=['cmd','shift'], route='window'); time.sleep(.2)
+        library = app.call('settings-state')['library']; app.call('menu-perform', id='view-library')
+        shot(app, 'library-live-%s.png' % config.lower(), window=library)
+        results['library_shared_window'] = {'ok': library > 0 and library == app.call('settings-state')['library']}
+        for command, section in [('view-downloads','downloads'),('view-archive','archive'),('view-history','history')]:
+            app.call('menu-perform', id=command); time.sleep(.2)
+            library_state = app.call('settings-state')
+            results[command + '_real_library'] = {'ok': library_state['library'] == library and library_state['librarySection'] == section and library_state['sharedArchives'], 'state': library_state}
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        archived = app.call('open', url=origin + '/archive')['id']; app.call('wait', tab=archived); app.call('close', tab=archived)
+        app.call('menu-perform', id='view-archive')
+        archive_state = wait_until(lambda: app.call('settings-state') if any(r['id'] == archived for r in app.call('settings-state')['archive']) else None, step=.1)
+        assert archive_state, app.call('settings-state')
+        app.call('library-restore', id=archived)
+        results['library_archive_restore'] = {'ok': app.tab(archived)['url'] == origin + '/archive' and not app.tab(archived)['hasWebContent'] and all(r['id'] != archived for r in app.call('settings-state')['archive'])}
+        app.call('menu-perform', id='view-history'); time.sleep(.2)
+        app.call('library-history-open', url=origin + '/history-open')
+        history_tab = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == origin + '/history-open'), None), step=.1)
+        results['library_history_profile_open'] = {'ok': bool(history_tab) and history_tab['profile'] == opened['profile']}
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('settings-custom-engine', template=origin + '/search?q=%s')
+        bar('t'); type_query('local custom query'); press('return')
+        custom_url = origin + '/search?q=local%20custom%20query'
+        custom = wait_until(lambda: next((t for t in app.call('tabs') if t['url'] == custom_url), None), step=.1)
+        results['custom_search_engine_navigation'] = {'ok': bool(custom), 'expectedURL': custom_url}
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        app.call('select', tab=target); app.call('wait', tab=target); app.call('focus', tab=target)
+        press('s', modifiers=['cmd','shift'])
+        save = wait_until(lambda: app.call('save-page-state') if app.call('save-page-state')['visible'] else None, timeout=5, step=.1)
+        results['save_page_sheet'] = {'ok': bool(save) and save['requests'] == 1, 'state': save, 'last': app.call('save-page-state')}
+        if save: app.call('dismiss')  # AppKit sheet cancel; remote system key input is not covered
+        assert wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
+        app.call('dismiss')  # close any remaining owned native panel before the next flow
+        capture = os.path.join(tmp, 'saved-command-page.mhtml')
+        # This is a separate native Save action. Re-establish its exact browser
+        # key window; the completion deliberately never re-keys a window.
+        app.call('window-focus', id=app.call('shell-windows')[0]['id'], activate=True)
+        assert wait_until(lambda: any(r['id'] == 'save-page-as' and r['enabled'] for r in app.call('menu-state')), timeout=3, step=.02), 'Save menu target did not return after sheet cancel'
+        app.call('menu-perform', id='save-page-as')
+        assert wait_until(lambda: app.call('save-page-state')['visible'], timeout=5, step=.02)
+        app.call('save-page-choose', path=capture)
+        written = wait_until(lambda: os.path.exists(capture) and 'Shell C' in Path(capture).read_text(errors='replace'), timeout=10, step=.05)
+        results['save_page_capture'] = {'ok': bool(written) and not app.call('save-page-state')['pending'],
+            'written': bool(written), 'bytes': os.path.getsize(capture) if os.path.exists(capture) else 0}
+
+        time.sleep(.25)
+        app.call('menu-perform', id='settings'); original_external = app.call('settings-state')['external']
+        app.call('settings-toggle', name='external'); app.call('save'); app.quit()
+        app = factory(urls=())
+        press(',', modifiers=['cmd']); time.sleep(.2)
+        results['settings_persist_relaunch'] = {'ok': app.call('settings-state')['external'] != original_external}
+        app.call('settings-toggle', name='external')
+    finally:
+        app.quit(); server.shutdown(); server.server_close()
 
 
 RUN_NAME = re.compile(r"^Open-E2E-[a-z]+-(?:alloy|chrome)-(\d+)-[0-9a-f]{8}(?:-scratch-.*)?$")
@@ -3140,12 +3704,13 @@ def sweep_stale_runs():
 
 
 def main():
+    global _ACTIVE_FOCUS_TRACKER
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="alloy", choices=["alloy", "chrome"])
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "profiles"],
+                                       "commandbar", "actions", "profiles"],
                     required=True)
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -3194,6 +3759,9 @@ def main():
         extra += ["--load-extension=" + ",".join(dirs), "--disable-features=DisableLoadExtensionCommandLineSwitch"]
     log = os.path.join(tmp, "open.log")
 
+    tracker = FocusTracker()
+    _ACTIVE_FOCUS_TRACKER = tracker
+
     def factory(urls=("about:blank",), fresh=False, snapshot=None, extra_env=None):
         if fresh or snapshot:
             shutil.rmtree(user_data, ignore_errors=True)
@@ -3201,35 +3769,50 @@ def main():
         if snapshot:
             os.makedirs(os.path.join(user_data, "State"), exist_ok=True)
             shutil.copyfile(snapshot, os.path.join(user_data, "State", "browser.json"))
-        return Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+        app = Open(opts.config, opts.style, user_data, extra, log, urls=urls, extra_env=extra_env)
+        app.focus_tracker = tracker
+        tracker.apps.append(app)
+        return app
 
     results = {"style": opts.style, "config": opts.config, "started": time.strftime("%Y-%m-%d %H:%M:%S")}
-    results["engine"] = engine_provenance(opts.config)
-    try:
+    def framework_uuid(path):
+        proc = subprocess.run(['dwarfdump', '--uuid', path], capture_output=True, text=True)
+        match = re.search(r'UUID: ([0-9A-F-]+)', proc.stdout)
+        return match.group(1) if match else ''
+    framework = 'Chromium Embedded Framework.framework/Chromium Embedded Framework'
+    embedded = framework_uuid(os.path.join(ROOT, 'build', opts.config, 'Open.app/Contents/Frameworks', framework))
+    vendor = framework_uuid(os.path.join(ROOT, 'Vendor/cef/Release', framework))
+    stamp_path = os.path.join(ROOT, 'Vendor/cef/.open-source')
+    stamp = Path(stamp_path).read_text().strip() if os.path.exists(stamp_path) else ''
+    results['engine'] = {'source': 'fork' if stamp.startswith('fork ') and embedded and embedded == vendor else 'unconfirmed', 'embeddedUUID': embedded, 'distributionUUID': vendor, 'stamp': stamp}
+    def execute():
         if opts.only == "shell":
-            results["shell"] = {}
+            results["shell"] = CheckedResults(tracker)
             shell_checks(factory, results["shell"], tmp)
+        elif opts.only in ("commandbar", "actions"):
+            results[opts.only] = CheckedResults(tracker)
+            commandbar_checks(factory, results[opts.only], tmp, opts.config)
         elif opts.only == "window":
-            results["window"] = {}
+            results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config)
         elif opts.only == "sidebar":
-            results["sidebar"] = {}
+            results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
         elif opts.only == "peek":
-            results["peek"] = {}
+            results["peek"] = CheckedResults(tracker)
             peek_checks(factory, results["peek"], tmp)
         elif opts.only == "profiles":
             results["profiles"] = {}
             profiles_checks(factory, results["profiles"], tmp, opts.config)
         elif opts.only == "measure":
-            results["measure"] = {}
+            results["measure"] = CheckedResults(tracker)
             measure(factory, results["measure"], tmp)
         else:
             app = factory(urls=("https://example.com/",))
             try:
                 results["ping"] = app.call("ping")
                 app.call("window-frame", frame=[80, 60, 1360, 860])
-                results[opts.only] = {}
+                results[opts.only] = CheckedResults(tracker)
                 if opts.only == "extensions":
                     extension_checks(app, opts.style, results["extensions"])
                 elif opts.only == "tabstrip":
@@ -3238,24 +3821,53 @@ def main():
                     feature_checks(app, opts.style, results["features"], tmp)
             finally:
                 app.quit()
-    except Exception as error:
-        results.setdefault(opts.only, {})["suite"] = {"ok": False, "error": str(error)}
-        traceback.print_exc()
+
+    interrupted_attempts = []
+    for attempt in range(1, 4):
+        tracker = FocusTracker()
+        _ACTIVE_FOCUS_TRACKER = tracker
+        shutil.rmtree(user_data, ignore_errors=True)
+        interruption = None
+        try:
+            execute()
+        except FocusInterruption as error:
+            interruption = {"reason": str(error), "focus": error.evidence}
+        except Exception as error:
+            loss = tracker.loss()
+            if loss:
+                interruption = {"reason": str(error), "focus": loss}
+            else:
+                dict.__setitem__(results.setdefault(opts.only, {}), "suite", {"ok": False, "error": str(error)})
+                traceback.print_exc()
+        finally:
+            for instance in tracker.apps:
+                instance.quit()
+        if interruption is None:
+            break
+        interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
+                                         checks=dict(results.get(opts.only, {}))))
+        print("%s attempt %d INTERRUPTED: %s" % (opts.only, attempt, interruption["reason"]), flush=True)
+        if attempt == 3:
+            dict.__setitem__(results.setdefault(opts.only, {}), "suite", {
+                "status": "INTERRUPTED", "reason": interruption["reason"], "focus": interruption["focus"], "attempts": 3})
+    results["interrupted_attempts"] = interrupted_attempts
     name = "results-%s-%s.json" % (opts.only, opts.style if opts.only in ("extensions", "features", "tabstrip")
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "profiles"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
-            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED"):
+            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "window", "sidebar", "peek")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)
+    if any(isinstance(v, dict) and v.get("status") == "INTERRUPTED" for v in results.get(opts.only, {}).values()):
+        sys.exit(2)
 
 
 if __name__ == "__main__":

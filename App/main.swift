@@ -110,7 +110,10 @@ LaunchTiming.shared.mark("engineStarted")
 
 OEEngine.shared.runMessageLoop()
 appDelegate.saveState()
+appDelegate.prepareForEngineShutdown()
+appDelegate.recordShutdownPhase("engineShutdownBegin")
 OEEngine.shared.shutdown()
+appDelegate.recordShutdownPhase("engineShutdownEnd")
 exit(0)
 
 /// The running app's code signature.

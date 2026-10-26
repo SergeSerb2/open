@@ -1,0 +1,55 @@
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3397, in main
+    execute()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3362, in execute
+    commandbar_checks(factory, results[opts.only], tmp, opts.config)
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/tools/e2e/engine_e2e.py", line 3277, in commandbar_checks
+    assert wait_until(lambda: not app.call('save-page-state')['pending'], timeout=3, step=.1)
+AssertionError
+lazy_commandbar          PASS
+first_open_results_budget PASS
+cmd_t_mode               PASS
+typed_top_today          PASS
+cmd_l_selection          PASS
+edit_current_tab         PASS
+page_copy_native_responder PASS
+page_select_all_native_responder PASS
+page_paste_native_responder PASS
+page_undo_native_responder PASS
+page_cut_native_responder PASS
+system_menu_nil_targets  PASS
+native_menu_registration PASS
+native_font_traits       PASS
+tabs_reveal_registered   PASS
+rename_tab_inline        PASS
+native_field_undo_preserves_model PASS
+command_return_background PASS
+action_pin-tab           PASS
+action_unpin-tab         PASS
+calculator_copy          PASS
+escape_then_page         PASS
+cmd_s_page_swallowing_keys PASS
+switch_tab_across_spaces PASS
+first_results_budget     PASS
+suggest_profile_isolation PASS
+dynamic_menus            PASS
+unsupported_disabled     PASS
+duplicate_tab_lazy       PASS
+duplicate_single_undo    PASS
+duplicate_split_lazy     PASS
+override_menu_and_router PASS
+double_press_shared_router PASS
+invalid_overrides_fallback PASS
+duplicate_folder_lazy    PASS
+settings_shared_window   PASS
+global_hotkey_toggle     PASS
+library_shared_window    PASS
+view-downloads_real_library PASS
+view-archive_real_library PASS
+view-history_real_library PASS
+library_archive_restore  PASS
+library_history_profile_open PASS
+custom_search_engine_navigation PASS
+save_page_sheet          PASS
+suite                    FAIL
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-actions-debug.json
