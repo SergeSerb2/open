@@ -55,6 +55,10 @@ enum Checks {
     }
 
     static func run(_ args: [String]) throws {
+        // Concurrent runs share the process preferences domain, so preferences
+        // the checks write go to a per-run suite that is removed at the end.
+        let suite = "com.open.sidebar-render-check.\(UUID().uuidString)"
+        SidebarHaptics.defaults = UserDefaults(suiteName: suite)!
         let model = Synthetic.model()
         model.rebuildIndex()
         let undo = UndoManager()
@@ -301,6 +305,7 @@ enum Checks {
         CompletionChecks.run()
         SpaceManagerChecks.run()
         PreviewChecks.run()
+        SidebarHaptics.defaults.removePersistentDomain(forName: suite)
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil

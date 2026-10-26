@@ -9,10 +9,8 @@ import OpenSidebar
 enum SpaceManagerChecks {
     static func run() {
         let check = Checks.check
-        let key = "open.advanced.hapticOnTabReorder", defaults = UserDefaults.standard
-        let oldPreference = defaults.object(forKey: key)
-        defaults.set(true, forKey: key)
-        defer { if let oldPreference { defaults.set(oldPreference, forKey: key) } else { defaults.removeObject(forKey: key) } }
+        // Checks.run owns this per-run suite, never the shared sidebar-render domain.
+        SidebarHaptics.defaults.set(true, forKey: "open.advanced.hapticOnTabReorder")
         let model = Synthetic.model()
         let window = model.windows[0], original = model.spaces.map(\.id)
         let undo = UndoManager(); undo.groupsByEvent = false; model.undoManager = undo
@@ -215,9 +213,9 @@ enum SpaceManagerChecks {
         scene.sidebar.simulateSwipe([scroll(1, 1), scroll(2, 5), scroll(2, 5), scroll(4, 0)])
         Checks.check(SidebarDiagnostics.haptics["levelChange", default: 0] == short, "HG2 short Space swipe has no haptic")
         let haptics = SidebarDiagnostics.haptics
-        UserDefaults.standard.set(false, forKey: "open.advanced.hapticOnTabReorder")
+        SidebarHaptics.defaults.set(false, forKey: "open.advanced.hapticOnTabReorder")
         scene.sidebar.simulateSwipe([scroll(1, -1), scroll(2, -125), scroll(4, 0)])
         Checks.check(SidebarDiagnostics.haptics == haptics, "HG3 setting off also suppresses a threshold-crossing swipe")
-        UserDefaults.standard.set(true, forKey: "open.advanced.hapticOnTabReorder")
+        SidebarHaptics.defaults.set(true, forKey: "open.advanced.hapticOnTabReorder")
     }
 }
