@@ -410,12 +410,14 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) == 186, "missing settings/library/appearance/detail/sheet/state renders")
+        require(len(pngs) == 214, "missing settings/library/appearance/detail/sheet/state renders")
         states = ("welcome welcome-inactive welcome-counting welcome-nodata welcome-saveerror "
                   "import import-arcrunning import-counting import-nodata import-parsehint "
                   "import-parsehint-running import-partial import-capability-on secrets secrets-on "
                   "progress progress-history-landed report report-worst report-saveerror failed "
-                  "default-browser default-declined default-error default-already").split()
+                  "default-browser default-declined default-error default-already "
+                  "welcome-singular import-singular secrets-singular report-singular "
+                  "welcome-large import-large secrets-large").split()
         required = {f"first-run-{state}{appearance}@{scale}x.png"
                     for state in states for appearance in ("", "-light") for scale in (1, 2)}
         require(required <= {p.name for p in pngs}, "missing permanent first-run review state")

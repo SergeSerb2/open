@@ -282,7 +282,7 @@ All roles and metrics come from the OpenDesign Settings group and Settings contr
 
 ## 4. Copy — final English strings
 
-Use these strings exactly (D9). Short and plain. "You" is the user. The source-browser name is allowed in “Import from Arc” and inside the import flow. Welcome status contains no other brand. No string mentions accounts, signing in, or sync. Counts use `%d` with the probe/outcome value; when a count is unknown the string is the "Counting…" or "Not found" variant, never a guessed number.
+Use these strings exactly (D9). Short and plain. "You" is the user. The source-browser name is allowed in “Import from Arc” and inside the import flow. Welcome status contains no other brand. No string mentions accounts, signing in, or sync. Counts use `.formatted()` with the probe/outcome value (`%d` below denotes a localized, grouped number); use the singular noun for 1; when a count is unknown the string is the "Counting…" or "Not found" variant, never a guessed number.
 
 ### 4.1 Welcome
 
@@ -319,7 +319,7 @@ These strings, S-5, and both I-6 help variants come from the shared `PasswordsIm
 | ID | String |
 |---|---|
 | S-1 | `Passwords and cookies can't be imported yet.` (capability OFF) |
-| S-2 | `Open found %d saved items in Arc. Open didn't read or copy them.` (capability OFF) |
+| S-2 | `Open found %d saved items in Arc. Open didn't read or copy them.` (capability OFF); singular: `Open found 1 saved item in Arc. Open didn't read or copy it.` |
 | S-3 | `Import passwords and cookies from Arc?` (capability ON) |
 | S-4 | `Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else.` (capability ON) |
 | S-5 | `You can skip this step and do it later from Settings.` |
@@ -339,8 +339,8 @@ Unknown-count Passwords body (shared with the wizard): `Open didn't read or copy
 | P-4 | `Checking passwords and cookies…` |
 | P-5 | `Your browser is ready. History is still importing in the background.` (once the real window is open behind) |
 | R-1 | `Import complete` (heading) |
-| R-2 | `%d Spaces, %d tabs, %d archived tabs imported.` |
-| R-3 | `%d items were already in Open and were not copied again.` (duplicates line; shown only when > 0) |
+| R-2 | `%d Spaces, %d tabs, %d archived tabs imported.`; omit any failed kind. Singular example: `1 Space, 1 tab, 1 archived tab imported.` If every summary kind failed: `Import finished.` |
+| R-3 | `%d items were already in Open and were not copied again.` (duplicates line; shown only when > 0); singular: `1 item was already in Open and was not copied again.` |
 | R-4 | `Continue` (report primary); all-failed footer: `Back`, `Start Fresh Instead`, `Try Again` |
 
 ### 4.5 Default browser step
@@ -362,9 +362,11 @@ Unknown-count Passwords body (shared with the wizard): `Open didn't read or copy
 | E-3 | `Keychain access was not granted. No passwords or cookies were read. You can try again later from Settings.` |
 | E-4 | `Open could not be set as your default browser. You can try again in Settings.` |
 | E-5 | `Open could not save your data. Your imported items are still open in this window. Try again.` (imported path); `Open could not save your data. Try Start Fresh again.` (fresh path) |
-| E-6 | `Skipped: 2 Easels` (example); combines nonzero kinds in order: `%d Easels`, `%d Notes`, `%d unsupported items` |
+| E-6 | `Skipped: 2 Easels` (example); combines nonzero kinds in order: `%d Easels`, `%d Notes`, `%d unsupported items`; singular: `Skipped: 1 Easel` / `1 Note` / `1 unsupported item` |
 
 Report row labels, in order: `Spaces`, `Pinned and Today tabs`, `Favorites`, `Folders`, `Archive`, `History`, `Search engine`, `Passwords and cookies`. Values: the imported count, `Not selected`, `Not imported`, or red `Could not be read`. Partial found totals append ` (partial)` when at least one source profile could not be counted. Only one report note appears (E-2, E-3, E-5 or E-6).
+
+Count grammar also uses `Found: 1 Space`, `Found: 1 archived tab`, `Found: 1 visit`, `Found: 1 saved item`, and `Found data to import: 1 Space, about 1 tab.` Report row labels are category names; both flows use `Search engine`. The Settings Choose help is `Imports your search engine choice only.` Partial-success E-2 text is secondary; failed cells remain red.
 
 ## 5. How the flow runs
 
@@ -599,3 +601,7 @@ Implement Steps A and B now, then stop. The designer reviews all six screen pair
 ### Review round 1 decisions (2026-10-26)
 
 The user approved the round-1 copy changes in §4 and the 560 × 520 pt size. The unavailable Passwords checkbox is disabled in both flows. Capability-ON consent still requires an explicit allow action; previews never invoke it. Both flows share the importer’s Archive filters and complete profile metadata merge. Readable per-profile History and saved-item counts survive another profile’s failure, marked partial. These corrections override the older raw-Archive count and secrets-only navigation instructions above. The utility probe remains model-free; Steps C–F remain outside this PR.
+
+### Review round 2 decisions (2026-10-26)
+
+Prominent style now covers all Settings default buttons and standalone sheet renders inherit the app’s base Settings style. Count strings use `.formatted()` with singular forms; R-2 omits failed kinds. Import row heights are minimums. The default-browser status has a fixed slot. Welcome with no data or a fresh save error makes Start Fresh the accent/default action. Step C entry criteria in docs/first-run.md record save retry/window-behind copy, real progress appearance/animation, and traffic-light clearance; no code for those criteria lands in A/B.

@@ -176,6 +176,19 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 actions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.tabs:3]);flow.showImport();flow.includeSecrets=false;await flow.continueImport();flow.finish()
                 try require(flow.wizard.hasImportedData && flow.wizard.reportCount("Imported tabs") == 3 && actions.events.last == "finishFirstRun imported=true","canonical adapter keys lost the imported finish flag")
                 try require(flow.reportValue("History") == "Not selected","unselected History showed zero")
+                // Exercise the display copy through the same caller flow, with one-item and large outcomes.
+                actions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.spaces:1,ImportOutcomeKeys.tabs:1,"Archive":1,"History":1,"Skipped easels":1,"Duplicates":1])
+                flow.showImport();flow.includeHistory=true;await flow.continueImport()
+                try require(flow.reportSummary == "1 Space, 1 tab, 1 archived tab imported." && flow.reportNote == "Skipped: 1 Easel" && flow.duplicateSummary == "1 item was already in Open and was not copied again.","singular report copy regressed")
+                var one=flow.probe!;one.spaces=1;one.sidebarItems=1;one.historyVisits=1;one.savedItems=1;flow.probe=one
+                try require(flow.welcomeStatus == "Found data to import: 1 Space, about 1 tab." && flow.found(1,singular:"visit",plural:"visits") == "Found: 1 visit" && flow.passwordsCopy.body == "Open found 1 saved item in Arc. Open didn't read or copy it.","singular found or shared Passwords copy regressed")
+                one.historyVisits=184203;one.savedItems=100001;flow.probe=one
+                actions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.spaces:120,ImportOutcomeKeys.tabs:12000,"History":184203],errorText:"Your Spaces and tabs are in. Some history could not be read.",failures:["Archive":"unreadable"])
+                flow.showImport();await flow.continueImport()
+                try require(flow.reportSummary == "120 Spaces, \(12000.formatted()) tabs imported." && flow.reportValue("History") == 184203.formatted() && !flow.reportNoteIsError,"partial summary includes failed data or styles good news as an error")
+                try require(flow.found(184203,singular:"visit",plural:"visits") == "Found: \(184203.formatted()) visits" && flow.passwordsCopy.body.contains(100001.formatted()),"large counts are unformatted")
+                flow.probe=ArcProbeResult();try require(flow.prefersFreshStart,"no-data Welcome did not prefer Start Fresh")
+                flow.probe=one;flow.reportSaveFailure(imported:false);try require(flow.prefersFreshStart,"fresh save error did not prefer Start Fresh")
                 actions.nextOutcome=ImportOutcome(errorText:"Open could not read your Arc data.");flow.showImport();flow.includeSecrets=false;await flow.continueImport()
                 try require(flow.step == .failed,"failed import did not reach retry")
                 flow.skipImport();flow.finish();try require(actions.events.last == "finishFirstRun imported=false","failed import finished as imported")

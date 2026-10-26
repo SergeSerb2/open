@@ -21,6 +21,13 @@ public struct ImportPlan: Sendable {
     public mutating func skipSecrets() { secretsRequested = false; secretsConsented = false }
     public mutating func consentToSecrets() { secretsRequested = true; secretsConsented = true }
 }
+enum ImportCountCopy {
+    static func phrase(_ count:Int,singular:String,plural:String)->String {
+        "\(count.formatted()) \(count == 1 ? singular:plural)"
+    }
+    static func displayCategory(_ category:String)->String {category == "Search settings" ? "Search engine":category}
+}
+
 public struct ImportOutcome: Sendable {
     public var counts: [String: Int]
     public var errorText: String?

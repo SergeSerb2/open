@@ -49,7 +49,7 @@ public struct PreviewsSheet: View {
             PreferenceToggle(title: "Show link previews", key: "open.general.previewsEnabled", root: model.root)
             PreferenceToggle(title: "Show previews when hovering links", key: "open.general.previewsOnHover", root: model.root)
             HStack {Text("Delay");Spacer();SettingsPopUp("Delay",selection:$model.previewDelay,width:137,entries:[.option("0.3 s",0.3),.option("0.5 s",0.5),.option("1 s",1)])}.disabled(!model.root.bool("open.general.previewsOnHover"))
-            Spacer(); HStack { Spacer(); Button("Done") { model.root.showsPreviews = false }.keyboardShortcut(.defaultAction) }
+            Spacer(); HStack { Spacer(); Button("Done") { model.root.showsPreviews = false }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
         }.padding(24).frame(width: 480, height: 320).buttonStyle(SettingsButtonStyle())
     }
 }

@@ -48,22 +48,24 @@ import OpenImport
         if !readable {errorText="No readable import data found at \(directoryDisplayPath)."}
     }
     public func countLabel(_ category:String)->String {
-        if let count=counts[category] {let partial=category == "History" ? probe?.historyPartial == true:category == "Passwords and cookies" && probe?.savedItemsPartial == true;return "Found: \(count)"+(partial ? " (partial)":"")}
+        if let count=counts[category] {let partial=category == "History" ? probe?.historyPartial == true:category == "Passwords and cookies" && probe?.savedItemsPartial == true;return "Found: \(count.formatted())"+(partial ? " (partial)":"")}
         guard let probe else {return "Counting…"}
         let found=category == "History" ? probe.historyFound:category == "Passwords and cookies" ? probe.secretsFound:category == "Archive" ? probe.archiveFound:probe.sidebarFound
         return found ? "Could not be read":"Not found"
     }
     public static let reportCategories=["Spaces","Pinned and Today tabs","Favorites","Folders","Archive","History","Search settings","Passwords and cookies"]
     public var reportSummary:String {
-        let spaces=reportCount("Spaces"),tabs=reportCount("Imported tabs")
-        return "Imported \(spaces) \(spaces == 1 ? "Space":"Spaces") and \(tabs) \(tabs == 1 ? "tab":"tabs")."
+        var parts:[String]=[]
+        if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
+        if ["Imported tabs","Pinned and Today tabs","Favorites"].allSatisfy({outcome?.failures[$0] == nil}) {parts.append(ImportCountCopy.phrase(reportCount("Imported tabs"),singular:"tab",plural:"tabs"))}
+        return parts.isEmpty ? "Import finished.":"Imported "+parts.joined(separator:" and ")+"."
     }
     public func reportCount(_ category:String)->Int {outcome?.importedCount(category) ?? 0}
     public var reportSkipped:String {
         let result=outcome?.counts ?? [:]
         var parts:[String]=[]
-        for (key,singular,plural) in [("Skipped easels","easel","easels"),("Skipped notes","note","notes"),("Skipped unknown","unsupported item","unsupported items")] {
-            let count=result[key,default:0];if count > 0 {parts.append("\(count) \(count == 1 ? singular:plural)")}
+        for (key,singular,plural) in [("Skipped easels","Easel","Easels"),("Skipped notes","Note","Notes"),("Skipped unknown","unsupported item","unsupported items")] {
+            let count=result[key,default:0];if count > 0 {parts.append(ImportCountCopy.phrase(count,singular:singular,plural:plural))}
         }
         return parts.isEmpty ? "":"Skipped: " + parts.joined(separator:", ")
     }
@@ -110,11 +112,11 @@ public struct ImportWizard: View {
                 case .choose:
                     HStack { Text("From: " + model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
                     option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested).disabled(!model.canImportPasswordsAndCookies)
-                    Text("Search settings imports your engine choice only.").font(.caption).foregroundStyle(.secondary)
+                    Text("Imports your search engine choice only.").font(.caption).foregroundStyle(.secondary)
                 case .review:
                     ForEach(model.spaceMapping, id: \.self) { Text($0) }
-                    Text("Profiles found: \(model.counts["Profiles", default: 0]) · Routing rules found: \(model.counts["Routing rules", default: 0])")
-                    Text("Skipped: \(model.counts["Skipped easels", default: 0]) \(model.counts["Skipped easels"] == 1 ? "easel" : "easels"), \(model.counts["Skipped notes", default: 0]) \(model.counts["Skipped notes"] == 1 ? "note" : "notes"), \(model.counts["Skipped unknown", default: 0]) unknown items.")
+                    Text("Found: \(ImportCountCopy.phrase(model.counts["Profiles",default:0],singular:"Profile",plural:"Profiles")) · \(ImportCountCopy.phrase(model.counts["Routing rules",default:0],singular:"routing rule",plural:"routing rules"))")
+                    Text("Skipped: \(ImportCountCopy.phrase(model.counts["Skipped easels",default:0],singular:"Easel",plural:"Easels")), \(ImportCountCopy.phrase(model.counts["Skipped notes",default:0],singular:"Note",plural:"Notes")), \(ImportCountCopy.phrase(model.counts["Skipped unknown",default:0],singular:"unknown item",plural:"unknown items")).")
                     Text("Easels and Notes do not import. Open has no Easels or Notes.").foregroundStyle(.secondary)
                 case .consent:
                     let copy=PasswordsImportCopy(canImport:model.canImportPasswordsAndCookies,savedItems:model.probe == nil ? nil:(model.probe?.secretsFound == false ? 0:model.counts["Passwords and cookies"]))
@@ -124,7 +126,7 @@ public struct ImportWizard: View {
                 case .report:
                     if model.outcome?.errorText == nil || model.hasImportedData {
                         Text(model.reportSummary).font(.headline)
-                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(name);Spacer();Text("\(model.reportCount(name))").monospacedDigit()}}
+                        ForEach(ImportWizardViewModel.reportCategories,id:\.self) {name in HStack {Text(ImportCountCopy.displayCategory(name));Spacer();Text(model.reportCount(name).formatted()).monospacedDigit()}}
                         if !model.reportSkipped.isEmpty {Text(model.reportSkipped).foregroundStyle(.secondary)}
                     }
                     if model.passwordsWereNotImported {Text("Passwords and cookies were not imported.").foregroundStyle(.secondary)}
@@ -151,6 +153,6 @@ public struct ImportWizard: View {
         .task { if !model.readable { await model.refreshCounts() } }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
-        HStack { Toggle(name, isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
+        HStack { Toggle(ImportCountCopy.displayCategory(name), isOn: Binding(get: { model.plan[keyPath: key] }, set: { model.plan[keyPath: key] = $0 })); Spacer(); Text(model.countLabel(name)).foregroundStyle(.secondary).monospacedDigit() }
     }
 }

@@ -16,7 +16,12 @@ The model strongly retains its action object and the Settings owner. `FirstRunAc
 
 The app fills `arcIsRunning`. Progress assignments (`phaseText`, `progress`, `browserHasLanded`) are seams for the later adapter. `finishFirstRun(imported:)` uses the shared `ImportOutcome.didImportAnything` key set; canonical adapter keys and display aliases are handled once. The App must save successfully before recording completion or closing. Call `reportSaveFailure(imported:)` on failure: the fresh path has its own centered message. This step never writes `open.firstRun.completed` or saves a first-run snapshot.
 
-Step C must verify the 36 pt inset beneath a real transparent title bar, keyboard order, key/inactive button styling, and the 80 pt application-icon frame (about 64 pt ink). The preview draws Open’s own icon; no reference artwork is copied.
+Step C entry criteria (recorded now; no Step C code in this PR):
+
+- **N4:** Give report-saveerror a Try Again action that retries saving the pending imported model. The message must say the imported items are in the browser window behind this panel. Do not mark completion or close the panel until the save succeeds. Update §4 E-5 with that shipped text when Step C implements it.
+- **N9:** Check the determinate progress fill uses the accent and the indeterminate bar animates in the real window. A still offscreen PNG does not prove native animation or activation.
+- **#12:** Capture the real window and check that the 36 pt top inset clears the traffic lights.
+- Check keyboard order, key/inactive button styling, and the 80 pt application-icon frame (about 64 pt ink). The preview draws Open’s own icon; no reference artwork is copied.
 
 One `ImportWizardViewModel` owns the plan and consent gate. `PasswordsImportCopy` supplies the shared body, later note, help variants and buttons. The capability stays OFF: both flows disable the checkbox and exclude it from selection. Capability-ON renders stop before Allow. Cancel/Back keep choices. The Failed footer returns to Import without changing them. Default-browser entry makes no system call; error and decline messages are exclusive, and an already-default browser offers only Start Browsing.
 
@@ -55,7 +60,7 @@ The refreshed [manual receipt](first-run/probe-checks.json) uses a hand-built pr
 
 ## Permanent render inventory
 
-All 186 PNGs were rendered and visually inspected: 100 first-run images below and 86 Settings/Library images in [settings.md](settings.md). Each first-run state uses one explicit appearance, at both 1x and 2x. The offscreen renderer supplies key/inactive control state to the same button style; Step C verifies the native window transition. [SHA-256 receipts](first-run/sha256.txt) bind every first-run PNG. The unavailable Passwords screen is an unreachable copy reference; capability-ON images do not execute consent. Import hints, partial counts and worst-case reports are permanent renderer states.
+All 214 PNGs were rendered and visually inspected: 128 first-run images below and 86 Settings/Library images in [settings.md](settings.md). Each first-run state uses one explicit appearance, at both 1x and 2x. The offscreen renderer supplies key/inactive control state to the same button style; Step C verifies the native window transition. [SHA-256 receipts](first-run/sha256.txt) bind every first-run PNG. The unavailable Passwords screen is an unreachable copy reference; capability-ON images do not execute consent. Import hints, partial counts, worst-case reports, single-item copy and large formatted counts are permanent renderer states. Import rows have minimum heights with vertical padding and grow for wrapped help. Default-browser status reserves the same 36 pt slot before and after the action. No-data Welcome and the fresh save error make Start Fresh the accent/default action.
 
 | State | Dark 1x | Dark 2x | Light 1x | Light 2x |
 |---|---|---|---|---|
@@ -84,5 +89,16 @@ All 186 PNGs were rendered and visually inspected: 100 first-run images below an
 | default-declined | [PNG](first-run/first-run-default-declined@1x.png) | [PNG](first-run/first-run-default-declined@2x.png) | [PNG](first-run/first-run-default-declined-light@1x.png) | [PNG](first-run/first-run-default-declined-light@2x.png) |
 | default-error | [PNG](first-run/first-run-default-error@1x.png) | [PNG](first-run/first-run-default-error@2x.png) | [PNG](first-run/first-run-default-error-light@1x.png) | [PNG](first-run/first-run-default-error-light@2x.png) |
 | default-already | [PNG](first-run/first-run-default-already@1x.png) | [PNG](first-run/first-run-default-already@2x.png) | [PNG](first-run/first-run-default-already-light@1x.png) | [PNG](first-run/first-run-default-already-light@2x.png) |
+| welcome-singular | [PNG](first-run/first-run-welcome-singular@1x.png) | [PNG](first-run/first-run-welcome-singular@2x.png) | [PNG](first-run/first-run-welcome-singular-light@1x.png) | [PNG](first-run/first-run-welcome-singular-light@2x.png) |
+| import-singular | [PNG](first-run/first-run-import-singular@1x.png) | [PNG](first-run/first-run-import-singular@2x.png) | [PNG](first-run/first-run-import-singular-light@1x.png) | [PNG](first-run/first-run-import-singular-light@2x.png) |
+| secrets-singular | [PNG](first-run/first-run-secrets-singular@1x.png) | [PNG](first-run/first-run-secrets-singular@2x.png) | [PNG](first-run/first-run-secrets-singular-light@1x.png) | [PNG](first-run/first-run-secrets-singular-light@2x.png) |
+| report-singular | [PNG](first-run/first-run-report-singular@1x.png) | [PNG](first-run/first-run-report-singular@2x.png) | [PNG](first-run/first-run-report-singular-light@1x.png) | [PNG](first-run/first-run-report-singular-light@2x.png) |
+| welcome-large | [PNG](first-run/first-run-welcome-large@1x.png) | [PNG](first-run/first-run-welcome-large@2x.png) | [PNG](first-run/first-run-welcome-large-light@1x.png) | [PNG](first-run/first-run-welcome-large-light@2x.png) |
+| import-large | [PNG](first-run/first-run-import-large@1x.png) | [PNG](first-run/first-run-import-large@2x.png) | [PNG](first-run/first-run-import-large-light@1x.png) | [PNG](first-run/first-run-import-large-light@2x.png) |
+| secrets-large | [PNG](first-run/first-run-secrets-large@1x.png) | [PNG](first-run/first-run-secrets-large@2x.png) | [PNG](first-run/first-run-secrets-large-light@1x.png) | [PNG](first-run/first-run-secrets-large-light@2x.png) |
 
-The Report uses red “Could not be read” count cells, “Not selected” for unrequested History, and one error or skipped-kind summary. No internal accounted/copy counters appear. The plan’s §4 records the shipped copy. Opus re-review remains pending before Step C.
+The Report uses red “Could not be read” count cells, “Not selected” for unrequested History, and one error or skipped-kind summary. The R-2 sentence omits failed kinds. Partial-success E-2 copy uses secondary text; red count cells identify the failure. All displayed counts use `.formatted()` and singular/plural wording. Both flows display “Search engine” while retaining the adapter’s existing dictionary key. No internal accounted/copy counters appear. The plan’s §4 records the shipped copy. Opus re-review remains pending before Step C.
+
+## Round-2 polish
+
+The seven remaining Settings default buttons use prominent SettingsButtonStyle. Standalone sheets in settings-preview explicitly inherit the same normal SettingsButtonStyle as the app; defaults override it. This avoids native default-button styling hiding a missing prominent style in renders. The existing action/adapter CLI flow also checks single-item and large-count copy, partial-success summaries, and the fresh-primary decision. No Step C implementation was added.

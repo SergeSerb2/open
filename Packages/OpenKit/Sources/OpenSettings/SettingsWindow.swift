@@ -139,9 +139,13 @@ struct SettingsGroup<Content: View>: View {
 struct SettingsRow<Content: View>: View {
     var height: CGFloat = SettingsTokens.controlRowHeight
     var divider = true
+    var minimumHeight:CGFloat? = nil
     @ViewBuilder var content: Content
     var body: some View {
-        content.frame(maxWidth:.infinity,alignment:.leading).frame(height:height).padding(.horizontal,10)
+        Group {
+            if let minimumHeight {content.frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,10).frame(minHeight:minimumHeight)}
+            else {content.frame(maxWidth:.infinity,alignment:.leading).frame(height:height)}
+        }.padding(.horizontal,10)
             .overlay(alignment:.bottom) { if divider { Rectangle().fill(Color(nsColor:SettingsTokens.divider.nsColor)).frame(height:1).padding(.horizontal,10) } }
     }
 }
@@ -156,13 +160,14 @@ struct SettingsSwitch:View {
     var body:some View { HStack { Text(title).fixedSize(horizontal:false,vertical:true);Spacer(minLength:8);Toggle(title,isOn:$isOn).labelsHidden().toggleStyle(.switch).controlSize(.mini) }.accessibilityElement(children:.contain) }
 }
 
-struct SettingsButtonStyle:ButtonStyle {
+public struct SettingsButtonStyle:ButtonStyle {
+    public init(prominent:Bool=false,height:CGFloat=24) {self.prominent=prominent;self.height=height}
     var prominent=false
     var height:CGFloat=24
     @Environment(\.isEnabled) private var enabled
     @Environment(\.controlActiveState) private var activeState
     private var highlighted:Bool {prominent && activeState == .key && enabled}
-    func makeBody(configuration:Configuration)->some View {
+    public func makeBody(configuration:Configuration)->some View {
         configuration.label.font(.system(size:13,weight:.regular)).padding(.horizontal,12).frame(height:height)
             .foregroundStyle(highlighted ? Color.white:Color.primary)
             .background((highlighted ? Color(nsColor:.controlAccentColor):Color(nsColor:SettingsTokens.button.nsColor)).opacity(configuration.isPressed ? 0.8:1),in:RoundedRectangle(cornerRadius:6))

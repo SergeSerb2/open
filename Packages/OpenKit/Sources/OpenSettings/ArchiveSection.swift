@@ -18,7 +18,7 @@ public struct ArchiveSection: View {
                             else { Image(systemName: row.reason == .folderDeleted ? "folder" : "globe").frame(width: 20) }
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(row.title).lineLimit(1)
-                                Text(row.reason == .folderDeleted ? "Folder · \(childCount) \(childCount == 1 ? "tab" : "tabs")" : "\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
+                                Text(row.reason == .folderDeleted ? "Folder · \(childCount.formatted()) \(childCount == 1 ? "tab" : "tabs")" : "\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
                             }; Spacer()
                             Text(row.archivedAt.formatted(.dateTime.month(.abbreviated).day())).font(.caption).foregroundStyle(.secondary)
                             Button("Restore") { Task { await model.restore(id: row.id) } }.modifier(ArchiveHoverAction())

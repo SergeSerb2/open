@@ -130,29 +130,29 @@ import CryptoKit
         settings.shortcuts.revert();settings.shortcuts.reset("new-tab");settings.shortcuts.query=""
         try originalBindings.write(to:settings.shortcuts.fileURL,options:.atomic)
         for scale in scales {
-            try await render(PreviewsSheet(model:settings.general),size:CGSize(width:480,height:320),scale:scale,dark:false,to:output.appendingPathComponent("sheet-previews@\(scale)x.png"))
+            try await render(PreviewsSheet(model:settings.general).buttonStyle(SettingsButtonStyle()),size:CGSize(width:480,height:320),scale:scale,dark:false,to:output.appendingPathComponent("sheet-previews@\(scale)x.png"))
             settings.profiles.select(settings.model.profiles[1].id)
-            try await render(SearchEnginesSheet(model:settings.profiles),size:CGSize(width:520,height:420),scale:scale,dark:false,to:output.appendingPathComponent("sheet-search-engines@\(scale)x.png"))
-            try await render(ClearBrowsingDataSheet(model:settings.profiles),size:CGSize(width:460,height:360),scale:scale,dark:false,to:output.appendingPathComponent("sheet-clear-data@\(scale)x.png"))
+            try await render(SearchEnginesSheet(model:settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:420),scale:scale,dark:false,to:output.appendingPathComponent("sheet-search-engines@\(scale)x.png"))
+            try await render(ClearBrowsingDataSheet(model:settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:460,height:360),scale:scale,dark:false,to:output.appendingPathComponent("sheet-clear-data@\(scale)x.png"))
             await settings.adBlock?.openSelectedProfile()
-            try await render(AdBlockSettingsSheet(model:settings.adBlock!),size:CGSize(width:600,height:560),scale:scale,dark:true,to:output.appendingPathComponent("sheet-adblock@\(scale)x.png"))
-            try await render(LinkRuleSheet(root:settings,draft:settings.links.drafts[1]),size:CGSize(width:520,height:380),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule@\(scale)x.png"))
+            try await render(AdBlockSettingsSheet(model:settings.adBlock!).buttonStyle(SettingsButtonStyle()),size:CGSize(width:600,height:560),scale:scale,dark:true,to:output.appendingPathComponent("sheet-adblock@\(scale)x.png"))
+            try await render(LinkRuleSheet(root:settings,draft:settings.links.drafts[1]).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:380),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule@\(scale)x.png"))
             settings.profiles.nameDraft="Example New Profile"
-            try await render(ProfileNameSheet(model:settings.profiles,create:true),size:CGSize(width:440,height:330),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-create@\(scale)x.png"))
+            try await render(ProfileNameSheet(model:settings.profiles,create:true).buttonStyle(SettingsButtonStyle()),size:CGSize(width:440,height:330),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-create@\(scale)x.png"))
             settings.profiles.nameDraft="Example Work"
-            try await render(ProfileNameSheet(model:settings.profiles,create:false),size:CGSize(width:440,height:180),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-rename@\(scale)x.png"))
+            try await render(ProfileNameSheet(model:settings.profiles,create:false).buttonStyle(SettingsButtonStyle()),size:CGSize(width:440,height:180),scale:scale,dark:false,to:output.appendingPathComponent("sheet-profile-rename@\(scale)x.png"))
             settings.profiles.proposeArchive(.oneHour)
-            try await render(ArchiveScopeSheet(model:settings.profiles),size:CGSize(width:500,height:160),scale:scale,dark:false,to:output.appendingPathComponent("sheet-archive-scope@\(scale)x.png"));settings.profiles.cancelArchive()
+            try await render(ArchiveScopeSheet(model:settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:500,height:160),scale:scale,dark:false,to:output.appendingPathComponent("sheet-archive-scope@\(scale)x.png"));settings.profiles.cancelArchive()
         }
         let customEngineID=settings.profiles.profile!.settings.customSearchEngines[0].id
         for scale in scales {
-            try await render(SearchEnginesSheet(model:settings.profiles,editingEngineID:customEngineID),size:CGSize(width:520,height:540),scale:scale,dark:false,to:output.appendingPathComponent("sheet-search-engine-edit@\(scale)x.png"))
+            try await render(SearchEnginesSheet(model:settings.profiles,editingEngineID:customEngineID).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:540),scale:scale,dark:false,to:output.appendingPathComponent("sheet-search-engine-edit@\(scale)x.png"))
             var invalid=settings.links.drafts[1];invalid.pattern=""
-            try await render(LinkRuleSheet(root:settings,draft:invalid),size:CGSize(width:520,height:380),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule-invalid@\(scale)x.png"))
+            try await render(LinkRuleSheet(root:settings,draft:invalid).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:380),scale:scale,dark:true,to:output.appendingPathComponent("sheet-link-rule-invalid@\(scale)x.png"))
         }
         let noticeEnvironment=try PreviewEnvironment();defer {noticeEnvironment.close()}
         noticeEnvironment.settings.profiles.presentSuggestNotice()
-        for scale in scales {try await render(SuggestNoticeSheet(model:noticeEnvironment.settings.profiles),size:CGSize(width:400,height:180),scale:scale,dark:false,to:output.appendingPathComponent("sheet-suggestion-notice@\(scale)x.png"))}
+        for scale in scales {try await render(SuggestNoticeSheet(model:noticeEnvironment.settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:400,height:180),scale:scale,dark:false,to:output.appendingPathComponent("sheet-suggestion-notice@\(scale)x.png"))}
         settings.profiles.select(settings.model.profiles[0].id)
         let empty=try PreviewEnvironment();defer {empty.close()};empty.downloadFeed.downloads=[]
         for section in [LibrarySection.archive,.downloads,.captures,.history] {
@@ -164,21 +164,21 @@ import CryptoKit
         try SyntheticData.writeImportFixture(to: source)
         let wizard = ImportWizardViewModel(root: wizardEnvironment.settings, directory: source)
         await wizard.refreshCounts()
-        for scale in scales { try await render(ImportWizard(model: wizard), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-choose@\(scale)x.png")) }
+        for scale in scales { try await render(ImportWizard(model: wizard).buttonStyle(SettingsButtonStyle()), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-choose@\(scale)x.png")) }
         wizard.plan.secretsRequested=false;wizard.review()
-        for scale in scales {try await render(ImportWizard(model:wizard),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-review@\(scale)x.png"))}
+        for scale in scales {try await render(ImportWizard(model:wizard).buttonStyle(SettingsButtonStyle()),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-review@\(scale)x.png"))}
         wizard.step = .consent // Capability-OFF copy reference; the disabled checkbox cannot navigate here.
         try require(wizard.step == .consent && wizardEnvironment.actions.importPlansWithConsent == 0 && wizardEnvironment.actions.log.isEmpty, "wizard rendering must stop at consent")
-        for scale in scales { try await render(ImportWizard(model: wizard), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-consent@\(scale)x.png")) }
+        for scale in scales { try await render(ImportWizard(model: wizard).buttonStyle(SettingsButtonStyle()), size: CGSize(width: 640, height: 520), scale: scale, dark: false, to: output.appendingPathComponent("import-consent@\(scale)x.png")) }
         await wizard.skipSecrets()
         try require(wizard.step == .report && wizard.outcome?.errorText == nil && wizardEnvironment.actions.importPlansWithConsent == 0,"count-only wizard report")
-        for scale in scales {try await render(ImportWizard(model:wizard),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-report@\(scale)x.png"))}
+        for scale in scales {try await render(ImportWizard(model:wizard).buttonStyle(SettingsButtonStyle()),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-report@\(scale)x.png"))}
         wizardEnvironment.actions.canImportPasswordsAndCookies=true
         let readyWizard=ImportWizardViewModel(root:wizardEnvironment.settings,directory:source)
         await readyWizard.refreshCounts();readyWizard.plan.secretsRequested=true;readyWizard.review();await readyWizard.beginImport()
         let importCalls=wizardEnvironment.actions.log.count
         try require(readyWizard.step == .consent && !readyWizard.plan.secretsConsented,"ready-copy render must stop before consent")
-        for scale in scales {try await render(ImportWizard(model:readyWizard),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-passwords-ready@\(scale)x.png"))}
+        for scale in scales {try await render(ImportWizard(model:readyWizard).buttonStyle(SettingsButtonStyle()),size:CGSize(width:640,height:520),scale:scale,dark:false,to:output.appendingPathComponent("import-passwords-ready@\(scale)x.png"))}
         try require(wizardEnvironment.actions.importPlansWithConsent == 0 && wizardEnvironment.actions.log.count == importCalls,"ready-copy rendering invoked import")
         readyWizard.finish();wizardEnvironment.actions.canImportPasswordsAndCookies=false
         for scale in scales {
@@ -323,6 +323,18 @@ app.run()
     let error=fresh(errorActions);error.enterDefaultBrowser();error.makeDefault();try await capture(error,"default-error")
     let alreadyActions=PreviewFirstRunActions();alreadyActions.defaultBrowser=true
     let already=fresh(alreadyActions);already.enterDefaultBrowser();try await capture(already,"default-already")
+    let singularActions=PreviewFirstRunActions()
+    singularActions.nextOutcome=ImportOutcome(counts:[ImportOutcomeKeys.spaces:1,ImportOutcomeKeys.tabs:1,"Pinned and Today tabs":1,"Archive":1,"History":1,"Search settings":1,"Skipped easels":1,"Duplicates":1])
+    let singular=fresh(singularActions);var one=good!;one.spaces=1;one.sidebarItems=1;one.archiveItems=1;one.historyVisits=1;one.savedItems=1;singular.probe=one
+    try await capture(singular,"welcome-singular")
+    singular.showImport();try await capture(singular,"import-singular")
+    singular.step = .secretsConsent;try await capture(singular,"secrets-singular")
+    singular.showImport();singular.includeHistory=true;await singular.continueImport();try await capture(singular,"report-singular")
+    let largeActions=PreviewFirstRunActions();largeActions.canImportPasswordsAndCookies=true
+    let large=fresh(largeActions);var many=good!;many.spaces=1234;many.sidebarItems=12000;many.archiveItems=10000;many.historyVisits=184203;many.savedItems=100001;many.historyPartial=true;many.savedItemsPartial=true;large.probe=many
+    try await capture(large,"welcome-large")
+    large.showImport();try await capture(large,"import-large")
+    largeActions.canImportPasswordsAndCookies=false;large.step = .secretsConsent;try await capture(large,"secrets-large")
     try require(baseActions.plans.count == 1 && baseActions.plans.allSatisfy{!$0.secretsConsented} && baseActions.simulatedKeychainRequests == 0,"preview crossed the adapter consent gate")
     print("GATE first-run consent-bearing-plans=0 simulated-keychain-requests=0 (preview adapter only)")
 }

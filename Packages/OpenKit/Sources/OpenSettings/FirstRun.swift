@@ -12,7 +12,7 @@ public struct PasswordsImportCopy: Sendable {
     public var title:String {canImport ? "Import passwords and cookies from Arc?":"Passwords and cookies can't be imported yet."}
     public var body:String {
         if canImport {return "Open will read the passwords, cookies, addresses, and cards Arc saved on this Mac. To unlock them, Open needs Arc's key from your Keychain. macOS will ask for your approval. If you choose Deny, Open reads nothing and imports everything else."}
-        if let savedItems {return "Open found \(savedItems) saved items in Arc. Open didn't read or copy them."}
+        if let savedItems {return "Open found \(ImportCountCopy.phrase(savedItems,singular:"saved item",plural:"saved items")) in Arc. Open didn't read or copy \(savedItems == 1 ? "it":"them")."}
         return "Open didn't read or copy passwords or cookies. You can continue without them."
     }
     public static let later="You can skip this step and do it later from Settings."
@@ -61,8 +61,9 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         guard let probe else {return "Checking for data to import…"}
         guard probe.sidebarFound else {return "No data found to import on this Mac."}
         guard let spaces=probe.spaces,let items=probe.sidebarItems else {return "Import data found. Choose what to bring into Open."}
-        return "Found data to import: \(spaces) Spaces, about \(items) tabs."
+        return "Found data to import: \(ImportCountCopy.phrase(spaces,singular:"Space",plural:"Spaces")), about \(ImportCountCopy.phrase(items,singular:"tab",plural:"tabs"))."
     }
+    public var prefersFreshStart:Bool {probe?.sidebarFound == false || errorText == Self.freshSaveError}
     public func showImport() {errorText=nil;step = .importChoices}
     public func startFresh() {guard !busy else {return};actions.finishFirstRun(imported:false)}
     public func skipImport() {guard !busy else {return};imported=false;enterDefaultBrowser()}
@@ -115,20 +116,36 @@ public enum FirstRunWindow {public static let size=SettingsTokens.firstRunSize}
         if outcome?.failures[category] != nil {return "Could not be read"}
         if category == "History" && !wizard.plan.history {return "Not selected"}
         if category == "Passwords and cookies" && !wizard.plan.secretsConsented {return includeSecrets && wizard.consentWasDecided ? "Not imported":"Not selected"}
-        return "\(wizard.reportCount(category))"
+        return wizard.reportCount(category).formatted()
     }
     public var reportNote:String? {
         if let error=errorText,!error.isEmpty {return error}
         var parts:[String]=[]
-        for (key,title) in [("Skipped easels","Easels"),("Skipped notes","Notes"),("Skipped unknown","unsupported items")] {
-            if let count=outcome?.counts[key],count>0 {parts.append("\(count) \(title)")}
+        for (key,singular,plural) in [("Skipped easels","Easel","Easels"),("Skipped notes","Note","Notes"),("Skipped unknown","unsupported item","unsupported items")] {
+            if let count=outcome?.counts[key],count>0 {parts.append(ImportCountCopy.phrase(count,singular:singular,plural:plural))}
         }
         return parts.isEmpty ? nil:"Skipped: "+parts.joined(separator:", ")
     }
-    public func found(_ value:Int?,kind:String,present:Bool=true,partial:Bool=false)->String {
+    public var reportSummary:String {
+        var parts:[String]=[]
+        if outcome?.failures["Spaces"] == nil {parts.append(ImportCountCopy.phrase(wizard.reportCount("Spaces"),singular:"Space",plural:"Spaces"))}
+        if ["Imported tabs","Pinned and Today tabs","Favorites"].allSatisfy({outcome?.failures[$0] == nil}) {parts.append(ImportCountCopy.phrase(wizard.reportCount("Imported tabs"),singular:"tab",plural:"tabs"))}
+        if outcome?.failures["Archive"] == nil {parts.append(ImportCountCopy.phrase(wizard.reportCount("Archive"),singular:"archived tab",plural:"archived tabs"))}
+        return parts.isEmpty ? "Import finished.":parts.joined(separator:", ")+" imported."
+    }
+    public var duplicateSummary:String? {
+        guard let count=outcome?.counts["Duplicates"],count>0 else {return nil}
+        let verb=count == 1 ? "was":"were"
+        return "\(ImportCountCopy.phrase(count,singular:"item",plural:"items")) \(verb) already in Open and \(verb) not copied again."
+    }
+    public var reportNoteIsError:Bool {
+        guard errorText != nil else {return false}
+        return !(wizard.hasImportedData && outcome?.failures.isEmpty == false && errorText == outcome?.errorText)
+    }
+    public func found(_ value:Int?,singular:String,plural:String,present:Bool=true,partial:Bool=false)->String {
         if probe == nil {return "Counting…"}
         guard let value else {return present ? "Could not be read":"Not found"}
-        return "Found: \(value) \(kind)"+(partial ? " (partial)":"")
+        return "Found: \(ImportCountCopy.phrase(value,singular:singular,plural:plural))"+(partial ? " (partial)":"")
     }
 }
 
@@ -158,8 +175,8 @@ public struct FirstRunView:View {
         Text("Open").font(Font(SettingsTokens.firstRunWordmark.font)).padding(.top,16)
         Text("Open is a fast, private browser that keeps your Spaces, tabs, and history on this Mac.").multilineTextAlignment(.center).frame(maxWidth:SettingsTokens.firstRunIdentityWidth).fixedSize(horizontal:false,vertical:true).padding(.top,8)
         VStack(spacing:8) {
-            Button {model.showImport()} label:{Text("Import from Arc").frame(width:SettingsTokens.firstRunButtonWidth-24)}.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true,height:28))
-            Button {model.startFresh()} label:{Text("Start Fresh").frame(width:SettingsTokens.firstRunButtonWidth-24)}.buttonStyle(SettingsButtonStyle(height:28))
+            Button {model.showImport()} label:{Text("Import from Arc").frame(width:SettingsTokens.firstRunButtonWidth-24)}.keyboardShortcut(model.prefersFreshStart ? nil:.defaultAction).buttonStyle(SettingsButtonStyle(prominent:!model.prefersFreshStart,height:28))
+            Button {model.startFresh()} label:{Text("Start Fresh").frame(width:SettingsTokens.firstRunButtonWidth-24)}.keyboardShortcut(model.prefersFreshStart ? .defaultAction:nil).buttonStyle(SettingsButtonStyle(prominent:model.prefersFreshStart,height:28))
         }.frame(width:SettingsTokens.firstRunButtonWidth).padding(.top,24)
         Text(model.welcomeStatus).font(section).foregroundStyle(secondary).multilineTextAlignment(.center).padding(.top,16)
         if let error=model.errorText {Text(error).foregroundStyle(.red).multilineTextAlignment(.center).frame(maxWidth:380).fixedSize(horizontal:false,vertical:true).padding(.top,8)}
@@ -186,11 +203,11 @@ public struct FirstRunView:View {
             } else {
                 if model.arcIsRunning {Text("Arc is open right now. Open can still import. If anything is missing, quit Arc and import again from Settings.").font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
                 SettingsGroup {
-                    choice("Spaces & tabs",help:"Spaces, pinned and today tabs, favorites, and folders. These come together.",found:model.found(model.probe?.spaces,kind:"Spaces"),value:$model.includeSpacesAndTabs,height:62)
-                    choice("Archive",help:"Tabs you closed or archived.",found:model.found(model.probe?.archiveItems,kind:"archived tabs",present:model.probe?.archiveFound ?? false),value:$model.includeArchive,height:56)
-                    choice("History",help:"Pages you visited. This can take a little longer. You can also do this later from Settings.",found:model.found(model.probe?.historyVisits,kind:"visits",present:model.probe?.historyFound ?? false,partial:model.probe?.historyPartial ?? false),value:$model.includeHistory,height:62,last:true)
+                    choice("Spaces & tabs",help:"Spaces, pinned and today tabs, favorites, and folders. These come together.",found:model.found(model.probe?.spaces,singular:"Space",plural:"Spaces"),value:$model.includeSpacesAndTabs,height:62)
+                    choice("Archive",help:"Tabs you closed or archived.",found:model.found(model.probe?.archiveItems,singular:"archived tab",plural:"archived tabs",present:model.probe?.archiveFound ?? false),value:$model.includeArchive,height:56)
+                    choice("History",help:"Pages you visited. This can take a little longer. You can also do this later from Settings.",found:model.found(model.probe?.historyVisits,singular:"visit",plural:"visits",present:model.probe?.historyFound ?? false,partial:model.probe?.historyPartial ?? false),value:$model.includeHistory,height:62,last:true)
                 }
-                SettingsGroup {choice("Passwords and cookies",help:model.passwordsCopy.help,found:model.found(model.probe?.savedItems,kind:"saved items",present:model.probe?.secretsFound ?? false,partial:model.probe?.savedItemsPartial ?? false),value:$model.includeSecrets,height:74,last:true,enabled:model.wizard.canImportPasswordsAndCookies)}
+                SettingsGroup {choice("Passwords and cookies",help:model.passwordsCopy.help,found:model.found(model.probe?.savedItems,singular:"saved item",plural:"saved items",present:model.probe?.secretsFound ?? false,partial:model.probe?.savedItemsPartial ?? false),value:$model.includeSecrets,height:74,last:true,enabled:model.wizard.canImportPasswordsAndCookies)}
                 if model.probe?.sidebarFound == true && model.probe?.spaces == nil {Text("Open found the sidebar file, but could not count it. You can try the import or choose a different folder.").font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
             }
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
@@ -203,7 +220,7 @@ public struct FirstRunView:View {
         }.fixedSize(horizontal:false,vertical:true)
     }}
     private func choice(_ title:String,help:String,found:String,value:Binding<Bool>,height:CGFloat,last:Bool=false,enabled:Bool=true)->some View {
-        SettingsRow(height:height,divider:!last) {HStack(alignment:.top,spacing:8) {
+        SettingsRow(divider:!last,minimumHeight:height) {HStack(alignment:.top,spacing:8) {
             VStack(alignment:.leading,spacing:4) {Toggle(title,isOn:value).toggleStyle(.checkbox).disabled(!enabled);Text(help).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true).padding(.leading,21)}
             Spacer(minLength:0);Text(found).font(section).foregroundStyle(secondary).monospacedDigit().fixedSize().padding(.top,2)
         }}
@@ -234,15 +251,15 @@ public struct FirstRunView:View {
     private var report:some View {VStack(alignment:.leading,spacing:10) {
         Text("Import complete").font(.title2)
         ScrollView {VStack(alignment:.leading,spacing:10) {
-            Text("\(model.wizard.reportCount("Spaces")) Spaces, \(model.wizard.reportCount("Imported tabs")) tabs, \(model.wizard.reportCount("Archive")) archived tabs imported.").fixedSize(horizontal:false,vertical:true)
+            Text(model.reportSummary).fixedSize(horizontal:false,vertical:true)
             SettingsGroup {ForEach(Array(ImportWizardViewModel.reportCategories.enumerated()),id:\.element) {index,name in
                 SettingsRow(height:30,divider:index != ImportWizardViewModel.reportCategories.count-1) {HStack {
-                    Text(name == "Search settings" ? "Search engine":name);Spacer();
+                    Text(ImportCountCopy.displayCategory(name));Spacer();
                     Text(model.reportValue(name)).monospacedDigit().foregroundStyle(model.outcome?.failures[name] != nil ? Color.red:model.reportValue(name).contains("Not ") ? secondary:Color.primary)
                 }}
             }}
-            if let count=model.outcome?.counts["Duplicates"],count>0 {Text("\(count) items were already in Open and were not copied again.").font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
-            if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.errorText == nil ? secondary:Color.red).fixedSize(horizontal:false,vertical:true)}
+            if let duplicates=model.duplicateSummary {Text(duplicates).font(section).foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
+            if let note=model.reportNote {Text(note).font(section).foregroundStyle(model.reportNoteIsError ? Color.red:secondary).fixedSize(horizontal:false,vertical:true)}
         }.frame(maxWidth:.infinity,alignment:.leading)}.scrollIndicators(.automatic)
         HStack {Spacer();primary("Continue"){model.enterDefaultBrowser()}}.fixedSize(horizontal:false,vertical:true)
     }}
@@ -252,9 +269,12 @@ public struct FirstRunView:View {
             Text("Make Open your default browser").font(.title2)
             Text("Links from other apps will open in Open. You can change this any time in Settings.").fixedSize(horizontal:false,vertical:true)
             Text("Little Open follows your link routing settings.").font(section).foregroundStyle(secondary)
-            if model.isDefaultBrowser {Text("Open is your default browser.").font(.headline)}
-            else if let error=model.errorText {Text(error).foregroundStyle(.red).fixedSize(horizontal:false,vertical:true)}
-            else if model.defaultWasAttempted {Text("Open is not your default browser yet. You can set it later in Settings.").foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
+            Group {
+                if model.isDefaultBrowser {Text("Open is your default browser.").font(.headline)}
+                else if let error=model.errorText {Text(error).foregroundStyle(.red).fixedSize(horizontal:false,vertical:true)}
+                else if model.defaultWasAttempted {Text("Open is not your default browser yet. You can set it later in Settings.").foregroundStyle(secondary).fixedSize(horizontal:false,vertical:true)}
+                else {Color.clear.accessibilityHidden(true)}
+            }.frame(height:SettingsTokens.firstRunStatusHeight,alignment:.top)
         }}
         HStack {Spacer();if model.isDefaultBrowser {primary("Start Browsing"){model.finish()}} else {Button("Not Now"){model.finish()};primary("Make Open your default"){model.makeDefault()}}}
     }}

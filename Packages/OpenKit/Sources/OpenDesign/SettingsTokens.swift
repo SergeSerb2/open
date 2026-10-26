@@ -8,6 +8,7 @@ public enum SettingsTokens {
     public static let firstRunWordmark = FontToken(28, .semibold)
     public static let firstRunStepTopInset:CGFloat = 36
     public static let firstRunSparseTextWidth:CGFloat = 400
+    public static let firstRunStatusHeight:CGFloat = 36
     public static let firstRunHorizontalInset: CGFloat = 32
     public static let firstRunVerticalInset: CGFloat = 28
     public static let firstRunIconSize: CGFloat = 80
