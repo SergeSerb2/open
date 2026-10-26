@@ -146,17 +146,22 @@ def main():
     if args.probe:
         print("13 sidebar capture states available")
         return 0
-    out = args.out.resolve() if args.out else Path(tempfile.mkdtemp(prefix="open-sidebar-compare-"))
+    # verify-all gives each check a disposable TMPDIR. Private comparison evidence
+    # must survive that cleanup and must stay outside the repository/artifact logs.
+    out = args.out.resolve() if args.out else Path(tempfile.mkdtemp(prefix="open-sidebar-compare-", dir="/tmp"))
     if out.is_relative_to(ROOT) and not out.is_relative_to(default_inputs().parent):
         raise ValueError("outputs must be outside the checkout")
     if args.out:
         out.mkdir(mode=0o700, parents=True, exist_ok=False)
     renderer = args.renderer.resolve()
-    baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, args.baseline_ref)
     ref_sha = subprocess.check_output(["git", "rev-parse", args.baseline_ref], cwd=ROOT, text=True).strip()
+    baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, ref_sha)
     receipt = {"baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
                "baselineBinarySHA256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
-               "branchBinarySHA256": hashlib.sha256(renderer.read_bytes()).hexdigest(), "states": []}
+               "branchBinarySHA256": hashlib.sha256(renderer.read_bytes()).hexdigest(),
+               "snapshotSHA256": {name: hashlib.sha256((root / name / "State/browser.json").read_bytes()).hexdigest()
+                                  for name in ("snap-static", "snap-real")},
+               "captureSHA256": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in captures.items()}, "states": []}
     combined = {"main": {}, "branch": {}}
     failed = []
     for state in STATES:

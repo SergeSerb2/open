@@ -132,5 +132,20 @@ enum CompletionChecks {
         }
         model.focusSpace(windowID: state.id, spaceID: model.spaces[1].id); pump()
         check(context.selection.isEmpty, "MS13 Space switch clears the selection")
+        let night = model.spaces[2]
+        model.focusSpace(windowID: state.id, spaceID: night.id); pump()
+        let group = night.pinned[0].folder!, split = group.children.compactMap(\.split)[0]
+        click(group.id, .command); click(split.id, .command)
+        check(context.selection.ids == [group.id, split.id] && state.selectedNodeBySpace[night.id] == nil,
+              "MS1 Cmd-click with no current row selects folders and splits without activating them")
+        let nightOutline = sidebar.focusedOutline!
+        let splitIndex = sidebar.displayedRows.firstIndex(of: split.id.description)!
+        let splitFill = nightOutline.rowView(atRow: splitIndex, makeIfNecessary: true)?.layer?.sublayers?.first { $0.name == "sidebar-row-fill" }
+        check(splitFill?.frame == CGRect(x: 24, y: 2, width: 196, height: 36) &&
+              splitFill?.backgroundColor == SidebarRole.rowMultiselected.cgColor(.dark) &&
+              sidebar.splitRowCells(splitID: split.id)?.cells.isEmpty == true,
+              "MS6 indented multi-selected split uses one fill and keeps its pane cells hidden")
+        model.moveNode(id: split.id, to: .spacePinned(night.id), at: 0); pump()
+        check(context.selection.ids == [split.id, group.id], "MS3 a structural move keeps selected IDs in display order")
     }
 }
