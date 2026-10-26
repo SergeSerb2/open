@@ -1,0 +1,9 @@
+{
+  "expectedExit": 2,
+  "actualExit": 1,
+  "forcedOwnAppDeactivations": 1,
+  "interruptedAttempts": 0,
+  "suiteStatus": null,
+  "method": "Real shell workflow; after native key dispatch, deactivate only Open through its automation socket. No other app receives input.",
+  "ok": false
+}

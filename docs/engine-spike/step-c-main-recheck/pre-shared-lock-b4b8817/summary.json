@@ -1,0 +1,426 @@
+[
+  {
+    "name": "build-debug",
+    "exit": 0,
+    "seconds": 34.25,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601"
+  },
+  {
+    "name": "build-release",
+    "exit": 0,
+    "seconds": 91.76,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601"
+  },
+  {
+    "name": "verify-all",
+    "exit": 0,
+    "seconds": 250.31,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601"
+  },
+  {
+    "name": "native-focus-negative-control",
+    "exit": 0,
+    "seconds": 27.44,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601"
+  },
+  {
+    "name": "debug-window-1",
+    "exit": 0,
+    "seconds": 53.37,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-window-1.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 45,
+    "failed": [],
+    "other": {
+      "cold_fresh_profile": {
+        "median_ms": {
+          "engineStart": 387,
+          "engineStarted": 467,
+          "firstContentfulPaint": 608,
+          "main": 221,
+          "modelLoaded": 223,
+          "sidebarDrawn": 386
+        },
+        "reason": "Release timing budgets are not evaluated in Debug",
+        "samples": 5,
+        "status": "SKIP"
+      },
+      "warm_existing_profile": {
+        "median_ms": {
+          "engineStart": 279,
+          "engineStarted": 356,
+          "firstContentfulPaint": 497,
+          "main": 140,
+          "modelLoaded": 142,
+          "sidebarDrawn": 278
+        },
+        "reason": "Release timing budgets are not evaluated in Debug",
+        "samples": 5,
+        "status": "SKIP"
+      }
+    }
+  },
+  {
+    "name": "debug-sidebar-1",
+    "exit": 0,
+    "seconds": 8.38,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-sidebar-1.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 18,
+    "failed": [],
+    "other": {
+      "durable_profile_storage": {
+        "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof.",
+        "status": "BLOCKED"
+      }
+    }
+  },
+  {
+    "name": "debug-shell-1",
+    "exit": 0,
+    "seconds": 12.57,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-shell-1.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 6,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-features-1",
+    "exit": 0,
+    "seconds": 72.87,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-features-1.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 19,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-actions-1",
+    "exit": 2,
+    "seconds": 32.04,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-actions-1.json",
+    "interruptedAttempts": 3,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 3,
+    "failed": [],
+    "other": {
+      "suite": {
+        "attempts": 3,
+        "focus": [
+          {
+            "event": "frontmostChanged",
+            "frontmostApp": "T3 Pretty Internal (Nightly)",
+            "frontmostPID": 88744,
+            "openPID": 93812,
+            "uptime": 132119.34072945834
+          },
+          {
+            "active": false,
+            "event": "NSApplicationDidResignActiveNotification",
+            "frontmostApp": "T3 Pretty Internal (Nightly)",
+            "frontmostPID": 88744,
+            "keyWindow": 0,
+            "openPID": 93812,
+            "uptime": 132119.34312170834
+          }
+        ],
+        "reason": "foreground lost during typed_top_today",
+        "status": "INTERRUPTED"
+      },
+      "typed_top_today": {
+        "assertion": {
+          "ok": true,
+          "tab": "12DA5F9E-1208-4DC0-A805-D81F739E9BC7"
+        },
+        "focus": [
+          {
+            "event": "frontmostChanged",
+            "frontmostApp": "T3 Pretty Internal (Nightly)",
+            "frontmostPID": 88744,
+            "openPID": 93812,
+            "uptime": 132119.34072945834
+          },
+          {
+            "active": false,
+            "event": "NSApplicationDidResignActiveNotification",
+            "frontmostApp": "T3 Pretty Internal (Nightly)",
+            "frontmostPID": 88744,
+            "keyWindow": 0,
+            "openPID": 93812,
+            "uptime": 132119.34312170834
+          }
+        ],
+        "status": "INTERRUPTED"
+      }
+    }
+  },
+  {
+    "name": "debug-window-2",
+    "exit": 0,
+    "seconds": 54.96,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-window-2.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 45,
+    "failed": [],
+    "other": {
+      "cold_fresh_profile": {
+        "median_ms": {
+          "engineStart": 399,
+          "engineStarted": 487,
+          "firstContentfulPaint": 652,
+          "main": 227,
+          "modelLoaded": 229,
+          "sidebarDrawn": 398
+        },
+        "reason": "Release timing budgets are not evaluated in Debug",
+        "samples": 5,
+        "status": "SKIP"
+      },
+      "warm_existing_profile": {
+        "median_ms": {
+          "engineStart": 415,
+          "engineStarted": 502,
+          "firstContentfulPaint": 694,
+          "main": 231,
+          "modelLoaded": 233,
+          "sidebarDrawn": 414
+        },
+        "reason": "Release timing budgets are not evaluated in Debug",
+        "samples": 5,
+        "status": "SKIP"
+      }
+    }
+  },
+  {
+    "name": "debug-sidebar-2",
+    "exit": 0,
+    "seconds": 8.43,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-sidebar-2.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 18,
+    "failed": [],
+    "other": {
+      "durable_profile_storage": {
+        "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof.",
+        "status": "BLOCKED"
+      }
+    }
+  },
+  {
+    "name": "debug-shell-2",
+    "exit": 0,
+    "seconds": 19.26,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-shell-2.json",
+    "interruptedAttempts": 1,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 6,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-features-2",
+    "exit": 0,
+    "seconds": 70.6,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-features-2.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 19,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-actions-2",
+    "exit": 0,
+    "seconds": 14.02,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-actions-2.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 45,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-window-3",
+    "exit": 0,
+    "seconds": 53.81,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-window-3.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 45,
+    "failed": [],
+    "other": {
+      "cold_fresh_profile": {
+        "median_ms": {
+          "engineStart": 394,
+          "engineStarted": 476,
+          "firstContentfulPaint": 623,
+          "main": 226,
+          "modelLoaded": 227,
+          "sidebarDrawn": 393
+        },
+        "reason": "Release timing budgets are not evaluated in Debug",
+        "samples": 5,
+        "status": "SKIP"
+      },
+      "warm_existing_profile": {
+        "median_ms": {
+          "engineStart": 380,
+          "engineStarted": 461,
+          "firstContentfulPaint": 598,
+          "main": 216,
+          "modelLoaded": 218,
+          "sidebarDrawn": 379
+        },
+        "reason": "Release timing budgets are not evaluated in Debug",
+        "samples": 5,
+        "status": "SKIP"
+      }
+    }
+  },
+  {
+    "name": "debug-sidebar-3",
+    "exit": 0,
+    "seconds": 8.53,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-sidebar-3.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 18,
+    "failed": [],
+    "other": {
+      "durable_profile_storage": {
+        "reason": "CEF root_cache_path non-default profile storage; docs/followups.md. Wrapper/page switching is not durable-storage proof.",
+        "status": "BLOCKED"
+      }
+    }
+  },
+  {
+    "name": "debug-shell-3",
+    "exit": 0,
+    "seconds": 13.07,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-shell-3.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 6,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-features-3",
+    "exit": 0,
+    "seconds": 72.58,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-features-3.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 19,
+    "failed": [],
+    "other": {}
+  },
+  {
+    "name": "debug-actions-3",
+    "exit": 0,
+    "seconds": 13.4,
+    "sourceHead": "c863d19d13024f25be98eaf1b2ffa56c2bcc0601",
+    "receipt": "docs/engine-spike/step-c-main-recheck/pre-shared-lock-b4b8817/debug-actions-3.json",
+    "interruptedAttempts": 0,
+    "engine": {
+      "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+      "source": "fork",
+      "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    },
+    "passed": 45,
+    "failed": [],
+    "other": {}
+  }
+]

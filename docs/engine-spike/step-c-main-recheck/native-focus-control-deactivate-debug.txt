@@ -1,0 +1,23 @@
+FOCUS DEBUG 53558 [128502.81597508334, 128503.13185825001] [{'active': True, 'event': 'NSApplicationDidBecomeActiveNotification', 'frontmostApp': 'Open', 'frontmostPID': 53558, 'keyWindow': 85016, 'uptime': 128501.99458466668}] {'active': True, 'frontmostApp': 'Open', 'frontmostPID': 53558, 'keyWindow': 85016, 'uptime': 128511.18266037501}
+Traceback (most recent call last):
+  File "tools/e2e/engine_e2e.py", line 2903, in main
+    execute()
+  File "tools/e2e/engine_e2e.py", line 2866, in execute
+    shell_checks(factory, results["shell"], tmp)
+  File "tools/e2e/engine_e2e.py", line 763, in shell_checks
+    app.call("key", key="escape")
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/probe-focus-interruption.py", line 14, in call
+    result=original(self,cmd,timeout=timeout,**args)
+  File "tools/e2e/engine_e2e.py", line 181, in call
+    raise RuntimeError("%s: %s" % (cmd, resp.get("error")))
+RuntimeError: key: key focus not ready: active=true target=85016 key=85016
+Traceback (most recent call last):
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/probe-focus-interruption.py", line 24, in <module>
+    try:m.main()
+  File "tools/e2e/engine_e2e.py", line 2915, in main
+    instance.quit()
+  File "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/.re/probe-focus-interruption.py", line 8, in quit
+    print("FOCUS DEBUG", self.pid, self.native_steps, original(self,"activation-events"), original(self,"native-focus-state"),flush=True)
+  File "tools/e2e/engine_e2e.py", line 164, in call
+    s.connect(self.sock)
+FileNotFoundError: [Errno 2] No such file or directory

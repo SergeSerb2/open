@@ -1,0 +1,91 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C446C-5555-3144-A1DB-55583E01E362",
+    "embeddedUUID": "4C4C446C-5555-3144-A1DB-55583E01E362",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792997958"
+  },
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "1C3375A2-C013-4A1F-8C44-933E647D830F",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "keyboard": {
+      "ok": false,
+      "restored_same_id": false,
+      "routes": {
+        "cmd_l_window": "RenderWidgetHostViewCocoa",
+        "cmd_t_app": "CommandBarFieldEditor"
+      },
+      "tabs": [
+        3,
+        4,
+        3
+      ]
+    },
+    "persistence": {
+      "loaded_after_launch": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "snapshot": "State/browser.json",
+      "tabs": 3
+    },
+    "split_view": {
+      "ok": true,
+      "panes": [
+        "https://example.org/",
+        "https://www.iana.org/help/example-domains"
+      ],
+      "screenshot": "shell-split-view.png"
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "AF04A145-ABC5-4C0B-BB9B-799E2CDF4A8A"
+        ],
+        [
+          1,
+          "5B90B9A7-57FC-40AB-B186-2DBEAF58E5F0"
+        ],
+        [
+          2,
+          "FDB2153C-75F4-48B2-9E3F-454ECBBCEA75"
+        ]
+      ]
+    },
+    "window_png": {
+      "file": "shell-window.png",
+      "method": "windowserver+devtools",
+      "ok": true
+    }
+  },
+  "started": "2026-10-26 00:17:40",
+  "style": "alloy"
+}

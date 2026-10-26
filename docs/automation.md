@@ -2,6 +2,29 @@
 
 Open's end-to-end tests drive the real app through a local Unix socket. There is no computer use: nothing here moves the system mouse, types on the system keyboard, or touches another app. Key and mouse events are built inside Open and go only to Open's own windows. Pixels come only from Open's own windows.
 
+Every agent command that opens Open on screen must hold the machine-wide lock
+for one suite or diagnostic invocation, including launch and cleanup:
+
+```sh
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --config Debug --style chrome --only window
+```
+
+Release the lock between suite invocations. Do not hold it during builds,
+verify-all, or offscreen render checks. Nested peer instances within a suite use
+that suite's existing lock; they do not acquire it again. The lock serializes
+agents, while native-focus interruption tracking still covers user activity.
+
+Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
+machine-wide heavy-job slot script (two jobs at a time):
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
+~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/verify-all.sh
+```
+
+Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
+on-screen lock around one suite only; take the heavy slot around build steps.
+
 ## Enable
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
@@ -71,7 +94,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `rightclick` | `tab`, `x`, `y` | Right click in the page |
 | `type` | `tab`, `text` | Insert text in the focused page field |
 | `key` | `key`, `modifiers`, `route` | Key press inside Open. `route: "app"` (default) goes through `NSApplication.sendEvent`, like real typing; `route: "window"` goes straight to the window's first responder (the page view), which tests the engine's pre-key hook. `text` sends plain characters to the first responder. |
-| `mouse` | `window`, `x`, `y`; `action=move` or `action=hover`; or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point (tracking areas follow the hardware pointer) and returns the owners it found |
+| `mouse` | `window`, `x`, `y`; `action=move`, `action=hover`, or `action=click` with `modifiers` (`option`, `command`, `shift`, `control`); or `from` / `to` point pairs | Own-window click, queued pointer motion, or native resize drag; system cursor stays unchanged. `click` runs the window's layout pass first (as real input follows a display cycle) and queues the mouse-up before sending the mouse-down, so controls that track the mouse (the window buttons) finish. Motion events carry a tag; from the first one on, pointer-driven window logic (the sidebar hover reveal) ignores the hardware pointer, so someone using the Mac cannot disturb a check. `move` and `click` also set the automation pointer at once (`BrowserWindowController.automationPointer`), and `hover` sets it after it has delivered enter, move, and exit (it rebuilds every tracking area first, and those rebuilds must still see the old point). A `move` delivers no enter or exit, so it clears `hover`'s record of entered owners and the next `hover` enters the owners under its point again; state that reads where the pointer is, not an event (the window buttons' hover after a full-screen exit, a restore, or a show), reads it instead of the hardware pointer. `hover` also delivers enter, move, and exit to the owners of the tracking areas under the point, title bar included (tracking areas follow the hardware pointer), and returns the owners it found. macOS's own window-button glyphs and tiling menu follow only the hardware pointer |
 | `focus` | `tab` | Give the page keyboard focus |
 | `find` / `zoom` / `mute` | `tab`, … | Find in page, zoom level, mute |
 | `print-pdf` | `tab`, `path` | Print to a PDF file |
@@ -81,12 +104,13 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `popup-close` | — | Close the open popup |
 | `windows` | — | Open's windows: number, class, frame, key, first responder |
 | `shell-windows` | — | Standard controller IDs and native window numbers |
-| `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
+| `window-state` | `id` (optional: another standard window, not made key) | Frame, sidebar mode/width/reveal, panel frame, traffic-light centers, frames, and visibility, the title bar frame, the hardware pointer in window coordinates (read only), hover-reveal state (`reveal`: phase, show/hide counts, last dwell, zone, the card's frame and on-screen offset), chrome geometry (`chrome`: URL field, favorites section, Space header band, title frame and baseline, hover states), window buttons (`trafficLightsDimmed`, `trafficLightsHovered`, per button alpha and action, the window's AX button attributes `axWindowButtons` with role and subrole), the automation pointer (`automationPointer`, window coordinates, or null when it is in another window or never moved), `key`, `appActive`, `miniaturized`, `zoomed`, selection, shown page IDs, engine URL/active ID, native and HTML full-screen state, transition state and completed transition count. Runs the window's pending layout first |
 | `window-focus` | `id`, `activate` | Make that own window key; optional own-app activation |
 | `appearance` | `name` (`light`, `dark`, or anything else for the system's) | Open's own appearance (`NSApp.appearance`); the system setting is untouched |
 | `window-close` | — | Native close for the current standard window; model tabs stay |
 | `window-reopen` | — | Real application reopen handler, including after the last window closes |
 | `window-fullscreen` | — | Native full-screen toggle; wait for completed transition count before testing the result |
+| `window-deminiaturize` | — | Restores a minimized window, as a click on its Dock tile does; wait for `miniaturized` false |
 | `sidebar-move` | `tab`, `section` or `folder`, `index` | Production SidebarDelegate move intent; model and engine strip share the resulting order |
 | `folder-create` / `folder-toggle` | `title` / `folder` | Create fixture folder through the model; production sidebar expand/collapse intent |
 | `folder` | `tabs`, `section` (`today`/`pinned`), `title`, `at` | Folder in the focused Space holding `tabs` in order, moved to index `at` |
@@ -123,20 +147,20 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 ## End-to-end suites
 
 ```sh
-tools/build.sh Debug
-tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
-tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
-tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
-tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
-tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
-tools/e2e/engine_e2e.py --only extensions --style chrome
-tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
-OPEN_AUTOMATION=1 tools/build.sh Release
-tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Each suite uses a fresh worktree-private data root under `.re/e2e-<suite>-<style>/user-data` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
@@ -160,3 +184,134 @@ kernel timestamp in all ten benchmark launches. Debug timing rows print named
 SKIP results with a Release-only reason. Sidebar `space_switch_wrapper` proves
 the live page and wrapper context; `durable_profile_storage` remains BLOCKED on
 the CEF `root_cache_path` follow-up in docs/followups.md.
+
+### App shell commands and Settings (Step C)
+
+`--only commandbar` drives the real command bar field editor with `key`
+(`route=app` and `route=window`), a loopback HTTP page that prevents default key
+handling, native menus, and the real Settings and Library presenters. It covers
+background opens, Pin/Unpin actions, profile isolation, custom search engines,
+key overrides, tab/folder/split duplication, Archive restore, and relaunch.
+It uses the app's existing snapshot writer. No unit or mocked engine checks
+stand in for these flows.
+
+Additional socket commands:
+
+| Command | Purpose |
+|---|---|
+| `commandbar-state` | Read actual bar mode, text, rows, selection, and monotonic first-result timings. Does not create the bar. |
+| `menu-state`, `menu-perform id=…` | Read native menu validation or invoke an enabled native menu item. |
+| `reload-keybindings` | Load the actual `State/keybindings.json`, validate conflicts, and rebuild menus and the global registration. |
+| `sidebar-duplicate id=…`, `sidebar-tree` | Send the production SidebarDelegate intent; read fresh subtree IDs and load flags. |
+| `settings-state`, `settings-toggle name=hotkey\|external` | Read the shared real presenters; commit the live Links settings model. |
+| `settings-custom-engine template=…` | Save a custom engine through the live Profiles settings model. |
+| `library-restore id=…`, `library-history-open url=…` | Exercise the live Library restore transaction or its profile-scoped history action. |
+| `hotkey-state` | Read Carbon registration, attempts, and any nonfatal registration error. Does not send a global key. |
+| `save-page-state` | Read the real Save panel request and pending state. |
+
+Reports identify the engine source from the vendor source stamp and the matching
+embedded/vendor Mach-O UUIDs. Release socket runs require
+`OPEN_AUTOMATION=1 nice -n 10 tools/build.sh Release`. A normal Release build
+keeps the socket off. The first-open command-bar budget includes construction
+and service work; the fixture waits for the normal post-paint prewarm before
+opening the bar. The repeat-open timing is reported separately.
+
+
+### Foreground GUI launch and readiness (Step C main merge)
+
+Normal e2e sessions launch the exact built `.app` through LaunchServices
+(`open -n -W`), with a fresh suite data root. The socket `ping` supplies the actual
+app PID; the harness retains the launch waiter and closes only that app.
+The LaunchServices waiter can end before app readiness, including with an
+`open -W` GetProcessPID error. The harness keeps its existing 60-second deadline
+for the real socket/PID handshake. The window suite verifies this with a real
+`open -n` launch without `-W` during the three-second first-frame-timeout fixture:
+the launcher ends, then the engine starts and the page must load.
+Direct
+executable launches remain only in the intentional early-quit/missing-engine
+checks. A raw executable can have a visible window but no foreground activation
+grant on macOS 26. `NSApp.activate()` is a request, not a synchronous grant.
+
+Key and page-focus commands require the real application and requested
+window to become active/key; they fail before sending events if readiness times out. `focus` waits
+for both the page's native responder and `document.hasFocus()`. `window-state`
+reports those native flags and screen bounds. Tests poll the resulting UI state
+instead of treating the key response as proof that the UI has finished changing.
+`activation-events` returns a bounded list of this app's native activation and
+resignation notifications, with monotonic uptime and its key-window number.
+The trace includes the frontmost application's name and PID, as does
+`native-focus-state`. Input responses include the native readiness-grant uptime.
+Window-chrome receipts retain this timeline to distinguish foreground loss from
+an edge or animation failure. Only foreground app metadata is read; input goes
+only to Open, and no other app's window content is read.
+
+`--only actions` runs the complete Step C command-bar/native-menu/action flow,
+including page Copy/Paste/Undo/Select All, model undo, lazy duplication, and real
+Settings/Library. `--only commandbar` remains available with the same checks.
+Use `--style chrome` to exercise production P1 tab hosting. Screenshot comparisons
+request the existing `window-frame unconstrained=true` mode and wait for the exact
+reference size; their dimensions and ≤1 pt/ΔE00≤2 assertions stay unchanged.
+
+
+The harness's data root is `.re/e2e-<suite>-<style>/user-data` in its own worktree,
+not a shared Application Support path. A native activation helper addresses the
+PID returned by that socket and first checks its exact executable path; it never
+activates an Open instance by bundle identifier. App cleanup waits for that PID
+to exit even if the LaunchServices waiter has ended. Native mouse moves carry a
+request tag and return only after the local monitor and reveal tracker have
+consumed that request. Coalescing stays enabled and production chrome is unchanged.
+While the tagged pointer filter is installed, unrelated app deactivation does
+not dismiss the virtual pointer's reveal card. Ordinary app sessions still dismiss
+it on deactivation. Pointer checks assert socket state without requiring activation.
+
+`yield-activation pid=…` allows a cooperative handoff only to another instance
+of the exact same Open executable. The harness uses a second owned instance with
+private data to verify inactive tagged hover and to exercise interrupted native
+input. It never activates or sends input to an unrelated app.
+
+Native-focus assertions use the activation trace from their readiness grant to
+the assertion boundary. An outside foreground change makes that attempt
+`INTERRUPTED`, even if its assertion succeeded. The original assertion, app name
+and trace remain in the receipt. The harness retries at most three attempts,
+from a fresh workflow fixture: replaying a single destructive key could otherwise
+close a second tab or apply an edit twice. Interrupted attempts never enter the
+accepted pass count. Exhausting attempts prints `INTERRUPTED` and exits 2;
+an ordinary failed assertion still prints FAIL and exits 1. No check, tolerance,
+timing budget or native event route is replaced by a successful no-op.
+
+A lead-requested display hold is enforced by `.re/hold-on-screen`. While it exists,
+the harness refuses new Open launches. The file must be removed only after an
+explicit resume instruction; an elapsed estimate is not permission. Offscreen
+renderers and compilation do not require removing the file.
+
+
+### Step C review: focus and shutdown observations
+
+Automation responses include `observationStart` (process monotonic uptime).
+`focus-state` reports the current responder owner, Find text/visibility, sheet
+state, and the count/result of post-navigation focus decisions. It accepts an
+optional standard-window `id` without activating that window. `activation-events`
+starts before the first window/engine turn and reports native resignation and
+workspace foreground changes. The e2e runner guards every timed poll/capture
+interval as well as native-input intervals. An unexpected foreground change
+stores INTERRUPTED, preserves the original assertion and trace, and allows at
+most three fresh workflow attempts. No interrupted assertion counts as a pass.
+Intentional inactive-window controls first verify the exact owned peer's PID and
+native handoff event, then start a new background-state observation interval.
+
+`commandbar-state.timingScope` labels the existing 50 ms bar timings exactly:
+showCommandBar entry to first snapshot applied. They exclude preceding key
+routing, socket transport and frame presentation.
+
+`save-page-choose(path:)` replies to Open's pending Save presenter through the
+socket and runs its same capture completion. The native sheet is shown and closed;
+the remote system Save button is not driven. The actual engine capture and file
+write run unchanged.
+`background-read` starts the selected live host's real background-color read.
+`async-engine-state` reports owned pending capture and background tasks. With
+`OPEN_AUTOMATION_SHUTDOWN_TRACE=1`, the own-profile State/shutdown-order.json
+records prepare, hostsClosed, engineShutdownBegin and engineShutdownEnd. The
+ordering check queues actual Save/background work with the automation-only
+`OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
+must clear work and close hosts before the actual engine shutdown boundary. The
+flag delays scheduling; it does not replace engine responses.

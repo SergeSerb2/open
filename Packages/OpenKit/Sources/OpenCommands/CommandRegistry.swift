@@ -180,6 +180,8 @@ public enum CommandRegistry {
                           enabledKey: EnabledKey.currentTabInSplit, aliases: ["Maximize Split Pane"]),
         CommandDefinition(id: "separate-from-split-view", title: "Separate Page from Split View", menuPath: ["View"],
                           enabledKey: EnabledKey.currentTabInSplit, aliases: ["Separate from Split View"]),
+        // Tabs carries a separate title and no key (menus-and-hotkeys.md §Tabs).
+        CommandDefinition(id: "reveal-tab-in-sidebar", title: "Reveal Tab in Sidebar", menuPath: ["Tabs"], enabledKey: EnabledKey.currentTab),
         CommandDefinition(id: "reveal-current-tab", title: "Reveal Current Tab", menuPath: ["View"],
                           defaultShortcuts: [.ctrl("space")], enabledKey: EnabledKey.currentTab,
                           aliases: ["Reveal Tab in Sidebar", "Focus Sidebar", "Show Tab in Sidebar"]),
