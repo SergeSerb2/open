@@ -45,6 +45,27 @@ enum Compare {
         guard arc.width == ours.width, arc.height == ours.height else {
             throw CLIError(description: "size mismatch: arc \(arc.width)x\(arc.height), ours \(ours.width)x\(ours.height)")
         }
+        if RenderCLI.value(args, "--spec") == "theme-window" {
+            guard out.contains("/.re/") || out.hasPrefix(".re/") else { throw CLIError(description: "capture comparisons must stay in .re") }
+            let w = Double(arc.width), h = Double(arc.height)
+            let regions: [(String, CGRect)] = [
+                ("sidebar empty", CGRect(x: 60, y: 900, width: 380, height: 400)),
+                ("sidebar left", CGRect(x: 3, y: 500, width: 4, height: 600)),
+                ("sidebar foot", CGRect(x: 60, y: h - 80, width: 380, height: 24)),
+                ("top strip", CGRect(x: 540, y: 2, width: w - 620, height: 4)),
+                ("bottom strip", CGRect(x: 540, y: h - 6, width: w - 620, height: 4)),
+                ("right strip", CGRect(x: w - 6, y: 80, width: 4, height: h - 160)),
+            ]
+            let results = regions.map { name, region -> Result in
+                var result = Result(name: name); result.arcColor = arc.mean(region); result.oursColor = ours.mean(region)
+                result.deltaE = ColorMath.deltaE2000(result.arcColor!, result.oursColor!); return result
+            }
+            let dir = URL(fileURLWithPath: out); try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let table = markdown(results, title: "F0139 theme window — background-only regions")
+            try table.write(to: dir.appendingPathComponent("table.md"), atomically: true, encoding: .utf8); print(table)
+            if results.contains(where: { ($0.deltaE ?? .infinity) > 2 }) { throw CLIError(description: "theme-window color comparison failed") }
+            return
+        }
         let layout = SpecLayout(args: args, windowHeight: Double(arc.height) / scale)
         let skip = RenderCLI.value(args, "--skip")?.split(separator: ",").map(String.init) ?? []
         let elements = layout.elements().filter { e in !skip.contains { e.name.contains($0) } }

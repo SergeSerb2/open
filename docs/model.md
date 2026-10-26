@@ -96,11 +96,14 @@ moves the nodes into Pinned, in order, as one undo step. Folder children,
 object identities, source positions, and pinned URLs restore on undo. The
 model buffers TreeChange events until every relocation succeeds. A late
 failure reverses all earlier moves and removes the inserted Space, then
-discards the events and registers no undo. The CLI fault-injection property
-is nil in the app and exercises this rollback through the real command.
+discards the events and registers no undo. A DEBUG-only CLI seam exercises
+the rollback code; the seam does not exist in production builds.
 Successful moves emit one `.move` per node and no source-parent reload.
-The original nonoptional overload forwards with an append index and no moves,
-which cannot fail. Step 7's move-to-new-Space and folder conversion callers
+An unknown Profile ID likewise refuses with no changes. The original
+nonoptional overload requires a live Profile ID and delegates with an append
+index and no moves; nil is a programmer error and its precondition names the
+bad ID. Data/import/automation/restored IDs must use the failable overload.
+Step 7's move-to-new-Space and folder conversion callers
 must likewise return false or nil on refusal without partial changes.
 
 Editor writes use `SpaceTheme(style:)`, clearing legacy theme fields. Older

@@ -15,6 +15,15 @@ public enum ThemeTexture {
     private struct Key: Hashable { var texture: SpaceStyleTexture; var noiseBucket: Int; var scale: CGFloat }
     private struct Tile { var image: CGImage; var metrics: Metrics }
     private static var cache: [Key: Tile] = [:]
+    private static var order: [Key] = []
+    public static let cacheLimit = 32
+    public static var cachedTileCount: Int { cache.count }
+    private struct GrainKey: Hashable { var bucket: Int; var scale: CGFloat }
+    private static var grains: [GrainKey: (CGImage, Double)] = [:]
+    private static var grainOrder: [GrainKey] = []
+    private static var denimPatterns: [CGFloat: [Double]] = [:]
+    private static var denimOrder: [CGFloat] = []
+    public private(set) static var denimGenerationCount = 0
     public private(set) static var generationCount = 0
 
     public static func period(_ t: SpaceStyleTexture) -> CGFloat {
@@ -30,32 +39,45 @@ public enum ThemeTexture {
     }
 
     public static func knobPreview(_ t: SpaceStyleTexture, diameter: CGFloat, scale: CGFloat) -> CGImage {
-        let tile = tile(t, noiseFactor: 1, scale: scale)!
-        let px = max(1, Int((diameter * scale).rounded()))
+        let outputScale = scale.isFinite && scale > 0 ? scale : 1
+        let side = diameter.isFinite && diameter > 0 ? diameter : 40
+        let px = max(1, Int((side * outputScale).rounded()))
         let context = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: px * 4,
                                 space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         context.setFillColor(CGColor(gray: 0.78, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: px, height: px))
-        // Our own enlarged pattern preview, clipped to a disc by the editor view.
-        context.draw(tile, in: CGRect(x: 0, y: 0, width: tile.width, height: tile.height))
+        // Deliberate 2× sample, centered on the disc. Missing tiles leave neutral gray.
+        if let tile = tile(t, noiseFactor: 1, scale: scale) {
+            context.draw(tile, in: CGRect(x: -Double(px) / 2, y: -Double(px) / 2, width: Double(px) * 2, height: Double(px) * 2))
+        }
         return context.makeImage()!
     }
 
     private static func cached(_ t: SpaceStyleTexture, noise: Double, scale: CGFloat) -> Tile? {
-        guard noise > 0, scale > 0, scale.isFinite else { return nil }
+        guard noise.isFinite, noise > 0, scale > 0, scale.isFinite else { return nil }
         let bucket = min(20, max(0, Int((noise * 20).rounded())))
         guard bucket > 0 else { return nil }
         let key = Key(texture: t, noiseBucket: bucket, scale: scale)
         if let tile = cache[key] { return tile }
         let factor = Double(bucket) / 20
-        guard let grain = Grain.tile(noiseFactor: factor, scale: scale), let grainData = grain.dataProvider?.data else { return nil }
-        let grainBytes = CFDataGetBytePtr(grainData)!
-        let grainMean = (0..<(grain.width * grain.height)).reduce(0.0) { $0 + Double(grainBytes[$1 * 4 + 3]) / 255 } / Double(grain.width * grain.height)
+        let grainKey = GrainKey(bucket: bucket, scale: scale)
+        let grain: CGImage, grainMean: Double
+        if let found = grains[grainKey] { (grain, grainMean) = found }
+        else {
+            guard let image = Grain.tile(noiseFactor: factor, scale: scale), let data = image.dataProvider?.data else { return nil }
+            let bytes = CFDataGetBytePtr(data)!
+            grain = image
+            grainMean = (0..<(image.width * image.height)).reduce(0.0) { $0 + Double(bytes[$1 * 4 + 3]) / 255 } / Double(image.width * image.height)
+            if grainOrder.count >= 64 {
+                for old in grainOrder.prefix(32) { grains[old] = nil }; grainOrder.removeFirst(32)
+            }
+            grains[grainKey] = (grain, grainMean); grainOrder.append(grainKey)
+        }
         if t == .grain {
             let tile = Tile(image: grain, metrics: Metrics(baseAlpha: 0, patternMean: grainMean, meanAlpha: grainMean,
                                                           peakMarksMeanAlpha: factor * 0.1, markCoverage: 1))
-            cache[key] = tile; generationCount += 1
+            insert(tile, for: key)
             return tile
         }
         let n = max(1, Int((period(t) * scale).rounded())), peak = factor * 0.1
@@ -76,6 +98,8 @@ public enum ThemeTexture {
                 }
             }
         case .denim:
+            if let pattern = denimPatterns[scale] { marks = pattern.map { $0 * peak } }
+            else {
             for y in 0..<n {
                 for x in 0..<n {
                     let u = Double(x) / scale, v = Double(y) / scale
@@ -86,9 +110,15 @@ public enum ThemeTexture {
                         let line = Int(floor((v - u) / 3))
                         let a = random(cell, line, 6), b = random((cell + 1) % 30, line, 6)
                         let smooth = fraction * fraction * (3 - 2 * fraction)
-                        marks[y * n + x] = peak * (0.4 + 0.6 * (a + (b - a) * smooth))
+                        marks[y * n + x] = 0.4 + 0.6 * (a + (b - a) * smooth)
                     }
                 }
+            }
+            if denimOrder.count >= 4 {
+                for old in denimOrder.prefix(2) { denimPatterns[old] = nil }; denimOrder.removeFirst(2)
+            }
+            denimPatterns[scale] = marks; denimOrder.append(scale); denimGenerationCount += 1
+            marks = marks.map { $0 * peak }
             }
         case .tweed:
             let cells = Int(ceil(period(t) / 3))
@@ -133,8 +163,16 @@ public enum ThemeTexture {
         let tile = Tile(image: image, metrics: Metrics(baseAlpha: base, patternMean: patternMean,
             meanAlpha: total / Double(marks.count), peakMarksMeanAlpha: peakCount > 0 ? peakTotal / Double(peakCount) : base,
             markCoverage: Double(markCount) / Double(marks.count)))
-        cache[key] = tile; generationCount += 1
+        insert(tile, for: key)
         return tile
+    }
+
+    private static func insert(_ tile: Tile, for key: Key) {
+        if order.count >= cacheLimit {
+            for old in order.prefix(cacheLimit / 2) { cache[old] = nil }
+            order.removeFirst(cacheLimit / 2)
+        }
+        cache[key] = tile; order.append(key); generationCount += 1
     }
 
     private static func random(_ x: Int, _ y: Int, _ salt: UInt32) -> Double {

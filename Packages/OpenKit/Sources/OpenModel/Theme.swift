@@ -41,23 +41,29 @@ public enum SpaceStyleTexture: String, Codable, Sendable, CaseIterable {
 public struct SpaceStyle: Codable, Hashable, Sendable {
     public static let currentMathVersion = 1
     public var mathVersion: Int
-    public var keyColor: RGBAColor { didSet { keyColor.alpha = 1 } }
+    public var keyColor: RGBAColor { didSet { keyColor = Self.finiteColor(keyColor) } }
     public var colorCount: Int { didSet { colorCount = min(3, max(1, colorCount)) } }
     public var wheel: SpaceStyleWheel
     public var appearance: SpaceStyleAppearance
-    public var noiseFactor: Double { didSet { noiseFactor = min(1, max(0, noiseFactor)) } }
+    public var noiseFactor: Double { didSet { noiseFactor = Self.unit(noiseFactor) } }
     public var texture: SpaceStyleTexture
-    public var intensityFactor: Double { didSet { intensityFactor = min(1, max(0, intensityFactor)) } }
+    public var intensityFactor: Double { didSet { intensityFactor = Self.unit(intensityFactor) } }
+
+    private static func unit(_ value: Double) -> Double { value.isFinite ? min(1, max(0, value)) : 0 }
+    private static func finiteColor(_ color: RGBAColor) -> RGBAColor {
+        RGBAColor(red: color.red.isFinite ? color.red : 0, green: color.green.isFinite ? color.green : 0,
+                  blue: color.blue.isFinite ? color.blue : 0)
+    }
 
     public init(keyColor: RGBAColor, colorCount: Int = 1, wheel: SpaceStyleWheel = .analogous,
                 appearance: SpaceStyleAppearance = .automatic, noiseFactor: Double = 0,
                 texture: SpaceStyleTexture = .grain, intensityFactor: Double = 0.8,
                 mathVersion: Int = SpaceStyle.currentMathVersion) {
         self.mathVersion = mathVersion
-        self.keyColor = RGBAColor(red: keyColor.red, green: keyColor.green, blue: keyColor.blue)
+        self.keyColor = Self.finiteColor(keyColor)
         self.colorCount = min(3, max(1, colorCount)); self.wheel = wheel; self.appearance = appearance
-        self.noiseFactor = min(1, max(0, noiseFactor)); self.texture = texture
-        self.intensityFactor = min(1, max(0, intensityFactor))
+        self.noiseFactor = Self.unit(noiseFactor); self.texture = texture
+        self.intensityFactor = Self.unit(intensityFactor)
     }
 
     private enum CodingKeys: String, CodingKey {
