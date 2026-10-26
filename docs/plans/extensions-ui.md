@@ -1058,7 +1058,7 @@ to their dependencies.
 Files (create exactly these):
 
 ```text
-Packages/OpenKit/Sources/OpenDesign/ExtensionsMetrics.swift   ExtensionsMetrics, ExtensionsRole, new Typography tokens, new Glyphs (.extensions, .extensionsMore)
+Packages/OpenKit/Sources/OpenDesign/ExtensionsMetrics.swift   ExtensionsMetrics, ExtensionsRole
 Packages/OpenKit/Sources/OpenExtensionsUI/ExtensionActionButton.swift   §3.1
 Packages/OpenKit/Sources/OpenExtensionsUI/ExtensionStripView.swift      §3.2, §3.3 (styles .urlField, .paneBar); fit, overflow, drag reorder
 Packages/OpenKit/Sources/OpenExtensionsUI/ExtensionStripLayout.swift    pure layout math (nMax, frames) shared by the view and `extensions-render check`
@@ -1082,12 +1082,15 @@ text right edge), `OpenSidebar/SidebarContext.swift` (an
 `OpenFeatures/LittleOpenWindowController.swift` (§3.4),
 `OpenCommands/CommandRegistry.swift` and `MenuBuilder.swift` (§6.1),
 `OpenSettings/ShortcutsPane.swift` (§3.12 menu item),
-`OpenWeb/OpenWeb.swift` (§8.2), `OpenDesign/Typography.swift` (tokens).
+`OpenWeb/OpenWeb.swift` (§8.2), `OpenDesign/Typography.swift` (new font
+tokens), `OpenDesign/Icons.swift` (new `Glyph` cases `.extensions`,
+`.extensionsMore`; an enum cannot gain cases in another file).
 
 ### 8.2 OpenWeb changes (OpenKit's view of the engine)
 
 ```swift
 /// An engine image, immutable. CGImage is thread-safe to read.
+/// Equality and hash by object identity (one object per engine image change).
 public final class ExtensionImage: @unchecked Sendable, Hashable {
     public let cgImage: CGImage        // 2x rep
     public let pointSize: CGSize       // 28×28 or 16×16
