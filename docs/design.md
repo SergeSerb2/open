@@ -362,7 +362,7 @@ Two fixes came from profiling: building the close and audio buttons on demand (s
 
 ## 12. End-to-end checks
 
-`sidebar-render check` drives the real view stack in an offscreen window: 123 checks, all passing (§15 adds 20) (the prior 81 plus 22 model-followup checks). Covered: rows match the model after `newTab`, `pinTab`, `moveNode`, `createFolder`, folder collapse and expand, `makeSplit` and `unsplit`, `closeTab` and its undo, `clearToday` and its undo (divider goes and comes back); no `reloadData` during edits; favorites add and remove; clicks (a mouse-down delivered to the hit-tested view, the mouse-up through the event queue) on a pinned row, a folder, "New Tab", and the URL field reach the delegate and the model; context menu item order for 4 targets; drop-target mapping for 4 positions; a Space switch moves the pager and the theme; a swipe switches Spaces and a short swipe snaps back.
+`sidebar-render check` drives the real view stack in an offscreen window: 125 checks, all passing: the prior 81, 22 model-followup checks, and 22 from §15. Covered: rows match the model after `newTab`, `pinTab`, `moveNode`, `createFolder`, folder collapse and expand, `makeSplit` and `unsplit`, `closeTab` and its undo, `clearToday` and its undo (divider goes and comes back); no `reloadData` during edits; favorites add and remove; clicks (a mouse-down delivered to the hit-tested view, the mouse-up through the event queue) on a pinned row, a folder, "New Tab", and the URL field reach the delegate and the model; context menu item order for 4 targets; drop-target mapping for 4 positions; a Space switch moves the pager and the theme; a swipe switches Spaces and a short swipe snaps back.
 
 ## 13. Model and import changes needed
 
@@ -426,6 +426,7 @@ Split View and Peek reach the sidebar. All values come from F0081, F0082, F0090,
 | Row titles keep 1 pt free at the right when they truncate | AX widths 128, 152, 168 | F0090 source title 0.0 |
 | A title box narrower than "…" draws nothing (four-pane split rows overflowed) | — | `sidebar-render check` |
 | First hover of a row lays out its new close button | — (bug: zero frame until the next layout) | `sidebar-render check` |
+| A Peek badge change reaches only its own row: on or off lays that row out, a new URL or favicon only redraws the badge (per-tab observable state in `SidebarContext`) | — (performance) | `sidebar-render check`: 1 row layout of 14 rows; 0 layouts and 1 draw on a URL change |
 
 Split-row menu: see §5.6.
 
@@ -451,4 +452,4 @@ The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktre
 
 Worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because the re-derived script skips the URL copy and Site Control buttons there. Element counts differ in six states (F0016, F0024, F0027, F0031, F0063, F0066): the re-derived script skips URL-host, button, and row-title elements whose text or state differs between the snapshot and the capture. The known differences in §9 remain (Home hover 2 pt, F0063/F0066 selected fill ≈ 2.0, blue grain 2.38).
 
-Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone; then the outputs matched.
+Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone, up to three times; then the outputs matched. The bottom-band glitch got more frequent under machine load.

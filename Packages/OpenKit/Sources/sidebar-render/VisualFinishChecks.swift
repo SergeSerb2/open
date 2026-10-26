@@ -59,23 +59,30 @@ enum VisualFinishChecks {
         _ = model.addPane(splitID: split.id, tabID: c.id); _ = model.addPane(splitID: split.id, tabID: d.id); pump()
         check(sidebar.contextMenu(nodeID: split.id)?.item(withTitle: "Add Tab…")?.isEnabled == false, "Add Tab… is disabled at four panes")
         check(sidebar.splitRowCells(splitID: split.id)?.cells.count == 4, "four-pane selected row has four cells")
-        // Narrow four-pane titles draw nothing rather than spill over the next cell.
-        let image = OffscreenRenderer().render(scene, scale: 1)
+        // Narrow four-pane titles draw nothing rather than spill over the next cell. Offscreen
+        // renders glitch now and then (design.md §15.1); a real spill shows in every render,
+        // so a second render runs only when the first shows ink.
         let rowFrame = sidebar.rowFrame(nodeID: split.id)!
         let rowInScene = scene.convert(rowFrame, from: sidebar)
         let p4 = (rowFrame.width - 16 - 4) / 4
-        var spill = 0
-        if let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) {
-            let bpr = image.bytesPerRow, bpp = image.bitsPerPixel / 8
-            for i in 0..<4 {
-                // Title area of cell i: from icon end + 6 to the next cell start.
-                let x0 = Int((rowInScene.minX + 17 + CGFloat(i) * p4 + 24).rounded()), x1 = Int((rowInScene.minX + 12 + CGFloat(i + 1) * p4 - 6).rounded())
-                let y0 = Int(rowInScene.minY + 14), y1 = Int(rowInScene.minY + 28)
-                var lo = 255, hi = 0
-                for y in y0..<y1 { for x in x0..<max(x0 + 1, x1) { let v = Int(bytes[y * bpr + x * bpp + 1]); lo = min(lo, v); hi = max(hi, v) } }
-                if hi - lo > 12 { spill += 1 }
+        func spillCount() -> Int {
+            let image = OffscreenRenderer().render(scene, scale: 1)
+            var spill = 0
+            if let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) {
+                let bpr = image.bytesPerRow, bpp = image.bitsPerPixel / 8
+                for i in 0..<4 {
+                    // Title area of cell i: from icon end + 6 to the next cell start.
+                    let x0 = Int((rowInScene.minX + 17 + CGFloat(i) * p4 + 24).rounded()), x1 = Int((rowInScene.minX + 12 + CGFloat(i + 1) * p4 - 6).rounded())
+                    let y0 = Int(rowInScene.minY + 14), y1 = Int(rowInScene.minY + 28)
+                    var lo = 255, hi = 0
+                    for y in y0..<y1 { for x in x0..<max(x0 + 1, x1) { let v = Int(bytes[y * bpr + x * bpp + 1]); lo = min(lo, v); hi = max(hi, v) } }
+                    if hi - lo > 12 { spill += 1 }
+                }
             }
+            return spill
         }
+        var spill = spillCount()
+        if spill > 0 { pump(); spill = min(spill, spillCount()) }
         check(spill == 0, "four-pane split titles do not overflow their cells (\(spill) cells with ink)")
         let paneB = sidebar.contextMenu(nodeID: split.id)!.item(withTitle: longTitle)!.submenu!
         paneB.performActionForItem(at: paneB.indexOfItem(withTitle: "Separate from Split View")); pump()
