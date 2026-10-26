@@ -14,6 +14,7 @@ import OpenStore
     let downloads: PreviewDownloads
     let captures: FileCapturesProvider
     let snapshot: SnapshotStore
+    var selectedHistoryProfile: (() -> ProfileID?)?
     init(model: BrowserModel, downloads: PreviewDownloads, captures: FileCapturesProvider, snapshot: SnapshotStore) { self.model = model; self.downloads = downloads; self.captures = captures; self.snapshot = snapshot }
     func record(_ text: String) { log.append(text); print("ACTION \(text)") }
     func restoreArchived(id: ItemID) { record("restoreArchived \(id)") }
@@ -35,6 +36,6 @@ import OpenStore
         guard let item = captures.captures.first(where: { $0.id == id }) else { return "Capture missing." }
         do { try Data(contentsOf: captures.directory.appendingPathComponent(item.fileName)).write(to: url, options: .atomic); return nil } catch { return "Could not save capture." }
     }
-    func openHistoryItem(url: URL) { record("openHistoryItem"); if let space = model.spaces.first { _ = model.newTab(in: space.id, url: url); try? snapshot.saveNow(model: model) } }
+    func openHistoryItem(url: URL) { record("openHistoryItem"); if let space = model.spaces.first(where: { $0.profileID == selectedHistoryProfile?() }) ?? model.spaces.first { _ = model.newTab(in: space.id, url: url); try? snapshot.saveNow(model: model) } }
     func viewSpace(id: SpaceID) { record("viewSpace \(id)") }
 }

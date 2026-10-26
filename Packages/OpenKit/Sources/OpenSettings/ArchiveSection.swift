@@ -18,11 +18,12 @@ public struct ArchiveSection: View {
             else {
                 List(selection: $model.selectedIDs) {
                     ForEach(model.archiveRows) { row in
+                        let childCount = row.reason == .folderDeleted ? model.archivedChildCount(row) : 0
                         HStack(spacing: 12) {
                             if let data = model.favicons[row.id], let image = NSImage(data: data) { Image(nsImage: image).resizable().frame(width: 20, height: 20) }
                             else { Image(systemName: row.reason == .folderDeleted ? "folder" : "globe").frame(width: 20) }
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(row.reason == .folderDeleted ? "Folder · \(model.archivedChildCount(row)) tab(s) · \(row.title)" : row.title).lineLimit(1)
+                                Text(row.reason == .folderDeleted ? "Folder · \(childCount) \(childCount == 1 ? "tab" : "tabs") · \(row.title)" : row.title).lineLimit(1)
                                 Text("\(row.url.host() ?? "") · \(spaceName(row.spaceID)) · \(row.reason.libraryTitle)").font(.caption).foregroundStyle(.secondary)
                             }; Spacer()
                             Text(row.archivedAt, style: .date).font(.caption).foregroundStyle(.secondary)

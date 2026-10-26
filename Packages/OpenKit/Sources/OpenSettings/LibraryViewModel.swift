@@ -63,6 +63,11 @@ import OpenStore
         if !ids.contains(historyProfileID), let first = model.profiles.first { historyProfileID = first.id }
     }
     public var filterIdentity: String { "\(section.rawValue)|\(query)|\(archiveSpaceFilter?.description ?? "")|\(archiveReasonFilter?.rawValue ?? "")|\(archiveOriginFilter.rawValue)|\(historyProfileID)" }
+    public func refreshExternalState() async {
+        do { try (captures as? FileCapturesProvider)?.reload() }
+        catch { statusText = "Could not read captures. \(error.localizedDescription)" }
+        await reload()
+    }
     public func reload() async { refreshProfiles(); if section == .archive { await reloadArchive() }; if section == .history { await reloadHistory() } }
     public func reloadArchive() async { generation = UUID(); cursors = [:]; archiveOwners = [:]; archiveRows = []; favicons = [:]; archiveHasMore = true; archiveLoading = false; await loadNextArchivePage() }
     public func loadNextArchivePage() async {

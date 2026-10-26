@@ -38,13 +38,15 @@ import OpenDesign
     public func record(_ shortcut: OpenCommands.KeyboardShortcut, for id: String, append: Bool = false) {
         guard let command = CommandRegistry.byID[id], command.isCustomizable, !command.isReserved else { return }
         var keys = append ? store.effectiveShortcuts(for: command) : []; if !keys.contains(shortcut) { keys.append(shortcut) }
-        let priority = store.bindings[id]?.priority ?? ShortcutPriority(rawValue: root.string("open.shortcuts.defaultPriority")) ?? .browserFirst
+        let priority: ShortcutPriority?
+        if let existing = store.bindings[id] { priority = existing.priority }
+        else { priority = ShortcutPriority(rawValue: root.string("open.shortcuts.defaultPriority")) ?? .browserFirst }
         store.setOverride(KeyBindingOverride(shortcuts: keys, priority: priority), for: id); recordingCommandID = nil; saveDraft()
     }
-    public func clear(_ id: String) { guard CommandRegistry.byID[id]?.isCustomizable == true else { return }; store.setOverride(.init(shortcuts: [], priority: store.bindings[id]?.priority), for: id); recordingCommandID = nil; saveDraft() }
-    public func reset(_ id: String) { guard CommandRegistry.byID[id]?.isCustomizable == true else { return }; store.setOverride(nil, for: id); saveDraft() }
+    public func clear(_ id: String) { guard let command = CommandRegistry.byID[id], command.isCustomizable, !command.isReserved else { return }; store.setOverride(.init(shortcuts: [], priority: store.bindings[id]?.priority), for: id); recordingCommandID = nil; saveDraft() }
+    public func reset(_ id: String) { guard let command = CommandRegistry.byID[id], command.isCustomizable, !command.isReserved else { return }; store.setOverride(nil, for: id); saveDraft() }
     public func priority(_ value: ShortcutPriority, for id: String) {
-        guard let command = CommandRegistry.byID[id], command.isCustomizable else { return }
+        guard let command = CommandRegistry.byID[id], command.isCustomizable, !command.isReserved else { return }
         store.setOverride(.init(shortcuts: store.effectiveShortcuts(for: command), priority: value), for: id); saveDraft()
     }
     public func revert() { store = saved; conflicts = ConflictChecker.check(overrides: store); statusText = "Reverted." }

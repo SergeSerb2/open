@@ -392,11 +392,11 @@ def main():
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
         pngs = sorted(output.glob("*.png"))
-        require(len(pngs) >= 40, "missing settings/library/appearance/detail renders")
+        require(len(pngs) >= 44, "missing settings/library/appearance/detail renders")
         for png in pngs:
             data = png.read_bytes()
             scale = 2 if "@2x" in png.name else 1
-            expected = (960, 640) if png.name.startswith("library-") else (684, 650)
+            expected = (960, 640) if png.name.startswith("library-") else ((640, 520) if png.name.startswith("import-") else (684, 650))
             require(data[:8] == b"\x89PNG\r\n\x1a\n" and struct.unpack(">II", data[16:24]) == tuple(n * scale for n in expected), "bad pane dimensions: " + png.name)
     elif name in ("sidebar-render", "commandbar-render"):
         all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))

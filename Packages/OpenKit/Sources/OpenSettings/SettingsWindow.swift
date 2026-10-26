@@ -72,15 +72,17 @@ private struct SettingsTabBar: NSViewRepresentable {
         return window
     }
 }
-@MainActor public final class SettingsPresenter {
+@MainActor public final class SettingsPresenter: NSObject, NSWindowDelegate {
     public let viewModel: SettingsViewModel
     public private(set) var window: NSWindow?
-    public init(viewModel: SettingsViewModel) { self.viewModel = viewModel }
+    public init(viewModel: SettingsViewModel) { self.viewModel = viewModel; super.init() }
     public func show(pane: PaneID? = nil) {
         if let pane { viewModel.selectedPane = pane }
-        if window == nil { window = SettingsWindow.makeWindow(viewModel: viewModel) }
+        if window == nil { window = SettingsWindow.makeWindow(viewModel: viewModel); window?.delegate = self }
+        if window?.isKeyWindow == true { viewModel.refreshExternalState() }
         window?.makeKeyAndOrderFront(nil)
     }
+    public func windowDidBecomeKey(_ notification: Notification) { viewModel.refreshExternalState() }
 }
 
 struct SettingsGroup<Content: View>: View {

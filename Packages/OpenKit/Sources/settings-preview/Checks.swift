@@ -37,6 +37,8 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
         histories = Dictionary(uniqueKeysWithValues: settings.model.profiles.map { ($0.id, HistoryStore(fileURL: directories.historyFileURL(for: $0))) })
         faviconStore = try FaviconStore(databaseURL: root.appendingPathComponent("State/favicons.sqlite3"))
         library = LibraryViewModel(model: settings.model, defaults: defaults, actions: libraryActions, downloads: downloadFeed, captures: captures, archives: archives, histories: histories, snapshot: settings.snapshot, faviconStore: faviconStore)
+        let library = self.library
+        libraryActions.selectedHistoryProfile = { [weak library] in library?.historyProfileID }
         let settings = self.settings
         settings.model.archiveSink = ProfileArchiveSink(directories: directories, directoryNameFor: { [weak model = settings.model] id in id.flatMap { model?.profile(id: $0)?.dataDirectoryName } ?? "Default" })
         try SyntheticData.seedSettings(root: root, model: settings.model)
@@ -154,7 +156,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 try FileManager.default.createDirectory(at: routeRoot.appendingPathComponent("State"), withIntermediateDirectories: true)
                 try FileManager.default.copyItem(at: vm.snapshot.fileURL, to: routeRoot.appendingPathComponent("State/browser.json"))
                 let cli = Process(); cli.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("openkit")
-                cli.arguments = ["route", routeRoot.path, "example.com/x", "--expect-destination", "space:" + vm.model.spaces[2].id.description]
+                cli.arguments = ["route", routeRoot.path, "example.com/x", "--external-little-open", "on", "--expect-destination", "space:" + vm.model.spaces[2].id.description]
                 let output = Pipe(); cli.standardOutput = output; cli.standardError = output; try cli.run()
                 let routeText = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self); cli.waitUntilExit()
                 try require(cli.terminationStatus == 0 && routeText.contains("Office"), "openkit route disagreed: \(routeText)")
@@ -171,7 +173,10 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 if case .littleOpen = vm.links.testDecision?.resolved {} else { throw CheckFailure(description: "explicit Little Open route lost with external OFF") }
                 _ = try env.diskModel()
             case "shortcuts-save":
-                vm.shortcuts.record(.ctrl("t"), for: "new-tab"); vm.shortcuts.clear("zoom-in"); vm.shortcuts.priority(.siteFirst, for: "new-tab")
+                vm.set("site", for: "open.shortcuts.defaultPriority")
+                vm.shortcuts.record(.ctrl("t"), for: "new-tab")
+                try require(try KeyBindingStore.load(from: vm.shortcuts.fileURL).bindings["new-tab"]?.priority == nil, "new-binding default rewrote an existing priority")
+                vm.shortcuts.clear("zoom-in"); vm.shortcuts.priority(.siteFirst, for: "new-tab")
                 let disk = try KeyBindingStore.load(from: vm.shortcuts.fileURL)
                 try require(disk.effectiveShortcuts(for: CommandRegistry.byID["new-tab"]!) == [.ctrl("t")] && disk.bindings["zoom-in"]?.shortcuts == [] && disk.effectivePriority(for: CommandRegistry.byID["new-tab"]!) == .siteFirst, "key binding persistence/effective menu keys")
                 try require(env.actions.log.allSatisfy { $0 == "keyBindingsDidChange" } && env.actions.log.count == 3, "menu/hotkey notifications")
@@ -203,6 +208,7 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 let global = try JSONSerialization.jsonObject(with: Data(contentsOf: env.root.appendingPathComponent("adblock-settings.json"))) as! [String: Any]
                 try require(global["nativeAdBlockEnabled"] as? Bool == false && env.actions.log.contains { $0.hasPrefix("setAdBlockEnabled false") } && env.actions.log.contains { $0.hasPrefix("setEnabledBlockLists") && $0.contains(regional.id) }, "adblock master/action persistence")
                 await ad.reset(); try require(ad.errorText.isEmpty && Set(ad.enabledIDs) == Set(["EasyList", "EasyPrivacy"]), "reset choices failed")
+                ad.openInfo(regional); try require(env.actions.log.last?.hasPrefix("openURL host=") == true, "list info bypassed the app action")
             case "advanced-toggles":
                 vm.set(true, for: "open.advanced.allowWindowDraggingFromWebTop"); _ = try env.diskDefaults(); vm.advanced.sleepMode = .aggressive
                 let disk = try env.diskDefaults()
@@ -269,7 +275,11 @@ func require(_ condition: @autoclosure () throws -> Bool, _ message: String) thr
                 library.section = .history; library.query = "Example"; await library.reloadHistory()
                 try require(library.historyRows.count == 3, "profile history isolation")
                 library.actions.openHistoryItem(url: library.historyRows[0].url)
-                let disk = try env.diskModel(); try require(disk.spaces.contains { !$0.today.isEmpty } && env.libraryActions.log.contains("openHistoryItem"), "history open action")
+                var disk = try env.diskModel(); try require(disk.spaces.contains { !$0.today.isEmpty } && env.libraryActions.log.contains("openHistoryItem"), "history open action")
+                library.historyProfileID = vm.model.profiles[1].id; await library.reloadHistory()
+                try require(library.historyRows.count == 2, "Work history profile scope")
+                let workURL = library.historyRows[0].url; library.actions.openHistoryItem(url: workURL)
+                disk = try env.diskModel(); try require(disk.spaces[2].today.contains { $0.tab?.url == workURL }, "history opened in the wrong profile")
             case "empty-states":
                 try await env.prepareLibrary(); env.downloadFeed.downloads = []
                 for store in env.archives.values { try await store.deleteAll() }

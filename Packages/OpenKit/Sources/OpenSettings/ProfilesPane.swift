@@ -183,6 +183,6 @@ public struct ProfilesPane: View {
             Picker("Time range", selection: $model.clearRange) { ForEach(ClearDataRange.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
             if model.clearing { ProgressView() }; Text(model.clearStatus)
             Spacer(); HStack { Button(model.clearStatus == "Done" ? "Done" : "Cancel") { model.showsClear = false }.disabled(model.clearing); Spacer(); Button("Clear Data", role: .destructive) { Task { await model.clear() } }.disabled(model.clearing || model.clearKinds.isEmpty) }
-        }.padding(24).frame(width: 412, height: 312)
+        }.padding(24).frame(width: 460, height: 360)
     }
 }

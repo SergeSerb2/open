@@ -107,7 +107,7 @@ extension SyntheticData {
         }
         for i in 0..<3 { items += ["example-tab-\(i)", ["id": "example-tab-\(i)", "data": ["tab": ["savedURL": "https://example.com/\(i)", "savedTitle": "Example Tab \(i+1)"]]]] }
         items += ["example-easel", ["id": "example-easel", "data": ["easel": [:]]]]
-        let profileDirectory = directory.appendingPathComponent("Default")
+        let profileDirectory = directory.appendingPathComponent("User Data/Default")
         try FileManager.default.createDirectory(at: profileDirectory, withIntermediateDirectories: true)
         var database: OpaquePointer?
         guard sqlite3_open(profileDirectory.appendingPathComponent("Login Data").path, &database) == SQLITE_OK else { sqlite3_close(database); throw CocoaError(.fileWriteUnknown) }

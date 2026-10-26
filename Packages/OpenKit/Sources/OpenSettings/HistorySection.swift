@@ -12,7 +12,7 @@ public struct HistorySection: View {
                 HStack {
                     Image(systemName: "globe").foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 5) { Text(row.title.isEmpty ? row.url.host() ?? "Page" : row.title).lineLimit(1); Text(row.url.host() ?? "").font(.caption).foregroundStyle(.secondary) }
-                    Spacer(); Text("\(row.visitCount) visits").font(.caption).foregroundStyle(.secondary); Text(row.lastVisit, style: .date).font(.caption)
+                    Spacer(); Text("\(row.visitCount) \(row.visitCount == 1 ? "visit" : "visits")").font(.caption).foregroundStyle(.secondary); Text(row.lastVisit, style: .date).font(.caption)
                     Button("Open") { model.actions.openHistoryItem(url: row.url) }
                 }.padding(.vertical, 8).tag(row.url.absoluteString).onTapGesture(count: 2) { model.actions.openHistoryItem(url: row.url) }
             } } }

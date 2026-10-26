@@ -154,6 +154,8 @@ public final class AdBlockStore {
         states[profile]?.enabledBlockLists ?? catalog.defaultIDs
     }
 
+    public func listReceipt(_ id: String, profile: ProfileID) -> AdBlockListReceipt? { states[profile]?.lists[id] }
+
     public func excludedDomains(for profile: ProfileID) -> [String] { exclusions[profile, default: []].sorted() }
 
     public func siteSnapshot(for profile: ProfileID) -> AdBlockSiteSnapshot {

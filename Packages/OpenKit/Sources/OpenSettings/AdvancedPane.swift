@@ -83,7 +83,7 @@ private struct AdBlockControls: View {
                         ForEach(lists) { list in HStack {
                             Toggle(list.displayName, isOn: Binding(get: { model.enabledIDs.contains(list.id) }, set: { value in Task { await model.setList(list.id, enabled: value) } })).disabled(model.busy || list.urls.isEmpty)
                             Spacer(); Text(model.listStatus(list)).font(.caption).foregroundStyle(.secondary)
-                            Link(destination: list.infoURL) { Image(systemName: "info.circle") }.help(list.unavailableReason ?? "About this list")
+                            Button { model.openInfo(list) } label: { Image(systemName: "info.circle") }.buttonStyle(.link).help(list.unavailableReason ?? "About this list")
                         } }
                     } label: { Text("\(category == "bcny" ? "Open additions" : category.capitalized) (\(lists.count))") }
                 }

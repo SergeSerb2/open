@@ -9,6 +9,7 @@ import SwiftUI
     public init(root: SettingsViewModel) { self.root = root; isDefault = root.actions.isDefaultBrowser() }
     public var updates: Bool { get { root.bool("open.general.automaticallyUpdate") } set { root.set(newValue, for: "open.general.automaticallyUpdate") } }
     public var warn: Bool { get { root.bool("open.general.warnBeforeQuitting") } set { root.set(newValue, for: "open.general.warnBeforeQuitting") } }
+    public func refresh() { isDefault = root.actions.isDefaultBrowser() }
     public func setDefault() { errorText = root.actions.setAsDefaultBrowser() ?? ""; isDefault = root.actions.isDefaultBrowser() }
     public func openPreviews() { root.showsPreviews = true; root.actions.openPreviewsSettings() }
     public var previewDelay: Double { get { _ = root.preferenceRevision; return root.defaults.double(forKey: "open.general.previewsDelaySeconds") } set { root.set(newValue, for: "open.general.previewsDelaySeconds") } }
@@ -47,6 +48,6 @@ struct PreviewsSheet: View {
             PreferenceToggle(title: "Show previews when hovering links", key: "open.general.previewsOnHover", root: model.root)
             Picker("Delay", selection: $model.previewDelay) { Text("0.3 s").tag(0.3); Text("0.5 s").tag(0.5); Text("1 s").tag(1.0) }
             Spacer(); HStack { Spacer(); Button("Done") { model.root.showsPreviews = false }.keyboardShortcut(.defaultAction) }
-        }.padding(24).frame(width: 432, height: 272)
+        }.padding(24).frame(width: 480, height: 320)
     }
 }

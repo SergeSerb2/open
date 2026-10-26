@@ -29,6 +29,6 @@ public struct SearchEnginesSheet: View {
             }
             SettingsError(text: model.errorText)
             HStack { Spacer(); Button("Done") { model.root.showsSearchEngines = false }.keyboardShortcut(.defaultAction) }
-        }.padding(24).frame(width: 472, height: 372)
+        }.padding(24).frame(width: 520, height: 420)
     }
 }

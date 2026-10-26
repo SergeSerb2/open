@@ -40,11 +40,12 @@ import OpenAdBlock
         do { try await store.resetListChoices(profile: profile); root.actions.setEnabledBlockLists(store.enabledListIDs(for: profile), profileID: profile); errorText = "" }
         catch { errorText = "Could not reset list choices. \(error)" }
     }
+    public func refresh() { revision &+= 1 }
     public func listStatus(_ list: BlockList) -> String {
         _ = revision
-        let file = store.listDirectory(for: profileID).appendingPathComponent("catalog-state.json")
-        let state = (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode(AdBlockProfileState.self, from: $0) }
-        return state?.lists[list.id] != nil ? (list.bundled ? "Bundled" : "Downloaded") : "Not downloaded"
+        guard let receipt = store.listReceipt(list.id, profile: profileID) else { return "Not downloaded" }
+        return list.bundled && receipt.sources.isEmpty ? "Bundled" : "Downloaded"
     }
+    public func openInfo(_ list: BlockList) { root.actions.openURL(list.infoURL, profileID: profileID) }
     public func copyDebug() { root.actions.copyText(store.debugInfo(profile: profileID) + "\n" + root.actions.adBlockDebugInfo(profileID: profileID)) }
 }

@@ -50,6 +50,7 @@ public struct ImportOutcome: Sendable {
     func setApplicationIcon(id: String)
     // Required by plan buttons that have no method in its original protocol sketch.
     func resetTranslatePrompts(profileID: ProfileID) -> String?
+    func openURL(_ url: URL, profileID: ProfileID)
     func openHelp(topic: String)
     func copyText(_ text: String)
     func openLibrary()

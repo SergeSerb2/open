@@ -53,11 +53,12 @@ private struct LibrarySidebar: NSViewRepresentable {
         return window
     }
 }
-@MainActor public final class LibraryPresenter {
+@MainActor public final class LibraryPresenter: NSObject, NSWindowDelegate {
     public let viewModel: LibraryViewModel
     public private(set) var window: NSWindow?
-    public init(viewModel: LibraryViewModel) { self.viewModel = viewModel }
-    public func show(section: LibrarySection? = nil) { if let section { viewModel.section = section }; if window == nil { window = LibraryWindow.makeWindow(viewModel: viewModel) }; window?.makeKeyAndOrderFront(nil) }
+    public init(viewModel: LibraryViewModel) { self.viewModel = viewModel; super.init() }
+    public func show(section: LibrarySection? = nil) { if let section { viewModel.section = section }; if window == nil { window = LibraryWindow.makeWindow(viewModel: viewModel); window?.delegate = self }; if window?.isKeyWindow == true { Task { await viewModel.refreshExternalState() } }; window?.makeKeyAndOrderFront(nil) }
+    public func windowDidBecomeKey(_ notification: Notification) { Task { await viewModel.refreshExternalState() } }
 }
 
 private final class LibrarySectionButton: NSButton {

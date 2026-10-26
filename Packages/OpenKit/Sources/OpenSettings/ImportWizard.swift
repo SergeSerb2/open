@@ -22,6 +22,11 @@ import OpenImport
         let path = root.defaults.string(forKey: "open.import.lastArcDir")
         plan = ImportPlan(directory: directory ?? path.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Arc"))
     }
+    public var directoryDisplayPath: String {
+        let path = plan.directory.path
+        if path.hasPrefix(root.root.path + "/") { return "Open Data/" + String(path.dropFirst(root.root.path.count + 1)) }
+        return (path as NSString).abbreviatingWithTildeInPath
+    }
     public var canContinue: Bool { readable && !busy && (plan.spaces || plan.tabs || plan.favorites || plan.folders || plan.archive || plan.history || plan.searchSettings || plan.secretsRequested) }
     public func choose(directory: URL) async { plan.directory = directory; await refreshCounts() }
     public func refreshCounts() async {
@@ -42,7 +47,7 @@ import OpenImport
             let totals = try await Task.detached(priority: .utility) { () -> (Int, Int) in
                 var secretCount = 0, historyCount = 0
                 for name in names {
-                    let directory = source.appendingPathComponent(name)
+                    let directory = source.appendingPathComponent("User Data").appendingPathComponent(name)
                     if ["Login Data", "Cookies", "Web Data"].contains(where: { FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path) }) {
                         let report = try ArcSecretsReader(profileDirectory: directory).countOnly()
                         secretCount += report.loginRows + report.cookieRows + report.addressRows + report.cardRows
@@ -86,7 +91,7 @@ public struct ImportWizard: View {
             ScrollView { VStack(alignment: .leading, spacing: 14) {
                 switch model.step {
                 case .choose:
-                    HStack { Text(model.plan.directory.path).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
+                    HStack { Text(model.directoryDisplayPath).font(.caption).foregroundStyle(.secondary).lineLimit(2); Spacer(); Button("Choose Folder…") { let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; if panel.runModal() == .OK, let directory = panel.url { Task { await model.choose(directory: directory) } } } }
                     option("Spaces", \.spaces); option("Pinned and Today tabs", \.tabs); option("Favorites", \.favorites); option("Folders", \.folders); option("Archive", \.archive); option("History", \.history); option("Search settings", \.searchSettings); option("Passwords and cookies", \.secretsRequested)
                     Text("Search settings imports your engine choice only.").font(.caption).foregroundStyle(.secondary)
                 case .review:
@@ -118,7 +123,7 @@ public struct ImportWizard: View {
                 case .report: if model.outcome?.errorText != nil { Button("Try Again") { model.retry() } } else { Button("Open Library") { model.finish(openLibrary: true) } }
                 }
             }
-        }.padding(24).frame(width: 592, height: 472).interactiveDismissDisabled(model.busy)
+        }.padding(24).frame(width: 640, height: 520).interactiveDismissDisabled(model.busy)
         .task { if !model.readable { await model.refreshCounts() } }
     }
     private func option(_ name: String, _ key: WritableKeyPath<ImportPlan, Bool>) -> some View {
