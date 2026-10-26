@@ -39,6 +39,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private let defaults: UserDefaults
     public var onSidebarIntent: ((SidebarIntent) -> Bool?)?
     public var onCommand: ((String) -> Bool)?
+    public var onCommandWithPayload: ((String, String?) -> Bool)?
+    public var onCommandValidation: ((String, String) -> Bool?)?
+    public var ownsAdditionalKeyWindow: ((NSWindow) -> Bool)?
+    public var isApplicationActive: (() -> Bool)?
+    public var isCommandBarPresented = false
+    public var keyBindingOverrides = KeyBindingStore.empty
+    private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
     public var onFocus: (() -> Void)?
@@ -532,29 +539,59 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     }
     public var peekBadgeTabIDs: Set<ItemID> { peekStorage?.peekBadgeTabIDs ?? [] }
     /// Shared window-local key path. Focus comes from AppKit's current responder.
-    @discardableResult public func handleKeyDown(_ event: NSEvent) -> Bool {
-        guard event.window === window else { return false }
-        if event.keyCode == 53 {
-            if let peek = peekStorage, peek.isShown { peek.escape() }
-            else { splitController.performCommand("escape"); container.cancelOperation(nil) }
+    @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
+        guard let eventWindow = event.window,
+              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
+        let flags = event.modifierFlags.rawValue
+        if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
+           last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
+        if event.keyCode == 53, !isCommandBarPresented, let peek = peekStorage, peek.isShown {
+            peek.escape()
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
             return true
         }
-        let responder = window?.firstResponder
+        if event.keyCode == 53, !isCommandBarPresented, container.maximizedTabID != nil {
+            splitController.performCommand("escape"); container.cancelOperation(nil)
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
+        let responder = eventWindow.firstResponder
         let view = responder as? NSView
         let textFocused = responder is NSTextView || responder is NSTextField
         func within(_ ancestor: NSView?) -> Bool {
             guard let view, let ancestor else { return false }
             return view === ancestor || view.isDescendant(of: ancestor)
         }
-        let webFocused = !textFocused && (container.slots.contains { within($0.contentHostView) }
+        let webFocused = !textFocused && (eventWindow !== window || container.slots.contains { within($0.contentHostView) }
             || (peekStorage?.isShown == true && within(peekStorage?.stack.last?.host?.view)))
-        let routing = RoutingContext(isCommandBarOpen: context.isNewTabCommandBarOpen,
-            isSidebarFocused: within(sidebar), isTextFocused: textFocused, isWebContentFocused: webFocused)
-        guard case .browserCommand(let id)? = keyboard.route(event: event, context: routing), handles(id) else { return false }
+        // Web editing keys go through Chromium's text system. Its unconsumed
+        // hook can still offer them to the menu (for model undo, for example).
+        let routing = RoutingContext(isAppActive: isApplicationActive?() ?? true,
+            isCommandBarOpen: isCommandBarPresented || context.isNewTabCommandBarOpen,
+            isSidebarFocused: within(sidebar), isTextFocused: textFocused || webFocused, isWebContentFocused: webFocused)
+        let decision = KeyboardShortcut.from(event: event).map {
+            keyboard.route(shortcut: $0, context: routing, overrides: keyBindingOverrides,
+                now: Date(timeIntervalSinceReferenceDate: event.timestamp))
+        }
+        lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, false)
+        // CEF can deliver a page event straight to the window. Keep native
+        // edit actions on the same nil-target responder path in that layer.
+        if case .system? = decision, webFocused, routing.isAppActive,
+           let shortcut = KeyboardShortcut.from(event: event),
+           let id = SystemCommandActions.command(for: shortcut, overrides: keyBindingOverrides),
+           SystemCommandActions.isEnabled(id), SystemCommandActions.perform(id) {
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return true
+        }
+        guard case .browserCommand(let id)? = decision,
+              handles(id) || onCommand != nil,
+              isCommandEnabled(id, enabledKey: CommandRegistry.byID[id]?.enabledKey ?? EnabledKey.always) else { return false }
         // These bindings have window scope in the registry; restrict them to the
         // page here so sidebar controls and AppKit field editors retain their keys.
         if id.hasPrefix("focus-split-pane-"), !webFocused { return false }
-        performCommand(id); return true
+        performCommand(id)
+        lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+        return true
     }
     private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
@@ -569,7 +606,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         else if id == "go-forward", peekStorage?.isShown == true { peekStorage?.stack.last?.host?.goForward() }
         else { splitController.performCommand(id) }
     }
-    public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool { splitController.isCommandEnabled(id, enabledKey: enabledKey) }
+    public func performCommand(_ id: String, payload: String?) {
+        if onCommandWithPayload?(id, payload) == true { return }
+        performCommand(id)
+    }
+    public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+        if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
+        if id == "open-in-current-space" { return peekStorage?.isShown == true }
+        if id == "go-back" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoBack == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoBack == true }
+        if id == "go-forward" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoForward == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoForward == true }
+        return splitController.isCommandEnabled(id, enabledKey: enabledKey)
+    }
     public func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
@@ -590,7 +637,13 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         refresh(); changed(); return true
     }
     public func windowWillClose(_ notification: Notification) { saveWindowState(); visibilityOverride = .closed; removeRevealCard(); container.closeAll(); onClose?(); onVisibilityChange?() }
-    public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undoManager }
+    public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
+    private lazy var nativeTextUndoManager = UndoManager()
+    public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
+        if let editor = onTextUndoManager?(window) { return editor }
+        if window.firstResponder is NSTextView || window.firstResponder is NSTextField { return nativeTextUndoManager }
+        return model.undoManager
+    }
     public func windowDidResize(_ notification: Notification) { layoutContent() }
     public func windowDidMove(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }
     public func windowDidEndLiveResize(_ notification: Notification) { saveWindowState(); snapshotStore?.scheduleSave(model: model) }

@@ -1,0 +1,10 @@
+{
+  "sourceHead": "4a6fe77572e9328b6afe674c311d669c6ef58eb7",
+  "failedReceipt": "debug-window-2.json",
+  "phase": "relaunch for persistence",
+  "observedLauncherError": "Unable to block on application (GetProcessPID() returned 18446744073709551016)",
+  "harnessBehavior": "The constructor treated open -W exit as Open app exit before the socket was ready.",
+  "confirmed": "LaunchServices wait failed; no actual app PID or app exit was established by that waiter error. No orphan socket was found during investigation.",
+  "fix": "Keep the existing 60-second socket/PID readiness deadline independent of launcher lifetime. No relaunch or assertion retry is added.",
+  "regression": "Existing real three-second first-frame-timeout fixture uses open without -W. Its launcher exits successfully before engine startup; require the real socket PID and loaded page."
+}

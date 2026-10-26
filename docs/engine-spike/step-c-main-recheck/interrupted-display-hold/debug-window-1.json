@@ -1,0 +1,739 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "embeddedUUID": "4C4C44F5-5555-3144-A143-53034578039A",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793006546"
+  },
+  "started": "2026-10-26 09:56:40",
+  "style": "chrome",
+  "window": {
+    "background_lazy": {
+      "ok": true
+    },
+    "close_unloaded_pinned": {
+      "after_close": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "after_unload": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "before": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 421,
+        "engineStarted": 531,
+        "firstContentfulPaint": 739,
+        "main": 229,
+        "modelLoaded": 232,
+        "sidebarDrawn": 420
+      },
+      "reason": "Release timing budgets are not evaluated in Debug",
+      "samples": 5,
+      "status": "SKIP"
+    },
+    "cpu_count": 18,
+    "engine_failure_alert": {
+      "exit": 1,
+      "ok": true
+    },
+    "first_frame_timeout_continues": {
+      "hosts": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true,
+      "timing": {
+        "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+        "didFinishLaunching": 3566,
+        "engineInitialized": 3563,
+        "engineStart": 3462,
+        "engineStarted": 3559,
+        "firstContentfulPaint": 3746,
+        "firstFrameConfirmed": false,
+        "firstFrameWaitTimedOut": 3461,
+        "firstLoadEnd": 3718,
+        "firstPaintClockUncertaintyMs": 0.53,
+        "kernelProcessStart": true,
+        "main": 252,
+        "modelLoaded": 255,
+        "windowShown": 415
+      }
+    },
+    "frame_save_debounced": {
+      "before": {
+        "captures": 1,
+        "dirty": false,
+        "mirrorSyncs": 1,
+        "scheduled": 1,
+        "treeChanges": 0
+      },
+      "debounced": {
+        "captures": 2,
+        "dirty": false,
+        "mirrorSyncs": 1,
+        "scheduled": 12,
+        "treeChanges": 0
+      },
+      "immediate": {
+        "captures": 1,
+        "dirty": true,
+        "mirrorSyncs": 1,
+        "scheduled": 12,
+        "treeChanges": 0
+      },
+      "ok": true
+    },
+    "hide_reveal": {
+      "dismissed_s": 0.03,
+      "hidden": "hidden",
+      "left_s": 0.68,
+      "ok": false,
+      "panel_x": 10,
+      "revealed_again_s": 0.629,
+      "revealed_s": null,
+      "selected": true
+    },
+    "kernel_process_start": {
+      "ok": true,
+      "samples": 10
+    },
+    "keys_keep_peek_lazy": {
+      "ok": true
+    },
+    "launch_runs": {
+      "cold_fresh_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 3683,
+          "engineInitialized": 3675,
+          "engineStart": 402,
+          "engineStarted": 3670,
+          "firstContentfulPaint": 3897,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 3865,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 229,
+          "modelLoaded": 232,
+          "sidebarDrawn": 401,
+          "windowShown": 341
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 511,
+          "engineInitialized": 507,
+          "engineStart": 393,
+          "engineStarted": 497,
+          "firstContentfulPaint": 674,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 644,
+          "firstPaintClockUncertaintyMs": 0.18,
+          "kernelProcessStart": true,
+          "main": 238,
+          "modelLoaded": 241,
+          "sidebarDrawn": 392,
+          "windowShown": 335
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 544,
+          "engineInitialized": 536,
+          "engineStart": 433,
+          "engineStarted": 531,
+          "firstContentfulPaint": 741,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 723,
+          "firstPaintClockUncertaintyMs": 0.13,
+          "kernelProcessStart": true,
+          "main": 241,
+          "modelLoaded": 243,
+          "sidebarDrawn": 432,
+          "windowShown": 373
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 527,
+          "engineInitialized": 520,
+          "engineStart": 421,
+          "engineStarted": 516,
+          "firstContentfulPaint": 672,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 644,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 225,
+          "modelLoaded": 227,
+          "sidebarDrawn": 420,
+          "windowShown": 351
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 550,
+          "engineInitialized": 543,
+          "engineStart": 434,
+          "engineStarted": 538,
+          "firstContentfulPaint": 739,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 716,
+          "firstPaintClockUncertaintyMs": 0.13,
+          "kernelProcessStart": true,
+          "main": 218,
+          "modelLoaded": 220,
+          "sidebarDrawn": 433,
+          "windowShown": 375
+        }
+      ],
+      "warm_existing_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 516,
+          "engineInitialized": 510,
+          "engineStart": 412,
+          "engineStarted": 504,
+          "firstContentfulPaint": 687,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 667,
+          "firstPaintClockUncertaintyMs": 0.23,
+          "kernelProcessStart": true,
+          "main": 226,
+          "modelLoaded": 228,
+          "sidebarDrawn": 410,
+          "windowShown": 345
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 494,
+          "engineInitialized": 488,
+          "engineStart": 389,
+          "engineStarted": 484,
+          "firstContentfulPaint": 687,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 670,
+          "firstPaintClockUncertaintyMs": 0.15,
+          "kernelProcessStart": true,
+          "main": 215,
+          "modelLoaded": 217,
+          "sidebarDrawn": 388,
+          "windowShown": 306
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 533,
+          "engineInitialized": 524,
+          "engineStart": 414,
+          "engineStarted": 520,
+          "firstContentfulPaint": 686,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 660,
+          "firstPaintClockUncertaintyMs": 0.29,
+          "kernelProcessStart": true,
+          "main": 202,
+          "modelLoaded": 204,
+          "sidebarDrawn": 413,
+          "windowShown": 346
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 476,
+          "engineInitialized": 454,
+          "engineStart": 348,
+          "engineStarted": 451,
+          "firstContentfulPaint": 640,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 614,
+          "firstPaintClockUncertaintyMs": 0.15,
+          "kernelProcessStart": true,
+          "main": 152,
+          "modelLoaded": 154,
+          "sidebarDrawn": 347,
+          "windowShown": 285
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 625,
+          "engineInitialized": 595,
+          "engineStart": 462,
+          "engineStarted": 570,
+          "firstContentfulPaint": 821,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 802,
+          "firstPaintClockUncertaintyMs": 0.15,
+          "kernelProcessStart": true,
+          "main": 229,
+          "modelLoaded": 231,
+          "sidebarDrawn": 461,
+          "windowShown": 389
+        }
+      ]
+    },
+    "load_average": [
+      12.71044921875,
+      11.7041015625,
+      11.4287109375
+    ],
+    "native_window": {
+      "ok": true,
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          1676,
+          311
+        ],
+        "engineSelected": 0,
+        "engineURL": "",
+        "firstResponder": "FavoritesCollectionView",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "16B62A6A-1C6E-4DEB-A1BA-7F16B0E86563",
+        "isKeyWindow": true,
+        "keyWindow": 69783,
+        "layoutPasses": 7,
+        "number": 69783,
+        "pageFullscreen": false,
+        "paneBackgrounds": [],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 5,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "",
+        "shownPages": [],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "3DC46EF6-0D97-4238-BED8-A59E30E24904",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      }
+    },
+    "navigation_before_engine": {
+      "hosts": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true,
+      "readiness_probe": true,
+      "title": "Queued"
+    },
+    "quit_before_engine": {
+      "exit": 0,
+      "ok": true
+    },
+    "resize_300": {
+      "ok": true,
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            300,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            300,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            242,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            284,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          1130,
+          444
+        ],
+        "engineSelected": 1,
+        "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
+        "firstResponder": "FavoritesCollectionView",
+        "frame": [
+          80,
+          60,
+          1000,
+          700
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "16B62A6A-1C6E-4DEB-A1BA-7F16B0E86563",
+        "isKeyWindow": true,
+        "keyWindow": 69783,
+        "layoutPasses": 127,
+        "number": 69783,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "D558F8D7-86D3-42D8-A28E-3F4C72A5FCCC"
+          }
+        ],
+        "panel": [
+          300,
+          10,
+          690,
+          680
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 52,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "D558F8D7-86D3-42D8-A28E-3F4C72A5FCCC",
+        "shownPages": [
+          "D558F8D7-86D3-42D8-A28E-3F4C72A5FCCC"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 300,
+        "space": "3DC46EF6-0D97-4238-BED8-A59E30E24904",
+        "titlebar": [
+          0,
+          0,
+          1000,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      }
+    },
+    "resize_limits": {
+      "ok": true
+    },
+    "selected_only_0": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_1": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_2": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_3": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_4": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "suite": {
+      "error": "key: key focus not ready: active=false target=69783 key=0",
+      "ok": false
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 412,
+        "engineStarted": 504,
+        "firstContentfulPaint": 687,
+        "main": 215,
+        "modelLoaded": 217,
+        "sidebarDrawn": 410
+      },
+      "reason": "Release timing budgets are not evaluated in Debug",
+      "samples": 5,
+      "status": "SKIP"
+    },
+    "window_before_engine_0": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_1": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_2": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_3": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_4": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_png": {
+      "file": "window-startup.png",
+      "ok": true
+    }
+  }
+}
