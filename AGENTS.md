@@ -24,6 +24,7 @@ Reference build: Arc 1.170.0 (build 89123) at `/Applications/Arc.app`. Its engin
 7. Cite evidence in every reverse-engineering finding: the rea command, symbol, string, or file that proves it. Mark guesses as guesses.
 8. Do not spawn subagents or delegate tasks yourself. The lead agent controls how many agents run at once.
 9. Start long-running jobs (engine builds, syncs) in their own session (for example `python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' <cmd>`), so an app restart does not kill them.
+10. Before you open or update a PR: merge `origin/main` into your branch, then run `tools/verify-all.sh` (all checks PASS; SKIP only for targets that do not exist yet). Paste its summary table into the PR. For `Package.swift` merge conflicts, keep both sides (each PR adds targets); never leave two definitions of one target.
 
 ## Reverse-engineering tools
 
