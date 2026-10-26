@@ -5,6 +5,8 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenFeatures", targets: ["OpenFeatures"]),
+        .executable(name: "features-render", targets: ["features-render"]),
         .library(name: "OpenModel", targets: ["OpenModel"]),
         .library(name: "OpenRouting", targets: ["OpenRouting"]),
         .library(name: "OpenSleep", targets: ["OpenSleep"]),
@@ -24,6 +26,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "OpenModel"),
+        .target(name: "OpenFeatures", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSuggest", "OpenSleep", "OpenRouting", "OpenCommands"]),
+        .executableTarget(name: "features-render", dependencies: ["OpenModel", "OpenStore", "OpenFeatures", "OpenDesign", "OpenSleep"], sources: ["Scene", "main.swift", "Checks.swift", "FeatureCompare.swift", "OffscreenRenderer.swift", "Compare.swift", "RenderCLI.swift"]),
         .target(name: "OpenSleep", dependencies: ["OpenModel"]),
         .target(name: "OpenBoosts", dependencies: ["OpenModel"], exclude: ["Harness"], resources: [.copy("Resources/boost-applier.js"), .copy("Resources/zap-picker.js")]),
         .target(name: "OpenRouting", dependencies: ["OpenModel"]),
@@ -34,7 +38,7 @@ let package = Package(
         .target(name: "OpenCommands", dependencies: ["OpenModel", "OpenSuggest"], resources: [.copy("Resources/expected-menu.json")], linkerSettings: [.linkedFramework("Carbon")]),
         .target(name: "OpenScripting", dependencies: ["OpenModel", "OpenCommands"]),
         .target(name: "OpenAdBlock", dependencies: ["OpenModel", "OpenRouting"], resources: [.copy("Resources")]),
-        .executableTarget(name: "openkit", dependencies: ["OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenSleep", "OpenAdBlock"], resources: [.copy("Resources/sleep-schema1.json")]),
+        .executableTarget(name: "openkit", dependencies: ["OpenFeatures", "OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenSleep", "OpenAdBlock"], resources: [.copy("Resources/sleep-schema1.json")]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
         .target(name: "OpenDesign", dependencies: ["OpenModel"]),
         .target(name: "OpenSidebar", dependencies: ["OpenModel", "OpenDesign"]),

@@ -1,0 +1,253 @@
+import AppKit
+import OpenModel
+import OpenDesign
+
+@MainActor
+public final class PaneSlotView: NSView {
+    public let tabID: ItemID
+    public private(set) var paneChrome: PaneChromeView?
+    public private(set) var placeholderView: PlaceholderContentView?
+    public private(set) var contentHostView: NSView?
+    let clip = NSView()
+    public let focusRing = CAShapeLayer()
+    var isFocused = false
+    init(tabID: ItemID) {
+        self.tabID = tabID; super.init(frame: .zero); wantsLayer = true; clip.wantsLayer = true
+        layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = PanelMetrics.shadowOpacity
+        layer?.shadowRadius = PanelMetrics.shadowRadius; layer?.shadowOffset = CGSize(width: 0, height: -PanelMetrics.shadowOffsetY)
+        clip.layer?.cornerRadius = PanelMetrics.cornerRadius; clip.layer?.masksToBounds = true; addSubview(clip)
+        focusRing.zPosition = 10; focusRing.fillColor = nil; focusRing.lineWidth = SplitMetrics.ringWidth; layer?.addSublayer(focusRing)
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    func configure(tab: Tab, host: (any WebContentHost)?, split: Bool, focused: Bool, style: SpaceThemeStyle,
+                   close: @escaping () -> Void, menu: @escaping (NSView) -> Void, url: @escaping () -> Void, copy: @escaping () -> Void) {
+        isFocused = split && focused
+        focusRing.strokeColor = style.accentColor(.light).cgColor
+        if split {
+            if paneChrome == nil { let chrome = PaneChromeView(); paneChrome = chrome; clip.addSubview(chrome) }
+            paneChrome?.host = host; paneChrome?.isFocused = focused; paneChrome?.onClose = close; paneChrome?.onMenu = menu
+            paneChrome?.onURL = url; paneChrome?.onCopy = copy
+            // TODO(engine): page theme color. The semantic content background is the pre-engine fallback.
+            paneChrome?.layer?.backgroundColor = style.lightPalette?.background.cgColor ?? NSColor.white.cgColor
+            paneChrome?.update()
+        } else { paneChrome?.removeFromSuperview(); paneChrome = nil }
+        contentHostView?.removeFromSuperview(); placeholderView?.removeFromSuperview(); placeholderView = nil
+        if let host, tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen {
+            contentHostView = host.view; clip.addSubview(host.view, positioned: .below, relativeTo: paneChrome)
+        } else {
+            contentHostView = nil; let placeholder = PlaceholderContentView(tab: tab, style: style)
+            placeholderView = placeholder; clip.addSubview(placeholder, positioned: .below, relativeTo: paneChrome)
+        }
+        needsLayout = true
+    }
+    public override func layout() {
+        super.layout(); layoutContents()
+    }
+    /// Updates slot geometry without forcing layout in the embedded web subtree.
+    fileprivate func layoutContents() {
+        clip.frame = bounds
+        let bar = paneChrome == nil ? 0 : SplitMetrics.barHeight
+        paneChrome?.frame = CGRect(x: 0, y: bounds.height - bar, width: bounds.width, height: bar)
+        let page = CGRect(x: 0, y: 0, width: bounds.width, height: max(0, bounds.height - bar))
+        contentHostView?.frame = page; placeholderView?.frame = page
+        focusRing.frame = bounds
+        focusRing.path = CGPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), cornerWidth: PanelMetrics.cornerRadius - 1,
+                               cornerHeight: PanelMetrics.cornerRadius - 1, transform: nil)
+        focusRing.isHidden = !isFocused
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: PanelMetrics.cornerRadius, cornerHeight: PanelMetrics.cornerRadius, transform: nil)
+    }
+}
+
+@MainActor
+public final class WebContentContainer: NSView {
+    public static let maxCachedHiddenHosts = 8
+    let factory: any WebContentHostFactory
+    public var tabProvider: ((ItemID) -> Tab?) = { _ in nil }
+    public var style = SpaceThemeStyle.defaultTheme(system: .dark)
+    public private(set) var slots: [PaneSlotView] = []
+    private var cache: [ItemID: any WebContentHost] = [:]
+    private var generations: [ItemID: Int] = [:]
+    private var hiddenLRU: [ItemID] = []
+    private var nextGeneration = 0
+    private var showGeneration = 0
+    private var currentProfile: ProfileID?
+    private var currentSpace: SpaceID?
+    private var ids: [ItemID] = []
+    private var focused: ItemID?
+    private var orientation: SplitOrientation = .horizontal
+    private var fractions: [Double] = []
+    public var maximizedTabID: ItemID? { didSet { needsLayout = true } }
+    public var onPaneClicked: ((ItemID) -> Void)?
+    public var onLinkClicked: ((ItemID, URL, NSEvent.ModifierFlags) -> Bool)?
+    public var onPaneClose: ((ItemID) -> Void)?
+    public var onPaneMenu: ((ItemID, NSView) -> Void)?
+    public var onURLField: (() -> Void)?
+    public var onToast: ((String) -> Void)?
+    public var onTabURLChanged: ((ItemID, URL) -> Void)?
+    public var onFocusedMetadata: ((String) -> Void)?
+    public var onFractionsCommitted: (([Double]) -> Void)?
+    public var onDrop: ((ItemID, SplitDropOverlayView.Zone, Int?) -> Bool)?
+    private var dividers: [SplitDividerView] = []
+    public let dropOverlay = SplitDropOverlayView()
+    private var monitor: Any?
+    private var transitioning = false
+
+    public init(factory: any WebContentHostFactory) {
+        self.factory = factory; super.init(frame: .zero); wantsLayer = true
+        registerForDraggedTypes([NSPasteboard.PasteboardType("com.open.sidebar.node")])
+        dropOverlay.isHidden = true; addSubview(dropOverlay)
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            MainActor.assumeIsolated { self?.observeClick(event) }; return event
+        }
+    }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    isolated deinit { if let monitor { NSEvent.removeMonitor(monitor) }; for host in cache.values { host.close() } }
+    public func show(tabIDs: [ItemID], focusedTabID: ItemID, orientation: SplitOrientation, fractions: [Double], spaceID: SpaceID, profileID: ProfileID) {
+        guard (1...4).contains(tabIDs.count), Set(tabIDs).count == tabIDs.count, tabIDs.contains(focusedTabID) else { return }
+        if let currentProfile, currentProfile != profileID { closeAll() }
+        self.currentProfile = profileID; currentSpace = spaceID; showGeneration += 1; let generation = showGeneration
+        let old = ids, previousFocus = focused
+        for id in old where !tabIDs.contains(id) { cache[id]?.view.removeFromSuperview(); hiddenLRU.removeAll { $0 == id }; hiddenLRU.append(id) }
+        for slot in slots where !tabIDs.contains(slot.tabID) { slot.removeFromSuperview() }
+        let byID = Dictionary(uniqueKeysWithValues: slots.map { ($0.tabID, $0) })
+        slots = tabIDs.map { id in byID[id] ?? PaneSlotView(tabID: id) }
+        for slot in slots where slot.superview == nil { addSubview(slot, positioned: .below, relativeTo: dropOverlay) }
+        ids = tabIDs; focused = focusedTabID; self.orientation = orientation
+        self.fractions = fractions.count == ids.count ? fractions : Array(repeating: 1 / Double(ids.count), count: ids.count)
+        hiddenLRU.removeAll { tabIDs.contains($0) }
+        ensureHost(focusedTabID); updateSlots(); trimCache(); layoutPanes(animated: old != ids)
+        if previousFocus != focusedTabID { cache[focusedTabID]?.focus() }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.showGeneration == generation else { return }
+            for id in tabIDs where id != focusedTabID { self.ensureHost(id) }
+            self.updateSlots()
+        }
+    }
+    private func ensureHost(_ id: ItemID) {
+        guard cache[id] == nil, let tab = tabProvider(id), let profile = currentProfile,
+              tab.live.sleepPhase == .live || tab.live.sleepPhase == .frozen else { return }
+        let host = factory.makeHost(tabID: id, profileID: profile, url: nil)
+        bind(host, as: id); host.load(tab.url)
+    }
+    private func bind(_ host: any WebContentHost, as id: ItemID) {
+        nextGeneration += 1; let generation = nextGeneration
+        cache[id] = host; generations[id] = generation; tabProvider(id)?.live.hasWebContent = true
+        host.onURLChange = { [weak self, weak host] url in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            // No engine-to-model bridge exists before the App target; property writes are the bridge.
+            self.tabProvider(id)?.url = url; self.onTabURLChanged?(id, url); self.metadataChanged(id)
+        }
+        host.onTitleChange = { [weak self, weak host] title in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            self.tabProvider(id)?.title = title; self.metadataChanged(id)
+        }
+        host.onLoadingChange = { [weak self, weak host] loading in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            self.tabProvider(id)?.live.isLoading = loading; self.metadataChanged(id)
+        }
+        host.onFaviconChange = { [weak self, weak host] data in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return }
+            self.tabProvider(id)?.live.faviconPNG = data
+        }
+        host.shouldNavigate = { [weak self, weak host] url, flags in
+            guard let self, let host, self.generations[id] == generation, self.cache[id] === host else { return false }
+            return self.onLinkClicked?(id, url, flags) ?? true
+        }
+    }
+    private func metadataChanged(_ id: ItemID) {
+        if let tab = tabProvider(id), let host = cache[id] {
+            tab.live.canGoBack = host.canGoBack; tab.live.canGoForward = host.canGoForward
+            if focused == id { onFocusedMetadata?(tab.title) }
+        }
+        slots.first { $0.tabID == id }?.paneChrome?.update()
+    }
+    private func updateSlots() {
+        for slot in slots {
+            guard let tab = tabProvider(slot.tabID) else { continue }; let id = slot.tabID
+            slot.configure(tab: tab, host: cache[id], split: ids.count > 1, focused: focused == id, style: style,
+                           close: { [weak self] in self?.onPaneClose?(id) }, menu: { [weak self] v in self?.onPaneMenu?(id, v) },
+                           url: { [weak self] in self?.onURLField?() }, copy: { [weak self] in self?.onToast?("Copied Current URL") })
+        }
+    }
+    public func refreshPlaceholders() { for id in ids { ensureHost(id) }; updateSlots() }
+    public func host(for tabID: ItemID) -> (any WebContentHost)? { cache[tabID] }
+    public func takeHost(for id: ItemID) -> (any WebContentHost)? {
+        generations[id] = nil; hiddenLRU.removeAll { $0 == id }; return cache.removeValue(forKey: id)
+    }
+    public func adopt(_ host: any WebContentHost, for id: ItemID) {
+        cache[id]?.close(); bind(host, as: id); refreshPlaceholders()
+    }
+    public func closeHost(for id: ItemID) { tabProvider(id)?.live.hasWebContent = false; generations[id] = nil; cache.removeValue(forKey: id)?.close(); hiddenLRU.removeAll { $0 == id } }
+    public func closeAll() { for id in Array(cache.keys) { closeHost(for: id) } }
+    private func trimCache() { while hiddenLRU.count > Self.maxCachedHiddenHosts { closeHost(for: hiddenLRU[0]) } }
+    public func focus(tabID: ItemID) {
+        guard ids.contains(tabID) else { return }; focused = tabID; updateSlots(); cache[tabID]?.focus(); metadataChanged(tabID)
+    }
+    func observeClick(_ event: NSEvent) {
+        guard event.window === window, !transitioning else { return }
+        guard let root = window?.contentView else { return }
+        let rootPoint = root.convert(event.locationInWindow, from: nil)
+        guard let hit = root.hitTest(rootPoint), hit === self || hit.isDescendant(of: self) else { return }
+        let p = convert(event.locationInWindow, from: nil)
+        if let slot = slots.first(where: { !$0.isHidden && $0.frame.contains(p) }) { onPaneClicked?(slot.tabID) }
+    }
+    public override func mouseDown(with event: NSEvent) { observeClick(event) }
+    public func setLivePaneFrames(_ frames: [CGRect]) {
+        guard frames.count == slots.count else { return }
+        for (slot, frame) in zip(slots, frames) where slot.frame != frame {
+            slot.frame = frame; slot.layoutContents(); slot.paneChrome?.layoutSubtreeIfNeeded()
+        }
+        layoutDividers()
+    }
+    public func layoutPanes(animated: Bool) {
+        let frames = SplitLayout.frames(content: bounds, orientation: orientation, fractions: fractions, gap: SplitMetrics.gap, minPane: SplitMetrics.minimumPane)
+        let animate = animated && window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        transitioning = animate
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = animate ? Motion.splitExpand : 0; context.timingFunction = Motion.easeInOut
+            for (slot, frame) in zip(slots, frames) {
+                slot.isHidden = maximizedTabID != nil && maximizedTabID != slot.tabID
+                let target = maximizedTabID == slot.tabID ? bounds : frame
+                if animate { slot.animator().frame = target } else { slot.frame = target }
+            }
+        } completionHandler: { [weak self] in MainActor.assumeIsolated { self?.transitioning = false } }
+        layoutDividers()
+    }
+    public override func layout() { super.layout(); dropOverlay.frame = bounds; layoutPanes(animated: false) }
+    private func layoutDividers() {
+        while dividers.count > max(0, slots.count - 1) { dividers.removeLast().removeFromSuperview() }
+        while dividers.count < max(0, slots.count - 1) {
+            let d = SplitDividerView(); dividers.append(d); addSubview(d, positioned: .below, relativeTo: dropOverlay)
+        }
+        for (i, d) in dividers.enumerated() {
+            d.isHidden = maximizedTabID != nil; d.isEnabled = !transitioning; d.orientation = orientation
+            let a = slots[i].frame, b = slots[i + 1].frame
+            d.frame = orientation == .horizontal ? CGRect(x: a.maxX, y: bounds.minY, width: max(0, b.minX - a.maxX), height: bounds.height)
+                : CGRect(x: bounds.minX, y: b.maxY, width: bounds.width, height: max(0, a.minY - b.maxY))
+            d.onBegin = { [weak self] in self?.slots.map(\.frame) ?? [] }
+            d.onDrag = { [weak self] frames in self?.setLivePaneFrames(frames) }
+            d.onCommit = { [weak self] frames in
+                guard let self else { return }; self.fractions = SplitLayout.fractions(forSizes: frames.map { self.orientation == .horizontal ? $0.width : $0.height })
+                self.onFractionsCommitted?(self.fractions)
+            }
+            d.pairIndex = i
+        }
+    }
+    public func divider(at index: Int) -> SplitDividerView? { dividers.indices.contains(index) ? dividers[index] : nil }
+    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { dropOverlay.isHidden = false; return draggingUpdated(sender) }
+    public override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        dropOverlay.zone = dropOverlay.zone(at: convert(sender.draggingLocation, from: nil)); return .move
+    }
+    public override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropOverlay.isHidden = true }
+    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        defer { dropOverlay.isHidden = true }
+        guard let raw = sender.draggingPasteboard.string(forType: .init("com.open.sidebar.node")), let uuid = UUID(uuidString: raw) else { return false }
+        let point = convert(sender.draggingLocation, from: nil)
+        let index = slots.count > 1 && dropOverlay.zone(at: point) == .center ? slots.firstIndex { $0.frame.contains(point) } : nil
+        return handleDrop(ItemID(rawValue: uuid), point: point, paneIndex: index)
+    }
+    @discardableResult public func handleDrop(_ id: ItemID, point: CGPoint, paneIndex: Int? = nil) -> Bool {
+        onDrop?(id, dropOverlay.zone(at: point), paneIndex) ?? false
+    }
+    public override func cancelOperation(_ sender: Any?) { dropOverlay.isHidden = true; maximizedTabID = nil }
+}

@@ -1270,6 +1270,8 @@ Work in order. A step is done only when its acceptance passes.
 
 ## 11. Verification log (fill in as steps land)
 
+M4 implementation record: GPT-6.1; full report and per-element tables in [docs/m4.md](../m4.md). Build: `nice -n 10 swift build -c release -j 6` in `Packages/OpenKit`. Feature harness: 83/83. Current-main regression runner: all available checks pass. No engine acceptance is claimed.
+
 Record: date, builder (model), build command + result, each check id
 with PASS/FAIL, render-comparison worst position/ΔE per state, and
 the A1–A7 verdicts from Step 9. Keep raw harness output and fixture
@@ -1278,16 +1280,16 @@ numbers only here — the same discipline as routing.md and sleep.md.
 
 | Step | Date | Result |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
-| 8 | | |
-| 9 | | |
-| 10 | | |
+| 1 | 2026-10-25 | PASS: OpenFeatures + three model commands; release build clean; commands-demo 115/115 after main merges. |
+| 2 | 2026-10-25 | PASS: C1 single/placeholder/lazy-host scenarios; offscreen scaled sRGB renderer; synthetic screens in docs/m4/. |
+| 3 | 2026-10-25 | PASS: S1/S3/S4; F0081 pane/bar geometry exact; glyph positions within 1 pt. Page-color fallback remains outside the color target. |
+| 4 | 2026-10-25 | PARTIAL: S2/S5/S6 and C2/C3 handlers pass. OpenSidebar focus fill, badge, split-row menu changes held by the task's visual freeze; see docs/m4.md. |
+| 5 | 2026-10-25 | PASS: P1–P5; same-host instance/history/click count preserved on promotion; F0090 worst 1 pt / ΔE00 1.86. |
+| 6 | 2026-10-25 | PASS: L1–L3; dedupe, blank reuse, Today-top move/no-main-window path, real SQLite archive, synthetic 720×540 window. |
+| 7 | 2026-10-25 | PASS: V1; visible split/Peek/Little Open and minimized/PiP states; sleep-demo 105/105. |
+| 8 | 2026-10-25 | OUT OF SCOPE: App-target intake/default browser/global hotkey. |
+| 9 | 2026-10-25 | OUT OF SCOPE: real engine adapter. A1–A7 remain UNVERIFIED for the real engine. |
+| 10 | 2026-10-25 | Not requested as a separate step. Static/fake-host checks and render limits are recorded in docs/m4.md. |
 
 
 

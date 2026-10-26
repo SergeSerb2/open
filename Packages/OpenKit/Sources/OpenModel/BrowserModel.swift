@@ -1085,6 +1085,58 @@ public final class BrowserModel {
         }
     }
 
+    /// Inserts a non-favorite, non-pane tab. A refused command changes nothing.
+    @discardableResult
+    public func addPane(splitID: ItemID, tabID: ItemID, at: Int? = nil) -> Bool {
+        guard let revert = insertPane(splitID: splitID, tabID: tabID, at: at) else { return false }
+        registerUndo(revert, reapply: { $0.insertPane(splitID: splitID, tabID: tabID, at: at) ?? Self.noRevert })
+        return true
+    }
+
+    private func insertPane(splitID: ItemID, tabID: ItemID, at: Int?) -> Revert? {
+        guard let split = index[splitID]?.split, split.panes.count < 4,
+              let tab = tab(id: tabID), let source = parentByID[tabID],
+              let home = parentByID[splitID] else { return nil }
+        switch source { case .favorites, .splitPane: return nil; default: break }
+        let oldFractions = split.fractions, oldFocus = split.focusedPaneID
+        guard let removed = removeChild(tabID, from: source) else { return nil }
+        let pinned = applyPinnedRule(to: .tab(tab), from: section(of: source), to: section(of: home))
+        split.panes.insert(tab, at: max(0, min(at ?? split.panes.count, split.panes.count)))
+        parentByID[tabID] = .splitPane(splitID)
+        split.fractions = Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
+        split.focusedPaneID = tabID
+        let changed = source == home ? [home] : [source, home]
+        for parent in changed { emit(.reload(parent: parent)) }
+        return { model in
+            guard model.parentByID[tabID] == .splitPane(splitID), model.index[splitID]?.split === split,
+                  model.insertChild(.tab(tab), into: source, at: removed.index) != nil else { return false }
+            split.panes.removeAll { $0.id == tabID }
+            model.parentByID[tabID] = source
+            split.fractions = oldFractions; split.focusedPaneID = oldFocus
+            Self.restore(pinned)
+            for parent in changed { model.emit(.reload(parent: parent)) }
+            return true
+        }
+    }
+
+    /// One write on divider release; no structural event and no per-tick undo.
+    public func setSplitFractions(splitID: ItemID, fractions: [Double]) {
+        guard let split = index[splitID]?.split, fractions.count == split.panes.count,
+              fractions.allSatisfy({ $0.isFinite && $0 >= 0 }),
+              abs(fractions.reduce(0, +) - 1) <= 0.001 else { return }
+        let old = split.fractions
+        guard old != fractions else { return }
+        split.fractions = fractions
+        registerChange(undo: { split.fractions = old }, redo: { split.fractions = fractions })
+    }
+
+    public func setSplitOrientation(splitID: ItemID, orientation: SplitOrientation) {
+        guard let split = index[splitID]?.split, split.orientation != orientation else { return }
+        let old = split.orientation
+        split.orientation = orientation
+        registerChange(undo: { split.orientation = old }, redo: { split.orientation = orientation })
+    }
+
     /// Replaces a split with its panes as separate rows, in pane order, at the split's slot.
     public func unsplit(splitID: ItemID) {
         guard let revert = dissolve(splitID) else { return }
@@ -1151,7 +1203,17 @@ public final class BrowserModel {
     /// changes nothing when the split or its remaining tab is gone.
     private func takePane(_ tabID: ItemID, from split: Split) -> (@MainActor (BrowserModel) -> Bool)? {
         let wasFocused = split.focusedPaneID == tabID
+        let previousFractions = split.fractions, previousCount = split.panes.count
         guard let removed = detach(tabID) else { return nil }
+        var surviving = previousFractions
+        if surviving.count == previousCount, surviving.allSatisfy({ $0.isFinite && $0 >= 0 }) {
+            surviving.remove(at: removed.index)
+        } else { surviving = [] }
+        let total = surviving.reduce(0, +)
+        split.fractions = total.isFinite && total > 0 ? surviving.map { $0 / total }
+            : Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
+        // Point minimums depend on the current viewport; SplitLayout applies the
+        // 200 pt clamp and narrow-window equal scaling to these normalized shares.
         if wasFocused { split.focusedPaneID = split.panes.first?.id }
         let collapsedIn = collapseIfSinglePane(split)
         let paneIndex = removed.index
@@ -1165,6 +1227,7 @@ public final class BrowserModel {
                 model.emit(.reload(parent: parent))
             }
             guard model.attach(removed.node, to: .splitPane(split.id), at: paneIndex) != nil else { return false }
+            split.fractions = previousFractions
             if wasFocused { split.focusedPaneID = tabID }
             return true
         }
