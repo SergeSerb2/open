@@ -1,5 +1,11 @@
 {
-  "config": "Debug",
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
   "extensions": {
     "chrome_extensions_page": {
       "items": 4,
@@ -10,7 +16,7 @@
     "content_scripts": {
       "darkreader": {
         "mode": "dynamic",
-        "styles": 28
+        "styles": 26
       },
       "isolated_worlds": [
         "1Password \u2013 Password Manager",
@@ -55,7 +61,7 @@
           "title": "Dark Reader"
         },
         {
-          "badge": null,
+          "badge": "4",
           "enabled": true,
           "icon": 2159,
           "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
@@ -103,7 +109,7 @@
       "ok": true,
       "pages": {
         "Dark Reader": {
-          "elements": 487,
+          "elements": 428,
           "ok": true,
           "screenshot": "chrome-options-darkreader.png",
           "title": "Dark Reader settings",
@@ -120,21 +126,77 @@
     "popups": {
       "by_extension": {
         "1password": {
-          "error": "eval: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
-          "ok": false
+          "console_errors": [],
+          "ok": true,
+          "screenshot": "chrome-popup-1password.png",
+          "state": {
+            "elements": 40,
+            "h": 450,
+            "text": "",
+            "w": 600
+          },
+          "tabs_api": {
+            "active": [
+              "https://en.wikipedia.org/wiki/Web_browser"
+            ],
+            "all": [
+              "https://bitwarden.com/browser-start/",
+              "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en",
+              "https://darkreader.org/help/en/",
+              "https://en.wikipedia.org/wiki/Web_browser"
+            ],
+            "current": 1659786674,
+            "windows": 1
+          }
         },
         "bitwarden": {
-          "error": "'identifier'",
-          "ok": false
+          "console_errors": [],
+          "ok": true,
+          "screenshot": "chrome-popup-bitwarden.png",
+          "state": {
+            "elements": 124,
+            "h": 600,
+            "text": "Make Bitwarden your browser's default password manager\n1\n\nSelect Continue.\n\n2\n\nSelect Allow from the browser prompt to g",
+            "w": 25
+          },
+          "tabs_api": {
+            "active": [
+              "https://en.wikipedia.org/wiki/Web_browser"
+            ],
+            "all": [
+              "https://bitwarden.com/browser-start/",
+              "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en",
+              "https://darkreader.org/help/en/",
+              "https://en.wikipedia.org/wiki/Web_browser"
+            ],
+            "current": 1659786674,
+            "windows": 1
+          }
         },
         "darkreader": {
-          "error": "timed out",
-          "ok": false,
+          "console_errors": [
+            "Unrecognized Content-Security-Policy directive 'navigate-to'."
+          ],
+          "ok": true,
+          "screenshot": "chrome-popup-darkreader.png",
           "state": {
-            "elements": 12,
-            "h": 61,
-            "text": "Loading, please wait",
-            "w": 64
+            "elements": 395,
+            "h": 580,
+            "text": "Loading, please wait\nDark Reader\n en.wikipedia.org\nConfigure website toggling\nOn\nOff\nConfigure automation\nFilter\nSite li",
+            "w": 276
+          },
+          "tabs_api": {
+            "active": [
+              "https://en.wikipedia.org/wiki/Web_browser"
+            ],
+            "all": [
+              "https://bitwarden.com/browser-start/",
+              null,
+              "https://darkreader.org/help/en/",
+              "https://en.wikipedia.org/wiki/Web_browser"
+            ],
+            "current": 1659786674,
+            "windows": 1
           }
         },
         "ublock": {
@@ -143,26 +205,26 @@
           "screenshot": "chrome-popup-ublock.png",
           "state": {
             "elements": 65,
-            "h": 222,
-            "text": "not a website",
+            "h": 374,
+            "text": "en.wikipedia.org\nfiltering mode\noptimal\nOn this website\nRemove an element\nCreate a custom filter\nReport an issue",
             "w": 273
           },
           "tabs_api": {
             "active": [
-              "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/popup.html"
+              "https://en.wikipedia.org/wiki/Web_browser"
             ],
             "all": [
-              "https://en.wikipedia.org/wiki/Web_browser",
-              "https://darkreader.org/help/en/",
+              "https://bitwarden.com/browser-start/",
               null,
-              "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/popup.html"
+              "https://darkreader.org/help/en/",
+              "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1973265266,
-            "windows": 4
+            "current": 1659786674,
+            "windows": 1
           }
         }
       },
-      "ok": false
+      "ok": true
     },
     "service_workers": {
       "all_target_types": [
@@ -180,15 +242,15 @@
     "webstore_install": {
       "button": "Add to Chrome",
       "click": [
-        1010.0078125,
+        1048.0078125,
         282
       ],
       "console": [
-        "WASM SDK loaded in 38ms",
-        "State version: 86",
+        "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
         "%c%s color: red; background: yellow; font-size: 24px; WARNING!",
         "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand.",
-        "Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist."
+        "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
+        "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received"
       ],
       "dialog_click": true,
       "installed": true,
@@ -197,12 +259,12 @@
           "attachedSheet": 0,
           "class": "NativeWidgetMacNSWindow",
           "firstResponder": "BridgedContentView",
-          "frame": "{{892, 607}, {448, 196}}",
+          "frame": "{{1056, 910}, {448, 196}}",
           "key": false,
           "level": 0,
-          "number": 5209,
+          "number": 127230,
           "parent": 0,
-          "sheet": true,
+          "sheet": false,
           "title": "",
           "visible": true
         }
@@ -212,24 +274,17 @@
       "screenshot_store": "chrome-webstore-page.png",
       "windows_after": [
         [
-          "NSWindow",
-          "{{1722, 8}, {1360, 1394}}"
+          "BrowserWindow",
+          "{{80, 60}, {1360, 860}}"
         ],
         [
-          "NSPanel",
-          "{{2064, 676}, {48, 632}}"
-        ],
-        [
-          "CefNSWindow",
-          "{{1666, 126}, {48, 1276}}"
-        ],
-        [
-          "CefNSWindow",
-          "{{1990, -0}, {1084, 1394}}"
+          "NativeWidgetMacNSWindow",
+          "{{-224, 1278}, {448, 132}}"
         ]
       ]
     },
     "welcome_tabs": [
+      "https://bitwarden.com/browser-start/",
       "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en",
       "https://darkreader.org/help/en/"
     ]
@@ -237,10 +292,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 13103,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome/Profiles"
+    "pid": 69714,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-69705-22a8a716",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-69705-22a8a716/Engine"
   },
-  "started": "2026-10-25 19:19:51",
+  "started": "2026-10-26 16:04:31",
   "style": "chrome"
 }

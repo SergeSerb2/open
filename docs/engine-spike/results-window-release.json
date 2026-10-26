@@ -6,72 +6,72 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
-  "started": "2026-10-26 14:40:21",
-  "style": "alloy",
+  "started": "2026-10-26 16:05:24",
+  "style": "chrome",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "19DD16C6-EC5D-4A90-B98A-72C2BB0BAE66",
+          "active": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "382760D5-68F6-4608-87CC-F7ACB829767D",
+          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
           "tabs": [
-            "19DD16C6-EC5D-4A90-B98A-72C2BB0BAE66",
-            "7750EB14-42B0-4614-AA48-004F4D187A20"
+            "E6ECB25B-F822-4D66-8BF0-C087573334ED",
+            "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "19DD16C6-EC5D-4A90-B98A-72C2BB0BAE66",
+          "active": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "382760D5-68F6-4608-87CC-F7ACB829767D",
+          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
           "tabs": [
-            "19DD16C6-EC5D-4A90-B98A-72C2BB0BAE66",
-            "7750EB14-42B0-4614-AA48-004F4D187A20"
+            "E6ECB25B-F822-4D66-8BF0-C087573334ED",
+            "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+          "active": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "382760D5-68F6-4608-87CC-F7ACB829767D",
+          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
           "tabs": [
-            "7750EB14-42B0-4614-AA48-004F4D187A20",
-            "81003E97-323B-4E5A-8E70-B0F0637745DC"
+            "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
+            "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "7750EB14-42B0-4614-AA48-004F4D187A20",
+          "active": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
           "activeIsMember": true,
           "contents": [
-            0,
+            4,
             3
           ],
           "context": "Default",
-          "profile": "382760D5-68F6-4608-87CC-F7ACB829767D",
+          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
           "tabs": [
-            "7750EB14-42B0-4614-AA48-004F4D187A20",
-            "81003E97-323B-4E5A-8E70-B0F0637745DC"
+            "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
+            "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
           ]
         }
       ]
@@ -3013,14 +3013,14 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 243,
-        "engineStarted": 324,
-        "firstContentfulPaint": 458,
-        "main": 142,
-        "modelLoaded": 144,
-        "sidebarDrawn": 242
+        "engineStart": 263,
+        "engineStarted": 372,
+        "firstContentfulPaint": 579,
+        "main": 133,
+        "modelLoaded": 136,
+        "sidebarDrawn": 262
       },
-      "ok": true,
+      "ok": false,
       "samples": 5
     },
     "comparison": {
@@ -3202,19 +3202,17 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3312,
-        "engineInitialized": 3310,
-        "engineStart": 3226,
-        "engineStarted": 3307,
-        "firstContentfulPaint": 3442,
+        "didFinishLaunching": 3563,
+        "engineInitialized": 3559,
+        "engineStart": 3424,
+        "engineStarted": 3552,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3226,
-        "firstLoadEnd": 3429,
-        "firstPaintClockUncertaintyMs": 0.26,
+        "firstFrameWaitTimedOut": 3422,
+        "firstLoadEnd": 3730,
         "kernelProcessStart": true,
-        "main": 137,
-        "modelLoaded": 139,
-        "windowShown": 191
+        "main": 123,
+        "modelLoaded": 125,
+        "windowShown": 213
       }
     },
     "frame_save_debounced": {
@@ -3245,19 +3243,19 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.529,
+      "dismissed_on_selection_s": 0.562,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.634
+      "revealed_s": 0.845
     },
     "hide_reveal": {
-      "dismissed_s": 0.534,
+      "dismissed_s": 0.67,
       "hidden": "hidden",
-      "left_s": 0.672,
+      "left_s": 0.845,
       "ok": true,
       "panel_x": 10,
-      "revealed_again_s": 0.627,
-      "revealed_s": 0.618,
+      "revealed_again_s": 0.789,
+      "revealed_s": 0.828,
       "selected": true
     },
     "html_fullscreen_from_window": {
@@ -3319,8 +3317,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2233,
-          185
+          2244,
+          167
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3334,16 +3332,16 @@
         "fullscreenChanges": 4,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "9C2DD694-DF11-4448-AF11-C568ED3034DC",
+        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
         "key": true,
-        "layoutPasses": 573,
+        "layoutPasses": 235,
         "miniaturized": false,
-        "number": 115900,
+        "number": 127336,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "81003E97-323B-4E5A-8E70-B0F0637745DC"
+            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
           }
         ],
         "panel": [
@@ -3360,7 +3358,7 @@
             0,
             0
           ],
-          "dwell": 0.1562606249935925,
+          "dwell": 0.15622595831518993,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3369,15 +3367,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "shownPages": [
-          "81003E97-323B-4E5A-8E70-B0F0637745DC"
+          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756",
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
         "titlebar": [
           0,
           0,
@@ -3504,8 +3502,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2533,
-          825
+          2544,
+          807
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3519,16 +3517,16 @@
         "fullscreenChanges": 3,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "9C2DD694-DF11-4448-AF11-C568ED3034DC",
+        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
         "key": true,
-        "layoutPasses": 548,
+        "layoutPasses": 209,
         "miniaturized": false,
-        "number": 115900,
+        "number": 127336,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "81003E97-323B-4E5A-8E70-B0F0637745DC"
+            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
           }
         ],
         "panel": [
@@ -3545,7 +3543,7 @@
             0,
             0
           ],
-          "dwell": 0.1562606249935925,
+          "dwell": 0.15622595831518993,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3554,15 +3552,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "shownPages": [
-          "81003E97-323B-4E5A-8E70-B0F0637745DC"
+          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756",
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
         "titlebar": [
           0,
           0,
@@ -3690,8 +3688,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2533,
-          825
+          2544,
+          807
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3705,16 +3703,16 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "9C2DD694-DF11-4448-AF11-C568ED3034DC",
+        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
         "key": true,
-        "layoutPasses": 290,
+        "layoutPasses": 164,
         "miniaturized": false,
-        "number": 115900,
+        "number": 127336,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "81003E97-323B-4E5A-8E70-B0F0637745DC"
+            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
           }
         ],
         "panel": [
@@ -3731,7 +3729,7 @@
             0,
             0
           ],
-          "dwell": 0.1562606249935925,
+          "dwell": 0.15622595831518993,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3740,15 +3738,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "shownPages": [
-          "81003E97-323B-4E5A-8E70-B0F0637745DC"
+          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756",
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
         "titlebar": [
           0,
           0,
@@ -3875,8 +3873,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2533,
-          825
+          2544,
+          807
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
@@ -3890,16 +3888,16 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "9C2DD694-DF11-4448-AF11-C568ED3034DC",
+        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
         "key": true,
-        "layoutPasses": 284,
+        "layoutPasses": 157,
         "miniaturized": false,
-        "number": 115900,
+        "number": 127336,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "81003E97-323B-4E5A-8E70-B0F0637745DC"
+            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
           }
         ],
         "panel": [
@@ -3916,7 +3914,7 @@
             0,
             0
           ],
-          "dwell": 0.1562606249935925,
+          "dwell": 0.15622595831518993,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3925,15 +3923,15 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "shownPages": [
-          "81003E97-323B-4E5A-8E70-B0F0637745DC"
+          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756",
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
         "titlebar": [
           0,
           0,
@@ -4018,11 +4016,11 @@
           1000,
           700
         ],
-        "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756"
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
       },
       "ok": true,
       "restored": {
@@ -4032,11 +4030,11 @@
           1000,
           700
         ],
-        "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756"
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
       }
     },
     "last_window_reopen": {
@@ -4048,11 +4046,11 @@
           1000,
           700
         ],
-        "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756"
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -4063,183 +4061,183 @@
           1000,
           700
         ],
-        "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
-        "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
+        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756"
+        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 3686,
-          "engineInitialized": 3683,
-          "engineStart": 296,
-          "engineStarted": 3680,
-          "firstContentfulPaint": 3853,
+          "didFinishLaunching": 528,
+          "engineInitialized": 525,
+          "engineStart": 316,
+          "engineStarted": 517,
+          "firstContentfulPaint": 697,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 3837,
+          "firstLoadEnd": 664,
           "firstPaintClockUncertaintyMs": 0.11,
           "kernelProcessStart": true,
-          "main": 202,
-          "modelLoaded": 204,
-          "sidebarDrawn": 295,
-          "windowShown": 261
+          "main": 139,
+          "modelLoaded": 142,
+          "sidebarDrawn": 315,
+          "windowShown": 240
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 258,
-          "engineInitialized": 256,
-          "engineStart": 170,
-          "engineStarted": 253,
-          "firstContentfulPaint": 391,
+          "didFinishLaunching": 437,
+          "engineInitialized": 433,
+          "engineStart": 309,
+          "engineStarted": 420,
+          "firstContentfulPaint": 604,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 376,
+          "firstLoadEnd": 569,
+          "firstPaintClockUncertaintyMs": 0.3,
+          "kernelProcessStart": true,
+          "main": 164,
+          "modelLoaded": 167,
+          "sidebarDrawn": 308,
+          "windowShown": 256
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 318,
+          "engineInitialized": 313,
+          "engineStart": 189,
+          "engineStarted": 305,
+          "firstContentfulPaint": 528,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 504,
           "firstPaintClockUncertaintyMs": 0.12,
           "kernelProcessStart": true,
-          "main": 71,
-          "modelLoaded": 72,
-          "sidebarDrawn": 169,
-          "windowShown": 131
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 361,
-          "engineInitialized": 359,
-          "engineStart": 269,
-          "engineStarted": 355,
-          "firstContentfulPaint": 491,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 479,
-          "firstPaintClockUncertaintyMs": 0.1,
-          "kernelProcessStart": true,
-          "main": 154,
-          "modelLoaded": 155,
-          "sidebarDrawn": 268,
-          "windowShown": 221
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 251,
-          "engineInitialized": 249,
-          "engineStart": 166,
-          "engineStarted": 246,
-          "firstContentfulPaint": 387,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 372,
-          "firstPaintClockUncertaintyMs": 0.09,
-          "kernelProcessStart": true,
-          "main": 71,
-          "modelLoaded": 72,
-          "sidebarDrawn": 166,
+          "main": 52,
+          "modelLoaded": 54,
+          "sidebarDrawn": 188,
           "windowShown": 127
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 329,
-          "engineInitialized": 326,
-          "engineStart": 243,
-          "engineStarted": 324,
-          "firstContentfulPaint": 458,
+          "didFinishLaunching": 386,
+          "engineInitialized": 379,
+          "engineStart": 261,
+          "engineStarted": 372,
+          "firstContentfulPaint": 565,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 446,
-          "firstPaintClockUncertaintyMs": 0.11,
+          "firstLoadEnd": 528,
+          "firstPaintClockUncertaintyMs": 0.09,
           "kernelProcessStart": true,
-          "main": 142,
-          "modelLoaded": 144,
-          "sidebarDrawn": 242,
-          "windowShown": 198
+          "main": 116,
+          "modelLoaded": 119,
+          "sidebarDrawn": 260,
+          "windowShown": 207
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 384,
+          "engineInitialized": 380,
+          "engineStart": 263,
+          "engineStarted": 372,
+          "firstContentfulPaint": 579,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 536,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 133,
+          "modelLoaded": 136,
+          "sidebarDrawn": 262,
+          "windowShown": 205
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 316,
-          "engineInitialized": 313,
-          "engineStart": 225,
-          "engineStarted": 307,
-          "firstContentfulPaint": 442,
+          "didFinishLaunching": 340,
+          "engineInitialized": 330,
+          "engineStart": 209,
+          "engineStarted": 324,
+          "firstContentfulPaint": 535,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 431,
-          "firstPaintClockUncertaintyMs": 0.11,
+          "firstLoadEnd": 517,
+          "firstPaintClockUncertaintyMs": 0.2,
           "kernelProcessStart": true,
-          "main": 131,
-          "modelLoaded": 133,
-          "sidebarDrawn": 224,
-          "windowShown": 186
+          "main": 65,
+          "modelLoaded": 71,
+          "sidebarDrawn": 208,
+          "windowShown": 149
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 323,
-          "engineInitialized": 319,
-          "engineStart": 232,
-          "engineStarted": 316,
-          "firstContentfulPaint": 453,
+          "didFinishLaunching": 528,
+          "engineInitialized": 521,
+          "engineStart": 380,
+          "engineStarted": 502,
+          "firstContentfulPaint": 702,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 441,
-          "firstPaintClockUncertaintyMs": 0.12,
+          "firstLoadEnd": 676,
+          "firstPaintClockUncertaintyMs": 0.13,
           "kernelProcessStart": true,
-          "main": 136,
-          "modelLoaded": 137,
-          "sidebarDrawn": 232,
-          "windowShown": 192
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 313,
-          "engineInitialized": 309,
-          "engineStart": 225,
-          "engineStarted": 307,
-          "firstContentfulPaint": 458,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 445,
-          "firstPaintClockUncertaintyMs": 0.12,
-          "kernelProcessStart": true,
-          "main": 133,
-          "modelLoaded": 135,
-          "sidebarDrawn": 224,
-          "windowShown": 188
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 323,
-          "engineInitialized": 320,
-          "engineStart": 239,
-          "engineStarted": 317,
-          "firstContentfulPaint": 451,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 438,
-          "firstPaintClockUncertaintyMs": 0.12,
-          "kernelProcessStart": true,
-          "main": 142,
+          "main": 141,
           "modelLoaded": 144,
-          "sidebarDrawn": 238,
-          "windowShown": 198
+          "sidebarDrawn": 379,
+          "windowShown": 281
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 316,
-          "engineInitialized": 313,
-          "engineStart": 225,
-          "engineStarted": 308,
-          "firstContentfulPaint": 444,
+          "didFinishLaunching": 423,
+          "engineInitialized": 416,
+          "engineStart": 301,
+          "engineStarted": 406,
+          "firstContentfulPaint": 603,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 432,
-          "firstPaintClockUncertaintyMs": 0.12,
+          "firstLoadEnd": 572,
+          "firstPaintClockUncertaintyMs": 0.23,
           "kernelProcessStart": true,
-          "main": 136,
-          "modelLoaded": 137,
-          "sidebarDrawn": 224,
-          "windowShown": 188
+          "main": 144,
+          "modelLoaded": 148,
+          "sidebarDrawn": 299,
+          "windowShown": 228
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 455,
+          "engineInitialized": 448,
+          "engineStart": 325,
+          "engineStarted": 439,
+          "firstContentfulPaint": 664,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 645,
+          "firstPaintClockUncertaintyMs": 0.45,
+          "kernelProcessStart": true,
+          "main": 126,
+          "modelLoaded": 129,
+          "sidebarDrawn": 323,
+          "windowShown": 247
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 308,
+          "engineInitialized": 302,
+          "engineStart": 193,
+          "engineStarted": 296,
+          "firstContentfulPaint": 468,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 443,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 62,
+          "modelLoaded": 65,
+          "sidebarDrawn": 192,
+          "windowShown": 133
         }
       ]
     },
     "load_average": [
-      12.3564453125,
-      13.6416015625,
-      19.51611328125
+      9.45947265625,
+      10.10546875,
+      13.07470703125
     ],
     "multiple_window_png": {
       "file": "window-multiple.png",
@@ -4249,12 +4247,12 @@
       "ok": true,
       "windows": [
         {
-          "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
-          "number": 115889
+          "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
+          "number": 127311
         },
         {
-          "id": "9C2DD694-DF11-4448-AF11-C568ED3034DC",
-          "number": 115900
+          "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
+          "number": 127336
         }
       ]
     },
@@ -4315,8 +4313,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2433,
-          285
+          2444,
+          267
         ],
         "engineSelected": 0,
         "engineURL": "",
@@ -4330,11 +4328,11 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
+        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
         "key": false,
         "layoutPasses": 8,
         "miniaturized": false,
-        "number": 115889,
+        "number": 127311,
         "pageFullscreen": false,
         "paneBackgrounds": [],
         "panel": [
@@ -4366,7 +4364,7 @@
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "28CE97CA-594B-4D1E-9D89-8113A3BFA869",
+        "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4",
         "titlebar": [
           0,
           0,
@@ -4506,8 +4504,8 @@
           "urlFieldHovered": false
         },
         "cursor": [
-          2453,
-          145
+          2464,
+          127
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
@@ -4521,16 +4519,16 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399",
+        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
         "key": false,
-        "layoutPasses": 138,
+        "layoutPasses": 146,
         "miniaturized": false,
-        "number": 115889,
+        "number": 127311,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "7750EB14-42B0-4614-AA48-004F4D187A20"
+            "tab": "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
           }
         ],
         "panel": [
@@ -4556,15 +4554,15 @@
           "zone": ""
         },
         "revealed": false,
-        "selected": "7750EB14-42B0-4614-AA48-004F4D187A20",
+        "selected": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
         "shownPages": [
-          "7750EB14-42B0-4614-AA48-004F4D187A20"
+          "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 300,
-        "space": "28CE97CA-594B-4D1E-9D89-8113A3BFA869",
+        "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4",
         "titlebar": [
           0,
           0,
@@ -4643,7 +4641,7 @@
         228,
         790
       ],
-      "dwell_s": 0.154,
+      "dwell_s": 0.225,
       "edge_walk": [
         [
           2,
@@ -4751,7 +4749,7 @@
           2
         ]
       ],
-      "exit_to_idle_s": 0.163,
+      "exit_to_idle_s": 0.241,
       "held": {
         "card": [
           5,
@@ -4759,11 +4757,11 @@
           228,
           790
         ],
-        "dwell": 0.1536340000166092,
+        "dwell": 0.22488483332563192,
         "hides": 2,
         "offset": 0,
         "phase": "shown",
-        "pointerEvents": 66,
+        "pointerEvents": 67,
         "shows": 3,
         "zone": "innerEdge"
       },
@@ -4784,8 +4782,8 @@
       ],
       "ok": true,
       "pass_by_without_reveal": true,
-      "settled_s": 0.627,
-      "slide_out_s": 0.504
+      "settled_s": 0.905,
+      "slide_out_s": 0.622
     },
     "selected_only_0": {
       "ok": true,
@@ -5831,20 +5829,20 @@
             "miniaturized": false,
             "trafficLightFrames": [
               [
-                13,
-                17,
+                9,
+                9,
                 14,
                 14
               ],
               [
-                36,
-                17,
+                32,
+                9,
                 14,
                 14
               ],
               [
-                59,
-                17,
+                55,
+                9,
                 14,
                 14
               ]
@@ -6372,14 +6370,14 @@
     },
     "warm_existing_profile": {
       "median_ms": {
-        "engineStart": 225,
-        "engineStarted": 308,
-        "firstContentfulPaint": 451,
-        "main": 136,
-        "modelLoaded": 137,
-        "sidebarDrawn": 224
+        "engineStart": 301,
+        "engineStarted": 406,
+        "firstContentfulPaint": 603,
+        "main": 126,
+        "modelLoaded": 129,
+        "sidebarDrawn": 299
       },
-      "ok": true,
+      "ok": false,
       "samples": 5
     },
     "window_before_engine_0": {
@@ -6436,24 +6434,24 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "7750EB14-42B0-4614-AA48-004F4D187A20",
+        "id": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
         "loaded": true,
         "loading": false,
         "page": {
           "audible": false,
-          "browser": 2,
+          "browser": 1,
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": -1,
-          "chromeWindowId": -1,
+          "chromeTabId": 599454374,
+          "chromeWindowId": 599454366,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "7750EB14-42B0-4614-AA48-004F4D187A20",
+          "hostTab": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -6466,17 +6464,17 @@
             255
           ],
           "popup": false,
-          "style": "alloy",
+          "style": "chrome",
           "title": "Window A",
           "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
           "zoom": 0
         },
-        "profile": "382760D5-68F6-4608-87CC-F7ACB829767D",
+        "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
         "progress": 1,
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "28CE97CA-594B-4D1E-9D89-8113A3BFA869",
+        "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4",
         "title": "Window A",
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
         "visible": false
@@ -6484,56 +6482,56 @@
     },
     "window_persistence": {
       "expected": {
-        "9C2DD694-DF11-4448-AF11-C568ED3034DC": {
+        "4AEEF782-2112-4BE9-909D-2472487DEE53": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+          "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756"
+          "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
         },
-        "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399": {
+        "99533131-61DB-4E1D-B0E6-2A04B8AA32A3": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "19DD16C6-EC5D-4A90-B98A-72C2BB0BAE66",
+          "selected": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "28CE97CA-594B-4D1E-9D89-8113A3BFA869"
+          "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4"
         }
       },
       "ok": true,
       "restored": {
-        "9C2DD694-DF11-4448-AF11-C568ED3034DC": {
+        "4AEEF782-2112-4BE9-909D-2472487DEE53": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "81003E97-323B-4E5A-8E70-B0F0637745DC",
+          "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "8BE8B9DE-5CF3-4038-88B4-95CDB98C4756"
+          "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
         },
-        "C19A9665-9B59-44BB-A6A8-8BBF3ACD9399": {
+        "99533131-61DB-4E1D-B0E6-2A04B8AA32A3": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "19DD16C6-EC5D-4A90-B98A-72C2BB0BAE66",
+          "selected": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "28CE97CA-594B-4D1E-9D89-8113A3BFA869"
+          "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4"
         }
       }
     },
