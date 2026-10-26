@@ -96,3 +96,18 @@ Frame ids: **F** = full session `.re/runtime/sessions/20261024-213009-session-fu
 5. Command bar: type a host prefix, then press Backspace, Right arrow, and Left arrow once each (one capture after each key). This proves the Backspace and arrow rules.
 6. Command bar with a three-pane or vertical split in the list (the split row icon).
 7. F0040 vs F0061: both show the whole host with the caret at the end, but only F0040 offers "or Space". The rule is not known.
+
+## 8. Capture session 2 results (2026-10-26)
+
+Session 2 item 18 (`interaction-states.md` §20.9; frames `S2 18/<frame>` = `.re/runtime/sessions/20261026-103712-18-command-bar/<frame>-*`). It answers §7 items 3 and 5 in part, and replaces the Q9 guess.
+
+| ID | Finding | Mark | Evidence |
+|---|---|---|---|
+| CC-39 | Hold Command for 2–4 s with the sidebar visible: no shortcut hints appear. With CC-23 this means the hints are off in the shipping config (the flag's server value is false or unset). | measured | S2 18/0001–0003; notes 10:38:02 |
+| CC-40 | "wiki" completes inline to "wikipedia.org" with the added part selected, and the trailing hint reads "Search Wikipedia" + [Tab] (AX "Search Wikipedia, Tab", `[1078, 393, 147, 24]`). Backspace removes the completion and leaves "wiki". Right and Left arrows were pressed, but no frame isolates their result (§7 item 5 stays open for them). | measured | S2 18/0009, 0010 |
+| CC-41 | Tab starts Site Search: the text becomes an orange chip "Wikipedia" (`#FFA000`, white text, x 535 … 615) in front of an empty field (the field moves to x 627). Typed text gives one search row with an orange selection (`#FFA000`). Backspace in the empty field removes the chip and gives back "wikipedia" as text. guess: the chip color is a per-engine color. | measured | S2 18/0016, 0018, 0021 |
+| CC-42 | The (i) button opens an inline footer at the bottom of the bar, not a window: "We talk to your search engine to help us suggest results." / "Learn more about your data on Arc here." ("here" is a link) and the buttons "Search Settings…" and "Dismiss". The Essential Keyboard Shortcuts window (CC-27) is reached from the Help menu, not from (i). | measured | S2 18/0044 |
+| CC-43 | The bar's fill and selection follow the Space: `#2F2D2E` / `#484DDB` in a default dark Space, `#1B2832` / `#2A68A3` in a blue Space; in macOS Light (default theme) `#F8F8F8` / `#8E95FF`. | measured | S2 18/0044, 0009; S2 20/0018 |
+| CC-44 | Open and close have no visible animation: in the video the whole bar appears or goes between two frames (≤ 38 ms apart), 4 of 4 times. | measured | `21-motion.mov` V 9.70, 10.88, 13.02, 14.20 s |
+
+Still open: §7 items 1, 2, 4, 6, 7, and the Right and Left arrow rules.
