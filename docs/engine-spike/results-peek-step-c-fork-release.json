@@ -1,10 +1,10 @@
 {
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
-    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "distributionUUID": "4C4C44B8-5555-3144-A161-028377002F35",
+    "embeddedUUID": "4C4C44B8-5555-3144-A161-028377002F35",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793000323"
   },
   "peek": {
     "close_promoted_releases_host": {
@@ -29,17 +29,17 @@
       "ok": true,
       "strip": [
         {
-          "active": "DB8BCA84-2325-47F0-BA25-238784EAC21D",
+          "active": "A372616A-8FA2-4656-9535-3548075E2552",
           "activeIsMember": true,
           "contents": [
             1,
             2
           ],
           "context": "Default",
-          "profile": "71B27060-5C68-400B-BE64-6E6D4CA00D3C",
+          "profile": "80C5E246-B57B-4BFB-B0BA-0B94B09AEDB3",
           "tabs": [
-            "A9A14CFB-44EE-4CFF-AA68-BBB061FCE56A",
-            "DB8BCA84-2325-47F0-BA25-238784EAC21D"
+            "1AC6C4BC-3524-4E8A-861C-42FBE1B351EC",
+            "A372616A-8FA2-4656-9535-3548075E2552"
           ]
         }
       ]
@@ -57,7 +57,7 @@
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "EDD3B5C0-8F85-4ADF-97DD-6E84C336AB0A",
+        "hostTab": "F33DEA33-3047-4EB4-B59C-76A4CC0FFE60",
         "identifier": 1,
         "kind": "tab",
         "live": true,
@@ -87,15 +87,15 @@
       "ok": true,
       "strip": [
         {
-          "active": "A9A14CFB-44EE-4CFF-AA68-BBB061FCE56A",
+          "active": "1AC6C4BC-3524-4E8A-861C-42FBE1B351EC",
           "activeIsMember": true,
           "contents": [
             1
           ],
           "context": "Default",
-          "profile": "71B27060-5C68-400B-BE64-6E6D4CA00D3C",
+          "profile": "80C5E246-B57B-4BFB-B0BA-0B94B09AEDB3",
           "tabs": [
-            "A9A14CFB-44EE-4CFF-AA68-BBB061FCE56A"
+            "1AC6C4BC-3524-4E8A-861C-42FBE1B351EC"
           ]
         }
       ]
@@ -109,6 +109,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-25 23:10:40",
+  "started": "2026-10-26 00:45:29",
   "style": "alloy"
 }

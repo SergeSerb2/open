@@ -458,7 +458,7 @@ Rule 10: merged origin/main, then full tools/verify-all.sh, 15 PASS, no SKIP.
 | boosts | PASS | 3 |
 
 
-## Step C — registry menus, keys, command bar, real Settings and Library
+## Step C initial integration — before audit P0
 
 The command bar uses the merged `OpenCommandBar` delegate API. Its one lazy
 controller per window shares the app's profile-scoped Suggest/History backend.
@@ -493,11 +493,11 @@ source stamp and both UUIDs. The earlier A/B CDN receipts remain separate.
 
 | Suite | Debug / fork | Release / fork | Evidence |
 |---|---|---|---|
-| `commandbar` | 35/35 PASS | 35/35 PASS | [Debug](engine-spike/results-commandbar-step-c-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-fork-release.json) |
-| `window` | 38/38 PASS; 2 named timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-c-fork-debug.json), [Release](engine-spike/results-window-step-c-fork-release.json) |
-| `sidebar` | 18/18 PASS; durable engine profile storage BLOCKED | 18/18 PASS; durable engine profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-fork-release.json) |
-| `peek` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-c-fork-debug.json), [Release](engine-spike/results-peek-step-c-fork-release.json) |
-| `shell` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-c-fork-debug.json), [Release](engine-spike/results-shell-step-c-fork-release.json) |
+| `commandbar` | 35/35 PASS | 35/35 PASS | [Debug](engine-spike/results-commandbar-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-pre-p0-fork-release.json) |
+| `window` | 38/38 PASS; 2 named timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-window-step-c-pre-p0-fork-release.json) |
+| `sidebar` | 18/18 PASS; durable engine profile storage BLOCKED | 18/18 PASS; durable engine profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-pre-p0-fork-release.json) |
+| `peek` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-peek-step-c-pre-p0-fork-release.json) |
+| `shell` | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-c-pre-p0-fork-debug.json), [Release](engine-spike/results-shell-step-c-pre-p0-fork-release.json) |
 
 The command-bar suite uses a real loopback HTTP page that prevents default keys,
 the actual field editor and native menu targets. It checks Cmd+T/L/W/S through
@@ -621,3 +621,107 @@ P1 port boundary: this step changes no TabStripMirror, ExtensionTabRequests, or
 factory OEBrowserDelegate section. Factory changes are UI composition, command
 bar/navigation intents, native text/find responders, and the Library download
 notification. Engine code and engine project settings remain with the lead.
+
+
+## Step C final audit P0 verification — 2026-10-26
+
+The PR targets main directly, after #45 and #52 merged. The tested main base is
+`b62935e96fd8a5ff062b525a1eeda32dafd3ecd8`; it includes the bundle-ID and entitlement
+updates. Both app builds pass under Swift 6. The Release socket build uses
+`OPEN_AUTOMATION=1`. The default **fork** distribution was refreshed with
+`tools/fetch-engine.sh --run`; no Chromium build, sync, or CDN fallback was used.
+
+All final rows below used matching embedded/vendor UUID
+`4C4C44B8-5555-3144-A161-028377002F35`. The exact source stamp and both UUIDs are in every
+receipt. Earlier receipts retain their different fork UUIDs and measurements.
+
+| Suite / fork | Debug | Release | Evidence |
+|---|---|---|---|
+| commandbar | 45/45 PASS | 45/45 PASS | [Debug](engine-spike/results-commandbar-step-c-fork-debug.json), [Release](engine-spike/results-commandbar-step-c-fork-release.json) |
+| window | 37/38 PASS; FAIL: fullscreen_hover_reveal; 2 named launch-timing SKIPs | 40/40 PASS | [Debug](engine-spike/results-window-step-c-fork-debug.json), [Release](engine-spike/results-window-step-c-fork-release.json) |
+| sidebar | 18/18 PASS; durable profile storage BLOCKED | 18/18 PASS; durable profile storage BLOCKED | [Debug](engine-spike/results-sidebar-step-c-fork-debug.json), [Release](engine-spike/results-sidebar-step-c-fork-release.json) |
+| peek | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-peek-step-c-fork-debug.json), [Release](engine-spike/results-peek-step-c-fork-release.json) |
+| shell | 6/6 PASS | 6/6 PASS | [Debug](engine-spike/results-shell-step-c-fork-debug.json), [Release](engine-spike/results-shell-step-c-fork-release.json) |
+
+| Step C acceptance | Debug / fork | Release / fork |
+|---|---|---|
+| Registry-native menu selectors, target nil | PASS | PASS |
+| Real page Copy, Cut, Paste, Undo, Select All via window keys | PASS | PASS |
+| Native text-field undo leaves model intact | PASS | PASS |
+| Sidebar model undo after outline focus | PASS | PASS |
+| Native Services / Font / Window menus and font trait tags | PASS | PASS |
+| Tabs Reveal Tab in Sidebar, no shortcut; View Ctrl+Space retained | PASS | PASS |
+| Cmd+T/L/W/S with a page that prevents default keys | PASS | PASS |
+| New/current/background navigation; cross-Space row; calculator copy | PASS | PASS |
+| Pin/Unpin actions; duplicate tab/folder/split stays lazy; one undo | PASS | PASS |
+| Real Settings/Library, shared SnapshotStore; section commands | PASS | PASS |
+| Archive restore, profile-scoped History open, custom engine | PASS | PASS |
+| Override reload/conflict fallback; shared-router double press | PASS | PASS |
+| Carbon registration/toggle and Settings persistence | PASS | PASS |
+| commands-dump exact expected-menu comparison | exit 0 | exit 0 |
+
+
+| Measurement / fork | Debug ms | Release ms | Budget |
+|---|---:|---:|---|
+| First command-bar results, including construction | 42.05 | 28.75 | ≤50; PASS |
+| Repeat command-bar results | 25.97 | 19.31 | ≤50; PASS |
+| Cold, fresh profile, median of 5: confirmed sidebar | — | 219 | ≤250; PASS |
+| Cold, fresh profile, median of 5: first contentful paint | — | 445 | ≤700; PASS |
+| Warm, existing profile, median of 5: confirmed sidebar | — | 237 | ≤250; PASS |
+| Warm, existing profile, median of 5: first contentful paint | — | 471 | ≤700; PASS |
+
+Host load was [10.59375, 10.75146484375, 10.736328125] on 18 CPUs. These are shared-machine
+observations, not idle acceptance. Keep the earlier 62.92 ms Debug bar miss and
+252 ms warm-sidebar miss in their frozen receipts. An intermediate run also
+reported 255 ms warm sidebar; its value was captured in the work log before the
+final run. The lead separately reported #52 at 253 ms cold (and an earlier
+207 ms run) while seven agents built. Step I must remeasure on an idle machine.
+
+The final Debug `fullscreen_hover_reveal` failure remains a failure: the floating
+card did not appear in native fullscreen. Earlier Release key-response and sidebar-width failures
+are retained in the before-key-settle receipt. Intermediate hover failures were
+also observed before the final run. No hover, frame, traffic-light,
+sidebar layout, or metrics code changed in Step C; that work is owned separately.
+The static F0001 sidebar comparison remains a legacy narrow check, not proof that
+the reported live-chrome defects are closed.
+
+The automation key response now waits one short native event-loop turn before
+reading responder state. The first Release command-bar attempt queried a host
+before creation; the fixture now waits through the existing `wait` interface.
+Neither change invents a UI result. Native page editing, text undo and sidebar
+undo are still dispatched through the real AppKit/engine interfaces.
+
+The factory OEBrowserDelegate section, TabStripMirror, ExtensionTabRequests,
+window setup and sidebar chrome remain untouched relative to the merged base.
+Existing Step C limits above remain: Little Open stub, disabled Incognito/Peek
+Email, later-step import/filter/sleep/icon/update adapters, the all-time combined
+cookie/cache API restriction, post-load color fallback, and durable non-default
+profile storage BLOCKED on root_cache_path. Native OS-wide services and Hide
+Others are not invoked by automation; their nil-target wiring is checked.
+
+### Final rule 10 and rendering checks
+
+Merged origin/main, then full tools/verify-all.sh: **16 PASS, no SKIP**. The added
+media-demo row comes from main. `features-render check`: **147/147 PASS**, including
+Escape through the real window handler restoring a maximized split. Sidebar
+render passes 125/125. commands-dump exits 0 with the new Tabs entry. No unit tests,
+reference assets, Arc launch, or desktop input were used.
+
+| Check | Result | Seconds |
+|---|---|---:|
+| build | PASS | 31 |
+| commands-demo | PASS | 0 |
+| roundtrip | PASS | 0 |
+| suggest-check | PASS | 11 |
+| commands-dump | PASS | 0 |
+| route | PASS | 1 |
+| favicons | PASS | 1 |
+| media-demo | PASS | 1 |
+| sleep-demo | PASS | 0 |
+| adblock-perf | PASS | 1 |
+| adblock-catalog | PASS | 0 |
+| profiles | PASS | 1 |
+| settings-preview | PASS | 43 |
+| sidebar-render | PASS | 17 |
+| commandbar-render | PASS | 15 |
+| boosts | PASS | 3 |
