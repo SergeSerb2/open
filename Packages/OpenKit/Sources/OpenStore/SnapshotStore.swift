@@ -43,7 +43,9 @@ public final class SnapshotStore: @unchecked Sendable {
         let dto = SnapshotMapper.dto(from: model)
         lock.lock()
         pendingWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.writeReportingFailure(dto: dto) }
+        // @Sendable: a closure formed on the main actor would otherwise be
+        // main-actor isolated, and Swift 6 traps when the queue runs it.
+        let work = DispatchWorkItem { @Sendable [weak self] in self?.writeReportingFailure(dto: dto) }
         pendingWork = work
         lock.unlock()
         queue.asyncAfter(deadline: .now() + 1.0, execute: work)

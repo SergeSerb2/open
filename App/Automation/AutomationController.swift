@@ -1,0 +1,641 @@
+#if OPEN_AUTOMATION
+  import AppKit
+  import OpenEngine
+  import OpenModel
+  import OpenWeb
+  import Synchronization
+
+  /// Executes automation commands (docs/automation.md) on the main actor.
+  /// Every command answers `{"id":…, "ok":true, "result":…}` or
+  /// `{"id":…, "ok":false, "error":"…"}`. Commands touch only Open's own
+  /// windows and pages; nothing here sends input to other apps.
+  @MainActor
+  final class AutomationController {
+    struct Failure: Error { let message: String }
+
+    unowned let app: AppDelegate
+    private let blockCounter = BlockCounter()
+
+    init(app: AppDelegate) {
+      self.app = app
+    }
+
+    var window: BrowserWindowController {
+      get throws {
+        guard let w = app.frontWindowController else { throw Failure(message: "no window") }
+        return w
+      }
+    }
+
+    func handle(_ data: Data) async -> Data {
+      var id: Any = NSNull()
+      var response: [String: Any]
+      do {
+        guard let request = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+          let cmd = request["cmd"] as? String
+        else { throw Failure(message: "expected {\"cmd\": …}") }
+        id = request["id"] ?? NSNull()
+        let args = request["args"] as? [String: Any] ?? [:]
+        let result = try await run(cmd, args)
+        response = ["id": id, "ok": true, "result": result]
+      } catch let failure as Failure {
+        response = ["id": id, "ok": false, "error": failure.message]
+      } catch {
+        response = ["id": id, "ok": false, "error": "\(error.localizedDescription)"]
+      }
+      let safe =
+        JSONSerialization.isValidJSONObject(response)
+        ? response : ["id": id, "ok": false, "error": "unserializable result"]
+      return (try? JSONSerialization.data(withJSONObject: safe, options: [.sortedKeys])) ?? Data("{}".utf8)
+    }
+
+    // MARK: Dispatch
+
+    private func run(_ cmd: String, _ a: [String: Any]) async throws -> Any {
+      let w = try window
+      switch cmd {
+      case "ping":
+        return [
+          "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
+          "userData": OEEngine.shared.configuration.userDataDirectory.path,
+          "root": app.directories.root.path,
+        ]
+
+      // Model-level tabs (the sidebar).
+      case "tabs":
+        return w.rows.compactMap { row -> [String: Any]? in
+          if case .tab(let tab, _) = row { return describe(tab, in: w) }
+          return nil
+        }
+      case "spaces":
+        return app.model.spaces.map { space in
+          [
+            "id": space.id.description, "title": space.title ?? "", "focused": space.id == w.focusedSpace?.id,
+            "pinned": space.pinned.count, "today": space.today.count,
+          ] as [String: Any]
+        }
+      case "space-create":
+        // A Space with its own profile (own engine context) when `profile`
+        // names a new one.
+        let model = app.model!
+        let name = a["profile"] as? String ?? "Default"
+        guard
+          let profile = model.profiles.first(where: { $0.name == name })
+            ?? model.createProfile(name: name)
+        else { throw Failure(message: "cannot create profile \(name)") }
+        try app.directories.ensureProfileDirectories(for: profile)
+        let space = model.createSpace(title: a["title"] as? String ?? name, profileID: profile.id)
+        w.focus(space: space)
+        return space.id.description
+      case "space":
+        guard let s = a["space"] as? String, let space = app.model.spaces.first(where: { $0.id.description == s })
+        else { throw Failure(message: "unknown space") }
+        w.focus(space: space)
+        return true
+      case "open":
+        let url = try url(a, "url")
+        guard let tab = w.openNewTab(url: url, background: a["background"] as? Bool ?? false) else {
+          throw Failure(message: "no space")
+        }
+        return describe(tab, in: w)
+      case "select":
+        let tab = try modelTab(a, w)
+        w.select(nodeID: tab.id)
+        return describe(tab, in: w)
+      case "close":
+        // A page identifier closes that page (popup panel, extension popup,
+        // or the tab that shows it); a tab id or nothing closes like Cmd-W.
+        if let n = a["tab"] as? Int {
+          guard let page = OEEngine.shared.webContent(identifier: n) else { throw Failure(message: "no page \(n)") }
+          w.close(page: page)
+          return true
+        }
+        if a["tab"] != nil || a["index"] != nil { w.select(nodeID: try modelTab(a, w).id) }
+        w.closeTab(nil)
+        return true
+      case "pin":
+        let tab = try modelTab(a, w)
+        w.select(nodeID: tab.id)
+        w.togglePin(nil)
+        return describe(tab, in: w)
+      case "split":
+        w.addSplitView(nil)
+        return w.visibleTabs.map { describe($0, in: w) }
+      case "navigate":
+        try content(a, w).load(try url(a, "url"))
+        return true
+      case "back":
+        try content(a, w).goBack()
+        return true
+      case "wait":
+        return try await waitForLoad(try content(a, w), timeout: a["timeout"] as? Double ?? 20)
+
+      // Pages (any live web content).
+      case "pages":
+        return OEEngine.shared.allWebContents.map { describe($0, in: w) }
+      case "eval":
+        guard let js = a["js"] as? String else { throw Failure(message: "missing js") }
+        // Through the OpenWeb protocol, as OpenKit features will call it.
+        let page: any WebContent = try content(a, w)
+        return try await page.evaluateJavaScript(js)
+      case "devtools":
+        guard let method = a["method"] as? String else { throw Failure(message: "missing method") }
+        return try await content(a, w).sendDevToolsMethod(method, parameters: a["params"] as? [String: Any])
+      case "click":
+        return try await click(try content(a, w), selector: a["selector"] as? String, text: a["text"] as? String)
+      case "rightclick":
+        let page = try content(a, w)
+        let x = a["x"] as? Double ?? 100, y = a["y"] as? Double ?? 100
+        for type in ["mousePressed", "mouseReleased"] {
+          _ = try await page.sendDevToolsMethod(
+            "Input.dispatchMouseEvent", parameters: ["type": type, "x": x, "y": y, "button": "right", "clickCount": 1])
+        }
+        return true
+      case "type":
+        _ = try await content(a, w).sendDevToolsMethod(
+          "Input.insertText", parameters: ["text": a["text"] as? String ?? ""])
+        return true
+      case "focus":
+        try content(a, w).focusPage()
+        return true
+      case "mouse":
+        // Clicks at (x, y) points from the top-left of one of OUR windows
+        // (for example Chromium's own install dialog) by sending NSEvents to
+        // that window. The system cursor does not move.
+        let number = a["window"] as? Int ?? 0
+        guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else {
+          throw Failure(message: "no window \(number)")
+        }
+        let p = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+          if let e = NSEvent.mouseEvent(
+            with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+          {
+            target.sendEvent(e)
+          }
+        }
+        return true
+      case "key":
+        return try sendKey(a, w)
+      case "events":
+        return w.drainEvents()
+      case "find":
+        let page = try content(a, w)
+        page.find(a["text"] as? String ?? "", forward: true, caseSensitive: false)
+        try await Task.sleep(for: .milliseconds(500))
+        let r = w.lastFindResult
+        return ["matches": r?.matchCount ?? 0, "active": r?.activeMatchIndex ?? 0, "final": r?.isFinal ?? false]
+      case "zoom":
+        let page = try content(a, w)
+        if let level = a["level"] as? Double { page.zoomLevel = level }
+        return page.zoomLevel
+      case "mute":
+        let page = try content(a, w)
+        page.isMuted = a["muted"] as? Bool ?? true
+        return ["muted": page.isMuted, "audible": page.isAudible]
+      case "devtools-open":
+        try content(a, w).showDevTools()
+        return true
+      case "print-pdf":
+        let path = (a["path"] as? String) ?? NSTemporaryDirectory() + "open-print.pdf"
+        let page = try content(a, w)
+        let ok = await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+          page.printToPDF(at: URL(fileURLWithPath: path)) { c.resume(returning: $0) }
+        }
+        return ["ok": ok, "path": path]
+      case "fullscreen-exit":
+        try content(a, w).exitFullscreen()
+        return true
+
+      // Extensions.
+      case "extensions":
+        let browser = try focusedBrowser(w)
+        browser.context.extensions.reload()
+        return [
+          "installed": browser.context.extensions.installedExtensions.map(describe),
+          "actions": EngineExtensionHost(browser).extensionActions.map {
+            [
+              "id": $0.extensionID, "title": $0.title, "icon": $0.iconPNG?.count ?? 0, "badge": $0.badgeText ?? NSNull(),
+              "enabled": $0.isEnabled, "popup": $0.hasPopup,
+            ] as [String: Any]
+          },
+        ]
+      case "popup":
+        guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        let browser = try focusedBrowser(w)
+        browser.context.extensions.reload()
+        guard EngineExtensionHost(browser).executeAction(extensionID: id), let popup = browser.extensionPopup else {
+          throw Failure(message: "action did not open a popup")
+        }
+        // The popup's browser is created once its view is in the panel.
+        for _ in 0..<50 where !popup.isLive {
+          try await Task.sleep(for: .milliseconds(100))
+        }
+        return describe(popup, in: w)
+      case "popup-close":
+        try focusedBrowser(w).closeExtensionPopup()
+        return true
+
+      // Windows and pixels (Open's own windows only).
+      case "windows":
+        return NSApp.windows.map(describe)
+      case "window-frame":
+        guard let win = w.window else { throw Failure(message: "no window") }
+        if let f = a["frame"] as? [Double], f.count == 4 {
+          win.setFrame(NSRect(x: f[0], y: f[1], width: f[2], height: f[3]), display: true)
+        }
+        return NSStringFromRect(win.frame)
+      case "snapshot":
+        return try await snapshot(a, w)
+
+      // Dialogs, permissions, scripts, filters, downloads.
+      case "policy":
+        if let v = a["contextMenu"] { w.contextMenuPolicy = v as? String }
+        if let v = a["fullscreen"] { w.fullscreenPolicy = v as? String }
+        if let v = a["dialogs"] { w.dialogPolicy = v as? String }
+        if let v = a["permissions"] { w.permissionPolicy = v as? String }
+        if let v = a["prompt"] { w.promptText = v as? String }
+        return true
+      case "dialog":
+        return w.completePendingDialog(accept: a["accept"] as? Bool ?? true, text: a["text"] as? String)
+      case "script-add":
+        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        profile.addUserScript(
+          UserScript(
+            id: a["id"] as? String ?? UUID().uuidString, source: a["source"] as? String ?? "",
+            kind: a["css"] as? Bool == true ? .styleSheet : .javaScript,
+            injectionTime: a["end"] as? Bool == true ? .documentEnd : .documentStart,
+            matchPatterns: a["matches"] as? [String] ?? ["<all_urls>"],
+            mainFrameOnly: !(a["allFrames"] as? Bool ?? false)))
+        return profile.userScripts.map(\.id)
+      case "script-remove":
+        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        profile.removeUserScript(id: a["id"] as? String ?? "")
+        return profile.userScripts.map(\.id)
+      case "filter":
+        let patterns = a["block"] as? [String] ?? []
+        let profile = EngineWebProfile(try focusedBrowser(w).context)
+        blockCounter.reset()
+        if patterns.isEmpty {
+          profile.setRequestFilter(nil)
+        } else {
+          let counter = blockCounter
+          profile.setRequestFilter { request in
+            for p in patterns where request.url.contains(p) {
+              counter.add(request.url)
+              return true
+            }
+            return false
+          }
+        }
+        return true
+      case "filter-stats":
+        return blockCounter.snapshot()
+      case "permission":
+        let origin = try url(a, "origin")
+        let context = try focusedBrowser(w).context
+        let kind = OEPermissionKind(rawValue: UInt32(a["kind"] as? Int ?? 0))
+        if let state = a["state"] as? Int, let s = OEPermissionState(rawValue: state) {
+          context.setPermissionState(s, for: kind, origin: origin)
+        }
+        return context.permissionState(for: kind, origin: origin).rawValue
+      case "download-dir":
+        w.downloadDirectory = URL(fileURLWithPath: a["path"] as? String ?? NSTemporaryDirectory())
+        return true
+      case "downloads":
+        return try focusedBrowser(w).context.downloads.map {
+          [
+            "id": $0.identifier, "state": $0.state.rawValue, "received": $0.receivedBytes, "total": $0.totalBytes,
+            "path": $0.destinationURL?.path ?? "", "url": $0.sourceURL.absoluteString,
+          ] as [String: Any]
+        }
+
+      // Measurements.
+      case "metrics":
+        return await metrics(interval: a["interval"] as? Double ?? 1)
+      case "timing":
+        return await timing(w)
+      case "save":
+        app.saveState()
+        return app.snapshotStore.fileURL.path
+      case "quit":
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
+        return true
+      default:
+        throw Failure(message: "unknown command \(cmd)")
+      }
+    }
+
+    // MARK: Arguments
+
+    private func modelTab(_ a: [String: Any], _ w: BrowserWindowController) throws -> Tab {
+      if let s = a["tab"] as? String {
+        guard let uuid = UUID(uuidString: s), let tab = app.model.tab(id: ItemID(rawValue: uuid)) else {
+          throw Failure(message: "no tab \(s)")
+        }
+        return tab
+      }
+      if let n = a["index"] as? Int {
+        let tabs = w.orderedTabs
+        guard n >= 0, n < tabs.count else { throw Failure(message: "no tab at \(n)") }
+        return tabs[n]
+      }
+      guard let tab = w.selectedTab else { throw Failure(message: "no selected tab") }
+      return tab
+    }
+
+    /// `tab`: a tab UUID, a page identifier (number), "popup", or omitted
+    /// for the selected tab.
+    private func content(_ a: [String: Any], _ w: BrowserWindowController) throws -> OEWebContent {
+      if let n = a["index"] as? Int {
+        return w.ensureContent(for: try modelTab(["index": n], w))
+      }
+      guard let page = w.content(forAutomationHandle: a["tab"]) else {
+        throw Failure(message: "no page for \(a["tab"] ?? "selected tab")")
+      }
+      return page
+    }
+
+    private func focusedBrowser(_ w: BrowserWindowController) throws -> OEBrowser {
+      guard let b = w.focusedBrowser else { throw Failure(message: "no browser") }
+      return b
+    }
+
+    private func url(_ a: [String: Any], _ key: String) throws -> URL {
+      guard let s = a[key] as? String, let url = URL(string: s) else { throw Failure(message: "missing \(key)") }
+      return url
+    }
+
+    // MARK: Descriptions
+
+    private func describe(_ tab: Tab, in w: BrowserWindowController) -> [String: Any] {
+      let section: String
+      if w.focusedProfile?.favorites.contains(where: { $0.id == tab.id }) == true {
+        section = "favorites"
+      } else if app.model.isPinned(tabID: tab.id) {
+        section = "pinned"
+      } else {
+        section = "today"
+      }
+      var d: [String: Any] = [
+        "id": tab.id.description, "title": tab.displayTitle, "url": tab.url.absoluteString, "section": section,
+        "selected": w.selectedTab?.id == tab.id, "visible": w.visibleTabs.contains { $0.id == tab.id },
+        "loading": tab.live.isLoading, "audible": tab.live.isAudible, "crashed": tab.live.isCrashed,
+        "favicon": tab.live.faviconPNG != nil, "loaded": w.contents[tab.id] != nil,
+      ]
+      if let c = w.contents[tab.id] {
+        d["page"] = describe(c, in: w)
+      }
+      return d
+    }
+
+    private func describe(_ c: OEWebContent, in w: BrowserWindowController) -> [String: Any] {
+      var kind = "unowned"
+      if w.tabID(for: c) != nil {
+        kind = "tab"
+      } else if c.extensionPopupIdentifier != nil {
+        kind = "extensionPopup"
+      } else if w.auxiliaryPages.contains(where: { $0.content === c }) {
+        kind = "popup"
+      }
+      return [
+        "identifier": c.identifier, "kind": kind, "live": c.isLive, "url": c.url?.absoluteString ?? "",
+        "title": c.title, "loading": c.isLoading, "style": c.runtimeStyle == .chrome ? "chrome" : "alloy",
+        "audible": c.isAudible, "muted": c.isMuted, "crash": c.crashState.rawValue, "fullscreen": c.isFullscreen,
+        "favicon": c.favicon != nil, "context": c.context.identifier, "canGoBack": c.canGoBack,
+        "zoom": c.zoomLevel, "popup": c.isPopup, "hidden": c.view.isHiddenOrHasHiddenAncestor,
+        "browser": c.browser?.identifier ?? 0,
+        "browserIndex": c.browser?.webContents.firstIndex(of: c) ?? -1,
+        "extension": c.extensionPopupIdentifier ?? "",
+      ]
+    }
+
+    private func describe(_ e: OEExtension) -> [String: Any] {
+      [
+        "id": e.identifier, "name": e.name, "version": e.version, "enabled": e.isEnabled, "unpacked": e.isUnpacked,
+        "manifestVersion": e.manifestVersion, "options": e.optionsURL?.absoluteString ?? "",
+        "icon": e.icon.map { "\(Int($0.size.width))x\(Int($0.size.height))" } ?? "",
+        "permissions": e.permissions, "hostPermissions": e.hostPermissions,
+      ]
+    }
+
+    private func describe(_ w: NSWindow) -> [String: Any] {
+      [
+        "number": w.windowNumber, "title": w.title, "class": String(describing: type(of: w)),
+        "visible": w.isVisible, "key": w.isKeyWindow, "frame": NSStringFromRect(w.frame),
+        "parent": w.parent?.windowNumber ?? 0, "level": w.level.rawValue,
+        "sheet": w.isSheet, "attachedSheet": w.attachedSheet?.windowNumber ?? 0,
+        "firstResponder": w.firstResponder.map { String(describing: type(of: $0)) } ?? "",
+      ]
+    }
+
+    // MARK: Helpers
+
+    private func waitForLoad(_ page: OEWebContent, timeout: Double) async throws -> [String: Any] {
+      let deadline = Date().addingTimeInterval(timeout)
+      // Let a just-issued navigation start before polling.
+      try await Task.sleep(for: .milliseconds(150))
+      while Date() < deadline {
+        if page.isLive && !page.isLoading && page.url != nil { return describe(page, in: try window) }
+        try await Task.sleep(for: .milliseconds(100))
+      }
+      throw Failure(message: "timeout waiting for load")
+    }
+
+    /// Clicks the element's center with DevTools Input events (real input
+    /// inside the page, so the page sees a user gesture).
+    private func click(_ page: OEWebContent, selector: String?, text: String?) async throws -> Any {
+      // Find by CSS selector, or by visible text (case-insensitive regex)
+      // among buttons and links, searching open shadow roots too.
+      let js = """
+        (() => {
+          const sel = \(jsString(selector ?? "")), re = \(jsString(text ?? ""));
+          const all = [];
+          const walk = (root) => { for (const el of root.querySelectorAll('*')) { all.push(el); if (el.shadowRoot) walk(el.shadowRoot); } };
+          walk(document);
+          let e = sel ? document.querySelector(sel) : null;
+          if (!e && re) { const rx = new RegExp(re, 'i');
+            e = all.find(x => /^(BUTTON|A)$/.test(x.tagName) || x.getAttribute('role') === 'button'
+                              ? rx.test((x.innerText || x.getAttribute('aria-label') || '').trim()) : false); }
+          if (!e) return null; e.scrollIntoView({block:'center'});
+          const r = e.getBoundingClientRect(); return [r.x + r.width/2, r.y + r.height/2]; })()
+        """
+      guard let point = try await page.evaluateJavaScript(js) as? [Double], point.count == 2 else {
+        throw Failure(message: "no element for \(selector ?? text ?? "")")
+      }
+      for type in ["mousePressed", "mouseReleased"] {
+        _ = try await page.sendDevToolsMethod(
+          "Input.dispatchMouseEvent",
+          parameters: ["type": type, "x": point[0], "y": point[1], "button": "left", "clickCount": 1])
+      }
+      return point
+    }
+
+    private func jsString(_ s: String) -> String {
+      let data = try? JSONSerialization.data(withJSONObject: [s])
+      let arr = data.flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
+      return String(arr.dropFirst().dropLast())
+    }
+
+    /// Posts a key event inside Open. `route: "app"` (default) goes through
+    /// NSApplication.sendEvent, like a real key press; `route: "window"`
+    /// sends it straight to the window's first responder (the page view when
+    /// it has focus), which exercises the engine's pre-key hook. In-process
+    /// only: the system keyboard is never touched.
+    private func sendKey(_ a: [String: Any], _ w: BrowserWindowController) throws -> Any {
+      guard let target = w.window else { throw Failure(message: "no window") }
+      if let text = a["text"] as? String {
+        // Plain characters to the first responder (the address field, a
+        // text field in a page, ...).
+        for ch in text {
+          for type in [NSEvent.EventType.keyDown, .keyUp] {
+            if let event = NSEvent.keyEvent(
+              with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+              windowNumber: target.windowNumber, context: nil, characters: String(ch),
+              charactersIgnoringModifiers: String(ch), isARepeat: false, keyCode: ch == "\r" ? 36 : 0)
+            {
+              target.sendEvent(event)
+            }
+          }
+        }
+        return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
+      }
+      let keys: [String: (String, UInt16)] = [
+        "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
+        "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
+        "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
+        "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
+        "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
+      ]
+      guard let (chars, code) = keys[a["key"] as? String ?? "return"] else { throw Failure(message: "unknown key") }
+      var mods: NSEvent.ModifierFlags = []
+      for m in a["modifiers"] as? [String] ?? [] {
+        switch m {
+        case "cmd": mods.insert(.command)
+        case "shift": mods.insert(.shift)
+        case "opt": mods.insert(.option)
+        case "ctrl": mods.insert(.control)
+        default: break
+        }
+      }
+      if code >= 123 { mods.insert([.function, .numericPad]) }
+      let route = a["route"] as? String ?? "app"
+      for type in [NSEvent.EventType.keyDown, .keyUp] {
+        guard
+          let event = NSEvent.keyEvent(
+            with: type, location: .zero, modifierFlags: mods, timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: target.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
+            isARepeat: false, keyCode: code)
+        else { continue }
+        if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
+      }
+      return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
+    }
+
+    private func snapshot(_ a: [String: Any], _ w: BrowserWindowController) async throws -> Any {
+      let path = a["path"] as? String ?? NSTemporaryDirectory() + "open-snapshot.png"
+      let url = URL(fileURLWithPath: path)
+      if a["tab"] != nil || a["page"] as? Bool == true {
+        let page: any WebContent = try content(a, w)
+        try await page.snapshotPNG().write(to: url)
+        return ["path": path, "method": "devtools"]
+      }
+      let number = a["window"] as? Int
+      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
+      else { throw Failure(message: "no window") }
+      let method = try await WindowSnapshot.capture(target, to: url)
+      return ["path": path, "method": method]
+    }
+
+    private func metrics(interval: Double) async -> [String: Any] {
+      let tasks = await OEEngine.shared.sampleProcessMetrics(after: interval)
+      let footprints = ProcessFootprint.tree(root: getpid())
+      return [
+        "tasks": tasks.map {
+          [
+            "kind": $0.kind.rawValue, "title": $0.title, "memory": $0.memoryFootprint, "gpu": $0.gpuMemory,
+            "cpu": $0.cpuUsage,
+          ] as [String: Any]
+        },
+        "processes": footprints.map {
+          ["pid": Int($0.pid), "name": $0.name, "footprint": $0.footprint, "rss": $0.rss] as [String: Any]
+        },
+        "totalFootprint": footprints.reduce(UInt64(0)) { $0 + $1.footprint },
+        "totalRSS": footprints.reduce(UInt64(0)) { $0 + $1.rss },
+        "livePages": OEEngine.shared.allWebContents.filter(\.isLive).count,
+      ]
+    }
+
+    private func timing(_ w: BrowserWindowController) async -> [String: Any] {
+      var out: [String: Any] = LaunchTiming.shared.report
+      if let page = w.selectedContent {
+        let js =
+          "(() => { const p = performance.getEntriesByName('first-contentful-paint')[0]; return p ? performance.timeOrigin + p.startTime : null; })()"
+        if let fcpEpochMs = try? await page.evaluateJavaScript(js) as? Double {
+          let start = LaunchTiming.shared.processStart.timeIntervalSince1970 * 1000
+          out["firstContentfulPaint"] = (fcpEpochMs - start).rounded()
+        }
+      }
+      return out
+    }
+  }
+
+  /// Counts blocked requests. Touched from Chromium's network thread.
+  final class BlockCounter: Sendable {
+    private let state = Mutex<(count: Int, recent: [String])>((0, []))
+
+    func add(_ url: String) {
+      state.withLock {
+        $0.count += 1
+        $0.recent.append(url)
+        if $0.recent.count > 50 { $0.recent.removeFirst() }
+      }
+    }
+
+    func reset() { state.withLock { $0 = (0, []) } }
+
+    func snapshot() -> [String: Any] {
+      state.withLock { ["blocked": $0.count, "recent": $0.recent] }
+    }
+  }
+
+  /// Physical footprint (what Activity Monitor shows) of a process and its
+  /// direct children (Chromium launches every helper from the browser process).
+  enum ProcessFootprint {
+    struct Sample {
+      let pid: pid_t
+      let name: String
+      let footprint: UInt64
+      let rss: UInt64
+    }
+
+    static func tree(root: pid_t) -> [Sample] {
+      var pids = [root]
+      let count = proc_listchildpids(root, nil, 0)
+      if count > 0 {
+        var children = [pid_t](repeating: 0, count: Int(count) * 2)
+        let n = proc_listchildpids(root, &children, Int32(children.count * MemoryLayout<pid_t>.size))
+        pids += children.prefix(Int(n))
+      }
+      return pids.compactMap(sample)
+    }
+
+    static func sample(_ pid: pid_t) -> Sample? {
+      var info = rusage_info_v4()
+      let ok = withUnsafeMutablePointer(to: &info) {
+        $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+          proc_pid_rusage(pid, RUSAGE_INFO_V4, $0)
+        }
+      }
+      guard ok == 0 else { return nil }
+      var name = [CChar](repeating: 0, count: 1024)
+      proc_name(pid, &name, UInt32(name.count))
+      var task = proc_taskinfo()
+      proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &task, Int32(MemoryLayout<proc_taskinfo>.size))
+      return Sample(
+        pid: pid, name: String(decoding: name.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self),
+        footprint: info.ri_phys_footprint, rss: task.pti_resident_size)
+    }
+  }
+#endif
