@@ -2595,30 +2595,38 @@ def actions_checks(app, results):
     closed = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
     results["page_close_closes_popup"] = {"ok": bool(state) and bool(closed)}
 
-    # Keys the popup page does not consume reach the popup's delegate: this
-    # shell closes the popup on Cmd+W there (plan F2), and the tab stays.
+    # A popup's keys reach its delegate before the page (through the hidden
+    # window's CEF delegate) and, when the page does not consume them, after
+    # it (the engine forwards them). Ctrl+D: both stages. Cmd+W: this shell
+    # closes the popup before the page (plan F2), and the tab stays.
     tabs_before = len(app.call("tabs"))
     state = open_popup(ACTION_PROBE)
     keys = {"opened": bool(state)}
     if state:
         app.call("focus", tab=state["page"]["identifier"])
         app.call("events")
+        app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
+        stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
+            [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
+        keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+        keys["still_open"] = bool(app.call("ext-popup").get("open"))
         app.call("key", key="w", modifiers=["cmd"], window="popup", route="window")
         keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
-        keys["delegate"] = [e for e in app.call("events") if e["type"] == "popupKey"]
         keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
         if not keys["closed"]:
             close_popup()
-    results["popup_unconsumed_keys"] = {
-        "ok": keys["opened"] and keys.get("closed") and bool(keys.get("delegate")) and keys.get("tabs_kept"), **keys}
+    results["popup_keys"] = {
+        "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
+              and keys.get("closed") and keys.get("tabs_kept"), **keys}
 
-    # A tab switch closes the popup (Chrome's ExtensionPopup does).
-    app.call("select", tab=a)
+    # A tab switch closes the popup (Chrome's ExtensionPopup does). The first
+    # tab: tab a has no popup since the onClicked check.
+    app.call("select", tab=first)
     state = open_popup(ACTION_PROBE)
     if state:
         app.call("select", tab=b)
     switched = wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10)
-    app.call("select", tab=a)
+    app.call("select", tab=first)
     results["tab_switch_closes_popup"] = {"ok": bool(state) and bool(switched)}
 
     # Pin and order: pinned actions first, in pinned order; moves and unpins.
@@ -2711,7 +2719,7 @@ def actions_checks(app, results):
         app.call("ping")
         ran[prefix] = r
     results["action_menu_commands"] = {"ok": all(v["ok"] for v in ran.values()), "commands": ran}
-    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, a)
+    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, first)
 
 
 def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, tab):
@@ -2794,6 +2802,10 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
         r["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=10))
         back = wait_until(lambda: (lambda x: x if x and x["live"] else None)(action(ACTION_PROBE)), timeout=20)
         r["back"] = bool(back)
+        if not back:
+            listed = actions()
+            r["at_timeout"] = {"ready": listed["ready"], "actions": [(x["id"], x["live"]) for x in listed["actions"]],
+                               "installed": [(e["id"], e["enabled"], e["version"]) for e in app.call("extensions")["installed"]]}
         r["pinned"] = bool(back and back["pinned"])
         def version():
             installed = [e for e in app.call("extensions")["installed"] if e["id"] == ACTION_PROBE]

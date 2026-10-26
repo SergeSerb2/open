@@ -411,13 +411,13 @@ Focus:
 
 - F1. On show, make the panel key and call `popup.focusPage()`. The
   browser window stays main.
-- F2. Keys while the panel is key: the page gets them first. Esc closes
-  the popup inside Chrome (`ExtensionViewHost`). Other keys the page does
-  not consume reach `webContent(_:handleUnconsumedKeyEvent:)`: Cmd+W there
-  closes the popup, not the tab (guess). There is no hook before the page
-  (engine-api.md). Every other app shortcut goes through
-  `OEApplication.keyEquivalentHandler` and the main menu as usual and acts
-  on the browser window.
+- F2. Keys while the panel is key: the popup's delegate sees them first
+  (`webContent(_:handleKeyEventBeforePage:)`, as for a tab), then the page,
+  then `webContent(_:handleUnconsumedKeyEvent:)`. Esc closes the popup
+  inside Chrome (`ExtensionViewHost`). Cmd+W in the before-page call closes
+  the popup, not the tab (guess); the debug shell does this today. Every
+  other app shortcut goes through `OEApplication.keyEquivalentHandler` and
+  the main menu as usual and acts on the browser window.
 
 Dismissal (D rules; Chrome `ExtensionPopup` behavior unless marked):
 

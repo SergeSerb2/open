@@ -697,19 +697,28 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   /// Key events that reach the page view directly (not through
   /// NSApplication.sendEvent) still get the reserved app shortcuts.
   func webContent(_ webContent: OEWebContent, handleKeyEventBeforePage event: NSEvent) -> Bool {
-    MainMenu.performReservedShortcut(event)
+    // An action popup's keys arrive here too (Chrome's ExtensionViewHost
+    // pre-handles them through the hidden window, whose delegate is CEF's).
+    // Cmd+W closes the popup, not the tab (extensions plan §3.7 F2).
+    if let browser = focusedBrowser, webContent === browser.extensionPopup {
+      record("popupKey", webContent, ["key": event.charactersIgnoringModifiers ?? "", "phase": "beforePage"])
+      if Self.isCommandW(event) {
+        browser.closeExtensionPopup()
+        return true
+      }
+    }
+    return MainMenu.performReservedShortcut(event)
+  }
+
+  private static func isCommandW(_ event: NSEvent) -> Bool {
+    event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command && event.charactersIgnoringModifiers == "w"
   }
 
   /// Keys an action popup's page did not consume (the engine forwards them,
-  /// fork patch P2). Cmd+W closes the popup, not the tab (extensions plan
-  /// §3.7 F2).
+  /// fork patch P2). This shell only records them.
   func webContent(_ webContent: OEWebContent, handleUnconsumedKeyEvent event: NSEvent) -> Bool {
     guard let browser = focusedBrowser, webContent === browser.extensionPopup else { return false }
-    record("popupKey", webContent, ["key": event.charactersIgnoringModifiers ?? "", "command": event.modifierFlags.contains(.command)])
-    if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command, event.charactersIgnoringModifiers == "w" {
-      browser.closeExtensionPopup()
-      return true
-    }
+    record("popupKey", webContent, ["key": event.charactersIgnoringModifiers ?? "", "phase": "unconsumed"])
     return false
   }
 
