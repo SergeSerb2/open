@@ -1078,7 +1078,7 @@ on both pages; the same editor in macOS Light.
 | Step | Date | Result |
 |---|---|---|
 | 1 | 2026-10-26 | PR #68, review round 1 fixes: commands-demo 163/163; roundtrip PASS; sidebar-render 125/125. Automated `space-legacy` gate: all original snapshot semantic fields unchanged (only main's additive `keepAliveSites: []` default is added), encoded DTO roundtrip byte-identical, all 3 committed pre-change PNGs byte-identical. Metal readback synchronization fixed; 24/24 repeated renders match the unchanged baselines. Full verify-all after merging `origin/main` at `bfef13c`: 17 PASS, no SKIP. |
-| 2 | | |
+| 2 | 2026-10-26 | M1–M5 and P1: 36/36. Four private stored themes: primary and semantic max error 0.000000. F0069 final PNG/table and 13 sidebar scene PNGs byte-identical to Step 1 head `2eedbfc`; sidebar-render output unchanged at 125/125. Provisional imported opacity 0.80 worsened worst ΔE00 2.38 → 2.93, so §4.5's imported 0.64 fallback stays. Lead's §4.4 base-alpha rule recorded above. Merged main at `005e065`, retaining media targets/checks and Space editor targets/checks; full verify-all 19 PASS, no SKIP; commands-demo 199/199. Main's new duplication path now preserves typed tab/folder/pane icon overrides. |
 | 3 | | |
 | 4 | | |
 | 5 | | |
