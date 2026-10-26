@@ -131,14 +131,14 @@ What no capture shows (all layout below is code constants or guesses):
 the mini player, the PiP window, the Document PiP window, the recording
 indicator. §11 lists the screenshots the lead must ask the user for.
 
-## 2. Current state (merged tree, origin/main 42bba0b, 2026-10-25)
+## 2. Current state (merged tree, origin/main c95be65, 2026-10-25)
 
 Re-verify before you edit: `git log --oneline -3`, then read each file
 you change.
 
 | Area | State | Evidence |
 |---|---|---|
-| Tab model | `Tab.isMuted` is persisted (`TabDTO.isMuted`). `TabLiveState.isAudible`, `isCapturing` are runtime. `BrowserModel.setMuted(tabID:muted:)` registers undo. Arc import maps `savedMuteStatus == "mute"` to `isMuted`. | `Packages/OpenKit/Sources/OpenModel/LiveNodes.swift:10-26,43`; `BrowserModel.swift:524`; `OpenStore/SnapshotDTOs.swift:97`; `OpenImport/ArcImport.swift:387,738` |
+| Tab model | `Tab.isMuted` is persisted (`TabDTO.isMuted`). `TabLiveState.isAudible`, `isCapturing` are runtime. `BrowserModel.setMuted(tabID:muted:)` registers undo. Arc import maps `savedMuteStatus == "mute"` to `isMuted`. | `Packages/OpenKit/Sources/OpenModel/LiveNodes.swift:10-26,43`; `BrowserModel.swift:524`; `OpenStore/SnapshotDTOs.swift:114`; `OpenImport/ArcImport.swift:392,743` |
 | Row indicator | `TabCellView` builds a 20×20 `PlateButton` on demand after the title, y 10, SF `speaker.wave.2.fill` / `speaker.slash.fill` at 11 pt, tint `SidebarRole.rowAccessory`, no hover plate, AX "Mute tab"/"Unmute tab", action `.toggleMute(tabID:)`. Shown when audible or muted. No animation, no tooltip, no recording indicator. | `Packages/OpenKit/Sources/OpenSidebar/SidebarRows.swift:295-307,380-389`; `OpenDesign/Icons.swift:43-44` |
 | Mute intents | `SidebarIntent.toggleMute` is model-only (`ModelSidebarActions`). The tab and split menus have Mute/Unmute, enabled when audible or muted. | `SidebarIntent.swift:41`; `ModelSidebarActions.swift:81-83`; `SidebarMenus.swift:94,158` |
 | Commands | `mute-all-tabs`, `unmute-all-tabs` are registered (code-only, no keys). No handler in the App yet. `view-media` is the Library media page, not playback. | `OpenCommands/CommandRegistry.swift:297,384-385`; `docs/commands.md:264,310-311` |
@@ -150,7 +150,7 @@ you change.
 | Now Playing | Not verified in Open. Chromium 156 enables `kHardwareMediaKeyHandling` on macOS and creates `SystemMediaControls` in `MediaKeysListenerManagerImpl`, which is content-layer code that CEF includes. | `media/base/media_switches.cc:659-661`; `content/browser/media/media_keys_listener_manager_impl.cc:328-360` |
 | App | Plain M1 shell: copies `tab.isMuted` to the page on creation and `isAudible` from engine changes. The real window lands with app-shell Step B; the S6 sleep adapter with Step G. | `App/BrowserWindowController.swift:405,919`; `docs/plans/app-shell.md` §7 |
 | Automation | `tabs` reports `audible`; `mute` command exists; the `features` suite has `audio` and `pip` checks that use a data-URI WAV and a remote WebM. | `docs/automation.md`; `tools/e2e/engine_e2e.py:410-445` |
-| Settings | Registry row `open.advanced.enablePictureInPictureOnLeave` (Bool, `true`) and Advanced row A-2 exist in the plan. `OpenSettings` is not built yet. | `docs/plans/settings-library.md:129,640` |
+| Settings | `OpenSettings` exists (M5). `SettingsDefaults.values` registers the app keys, including `open.advanced.enablePictureInPictureOnLeave: true`. The Advanced pane has the A-2 toggle ("Enable Picture in Picture when you leave a video tab"). Nothing reads the key yet. | `Packages/OpenKit/Sources/OpenSettings/SettingsTypes.swift:70-88`; `AdvancedPane.swift:46`; `docs/plans/settings-library.md` §2.1, §5.5 |
 
 ## 3. Architecture
 
@@ -164,7 +164,8 @@ you change.
 | | `AutoPiPPolicy.swift` | Pure decision function and its reasons (§4.5). |
 | | `PiPSession.swift` | The PiP session state machine and per-tab snoozes (§4.4.6). |
 | | `PiPSiteRules.swift`, `Resources/pip-site-rules.json` | Open's own site-rule file and its matcher (§4.5.4). |
-| | `MediaSettings.swift` | Typed access to the three `UserDefaults` keys in §5 (injectable `UserDefaults`). |
+| | `MediaSettings.swift` | Typed access to the three `UserDefaults` keys in §5 (injectable `UserDefaults`). Reads use `object(forKey:) as? T ?? default`, so they work before the App registers defaults. |
+| `OpenSettings` (edit) | `SettingsTypes.swift` | Add `"open.pip.autoDisabledHosts": [String]()` and `"open.pip.keepOnTop": true` to `SettingsDefaults.values`. No new Settings UI (D-7). |
 | `OpenDesign` (edit) | `FeatureMetrics.swift`, `Palette.swift`, `Typography.swift`, `Motion.swift`, `Icons.swift` | `MiniPlayerMetrics`, `PiPMetrics`, `RowMediaMetrics`; roles; fonts; motion tokens; glyph cases (§4). |
 | `OpenSidebar` (edit, now depends on `OpenMedia`) | `MediaControlsView.swift` (new) | The stack container (§4.2). |
 | | `MiniPlayerCardView.swift` (new) | One card (§4.2.3). |
@@ -1213,7 +1214,7 @@ so.
 | Step | Work | Files | Acceptance |
 |---|---|---|---|
 | 0 | Screenshots S1–S12 from the user (§11), through the lead. Runs in parallel; Steps 1–5 do not wait. | — | Lead files them under `.re/runtime/` (git-ignored) and adds measured values to `docs/re/interaction-states.md`. |
-| 1 | `OpenMedia` target: store, policy, session, site rules, settings; `OpenWeb` media types; `OpenSleep` `mediaControls` field; `openkit media-demo`; registry rows (already in settings-library §2.1). | §3.1 rows for `OpenMedia`, `OpenWeb`, `OpenSleep`, `openkit`; `Package.swift`; `tools/verify-all.sh` | `media-demo` all PASS; `sleep-demo` still 105/105; `verify-all.sh` PASS. |
+| 1 | `OpenMedia` target: store, policy, session, site rules, settings; `OpenWeb` media types; `OpenSleep` `mediaControls` field; `openkit media-demo`; the two new defaults in `SettingsDefaults` (registry rows are already in settings-library §2.1). | §3.1 rows for `OpenMedia`, `OpenWeb`, `OpenSleep`, `OpenSettings`, `openkit`; `Package.swift`; `tools/verify-all.sh` | `media-demo` all PASS; `sleep-demo` still 105/105; `settings-preview` still PASS; `verify-all.sh` PASS. |
 | 2 | Tokens and row indicator: `MiniPlayerMetrics`, `PiPMetrics`, `RowMediaMetrics`, roles, fonts, motion, glyphs; speaker transition, tooltip, recording dot. | `OpenDesign/*` (listed), `OpenSidebar/SidebarRows.swift`, `sidebar-render` RI checks | RI1–RI4 PASS; existing `sidebar-render check` PASS; bench p95 unchanged. |
 | 3 | Mini player stack in the sidebar with fake hosts. | `OpenSidebar/MediaControlsView.swift`, `MiniPlayerCardView.swift`, `MarqueeLabel.swift`, `SidebarView.swift`, `SidebarContext.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift`; `sidebar-render` media scenes | MC1–MC10 PASS; renders attached to the PR. |
 | 4 | Phase 2 PiP window and Document PiP window with a fake video view; menu builder. | `OpenFeatures/PictureInPictureWindowController.swift`, `PiPOverlayView.swift`, `PiPScrubberView.swift`, `PiPMenuBuilder.swift`, `DocumentPiPWindowController.swift`; `features-render` pip | PP1–PP8 PASS. |
