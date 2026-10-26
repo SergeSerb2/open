@@ -878,7 +878,7 @@ precedence), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
 (`change-space-icon`), `SuggestAdapter.swift` (its symbol `face.smiling`),
 `OpenFeatures/BrowserWindowController.swift`,
 `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`,
-`tools/verify-all.sh` (add `space-editor`), `docs/model.md`,
+`tools/verify-all.sh` (add `space-editor`), `docs/release/licenses.md` (emoji data row, Step 6), `docs/model.md`,
 `docs/design.md` (new §: editor), `docs/commands.md`.
 
 ## 12. Verification (no unit tests)
@@ -993,7 +993,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | The provisional intensity law worsens the F0069 compare. | §4.5 fallback: keep 0.64 for imported themes until calibrated. |
 | Live preview at 120 Hz floods Observation and redraws large sidebars. | One model write per frame (§9.1); the sidebar redraws only rows whose colors changed (title, hover, selection layers). B1 enforces the budget. |
 | The creation form placement guess (sidebar page) is wrong. | The form is a plain `NSView`; moving it into a sheet is a container change only. Capture first (§15 Q6) if the lead wants certainty before Step 7. |
-| Emoji data licensing or size. | Generated JSON from Unicode data (license notice in the PR); size target ≤ 400 KB; loaded lazily on first picker open. |
+| Emoji data licensing or size. | Generated JSON from Unicode data; a `docs/release/licenses.md` row and the license text land with Step 6; size target ≤ 400 KB; loaded lazily on first picker open. |
 | P3 conversion differences between our matrices and the system converter. | Use the system `CGColor` conversion for inputs; M1 tolerance 1/255. |
 | Older builds lose themes written by the editor (they ignore `style` and the legacy fields are cleared). | Accepted (no released users), stated in `docs/model.md`. |
 
@@ -1001,7 +1001,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | Emoji data source for the picker. | Generate `emoji-index.json` from Unicode `emoji-test.txt` (Unicode License V3, pinned version + SHA-256) with our script. Not the macOS Character Viewer (not Arc's look) and never Arc's `emojis.json`. |
+| Q1 | Emoji data source for the picker. | Generate `emoji-index.json` from Unicode `emoji-test.txt` (Unicode License V3, pinned version + SHA-256) with our script, and add a row for it to `docs/release/licenses.md` in the same PR. Not the macOS Character Viewer (not Arc's look) and never Arc's `emojis.json`. |
 | Q2 | Which theme a brand-new Space starts with (not decoded). | Brand preset `spaces.count mod 9`, 1 color, Automatic, noise 0, intensity 0.8. Deterministic, and neighbors differ. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
 | Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
