@@ -12,12 +12,27 @@ public final class DimmedTrafficLightsView: NSView {
     public var tone: ContentAppearance = .light { didSet { if tone != oldValue { rebuild() } } }
     /// The colored rings show only while the window is active: inactive Arc draws the same
     /// fill without them (capture session 2, 03 step 4).
-    public var showsRing = true { didSet { if showsRing != oldValue { circles.forEach { $0.ring.isHidden = !showsRing } } } }
+    public var showsRing = true {
+        didSet {
+            guard showsRing != oldValue else { return }
+            // At once, as macOS changes its own buttons on a key change (no implicit fade).
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            circles.forEach { $0.ring.isHidden = !showsRing }
+            CATransaction.commit()
+        }
+    }
     /// Called when the pointer enters or leaves the group (`groupRect`), also while the
     /// app is inactive.
     public var onHoverChange: ((Bool) -> Void)?
+    /// Where the pointer is now, in window base coordinates, or nil when unknown. The
+    /// default reads the hardware pointer; automation substitutes its own pointer.
+    public var pointerLocation: (() -> NSPoint?)?
     /// The group's hover region in this view's coordinates.
     public var groupRect: CGRect = .zero { didSet { if groupRect != oldValue { updateTrackingAreas() } } }
+    /// The view owns the hover state. A tracking area that AppKit re-creates (unhide, frame
+    /// change, full-screen exit) sends no exit for a pointer that left meanwhile, and a hidden
+    /// view gets none at all, so the state is cleared on hide and read again from the
+    /// pointer whenever the area is rebuilt or the window comes back.
     public private(set) var isPointerInside = false
     private var tracking: NSTrackingArea?
     private var circles: [(fill: CAShapeLayer, ring: CAShapeLayer)] = []
@@ -36,10 +51,30 @@ public final class DimmedTrafficLightsView: NSView {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
         tracking = nil
-        guard !groupRect.isEmpty else { return }
+        guard !groupRect.isEmpty else { setPointerInside(false); return }
         let area = NSTrackingArea(rect: groupRect, options: [.mouseEnteredAndExited, .activeAlways], owner: self)
         addTrackingArea(area)
         tracking = area
+        syncWithPointer()
+    }
+
+    public override func viewDidHide() {
+        super.viewDidHide()
+        setPointerInside(false)
+    }
+
+    public override func viewDidUnhide() {
+        super.viewDidUnhide()
+        syncWithPointer()
+    }
+
+    /// Sets the hover state from where the pointer is now (after a full-screen exit, a
+    /// restore from the Dock, or when the group shows again).
+    public func syncWithPointer() {
+        guard let window, !isHiddenOrHasHiddenAncestor, !groupRect.isEmpty else { setPointerInside(false); return }
+        let location = pointerLocation.map { $0() } ?? window.mouseLocationOutsideOfEventStream
+        guard let location else { return }
+        setPointerInside(groupRect.contains(convert(location, from: nil)))
     }
 
     public override func mouseEntered(with event: NSEvent) { setPointerInside(true) }

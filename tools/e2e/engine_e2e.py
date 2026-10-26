@@ -1895,9 +1895,9 @@ RING_COLORS = {"light": [(219, 59, 60), (212, 162, 1), (47, 181, 19)], "dark": [
 def dimmed_look(png, scale, centers, mode, ring=True):
     """Rest look at each button against the expected composite over the background sampled
     between buttons: the fill at the center (±5 levels) and, on dark content, the ring at
-    r 6.5: in an active window the colored ring (±12 levels: an anti-aliased pixel), in an
-    inactive one none (the pixel nearer the plain background than the colored ring). On light
-    content the ring is only 0.06, so it is not checked."""
+    r 6.5. `ring` is the expectation: in an active window the colored ring (±12 levels: an
+    anti-aliased pixel), in an inactive one none (the pixel nearer the plain background than
+    the colored ring). On light content the ring is only 0.06, so it is not checked."""
     _, _, px = read_image(png)
     tok, fill_a, ring_a = DIMMED_LOOK[mode]
     rows, ok = [], True
@@ -1906,21 +1906,49 @@ def dimmed_look(png, scale, centers, mode, ring=True):
         bg = [sum(px((cx + 11.5) * scale, (cy + dy) * scale)[k] for dy in (-2, 0, 2)) / 3 for k in range(3)]
         expected = [bg[k] * (1 - fill_a) + tok[k] * fill_a for k in range(3)]
         fill_err = max(abs(core[k] - expected[k]) for k in range(3))
-        edge = px((cx - 6.5) * scale, cy * scale)
+        ring_px = px((cx - 6.5) * scale, cy * scale)
         ring_expected = [bg[k] * (1 - ring_a) + RING_COLORS[mode][index][k] * ring_a for k in range(3)]
-        ring_err = max(abs(edge[k] - ring_expected[k]) for k in range(3))
-        plain_err = max(abs(edge[k] - bg[k]) for k in range(3))
+        ring_err = max(abs(ring_px[k] - ring_expected[k]) for k in range(3))
+        plain_err = max(abs(ring_px[k] - bg[k]) for k in range(3))
         ring_ok = mode == "light" or (ring_err <= 12 if ring else plain_err < ring_err)
         good = fill_err <= 5 and ring_ok
         ok = ok and good
         rows.append({"center": [cx, cy], "core": [round(v) for v in core], "expected": [round(v) for v in expected],
-                     "fill_error": round(fill_err, 1), "ring": list(edge), "ring_expected": [round(v) for v in ring_expected],
+                     "fill_error": round(fill_err, 1), "ring": list(ring_px), "ring_expected": [round(v) for v in ring_expected],
                      "ring_error": round(ring_err, 1), "plain_error": round(plain_err, 1), "ring_expected_shown": ring, "ok": good})
     return ok, rows
 
 
+def colored_look(png, scale, centers):
+    """The system buttons in color at each center (key window, pointer over the group): red
+    (R − G ≥ 60), yellow (R and G − B ≥ 60), green (G − R ≥ 60). macOS's own grey buttons
+    (an inactive window) and the dimmed look both fail."""
+    _, _, px = read_image(png)
+    rows, ok = [], True
+    for index, (cx, cy) in enumerate(centers):
+        r, g, b = [sum(px((cx + dx) * scale, (cy + dy) * scale)[k] for dx in (-1.5, -0.5, 0.5) for dy in (-1.5, -0.5, 0.5)) / 9 for k in range(3)]
+        margin = (r - g, min(r, g) - b, g - r)[index]
+        good = margin >= 60
+        ok = ok and good
+        rows.append({"center": [cx, cy], "core": [round(r), round(g), round(b)], "hue_margin": round(margin, 1), "ok": good})
+    return ok, rows
+
+
+def ensure_key(app, wid, timeout=15):
+    """Makes the window key; macOS refuses to activate an app while someone uses another one,
+    so this asks again until it holds. Returns the state, key or not."""
+    deadline = time.time() + timeout
+    while True:
+        app.call("window-focus", id=wid, activate=True)
+        time.sleep(0.25)
+        st = app.call("window-state", id=wid)
+        if (st["key"] and st["appActive"]) or time.time() > deadline:
+            return st
+
+
 def traffic_light_look_checks(app, results, private, scale, wid):
-    """The window buttons' rest look, hover, not-key look, card, AX, and actions."""
+    """The window buttons' rest look, hover, not-key look, card, AX, actions, and the hover
+    state across full screen, minimize, and a sidebar hide."""
     def state():
         return app.call("window-state")
     def buttons_ok(st, dimmed):
@@ -1929,61 +1957,90 @@ def traffic_light_look_checks(app, results, private, scale, wid):
         # At rest 0.001, not 0: AppKit ignores a window button at alpha 0.
         return (st["trafficLightsDimmed"] == dimmed and all(abs(a - (0.001 if dimmed else 1)) < 0.0005 for a in alpha) and len(alpha) == 3
                 and ax[:3] == [("AXButton", "AXCloseButton"), ("AXButton", "AXMinimizeButton"), ("AXButton", "AXFullScreenButton")]), alpha, ax
+    def shot(name, window=None):
+        path = os.path.join(private, "lights-%s.png" % name)
+        if window is None:
+            app.call("snapshot", path=path)
+        else:
+            app.call("snapshot", path=path, window=window)
+        return path
     rows = {}
     for mode in ("light", "dark"):
         app.call("appearance", name=mode)
-        app.call("window-focus", id=wid, activate=True)
         app.call("mouse", action="hover", x=700, y=400)
-        time.sleep(0.4)
+        rest = ensure_key(app, wid)
+        time.sleep(0.3)
         rest = state()
         rest_ok, alpha, ax = buttons_ok(rest, True)
-        png = os.path.join(private, "lights-%s-rest.png" % mode)
-        app.call("snapshot", path=png)
+        png = shot("%s-rest" % mode)
         look_ok, look = dimmed_look(png, scale, LIGHT_CENTERS, mode, ring=rest["key"])
+        # Hover: the system buttons in color. The synthetic pointer gets macOS's colors only in
+        # a key window (an inactive window's buttons stay grey), so the row needs key.
+        hover_key = ensure_key(app, wid)["key"]
         app.call("mouse", action="hover", x=43, y=24)
         hover = state_when(app, lambda st: not st["trafficLightsDimmed"], timeout=2) or state()
         hover_ok, hover_alpha, _ = buttons_ok(hover, False)
-        hpng = os.path.join(private, "lights-%s-hover.png" % mode)
-        app.call("snapshot", path=hpng)
-        _, _, hp = read_image(hpng)
-        _, _, rp = read_image(png)
-        changed = all(max(abs(a - b) for a, b in zip(hp(cx * scale, cy * scale), rp(cx * scale, cy * scale))) > 15 for cx, cy in LIGHT_CENTERS)
+        hpng = shot("%s-hover" % mode)
+        hue_ok, hue = colored_look(hpng, scale, LIGHT_CENTERS)
         app.call("mouse", action="hover", x=700, y=400)
         left = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2)
-        # Not key: a second window in front; the first keeps the look.
+        # Controls: the checks reject the wrong look. The rest image is not colored; on dark
+        # content in a key window, its rings fail the not-key expectation.
+        control_hue = not colored_look(png, scale, LIGHT_CENTERS)[0]
+        control_ring = mode == "light" or not rest["key"] or not dimmed_look(png, scale, LIGHT_CENTERS, mode, ring=False)[0]
+        # Not key: a second window in front; the first keeps the look, without rings.
         app.call("key", key="n", modifiers=["cmd"], route="app")
         second = state_when(app, lambda st: st["id"] != wid) or state()
         first = app.call("window-state", id=wid)
-        npng = os.path.join(private, "lights-%s-notkey.png" % mode)
-        app.call("snapshot", path=npng, window=first["number"])
+        npng = shot("%s-notkey" % mode, window=first["number"])
         notkey_ok, notkey = dimmed_look(npng, scale, LIGHT_CENTERS, mode, ring=first["key"])
         app.call("window-close")
         state_when(app, lambda st: st["id"] == wid)
-        app.call("window-focus", id=wid, activate=True)
+        ensure_key(app, wid)
         # On the hover-reveal card.
         app.call("key", key="s", modifiers=["cmd"], route="app")
         sidebar_hidden(app)
         hidden = state()
         card = reveal_card_and_wait(app)
         app.call("mouse", action="move", x=150, y=400)
-        cpng = os.path.join(private, "lights-%s-card.png" % mode)
-        app.call("snapshot", path=cpng)
+        cpng = shot("%s-card" % mode)
         card_state = state()
         card_ok, card_look = dimmed_look(cpng, scale, [[x + 5, y + 5] for x, y in LIGHT_CENTERS], mode, ring=card_state["key"])
         app.call("mouse", action="move", x=700, y=400)
         wait_card(app, False)
         app.call("key", key="s", modifiers=["cmd"], route="app")
         sidebar_anchored(app)
-        rows[mode] = {"ok": rest_ok and look_ok and hover_ok and changed and bool(left) and not first["trafficLightsHovered"]
-                      and first["trafficLightsDimmed"] and notkey_ok and all(hidden["trafficLightsHidden"]) and bool(card)
-                      and card_ok and card_state["trafficLightsDimmed"],
-                      "rest_alpha": alpha, "ax": ax, "rest_look": look, "hover_alpha": hover_alpha, "hover_changed_pixels": changed,
-                      "dimmed_after_leaving": bool(left), "not_key": {"key": first["key"], "dimmed": first["trafficLightsDimmed"], "look": notkey},
-                      "hidden_with_sidebar": hidden["trafficLightsHidden"], "card_look": card_look, "key_during_rest": rest["key"]}
+        rows[mode] = {"ok": rest_ok and look_ok and hover_key and hover_ok and hue_ok and bool(left) and control_hue and control_ring
+                      and not first["trafficLightsHovered"] and first["trafficLightsDimmed"] and notkey_ok
+                      and all(hidden["trafficLightsHidden"]) and bool(card) and card_ok and card_state["trafficLightsDimmed"],
+                      "rest_alpha": alpha, "ax": ax, "rest_look": look, "key_during_rest": rest["key"],
+                      "hover": {"key": hover_key, "alpha": hover_alpha, "hue": hue},
+                      "dimmed_after_leaving": bool(left), "controls_reject": {"rest_as_colored": control_hue, "rings_as_not_key": control_ring},
+                      "not_key": {"key": first["key"], "dimmed": first["trafficLightsDimmed"], "look": notkey},
+                      "hidden_with_sidebar": hidden["trafficLightsHidden"], "card_look": card_look}
     app.call("appearance", name="system")
-    results["traffic_light_look"] = {"ok": all(r["ok"] for r in rows.values()), "rows": rows}
-    # Actions on the real buttons: Option-click zoom zooms, a plain click enters full screen
-    # (where the system buttons show as they are), and the dimmed look returns after it.
+    # The hover region: each button and both gaps hold the hover (no flicker walking across);
+    # points just outside the group do not.
+    ensure_key(app, wid)
+    app.call("mouse", action="hover", x=700, y=400)
+    state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2)
+    inside, outside = {}, {}
+    for x, y in ((20, 24), (31.5, 24), (43, 24), (54.5, 24), (66, 24)):
+        app.call("mouse", action="hover", x=x, y=y)
+        st = state_when(app, lambda st: not st["trafficLightsDimmed"], timeout=1) or state()
+        inside["%g,%g" % (x, y)] = st["trafficLightsHovered"] and not st["trafficLightsDimmed"]
+    for x, y in ((12.5, 24), (73.5, 24), (43, 16.5), (43, 31.5)):
+        app.call("mouse", action="hover", x=43, y=24)
+        state_when(app, lambda st: not st["trafficLightsDimmed"], timeout=1)
+        app.call("mouse", action="hover", x=x, y=y)
+        st = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=1) or state()
+        outside["%g,%g" % (x, y)] = st["trafficLightsDimmed"] and not st["trafficLightsHovered"]
+    app.call("mouse", action="hover", x=700, y=400)
+    region_ok = all(inside.values()) and all(outside.values())
+    results["traffic_light_look"] = {"ok": all(r["ok"] for r in rows.values()) and region_ok, "rows": rows,
+                                     "hover_region": {"inside": inside, "outside": outside}}
+    # Actions on the real buttons: Option-click zoom zooms and restores.
+    ensure_key(app, wid)
     before = state()
     app.call("mouse", action="hover", x=66, y=24)
     app.call("mouse", action="click", x=66, y=24, modifiers=["option"])
@@ -1991,20 +2048,67 @@ def traffic_light_look_checks(app, results, private, scale, wid):
     app.call("mouse", action="hover", x=66, y=24)
     app.call("mouse", action="click", x=66, y=24, modifiers=["option"])
     restored = state_when(app, lambda st: not st["zoomed"] and st["frame"] == before["frame"], timeout=4)
+    app.call("mouse", action="hover", x=700, y=400)
+    results["traffic_light_actions"] = {"ok": bool(zoomed) and bool(restored),
+                                        "option_click_zoomed": bool(zoomed) and zoomed["frame"], "option_click_restored": bool(restored),
+                                        "tiling_menu": {"status": "SKIP", "reason": "macOS opens it for the hardware pointer resting on the green button; synthetic events do not reach it"}}
+    # The hover state after the buttons went away with the pointer on them. Each case checks
+    # the look before any further pointer event (an exit would hide a stale state).
+    def at_rest(name):
+        st = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2) or state()
+        ok, look = dimmed_look(shot(name), scale, LIGHT_CENTERS, "dark", ring=st["key"])
+        return {"ok": st["trafficLightsDimmed"] and not st["trafficLightsHovered"] and ok, "dimmed": st["trafficLightsDimmed"],
+                "hovered": st["trafficLightsHovered"], "key": st["key"], "look": look}
+    stale = {}
+    app.call("appearance", name="dark")  # dark content: the rings are checked too
+    # (1) A click on the green button enters full screen; the pointer moves away there; the
+    # command exits full screen.
+    ensure_key(app, wid)
     app.call("mouse", action="hover", x=66, y=24)
     app.call("mouse", action="click", x=66, y=24)
     full = state_when(app, lambda st: st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
     full_alpha = full and [b["alpha"] for b in full["trafficLightButtons"]]
+    app.call("mouse", action="move", x=700, y=400)
     app.call("window-fullscreen")
     back = state_when(app, lambda st: not st["fullscreen"] and not st["fullscreenTransition"], timeout=15, step=0.1)
+    stale["full_screen_exit"] = dict(at_rest("stale-fullscreen"), entered=bool(full), full_screen_alpha=full_alpha,
+                                     full_screen_dimmed=bool(full) and full["trafficLightsDimmed"], exited=bool(back))
+    stale["full_screen_exit"]["ok"] = (stale["full_screen_exit"]["ok"] and bool(full) and full_alpha == [1, 1, 1]
+                                       and not full["trafficLightsDimmed"] and bool(back))
+    # (2) A click on the yellow button minimizes; the pointer moves away; the Dock restores.
+    ensure_key(app, wid)
+    app.call("mouse", action="hover", x=43, y=24)
+    app.call("mouse", action="click", x=43, y=24)
+    mini = state_when(app, lambda st: st["miniaturized"], timeout=5, step=0.1)
+    app.call("mouse", action="move", x=700, y=400)
+    app.call("window-deminiaturize")
+    up = state_when(app, lambda st: not st["miniaturized"], timeout=5, step=0.1)
+    time.sleep(0.4)
+    stale["minimize_restore"] = dict(at_rest("stale-minimize"), minimized=bool(mini), restored=bool(up))
+    stale["minimize_restore"]["ok"] = stale["minimize_restore"]["ok"] and bool(mini) and bool(up)
+    # (3) Cmd+S hides the sidebar with the pointer on the buttons; the pointer moves away;
+    # Cmd+S shows it; the pointer comes back over the buttons.
+    ensure_key(app, wid)
+    app.call("mouse", action="hover", x=43, y=24)
+    hovered = state_when(app, lambda st: st["trafficLightsHovered"], timeout=1)
+    app.call("key", key="s", modifiers=["cmd"], route="app")
+    sidebar_hidden(app)
     app.call("mouse", action="hover", x=700, y=400)
-    redimmed = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=3)
-    results["traffic_light_actions"] = {"ok": bool(zoomed) and bool(restored) and bool(full) and full_alpha == [1, 1, 1]
-                                        and not full["trafficLightsDimmed"] and bool(back) and bool(redimmed),
-                                        "option_click_zoomed": bool(zoomed) and zoomed["frame"], "option_click_restored": bool(restored),
-                                        "click_full_screen": bool(full), "full_screen_alpha": full_alpha,
-                                        "dimmed_after_full_screen": bool(redimmed),
-                                        "tiling_menu": {"status": "SKIP", "reason": "macOS opens it for the hardware pointer resting on the green button; synthetic events do not reach it"}}
+    app.call("key", key="s", modifiers=["cmd"], route="app")
+    sidebar_anchored(app)
+    shown = at_rest("stale-hide-shown")
+    ensure_key(app, wid)
+    app.call("mouse", action="hover", x=43, y=24)
+    again = state_when(app, lambda st: st["trafficLightsHovered"] and not st["trafficLightsDimmed"], timeout=2) or state()
+    hue_ok, hue = colored_look(shot("stale-hide-rehover"), scale, LIGHT_CENTERS)
+    app.call("mouse", action="hover", x=700, y=400)
+    left = state_when(app, lambda st: st["trafficLightsDimmed"], timeout=2)
+    stale["hide_rehover"] = {"ok": bool(hovered) and shown["ok"] and again["trafficLightsHovered"] and not again["trafficLightsDimmed"]
+                             and hue_ok and bool(left), "hovered_before": bool(hovered), "after_show": shown,
+                             "rehover": {"hovered": again["trafficLightsHovered"], "dimmed": again["trafficLightsDimmed"], "key": again["key"], "hue": hue},
+                             "dimmed_after_leaving": bool(left)}
+    app.call("appearance", name="system")
+    results["traffic_light_stale_hover"] = {"ok": all(v["ok"] for v in stale.values()), "cases": stale}
 
 
 def window_chrome_checks(factory, results, tmp):

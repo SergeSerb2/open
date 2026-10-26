@@ -71,6 +71,10 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Automation builds drive the pointer with tagged events; this lets them ignore the
     /// hardware pointer so a test is not disturbed by someone using the Mac. nil: accept all.
     public static var pointerEventFilter: ((NSEvent) -> Bool)?
+    /// The automation pointer's position (window number, window base coordinates), set with
+    /// `pointerEventFilter`. While automation drives the pointer, the window buttons' hover
+    /// state reads this instead of the hardware pointer.
+    public static var automationPointer: (window: Int, location: NSPoint)?
     /// Automation builds can turn this off to keep a capture-size frame on a smaller screen.
     public static var constrainsFramesToScreen = true
     private var toastTask: Task<Void, Never>?
@@ -320,6 +324,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 self?.trafficLightsHovered = inside
                 self?.applyTrafficLightDim(animated: true)
             }
+            dimmedLights.pointerLocation = { [weak self] in
+                guard let window = self?.window else { return nil }
+                guard BrowserWindowController.pointerEventFilter != nil else { return window.mouseLocationOutsideOfEventStream }
+                guard let pointer = BrowserWindowController.automationPointer, pointer.window == window.windowNumber else {
+                    return NSPoint(x: -.greatestFiniteMagnitude, y: -.greatestFiniteMagnitude) // in another window
+                }
+                return pointer.location
+            }
             parent.addSubview(dimmedLights, positioned: .below, relativeTo: buttons[0])
         }
         let group = buttons.map(\.frame).reduce(CGRect.null) { $0.union($1) }
@@ -330,8 +342,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         dimmedLights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
         dimmedLights.showsRing = window.isKeyWindow
         let hidden = buttons[0].isHidden
+        // Hiding clears the hover state and showing reads it from the pointer (the view).
         if dimmedLights.isHidden != hidden { dimmedLights.isHidden = hidden }
-        if hidden, trafficLightsHovered { trafficLightsHovered = false }
         applyTrafficLightDim(animated: false)
     }
 
@@ -585,14 +597,22 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public func windowWillEnterFullScreen(_ notification: Notification) { saveWindowState(); fullscreenTransition = true; applyTrafficLightDim(animated: false); dimmedLights.isHidden = true }
     public func windowWillExitFullScreen(_ notification: Notification) { fullscreenTransition = true; applyTrafficLightDim(animated: false) }
     public func windowDidEnterFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
-    public func windowDidExitFullScreen(_ notification: Notification) { fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?() }
+    public func windowDidExitFullScreen(_ notification: Notification) {
+        fullscreenTransition = false; fullScreenTransitionCount += 1; layoutContent(); onVisibilityChange?()
+        // The window is back at its frame; the pointer may or may not be over the buttons.
+        dimmedLights.syncWithPointer()
+    }
     public func windowDidBecomeKey(_ notification: Notification) { context.isWindowActive = true; background.isWindowActive = true; positionTrafficLights(); onFocus?() }
     public func windowDidResignKey(_ notification: Notification) { context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }
     public func windowDidMiniaturize(_ notification: Notification) { onVisibilityChange?() }
-    public func windowDidDeminiaturize(_ notification: Notification) { onVisibilityChange?() }
+    public func windowDidDeminiaturize(_ notification: Notification) {
+        onVisibilityChange?()
+        // The pointer was on the yellow button when the window left, and has moved since.
+        dimmedLights.syncWithPointer()
+    }
     public func windowDidChangeOcclusionState(_ notification: Notification) { onVisibilityChange?() }
 }
 

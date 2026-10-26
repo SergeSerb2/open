@@ -237,6 +237,9 @@
           // hardware pointer of whoever uses the Mac cannot disturb a check.
           BrowserWindowController.pointerEventFilter = { $0.eventNumber == AutomationController.syntheticPointerTag }
           let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+          // Known at once (the move event is queued), for state that reads where the pointer
+          // is rather than waiting for an event: the window buttons' hover.
+          BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
           if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
           // Tracking areas follow the hardware pointer, so `hover` also delivers
           // enter, move, and exit to the owners of the areas under the point.
@@ -250,6 +253,8 @@
             case "shift": flags.insert(.shift); case "control": flags.insert(.control); default: break }
           }
           let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
+          // A click happens where the pointer is.
+          BrowserWindowController.automationPointer = (number, point)
           func click(_ type: NSEvent.EventType) -> NSEvent? {
             NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
               windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
@@ -402,26 +407,20 @@
           "trafficLightsDimmed": controller.trafficLightsDimmed, "trafficLightsHovered": controller.trafficLightsHoveredState,
           "trafficLightButtons": [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].compactMap { kind -> [String: Any]? in
             guard let button = win.standardWindowButton(kind) else { return nil }
-            let ax = button.accessibilityFrame()
-            let origin = win.convertPoint(fromScreen: ax.origin)
+            // In process, the buttons' own AX role reads AXUnknown; outside clients see the
+            // window's attributes below, so only those carry roles here.
             return ["alpha": Double(button.alphaValue), "hidden": button.isHiddenOrHasHiddenAncestor,
-              // The legacy attribute API: what outside AX clients read for these system widgets.
-              "role": legacyAX(button, "AXRole"), "subrole": legacyAX(button, "AXSubrole"),
-              "axDescription": legacyAX(button, "AXDescription"),
-              "axFrame": [Double(origin.x), Double(win.frame.height - origin.y - ax.height), Double(ax.width), Double(ax.height)],
               "action": button.action.map { NSStringFromSelector($0) } ?? ""] as [String: Any]
           },
           // The window's AX button attributes, as an outside AX client reads them (F0001's dump).
+          // Role and subrole only: their AXFrame does not resolve in process.
           "axWindowButtons": ["AXCloseButton", "AXMinimizeButton", "AXZoomButton", "AXFullScreenButton"].compactMap { name -> [String: Any]? in
             let selector = NSSelectorFromString("accessibilityAttributeValue:")
             guard win.responds(to: selector), let element = win.perform(selector, with: name)?.takeUnretainedValue() as? NSObject else { return nil }
-            var frame: [Double] = []
-            if let value = element.perform(selector, with: "AXFrame")?.takeUnretainedValue() as? NSValue {
-              let r = value.rectValue, o = win.convertPoint(fromScreen: r.origin)
-              frame = [Double(o.x), Double(win.frame.height - o.y - r.height), Double(r.width), Double(r.height)]
-            }
-            return ["attribute": name, "role": legacyAX(element, "AXRole"), "subrole": legacyAX(element, "AXSubrole"), "frame": frame]
+            return ["attribute": name, "role": legacyAX(element, "AXRole"), "subrole": legacyAX(element, "AXSubrole")]
           },
+          "automationPointer": BrowserWindowController.automationPointer.map { p -> Any in
+            p.window == win.windowNumber ? [Double(p.location.x), Double(win.frame.height - p.location.y)] : NSNull() } ?? NSNull(),
           "key": win.isKeyWindow, "appActive": NSApp.isActive, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
@@ -458,6 +457,9 @@
         w.window?.performClose(nil); return true
       case "window-fullscreen":
         w.window?.toggleFullScreen(nil); return true
+      case "window-deminiaturize":
+        // What a click on the window's Dock tile does.
+        w.window?.deminiaturize(nil); return true
       case "sidebar-move":
         let tab = try modelTab(a, w)
         let parent: NodeParent

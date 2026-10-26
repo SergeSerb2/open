@@ -77,6 +77,8 @@ final class TrafficLightsView: NSView {
     private let dimmed = DimmedTrafficLightsView()
     /// The Space's content appearance (set by the scene), as in the window.
     var tone: ContentAppearance = .light { didSet { needsLayout = true } }
+    /// Rings only in an active window (renders with `--inactive` draw none).
+    var showsRing = true { didSet { needsLayout = true } }
     override var isFlipped: Bool { true }
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -93,8 +95,6 @@ final class TrafficLightsView: NSView {
         dimmed.tone = tone
         dimmed.showsRing = showsRing
     }
-    /// Rings only in an active window (renders with `--inactive` draw none).
-    var showsRing = true { didSet { needsLayout = true } }
 }
 
 /// Delegate for renders and checks: applies model intents, records the rest.

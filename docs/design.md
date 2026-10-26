@@ -579,7 +579,8 @@ The user decided that the window buttons use Arc's grey look in every window sta
 - At rest the system buttons have alpha 0.001: they stay in place for clicks and AX. Not 0: AppKit ignores a window button at alpha 0, so `performClose:`, `performZoom:`, and an AX press stop working (tested; the window suite's window-close checks failed that way); 0.001 draws nothing visible. Its tracking area (`.activeAlways`, the group's rect) swaps the alphas over 0.08 s when the pointer enters or leaves, also while Open is inactive.
 - AppKit can reset the buttons' alpha when it lays the title bar out; the placement pass after each layout puts it back. In full screen the system buttons show as they are.
 - Light or dark follows the Space's content appearance, as for the sidebar.
-- The colored rings show only while the window is key (`showsRing`), as in session 2: inactive Arc keeps the fill and drops the rings.
+- The colored rings show only while the window is key (`showsRing`), as in session 2: inactive Arc keeps the fill and drops the rings. The change is immediate, as for macOS's own buttons (no implicit layer fade).
+- `DimmedTrafficLightsView` owns the hover state. AppKit sends no exit to a hidden view, and a tracking area it re-creates (unhide, frame change, full-screen exit) sends no exit for a pointer that left meanwhile. So the view clears the state when it hides (full-screen entry, ⌘S, the card's hide) and reads it again from where the pointer is when it shows, when its tracking area is rebuilt, after a full-screen exit, and after a restore from the Dock. While automation drives the pointer, it reads the automation pointer instead of the hardware one. Before this (PR #104 review), the buttons stayed colored at rest after a full-screen exit or a restore, and stayed grey under the pointer after ⌘S twice.
 
 ### 17.3 Comparison with Arc (§7 method)
 
@@ -606,13 +607,19 @@ Against session 2 (03 frames, 1728 × 1084, default dark theme), offscreen rende
 | active (0003) | zoom | `#686973` on `#242538` | `#6A6973` on `#262538` | 0.330 / 0.330 | `#39543E` | `#3C553F` | 0.87 |
 | inactive (0016) | all three | `#565761` on `#0A0B1D` | `#696973` on `#262538` | 0.329 / 0.330 | none (`#202132`) | none (`#2A293C`) | — |
 
-Inactive, the fill alpha matches and both have no ring; the colors differ because Open's default dark theme does not darken when inactive (followup). The hover look is macOS's own: Arc's frame 0007 shows the system's hover state (body `#F04E43` / `#FCB900` / `#18BF00` with glyphs); the automation's synthetic pointer cannot put Open's same system buttons into that state (Open's synthetic-hover bodies `#E26456` / `#F3BE0B` / `#5ABC10` are the plain active buttons).
+Inactive, the fill alpha matches and both have no ring; the colors differ because Open's default dark theme does not darken when inactive (followup). The hover look is macOS's own: Arc's frame 0007 shows the system's hover state (body `#F04E43` / `#FCB900` / `#18BF00` with glyphs); the automation's synthetic pointer gets the same system buttons without glyphs, because macOS draws glyphs only for the hardware pointer. Measured by the PR #104 review in a key window (body = the median of the lighter half at r 4–4.5, so Arc's glyph is left out): Open `#F06258` / `#FDC900` / `#36C300`, ΔE00 to Arc's bodies 0.97 / 0.17 / 0.26 anchored and 1.03 / 0.17 / 0.37 on the card (05 frame 0018); the ring at r 6.5 is 0.04–0.16. In a window that is not key, the synthetic pointer leaves macOS's own grey buttons, so the suite checks hover colors in a key window only.
 
 ![Window buttons](design/window-buttons-dimmed.png)
 
 ### 17.4 Verification
 
-New `window` suite rows: `traffic_light_look` (the rest look against the expected composite at each center, ±5 levels, and the dark ring, ±12; alpha 0 at rest and 1 under the pointer; AX roles and subroles unchanged; the same look in a window that is not key and on the card, in light and dark; hidden with the sidebar) and `traffic_light_actions` (Option-click zoom zooms and restores; a click enters full screen, where the system buttons show; the dimmed look returns). The tiling menu is reported SKIP: macOS opens it only for the hardware pointer resting on the green button. The `traffic_lights` row now finds the drawn circles at an 8-level contrast (the light rest look differs from the background by 15–23 levels).
+New `window` suite rows:
+
+- `traffic_light_look`: in light and dark, the rest look against the expected composite at each center (±5 levels) and the dark ring (±12) or its absence in a window that is not key; alpha 0.001 at rest and 1 under the pointer; AX roles and subroles unchanged; hover in a key window shows the system colors at each center (hue margin ≥ 60: red R − G, yellow R and G − B, green G − R; macOS's grey or the dimmed look fail); the same rest look in a window that is not key and on the card; hidden with the sidebar. Controls prove the checks can fail: the rest image fails the hue check, and in a key window on dark content it fails the no-ring expectation. The hover region: each button and both gaps (x 20, 31.5, 43, 54.5, 66) hover, and x 12.5 / 73.5 and y 16.5 / 31.5 do not.
+- `traffic_light_actions`: Option-click zoom zooms and restores. The tiling menu is reported SKIP: macOS opens it only for the hardware pointer resting on the green button.
+- `traffic_light_stale_hover` (dark content, each case checked before any further pointer event): a click on the green button enters full screen (system buttons at alpha 1 there), the pointer moves away, the command exits, and the buttons are dimmed; a click on the yellow button minimizes, the pointer moves away, the Dock restore leaves them dimmed; ⌘S with the pointer on the buttons, pointer away, ⌘S, and they are dimmed, then the pointer back over them shows the system colors.
+
+The `traffic_lights` row finds the drawn circles at an 8-level contrast (the light rest look differs from the background by 15–23 levels).
 
 Behaviors checked through the automation layer: Option-click on the green button zooms (`[0, 0, 2560, 1410]`) and restores; a click enters full screen; `performClose:` (the window-close checks) works at rest. The tiling menu could not be reached (above). The first run of the suite failed three window-close rows with the buttons at alpha 0, which is why the rest alpha is 0.001.
 
