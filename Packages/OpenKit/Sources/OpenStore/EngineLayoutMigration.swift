@@ -368,7 +368,8 @@ enum EngineLayoutMigration {
               let dash = target.lastIndex(of: "-"), let pid = Int32(target[target.index(after: dash)...]) else { return nil }
         var host = [CChar](repeating: 0, count: 256)
         gethostname(&host, host.count)
-        guard String(target[..<dash]) == String(cString: host), pid > 0, pid != getpid() else { return nil }
+        let hostName = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        guard String(target[..<dash]) == hostName, pid > 0, pid != getpid() else { return nil }
         return kill(pid, 0) == 0 || errno == EPERM ? pid : nil
     }
 
