@@ -205,6 +205,11 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   // Keeps this object (and so the parent view) alive from -close until
   // Chromium reports the browser closed.
   OEWebContent* _closingSelf;
+  // Keeps this object (and so the parent view) alive from CreateBrowser
+  // until OnAfterCreated: CEF creates the browser in a later task and
+  // dereferences the parent NSView then (a freed view crashed in
+  // CefBrowserPlatformDelegateNativeMac::CreateHostWindow).
+  OEWebContent* _creatingSelf;
 }
 
 - (instancetype)initWithConfiguration:(OEWebContentConfiguration*)configuration
@@ -357,6 +362,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   info.SetAsChild((__bridge CefWindowHandle)_view,
                   CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   info.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
+  _creatingSelf = self;
   CefBrowserHost::CreateBrowser(info, _client.get(), url,
                                 [self oe_browserSettings],
                                 [self oe_extraInfo], context);
@@ -387,6 +393,7 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
                         CefRect(0, 0, (int)b.size.width, (int)b.size.height));
   windowInfo.runtime_style = CEF_RUNTIME_STYLE_ALLOY;
   _configuration.runtimeStyle = OERuntimeStyleAlloy;
+  _creatingSelf = self;
   return YES;
 }
 
@@ -407,6 +414,18 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _browser = browser;
   _creating = NO;
   _awaitingPopup = NO;
+  // Released at the end of this method; -close or the parking path in
+  // -dealloc take over from here.
+  OEWebContent* keepAlive = _creatingSelf;
+  _creatingSelf = nil;
+  (void)keepAlive;
+  if (_closeRequested) {
+    // Closed while Chromium was still creating the browser.
+    _closingSelf = self;
+    _client->SetClosing();
+    browser->GetHost()->CloseBrowser(true);
+    return;
+  }
   if (_muted) {
     browser->GetHost()->SetAudioMuted(true);
   }
