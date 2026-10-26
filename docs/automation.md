@@ -14,6 +14,17 @@ verify-all, or offscreen render checks. Nested peer instances within a suite use
 that suite's existing lock; they do not acquire it again. The lock serializes
 agents, while native-focus interruption tracking still covers user activity.
 
+Builds, `swift build`, and every `tools/verify-all.sh` invocation use the separate
+machine-wide heavy-job slot script (two jobs at a time):
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
+~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/verify-all.sh
+```
+
+Do not hold the on-screen lock while waiting for a heavy-job slot. Keep the
+on-screen lock around one suite only; take the heavy slot around build steps.
+
 ## Enable
 
 - Debug builds always include it (`SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG OPEN_AUTOMATION`, `project.yml`).
@@ -135,20 +146,20 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 ## End-to-end suites
 
 ```sh
-tools/build.sh Debug
-tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
-tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
-tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
-tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
-tools/e2e/engine_e2e.py --only features --style alloy      # engine features
-tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
-tools/e2e/engine_e2e.py --only extensions --style chrome
-tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
-OPEN_AUTOMATION=1 tools/build.sh Release
-tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
+~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Debug
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only shell                       # model, keyboard, split, persistence
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only window --config Release     # startup, lifecycle failures, real window, persistence, static comparison
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar                     # intents, correct live page, cache eviction, static comparison
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only peek                        # promotion identity, cleanup, model strip, live pane color
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only features --style alloy      # engine features
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style alloy    # needs .re/ext/unpacked/*
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only extensions --style chrome
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only tabstrip --style chrome     # fork patch P1: chrome.tabs sees Open's tabs
+OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/build.sh Release
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh user data dir under `~/Library/Application Support/Open-E2E-*` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Each suite uses a fresh worktree-private data root under `.re/e2e-<suite>-<style>/user-data` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame

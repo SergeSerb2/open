@@ -900,3 +900,77 @@ processes are closed and `.re/hold-on-screen` prevents new launches. The estimat
 11:15 end is not authorization to resume. The required three repetitions of
 window/sidebar/shell/features/actions in Debug and Release, the final PR body,
 and push remain pending the lead's explicit resume.
+
+
+## Step C review update: main merge, focus and capture checks
+
+Main is merged through `a962f39`. #53's factory/delegate structure and strip order,
+#90's window geometry and reveal behavior, both Package.swift sides and every
+verify-all row are retained. No rebase or force-push. TabStripMirror,
+ExtensionTabRequests and the factory's OEBrowserDelegate section match main.
+The sole additional reveal hook applies only after the existing tagged automation
+pointer filter is installed; its default nil preserves ordinary deactivation behavior.
+
+| Reported failure | Root cause and evidence | Change |
+|---|---|---|
+| Native key focus (`keyWindow=0`) | A raw executable can show a window without a foreground grant. Same-app raw-vs-LaunchServices controls are retained in `focus-capture-causes.json`. Activation is asynchronous and can be refused or lost to another app. | Launch the exact bundle through LaunchServices; activate only its verified PID; wait for the actual requested key window before native input. A lost grant is INTERRUPTED, not PASS. |
+| Page editing after command-bar navigation | The old native view stayed first responder, but the committed renderer reported `document.hasFocus=false`. | Restore focus after load only if that page is still selected, its window is key and the bar is closed. The real native Copy/Paste/Undo/Select All/Cut assertions remain. |
+| Comparison capture size | AppKit constrained a 1394 pt request to 1050 on a 1080 pt display. A controlled larger request likewise clipped under ordinary constraints and stayed exact with the existing capture hook. | Keep #90's unconstrained automation frame mode and poll the exact reference dimensions. No comparison tolerance changes. |
+| Hover and card-pixel checks | Synthetic moves previously advanced before native dequeue, and real activation traces then confirmed repeated didResignActive notifications during dwell/hold/capture. The production card intentionally dismisses on resignation. The lead confirmed concurrent user/agent foreground use. | Acknowledge each tagged native motion and reveal-tracker delivery. Tagged pointer sessions ignore unrelated activation changes; normal sessions still dismiss. A real-app check yields only Open and verifies reveal/dismiss while inactive. Pixel/native-focus steps retain interruption evidence and bounded retries. |
+| Direct deactivation control failed | NSApp.deactivate did not complete a foreground handoff or emit a resignation in the controlled run; native key-window readiness then timed out. This was a control-method failure, not evidence of a page/menu defect. | Replace it with a second owned Open process, exact-executable validation and AppKit cooperative activation. Native resignation itself is sufficient interruption evidence; app metadata can update later. Retain the failed control receipts. |
+| Save fixture focus | The fixture tried to focus an old background tab after selecting a newer custom-search tab. | Select and load the target before focusing it. |
+| Cross-worktree/process interference | Shared suite data roots and launcher-only cleanup could leave an old app running or collide with another worktree. | Private worktree data roots, actual socket PID/executable validation, and app-PID cleanup. Signal handling finishes the current child before stopping. |
+
+Native-focus steps record the readiness-grant uptime and the actual frontmost app
+name/PID. Foreground loss before an assertion marks the attempt INTERRUPTED even
+if its assertion succeeded. Up to three fresh workflow attempts avoid replaying a
+destructive key against partially changed state. Each original assertion is kept;
+only a complete uninterrupted retry can contribute accepted passes. Exhaustion
+exits 2. Ordinary assertion failures exit 1. The native fault-injection receipt
+checks this policy against two owned real app instances, not an isolated model or mock.
+
+The lead cannot reserve the foreground. Remaining interrupted workflows therefore
+stay pending the lead's exclusive focus-dependent verification before merge.
+All timing misses, ordinary failures, interrupted attempts, named Debug timing
+SKIPs and durable profile-storage BLOCKED rows remain explicit in the linked
+summary and raw receipts. Step I must remeasure launch budgets on an idle machine.
+
+
+All final on-screen invocations hold `/tmp/open-onscreen-e2e.lock` through
+`/usr/bin/lockf`, one suite at a time. Builds and offscreen checks do not hold it.
+Pre-lock foreground interruptions remain in their own phase; they do not enter
+the final accepted matrix.
+
+Builds and the 19-row full verifier completed before the 13:06 local heavy-job
+slot rule. Future build/verifier commands use `heavy.sh`. No slot was held while
+the on-screen matrix ran. The recorded timings remain loaded-machine evidence.
+
+
+### Final locked matrix and remaining acceptance gap
+
+Tested source `342800c`, main `a962f39`, default fork UUID
+`4C4C4432-5555-3144-A144-B678285BC5F4`, Chrome hosting. All 30 requested
+Debug/Release invocations finished. Full verify-all: **19 PASS, no SKIP**;
+sidebar-render **368/368**, features-render **151/151**. All twelve live static
+comparisons passed within **1 pt / ΔE00 1.61**.
+
+The final matrix has **zero foreground interruptions**. All Debug rows pass.
+Release window runs each pass 45 functional checks and fail both 250 ms sidebar
+launch budgets under load; all six first-paint medians pass 700 ms. They remain
+recorded load exceptions for Step I, not passes. Release actions repetition 1
+stops after six passes with a native key-readiness FAIL before page Copy, despite
+its error reporting active=true and equal target/key window numbers. No external
+foreground loss was observed. Its exact cause is **unconfirmed**. Later 45/45
+runs and 80 additional locked real-app navigation/Copy cycles do not erase it.
+The exact two-tab diagnostic captured 400 native input steps with active/key state
+at every before/after boundary. Focus acceptance remains pending the lead
+exclusive run. No timing budget or comparison tolerance changed.
+
+[Full three-run tables, six Release medians, command-bar timings and all verifier rows](engine-spike/step-c-main-recheck/final-summary.md).
+[Unresolved focus failure and diagnostic provenance](engine-spike/step-c-main-recheck/focus-readiness-unresolved.json).
+
+Earlier phases retain their code-4 fullscreen failure, Widevine download misses
+and command-bar timing misses with their original revisions. These did not recur
+in the final matrix; their historical underlying causes are not declared fixed.
+The final Open command-bar, Settings and Library screenshots were inspected.
+No new Arc comparison is claimed for those three windows.

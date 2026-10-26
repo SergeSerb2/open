@@ -1,30 +1,46 @@
-# Step C main-merge diagnostics — display hold
+# Step C main-merge verification
 
-These are diagnostic attempts, not the requested completed three-run acceptance matrix.
-The lead held on-screen Open runs at 09:58 on 2026-10-26 (America/Vancouver).
-No automatic resume is authorized. See `run-state.json`.
+The final locked matrix uses source `342800c`, main merged through `a962f39`,
+the default fork, and Chrome hosting. See [final-summary.md](final-summary.md)
+for every repetition, timing miss, interrupted attempt, comparison and verifier
+row. Each on-screen invocation holds the shared lock for its own launch/cleanup.
+Builds and offscreen checks do not hold it. Source receipts precede the later
+commit that records these results.
 
-- `focus-capture-causes.json`: real-app raw-launch vs bundle-launch native states,
-  capture size negative control, and the pre-fix native/renderer focus mismatch.
-- `diagnostic-actions-debug.json`: 45/45 checks after the command-bar navigation
-  focus fix, before the final pointer/PID/cleanup changes. Fork / Chrome.
-- `before-motion-ack/`: first diagnostic matrix; retains the first hide/reveal
-  failure and subsequent passing run. Debug only. Not three complete repetitions.
-- `interrupted-display-hold/`: partial second attempt. Key-focus/hover failures
-  remain failures. The features session was interrupted and has no complete receipt.
-- `diagnostic-*.png`: Open's own synthetic-fixture windows captured before the
-  display hold. They are diagnostic screenshots, not final acceptance screenshots.
+`native-focus-negative-control-summary.json` verifies the interruption policy
+against two owned real Open processes. Its three deliberately interrupted native
+keyboard attempts are expected control results, not three accepted suite passes.
+The ordinary matrix is separate.
 
-Later foreground failures are not cleared by the earlier 45/45 run. Native motion
-acknowledgement did not establish a complete fix: its first subsequent window
-attempt still failed hide/reveal and reported appActive=false/keyWindow=0. Exact-PID
-activation, app-PID cleanup and worktree-private data roots need the resumed run.
+`focus-readiness-unresolved.json` records one genuine final Release actions
+readiness failure and 80 additional real-app diagnostic cycles. Its cause is
+unconfirmed; it remains FAIL and is not cleared by later passes.
 
-The interrupted supervisors left two own Open processes. Both were identified by
-socket-reported PID and closed through those sockets. The next supervisor records
-stop requests and waits for the current child instead of interrupting subprocess.run.
+History stays separate and keeps its original failures and source revisions:
 
-The final required matrix remains: window, sidebar, shell, features and actions,
-three repetitions each, Debug and Release, default fork and production Chrome hosting.
-Every attempt must remain recorded. Durable profile-storage BLOCKED rows and Debug
-Release-only timing SKIPs must remain explicit.
+- `focus-capture-causes.json`: raw executable versus bundle launch, constrained
+  capture-size control, and the pre-fix native/renderer focus mismatch.
+- `before-motion-ack/`, `interrupted-display-hold/`, `resumed-before-hover-fix/`:
+  original focus/hover/capture failures and the lead-requested display hold.
+- `foreground-trace-before-isolation/`: native resignation traces during hover.
+- `pointer-isolation-before-background-check/`: first tagged-pointer isolation run.
+- `pre-b5f3034/`: partial matrix before the next required main merge.
+- `post-b5f3034/`: complete earlier 30-run matrix. It retains one engine code-4
+  fullscreen failure, two Widevine download misses, command-bar latency misses,
+  launch-budget misses and foreground interruptions. Those are not erased by
+  later passing runs.
+- `pre-shared-lock-b4b8817/`: three Debug repetitions before the machine-wide
+  lock rule. An exhausted actions workflow and an interrupted shell retry remain
+  INTERRUPTED. No Release acceptance is claimed for this partial phase.
+- `native-focus-control-deactivate-*`: failed diagnostic method; NSApp.deactivate
+  did not produce the required handoff. The final cooperative owned-peer control
+  replaces that method without treating its failure as a product pass.
+- `fullscreen-diagnostic-summary.json`: additional real fullscreen cycles after
+  the earlier code-4 failure. They passed, but its underlying engine lifetime
+  cause remains unconfirmed.
+- `diagnostic-*.png` and `diagnostic-actions-debug.json`: early synthetic Open
+  fixtures; diagnostic evidence, not the final acceptance matrix.
+
+Only Open's own synthetic-fixture screenshots are published. Arc pixels,
+snapshot content and comparison images remain private under `.re/`; only numeric
+comparison tables leave that directory. No unit tests or system desktop input.
