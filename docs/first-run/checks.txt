@@ -51,7 +51,7 @@ PASS profile-archive-scope
 PASS profile-downloads
 ACTION clearBrowsingData 10000000-0000-0000-0000-000000000001 kinds=3 range=All time
 PASS clear-data
-ACTION deleteProfileData 2E821CB8-3A22-4498-9D06-98D294DB17E7
+ACTION deleteProfileData D3939EB1-1D1C-4433-B752-B4888D41F3E6
 PASS profile-guards
 PASS links-rules
 ACTION keyBindingsDidChange
@@ -100,8 +100,8 @@ PASS archive-save-failure
 ACTION deleteArchived 50000000-0000-0000-0000-000000000001
 ACTION deleteArchived 50000000-0000-0000-0000-000000000003
 PASS archive-owner-partial
-ACTION setAdBlockExcludedDomains example.org BF57AA0A-433B-4180-A6F6-964934EDF441
-ACTION deleteProfileData BF57AA0A-433B-4180-A6F6-964934EDF441
+ACTION setAdBlockExcludedDomains example.org 7759283C-11C2-4B9D-8FC5-87068784A2D7
+ACTION deleteProfileData 7759283C-11C2-4B9D-8FC5-87068784A2D7
 PASS adblock-profile-lifecycle
 PASS suggestion-notice
 ACTION keyBindingsDidChange
@@ -111,8 +111,8 @@ ACTION keyBindingsDidChange
 PASS shortcuts-recording-admission
 PASS archive-paging
 PASS links-save-failure
-ACTION setAdBlockExcludedDomains example.org 02AB0C94-F781-46D1-A932-D33594EA2BCF
-ACTION deleteProfileData 02AB0C94-F781-46D1-A932-D33594EA2BCF
+ACTION setAdBlockExcludedDomains example.org 81DF700A-6092-4146-A053-E8349EEF0B7C
+ACTION deleteProfileData 81DF700A-6092-4146-A053-E8349EEF0B7C
 PASS adblock-readiness
 ACTION keyBindingsDidChange
 PASS settings-caches
@@ -123,11 +123,17 @@ ACTION setAsDefaultBrowser
 ACTION setAsDefaultBrowser
 ACTION finishFirstRun imported=true
 ACTION runImport spaces=true archive=true history=false secrets=false
+ACTION finishFirstRun imported=true
+ACTION runImport spaces=true archive=true history=false secrets=false
 ACTION finishFirstRun imported=false
-PASS first-run-flows
+PASS first-run-actions-and-adapter-gate
 ACTION finishFirstRun imported=false
 ACTION finishFirstRun imported=false
 ACTION runImport spaces=true archive=true history=false secrets=false
-PROBE fixture spaces=2 items=4 archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.001672083
+PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.001780334
 PASS first-run-probe
-SUMMARY 30 checks passed, 0 failed
+PARITY actual-import archive=2 profiles=2 engines=2 history=3(partial) saved=4(partial)
+PASS first-run-count-parity
+COPY cancelled-mid-file=true private-modes=true temp-removed=true source-unchanged=true
+PASS probe-cancel-mid-copy
+SUMMARY 32 checks passed, 0 failed

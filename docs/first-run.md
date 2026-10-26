@@ -1,12 +1,10 @@
 # First run: Steps A and B
 
-Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance). The user requested the designer review before Step C. No App/ file changes, window controller, startup trigger, completion save, model swap, engine import adapter, background-history landing, automation socket command, or real default-browser call is included. Steps C–F remain pending.
+Implements [first-run.md §11 A/B](plans/first-run.md#11-implementation-order-small-prs-each-step-files-then-acceptance), including review round 1. Steps C–F remain pending. This PR adds no App wiring, startup trigger, completion save, model swap, engine import adapter, real default-browser call or launch-timing claim.
 
-`FirstRunViewModel` and `FirstRunView` live in OpenSettings. The single size is `FirstRunWindow.size` (560×460), backed by Settings tokens. Colors, grouped rows, borders, button style, and typography use the Settings controls or system defaults. Step transitions use `Motion.selectionFade` and cut when Reduce Motion is on. The preview uses Open's own drawn icon; no reference artwork is copied.
+`FirstRunViewModel` and `FirstRunView` live in OpenSettings. `FirstRunWindow.size` is 560 × 520 pt. OpenDesign Settings tokens supply the insets, grouped rows, typography and colors. `SettingsButtonStyle` supplies the prominent default button: accent/white while key, normal gray while inactive. Welcome uses a 28 pt semibold wordmark and 28 pt buttons. Import and Report pin the heading/footer around a scrolling middle with automatic indicators. Sparse screens center a visual and text above the footer. Step transitions use `Motion.selectionFade` and cut with Reduce Motion.
 
 ## App seam for Step C
-
-Retain the app's action object with the model. It implements `FirstRunActions` and `SettingsActions`; both inherit the same `ImportActions` requirement. Forward `runImport`, `setAsDefaultBrowser`, and `isDefaultBrowser` to the same implementation used by Settings.
 
 ```swift
 let firstRun = FirstRunViewModel(
@@ -14,50 +12,77 @@ let firstRun = FirstRunViewModel(
 let content = FirstRunView(model: firstRun)
 ```
 
-Pass the existing Settings owner and its injected shared SnapshotStore. First run creates no writer. The model retains that owner because the shared wizard borrows it. The app fills `arcIsRunning`; OpenImport imports no AppKit. Progress assignments (`phaseText`, `progress`, `browserHasLanded`) are event-driven seams for the later action adapter. The flow calls `finishFirstRun(imported:)`; the App must save successfully before recording completion or closing the window. This step never writes `open.firstRun.completed` or saves a first-run snapshot.
+The model strongly retains its action object and the Settings owner. `FirstRunActions` and `SettingsActions` inherit one `ImportActions` requirement. Forward import and default-browser operations to the same implementation. Pass the existing Settings owner with its injected shared SnapshotStore. First run creates no writer.
 
-First run owns one `ImportWizardViewModel`. It builds the existing `ImportPlan` and uses the wizard's consent/skip execution. `PasswordsImportCopy` is the only source of both capability-dependent texts and button labels. The capability stays OFF in this build. Unknown counts have an honest shared fallback. Cancel keeps the choices. Only the existing explicit allow method can set consent, and it is disabled by the capability gate.
+The app fills `arcIsRunning`. Progress assignments (`phaseText`, `progress`, `browserHasLanded`) are seams for the later adapter. `finishFirstRun(imported:)` uses the shared `ImportOutcome.didImportAnything` key set; canonical adapter keys and display aliases are handled once. The App must save successfully before recording completion or closing. Call `reportSaveFailure(imported:)` on failure: the fresh path has its own centered message. This step never writes `open.firstRun.completed` or saves a first-run snapshot.
 
-Counting and importing have separate state. A pending estimate does not gate Start fresh, Not now, or Continue. A late result updates counts without changing the current step. Closing the view cancels its task; the probe cancels its utility worker and the history reader checks cancellation between batches.
+Step C must verify the 36 pt inset beneath a real transparent title bar, keyboard order, key/inactive button styling, and the 80 pt application-icon frame (about 64 pt ink). The preview draws Open’s own icon; no reference artwork is copied.
+
+One `ImportWizardViewModel` owns the plan and consent gate. `PasswordsImportCopy` supplies the shared body, later note, help variants and buttons. The capability stays OFF: both flows disable the checkbox and exclude it from selection. Capability-ON renders stop before Allow. Cancel/Back keep choices. The Failed footer returns to Import without changing them. Default-browser entry makes no system call; error and decline messages are exclusive, and an already-default browser offers only Start Browsing.
+
+Counting and importing have separate state. Pending counts never gate first-run Start Fresh, Not Now or Continue. A late result updates counts without changing the step. Closing cancels the utility count task. Settings loads Space labels on that worker before enabling Review. `FirstRunView(startsProbe:false)` is used only by the CLI to hold deliberate counting/error render states; normal callers keep the default automatic probe.
 
 ## Shared count probe
 
-`ArcProbe(arcDirectory:).run()` returns Sendable count values. It owns a utility task and never constructs a BrowserModel. The Settings wizard's `refreshCounts` and first run's `refreshProbe` use that same result. The former independent wizard counter and main-actor import-for-counts were removed. Space names are loaded separately, only for the Settings Review UI, on a utility worker; they never enter a probe result or CLI receipt.
+`ArcProbe(arcDirectory:).run()` returns Sendable counts/flags, never URLs, titles, usernames, secrets or BrowserModel objects. Settings `refreshCounts` and first-run `refreshProbe` consume it. There is no second counter.
 
-The probe uses the importer's immutable sidebar parse and estimates non-container entries. These estimates can include folders and unsupported items, so Welcome says “about”. Archive is the raw alternating-entry count. History uses the existing streaming reader's `keptVisits`, matching plan F2: the six-row fixture keeps three. This resolves the earlier raw COUNT instruction in §2.2. It shares schema, scheme, transition and date filtering with import. Login/cookie counts use `ArcSecretsReader.countOnly`; `savedItems` also includes addresses/cards for the shared Passwords copy. Missing data stays nil; a failed kind does not erase other estimates.
+Archive selection and the full profile metadata merge are shared value helpers used by the probe and `ArcImporter.importAll`. Archive counts apply the same kind/reason/source/duplicate/live-ID/URL filters. `rawArchiveItems` is diagnostic only. Profile and engine counts include unused `StorableProfiles.json` metadata and preserve a named Default profile. Sidebar tab estimates still include unsupported entries, so Welcome says “about”.
 
-Both readers use the existing `ArcSQLiteCopy`: private 0700 directory, exclusive 0600 files, DB plus WAL or journal, no SHM copy, quick_check, one 200 ms fresh-copy retry, and cleanup. The probe never opens a source SQLite connection. Profile basenames come from named metadata files, with no scan of unrelated files. Results contain no URLs, titles, usernames, or secret values.
+History uses the existing reader’s filtered `keptVisits`. Saved-item counts use `ArcSecretsReader.countOnly`, including addresses/cards for the shared copy. Results retain counts per opaque profile ID, sum successful reads and append “(partial)” if another profile failed. All-failed counts remain unknown. A missing source stays absent.
 
-A counts-only caller is available because Settings also needs this API:
+SQLite reads copy first through `ArcSQLiteCopy`: private 0700 directory, exclusive 0600 files, DB plus WAL or journal, no SHM, quick_check, one 200 ms fresh-copy retry, then cleanup. Cancellation is checked between copy chunks and history batches. JSON/profile resolution and counting run on the utility worker. The later import model build remains main-actor work and is outside the probe; Step D must measure it on a large graph before app integration. No source SQLite connection is opened by the probe.
 
 ```sh
 Packages/OpenKit/.build/release/settings-preview probe --arc-dir /tmp/synthetic-source
-Packages/OpenKit/.build/release/settings-preview render --first-run-only --out /tmp/first-run --scale both
+Packages/OpenKit/.build/release/settings-preview check
+Packages/OpenKit/.build/release/settings-preview render --out /tmp/settings-panes --scale both
 ```
-
-The probe command requires an explicit source folder and emits counts/flags/timing JSON only. It never asks for consent or calls Keychain.
 
 ## Verification
 
-No unit tests or desktop automation. `settings-preview check` exercises the real view-model entry points, settings files, SQLite readers, WAL copy path and action boundaries. The intentional first-run preview action is a logger with a canned outcome derived from a small synthetic import report. It is not a browser adapter or native launch acceptance.
+No unit tests or desktop automation. All 32 `settings-preview check` flows pass ([receipt](first-run/checks.txt)). They exercise the real view-model entry points, files, importer, SQLite readers and action boundaries. The first-run logger is intentionally a preview adapter, with a canned outcome derived from an actual synthetic import report; this is not app launch acceptance.
 
-`first-run-flows` covers fresh/skip/cancel, capability rejection, success/failure/retry states, default-browser failure/decline/success, and absence of completion/snapshot writes. `first-run-probe` covers the shared wizard/first-run result, empty state, a failing slow probe with live first-run buttons, a WAL writer with committed and uncommitted rows, unchanged source hashes, and a real openkit import that preserves an explicitly named Default profile. All 30 checks pass ([receipt](first-run/checks.txt)). Existing settings checks also run. The PR contains the final verify-all table.
+| Check | Proof |
+|---|---|
+| first-run-actions-and-adapter-gate | Fresh/skip/cancel, unavailable checkbox, capability rejection, canonical adapter outcome keys, imported finish flag, retry, default-browser states, no completion or snapshot writes |
+| first-run-probe | Shared consumer result, ready mapping labels, empty source, late failing probe, named Default through real CLI import, History WAL committed/uncommitted rows and unchanged source bytes |
+| first-run-count-parity | Probe vs actual ArcImporter report/records; all Archive filters; unused named Default metadata; readable counts survive a bad second profile and show partial |
+| probe-cancel-mid-copy | Cancels the actual utility task after the first 256 KiB of an owned 8 MiB fixture copy; verifies 0700/0600, partial copy removal and unchanged source |
 
-The skip render logs `ACTION runImport spaces=true archive=true history=false secrets=false`. Its adapter reports zero consent-bearing plans and zero **simulated** Keychain requests. This proves the wizard gate at that adapter, not interception of arbitrary Keychain APIs. No real Keychain API, real user import, engine build, or system-default change ran.
+The cancellation audit is internal and task-local. Its public verification entry point constructs only its own synthetic /tmp source; it accepts no user path. It cancels a real file copy instead of replacing the reader. The adapter-gate check counts **simulated** requests in that adapter only; it does not intercept arbitrary Keychain APIs. No real Keychain API, consent token, user-data import, engine build or system-default change ran.
 
-The [manual probe receipt](first-run/probe-checks.json) came from a hand-built private /tmp source with plan §10.1 JSON and SQLite shapes. Only the temporary driver and fixtures existed under /tmp; fixtures were deleted. Counts were exact: 2 Spaces, 9 non-container items, 3 Archive entries, 3 kept visits, 3 login/cookie rows. The WAL case kept 4 committed visits while an eighth row was uncommitted. The empty source returned sidebarFound=false. The malformed sidebar kept other counts. The 10,000-item/100,000-visit fixture completed in about 64 ms; the small source in about 31 ms. All O(n) count work runs on the utility task. These are probe measurements, not cold-launch, graph-install, or real-window performance results.
+The refreshed [manual receipt](first-run/probe-checks.json) uses a hand-built private /tmp fixture: 2 Spaces, 9 sidebar items, 3 raw Archive entries / 2 importable tabs, 3 kept visits, 3 login/cookie rows. The WAL case keeps 4 committed visits and ignores an uncommitted row. Empty and malformed sources retain honest absent/failed counts. The 10,000-item/100,000-visit probe completes under 1 second; see the receipt for measured times. Fixtures were deleted. This measures the probe, not launch or graph installation.
 
-## Six screens for design review
+## Permanent render inventory
 
-All 12 synthetic PNGs were inspected. The found counts are estimates; the fake report uses the actual small fixture's import report, so its three Archive entries become two imported Archive entries and one skipped easel. A second skipped easel comes from the sidebar. Passwords show zero imported. [PNG hashes](first-run/sha256.txt) bind these images.
+All 186 PNGs were rendered and visually inspected: 100 first-run images below and 86 Settings/Library images in [settings.md](settings.md). Each first-run state uses one explicit appearance, at both 1x and 2x. The offscreen renderer supplies key/inactive control state to the same button style; Step C verifies the native window transition. [SHA-256 receipts](first-run/sha256.txt) bind every first-run PNG. The unavailable Passwords screen is an unreachable copy reference; capability-ON images do not execute consent. Import hints, partial counts and worst-case reports are permanent renderer states.
 
-| Screen | 1x | 2x |
-|---|---|---|
-| Welcome | [PNG](first-run/first-run-welcome@1x.png) | [PNG](first-run/first-run-welcome@2x.png) |
-| Import | [PNG](first-run/first-run-import@1x.png) | [PNG](first-run/first-run-import@2x.png) |
-| Passwords | [PNG](first-run/first-run-secrets@1x.png) | [PNG](first-run/first-run-secrets@2x.png) |
-| Progress | [PNG](first-run/first-run-progress@1x.png) | [PNG](first-run/first-run-progress@2x.png) |
-| Report | [PNG](first-run/first-run-report@1x.png) | [PNG](first-run/first-run-report@2x.png) |
-| Default browser | [PNG](first-run/first-run-default-browser@1x.png) | [PNG](first-run/first-run-default-browser@2x.png) |
+| State | Dark 1x | Dark 2x | Light 1x | Light 2x |
+|---|---|---|---|---|
+| welcome | [PNG](first-run/first-run-welcome@1x.png) | [PNG](first-run/first-run-welcome@2x.png) | [PNG](first-run/first-run-welcome-light@1x.png) | [PNG](first-run/first-run-welcome-light@2x.png) |
+| welcome-inactive | [PNG](first-run/first-run-welcome-inactive@1x.png) | [PNG](first-run/first-run-welcome-inactive@2x.png) | [PNG](first-run/first-run-welcome-inactive-light@1x.png) | [PNG](first-run/first-run-welcome-inactive-light@2x.png) |
+| welcome-counting | [PNG](first-run/first-run-welcome-counting@1x.png) | [PNG](first-run/first-run-welcome-counting@2x.png) | [PNG](first-run/first-run-welcome-counting-light@1x.png) | [PNG](first-run/first-run-welcome-counting-light@2x.png) |
+| welcome-nodata | [PNG](first-run/first-run-welcome-nodata@1x.png) | [PNG](first-run/first-run-welcome-nodata@2x.png) | [PNG](first-run/first-run-welcome-nodata-light@1x.png) | [PNG](first-run/first-run-welcome-nodata-light@2x.png) |
+| welcome-saveerror | [PNG](first-run/first-run-welcome-saveerror@1x.png) | [PNG](first-run/first-run-welcome-saveerror@2x.png) | [PNG](first-run/first-run-welcome-saveerror-light@1x.png) | [PNG](first-run/first-run-welcome-saveerror-light@2x.png) |
+| import | [PNG](first-run/first-run-import@1x.png) | [PNG](first-run/first-run-import@2x.png) | [PNG](first-run/first-run-import-light@1x.png) | [PNG](first-run/first-run-import-light@2x.png) |
+| import-arcrunning | [PNG](first-run/first-run-import-arcrunning@1x.png) | [PNG](first-run/first-run-import-arcrunning@2x.png) | [PNG](first-run/first-run-import-arcrunning-light@1x.png) | [PNG](first-run/first-run-import-arcrunning-light@2x.png) |
+| import-counting | [PNG](first-run/first-run-import-counting@1x.png) | [PNG](first-run/first-run-import-counting@2x.png) | [PNG](first-run/first-run-import-counting-light@1x.png) | [PNG](first-run/first-run-import-counting-light@2x.png) |
+| import-nodata | [PNG](first-run/first-run-import-nodata@1x.png) | [PNG](first-run/first-run-import-nodata@2x.png) | [PNG](first-run/first-run-import-nodata-light@1x.png) | [PNG](first-run/first-run-import-nodata-light@2x.png) |
+| import-parsehint | [PNG](first-run/first-run-import-parsehint@1x.png) | [PNG](first-run/first-run-import-parsehint@2x.png) | [PNG](first-run/first-run-import-parsehint-light@1x.png) | [PNG](first-run/first-run-import-parsehint-light@2x.png) |
+| import-parsehint-running | [PNG](first-run/first-run-import-parsehint-running@1x.png) | [PNG](first-run/first-run-import-parsehint-running@2x.png) | [PNG](first-run/first-run-import-parsehint-running-light@1x.png) | [PNG](first-run/first-run-import-parsehint-running-light@2x.png) |
+| import-partial | [PNG](first-run/first-run-import-partial@1x.png) | [PNG](first-run/first-run-import-partial@2x.png) | [PNG](first-run/first-run-import-partial-light@1x.png) | [PNG](first-run/first-run-import-partial-light@2x.png) |
+| import-capability-on | [PNG](first-run/first-run-import-capability-on@1x.png) | [PNG](first-run/first-run-import-capability-on@2x.png) | [PNG](first-run/first-run-import-capability-on-light@1x.png) | [PNG](first-run/first-run-import-capability-on-light@2x.png) |
+| secrets | [PNG](first-run/first-run-secrets@1x.png) | [PNG](first-run/first-run-secrets@2x.png) | [PNG](first-run/first-run-secrets-light@1x.png) | [PNG](first-run/first-run-secrets-light@2x.png) |
+| secrets-on | [PNG](first-run/first-run-secrets-on@1x.png) | [PNG](first-run/first-run-secrets-on@2x.png) | [PNG](first-run/first-run-secrets-on-light@1x.png) | [PNG](first-run/first-run-secrets-on-light@2x.png) |
+| progress | [PNG](first-run/first-run-progress@1x.png) | [PNG](first-run/first-run-progress@2x.png) | [PNG](first-run/first-run-progress-light@1x.png) | [PNG](first-run/first-run-progress-light@2x.png) |
+| progress-history-landed | [PNG](first-run/first-run-progress-history-landed@1x.png) | [PNG](first-run/first-run-progress-history-landed@2x.png) | [PNG](first-run/first-run-progress-history-landed-light@1x.png) | [PNG](first-run/first-run-progress-history-landed-light@2x.png) |
+| report | [PNG](first-run/first-run-report@1x.png) | [PNG](first-run/first-run-report@2x.png) | [PNG](first-run/first-run-report-light@1x.png) | [PNG](first-run/first-run-report-light@2x.png) |
+| report-worst | [PNG](first-run/first-run-report-worst@1x.png) | [PNG](first-run/first-run-report-worst@2x.png) | [PNG](first-run/first-run-report-worst-light@1x.png) | [PNG](first-run/first-run-report-worst-light@2x.png) |
+| report-saveerror | [PNG](first-run/first-run-report-saveerror@1x.png) | [PNG](first-run/first-run-report-saveerror@2x.png) | [PNG](first-run/first-run-report-saveerror-light@1x.png) | [PNG](first-run/first-run-report-saveerror-light@2x.png) |
+| failed | [PNG](first-run/first-run-failed@1x.png) | [PNG](first-run/first-run-failed@2x.png) | [PNG](first-run/first-run-failed-light@1x.png) | [PNG](first-run/first-run-failed-light@2x.png) |
+| default-browser | [PNG](first-run/first-run-default-browser@1x.png) | [PNG](first-run/first-run-default-browser@2x.png) | [PNG](first-run/first-run-default-browser-light@1x.png) | [PNG](first-run/first-run-default-browser-light@2x.png) |
+| default-declined | [PNG](first-run/first-run-default-declined@1x.png) | [PNG](first-run/first-run-default-declined@2x.png) | [PNG](first-run/first-run-default-declined-light@1x.png) | [PNG](first-run/first-run-default-declined-light@2x.png) |
+| default-error | [PNG](first-run/first-run-default-error@1x.png) | [PNG](first-run/first-run-default-error@2x.png) | [PNG](first-run/first-run-default-error-light@1x.png) | [PNG](first-run/first-run-default-error-light@2x.png) |
+| default-already | [PNG](first-run/first-run-default-already@1x.png) | [PNG](first-run/first-run-default-already@2x.png) | [PNG](first-run/first-run-default-already-light@1x.png) | [PNG](first-run/first-run-default-already-light@2x.png) |
 
-The source-browser name is absent from Welcome status text and appears only on the allowed import button and inside the import flow. The plan's copy registry records these user-requested changes. The designer's review is pending before Step C.
+The Report uses red “Could not be read” count cells, “Not selected” for unrequested History, and one error or skipped-kind summary. No internal accounted/copy counters appear. The plan’s §4 records the shipped copy. Opus re-review remains pending before Step C.

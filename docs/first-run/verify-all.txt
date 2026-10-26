@@ -1,0 +1,16 @@
+NAME                   RESULT SECONDS
+build                  PASS   53
+commands-demo          PASS   0
+roundtrip              PASS   1
+suggest-check          PASS   12
+commands-dump          PASS   0
+route                  PASS   1
+favicons               PASS   1
+sleep-demo             PASS   1
+adblock-perf           PASS   0
+adblock-catalog        PASS   0
+profiles               PASS   1
+settings-preview       PASS   67
+sidebar-render         PASS   17
+commandbar-render      PASS   14
+boosts                 PASS   3

@@ -251,6 +251,10 @@ Additional states: [suggestion notice](settings/sheet-suggestion-notice@1x.png),
 
 All affected PNGs were re-rendered and inspected at both scales. The release build and all 28 settings-preview checks pass. The PR contains the full verify-all summary for its head.
 
-## Shared first-run probe
+## Shared first-run probe and review round 1
 
-First-run Steps A/B replace the wizard's independent count reads with OpenImport.ArcProbe. Counts, file-presence states and cancellation now match first run. No BrowserModel is built for counts. Space mapping labels load only when Review opens, on a utility worker, and are excluded from probe results. Unknown/present-but-unreadable counts no longer show a made-up zero. The count and import busy states are separate so a first-run estimate cannot gate navigation. See [first-run.md](first-run.md) for the 30-flow receipt, WAL checks, timing and six screen pairs. Actual import graph construction is still the import action's responsibility; app-shell Steps C–F are pending.
+First-run Steps A/B replace the wizard's independent count reads with OpenImport.ArcProbe. It builds no BrowserModel. Both flows share the importer's Archive filters and full profile metadata merge, including unused profiles and a distinct named Default. Readable per-profile History and saved-item counts survive another profile's error and show “(partial)”. Space mapping labels load on the utility worker during `refreshCounts`, before Review is enabled, and stay out of probe receipts.
+
+The unavailable Passwords checkbox is disabled and excluded from selection in both flows. Capability-OFF consent renders are copy references only; capability-ON renders stop before consent. `ImportOutcome.didImportAnything` handles canonical adapter keys once for both flows. Default buttons use the prominent Settings style; General's Make Open your default and the wizard's Next/Import/Done/consent buttons use it too. Inactive windows retain the gray fill.
+
+All 86 Settings/Library PNGs were re-rendered and inspected at both scales, including General light/dark and Choose/Review/Passwords/Report. [SHA-256 receipts](settings/sha256.txt) bind them. The renderer supplies explicit key state for these never-ordered windows. See [first-run.md](first-run.md) for the 32-flow receipt, filtered-count parity, cancellation cleanup, WAL checks and 100 permanent first-run state PNGs. Real window integration and graph-build performance remain Steps C–F.
