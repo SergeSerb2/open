@@ -1,0 +1,62 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "40FFC8F7-490B-4D2C-B5E1-B490B09DCA23",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "suite": {
+      "error": "key: key focus not ready: active=true target=83696 key=83696",
+      "ok": false
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "EB90E56C-A59A-439F-9B3F-87A1D33E8F5D"
+        ],
+        [
+          1,
+          "49AAEA4A-CA3B-4833-84EB-B87C85F90AC7"
+        ],
+        [
+          2,
+          "1B71593A-F3DC-47CB-86C5-5336AD4CCB9B"
+        ]
+      ]
+    }
+  },
+  "started": "2026-10-26 11:31:34",
+  "style": "chrome"
+}

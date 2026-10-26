@@ -1,0 +1,425 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "fresh_model": {
+          "ok": true,
+          "spaces": [
+            {
+              "focused": true,
+              "id": "8CDB860A-194A-4881-BCAA-43735DE60C11",
+              "pinned": 0,
+              "title": "Space",
+              "today": 0
+            }
+          ],
+          "tabs": []
+        },
+        "keyboard": {
+          "assertion": {
+            "ok": true,
+            "restored_same_id": true,
+            "routes": {
+              "cmd_l_window": "CommandBarFieldEditor",
+              "cmd_t_app": "CommandBarFieldEditor"
+            },
+            "tabs": [
+              3,
+              4,
+              3
+            ]
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Open",
+              "frontmostPID": 67629,
+              "openPID": 65594,
+              "uptime": 131918.79423266667
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Open",
+              "frontmostPID": 67629,
+              "keyWindow": 0,
+              "openPID": 65594,
+              "uptime": 131918.80193266668
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "tab_strip_mirror": {
+          "ok": true,
+          "sidebar": [
+            [
+              "pinned",
+              "https://example.com/"
+            ],
+            [
+              "today",
+              "https://www.iana.org/help/example-domains"
+            ],
+            [
+              "today",
+              "https://example.org/"
+            ]
+          ],
+          "strip": [
+            [
+              0,
+              "5923C3F3-9DD5-4D3E-A864-42BB88F16002"
+            ],
+            [
+              1,
+              "B35E79E6-386B-48DC-B205-CBF2781594DF"
+            ],
+            [
+              2,
+              "D6FA075E-A12C-4DD7-9A97-F4E687CD1EB5"
+            ]
+          ]
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "Open",
+          "frontmostPID": 67629,
+          "openPID": 65594,
+          "uptime": 131918.79423266667
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "Open",
+          "frontmostPID": 67629,
+          "keyWindow": 0,
+          "openPID": 65594,
+          "uptime": 131918.80193266668
+        }
+      ],
+      "reason": "foreground lost during keyboard",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 2,
+      "checks": {
+        "fresh_model": {
+          "ok": true,
+          "spaces": [
+            {
+              "focused": true,
+              "id": "3E9D84F7-9327-4664-942A-9DE56F7FFCBC",
+              "pinned": 0,
+              "title": "Space",
+              "today": 0
+            }
+          ],
+          "tabs": []
+        },
+        "keyboard": {
+          "assertion": {
+            "ok": true,
+            "restored_same_id": true,
+            "routes": {
+              "cmd_l_window": "CommandBarFieldEditor",
+              "cmd_t_app": "CommandBarFieldEditor"
+            },
+            "tabs": [
+              3,
+              4,
+              3
+            ]
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Open",
+              "frontmostPID": 68011,
+              "openPID": 67977,
+              "uptime": 131926.5982042917
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Open",
+              "frontmostPID": 68011,
+              "keyWindow": 0,
+              "openPID": 67977,
+              "uptime": 131926.60720108333
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "tab_strip_mirror": {
+          "ok": true,
+          "sidebar": [
+            [
+              "pinned",
+              "https://example.com/"
+            ],
+            [
+              "today",
+              "https://www.iana.org/help/example-domains"
+            ],
+            [
+              "today",
+              "https://example.org/"
+            ]
+          ],
+          "strip": [
+            [
+              0,
+              "B54DF80E-6CF8-489A-A46A-036B9E19058A"
+            ],
+            [
+              1,
+              "18D24B52-76C7-4A97-BCBE-990AAFE2D253"
+            ],
+            [
+              2,
+              "CB45CA6A-B759-457F-9EE1-766E53A4D3F5"
+            ]
+          ]
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "Open",
+          "frontmostPID": 68011,
+          "openPID": 67977,
+          "uptime": 131926.5982042917
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "Open",
+          "frontmostPID": 68011,
+          "keyWindow": 0,
+          "openPID": 67977,
+          "uptime": 131926.60720108333
+        }
+      ],
+      "reason": "foreground lost during keyboard",
+      "status": "INTERRUPTED"
+    },
+    {
+      "attempt": 3,
+      "checks": {
+        "fresh_model": {
+          "ok": true,
+          "spaces": [
+            {
+              "focused": true,
+              "id": "70C58F69-793A-47B3-8E7D-4D9E10A661BE",
+              "pinned": 0,
+              "title": "Space",
+              "today": 0
+            }
+          ],
+          "tabs": []
+        },
+        "keyboard": {
+          "assertion": {
+            "ok": true,
+            "restored_same_id": true,
+            "routes": {
+              "cmd_l_window": "CommandBarFieldEditor",
+              "cmd_t_app": "CommandBarFieldEditor"
+            },
+            "tabs": [
+              3,
+              4,
+              3
+            ]
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Open",
+              "frontmostPID": 68359,
+              "openPID": 68319,
+              "uptime": 131934.42862154168
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Open",
+              "frontmostPID": 68359,
+              "keyWindow": 0,
+              "openPID": 68319,
+              "uptime": 131934.43663858334
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "tab_strip_mirror": {
+          "ok": true,
+          "sidebar": [
+            [
+              "pinned",
+              "https://example.com/"
+            ],
+            [
+              "today",
+              "https://www.iana.org/help/example-domains"
+            ],
+            [
+              "today",
+              "https://example.org/"
+            ]
+          ],
+          "strip": [
+            [
+              0,
+              "15673B1A-992D-4B1A-898F-37746978DAB8"
+            ],
+            [
+              1,
+              "57C2787D-DE69-4432-BD17-1486B3A6A780"
+            ],
+            [
+              2,
+              "F392A46C-1132-4C2C-8B14-05092E28ACA5"
+            ]
+          ]
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "Open",
+          "frontmostPID": 68359,
+          "openPID": 68319,
+          "uptime": 131934.42862154168
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "Open",
+          "frontmostPID": 68359,
+          "keyWindow": 0,
+          "openPID": 68319,
+          "uptime": 131934.43663858334
+        }
+      ],
+      "reason": "foreground lost during keyboard",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "70C58F69-793A-47B3-8E7D-4D9E10A661BE",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "keyboard": {
+      "assertion": {
+        "ok": true,
+        "restored_same_id": true,
+        "routes": {
+          "cmd_l_window": "CommandBarFieldEditor",
+          "cmd_t_app": "CommandBarFieldEditor"
+        },
+        "tabs": [
+          3,
+          4,
+          3
+        ]
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "Open",
+          "frontmostPID": 68359,
+          "openPID": 68319,
+          "uptime": 131934.42862154168
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "Open",
+          "frontmostPID": 68359,
+          "keyWindow": 0,
+          "openPID": 68319,
+          "uptime": 131934.43663858334
+        }
+      ],
+      "status": "INTERRUPTED"
+    },
+    "suite": {
+      "attempts": 3,
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "Open",
+          "frontmostPID": 68359,
+          "openPID": 68319,
+          "uptime": 131934.42862154168
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "Open",
+          "frontmostPID": 68359,
+          "keyWindow": 0,
+          "openPID": 68319,
+          "uptime": 131934.43663858334
+        }
+      ],
+      "reason": "foreground lost during keyboard",
+      "status": "INTERRUPTED"
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "15673B1A-992D-4B1A-898F-37746978DAB8"
+        ],
+        [
+          1,
+          "57C2787D-DE69-4432-BD17-1486B3A6A780"
+        ],
+        [
+          2,
+          "F392A46C-1132-4C2C-8B14-05092E28ACA5"
+        ]
+      ]
+    }
+  },
+  "started": "2026-10-26 12:35:55",
+  "style": "chrome"
+}

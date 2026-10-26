@@ -1,0 +1,17 @@
+[
+  {
+    "config": "Debug",
+    "exit": 0,
+    "seconds": null,
+    "head": "8e345dc70ae9b389f36f2dcc7ab0e4689a93fef4",
+    "log": "build-new-debug.log",
+    "executableSHA256": "c9b4dda4fa44b10f0686850cd5347e9191d8146c94c0eed8c4b33374a5d9b4d8"
+  },
+  {
+    "config": "Release",
+    "exit": 0,
+    "seconds": 56.99,
+    "head": "8e345dc70ae9b389f36f2dcc7ab0e4689a93fef4",
+    "executableSHA256": "23660f7e3d1c6cf4d407af4602b897dccd98c0b7ba24666dc6d9ae2884e18b33"
+  }
+]

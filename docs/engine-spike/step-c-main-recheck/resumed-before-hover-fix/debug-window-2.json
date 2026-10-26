@@ -1,0 +1,4186 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "started": "2026-10-26 10:58:25",
+  "style": "chrome",
+  "window": {
+    "all_spaces_strip_order": {
+      "first_after": [
+        {
+          "active": "355AC8F1-919C-4D0C-8C11-DD7969D2CABB",
+          "activeIsMember": true,
+          "contents": [
+            2,
+            1
+          ],
+          "context": "Default",
+          "profile": "EB2102BC-0766-4410-8BFA-84DF099634EF",
+          "tabs": [
+            "355AC8F1-919C-4D0C-8C11-DD7969D2CABB",
+            "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24"
+          ]
+        }
+      ],
+      "first_before": [
+        {
+          "active": "355AC8F1-919C-4D0C-8C11-DD7969D2CABB",
+          "activeIsMember": true,
+          "contents": [
+            2,
+            1
+          ],
+          "context": "Default",
+          "profile": "EB2102BC-0766-4410-8BFA-84DF099634EF",
+          "tabs": [
+            "355AC8F1-919C-4D0C-8C11-DD7969D2CABB",
+            "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24"
+          ]
+        }
+      ],
+      "ok": true,
+      "second_after": [
+        {
+          "active": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+          "activeIsMember": true,
+          "contents": [
+            4,
+            3
+          ],
+          "context": "Default",
+          "profile": "EB2102BC-0766-4410-8BFA-84DF099634EF",
+          "tabs": [
+            "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24",
+            "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+          ]
+        }
+      ],
+      "second_before": [
+        {
+          "active": "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24",
+          "activeIsMember": true,
+          "contents": [
+            4,
+            3
+          ],
+          "context": "Default",
+          "profile": "EB2102BC-0766-4410-8BFA-84DF099634EF",
+          "tabs": [
+            "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24",
+            "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+          ]
+        }
+      ]
+    },
+    "background_lazy": {
+      "ok": true
+    },
+    "card_edges_1x": {
+      "corner_symmetry_max": 9,
+      "corners": {
+        "bottom_left": {
+          "antialiased_rows": 0,
+          "corner_alpha": 0,
+          "edge_by_row": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "max_error_px": 9,
+          "monotonic": true,
+          "reference": [
+            8.57,
+            6.19,
+            4.67,
+            3.53,
+            2.63,
+            1.91,
+            1.33,
+            0.88,
+            0.52,
+            0.26,
+            0.09,
+            0.01,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rows": 0
+        },
+        "bottom_right": {
+          "antialiased_rows": 0,
+          "corner_alpha": 0,
+          "edge_by_row": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "max_error_px": 9,
+          "monotonic": true,
+          "reference": [
+            8.57,
+            6.19,
+            4.67,
+            3.53,
+            2.63,
+            1.91,
+            1.33,
+            0.88,
+            0.52,
+            0.26,
+            0.09,
+            0.01,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rows": 0
+        },
+        "top_left": {
+          "antialiased_rows": 0,
+          "corner_alpha": 0,
+          "edge_by_row": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "max_error_px": 9,
+          "monotonic": true,
+          "reference": [
+            8.57,
+            6.19,
+            4.67,
+            3.53,
+            2.63,
+            1.91,
+            1.33,
+            0.88,
+            0.52,
+            0.26,
+            0.09,
+            0.01,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rows": 0
+        },
+        "top_right": {
+          "antialiased_rows": 0,
+          "corner_alpha": 0,
+          "edge_by_row": [
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "max_error_px": 9,
+          "monotonic": true,
+          "reference": [
+            8.57,
+            6.19,
+            4.67,
+            3.53,
+            2.63,
+            1.91,
+            1.33,
+            0.88,
+            0.52,
+            0.26,
+            0.09,
+            0.01,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rows": 0
+        }
+      },
+      "low_contrast": true,
+      "ok": false,
+      "right_shadow_profile": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "scale": 1.0,
+      "sides": {
+        "bottom": {
+          "contrast": 0.0,
+          "expected": [
+            76,
+            76,
+            76
+          ],
+          "shadow_1px": 0.0,
+          "stroke": [
+            0,
+            0,
+            0
+          ],
+          "stroke_ok": false
+        },
+        "left": {
+          "contrast": 0.0,
+          "expected": [
+            76,
+            76,
+            76
+          ],
+          "shadow_1px": 0.0,
+          "stroke": [
+            0,
+            0,
+            0
+          ],
+          "stroke_ok": false
+        },
+        "right": {
+          "contrast": 0.0,
+          "expected": [
+            76,
+            76,
+            76
+          ],
+          "shadow_1px": 0.0,
+          "stroke": [
+            0,
+            0,
+            0
+          ],
+          "stroke_ok": false
+        },
+        "top": {
+          "contrast": 0.0,
+          "expected": [
+            76,
+            76,
+            76
+          ],
+          "shadow_1px": 0.0,
+          "stroke": [
+            0,
+            0,
+            0
+          ],
+          "stroke_ok": false
+        }
+      }
+    },
+    "card_edges_appearance": {
+      "ok": false,
+      "rows": {
+        "dark": {
+          "corner_symmetry_max": 0.093,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.016,
+              "edge_by_row": [
+                8.22,
+                5.97,
+                4.44,
+                3.34,
+                2.44,
+                1.83,
+                1.2,
+                0.81,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "bottom_right": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.02,
+              "edge_by_row": [
+                8.21,
+                5.97,
+                4.43,
+                3.33,
+                2.43,
+                1.75,
+                1.12,
+                0.74,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "top_left": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.01,
+              "edge_by_row": [
+                8.19,
+                5.98,
+                4.44,
+                3.32,
+                2.44,
+                1.82,
+                1.18,
+                0.83,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "top_right": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.01,
+              "edge_by_row": [
+                8.19,
+                5.95,
+                4.43,
+                3.32,
+                2.43,
+                1.75,
+                1.12,
+                0.73,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "right_shadow_profile": [
+            0.923,
+            0.941,
+            0.953,
+            0.972,
+            0.976,
+            0.984,
+            0.988,
+            0.992,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 1.0,
+          "sides": {
+            "bottom": {
+              "contrast": 110.4,
+              "expected": [
+                109,
+                102,
+                116
+              ],
+              "shadow_1px": 0.937,
+              "stroke": [
+                109,
+                101,
+                115
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 111.1,
+              "expected": [
+                104,
+                103,
+                116
+              ],
+              "shadow_1px": 0.96,
+              "stroke": [
+                106,
+                101,
+                115
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 250.8,
+              "expected": [
+                113,
+                101,
+                114
+              ],
+              "shadow_1px": 0.923,
+              "stroke": [
+                113,
+                101,
+                115
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 111.7,
+              "expected": [
+                107,
+                102,
+                116
+              ],
+              "shadow_1px": 0.938,
+              "stroke": [
+                108,
+                101,
+                115
+              ],
+              "stroke_ok": true
+            }
+          }
+        },
+        "light": {
+          "error": "card did not settle",
+          "ok": false
+        }
+      }
+    },
+    "card_edges_themed": {
+      "ok": false,
+      "rows": {
+        "space 1 (offscreen render, 1x)": {
+          "corner_symmetry_max": 0.186,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.051,
+              "edge_by_row": [
+                8.11,
+                6.02,
+                4.38,
+                3.28,
+                2.38,
+                1.77,
+                1.23,
+                0.75,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "bottom_right": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.086,
+              "edge_by_row": [
+                8.08,
+                6.01,
+                4.36,
+                3.27,
+                2.39,
+                1.78,
+                1.09,
+                0.75,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "top_left": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.07,
+              "edge_by_row": [
+                8.11,
+                6.06,
+                4.4,
+                3.27,
+                2.37,
+                1.78,
+                1.3,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "top_right": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.069,
+              "edge_by_row": [
+                8.13,
+                6.08,
+                4.36,
+                3.28,
+                2.38,
+                1.76,
+                1.1,
+                0.75,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.922,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.988,
+            0.992,
+            0.996,
+            1.0,
+            1.0,
+            0.996,
+            1.0
+          ],
+          "scale": 1,
+          "sides": {
+            "bottom": {
+              "contrast": 61.8,
+              "expected": [
+                240,
+                190,
+                172
+              ],
+              "shadow_1px": 0.925,
+              "stroke": [
+                240,
+                189,
+                172
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 52.7,
+              "expected": [
+                235,
+                194,
+                163
+              ],
+              "shadow_1px": 0.925,
+              "stroke": [
+                235,
+                193,
+                164
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 107.3,
+              "expected": [
+                244,
+                182,
+                178
+              ],
+              "shadow_1px": 0.922,
+              "stroke": [
+                245,
+                182,
+                177
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 61.5,
+              "expected": [
+                239,
+                193,
+                171
+              ],
+              "shadow_1px": 0.923,
+              "stroke": [
+                239,
+                192,
+                170
+              ],
+              "stroke_ok": true
+            }
+          }
+        },
+        "space 1 (offscreen render, 2x)": {
+          "corner_symmetry_max": 0.565,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.054,
+              "edge_by_row": [
+                18.47,
+                15.21,
+                13.16,
+                11.19,
+                9.75,
+                8.39,
+                7.3,
+                6.31,
+                5.44,
+                4.68,
+                4.01,
+                3.25,
+                2.77,
+                2.31,
+                1.79,
+                1.32,
+                1.07,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "bottom_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.085,
+              "edge_by_row": [
+                18.49,
+                15.2,
+                13.29,
+                11.19,
+                9.76,
+                8.44,
+                7.32,
+                6.31,
+                5.44,
+                4.69,
+                3.96,
+                3.36,
+                2.81,
+                2.13,
+                1.82,
+                1.4,
+                1.02,
+                0.79,
+                0.57,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_left": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.071,
+              "edge_by_row": [
+                18.46,
+                15.2,
+                13.3,
+                11.18,
+                9.76,
+                8.44,
+                7.3,
+                6.28,
+                5.43,
+                4.66,
+                4.04,
+                3.25,
+                2.76,
+                2.44,
+                1.79,
+                1.32,
+                1.1,
+                0.73,
+                0.5,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.052,
+              "edge_by_row": [
+                18.42,
+                15.2,
+                13.28,
+                11.18,
+                9.77,
+                8.44,
+                7.31,
+                6.32,
+                5.44,
+                4.68,
+                3.98,
+                3.37,
+                2.81,
+                2.13,
+                1.84,
+                1.43,
+                1.02,
+                0.8,
+                0.58,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.918,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.984,
+            0.992,
+            0.996,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 2,
+          "sides": {
+            "bottom": {
+              "contrast": 62.2,
+              "expected": [
+                240,
+                190,
+                172
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                240,
+                190,
+                172
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 53.0,
+              "expected": [
+                235,
+                194,
+                163
+              ],
+              "shadow_1px": 0.925,
+              "stroke": [
+                235,
+                193,
+                163
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 106.6,
+              "expected": [
+                244,
+                183,
+                178
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                245,
+                182,
+                178
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 62.3,
+              "expected": [
+                239,
+                192,
+                171
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                239,
+                191,
+                171
+              ],
+              "stroke_ok": true
+            }
+          }
+        },
+        "space 1 (window)": {
+          "error": "card did not settle",
+          "ok": false
+        },
+        "space 2 (offscreen render, 1x)": {
+          "corner_symmetry_max": 0.195,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.057,
+              "edge_by_row": [
+                8.13,
+                6.09,
+                4.38,
+                3.31,
+                2.39,
+                1.77,
+                1.24,
+                0.78,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "bottom_right": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.064,
+              "edge_by_row": [
+                8.1,
+                6.06,
+                4.34,
+                3.27,
+                2.38,
+                1.78,
+                1.09,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "top_left": {
+              "antialiased_rows": 11,
+              "corner_alpha": -0.066,
+              "edge_by_row": [
+                8.17,
+                6.02,
+                4.35,
+                3.26,
+                2.37,
+                1.77,
+                1.31,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            },
+            "top_right": {
+              "antialiased_rows": 10,
+              "corner_alpha": -0.096,
+              "edge_by_row": [
+                8.09,
+                6.26,
+                4.41,
+                3.26,
+                2.38,
+                1.76,
+                1.11,
+                0.75,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.5,
+              "monotonic": true,
+              "reference": [
+                8.57,
+                6.19,
+                4.67,
+                3.53,
+                2.63,
+                1.91,
+                1.33,
+                0.88,
+                0.52,
+                0.26,
+                0.09,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 20
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.922,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.988,
+            0.992,
+            0.996,
+            1.0,
+            1.0,
+            0.996,
+            1.0
+          ],
+          "scale": 1,
+          "sides": {
+            "bottom": {
+              "contrast": 68.4,
+              "expected": [
+                172,
+                190,
+                237
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                169,
+                186,
+                232
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 62.8,
+              "expected": [
+                168,
+                191,
+                228
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                168,
+                193,
+                231
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 112.3,
+              "expected": [
+                170,
+                182,
+                240
+              ],
+              "shadow_1px": 0.922,
+              "stroke": [
+                171,
+                182,
+                240
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 68.5,
+              "expected": [
+                171,
+                191,
+                234
+              ],
+              "shadow_1px": 0.922,
+              "stroke": [
+                171,
+                191,
+                234
+              ],
+              "stroke_ok": true
+            }
+          }
+        },
+        "space 2 (offscreen render, 2x)": {
+          "corner_symmetry_max": 0.594,
+          "corners": {
+            "bottom_left": {
+              "antialiased_rows": 23,
+              "corner_alpha": -0.037,
+              "edge_by_row": [
+                18.5,
+                15.22,
+                13.18,
+                11.21,
+                9.8,
+                8.43,
+                7.31,
+                6.32,
+                5.45,
+                4.68,
+                4.05,
+                3.27,
+                2.79,
+                2.32,
+                1.82,
+                1.34,
+                1.05,
+                0.76,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "bottom_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.066,
+              "edge_by_row": [
+                18.42,
+                15.12,
+                13.29,
+                11.17,
+                9.73,
+                8.45,
+                7.32,
+                6.28,
+                5.44,
+                4.67,
+                3.96,
+                3.36,
+                2.8,
+                2.13,
+                1.82,
+                1.44,
+                1.03,
+                0.79,
+                0.57,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_left": {
+              "antialiased_rows": 23,
+              "corner_alpha": -0.055,
+              "edge_by_row": [
+                18.68,
+                15.27,
+                13.37,
+                11.16,
+                9.8,
+                8.48,
+                7.31,
+                6.32,
+                5.42,
+                4.66,
+                4.09,
+                3.28,
+                2.75,
+                2.4,
+                1.81,
+                1.34,
+                1.08,
+                0.74,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.62,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            },
+            "top_right": {
+              "antialiased_rows": 22,
+              "corner_alpha": -0.064,
+              "edge_by_row": [
+                18.37,
+                15.12,
+                13.39,
+                11.15,
+                9.75,
+                8.38,
+                7.27,
+                6.28,
+                5.43,
+                4.63,
+                3.99,
+                3.37,
+                2.82,
+                2.14,
+                1.84,
+                1.42,
+                1.04,
+                0.8,
+                0.61,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "max_error_px": 0.42,
+              "monotonic": true,
+              "reference": [
+                19.13,
+                15.65,
+                13.33,
+                11.52,
+                10.01,
+                8.71,
+                7.58,
+                6.57,
+                5.68,
+                4.88,
+                4.16,
+                3.51,
+                2.93,
+                2.42,
+                1.96,
+                1.56,
+                1.2,
+                0.9,
+                0.64,
+                0.43,
+                0.26,
+                0.13,
+                0.05,
+                0.01,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rows": 39
+            }
+          },
+          "low_contrast": false,
+          "ok": true,
+          "renders": 4,
+          "right_shadow_profile": [
+            0.918,
+            0.937,
+            0.953,
+            0.965,
+            0.976,
+            0.984,
+            0.992,
+            0.996,
+            0.996,
+            1.0,
+            1.0,
+            1.0
+          ],
+          "scale": 2,
+          "sides": {
+            "bottom": {
+              "contrast": 72.4,
+              "expected": [
+                171,
+                189,
+                235
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                171,
+                189,
+                236
+              ],
+              "stroke_ok": true
+            },
+            "left": {
+              "contrast": 65.6,
+              "expected": [
+                167,
+                191,
+                228
+              ],
+              "shadow_1px": 0.924,
+              "stroke": [
+                168,
+                192,
+                228
+              ],
+              "stroke_ok": true
+            },
+            "right": {
+              "contrast": 113.0,
+              "expected": [
+                169,
+                181,
+                238
+              ],
+              "shadow_1px": 0.918,
+              "stroke": [
+                170,
+                182,
+                240
+              ],
+              "stroke_ok": true
+            },
+            "top": {
+              "contrast": 58.9,
+              "expected": [
+                170,
+                189,
+                232
+              ],
+              "shadow_1px": 0.923,
+              "stroke": [
+                168,
+                187,
+                230
+              ],
+              "stroke_ok": true
+            }
+          }
+        },
+        "space 2 (window)": {
+          "error": "card did not settle",
+          "ok": false
+        }
+      },
+      "skipped": []
+    },
+    "close_unloaded_pinned": {
+      "after_close": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "after_unload": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "before": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "close_window_keeps_tabs": {
+      "ok": true
+    },
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 325,
+        "engineStarted": 399,
+        "firstContentfulPaint": 537,
+        "main": 202,
+        "modelLoaded": 203,
+        "sidebarDrawn": 324
+      },
+      "reason": "Release timing budgets are not evaluated in Debug",
+      "samples": 5,
+      "status": "SKIP"
+    },
+    "comparison": {
+      "capture": "F0001",
+      "elements": [
+        {
+          "delta_e00": 0.57,
+          "element": "background (sidebar column) (101 points, max \u0394E 0.85)",
+          "position_pt": null
+        },
+        {
+          "delta_e00": 0.42,
+          "element": "panel fill (empty state) (11 points, max \u0394E 1.05)",
+          "position_pt": null
+        },
+        {
+          "delta_e00": 0.86,
+          "element": "toolbar: sidebar toggle",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.29,
+          "element": "toolbar: back",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.25,
+          "element": "toolbar: forward",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.26,
+          "element": "toolbar: reload",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.14,
+          "element": "URL field fill",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.51,
+          "element": "URL field magnifier",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.03,
+          "element": "URL field placeholder",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.08,
+          "element": "favorite tile 1",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.2,
+          "element": "favorite tile 2",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.14,
+          "element": "favorite tile 3",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.15,
+          "element": "favorite tile 4",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.26,
+          "element": "favorite tile 5",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.27,
+          "element": "favorite tile 6",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": null,
+          "element": "Space icon (centroid \u0394 0.1, 0.2 px)",
+          "position_pt": 0.2
+        },
+        {
+          "delta_e00": 0.19,
+          "element": "Space title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.03,
+          "element": "row 1 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.04,
+          "element": "row 2 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.1,
+          "element": "row 3 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.12,
+          "element": "row 4 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.12,
+          "element": "row 5 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.06,
+          "element": "row 6 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.09,
+          "element": "row 7 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.04,
+          "element": "row 8 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.03,
+          "element": "row 9 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.05,
+          "element": "row 10 title",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 1.39,
+          "element": "New Tab plus",
+          "position_pt": 1.0
+        },
+        {
+          "delta_e00": 0.36,
+          "element": "New Tab label",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 0.46,
+          "element": "bottom: Home",
+          "position_pt": 0.0
+        },
+        {
+          "delta_e00": 1.61,
+          "element": "bottom: plus",
+          "position_pt": 0.0
+        }
+      ],
+      "method": "docs/design.md section 7; live Open snapshot converted to 1x; same masks",
+      "ok": true,
+      "private_artifacts": ".re/app-shell-comparison-window",
+      "worst_delta_e00": 1.61,
+      "worst_position_pt": 1.0
+    },
+    "cpu_count": 18,
+    "engine_failure_alert": {
+      "exit": 1,
+      "ok": true
+    },
+    "first_frame_timeout_continues": {
+      "hosts": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true,
+      "timing": {
+        "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+        "didFinishLaunching": 3291,
+        "engineInitialized": 3263,
+        "engineStart": 3179,
+        "engineStarted": 3257,
+        "firstContentfulPaint": 3393,
+        "firstFrameConfirmed": false,
+        "firstFrameWaitTimedOut": 3177,
+        "firstLoadEnd": 3375,
+        "firstPaintClockUncertaintyMs": 0.23,
+        "kernelProcessStart": true,
+        "main": 80,
+        "modelLoaded": 82,
+        "windowShown": 144
+      }
+    },
+    "frame_save_debounced": {
+      "before": {
+        "captures": 1,
+        "dirty": false,
+        "mirrorSyncs": 1,
+        "scheduled": 1,
+        "treeChanges": 0
+      },
+      "debounced": {
+        "captures": 2,
+        "dirty": false,
+        "mirrorSyncs": 1,
+        "scheduled": 12,
+        "treeChanges": 0
+      },
+      "immediate": {
+        "captures": 1,
+        "dirty": true,
+        "mirrorSyncs": 1,
+        "scheduled": 12,
+        "treeChanges": 0
+      },
+      "ok": true
+    },
+    "fullscreen": {
+      "ok": true
+    },
+    "fullscreen_hover_reveal": {
+      "dismissed_on_selection_s": 0.509,
+      "hidden": "hidden",
+      "ok": true,
+      "revealed_s": 0.624
+    },
+    "hide_reveal": {
+      "dismissed_s": 0.53,
+      "hidden": "hidden",
+      "left_s": 0.672,
+      "ok": true,
+      "panel_x": 10,
+      "revealed_again_s": 0.614,
+      "revealed_s": 0.615,
+      "selected": true
+    },
+    "html_fullscreen_from_window": {
+      "after_exit": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          507,
+          182
+        ],
+        "engineSelected": 3,
+        "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          300,
+          200,
+          900,
+          600
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 4,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "22B28BA6-3003-40E3-914B-EF52B43D9C09",
+        "isKeyWindow": true,
+        "keyWindow": 79139,
+        "layoutPasses": 401,
+        "number": 79139,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          662,
+          580
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0.16007466666633263,
+          "hides": 1,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 2,
+          "shows": 1,
+          "zone": "innerEdge"
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "shownPages": [
+          "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31",
+        "titlebar": [
+          0,
+          0,
+          900,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      },
+      "ok": true,
+      "page_state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            -228,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            -228,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            -187,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            -220,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          807,
+          822
+        ],
+        "engineSelected": 3,
+        "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "fullscreen": true,
+        "fullscreenChanges": 3,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "22B28BA6-3003-40E3-914B-EF52B43D9C09",
+        "isKeyWindow": true,
+        "keyWindow": 79139,
+        "layoutPasses": 378,
+        "number": 79139,
+        "pageFullscreen": true,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+          }
+        ],
+        "panel": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0.16007466666633263,
+          "hides": 1,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 2,
+          "shows": 1,
+          "zone": "innerEdge"
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "shownPages": [
+          "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": false,
+        "sidebarWidth": 228,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31",
+        "titlebar": [
+          0,
+          0,
+          2560,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            0,
+            0,
+            14,
+            14
+          ],
+          [
+            0,
+            0,
+            14,
+            14
+          ],
+          [
+            0,
+            0,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            16,
+            1392
+          ],
+          [
+            39,
+            1392
+          ],
+          [
+            62,
+            1392
+          ]
+        ],
+        "trafficLightsHidden": [
+          true,
+          true,
+          true
+        ],
+        "visible": true
+      }
+    },
+    "html_fullscreen_in_native": {
+      "after_exit": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          807,
+          822
+        ],
+        "engineSelected": 3,
+        "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "fullscreen": true,
+        "fullscreenChanges": 1,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "22B28BA6-3003-40E3-914B-EF52B43D9C09",
+        "isKeyWindow": true,
+        "keyWindow": 79139,
+        "layoutPasses": 333,
+        "number": 79139,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          2322,
+          1420
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0.16007466666633263,
+          "hides": 1,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 2,
+          "shows": 1,
+          "zone": "innerEdge"
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "shownPages": [
+          "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31",
+        "titlebar": [
+          0,
+          0,
+          2560,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            0,
+            0,
+            14,
+            14
+          ],
+          [
+            0,
+            0,
+            14,
+            14
+          ],
+          [
+            0,
+            0,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            16,
+            1392
+          ],
+          [
+            39,
+            1392
+          ],
+          [
+            62,
+            1392
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      },
+      "ok": true,
+      "page_state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            -228,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            -228,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            -187,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            -220,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          807,
+          822
+        ],
+        "engineSelected": 3,
+        "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "fullscreen": true,
+        "fullscreenChanges": 1,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "22B28BA6-3003-40E3-914B-EF52B43D9C09",
+        "isKeyWindow": true,
+        "keyWindow": 79139,
+        "layoutPasses": 326,
+        "number": 79139,
+        "pageFullscreen": true,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+          }
+        ],
+        "panel": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0.16007466666633263,
+          "hides": 1,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 2,
+          "shows": 1,
+          "zone": "innerEdge"
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "shownPages": [
+          "331BF78E-B6AD-4B79-AA4E-AE1204FEB077"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": false,
+        "sidebarWidth": 228,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31",
+        "titlebar": [
+          0,
+          0,
+          2560,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            0,
+            0,
+            14,
+            14
+          ],
+          [
+            0,
+            0,
+            14,
+            14
+          ],
+          [
+            0,
+            0,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            16,
+            1392
+          ],
+          [
+            39,
+            1392
+          ],
+          [
+            62,
+            1392
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      }
+    },
+    "kernel_process_start": {
+      "ok": true,
+      "samples": 10
+    },
+    "keys_keep_peek_lazy": {
+      "ok": true
+    },
+    "last_window_relaunch": {
+      "correct_page": true,
+      "expected": {
+        "frame": [
+          80,
+          60,
+          1000,
+          700
+        ],
+        "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "sidebarMode": "hidden",
+        "sidebarWidth": 300,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31"
+      },
+      "ok": true,
+      "restored": {
+        "frame": [
+          80,
+          60,
+          1000,
+          700
+        ],
+        "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "sidebarMode": "hidden",
+        "sidebarWidth": 300,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31"
+      }
+    },
+    "last_window_reopen": {
+      "correct_page": true,
+      "expected": {
+        "frame": [
+          80,
+          60,
+          1000,
+          700
+        ],
+        "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "sidebarMode": "hidden",
+        "sidebarWidth": 300,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31"
+      },
+      "no_windows_after_close": true,
+      "ok": true,
+      "reopened": {
+        "frame": [
+          80,
+          60,
+          1000,
+          700
+        ],
+        "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+        "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+        "sidebarMode": "hidden",
+        "sidebarWidth": 300,
+        "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31"
+      }
+    },
+    "launch_runs": {
+      "cold_fresh_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 410,
+          "engineInitialized": 407,
+          "engineStart": 325,
+          "engineStarted": 404,
+          "firstContentfulPaint": 537,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 512,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 205,
+          "modelLoaded": 207,
+          "sidebarDrawn": 324,
+          "windowShown": 278
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 451,
+          "engineInitialized": 447,
+          "engineStart": 364,
+          "engineStarted": 441,
+          "firstContentfulPaint": 589,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 558,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 214,
+          "modelLoaded": 215,
+          "sidebarDrawn": 363,
+          "windowShown": 306
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 386,
+          "engineInitialized": 384,
+          "engineStart": 307,
+          "engineStarted": 380,
+          "firstContentfulPaint": 515,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 501,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 194,
+          "modelLoaded": 196,
+          "sidebarDrawn": 306,
+          "windowShown": 262
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 396,
+          "engineInitialized": 391,
+          "engineStart": 309,
+          "engineStarted": 386,
+          "firstContentfulPaint": 535,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 515,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 192,
+          "modelLoaded": 193,
+          "sidebarDrawn": 308,
+          "windowShown": 264
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 407,
+          "engineInitialized": 404,
+          "engineStart": 325,
+          "engineStarted": 399,
+          "firstContentfulPaint": 545,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 530,
+          "firstPaintClockUncertaintyMs": 0.05,
+          "kernelProcessStart": true,
+          "main": 202,
+          "modelLoaded": 203,
+          "sidebarDrawn": 324,
+          "windowShown": 277
+        }
+      ],
+      "warm_existing_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 388,
+          "engineInitialized": 385,
+          "engineStart": 309,
+          "engineStarted": 382,
+          "firstContentfulPaint": 524,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 506,
+          "firstPaintClockUncertaintyMs": 0.06,
+          "kernelProcessStart": true,
+          "main": 203,
+          "modelLoaded": 205,
+          "sidebarDrawn": 308,
+          "windowShown": 270
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 442,
+          "engineInitialized": 438,
+          "engineStart": 353,
+          "engineStarted": 429,
+          "firstContentfulPaint": 563,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 545,
+          "firstPaintClockUncertaintyMs": 0.08,
+          "kernelProcessStart": true,
+          "main": 217,
+          "modelLoaded": 219,
+          "sidebarDrawn": 353,
+          "windowShown": 297
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 323,
+          "engineInitialized": 319,
+          "engineStart": 242,
+          "engineStarted": 316,
+          "firstContentfulPaint": 451,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 437,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 88,
+          "modelLoaded": 90,
+          "sidebarDrawn": 241,
+          "windowShown": 185
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 402,
+          "engineInitialized": 398,
+          "engineStart": 319,
+          "engineStarted": 392,
+          "firstContentfulPaint": 530,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 516,
+          "firstPaintClockUncertaintyMs": 0.16,
+          "kernelProcessStart": true,
+          "main": 204,
+          "modelLoaded": 206,
+          "sidebarDrawn": 318,
+          "windowShown": 276
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 438,
+          "engineInitialized": 435,
+          "engineStart": 359,
+          "engineStarted": 432,
+          "firstContentfulPaint": 566,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 550,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 202,
+          "modelLoaded": 204,
+          "sidebarDrawn": 358,
+          "windowShown": 297
+        }
+      ]
+    },
+    "load_average": [
+      9.7958984375,
+      8.794921875,
+      8.95556640625
+    ],
+    "multiple_window_png": {
+      "file": "window-multiple.png",
+      "ok": true
+    },
+    "multiple_windows": {
+      "ok": true,
+      "windows": [
+        {
+          "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+          "number": 79135
+        },
+        {
+          "id": "22B28BA6-3003-40E3-914B-EF52B43D9C09",
+          "number": 79139
+        }
+      ]
+    },
+    "native_window": {
+      "ok": true,
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          707,
+          282
+        ],
+        "engineSelected": 0,
+        "engineURL": "",
+        "firstResponder": "FavoritesCollectionView",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+        "isKeyWindow": true,
+        "keyWindow": 79135,
+        "layoutPasses": 7,
+        "number": 79135,
+        "pageFullscreen": false,
+        "paneBackgrounds": [],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "",
+        "shownPages": [],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "73C75BD1-B6F9-4399-9710-0B4BB189F7DF",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      }
+    },
+    "navigation_before_engine": {
+      "hosts": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true,
+      "readiness_probe": true,
+      "title": "Queued"
+    },
+    "quit_before_engine": {
+      "exit": 0,
+      "ok": true
+    },
+    "resize_300": {
+      "ok": true,
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            300,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            300,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            242,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            284,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          727,
+          142
+        ],
+        "engineSelected": 1,
+        "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
+        "firstResponder": "FavoritesCollectionView",
+        "frame": [
+          80,
+          60,
+          1000,
+          700
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "2A0EE529-C7FD-42CC-9A25-9BE193412952",
+        "isKeyWindow": true,
+        "keyWindow": 79135,
+        "layoutPasses": 133,
+        "number": 79135,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24"
+          }
+        ],
+        "panel": [
+          300,
+          10,
+          690,
+          680
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24",
+        "shownPages": [
+          "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 300,
+        "space": "73C75BD1-B6F9-4399-9710-0B4BB189F7DF",
+        "titlebar": [
+          0,
+          0,
+          1000,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      }
+    },
+    "resize_limits": {
+      "ok": true
+    },
+    "reveal_timing": {
+      "card": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "dwell_s": 0.154,
+      "edge_walk": [
+        [
+          2,
+          100,
+          "idle",
+          1,
+          1
+        ],
+        [
+          4,
+          160,
+          "idle",
+          1,
+          1
+        ],
+        [
+          1,
+          220,
+          "idle",
+          1,
+          1
+        ],
+        [
+          3,
+          280,
+          "idle",
+          1,
+          1
+        ],
+        [
+          0,
+          340,
+          "idle",
+          1,
+          1
+        ],
+        [
+          2,
+          400,
+          "idle",
+          1,
+          1
+        ],
+        [
+          5,
+          460,
+          "idle",
+          1,
+          1
+        ],
+        [
+          1,
+          520,
+          "idle",
+          1,
+          1
+        ],
+        [
+          3,
+          580,
+          "idle",
+          1,
+          1
+        ],
+        [
+          2,
+          640,
+          "idle",
+          1,
+          1
+        ],
+        [
+          4,
+          700,
+          "idle",
+          1,
+          1
+        ],
+        [
+          12,
+          700,
+          "idle",
+          1,
+          1
+        ],
+        [
+          60,
+          650,
+          "idle",
+          1,
+          1
+        ],
+        [
+          120,
+          400,
+          "idle",
+          1,
+          1
+        ],
+        [
+          2,
+          300,
+          "pending",
+          1,
+          1
+        ]
+      ],
+      "exit_to_idle_s": 0.009,
+      "held": {
+        "card": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "dwell": 0.15386691666208208,
+        "hides": 1,
+        "offset": null,
+        "phase": "idle",
+        "pointerEvents": 24,
+        "shows": 1,
+        "zone": "innerEdge"
+      },
+      "lights_hidden_while_hidden": true,
+      "lights_on_card": [
+        [
+          20.0,
+          24.0
+        ],
+        [
+          43.0,
+          24.0
+        ],
+        [
+          66.0,
+          24.0
+        ]
+      ],
+      "ok": false,
+      "pass_by_without_reveal": true,
+      "settled_s": null,
+      "slide_out_s": 0.001
+    },
+    "selected_only_0": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_1": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_2": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_3": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_4": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "space_header_url_field": {
+      "field_fill_hover": [
+        70,
+        70,
+        85
+      ],
+      "field_fill_rest": [
+        59,
+        59,
+        76
+      ],
+      "header_fill_hover": [
+        62,
+        57,
+        76
+      ],
+      "header_fill_rest": [
+        41,
+        36,
+        56
+      ],
+      "header_hovered": {
+        "favorites": [
+          0,
+          82,
+          228,
+          8
+        ],
+        "header": [
+          0,
+          90,
+          228,
+          36
+        ],
+        "headerHovered": true,
+        "headerTitle": [
+          41,
+          99,
+          148,
+          18
+        ],
+        "headerTitleBaseline": 113,
+        "urlField": [
+          8,
+          46,
+          212,
+          36
+        ],
+        "urlFieldHovered": false
+      },
+      "ok": true,
+      "rest": {
+        "favorites": [
+          0,
+          82,
+          228,
+          8
+        ],
+        "header": [
+          0,
+          90,
+          228,
+          36
+        ],
+        "headerHovered": false,
+        "headerTitle": [
+          41,
+          99,
+          170,
+          18
+        ],
+        "headerTitleBaseline": 113,
+        "urlField": [
+          8,
+          46,
+          212,
+          36
+        ],
+        "urlFieldHovered": false
+      },
+      "url_hovered": {
+        "favorites": [
+          0,
+          82,
+          228,
+          8
+        ],
+        "header": [
+          0,
+          90,
+          228,
+          36
+        ],
+        "headerHovered": false,
+        "headerTitle": [
+          41,
+          99,
+          170,
+          18
+        ],
+        "headerTitleBaseline": 113,
+        "urlField": [
+          8,
+          46,
+          212,
+          36
+        ],
+        "urlFieldHovered": true
+      },
+      "url_to_header_gap_pt": 8
+    },
+    "toggle_sidebar": {
+      "ok": true
+    },
+    "traffic_lights": {
+      "after_fullscreen_exit": [
+        [
+          20.0,
+          24.0
+        ],
+        [
+          43.0,
+          24.0
+        ],
+        [
+          66.0,
+          24.0
+        ]
+      ],
+      "drawn_launch": [
+        [
+          20.02,
+          23.72
+        ],
+        [
+          43.0,
+          23.74
+        ],
+        [
+          65.99,
+          23.72
+        ]
+      ],
+      "expected_centers": [
+        [
+          20,
+          24
+        ],
+        [
+          43,
+          24
+        ],
+        [
+          66,
+          24
+        ]
+      ],
+      "first_window_not_key": [
+        [
+          20.0,
+          24.0
+        ],
+        [
+          43.0,
+          24.0
+        ],
+        [
+          66.0,
+          24.0
+        ]
+      ],
+      "launch": [
+        [
+          20.0,
+          24.0
+        ],
+        [
+          43.0,
+          24.0
+        ],
+        [
+          66.0,
+          24.0
+        ]
+      ],
+      "ok": true,
+      "resized": [
+        [
+          20.0,
+          24.0
+        ],
+        [
+          43.0,
+          24.0
+        ],
+        [
+          66.0,
+          24.0
+        ]
+      ],
+      "second_window_key": [
+        [
+          20.0,
+          24.0
+        ],
+        [
+          43.0,
+          24.0
+        ],
+        [
+          66.0,
+          24.0
+        ]
+      ]
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 319,
+        "engineStarted": 392,
+        "firstContentfulPaint": 530,
+        "main": 203,
+        "modelLoaded": 205,
+        "sidebarDrawn": 318
+      },
+      "reason": "Release timing budgets are not evaluated in Debug",
+      "samples": 5,
+      "status": "SKIP"
+    },
+    "window_before_engine_0": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_1": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_2": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_3": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_4": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_close_preserves_other_host": {
+      "ok": true,
+      "state": {
+        "audible": false,
+        "canGoBack": false,
+        "canGoForward": false,
+        "crashed": false,
+        "favicon": false,
+        "hasWebContent": true,
+        "id": "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24",
+        "loaded": true,
+        "loading": false,
+        "page": {
+          "audible": false,
+          "browser": 1,
+          "browserIndex": 1,
+          "browserPinned": false,
+          "canGoBack": false,
+          "chromeTabId": 742428788,
+          "chromeWindowId": 742428780,
+          "context": "Default",
+          "crash": 0,
+          "extension": "",
+          "favicon": false,
+          "fullscreen": false,
+          "hidden": true,
+          "hostTab": "EBDCF4D1-2570-410C-8ED1-0D2D8EFFBF24",
+          "identifier": 3,
+          "kind": "tab",
+          "live": true,
+          "loading": false,
+          "muted": false,
+          "pageBackground": [
+            255,
+            255,
+            255,
+            255
+          ],
+          "popup": false,
+          "style": "chrome",
+          "title": "Window A",
+          "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
+          "zoom": 0
+        },
+        "profile": "EB2102BC-0766-4410-8BFA-84DF099634EF",
+        "progress": 1,
+        "section": "today",
+        "selected": false,
+        "sleepPhase": "live",
+        "space": "73C75BD1-B6F9-4399-9710-0B4BB189F7DF",
+        "title": "Window A",
+        "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
+        "visible": false
+      }
+    },
+    "window_persistence": {
+      "expected": {
+        "22B28BA6-3003-40E3-914B-EF52B43D9C09": {
+          "frame": [
+            300,
+            200,
+            900,
+            600
+          ],
+          "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+          "sidebarMode": "anchored",
+          "sidebarWidth": 228,
+          "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31"
+        },
+        "2A0EE529-C7FD-42CC-9A25-9BE193412952": {
+          "frame": [
+            80,
+            60,
+            1000,
+            700
+          ],
+          "selected": "355AC8F1-919C-4D0C-8C11-DD7969D2CABB",
+          "sidebarMode": "hidden",
+          "sidebarWidth": 300,
+          "space": "73C75BD1-B6F9-4399-9710-0B4BB189F7DF"
+        }
+      },
+      "ok": true,
+      "restored": {
+        "22B28BA6-3003-40E3-914B-EF52B43D9C09": {
+          "frame": [
+            300,
+            200,
+            900,
+            600
+          ],
+          "selected": "331BF78E-B6AD-4B79-AA4E-AE1204FEB077",
+          "sidebarMode": "anchored",
+          "sidebarWidth": 228,
+          "space": "705E1C93-DBA7-4CD3-B98C-86130A47EA31"
+        },
+        "2A0EE529-C7FD-42CC-9A25-9BE193412952": {
+          "frame": [
+            80,
+            60,
+            1000,
+            700
+          ],
+          "selected": "355AC8F1-919C-4D0C-8C11-DD7969D2CABB",
+          "sidebarMode": "hidden",
+          "sidebarWidth": 300,
+          "space": "73C75BD1-B6F9-4399-9710-0B4BB189F7DF"
+        }
+      }
+    },
+    "window_png": {
+      "file": "window-startup.png",
+      "ok": true
+    }
+  }
+}
