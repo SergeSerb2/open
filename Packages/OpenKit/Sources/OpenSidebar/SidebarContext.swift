@@ -12,6 +12,9 @@ public final class SidebarContext {
     public let model: BrowserModel
     public let windowID: WindowID
     public let selection = SidebarSelection()
+    public let haptics = SidebarHaptics()
+    @ObservationIgnored weak var manager: SpaceManagerView?
+    var managerSpaceID: SpaceID?
     /// Live Option state, also forced by the offscreen renderer. One window
     /// monitor updates this even while web content is first responder.
     public var isOptionHeld = false
@@ -75,6 +78,7 @@ public final class SidebarContext {
     public var window: BrowserWindowState? { model.windows.first { $0.id == windowID } }
 
     public var focusedSpace: Space? {
+        if let managerSpaceID { return model.space(id: managerSpaceID) ?? model.spaces.first }
         guard let w = window else { return model.spaces.first }
         return model.space(id: w.focusedSpaceID) ?? model.spaces.first
     }
@@ -133,7 +137,7 @@ public final class SidebarContext {
         case .select, .selectFavorite: selection.clear()
         default: break
         }
-        guard let sidebar, let delegate = sidebar.delegate else { return false }
+        guard manager != nil || sidebar?.delegate != nil else { return false }
         let consumes: Bool
         switch intent {
         case .moveNodes, .moveNodesToSpace, .moveNodesToNewSpace, .archiveNodes, .newFolderFromSelection: consumes = true
@@ -145,7 +149,8 @@ public final class SidebarContext {
         // command. A refused delegate restores the unchanged view state.
         if consumes {
             selection.clear()
-            sidebar.pager.currentPage?.syncSelectionIndexes()
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
         }
         let batches: Bool
         switch intent {
@@ -153,17 +158,23 @@ public final class SidebarContext {
              .setPinned, .duplicateNodes, .duplicate, .exportSpaceIntoFolder: batches = true
         default: batches = false
         }
-        if batches { sidebar.beginModelUpdates() }
-        let accepted = delegate.sidebar(sidebar, didRequest: intent)
-        if batches { sidebar.endModelUpdates() }
+        if batches { sidebar?.beginModelUpdates(); manager?.beginModelUpdates() }
+        let accepted: Bool
+        if let manager { accepted = manager.send(intent) }
+        else if let sidebar, let delegate = sidebar.delegate { accepted = delegate.sidebar(sidebar, didRequest: intent) }
+        else { accepted = false }
+        if batches { sidebar?.endModelUpdates(); manager?.endModelUpdates() }
         if consumes, !accepted {
             selection.select(previousIDs, anchor: previousAnchor)
-            sidebar.pager.currentPage?.syncSelectionIndexes()
-        } else if accepted, case .archiveNodes = intent, let page = sidebar.pager.currentPage {
-            let visible = Set(page.selectableOrder)
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
+        } else if accepted, case .archiveNodes = intent {
+            let outline = sidebar?.pager.currentPage?.outline ?? focusedSpace.flatMap { manager?.outline(spaceID: $0.id) }
+            let visible = Set((0..<(outline?.numberOfRows ?? 0)).compactMap { itemID(of: outline?.item(atRow: $0)) })
             let kept = previousIDs.filter { visible.contains($0) && model.node(id: $0) != nil }
             selection.select(kept, anchor: previousAnchor.flatMap { kept.contains($0) ? $0 : nil } ?? kept.first)
-            page.syncSelectionIndexes()
+            sidebar?.pager.currentPage?.syncSelectionIndexes()
+            manager?.syncSelectionIndexes()
         }
         return accepted
     }

@@ -13,6 +13,7 @@ import OpenModel
 final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegate {
     unowned let context: SidebarContext
     let space: Space
+    var displaysHeader = true { didSet { header.isHidden = !displaysHeader; needsLayout = true } }
     let header: SpaceHeaderView
     let scroll = PageScrollView()
     let outline = SidebarOutlineView()
@@ -39,12 +40,11 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         wantsLayer = true
         header.page = self
         addSubview(header)
+        rootItems = computeRoot()
         configureOutline()
         scroll.documentView = outline
         addSubview(scroll)
         applyAppearance()
-        rootItems = computeRoot()
-        outline.reloadData()
         syncExpansion(animated: false)
         observe()
     }
@@ -74,7 +74,6 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         outline.allowsEmptySelection = true
         outline.allowsMultipleSelection = true
         outline.focusRingType = .none
-        outline.dataSource = self
         outline.delegate = self
         outline.page = self
         outline.target = self
@@ -94,6 +93,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         scroll.verticalScrollElasticity = .allowed
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        // Setting the native data source performs the initial load. Cache roots
+        // and install the delegate first, so there is no empty preliminary load.
+        outline.dataSource = self
     }
 
     /// Each page draws in its own Space's content appearance.
@@ -105,7 +107,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         super.layout()
         let w = bounds.width
         header.frame = CGRect(x: 0, y: 0, width: w, height: SpaceListMetrics.headerHeight)
-        scroll.frame = CGRect(x: 0, y: SpaceListMetrics.headerHeight, width: w, height: max(0, bounds.height - SpaceListMetrics.headerHeight))
+        let headerHeight = displaysHeader ? SpaceListMetrics.headerHeight : 0
+        scroll.frame = CGRect(x: 0, y: headerHeight, width: w, height: max(0, bounds.height - headerHeight))
         if let column = outline.tableColumns.first, column.width != w { column.width = w }
     }
 
@@ -133,6 +136,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
             self.forEachLoadedFolder { _ = $0.isExpanded; _ = $0.children.count }
         }) { [weak self] in
             guard let self else { return }
+            guard self.context.manager?.deferHiddenUpdates() != true else { return }
             self.syncRoot()
             self.syncExpansion(animated: self.animatesSidebarChanges)
         })
@@ -241,6 +245,13 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         updateRowStates(animated: false)
         pruneSelection()
         syncSelectionIndexes()
+    }
+
+    /// Reconcile a hidden Manager once on visibility, without reloadData or an event backlog.
+    func resyncAfterVisibility() {
+        var changes: [TreeChange] = [.reload(parent: .spacePinned(space.id)), .reload(parent: .spaceToday(space.id))]
+        forEachLoadedFolder { changes.append(.reload(parent: .folder($0.id))) }
+        applyBulk(changes)
     }
 
     private enum Displayed {
@@ -429,6 +440,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     func modifySelection(item: Any, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard let id = itemID(of: item), !modifiers.intersection([.command, .shift]).isEmpty else { return false }
+        context.manager?.activate(space)
         let order = selectableOrder
         let selection = context.selection
         if selection.isEmpty, let current = context.selectedID(in: space.id), order.contains(current) {
@@ -532,6 +544,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     @discardableResult
     func activate(item: Any) -> Bool {
+        context.manager?.activate(space)
         context.selection.clear()
         TooltipController.shared.cancel(for: nil)
         switch item {
@@ -566,6 +579,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     }
 
     func menu(at point: NSPoint) -> NSMenu {
+        context.manager?.activate(space)
         let row = outline.row(at: point)
         let item = row >= 0 ? outline.item(atRow: row) : nil
         if let id = itemID(of: item), context.selection.contains(id) {
@@ -661,6 +675,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     func outlineView(_ outlineView: NSOutlineView, draggingSession session: NSDraggingSession,
                      endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         draggingIDs = []
+        context.haptics.endDrag()
         outline.dragWasStarted = false
         syncSelectionIndexes()
         updateRowStates(animated: false)
@@ -697,7 +712,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard let dest = dropDestination(item: item, childIndex: index) else { return [] }
         if let r = dest.retarget { outlineView.setDropItem(r.0, dropChildIndex: r.1) }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
-            return ids.contains { context.model.canMoveNode(id: $0, to: dest.parent) } ? .move : []
+            let allowed = ids.contains { context.model.canMoveNode(id: $0, to: dest.parent) }
+            if allowed { context.haptics.insertionChanged(parent: dest.parent, index: dest.index) }
+            return allowed ? .move : []
         }
         return SidebarPasteboard.urls(from: info.draggingPasteboard).isEmpty ? [] : .copy
     }
@@ -706,7 +723,9 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         guard let dest = dropDestination(item: item, childIndex: index) else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: info.draggingPasteboard) {
             guard !ids.isEmpty else { return false }
-            return context.send(.moveNodes(ids: ids, to: dest.parent, index: dest.index))
+            let accepted = context.send(.moveNodes(ids: ids, to: dest.parent, index: dest.index))
+            context.haptics.dropped(accepted)
+            return accepted
         }
         guard let url = SidebarPasteboard.urls(from: info.draggingPasteboard).first else { return false }
         return context.send(.openURL(url, in: dest.parent, index: dest.index))
@@ -760,6 +779,7 @@ final class SidebarOutlineView: NSOutlineView {
         }()
         if let pressedControl { pressedControl.mouseDown(with: event); return }
         if let page {
+            page.context.manager?.activate(page.space)
             let row = row(at: convert(event.locationInWindow, from: nil))
             if row >= 0, let item = item(atRow: row), page.modifySelection(item: item, modifiers: event.modifierFlags) {
                 window?.makeFirstResponder(self)
@@ -780,7 +800,13 @@ final class SidebarOutlineView: NSOutlineView {
         }
     }
 
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        page?.context.haptics.endDrag()
+        super.draggingExited(sender)
+    }
+
     override func keyDown(with event: NSEvent) {
+        if let page { page.context.manager?.activate(page.space) }
         if let page, !page.context.selection.isEmpty, event.modifierFlags.intersection([.control, .option]).isEmpty {
             if event.modifierFlags.contains(.command) {
                 if event.keyCode == 2, !event.modifierFlags.contains(.shift) { _ = page.context.performSelectionCommand("pin-unpin-tab"); return }

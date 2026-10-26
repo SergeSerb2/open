@@ -174,7 +174,9 @@ final class SwitcherItemView: PlateButton {
         cancelSpringLoad()
         guard !operation(for: sender.draggingPasteboard).isEmpty, let context else { return false }
         if let ids = SidebarPasteboard.nodeIDs(from: sender.draggingPasteboard) {
-            return context.send(.moveNodesToSpace(ids: ids, space: space.id))
+            let accepted = context.send(.moveNodesToSpace(ids: ids, space: space.id))
+            context.haptics.dropped(accepted)
+            return accepted
         }
         let urls = SidebarPasteboard.urls(from: sender.draggingPasteboard)
         for url in urls.reversed() {

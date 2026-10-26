@@ -118,7 +118,9 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
             // Favorites hold tabs only.
             guard let profileID else { return [] }
-            return ids.contains { context.model.canMoveNode(id: $0, to: .favorites(profileID)) } ? .move : []
+            let allowed = ids.contains { context.model.canMoveNode(id: $0, to: .favorites(profileID)) }
+            if allowed { context.haptics.insertionChanged(parent: .favorites(profileID), index: proposedIndexPath.pointee.item) }
+            return allowed ? .move : []
         }
         return SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).isEmpty ? [] : .copy
     }
@@ -128,7 +130,9 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
         let index = indexPath.item
         if let ids = SidebarPasteboard.nodeIDs(from: draggingInfo.draggingPasteboard) {
             guard !ids.isEmpty, let profileID else { return false }
-            return context.send(.moveNodes(ids: ids, to: .favorites(profileID), index: index))
+            let accepted = context.send(.moveNodes(ids: ids, to: .favorites(profileID), index: index))
+            context.haptics.dropped(accepted)
+            return accepted
         }
         guard let profileID, let url = SidebarPasteboard.urls(from: draggingInfo.draggingPasteboard).first else { return false }
         return context.send(.openURL(url, in: .favorites(profileID), index: index))
@@ -140,6 +144,11 @@ final class FavoritesView: NSView, NSCollectionViewDataSource, NSCollectionViewD
 final class FavoritesCollectionView: NSCollectionView {
     weak var owner: FavoritesView?
     override var isOpaque: Bool { false }
+
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        owner?.context.haptics.endDrag()
+        super.draggingExited(sender)
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let p = convert(event.locationInWindow, from: nil)

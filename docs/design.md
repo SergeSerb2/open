@@ -439,7 +439,27 @@ Split-row menu: see §5.6.
 
 ### 15.1 No regression on the matched states
 
-The M2 run script (`.re/design-compare/run-states.sh`) was lost with its worktree. It is re-derived from the frames in `.re/vf/run-states.sh` (same snapshots, sizes, forced states). The table runs it with release builds of `origin/main` (`33aade1`) and of this branch, one state per process. All 13 PNGs and tables are byte-identical between the two builds.
+The historical M4 cohort used release builds of `origin/main` (`33aade1`) and
+its branch, one state per process. Its 13 PNGs and tables were byte-identical.
+The table below records the Arc worst-value limits and element counts for the
+current gate. The lost ignored runner is now committed as
+`tools/verification/sidebar-compare-states.sh` (details in §17.1).
+
+**Lead gate, 2026-10-26 (supersedes table-byte and SHA identity):**
+
+1. Every compared element's position error and both Arc/Open ink boxes must be
+   identical between main and branch. There is no geometry tolerance.
+2. Each element's color metric may differ from main by at most **0.15 ΔE00**.
+   This includes the background mean and sampled maximum. RGB strings and table
+   bytes can differ because text anti-aliasing differs between builds.
+3. Both main and branch must stay within each state's recorded worst position
+   and ΔE00 limits below, with the same compared elements and sampling counts.
+4. Combined table SHA-256 values are reported for information only. They do not
+   gate acceptance.
+
+The runner retains at most three paired attempts per state, as before; every
+failed attempt and its reason stays in the receipt and private output folder.
+It never changes masks, inputs, or limits to make a state pass.
 
 | State | Frame | Elements | Worst position (pt) | Worst ΔE00 | Main vs branch |
 |---|---|---|---|---|---|
@@ -597,7 +617,8 @@ tools/verification/sidebar-compare-states.sh \
 The runner resolves `origin/main` to an immutable commit, exports its package
 source into `/tmp`, and makes a release build. `--baseline-renderer` can reuse an
 existing release binary built from `--baseline-ref`. It renders and compares both
-binaries sequentially and requires every state's table to be byte-identical.
+binaries sequentially and applies the exact-geometry / 0.15 ΔE00 color-metric /
+recorded-Arc-limits gate in §15.1. Table and SHA identity are informational.
 Known offscreen nondeterminism (§15.1) permits at most three paired attempts per
 state; every attempt is retained and the receipt lists the count. It never
 changes or removes table rows to hide a main-versus-branch difference. Outputs
@@ -610,7 +631,8 @@ All 13 per-state worst values and element counts reproduce §15.1, and all 13
 main-versus-S1 tables are byte-identical. **Baseline SHA re-derived:**
 `f820361b0b4baa3ad4e24b723ca807462f1b195d2f2391997815445ec77455e1`.
 The historical `2e7974…a278448` is still printed for comparison. Its original
-runner is unavailable, so main-versus-branch identity is the acceptance gate.
+runner is unavailable. This was the S1 byte-identity gate; the lead replaced it
+with the numeric gate in §15.1 on 2026-10-26.
 `tools/verify-all.sh` includes `sidebar-compare`: it runs where the private inputs
 exist and SKIPs only when those inputs are absent. `SIDEBAR_CAPTURE_ROOT` selects
 a different private input root; `SIDEBAR_BASELINE_RENDERER` supplies a prebuilt
@@ -724,3 +746,72 @@ This branch is based on unreviewed M3 PR #78, branch `t3/sidebar-tidy-titles`, a
 `7e16e6195c0aef187a50edf7f95f4f5c61149890`. The M3 merge kept its tidy-title
 CLI check, stronger B4 removal-order check, and model documentation alongside the
 merged M2 archive flow; lane S adds no model implementation changes.
+
+## 20. Sidebar completion S4 (2026-10-26)
+
+`SpaceManagerView` is an injectable Library page from OpenSidebar. It takes a
+dedicated `SidebarContext` and an optional `onIntent` closure. The App supplies
+its normal intent routing for navigation and confirmations; the default uses
+`ModelSidebarActions` for the offscreen harness. Library registration and host
+wiring remain M5/A-lane work. No Settings dependency or new target was added.
+
+Columns are 244 pt wide, with 16 pt insets and 12 pt gaps. Their 44 pt
+`SpaceControlsView` headers draw the existing Space icon, 13 pt Semibold title,
+a Profile chip only with two or more Profiles, and a More menu. The menu has
+Turn into Folder destinations and Delete (disabled for the last Space). The
+body uses the same `SpacePageView` rows, selection, menus, inline rename, and
+production pasteboard/drop paths, without Favorites or a duplicate Space header.
+These geometry and lift values remain guesses from completion §3.2.
+
+A native grabber tracking loop moves the column horizontally. Crossing another
+column's midpoint changes its slot with the Space-switch spring and one
+alignment haptic per crossed slot. Release commits one `moveSpace` intent; Esc
+cancels. The card lifts with scale 1.02 and a black 0.25 / radius 8 / y +4 shadow.
+The pager now repositions cached pages when Space order changes with no focus
+change. Per lead Q5, the bottom switcher has **no reorder gesture**. SW1–SW4 are
+intentionally skipped; existing Space-icon tab drops remain checked by MS12.
+HG4 checks the two-slot reorder in the Manager instead.
+
+Column shells and headers exist in model order. Row pages and theme backgrounds
+build when a column first enters the horizontal viewport and stay cached. The
+real 10-Space × 100-row harness verifies the ≤120 ms initial build budget, lazy
+scroll-in, and no full reloads of existing pages. Initial page setup fills the
+root cache and installs its delegate before the native data source, whose setter
+performs the initial reload; the old redundant empty/explicit pair is gone.
+Model edits still send per-node events and the Manager batches view updates
+through the same transaction path as the sidebar.
+
+`SidebarHaptics` reads `open.advanced.hapticOnTabReorder` at use (default true)
+and calls the system performer. Outline, folder, Favorites, and Space-icon node
+drops use generic feedback on success; distinct insertion destinations use
+alignment. Space swipes emit levelChange once when crossing the half-width
+commit threshold. Diagnostic counts record the actual performer calls. No timer
+was added. The release harness drives native grabber events, Escape, undo,
+cross-column production drop callbacks, preference changes, and real swipe
+events for SM1–SM6 and HG1–HG4. Haptic feel needs human review.
+
+`sidebar-render space-manager --out FILE.png [--profiles 2]` renders the real
+Library view with neutral synthetic data. `--snapshot` uses an existing snapshot
+read-only; `--columns N --rows N --scroll-x X` exercises lazy columns. All
+evidence stays outside the repository. No unit tests or App source changes.
+
+S4's renderer dependency is Media Step 3 #92 (`OffscreenRenderer.swift` at
+`35c0c41`): CARenderer and read-back share one Metal queue, and CATextLayer is
+cloned as text. A scratch main with only that file ported is
+`687843162552c6e4f6801930f968b48722c72221`. Two independent release builds were
+warning/error-free. Their first comparison had 11/13 byte-identical tables;
+static-active and selected-pinned differed only in row-title color metrics, with
+identical positions and ink boxes. Full evidence is under
+`/tmp/open-sidebar-s4/fixed-main`. That result prompted the lead gate above.
+`verify-all` accepts `SIDEBAR_BASELINE_REF` and `SIDEBAR_BASELINE_RENDERER` to
+name this renderer-only main dependency explicitly until #92 merges.
+
+S4 review R1: the grabber uses the shared capsule tooltip. Header icon/title align
+with the sidebar (13/41 pt), with the grabber at W−58. Lift transforms the content
+about the column center; `--lift-column` captures an actual tracking frame.
+Manager renders use LibraryContent’s `SettingsTokens.content` background in both
+appearances. Dark columns have a 1 pt white 0.30 rim (guess pending C2).
+Hidden Managers keep one dirty flag; visibility reconciles cached final parent
+lists in one bulk native update, without reloadData or a queued event history.
+The earlier SM6 number means **36 ms to first layout**, excluding GPU snapshot
+and real favicon loading. C2/C5/C7 values remain guesses until capture session 2.

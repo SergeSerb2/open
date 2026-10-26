@@ -7,6 +7,7 @@ explicit text mismatches documented in §15.1 are excluded below. No private tex
 or screenshot bytes are part of this script. Never copies its private inputs.
 """
 import argparse
+from decimal import Decimal
 import hashlib
 import json
 import os
@@ -18,6 +19,19 @@ import tempfile
 
 HISTORICAL_SHA = "2e79746492cc775d8b207bc5759084b74f3e96ab88e521c6ab9909790a278448"
 ROOT = Path(__file__).resolve().parents[2]
+
+# Lead gate (2026-10-26), docs/design.md §15.1. SHA is informational.
+COLOR_DRIFT = Decimal("0.15")
+# Expected compared elements, worst position, worst ΔE00 against Arc.
+LIMITS = {
+    "static-active": (31, "1.0", "1.59"), "static-inactive": (31, "1.0", "1.17"),
+    "row-hover": (33, "1.0", "1.59"), "selected-pinned": (33, "1.0", "1.73"),
+    "selected-favorite": (28, "1.0", "1.59"), "toggle-hover": (29, "1.0", "1.59"),
+    "home-hover": (29, "2.0", "1.59"), "newtab-hover": (29, "1.0", "1.59"),
+    "newtab-open": (35, "1.0", "2.00"), "selected-today": (36, "1.0", "2.03"),
+    "default-dark": (31, "1.0", "1.77"), "yellow": (23, "1.0", "1.95"),
+    "blue-grain": (19, "1.0", "2.38"),
+}
 
 # name, capture, snapshot, render arguments, comparison arguments.
 # Capture-time snapshots: static has no Today tabs, real has six Today tabs.
@@ -126,6 +140,67 @@ def run_state(renderer, root, capture, state, target):
     return (target / "table.md").read_bytes()
 
 
+def table_metrics(table):
+    text = table.decode("utf-8")
+    rows = []
+    for line in text.splitlines():
+        if not line.startswith("| ") or line.startswith("| Element |"):
+            continue
+        cells = [part.strip() for part in line.strip("|").split("|")]
+        if len(cells) != 7:
+            raise ValueError("unexpected comparison table columns")
+        label = cells[0]
+        # Background labels include their sampling count and maximum color
+        # metric. Keep the count exact; compare the metric as a color value.
+        extra = re.search(r" \((\d+) points, max ΔE ([0-9.]+)\)$", label)
+        colors = [None if cells[2] == "—" else Decimal(cells[2])]
+        if extra:
+            label = label[:extra.start()] + " (" + extra[1] + " points)"
+            colors.append(Decimal(extra[2]))
+        rows.append({"element": label, "position": cells[1], "ink": cells[5:7], "colors": colors})
+    summary = re.search(r"Worst position error ([0-9.]+) pt, worst ΔE00 ([0-9.]+), (\d+) elements\.", text)
+    if not rows or not summary:
+        raise ValueError("missing comparison rows or worst-value summary")
+    return rows, (Decimal(summary[1]), Decimal(summary[2]), int(summary[3]))
+
+
+def gate_tables(name, tables):
+    parsed = {kind: table_metrics(table) for kind, table in tables.items()}
+    errors = []
+    count, position_limit, color_limit = LIMITS[name]
+    for kind, (rows, worst) in parsed.items():
+        if len(rows) != count or worst[2] != count:
+            errors.append(f"{kind}: compared element count {len(rows)}/{worst[2]} != {count}")
+        if worst[0] > Decimal(position_limit) or worst[1] > Decimal(color_limit):
+            errors.append(f"{kind}: Arc worst {worst[0]} pt / {worst[1]} ΔE00 exceeds {position_limit} pt / {color_limit}")
+    main_rows, branch_rows = parsed["main"][0], parsed["branch"][0]
+    geometry_same = True
+    max_drift = Decimal(0)
+    if [row["element"] for row in main_rows] != [row["element"] for row in branch_rows]:
+        errors.append("compared elements or sampling counts differ")
+        geometry_same = False
+    else:
+        for main, branch in zip(main_rows, branch_rows):
+            if main["position"] != branch["position"] or main["ink"] != branch["ink"]:
+                geometry_same = False
+                errors.append(main["element"] + ": position or ink box differs")
+            if len(main["colors"]) != len(branch["colors"]):
+                errors.append(main["element"] + ": color metrics differ in shape")
+                continue
+            for a, b in zip(main["colors"], branch["colors"]):
+                if a is None or b is None:
+                    if a != b:
+                        errors.append(main["element"] + ": missing color metric")
+                    continue
+                drift = abs(a - b)
+                max_drift = max(max_drift, drift)
+                if drift > COLOR_DRIFT:
+                    errors.append(f"{main['element']}: color-metric drift {drift} > {COLOR_DRIFT} ΔE00")
+    return {"passed": not errors, "positionAndInkIdentical": geometry_same,
+            "maxColorMetricDrift": str(max_drift), "errors": errors,
+            "byteIdentical": tables["main"] == tables["branch"]}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("capture_root", type=Path, nargs="?", help="absolute .re/design-compare directory")
@@ -156,7 +231,9 @@ def main():
     renderer = args.renderer.resolve()
     ref_sha = subprocess.check_output(["git", "rev-parse", args.baseline_ref], cwd=ROOT, text=True).strip()
     baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, ref_sha)
-    receipt = {"baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
+    receipt = {"gate": {"positionAndInk": "identical", "colorMetricDrift": str(COLOR_DRIFT),
+                        "arcLimits": LIMITS, "sha": "informational"},
+               "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
                "baselineBinarySHA256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
                "branchBinarySHA256": hashlib.sha256(renderer.read_bytes()).hexdigest(),
                "snapshotSHA256": {name: hashlib.sha256((root / name / "State/browser.json").read_bytes()).hexdigest()
@@ -166,28 +243,31 @@ def main():
     failed = []
     for state in STATES:
         name, frame, _, _, _ = state
+        attempt_results = []
         for attempt in range(1, args.attempts + 1):
             tables = {kind: run_state(binary, root, captures[frame], state, out / kind / name / f"attempt-{attempt}")
                       for kind, binary in (("main", baseline), ("branch", renderer))}
-            same = tables["main"] == tables["branch"]
-            if same or attempt == args.attempts:
+            result = gate_tables(name, tables)
+            attempt_results.append({"attempt": attempt, **result})
+            if result["passed"] or attempt == args.attempts:
                 for kind, table in tables.items():
                     combined[kind][name] = table
                     (out / kind / name / "table.md").write_bytes(table)
                 break
-            print(f"{name}: tables differ on paired attempt {attempt}; preserving outputs and repeating both processes", flush=True)
+            print(f"{name}: gate failed on paired attempt {attempt}; preserving outputs and repeating both processes: " + "; ".join(result["errors"]), flush=True)
         worst = re.search(rb"Worst position error .*", tables["main"])
-        print(f"{name}: {'PASS' if same else 'FAIL'} (paired attempts {attempt}) " + (worst[0].decode() if worst else "missing summary"), flush=True)
-        receipt["states"].append({"name": name, "identical": same, "attempts": attempt})
-        if not same:
+        print(f"{name}: {'PASS' if result['passed'] else 'FAIL'} (paired attempts {attempt}; position/ink {'identical' if result['positionAndInkIdentical'] else 'differ'}; max color drift {result['maxColorMetricDrift']} ΔE00) " + (worst[0].decode() if worst else "missing summary"), flush=True)
+        receipt["states"].append({"name": name, "attempts": attempt, "attemptResults": attempt_results, **result})
+        if not result["passed"]:
             failed.append(name)
+            print("  " + "; ".join(result["errors"]), flush=True)
     for kind in combined:
         payload = b"".join(combined[kind][name] for name in sorted(combined[kind]))
         digest = hashlib.sha256(payload).hexdigest()
         receipt[kind + "CombinedSHA256"] = digest
         (out / kind / "combined-tables.md").write_bytes(payload)
         (out / kind / "combined.sha256").write_text(digest + "\n")
-        print(f"{kind} concatenated tables SHA-256: {digest}")
+        print(f"{kind} concatenated tables SHA-256 (informational): {digest}")
     print("historical SHA-256: " + HISTORICAL_SHA)
     if receipt["mainCombinedSHA256"] != HISTORICAL_SHA:
         print("baseline SHA re-derived: " + receipt["mainCombinedSHA256"])
@@ -195,7 +275,8 @@ def main():
     if (hashlib.sha256(baseline.read_bytes()).hexdigest() != receipt["baselineBinarySHA256"] or
             hashlib.sha256(renderer.read_bytes()).hexdigest() != receipt["branchBinarySHA256"]):
         raise ValueError("renderer changed during comparison; rerun after its build completes")
-    print(f"tables identical: {13 - len(failed)}/13; output: {out}")
+    identical = sum(state["byteIdentical"] for state in receipt["states"])
+    print(f"states passed: {13 - len(failed)}/13; tables byte-identical (informational): {identical}/13; output: {out}")
     return 1 if failed else 0
 
 

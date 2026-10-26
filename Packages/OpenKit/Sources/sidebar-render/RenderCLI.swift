@@ -15,6 +15,7 @@ enum RenderCLI {
         case "render": try render(rest)
         case "synth": try synth(rest)
         case "tooltip": try tooltip(rest)
+        case "space-manager": try spaceManager(rest)
         case "compare": try Compare.run(rest)
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
@@ -35,6 +36,7 @@ enum RenderCLI {
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
+      sidebar-render space-manager --out FILE.png [--snapshot DIR] [--size WxH] [--scale 1|2] [--profiles 2] [--columns N --rows N --scroll-x X]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
       sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed]
@@ -206,6 +208,51 @@ enum RenderCLI {
         }
         OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
         print("wrote \(out) \(image.width)x\(image.height)")
+    }
+
+    static func spaceManager(_ args: [String]) throws {
+        guard let out = value(args, "--out") else { throw CLIError(description: usage) }
+        let model = try value(args, "--snapshot").map(loadModel) ?? Synthetic.model()
+        if value(args, "--profiles") == "2", let profile = model.createProfile(name: "Work") { model.updateSpace(id: model.spaces[0].id, profileID: profile.id) }
+        if let count = value(args, "--columns").flatMap(Int.init) {
+            guard count > 0 else { throw CLIError(description: "--columns must be positive") }
+            model.spaces = (0..<count).map { i in
+                let space = Space(title: "Space \(i + 1)", icon: .emoji("📚"), profileID: model.profiles[0].id)
+                Synthetic.fillBulk(space, rows: Int(value(args, "--rows") ?? "100") ?? 100); return space
+            }
+            model.windows[0].focusedSpaceID = model.spaces[0].id; model.rebuildIndex()
+        }
+        let context = SidebarContext(model: model, windowID: model.windows[0].id)
+        context.systemAppearance = value(args, "--appearance") == "light" ? .light : .dark
+        let manager = SpaceManagerView(context: context)
+        manager.frame.size = size(value(args, "--size")) ?? CGSize(width: 1000, height: 700)
+        let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
+        // The same opaque content background used by LibraryContent.
+        let library = NSView(frame: manager.frame); library.wantsLayer = true
+        library.appearance = context.systemAppearance.nsAppearance
+        library.layer?.backgroundColor = SettingsTokens.content.cgColor(context.systemAppearance)
+        library.addSubview(manager)
+        let host = OffscreenRenderer.host(library, scale: scale)
+        defer { SidebarDiagnostics.spaceReorderFrame = nil; host.contentView = nil; host.close() }
+        if let x = value(args, "--scroll-x").flatMap(Double.init) {
+            manager.scrollView.contentView.scroll(to: CGPoint(x: x, y: 0))
+            manager.scrollView.reflectScrolledClipView(manager.scrollView.contentView)
+            OffscreenRenderer.settle(library, runLoop: 0.002)
+        }
+        var captured: CGImage?
+        if let index = value(args, "--lift-column").flatMap(Int.init), model.spaces.indices.contains(index), let grip = manager.controls(spaceID: model.spaces[index].id)?.grabber {
+            SidebarDiagnostics.spaceReorderFrame = { OffscreenRenderer.settle(library); captured = OffscreenRenderer().snapshot(library, scale: scale) }
+            let point = grip.convert(CGPoint(x: 12, y: 12), to: nil)
+            func event(_ type: NSEvent.EventType, dx: CGFloat) -> NSEvent {
+                NSEvent.mouseEvent(with: type, location: CGPoint(x: point.x+dx,y: point.y), modifierFlags: [], timestamp: 0, windowNumber: host.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            NSApp.postEvent(event(.leftMouseDragged, dx: 20), atStart: false)
+            NSApp.postEvent(event(.leftMouseUp, dx: 20), atStart: false)
+            grip.mouseDown(with: event(.leftMouseDown, dx: 0))
+        }
+        let image = captured ?? OffscreenRenderer().snapshot(library, scale: scale)
+        OffscreenRenderer.writePNG(image, to: URL(fileURLWithPath: out))
+        print("wrote \(out) \(image.width)x\(image.height); built \(manager.builtColumnIDs.count)/\(model.spaces.count) columns")
     }
 
     /// Renders one Arc-style tooltip capsule in a Space's colors.
