@@ -21,10 +21,16 @@ Settings storage, sharing, imports, and per-frame engine injection remain future
 - `BoostInjectionPlanner.plan`: accepts URL, profile, matcher, global flag, and
   context. Selects the last non-identity color and last valid font/text component.
   Produces a stable FNV-1a content ID and structured `InjectionPlan`.
-- `BoostPickerCoordinator.handle`: persists commit/replacement/undo and returns
-  whether the caller must rebuild matching and re-plan. Native removal echoes do
-  not mutate twice. `BridgeDecode` converts transport pairs to/from typed messages.
-  The App adapter must validate envelope version 1 before decoding payloads.
+- `BoostPickerCoordinator.enterZap(boostID:for:)`: arms a native session for an
+  engine-owned document/frame identity and returns the command to send. Each new
+  session gets a random UUID nonce. Re-entry keeps the same active session.
+  `handle(_:from:)` accepts commits/replacements/undo/list/lifecycle messages only
+  for that page, Boost, and nonce. It returns whether matching/plans need rebuilding.
+  `listZaps(for:)` supplies persisted selectors in the command. Native removal
+  echoes do not mutate twice. `exitZap(for:)` expires the capability before send;
+  a valid `picker:exited` also expires it. Call `invalidate(pageID:)` on navigation,
+  frame destruction, transport loss, or failed send. `BridgeDecode` handles wire
+  pairs; the App adapter must validate envelope version 1 before decoding.
 - `BoostResources.applierJS` / `.pickerJS`: cached bundled text. The applier owns
   `window.__openBoosts`; the on-demand picker owns `window.__openZap`. Transport is
   `__open.postMessage(type,payload)` / `__open.receive({v:1,type,payload})`.
@@ -36,74 +42,128 @@ and captured late closed roots. Clear restores owned hooks and removes owned she
 The picker uses a closed shadow overlay, click-only semantic selector generation,
 related-element previews, session undo, and capture listeners only while active.
 
+## Engine requirements and session contract
+
+True overlay secrecy requires the engine adapter to inject the picker in an
+**ISOLATED WORLD** (Chromium content-script world). A closed shadow root and
+captured functions alone do not protect a main-world picker from page code that
+ran before injection. Inject the managed applier in that world too, so its state
+and Boost IDs remain private. User-authored Boost JS still runs in the main world
+through its script element. This is a required engine integration gate, not an
+implemented App/engine adapter in this milestone.
+
+The engine must deliver native commands directly into that isolated world and
+accept its native binding there. Do not forward capabilities through page-visible
+DOM attributes, events, main-world globals, or a main-world receive relay. Derive
+`pageID` from the engine's document/frame identity, never from message JSON. Use a
+new identity on navigation, and invalidate the old native session. Capture the
+pristine built-ins before page code can replace them in the injection world.
+Both IIFEs retain the listed DOM queries/hit tests, shadow attachment, computed
+style/rect functions, Array helpers, Map/Set/WeakMap methods, JSON, and
+MutationObserver references.
+
+An isolated applier's prototype hooks see calls from its own world. The engine
+must provide late closed-root style injection for roots created by main-world
+page code. The main-world harness S2/S3 checks do not prove that engine path.
+
+Every `zap:*` and `picker:*` payload now includes `boostID` and `sessionNonce`.
+Native creates that nonce when it arms `zap:enter`; the picker echoes it in every
+reply. `zap:exit`, `zap:undo`, `zap:remove`, and `zap:list` commands also carry the
+session pair. `zap:list` additionally carries `selectors: [String]` from the native
+store. There is no DOM manifest. The stylesheet contains CSS only, with no Boost
+ID comments or attributes. Hide selectors are inherently observable CSS; they are
+not secrets. A page-created `__openZap.enter({boostID})` does not enter picking.
+A page-invented nonce cannot pass the native session check.
+
 ## Verification (2026-10-25, America/Vancouver)
 
-Real package callers compiled under `/tmp` against the release library. Browser
-checks used only T3 collaborative `preview_*` tools and the production files served
-by `Harness/serve.py` on port 8931. A fresh server ran the complete H/A/S-A/S/O/E
-sequence from loader.html without a restart. No unit tests were added or run.
-
-**24 checks pass. A7 and A11 pass functionally but their visual portions remain
-UNVERIFIED.** `preview_snapshot` failed on the initial tab and on fresh/reopened
-tabs, including after an explicit viewport resize. The errors were:
-
-> Preview automation snapshot timed out after 15000ms.
-
-> Protocol error (Page.captureScreenshot): A previous preview capture is still pending. Reopen this tab to capture again.
-
-This is an incomplete visual acceptance gate. No screenshot or full visual pass is
-claimed. Functional assertions below are Eval results, not substitutes for visuals.
+The complete **26/26 H/A/S-A/S/O/E checks pass**, including visual A7/A11.
+The earlier T3 hidden-tab snapshot failure is superseded by this run. As directed,
+verification used `puppeteer-core` and system Google Chrome in `headless: "new"`
+mode, Chrome 156.0.8078.48, at 1280×900, serving the production files on port 8931. The existing server
+was reused; its served files were verified against this worktree. No desktop was
+driven, and no unit tests or permanent verification dependencies were added.
 
 | Check | Result | Observed evidence |
 |---|---|---|
-| H0 | PASS | Versions 1/1; `applier: v1, picker: v1`; errors `[]`; bridge snippets identical on all 5 pages. |
-| H1 | PASS | Production applier fetch status `200`; fresh state has null plan, empty IDs, zero zaps. |
-| A1 | PASS | Outline `solid`; `harness-F1`, one boost, zapCount 1. |
-| A2 | PASS | Banner display `none`. |
-| A3 | PASS | Fresh load `block`; F1 re-injection changes it to `none`. |
-| A4 | PASS | `hue-rotate(90deg) saturate(0.5)`; article Georgia; code monospace. |
-| A5 | PASS | JS marker `ran`, counter `1` after two applies; one applied report. |
-| A6 | PASS | Banner `block`, outline `none`, appliedPlanID null. |
-| A7 | PARTIAL | One `#promo-banner` commit, matches 1, hidden, still picking. Hover overlay visual UNVERIFIED: capture service failure. |
-| A8 | PASS | Escape exit reason `esc`; simulated native re-apply keeps banner hidden with preview stylesheet removed. |
-| A9 | PASS | Control+Z and bar Undo both restore ad; removed via undo; empty stack returns false. |
-| A10 | PASS | 15 sorted, bounded candidates; first `#promo-banner`; rect 1232×58; hash begins `DIV#promo-banner`. |
-| A11 | PARTIAL | Unique article pick replaced by 3-match selector; all 3 hidden. Related-preview visual UNVERIFIED: capture service failure. |
-| S-A1 | PASS | New view-B marker present, replacement banner hidden without re-apply. |
-| S-A2 | PASS | Removed stylesheet restored; banner hidden by next tool Eval, no extra wait needed. |
-| S-A3 | PASS | `/Harness/blog/post`, cleared state, banner `block`; direct route reload loads both real runtimes. |
-| S1 | PASS | Open-root promo `none`. |
-| S2 | PASS | Newly attached open-root promo `none`. |
-| S3 | PASS | Pre-apply closed-root promo `block` (known limit); late closed-root promo `none`; created-after flag true. |
-| S4 | PASS | Commit `#shadow-promo`, inShadowRoot true; root-local preview hides it. |
-| O1 | PASS | First `[data-testid="card-2"] p`; top five avoid bare generated-class terms; commit includes exact test ID. |
-| O2 | PASS | Structural `#content :nth-child(7)`, matches 1; widget hidden. |
-| O3 | PASS | ≤15 candidates, 1–100 matches, sorted; 6 post-title rects. |
-| E1 | PASS | Out-of-bounds candidates `[]`; margin click commits broad body selector; picker remains active; errors `[]`. |
-| E2 | PASS | Good zap and outline apply; invalid-zap-selector reported for `!!!invalid`. |
-| E3 | PASS | already-active error; subsequent commit retains harness-boost. |
-| Appendix C text | PASS | Zoom `1.25`, uppercase text; input, textarea, editable child `none`; Clear restores zoom `1` and transform `none`. |
-| Native data/store/matcher | PASS | Stable numeric-date JSON, normalization, clamps, dedupe, atomic replacement, quarantine, schema preservation, debounce; 15 matcher rows including IPv6 and encoded paths. |
-| Native planner/bridge | PASS | Stable/edit/empty/context plans; font rejection; coordinator persistence/echo handling; 9 inbound and 7 outbound types; actual Swift-encoded plan applied through browser bridge; persisted list/native remove/version guard and 100-rect cap pass. |
-| Release build / existing CLI | PASS | `nice -n 10 swift build -c release -j 6` in OpenKit; zero new warnings. `openkit commands-demo /tmp/boost-check/commands-demo`: 66 passed, 0 failed. |
-| Idle | PASS (source reading) | Freshly loaded, never-applied runtime creates no timers or observers. Clear disconnects observer and restores history/attachShadow. Picker exit removes document/window input listeners and cancels rAF; exit grace is bounded to 500 ms. |
+| H0 | PASS | Both runtimes v1; loader status correct; runtime errors empty; identical bridge/bar snippets across all six pages. |
+| H1 | PASS | Production applier fetch 200; fresh null plan, empty IDs, zero zaps. |
+| A1 | PASS | Header outline solid; harness-F1, one Boost, one zap. |
+| A2 | PASS | Banner display none. |
+| A3 | PASS | Fresh banner visible; re-injection hides it. |
+| A4 | PASS | Hue 90°, saturation 0.5; article Georgia; code monospace. |
+| A5 | PASS | JS counter stays 1 after two identical applies. |
+| A6 | PASS | Clear restores banner and outline; plan null. |
+| A7 | PASS | Screenshot shows blue border/tint on banner only. Click commits #promo-banner, matches 1; banner hidden, picker active. |
+| A8 | PASS | Escape exit reason esc; native-style re-apply keeps banner hidden after preview style removal. |
+| A9 | PASS | Control+Z and Undo button each restore the ad; two undo removals; empty stack false. |
+| A10 | PASS | 15 sorted, bounded candidates; #promo-banner first; one positive rect; DIV#promo-banner hash. |
+| A11 | PASS | Precise first-article pick widens to a 3-match selector; all articles hidden. Screenshot shows live related preview on Second/Third only. |
+| S-A1 | PASS | View B replaces content; banner stays hidden without re-apply. |
+| S-A2 | PASS | Removed stylesheet returns on rAF; replacement banner stays hidden. |
+| S-A3 | PASS | Path-clear restores banner; nested-route reload loads both runtimes. |
+| S1 | PASS | Existing open-root promo hidden. |
+| S2 | PASS | Newly attached open-root promo hidden. |
+| S3 | PASS | Pre-apply closed-root promo visible (known limit); late closed-root promo hidden. |
+| S4 | PASS | #shadow-promo commit marked inShadowRoot; root-local preview hides it. |
+| O1 | PASS | Card-2 body pick includes exact data-testid; top five avoid bare obfuscated classes. |
+| O2 | PASS | Structural widget selector matches one; widget hidden. |
+| O3 | PASS | ≤15 candidates, 1–100 matches, sorted; six title rects. |
+| E1 | PASS | Out-of-bounds candidates empty; margin click commits broad body selector, picker stays active, no errors. |
+| E2 | PASS | Valid zap/outline apply; invalid selector reports one error. |
+| E3 | PASS | Double-enter reports already-active; next commit retains the original Boost/session. |
 
-| Budget | Values (ms) | Result |
-|---|---|---|
-| P1 apply, 5 runs | 0.10, 0, 0, 0.10, 0.10; median **0.10** | PASS <1 ms |
-| P2 hoveredAt, 20 calls | 19 zero samples, one 0.10; median **0**, max **0.10** | PASS <2 ms; below timer resolution |
-| P2 fresh baseline | 17 zero samples, three 0.10; median **0**, max **0.10** | Same resolution/noise floor |
-| P3 article candidates, 5 runs | 1.80, 1.20, 1.10, 1.10, 0.90; median **1.10** | Below 50 ms guidance |
-| Native matcher | 100 boosts / 10 domains / 10,000 lookups: **53.506 ms total**, **0.0053506 ms/lookup** | Negligible; release library |
+Additional checks pass:
 
-Browser timer resolution was about 0.10 ms; zero means below that resolution.
-P1 measures style construction after parse. Production document-start timing needs
-the engine adapter and is not verified here. Five real hover tool calls completed
-without handler errors; visible lag remains unverified because capture failed.
-The static gibberish control's top selector was `#content :nth-child(5)`.
-The final resource bundle and served source hashes match: applier
-`3a9e633b12c8db7a64f1577349387cca767b54823cdf4aab2199b16806de4592`, picker
-`3c775acdf86308ac7ea75866e899181ea15c51f54e10811e89a3557030398440`.
+| Finding / check | Evidence |
+|---|---|
+| Native authority and persistence | 18 assertions pass. A temporary real Swift executable used BoostStore, coordinator, decode/encode, and file reloads. Chrome isolated-world messages traversed that caller over a native binding. Valid pick/list/undo/related replacement/native removal persisted correctly. Missing, invented, wrong-page, wrong-Boost, wrong-nonce, and expired capabilities did not change the file. |
+| Session expiry | Picker Escape, native exit before delivery, and navigation invalidation each reject replay. New sessions rotate the nonce. All picker/zap replies carry the pair. |
+| Captured built-ins / isolated world | Page attachShadow interception before isolated injection captured zero overlay roots; main-world picker/applier globals absent, host.shadowRoot null. Replacing all named query/hit-test/rect/style/shadow, Array, Map/Set, JSON, and observer functions after capture triggered zero replacement calls; 15 candidates and closed overlay still worked. |
+| Hover cost | 100 mousemove events before a frame: zero immediate hit tests, exactly one after rAF. |
+| Picture invert | picture filter none; nested img and standalone img have the same counter-filter and matching visible colors. |
+| Selector identity / diagnostics / roots | Giving every page element the same __open_id did not affect the precise pick. A distinct new plan reports the invalid selector again. Two list selectors share one document root scan; adding a live shadow root changes both match counts from 1 to 2 with one new scan. The inventory invalidates on mutation, including pending observer records. |
+| Live related rects | First post is hidden. Only two boxes: (24,268,920,84) on Second post and (24,364,920,84) on Third post. Hidden/zero-size matches are skipped. |
+| Picker controls | Hovering related or Done hides the page highlight and label; hoveredAt over the pill returns null. No body tint. |
+| Appendix C | Zoom 1.25 and uppercase; input, textarea, editable child unchanged; Clear restores zoom 1 / transform none. |
+| Build | `nice -n 10 swift build -c release -j 6` in Packages/OpenKit succeeds. Temporary caller target/source was removed before the final clean-manifest build. |
+
+Screenshots were opened with the image viewer and checked: `a7-hover.png` shows the
+banner highlight; `a11-related.png` shows two aligned live boxes; `pill-hover.png`
+shows no page highlight over Done; `picture-invert.png` shows equal standalone and
+picture image colors. PNGs remain in the local temporary evidence directory and
+are not committed. Browser receipts are `acceptance.json`, `native-browser.json`,
+`hardening.json`, `roots.json`, and the before/after latency JSON there. The local
+evidence directory for this run is `/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-boost-fixes-8fuqghwj`.
+
+| Measurement | Raw values (ms) | Median (ms) | Max (ms) |
+|---|---|---|---|
+| Large candidates, before (10) | 55.6, 49.1, 47.8, 47.1, 45.1, 55, 50.5, 56.5, 49.2, 45 | 49.15 | 56.5 |
+| Large candidates, after (10) | 12.4, 8.7, 9.8, 8.4, 7.8, 7.4, 7.5, 7.8, 7.4, 7.4 | 7.80 | 12.40 |
+| Large complete clicks, after (10) | 14.7, 9.7, 12, 11.4, 10.7, 12, 11.5, 13.1, 11.1, 8.7 | 11.45 | 14.70 |
+| P1 static | 0.1, 0, 0.1, 0, 0 | 0.00 | 0.10 |
+| P2 static | 0, 0, 0, 0, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0, 0, 0, 0, 0, 0 | 0.00 | 0.10 |
+| P3 static | 1.4, 0.9, 0.6, 0.6, 0.5 | 0.60 | 1.40 |
+
+The 20,000-element fixture is generated client-side in `Harness/large.html`:
+100 sections, each with a caption and 18 obfuscated cards of 11 elements each.
+The timed target is the first article's padding. Candidate generation caches
+selector node lists for one pick, narrows expansions from those lists, and ranks
+and fingerprints only beam/phase-2 survivors. The full click timing runs from the
+document capture listener to `zap:committed`, including preview-hide work.
+All raw samples are retained; medians of even sample counts average the middle two.
+Browser timers resolve about 0.1 ms; zero means below that resolution.
+
+The bundled and served resource bytes match the final source: applier SHA-256
+`2d1dcd10e425cef993de62ce95179fc4d915a0fd26acd23113618fac65edb3be`, picker
+`067102a53aed582e04c2b23cca3f7b50a1eb234830591081f58e90b1baeefba5`.
+The fallback bridge can be replaced after runtime load while retaining handlers;
+apply, ready, and a real banner-click commit reach the adopted transport.
+
+Production document-start timing and the actual OpenEngine adapter remain
+unverified. This pass proves package/Chrome runtime behavior and the real native
+coordinator/store bridge. Existing model/store/matcher baseline results from the
+initial milestone were not repeated for this bounded fix.
 
 ## Deviations from plan
 
@@ -130,11 +190,12 @@ The final resource bundle and served source hashes match: applier
 - The related preview uses the same closed overlay. Document capture ignores its
   host, since a closed root's composedPath hides the internal bar. Harness controls
   opt out through `data-open-zap-ignore`. Overlay styling uses the specified Open
-  values; its appearance has not passed visual review due to capture failures.
-- Added an internal zap manifest on the applier-owned style element so an on-demand
-  picker can list persisted zaps without a new public API. The §9.2 list-result
-  wire shape (counts, not rect arrays) takes precedence over §7.6. Added outbound
-  `undoZap` to cover the normative §9.3 command missing from §8.3's enum.
+  values; the updated screenshots pass visual review.
+- The initial DOM manifest was removed in the review fix. Native now supplies
+  persisted selectors in authenticated list commands. Native-issued sessions and
+  isolated-world injection supersede the plan's main-world assumption. The §9.2
+  list-result wire shape (counts, not rect arrays) takes precedence over §7.6.
+  Outbound undoZap covers the normative §9.3 command missing from §8.3's enum.
 - Shadow font/text selectors use `:host` because body cannot match in a shadow root.
   Text controls also reset form/editable inheritance. Text fields extend the wire
   plan, component selection, and content hash as required by Appendix C.
@@ -146,7 +207,7 @@ The final resource bundle and served source hashes match: applier
 
 Default Q4–Q7 decisions remain: apply in both contexts, pass the global preference
 into the planner, enter Zap through the bridge, and store filter values without
-editor wheel math. Main-world/document-start injection follows the plan's explicit
-assumption, not verified Arc timing. See the [harness README](../Packages/OpenKit/Sources/OpenBoosts/Harness/README.md)
+editor wheel math. Managed runtime injection requires the isolated-world engine
+contract above; document-start remains unverified Arc timing. See the [harness README](../Packages/OpenKit/Sources/OpenBoosts/Harness/README.md)
 for operation and limits: CSP, arbitrary JS effects, icon fonts, partial-invert media,
 pre-injection closed roots, and per-frame engine work.

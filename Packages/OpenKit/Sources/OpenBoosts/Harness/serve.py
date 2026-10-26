@@ -28,6 +28,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8931)
     args = parser.parse_args()
-    for page in ["loader", "static", "spa", "shadow-dom", "obfuscated"]:
+    for page in ["loader", "static", "spa", "shadow-dom", "obfuscated", "large"]:
         print(f"http://127.0.0.1:{args.port}/Harness/{page}.html", flush=True)
     ThreadingHTTPServer(("127.0.0.1", args.port), Handler).serve_forever()

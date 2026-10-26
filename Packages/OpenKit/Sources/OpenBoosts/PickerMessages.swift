@@ -1,13 +1,22 @@
 import Foundation
 
+/// Capability created only by native. The adapter keeps page identity out of page JSON.
+public struct PickerSession: Sendable, Equatable {
+    public let boostID: BoostID
+    public let sessionNonce: String
+    fileprivate init(boostID: BoostID, sessionNonce: String) {
+        self.boostID = boostID; self.sessionNonce = sessionNonce
+    }
+}
+
 public enum PickerInbound: Sendable {
-    case zapCommitted(boostID: BoostID, selector: String, label: String, matches: Int, inShadowRoot: Bool)
-    case zapReplaced(boostID: BoostID, oldSelector: String, newSelector: String, label: String, matches: Int)
-    case zapRemoved(boostID: BoostID, selector: String, via: String)
-    case zapListResult(boostID: BoostID, entries: [ZapListEntry])
-    case pickerReady(boostID: BoostID)
-    case pickerExited(boostID: BoostID?, reason: String)
-    case pickerError(kind: String, selector: String?)
+    case zapCommitted(session: PickerSession, selector: String, label: String, matches: Int, inShadowRoot: Bool)
+    case zapReplaced(session: PickerSession, oldSelector: String, newSelector: String, label: String, matches: Int)
+    case zapRemoved(session: PickerSession, selector: String, via: String)
+    case zapListResult(session: PickerSession, entries: [ZapListEntry])
+    case pickerReady(session: PickerSession)
+    case pickerExited(session: PickerSession, reason: String)
+    case pickerError(session: PickerSession, kind: String, selector: String?)
     case boostApplied(planID: String)
     case boostError(kind: String, selector: String?)
 }
@@ -31,11 +40,11 @@ public struct ZapListEntry: Sendable, Decodable {
 }
 
 public enum PickerOutbound: Sendable {
-    case enterZap(boostID: BoostID)
-    case exitZap
-    case undoZap
-    case listZaps(boostID: BoostID)
-    case removeZap(boostID: BoostID, selector: String)
+    case enterZap(session: PickerSession)
+    case exitZap(session: PickerSession)
+    case undoZap(session: PickerSession)
+    case listZaps(session: PickerSession, selectors: [String])
+    case removeZap(session: PickerSession, selector: String)
     case applyBoosts(InjectionPlan)
     case clearBoosts
 }
@@ -43,27 +52,59 @@ public enum PickerOutbound: Sendable {
 @MainActor
 public final class BoostPickerCoordinator {
     private let store: BoostStore
+    private var sessions: [String: PickerSession] = [:]
     public private(set) var lastListResult: [ZapListEntry] = []
     public init(store: BoostStore) { self.store = store }
 
-    public func handle(_ message: PickerInbound) -> Bool {
+    /// Call only for a native user request, then send the returned command to this
+    /// exact document/frame in the ISOLATED WORLD. Re-entry keeps its capability.
+    public func enterZap(boostID: BoostID, for pageID: String) -> PickerOutbound? {
+        guard store.boost(id: boostID) != nil, !pageID.isEmpty else { return nil }
+        if let existing = sessions[pageID] {
+            return existing.boostID == boostID ? .enterZap(session: existing) : nil
+        }
+        let session = PickerSession(boostID: boostID, sessionNonce: UUID().uuidString)
+        sessions[pageID] = session; lastListResult = []
+        return .enterZap(session: session)
+    }
+    public func listZaps(for pageID: String) -> PickerOutbound? {
+        guard let session = sessions[pageID], let boost = store.boost(id: session.boostID) else { return nil }
+        return .listZaps(session: session, selectors: boost.zaps.map(\.selector))
+    }
+    public func undoZap(for pageID: String) -> PickerOutbound? {
+        sessions[pageID].map { .undoZap(session: $0) }
+    }
+    public func removeZap(selector: String, for pageID: String) -> PickerOutbound? {
+        sessions[pageID].map { .removeZap(session: $0, selector: selector) }
+    }
+    public func exitZap(for pageID: String) -> PickerOutbound? {
+        sessions.removeValue(forKey: pageID).map { .exitZap(session: $0) }
+    }
+    /// Required on navigation, frame destruction, transport loss, or failed send.
+    public func invalidate(pageID: String) { sessions.removeValue(forKey: pageID) }
+
+    /// pageID comes from the engine's document/frame identity, never from payload.
+    /// An absent, foreign, or expired native capability cannot mutate the store.
+    public func handle(_ message: PickerInbound, from pageID: String) -> Bool {
+        if let session = message.session {
+            guard sessions[pageID] == session, store.boost(id: session.boostID) != nil else { return false }
+        }
         switch message {
-        case let .zapCommitted(id, selector, label, _, _):
-            guard store.boost(id: id) != nil else { debugLog("unknown boost \(id)"); return false }
-            return store.appendZap(boostID: id, zap: ZappedElement(selector: selector, label: label))
-        case let .zapReplaced(id, old, new, label, _):
-            guard store.boost(id: id) != nil else { debugLog("unknown boost \(id)"); return false }
+        case let .zapCommitted(session, selector, label, _, _):
+            return store.appendZap(boostID: session.boostID, zap: ZappedElement(selector: selector, label: label))
+        case let .zapReplaced(session, old, new, label, _):
             let old = old.trimmingCharacters(in: .whitespacesAndNewlines), new = new.trimmingCharacters(in: .whitespacesAndNewlines)
             guard old != new, !new.isEmpty else { return false }
-            let removed = store.removeZap(boostID: id, selector: old)
-            let appended = store.appendZap(boostID: id, zap: ZappedElement(selector: new, label: label))
+            let removed = store.removeZap(boostID: session.boostID, selector: old)
+            let appended = store.appendZap(boostID: session.boostID, zap: ZappedElement(selector: new, label: label))
             return removed || appended
-        case let .zapRemoved(id, selector, via):
-            return via == "undo" ? store.removeZap(boostID: id, selector: selector) : false
+        case let .zapRemoved(session, selector, via):
+            return via == "undo" ? store.removeZap(boostID: session.boostID, selector: selector) : false
         case let .zapListResult(_, entries): lastListResult = entries; return false
-        case let .pickerError(kind, selector), let .boostError(kind, selector):
+        case .pickerExited: invalidate(pageID: pageID); return false
+        case let .pickerError(_, kind, selector), let .boostError(kind, selector):
             debugLog("\(kind) \(selector ?? "")"); return false
-        case .pickerReady, .pickerExited, .boostApplied: return false
+        case .pickerReady, .boostApplied: return false
         }
     }
     private func debugLog(_ message: String) {
@@ -73,11 +114,23 @@ public final class BoostPickerCoordinator {
     }
 }
 
+private extension PickerInbound {
+    var session: PickerSession? {
+        switch self {
+        case let .zapCommitted(s, _, _, _, _), let .zapReplaced(s, _, _, _, _),
+             let .zapRemoved(s, _, _), let .zapListResult(s, _), let .pickerReady(s),
+             let .pickerExited(s, _), let .pickerError(s, _, _): return s
+        case .boostApplied, .boostError: return nil
+        }
+    }
+}
+
 /// The App transport checks envelope v == 1 before passing (type, payloadJSON).
 /// Native -> page: wrap the returned pair in {v:1,type,payload} for __open.receive.
 public enum BridgeDecode {
     private struct Inbound: Decodable {
         var boostID: BoostID?
+        var sessionNonce: String?
         var selector: String?
         var label: String?
         var matches: Int?
@@ -92,25 +145,29 @@ public enum BridgeDecode {
     }
     public static func decode(type: String, payloadJSON: String) -> PickerInbound? {
         guard let data = payloadJSON.data(using: .utf8), let p = try? JSONDecoder().decode(Inbound.self, from: data) else { return nil }
+        let session = p.boostID.flatMap { id in
+            p.sessionNonce.flatMap { $0.isEmpty ? nil : PickerSession(boostID: id, sessionNonce: $0) }
+        }
+        if type.hasPrefix("zap:") || type.hasPrefix("picker:") { guard session != nil else { return nil } }
         switch type {
         case "zap:committed":
-            guard let id = p.boostID, let s = p.selector, let m = p.matches else { return nil }
-            return .zapCommitted(boostID: id, selector: s, label: p.label ?? "", matches: m, inShadowRoot: p.inShadowRoot ?? false)
+            guard let session, let s = p.selector, let m = p.matches else { return nil }
+            return .zapCommitted(session: session, selector: s, label: p.label ?? "", matches: m, inShadowRoot: p.inShadowRoot ?? false)
         case "zap:replaced":
-            guard let id = p.boostID, let old = p.oldSelector, let new = p.newSelector, let m = p.matches else { return nil }
-            return .zapReplaced(boostID: id, oldSelector: old, newSelector: new, label: p.label ?? "", matches: m)
+            guard let session, let old = p.oldSelector, let new = p.newSelector, let m = p.matches else { return nil }
+            return .zapReplaced(session: session, oldSelector: old, newSelector: new, label: p.label ?? "", matches: m)
         case "zap:removed":
-            guard let id = p.boostID, let s = p.selector, let via = p.via else { return nil }
-            return .zapRemoved(boostID: id, selector: s, via: via)
+            guard let session, let s = p.selector, let via = p.via else { return nil }
+            return .zapRemoved(session: session, selector: s, via: via)
         case "zap:list-result":
-            guard let id = p.boostID, let entries = p.entries else { return nil }
-            return .zapListResult(boostID: id, entries: entries)
+            guard let session, let entries = p.entries else { return nil }
+            return .zapListResult(session: session, entries: entries)
         case "picker:ready":
-            guard let id = p.boostID else { return nil }; return .pickerReady(boostID: id)
+            guard let session else { return nil }; return .pickerReady(session: session)
         case "picker:exited":
-            guard let reason = p.reason else { return nil }; return .pickerExited(boostID: p.boostID, reason: reason)
+            guard let session, let reason = p.reason else { return nil }; return .pickerExited(session: session, reason: reason)
         case "picker:error":
-            guard let kind = p.kind else { return nil }; return .pickerError(kind: kind, selector: p.selector)
+            guard let session, let kind = p.kind else { return nil }; return .pickerError(session: session, kind: kind, selector: p.selector)
         case "boost:applied":
             guard let id = p.planID else { return nil }; return .boostApplied(planID: id)
         case "boost:error":
@@ -120,8 +177,14 @@ public enum BridgeDecode {
     }
 
     private struct Command: Encodable {
-        var boostID: BoostID?
+        var boostID: BoostID
+        var sessionNonce: String
         var selector: String?
+        var selectors: [String]?
+        init(_ session: PickerSession, selector: String? = nil, selectors: [String]? = nil) {
+            boostID = session.boostID; sessionNonce = session.sessionNonce
+            self.selector = selector; self.selectors = selectors
+        }
     }
     private struct WireBoost: Encodable { var boostID: BoostID; var css: String; var zaps: [String] }
     private struct WirePlan: Encodable {
@@ -144,11 +207,11 @@ public enum BridgeDecode {
     }
     public static func encode(_ message: PickerOutbound) -> (type: String, payloadJSON: String) {
         switch message {
-        case let .enterZap(id): return ("zap:enter", json(Command(boostID: id)))
-        case .exitZap: return ("zap:exit", "{}")
-        case .undoZap: return ("zap:undo", "{}")
-        case let .listZaps(id): return ("zap:list", json(Command(boostID: id)))
-        case let .removeZap(id, selector): return ("zap:remove", json(Command(boostID: id, selector: selector)))
+        case let .enterZap(s): return ("zap:enter", json(Command(s)))
+        case let .exitZap(s): return ("zap:exit", json(Command(s)))
+        case let .undoZap(s): return ("zap:undo", json(Command(s)))
+        case let .listZaps(s, selectors): return ("zap:list", json(Command(s, selectors: selectors)))
+        case let .removeZap(s, selector): return ("zap:remove", json(Command(s, selector: selector)))
         case let .applyBoosts(plan):
             let wire = WirePlan(planID: plan.planID, boosts: plan.boosts.map { WireBoost(boostID: $0.boostID, css: $0.css, zaps: $0.zaps) },
                                 colorAdjustment: plan.colorAdjustment?.clamped(), fontFamily: plan.fontFamily,

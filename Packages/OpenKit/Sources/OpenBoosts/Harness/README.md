@@ -11,12 +11,24 @@ Start at http://127.0.0.1:8931/Harness/loader.html, then use:
 - http://127.0.0.1:8931/Harness/spa.html
 - http://127.0.0.1:8931/Harness/shadow-dom.html
 - http://127.0.0.1:8931/Harness/obfuscated.html
+- http://127.0.0.1:8931/Harness/large.html
 
-The loader contains the canonical bridge/bar snippet, copied verbatim to all four
-pages. It simulates the abstract engine bridge. It does not run the Swift matcher.
+The loader contains the canonical bridge/bar snippet, copied verbatim to all five
+content pages. It simulates the abstract engine bridge. It does not run the Swift matcher.
 Use T3 `preview_open`, `preview_navigate`, `preview_click`, `preview_hover`,
 `preview_press`, `preview_evaluate`, and `preview_snapshot`. Do not use the desktop.
-The bar is excluded from Zap capture by `data-open-zap-ignore` so its controls work.
+If hidden-tab snapshots time out, use puppeteer-core with system Chrome at
+`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, `headless: "new"`.
+Install that tooling in a temporary directory outside the repo. Open the resulting
+PNGs in an image viewer. The bar is excluded from Zap capture by
+`data-open-zap-ignore` so its controls work.
+
+This harness simulates native arming with a random nonce and supplies saved
+selectors in zap:list. It deliberately runs in the page world and exposes its
+fixtures/messages; it is not a security boundary. Production requires the
+ISOLATED WORLD/native session contract in docs/boosts.md. Its native-authority
+checks used the actual Swift coordinator and store through a Chrome isolated-world
+native binding, not the in-page simulation.
 
 F1 adds a red header outline and hides the banner. F1b has identical content and a
 different plan ID. F2 adds hue/saturation and Georgia (code stays monospace). F3
@@ -75,6 +87,14 @@ For P3, use five runs at the article padding (not the child heading):
 ```
 
 The P3 guidance is < 50 ms. Selector generation runs on click, never on hover.
+
+large.html generates exactly 20,000 elements under #content at load, with repeated
+obfuscated classes. Measure ten calls to candidatesAt at the first article's
+(x+4,y+4) padding point, outside child text. Record every value, max, and the mean
+of sorted values 4 and 5 as the median. Target: each pick <16 ms on this fixture.
+For complete click timing, register a document capture listener before entering
+Zap, then record elapsed time when the bridge receives zap:committed. Include
+selector generation and preview-style work; exclude browser automation overhead.
 See docs/boosts.md for the complete H/A/S-A/S/O/E results and measured budgets.
 
 ## Known limits
