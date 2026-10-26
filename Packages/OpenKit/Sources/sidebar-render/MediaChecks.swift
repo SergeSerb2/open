@@ -1,7 +1,10 @@
 import AppKit
+import Darwin
 import OpenDesign
 import OpenModel
 import OpenSidebar
+import OpenMedia
+import OpenWeb
 
 /// Real composed sidebar, hit testing, native symbol layers and tooltip read-back.
 @MainActor enum MediaChecks {
@@ -126,5 +129,168 @@ import OpenSidebar
         let speaker = views.first { !$0.isHidden && $0.accessibilityLabel() == "Mute tab" }
         let dot = views.first { !$0.isHidden && $0.accessibilityLabel() == "This tab is using your camera or microphone" }
         Checks.check(speaker?.frame.width == 20 && dot == nil, "RI narrow deep hovered row hides dot before speaker")
+    }
+}
+
+extension MediaChecks {
+    static func runMiniPlayers() {
+        print("MC1–MC10: composed sidebar, fake media hosts, native events and idle layers")
+        let model = Synthetic.model(); model.rebuildIndex()
+        guard let window = model.windows.first, let space = model.spaces.first else { return }
+        let context = SidebarContext(model: model, windowID: window.id)
+        let store = MediaSourceStore(); context.media = store
+        let delegate = MediaHarnessDelegate(context: context)
+        let tab = model.newTab(in: space.id, url: URL(string: "https://media.example.test/song")!, title: "A short media title")
+        let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: delegate)
+        let windowHost = OffscreenRenderer.host(scene, scale: 2)
+        let controls = scene.sidebar.mediaControls
+        let priorForce = SidebarDiagnostics.forceAnimations
+        SidebarDiagnostics.forceAnimations = true; SidebarDiagnostics.mediaReduceMotionOverride = false
+        windowHost.orderBack(nil)
+        defer {
+            windowHost.orderOut(nil); windowHost.contentView = nil; windowHost.close()
+            SidebarDiagnostics.forceAnimations = priorForce; SidebarDiagnostics.mediaReduceMotionOverride = nil
+        }
+        func pump(_ seconds: Double = 0.05) { OffscreenRenderer.settle(scene, runLoop: seconds / 3) }
+        func event(_ type: NSEvent.EventType, _ view: NSView, fraction: CGFloat = 0.5) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: view.convert(CGPoint(x: view.bounds.width * fraction, y: view.bounds.midY), to: nil),
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: windowHost.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)!
+        }
+        func click(_ view: NSView, _ name: String, fraction: CGFloat = 0.5) {
+            let down = event(.leftMouseDown, view, fraction: fraction)
+            Checks.check(windowHost.contentView?.hitTest(down.locationInWindow) === view, "MC5 native hit test: \(name)")
+            windowHost.sendEvent(down); windowHost.sendEvent(event(.leftMouseUp, view, fraction: fraction)); pump(0.2)
+        }
+        func card() -> MiniPlayerCardView? { controls.cards.first { $0.source.tabID == tab.id } }
+        pump(0.2)
+        Checks.check(controls.requiredHeight == 0 && controls.frame.height == 0 && scene.sidebar.focusedOutline?.enclosingScrollView?.frame.height != nil,
+                     "MC1 no source reserves no media height")
+        let emptyPagerBottom = descendants(scene.sidebar).first { String(describing: type(of: $0)) == "SpacePagerView" }?.frame.maxY
+        Checks.check(emptyPagerBottom == scene.sidebar.bounds.height - 50, "MC1 pager ends at h - 50")
+        let state = WebMediaState(playback: .playing, isControllable: true, hasVideo: true, largestVideoArea: 640 * 360,
+                                  actions: [.play, .pause, .previousTrack, .nextTrack], volume: 0.5)
+        let mediaHost = delegate.add(tab: tab, state: state); pump(0.5)
+        guard let first = card() else { Checks.check(false, "MC2 first card exists"); return }
+        let global = first.convert(first.bounds, to: scene.sidebar)
+        Checks.check(controls.requiredHeight == 76 && abs(global.minX - 8) <= 0.5 && abs(global.minY - (900 - 50 - 72)) <= 0.5 &&
+                     abs(global.width - (scene.sidebar.bounds.width - 16)) <= 0.5 && global.height == 68, "MC2 first card frame and C=76: \(global)")
+        let specs: [(String, CGFloat, CGFloat, Glyph, String)] = [
+            ("previous", 6, 40, .mediaPrevious, "Previous Track"), ("play", 34, 40, .mediaPause, "Pause"),
+            ("next", 62, 40, .mediaNext, "Next Track"), ("volume", first.bounds.width - 30, 40, .mediaVolume, "Adjust Tab Volume"),
+            ("pip", first.bounds.width - 30, 6, .mediaPiP, "Open Picture in Picture")]
+        for (id, x, y, glyph, title) in specs {
+            let item = first.control(named: id)
+            Checks.check(item?.view.frame == CGRect(x: x, y: y, width: 24, height: 24) && item?.glyph == glyph &&
+                         item?.tooltip?.title == title && item?.tooltip?.placement == .above && item?.tooltip?.showDelay == 0.45 && item?.view.accessibilityHelp() == title,
+                         "MC3 frame, glyph, tooltip and help: \(id)")
+        }
+        if let play = first.control(named: "play")?.view {
+            play.mouseEntered(with: event(.mouseMoved, play)); pump(0.55)
+            Checks.check(TooltipController.shared.visibleTooltip?.title == "Pause", "MC3 actual media tooltip appears after its 0.45 s delay")
+            play.mouseExited(with: event(.mouseMoved, play)); pump(0.2)
+        }
+        Checks.check(first.control(named: "close")?.view.frame.width == 0, "MC4 close starts 0 wide")
+        context.forcedMediaHover = .card(tab.id); pump(0.25)
+        Checks.check(first.control(named: "close")?.view.frame.width == 24 && first.control(named: "close")?.view.alphaValue == 1, "MC4 hover reveals 24 pt close")
+        context.forcedMediaHover = nil; pump(0.25)
+        Checks.check(first.control(named: "close")?.view.frame.width == 0, "MC4 exit hides close")
+        let selection = window.selectedNodeBySpace
+        for id in ["previous", "next", "play", "play"] { if let button = first.control(named: id)?.view { click(button, id) } }
+        Checks.check(mediaHost.calls.contains(.action(.previousTrack)) && mediaHost.calls.contains(.action(.nextTrack)) &&
+                     mediaHost.calls.contains(.action(.pause)) && mediaHost.calls.contains(.action(.play)) && window.selectedNodeBySpace == selection,
+                     "MC5 playback controls reach the fake host without selecting")
+        mediaHost.mediaState.actions = [.play, .pause]; mediaHost.publish(); pump()
+        Checks.check(first.control(named: "previous")?.view.isHidden == true && first.control(named: "next")?.view.isHidden == true &&
+                     first.control(named: "play")?.view.frame.minX == 6, "MC3 previous/next hide and play shifts to x=6")
+        if let volume = first.control(named: "volume")?.view { click(volume, "volume drawer") }
+        Checks.check(first.drawerIsOpen && first.cardHeight == 96 && controls.requiredHeight == 104, "MC3 drawer adds 28 pt")
+        if let slider = descendants(first).first(where: { $0.accessibilityLabel() == "Tab Volume" }) {
+            click(slider, "volume slider", fraction: 0.4)
+            Checks.check(mediaHost.calls.contains(.volume(0.4)) && slider.accessibilityValue() as? String == "40 %", "MC5 slider delivers volume and percentage")
+            _ = slider.accessibilityPerformIncrement(); pump()
+            Checks.check(abs((mediaHost.mediaState.volume ?? -1) - 0.5) < 0.001, "MC5 slider accessibility increments by 10 percent")
+        } else { Checks.check(false, "MC3 volume slider exists") }
+        if let volume = first.control(named: "volume")?.view { click(volume, "close drawer") }
+        mediaHost.mediaState.volume = nil; mediaHost.publish(); pump()
+        if let volume = first.control(named: "volume")?.view { click(volume, "interim mute toggle") }
+        Checks.check(tab.isMuted && !first.drawerIsOpen && first.control(named: "volume")?.glyph == .mediaVolumeMuted,
+                     "MC5 interim volume control toggles mute when volume is unavailable")
+        let extra1 = model.newTab(in: space.id, url: URL(string: "https://media.example.test/second")!, title: "Second")
+        let extra2 = model.newTab(in: space.id, url: URL(string: "https://media.example.test/third")!, title: "Third")
+        _ = delegate.add(tab: extra1, state: WebMediaState(playback: .playing, isControllable: true))
+        _ = delegate.add(tab: extra2, state: WebMediaState(playback: .paused, isControllable: true)); pump(0.7)
+        Checks.check(controls.cards.count == 3 && controls.stackHeight == 78 && controls.requiredHeight == 86,
+                     "MC6 three collapsed cards reserve 68+10 pt")
+        Checks.check(controls.cards.dropFirst().allSatisfy { ($0.layer?.mask as? CAShapeLayer)?.path?.boundingBox.height == 5 && !$0.marquee.isRunning },
+                     "MC6 back cards are clipped and their marquees stop")
+        controls.mouseEntered(with: event(.mouseMoved, controls)); pump(0.7)
+        Checks.check(controls.isExpanded && controls.stackHeight == 216 && controls.cards.allSatisfy { $0.layer?.mask == nil }, "MC6 hover expands to 3*68+12")
+        controls.mouseExited(with: event(.mouseMoved, controls)); pump(0.15)
+        Checks.check(controls.isExpanded && controls.pendingCollapseCount == 1, "MC6 exit waits 0.3 s")
+        pump(0.6)
+        Checks.check(!controls.isExpanded && controls.pendingCollapseCount == 0 && controls.stackHeight == 78, "MC6 real delayed work collapses the stack")
+        store.remove(tabID: extra1.id); store.remove(tabID: extra2.id); pump(0.7)
+        tab.title = "A deliberately long playing title which must overflow this narrow mini player and keep scrolling"; mediaHost.perform(.play); pump(0.25)
+        Checks.check(first.marquee.isOverflowing && first.marquee.isRunning, "MC7 overflowing playing title runs in a visible window")
+        context.forcedMediaHover = .title(tab.id); pump(0.25)
+        Checks.check(!first.marquee.isRunning, "MC7 title hover stops the marquee")
+        context.forcedMediaHover = nil; mediaHost.perform(.pause); pump(0.25)
+        Checks.check(!first.marquee.isRunning, "MC7 paused title is static")
+        mediaHost.perform(.play); tab.title = "Short"; pump(0.25)
+        let copies = first.marquee.layer?.sublayers?.first?.sublayers?.compactMap { $0 as? CATextLayer } ?? []
+        Checks.check(!first.marquee.isOverflowing && !first.marquee.isRunning && copies.filter { !$0.isHidden }.count == 1, "MC7 fitting title has one visible copy and never starts a marquee")
+        tab.title = "A deliberately long title for the visibility and Reduce Motion checks"; pump(0.25)
+        SidebarDiagnostics.mediaReduceMotionOverride = true; context.forcedMediaHover = .card(tab.id); pump(0.25)
+        Checks.check(!first.marquee.isRunning, "MC7 Reduce Motion stops the marquee")
+        SidebarDiagnostics.mediaReduceMotionOverride = false; context.forcedMediaHover = nil; pump(0.25)
+        scene.sidebar.isHidden = true; pump(0.1)
+        Checks.check(!first.marquee.isRunning, "MC7 hidden sidebar stops the marquee")
+        scene.sidebar.isHidden = false; pump(0.1)
+        windowHost.orderOut(nil); pump(0.15)
+        Checks.check(!first.marquee.isRunning, "MC7 ordered-out window stops the marquee")
+        windowHost.orderBack(nil); mediaHost.perform(.pause); tab.title = "Paused"; pump(1.2)
+        Checks.check(animationKeys(scene.layer).isEmpty && !first.marquee.isRunning && controls.pendingCollapseCount == 0 && store.pendingWorkItemCount == 1,
+                     "MC8 idle paused window has no CA animations and only the one store dismiss item")
+        func cpuSeconds() -> Double {
+            var time = timespec(); clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &time)
+            return Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000
+        }
+        let cpuStart = cpuSeconds(), wallStart = CACurrentMediaTime()
+        RunLoop.main.run(until: Date().addingTimeInterval(2))
+        let idleCPU = 100 * (cpuSeconds() - cpuStart) / (CACurrentMediaTime() - wallStart)
+        Checks.check(idleCPU <= 0.5, String(format: "MC8 idle paused CLI CPU %.3f%% (budget 0.5%%); no media Timer or display link", idleCPU))
+        context.shownPeek = SidebarShownPeek(sourceNodeID: tab.id, url: URL(string: "https://peek.example.test/")!); pump(0.15)
+        Checks.check(controls.alphaValue == SidebarRole.peekBottomBarOpacity, "MC10 mini controls dim with the bottom bar in Peek")
+        context.shownPeek = nil; pump(0.15)
+        Checks.check(controls.alphaValue == 1, "MC10 closing Peek restores opacity")
+        if let pip = first.control(named: "pip")?.view { click(pip, "picture in picture") }
+        Checks.check(mediaHost.calls.contains(.enterPiP) && controls.cards.isEmpty, "MC5 PiP request reaches the fake host and hides the active source")
+        mediaHost.exitPictureInPicture(pausing: false); mediaHost.perform(.play); pump(0.6)
+        if let current = card(), let title = descendants(current).first(where: { $0.accessibilityIdentifier() == "media.title" }) { click(title, "title back to tab") }
+        Checks.check(delegate.intents.last == .backToTab(tab.id) && controls.cards.isEmpty, "MC5 title returns to the tab")
+        context.displayedTabIDs = []; pump(0.6)
+        context.forcedMediaHover = .card(tab.id); pump(0.2)
+        if let close = card()?.control(named: "close")?.view { click(close, "close mini player") }
+        pump(0.5)
+        Checks.check(delegate.intents.last == .close(tab.id) && mediaHost.calls.last == .action(.pause) && controls.cards.isEmpty && controls.requiredHeight == 0,
+                     "MC5 close pauses and removes the last card")
+        mediaHost.perform(.play); pump(0.5)
+        let old = card(); store.remove(tabID: tab.id); mediaHost.publish(); pump(0.8)
+        Checks.check(card() !== old && controls.cards.count == 1 && controls.subviews.compactMap { $0 as? MiniPlayerCardView }.count == 1,
+                     "MC source replacement within one event turn leaves one fresh card and no retired view")
+        store.remove(tabID: tab.id); context.forcedMediaHover = nil; pump(0.5)
+        let recording = model.newTab(in: space.id, url: URL(string: "https://meeting.example.test/")!, title: "Meeting")
+        recording.live.isCapturing = true
+        let recordingHost = delegate.add(tab: recording, state: WebMediaState(isControllable: true, actions: [.toggleMicrophone, .toggleCamera], microphoneMuted: false, cameraOn: true))
+        pump(0.5)
+        if let recordingCard = controls.cards.first {
+            Checks.check(recordingCard.control(named: "play")?.view.isHidden == true && recordingCard.control(named: "volume")?.view.isHidden == true &&
+                         recordingCard.control(named: "microphone")?.view.frame == CGRect(x: 6, y: 40, width: 24, height: 24) && recordingCard.control(named: "camera")?.view.frame == CGRect(x: 34, y: 40, width: 24, height: 24),
+                         "MC3 recording card shows microphone/camera instead of play and volume")
+            for id in ["microphone", "camera"] { if let button = recordingCard.control(named: id)?.view { click(button, id) } }
+            Checks.check(recordingHost.calls == [.action(.toggleMicrophone), .action(.toggleCamera)] && recordingCard.control(named: "microphone")?.glyph == .mediaMicrophoneMuted && recordingCard.control(named: "camera")?.glyph == .mediaCameraOff,
+                         "MC5 recording controls reach the host and update their glyphs")
+        } else { Checks.check(false, "MC3 recording card exists") }
     }
 }

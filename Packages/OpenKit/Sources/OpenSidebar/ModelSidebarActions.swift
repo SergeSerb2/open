@@ -18,6 +18,7 @@ public struct ModelSidebarActions {
     @discardableResult
     public func perform(_ intent: SidebarIntent) -> Bool {
         switch intent {
+        case .media: return false
         case .select(let id, let space):
             model.selectNode(windowID: windowID, spaceID: space, nodeID: id)
         case .selectFavorite(let id):

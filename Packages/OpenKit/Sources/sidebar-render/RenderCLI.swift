@@ -28,14 +28,15 @@ enum RenderCLI {
                             [--width W] [--select ROW] [--hover TARGET] [--loaded] [--new-tab-open]
                             [--hidden] [--reveal] [--inactive] [--appearance light|dark]
                             [--clear-today] [--collapse-folders] [--no-lights] [--page] [--crop X,Y,W,H]
-          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media]
+          --media "today:0=audible,today:1=muted,today:2=recording" [--media-depth N] [--media-theme default|red] [--reduce-motion] [--crop-media] [--crop-media-controls]
+          --media-hover card:N|title:N|stack --media-drawer N
           ROW: pinned:N | today:N | favorite:N | folder:N/M (child M of the N-th pinned folder)
           TARGET: ROW | newtab | divider | header | url | home | plus | switcher:N | toolbar:back|forward|reload|toggle
           --switch-to N --at SECONDS: start an animated switch to Space N and capture that moment
       sidebar-render tooltip --snapshot DIR [--space N] --title TEXT [--subtitle TEXT] [--keys "⌘,["] --out FILE.png [--scale S]
       sidebar-render synth --out DIR [--rows N]
       sidebar-render compare --arc FILE.png --ours FILE.png --spec NAME --out DIR [--scale S]
-      sidebar-render bench [--rows N] [--row-media mixed]
+      sidebar-render bench [--rows N] [--row-media mixed] [--media-card]
       sidebar-render check
     """
 
@@ -152,7 +153,7 @@ enum RenderCLI {
         options.trafficLights = !args.contains("--no-lights")
         options.emptyPanel = !args.contains("--page")
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 1)
-        let delegate = RecordingDelegate()
+        let delegate: any SidebarDelegate = context.media == nil ? RecordingDelegate() : MediaScene.delegate(context: context)
         let scene = RenderScene(context: context, options: options, delegate: delegate)
         scene.background.renderScale = scale
         var image: CGImage
@@ -168,6 +169,14 @@ enum RenderCLI {
             host.close()
         } else {
             image = OffscreenRenderer().render(scene, scale: scale)
+        }
+        if args.contains("--crop-media-controls") {
+            let mediaFrame = scene.sidebar.mediaControls.convert(scene.sidebar.mediaControls.bounds, to: scene)
+            let y = max(0, mediaFrame.minY - 12)
+            guard let crop = image.cropping(to: CGRect(x: 0, y: y * scale, width: context.sidebarWidth * scale, height: (scene.bounds.height - y) * scale)) else {
+                throw CLIError(description: "could not crop media controls")
+            }
+            image = crop
         }
         if args.contains("--crop-media") {
             let ids = model.index.values.compactMap(\.tab).filter { $0.live.isAudible || $0.isMuted || $0.live.isCapturing }.map(\.id)

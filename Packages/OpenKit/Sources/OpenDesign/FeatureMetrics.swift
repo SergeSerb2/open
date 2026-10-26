@@ -87,6 +87,17 @@ public enum MiniPlayerMetrics {
     public static let expandedGap: CGFloat = 6
     public static let collapseDelay: TimeInterval = 0.3
     public static let tooltipDelay: TimeInterval = 0.45 // PP-6
+    public static let drawerIconX: CGFloat = 9
+    public static let drawerIconY: CGFloat = 74
+    public static let drawerIcon: CGFloat = 16
+    public static let drawerTrailingIconInset: CGFloat = 25
+    public static let drawerSliderX: CGFloat = 31
+    public static let drawerSliderY: CGFloat = 74
+    public static let drawerSliderHeight: CGFloat = 16
+    public static let drawerTrackY: CGFloat = 6
+    public static let drawerTrackRadius: CGFloat = 2
+    public static let drawerShadowBlur: CGFloat = 2
+    public static let drawerShadowOffset = CGSize(width: 0, height: -1)
     public static let drawerHeight: CGFloat = 28
     public static let drawerTrackHeight: CGFloat = 4
     public static let drawerKnob: CGFloat = 12

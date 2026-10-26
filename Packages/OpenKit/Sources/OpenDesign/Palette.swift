@@ -183,6 +183,7 @@ extension SidebarRole {
     public static let miniPlayerFill = SidebarColors.itemBackground
     public static let miniPlayerHoverFill = SidebarColors.itemHoveredBackground
     public static let mediaControlGlyph = CommandBarColors.accessoryForeground
+    public static let mediaDrawerKnob = DesignColor(light: .white(1), dark: .white(1))
     /// Provisional: use the existing insecure-lock pair until S9 (§4.1).
     public static let recordingIndicator = CommandBarColors.lockInsecure
 }
