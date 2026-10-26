@@ -121,7 +121,7 @@ public struct RemoteSuggestionsProvider: SuggestProvider {
         let engine: SearchEngine
         if let site = input.siteSearch {
             guard let engineID = site.engineID else { return nil }
-            engine = SearchEngines.engine(id: engineID, in: engines)
+            engine = SearchEngines.resolve(id: engineID, custom: input.customSearchEngines, in: engines)
         } else {
             engine = input.searchEngine
         }

@@ -195,6 +195,24 @@ actor ListRepository {
         return (next, results)
     }
 
+    /// Reset is one generation transaction, so a failed default download keeps all old choices.
+    func resetChoices(directory: URL, state: AdBlockProfileState, catalog: AdBlockCatalog) async throws -> AdBlockProfileState {
+        let staging = try makeStaging(directory)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        let previous = try stageCurrent(directory: directory, staging: staging, catalog: catalog)
+        var next = state
+        for id in catalog.defaultIDs where next.lists[id] == nil {
+            next.lists[id] = try await update(catalog.list(id), directory: staging, previous: nil).0
+        }
+        next.enabledBlockLists = catalog.defaultIDs
+        next.lists = next.lists.filter { catalog.defaultIDs.contains($0.key) }
+        next.lastError = nil
+        try Task.checkCancellation()
+        try publishCaches(staging: staging, directory: directory, state: next)
+        _ = try storage.publish(state: next, inputs: staging.appendingPathComponent("lists"), directory: directory, previous: previous)
+        return next
+    }
+
     func setEnabled(_ id: String, on: Bool, directory: URL, state: AdBlockProfileState, catalog: AdBlockCatalog)
         async throws -> (AdBlockProfileState, [AdBlockUpdateResult]) {
         let staging = try makeStaging(directory)
