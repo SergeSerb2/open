@@ -225,3 +225,45 @@ This is a bounded input snapshot, not a hash of changing build outputs.
 Local receipts are in ignored `.re/pr25-review/`: `fixture-results.json`,
 `fixture-commands.log`, `fixture-distrib.log`, the dry-run outputs,
 `real-check-receipt.json`, and both hash manifests.
+
+## Phase B bring-up (Steps 7–11) — 2026-10-25
+
+The stock build ended at 19:11. The engine lead owns the shared tree from
+then on. All commands below ran on the real tree.
+
+| Step | Command | Result |
+|---|---|---|
+| 7 bootstrap | `engine-bootstrap --run --skip-sync --skip-hooks` | Phases 0–2 and 5 pass. The stock scripts already synced the tree and ran its hooks (`hooks.done`), so a sync would only stop at the dirty-tree guard. |
+| 7 apply | `engine-apply --all`, twice | First run: `117 patches total (0 applied, 117 skipped, 0 failed)`, 1 overlay file copied. Second run: 0 copied. `applied.json` written. |
+| 7 args | `gn/dev.args.gn` + `disable_fieldtrial_testing_config=true` | `engine-build --regen --target "cefsimple cefclient" --detach`: 649 steps, 85 s, exit 0. `gen/components/variations/service/buildflags.h` now has `FIELDTRIAL_TESTING_ENABLED() (0)`. |
+| 7 smoke A | `cefsimple --url=https://example.com --use-mock-keychain --user-data-dir=<one dir>`, twice | Alive at 10 s; title "Example Domain" via the DevTools endpoint; clean SIGTERM exit; no `FATAL`/`Check failed`, no GPU `1003`, no `sandbox_extension` line; no leftover process. cefsimple does not pass `--disable-field-trial-config`, so the GN arg alone fixes child launch. |
+| 8 Rust vendor | — | Not run. It is ad-block build glue; the ad-block series queues behind P1 (lead decision 1 in docs/engine-patches.md). |
+| 9 distrib + fetch | `engine-distrib --run`, `tools/build.sh Release` | `distrib.txt` → `cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal` (551 MB). Open.app embeds the fork framework (same UUID `4C4C44A5-5555-3144-A14B-F02030962C73` as `out/Release_GN_arm64`), `codesign -v --deep --strict` passes. |
+| 10 release | `engine-build --config release --target cefsimple` | The PGO gate stops it: `release: no PGO profile found; set chrome_pgo_phase=0 explicitly in gn/release.args.gn or add the profile`. `.gclient` has `checkout_pgo_profiles: False` and `chrome/build/pgo_profiles/` is absent. Known gap: release is blocked on the PGO profile, and the packaging gate stays. |
+| 11 rebase rehearsal | `engine-rebase --chromium 156.0.8078.48 --cef-branch 8078 </dev/null` | Prints the checklist, `same pins: verified applied state; no tree or VERSIONS changes`, exit 0. `VERSIONS` hash and tree status hash unchanged. |
+
+`engine-status` after Step 9: **8 pass, 0 fail, 0 warn**.
+
+Fixes found on the way:
+
+- CEF's `make_distrib.py` copies the framework out of `cefclient.app`. The
+  stock flow built only `cefsimple`, so its distributions had no `Release/`
+  folder ("No Release build files"). Distrib now builds both targets.
+- On branch 8078, `automate-git.py` never passes `--no-symbols` for the
+  minimal type, so `make_distrib.py` copies dSYMs. Dev builds make none
+  (`FileNotFoundError: … Chromium Embedded Framework.dSYM`). Distrib now
+  calls `make_distrib.py --minimal --no-symbols --no-docs --no-archive`
+  directly; the app uses the directory, not the archive.
+- The macOS output of the `cefsimple` target is `cefsimple.app`. S-6 and the
+  build summary checked `out/…/cefsimple`.
+- S-2 now runs CEF's own read-only applied check
+  (`git apply -p0 --ignore-whitespace --reverse --check`, from
+  `cef/tools/git_util.py`) for each `patch.cfg` entry, instead of the
+  file-presence fallback. It takes about 6 s.
+- A raw `cefsimple` without `--use-mock-keychain` never commits its first
+  navigation (`location.href` stays `about:blank`): the network service waits
+  on the shared "Chromium Safe Storage" keychain item. Open.app already uses
+  its own item (docs/engine-spike.md, "Bugs found").
+
+The app now builds against the fork by default (`tools/fetch-cef.sh`,
+`CEF_SOURCE=fork`). `CEF_SOURCE=cdn` stays for comparisons only.

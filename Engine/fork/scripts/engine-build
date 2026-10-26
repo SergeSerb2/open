@@ -9,6 +9,7 @@ usage() {
     cat <<'EOF'
 engine-build [--config dev|release] [--target <gn-target>] [--regen] [--detach] [--jobs <n>] [--dry-run]
 Defaults: --config dev --target cefsimple --jobs $BUILD_JOBS_DEFAULT (10)
+--target takes one target or a quoted, space-separated list ("cefsimple cefclient").
 Engine/fork/scripts/engine-build --detach
 Engine/fork/scripts/engine-build --config release --target cefsimple
 EOF
@@ -107,11 +108,13 @@ mv "$build_log" "$build_log.log"
 build_log+=.log
 start=$(date +%s)
 set +e
-(cd "$SRC_DIR" && caffeinate -dimsu nice -n 10 autoninja -C "$out" "$target" -j "$jobs") 2>&1 | tee "$build_log"
+read -r -a targets <<< "$target"
+[[ ${#targets[@]} -gt 0 ]] || die 'empty --target'
+(cd "$SRC_DIR" && caffeinate -dimsu nice -n 10 autoninja -C "$out" "${targets[@]}" -j "$jobs") 2>&1 | tee "$build_log"
 rc=${PIPESTATUS[0]}
 set -e
-result_path="$SRC_DIR/$out/$target"
-[[ "$target" != *framework* && "$target" != *cef*framework* ]] || result_path="$SRC_DIR/$out/Chromium Embedded Framework.framework"
+result_path="$SRC_DIR/$out/${targets[0]}.app"
+[[ "$target" != *framework* ]] || result_path="$SRC_DIR/$out/Chromium Embedded Framework.framework"
 log "build summary: config=$config target=$target out=$out elapsed=$(($(date +%s) - start))s exit=$rc"
 tail -n 5 "$build_log"
 log "built target: $result_path; log: $build_log"

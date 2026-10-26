@@ -6,9 +6,13 @@ outputs in Phase A as a smoke pass.
 
 ## A. cefsimple launch (after every dev build)
 
-Use the dev out directory from `VERSIONS`. Launch its `cefsimple` with
-`--url=https://example.com --enable-logging=stderr --v=0` and capture stderr
-to `$LOG_DIR/smoke-<date>.log`. Keep the launched PID. At 10 seconds require
+Use the dev out directory from `VERSIONS`. Launch its `cefsimple.app` with
+`--url=https://example.com --enable-logging=stderr --v=0 --use-mock-keychain
+--user-data-dir=<one scratch dir> --remote-debugging-port=<port>` and capture
+stderr to `$LOG_DIR/smoke-<date>.log`. Without `--use-mock-keychain` the first
+navigation waits on the shared "Chromium Safe Storage" keychain item and never
+commits. Read the title through the DevTools endpoint (`Runtime.evaluate`
+`document.title`). Keep the launched PID. At 10 seconds require
 that PID to be alive, then send SIGTERM to that PID only and wait for exit.
 Inspect the log for `FATAL|Check failed`. Never terminate unrelated processes.
 

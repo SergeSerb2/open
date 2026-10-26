@@ -1,0 +1,179 @@
+{
+  "config": "Release",
+  "measure": {
+    "cpu_count": 18,
+    "idle_cpu_10_tabs_percent": 1.16,
+    "launch_ms": {
+      "engineInitialized": 285,
+      "engineStarted": 256,
+      "firstContentfulPaint": 584,
+      "firstLoadEnd": 542,
+      "main": 37,
+      "windowShown": 386
+    },
+    "launch_runs": [
+      {
+        "didFinishLaunching": 330,
+        "engineInitialized": 216,
+        "engineStart": 100,
+        "engineStarted": 187,
+        "firstContentfulPaint": 517,
+        "firstLoadEnd": 478,
+        "main": 31,
+        "modelLoaded": 99,
+        "windowShown": 319
+      },
+      {
+        "didFinishLaunching": 397,
+        "engineInitialized": 285,
+        "engineStart": 144,
+        "engineStarted": 256,
+        "firstContentfulPaint": 584,
+        "firstLoadEnd": 542,
+        "main": 42,
+        "modelLoaded": 143,
+        "windowShown": 386
+      },
+      {
+        "didFinishLaunching": 617,
+        "engineInitialized": 387,
+        "engineStart": 209,
+        "engineStarted": 320,
+        "firstContentfulPaint": 814,
+        "firstLoadEnd": 773,
+        "main": 32,
+        "modelLoaded": 207,
+        "windowShown": 570
+      },
+      {
+        "didFinishLaunching": 385,
+        "engineInitialized": 265,
+        "engineStart": 135,
+        "engineStarted": 238,
+        "firstContentfulPaint": 560,
+        "firstLoadEnd": 524,
+        "main": 37,
+        "modelLoaded": 134,
+        "windowShown": 374
+      }
+    ],
+    "load_average_at_start": [
+      10.2,
+      10.8,
+      11.2
+    ],
+    "memory_10_tabs": {
+      "by_process": [
+        [
+          "Open Helper",
+          458.0
+        ],
+        [
+          "Open Helper (Renderer)",
+          136.7
+        ],
+        [
+          "Open",
+          89.9
+        ],
+        [
+          "Open Helper (Renderer)",
+          80.5
+        ],
+        [
+          "Open Helper (Renderer)",
+          61.3
+        ],
+        [
+          "Open Helper (Renderer)",
+          55.6
+        ],
+        [
+          "Open Helper (Renderer)",
+          46.3
+        ],
+        [
+          "Open Helper (Renderer)",
+          45.4
+        ],
+        [
+          "Open Helper (Renderer)",
+          42.1
+        ],
+        [
+          "Open Helper (Renderer)",
+          37.8
+        ],
+        [
+          "Open Helper (Renderer)",
+          35.3
+        ],
+        [
+          "Open Helper (Renderer)",
+          35.3
+        ],
+        [
+          "Open Helper",
+          34.1
+        ],
+        [
+          "Open Helper (Renderer)",
+          26.9
+        ],
+        [
+          "Open Helper",
+          25.2
+        ]
+      ],
+      "live_pages": 10,
+      "processes": 15,
+      "task_manager_mb_by_kind": {
+        "browser": 89.9,
+        "gpu": 473.8,
+        "renderer": 604.6,
+        "utility": 59.3
+      },
+      "total_footprint_mb": 1210.4
+    },
+    "memory_1_tab": {
+      "by_process": [
+        [
+          "Open",
+          66.4
+        ],
+        [
+          "Open Helper",
+          60.0
+        ],
+        [
+          "Open Helper (Renderer)",
+          37.3
+        ],
+        [
+          "Open Helper (Renderer)",
+          28.3
+        ],
+        [
+          "Open Helper",
+          26.5
+        ],
+        [
+          "Open Helper",
+          20.4
+        ]
+      ],
+      "live_pages": 1,
+      "processes": 6,
+      "task_manager_mb_by_kind": {
+        "browser": 66.4,
+        "gpu": 60.0,
+        "renderer": 65.6,
+        "utility": 46.9
+      },
+      "total_footprint_mb": 239.0
+    },
+    "ok": true
+  },
+  "started": "2026-10-25 19:58:38",
+  "style": "alloy"
+}
