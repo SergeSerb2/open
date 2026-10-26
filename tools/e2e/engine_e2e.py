@@ -2632,6 +2632,29 @@ def profiles_checks(factory, results, tmp, config):
         finally:
             app.quit()
 
+    def legacy_launch_with_deferred_profile(label):
+        """A legacy launch (lead decision 2026-10-26): the default profile runs
+        on its old data; the Work profile is deferred. Switching to its Space
+        and opening a new tab there runs nothing: no crash, no context for
+        Work (never a memory-only one), and one log line for the launch."""
+        app = factory(urls=())
+        start = os.path.getsize(app.log.name)
+        try:
+            got = check_cookies(app, label, work_loads=False)
+            app.call("space", space=work)
+            opened = app.call("open", url="https://example.com/?profile=work-new")
+            time.sleep(2)
+            got["new_work_tab_live"] = bool(app.page(opened["id"]).get("live"))
+            app.call("space", space=home)
+            got["alive"] = app.call("ping") is not None
+            got["page_contexts"] = sorted({page["context"] for page in app.call("pages")})
+        finally:
+            app.quit()
+        with open(app.log.name, errors="replace") as f:
+            f.seek(start)
+            got["deferred_log_lines"] = [line for line in f.read().splitlines() if "unavailable this launch" in line]
+        return got
+
     # A plain move: every file arrives unchanged, the snapshot is untouched.
     make_legacy()
     before = inventory(os.path.join(root, "Profiles", "Default"))
@@ -2683,7 +2706,7 @@ def profiles_checks(factory, results, tmp, config):
     untouched = inventory(os.path.join(root, "Profiles", "Default")) == before \
         and not os.path.exists(os.path.join(root, "Engine", "Default")) \
         and os.path.exists(os.path.join(root, "Profiles", "Local State"))
-    got = launch_and_check("locked-legacy-launch")
+    got = legacy_launch_with_deferred_profile("locked-legacy-launch")
     subprocess.run(["chflags", "nouchg", locked], check=True)
     # The legacy launch ran Chromium on Profiles/Default: compare from here.
     before = inventory(os.path.join(root, "Profiles", "Default"))
@@ -2692,10 +2715,14 @@ def profiles_checks(factory, results, tmp, config):
     results["migration_locked_file"] = {
         "ok": code == 0 and same_snapshot and untouched and "legacy layout for this launch" in text
               and "oe_default=1" in got["default_cookie"] and not got["work_page_live"]
+              and not got["new_work_tab_live"] and got["alive"] and got["page_contexts"] == ["Default"]
+              and len(got["deferred_log_lines"]) == 1
               and code2 == 0 and same_snapshot2 and before == after and layout_ok(migrated_layout()),
         "first_launch": {"exit": code, "untouched": untouched, "snapshot_byte_identical": same_snapshot,
                          "log": [line for line in text.splitlines() if "engine layout" in line][:3],
-                         "default_cookie": got["default_cookie"], "work_page_live": got["work_page_live"]},
+                         "default_cookie": got["default_cookie"], "work_page_live": got["work_page_live"],
+                         "new_work_tab_live": got["new_work_tab_live"], "alive": got["alive"],
+                         "page_contexts": got["page_contexts"], "deferred_log_lines": got["deferred_log_lines"]},
         "after_unlock": {"exit": code2, "inventory_equal": before == after, "snapshot_byte_identical": same_snapshot2}}
     os.remove(os.path.join(root, "Engine", "Default", "Open E2E locked.bin"))
 

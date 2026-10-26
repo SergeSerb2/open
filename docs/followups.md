@@ -37,3 +37,5 @@ Small items found during review and verification. Each line: area — issue — 
 - Media D8 (2026-10-26): decode the inline speaker-tooltip string and the
   `SpeakerIcon` timing values from the shared read-only RE snapshots. Cite
   the symbol/string evidence and confirm the tooltip text/case with S9.
+- Shell (profiles) — when a launch keeps the old engine layout (a locked file or a running old engine blocks the one-time migration), non-default Profiles do not open in that launch (docs/plans/profiles.md, "A legacy launch"). Today only stderr says so. Show a user-visible notice for a deferred Profile (for example in its Space: "This profile opens after Open restarts", with the reason), and clear it when the next launch finishes the migration. — lead decision, 2026-10-26
+
