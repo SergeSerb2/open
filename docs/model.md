@@ -729,3 +729,24 @@ The 13 capture-state comparisons could not run: `.re/vf/run-states.sh` and its
 capture-time inputs are absent from this checkout and the current project/worktrees.
 The full `sidebar-render check` remains part of verify-all; lane S owns TT1/TT2.
 No claim of capture parity is made for this step.
+
+## Sidebar M1 Muse follow-up (2026-10-26)
+
+Bulk moves build one original-slot map per parent and use prefix removal counts to
+update positions without per-node list searches. The primitive validates a supplied
+slot before removal; the existing single-node path retains its normal lookup.
+Same-slot nodes emit no move. Move to Space marks unread only on descendants of
+actually relocated nodes and leaves every flag untouched with markUnread false.
+Bulk archive builds each parent position map once, sorts by those values, and
+removes known slots from highest to lowest (split collapse retains its existing path).
+
+The CLI now asserts exact B4 removal IDs/order, B7 fresh IDs at every depth plus
+split focus/fractions/orientation, and unread true/false through folders and splits
+from two source Spaces. It also checks a same-slot pin stays read and a middle drop
+with selected nodes on both sides. `commands-demo` passes 156/156 on the M1 base.
+
+`openkit bench` runs 20 real command/undo rounds at 50 and 500 nodes, with exact
+event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
+Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
+500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
+new target, dependency, timer, App edit, or desktop input was added.
