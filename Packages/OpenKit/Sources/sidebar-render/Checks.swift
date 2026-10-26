@@ -275,6 +275,7 @@ enum Checks {
               "unknown named icons use the neutral symbol")
 
         ReviewChecks.run()
+        VisualFinishChecks.run()
 
         print("\nchecks: \(passes) passed, \(failures) failed")
         host.contentView = nil

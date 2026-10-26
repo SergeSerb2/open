@@ -614,6 +614,36 @@ Families and proven item names:
 Exact item order, separators, and disabled rules for these menus need
 screen checks. Static data proves families, not full lists.
 
+### Split row menu (from code, 2026-10-25)
+
+No capture shows this menu. Its items and order come from the function
+that builds it in the arm64 slice, `0x102eccc9c` (shared Ghidra project,
+read-only; `DecompAt.java` run from `~/Library/Caches/OpenRE/ghidra-scripts-vf`,
+plus `xcrun llvm-objdump -d` with an `adrp`/`add` string resolver; raw output
+in `.re/`). It appends items in this order:
+
+| Order | Item | Evidence |
+|---|---|---|
+| — | Menu title "Split View Context Menu" | string `0x103a373d0` |
+| 1 | "Share Split View", then a separator. Only when a flag is clear. | strings `0x103957ae0`, comment "Title for the 'Share' menuItem in the Split view Context Menu." |
+| 2 | "Separate All Tabs" | string `0x103a37460` with comment "…separate all tabs from a split view sidebar item" |
+| 3 | "Add Tab…" | inline small string `Add Tab` + `E2 80 A6`, comment "…add a new tab to a split view sidebar item" |
+| 4 | "Convert to Vertical Split View" or "Convert to Horizontal Split View", one selected item only | `0x102ecefbc` calls `0x102ed0208`, which picks the title by length (30 or 32 bytes) |
+| 5 | Separator, then the header "Tab Options" | inline small string, comment "…header in split view menu that demarcates child tab level options" |
+| 6 | One item per pane, built by `0x102ecf180`: the pane title cut to 30 characters plus "…", holding "Separate from Split View", a separator, Mute (`0x102ecc2f0`), Copy Link (`0x102ec9680`), Copy Link as Markdown (`0x102ecc068`), a separator, and Archive Item | strings `0x103a12680`, "Context menu action to mute the selected tab", "Copy link as Markdown"; the truncation call takes `0x1e` and `…` |
+| 7 | Separator, "Reset Name and Icon", then optional "Change Icon…" (`0x102ee1b38`) and "Rename…" (`0x102eca348`) | string `0x103a15de0`; inline `Change Icon`, `Rename` |
+| 8 | Separator, "Duplicate", then staff-only "Copy IDs" | inline `Duplicate`, `Copy IDs` |
+| 9 | Separator, "Archive Item" / "Archive Items" with "Archive Other Tabs", "Archive Tabs Below", "Archive Tabs Above" | strings `0x103a37520`, `0x103a37580`, `0x103a375f0` |
+| 10 | `0x102ecb9b8`: the root-Spaces submenu ("Move to") and "New Folder with N Items" | "Menu Item that shows a user's root spaces in a submenu" |
+
+guess: display order is append order. guess: each pane item is a submenu (a
+title item followed by its own list). "Archive Other/Below/Above" are not in
+the captured tab menus (F0115, F0116), so they are probably alternates or
+multi-selection items. Open builds this menu without Share (account link),
+Reset Name and Icon, Change Icon…, and Rename… (Open's splits have no custom
+name or icon), and without staff items. It puts "Move to" before the last
+separator, as in the captured tab menus.
+
 ## Out of scope for Open v1 (present in this build)
 
 - Account/sync: Sign Out, Share Arc (referral), Import sync prompts,

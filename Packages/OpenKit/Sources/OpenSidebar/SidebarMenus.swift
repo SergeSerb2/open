@@ -117,14 +117,51 @@ struct SidebarMenus {
         ])
     }
 
-    /// Split row. guess: not captured.
+    /// Split row. Not captured; the items and their order follow Arc's split-row
+    /// menu builder (Arc 1.170.0 arm64, function at 0x102eccc9c; docs/re/menus-and-hotkeys.md).
+    /// Left out: "Share Split View" (account link), "Reset Name and Icon", "Change Icon…",
+    /// and "Rename…" (Open's splits have no custom name or icon), and staff-only items.
+    /// guess: "Move to" sits before the last separator, as in the captured tab menus.
     func split(_ split: Split) -> NSMenu {
-        menu([
-            item("Separate Tabs", .separateSplit(splitID: split.id)),
+        let convert: NSMenuItem = split.orientation == .horizontal
+            ? item("Convert to Vertical Split View", .setSplitOrientation(splitID: split.id, orientation: .vertical))
+            : item("Convert to Horizontal Split View", .setSplitOrientation(splitID: split.id, orientation: .horizontal))
+        let header = NSMenuItem(title: "Tab Options", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        var items: [NSMenuItem] = [
+            item("Separate All Tabs", .separateSplit(splitID: split.id)),
+            item("Add Tab…", enabled: split.panes.count < 4, .addTabToSplit(splitID: split.id)),
+            convert,
+            .separator(),
+            header,
+        ]
+        items += split.panes.map { pane(of: split, $0) }
+        items += [
+            .separator(),
+            item("Duplicate", .duplicate(nodeID: split.id)),
             moveTo(split.id),
             .separator(),
-            item("Archive Split View", .close(nodeID: split.id)),
+            item("Archive Item", .close(nodeID: split.id)),
+        ]
+        return menu(items)
+    }
+
+    /// One pane of a split: a submenu titled with the pane title, cut to 30
+    /// characters plus "…" (Arc's per-pane builder at 0x102ecf180).
+    private func pane(of split: Split, _ tab: Tab) -> NSMenuItem {
+        var title = tab.displayTitle
+        if title.count > 30 { title = String(title.prefix(30)) + "…" }
+        let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        parent.submenu = menu([
+            item("Separate from Split View", .separatePane(splitID: split.id, tabID: tab.id)),
+            .separator(),
+            item(tab.isMuted ? "Unmute" : "Mute", enabled: tab.live.isAudible || tab.isMuted, .toggleMute(tabID: tab.id)),
+            item("Copy Link", .copyLink(nodeID: tab.id, markdown: false)),
+            item("Copy Link as Markdown", .copyLink(nodeID: tab.id, markdown: true)),
+            .separator(),
+            item("Archive Item", .close(nodeID: tab.id)),
         ])
+        return parent
     }
 
     /// Folder (F0119, F0134).

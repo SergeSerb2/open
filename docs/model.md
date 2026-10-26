@@ -88,6 +88,7 @@ Untitled Spaces store `title == nil`; schema-1 snapshots accept both missing/nul
 #### Archive and restore
 
 - `closeTab` archives. On a folder it archives every tab inside, with reason `folderDeleted`. On a split pane it archives that pane. A split left with one pane collapses: the remaining tab takes the split's slot.
+- A split that leaves the tree keeps its windows on a page. On a collapse (`removePane` with or without `archive`, `closeTab` on a pane), every window whose `selectedNodeBySpace` held the split selects the remaining tab. On `unsplit`, it selects the split's focused pane (else the first pane). Undo puts the split back and selects it again where the selection still points at that tab; redo repeats the move. Keys, menus, and scripts get this from the model; controllers do not re-select.
 - `deleteSpace` keeps at least one Space. It archives the Space's tabs and moves window focus to the first remaining Space.
 - `clearToday(space:)` archives every Today node of the Space in one pass.
 - `archiveExpiredTabs(now:)` uses the Space profile's `autoArchiveAfter` and the tab's `lastActiveAt`. It checks Today tabs, split panes in Today, and tabs inside Today folders, at any depth. Pinned tabs and favorites never expire. A split left with fewer than 2 panes dissolves.

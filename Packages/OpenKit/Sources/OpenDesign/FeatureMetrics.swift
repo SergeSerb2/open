@@ -12,6 +12,13 @@ public enum SplitMetrics {
     public static let back = CGRect(x: 5, y: 4, width: 32, height: 24)
     public static let forward = CGRect(x: 42, y: 4, width: 32, height: 24)
     public static let reload = CGRect(x: 79, y: 4, width: 32, height: 24)
+    /// Host group: the copy button sits 3 pt before the host text, and a 24 pt slot
+    /// mirrors it after the text (F0081 AX: 24 · 3 · host · 3 · 24, centered on the bar).
+    public static let hostSlot: CGFloat = 25
+    /// Space kept between the host group and the side controls. guess.
+    public static let barControlGap: CGFloat = 4
+    /// Narrower than this, the host and copy button hide. guess: about three characters.
+    public static let hostMinimumWidth: CGFloat = 28
 }
 
 /// Evidence: docs/re/interaction-states.md §12, F0090 AX, F0102 pixels.
