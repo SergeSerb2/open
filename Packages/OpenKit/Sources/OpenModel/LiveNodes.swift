@@ -3,9 +3,15 @@ import Observation
 
 // MARK: - Runtime-only tab state (never persisted)
 
+public enum SleepPhase: Sendable { case placeholder, live, frozen, sleeping }
+
 @MainActor
 @Observable
 public final class TabLiveState {
+    public var sleepPhase: SleepPhase = .placeholder
+    public var isCapturing: Bool = false
+    public var devToolsOpen: Bool = false
+    public var lastFormInteractionAt: Date?
     public var isLoading: Bool = false
     public var progress: Double = 0
     public var isAudible: Bool = false

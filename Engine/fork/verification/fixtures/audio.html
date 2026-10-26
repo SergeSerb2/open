@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Open audio protection</title>
+<h1>Open audio protection</h1><button id="tone">Start tone</button><p id="state">Stopped</p>
+<script>
+let context, oscillator;
+document.querySelector('#tone').onclick = async () => {
+  if (context) {
+    oscillator.stop(); await context.close(); context = null;
+    document.querySelector('#tone').textContent = 'Start tone';
+    document.querySelector('#state').textContent = 'Stopped';
+  } else {
+    context = new AudioContext(); oscillator = context.createOscillator();
+    const gain = context.createGain(); gain.gain.value = 0.05;
+    oscillator.connect(gain).connect(context.destination); oscillator.start(); await context.resume();
+    document.querySelector('#tone').textContent = 'Stop tone';
+    document.querySelector('#state').textContent = 'Playing';
+  }
+};
+</script></html>

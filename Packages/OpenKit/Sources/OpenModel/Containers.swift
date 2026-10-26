@@ -17,19 +17,34 @@ public enum AutoArchiveInterval: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum SleepMode: String, Codable, CaseIterable, Sendable {
+    case off, conservative, balanced, aggressive
+
+    public var discardDelay: TimeInterval? {
+        switch self {
+        case .off: nil
+        case .conservative: 900
+        case .balanced: 300
+        case .aggressive: 120
+        }
+    }
+}
+
 public struct ProfileSettings: Codable, Hashable, Sendable {
     public var autoArchiveAfter: AutoArchiveInterval
     public var littleOpenAutoArchiveAfter: AutoArchiveInterval
     public var searchEngineID: String
+    public var sleepMode: SleepMode
 
-    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "duckduckgo") {
+    public init(autoArchiveAfter: AutoArchiveInterval = .twelveHours, littleOpenAutoArchiveAfter: AutoArchiveInterval = .sixHours, searchEngineID: String = "duckduckgo", sleepMode: SleepMode = .balanced) {
         self.autoArchiveAfter = autoArchiveAfter
         self.littleOpenAutoArchiveAfter = littleOpenAutoArchiveAfter
         self.searchEngineID = searchEngineID
+        self.sleepMode = sleepMode
     }
 
     private enum CodingKeys: String, CodingKey {
-        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID
+        case autoArchiveAfter, littleOpenAutoArchiveAfter, searchEngineID, sleepMode
         case littleArcAutoArchiveAfter // Legacy snapshots, decode only.
     }
 
@@ -40,6 +55,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
             ?? container.decodeIfPresent(AutoArchiveInterval.self, forKey: .littleArcAutoArchiveAfter)
             ?? .sixHours
         searchEngineID = try container.decode(String.self, forKey: .searchEngineID)
+        sleepMode = try container.decodeIfPresent(SleepMode.self, forKey: .sleepMode) ?? .balanced
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -47,6 +63,7 @@ public struct ProfileSettings: Codable, Hashable, Sendable {
         try container.encode(autoArchiveAfter, forKey: .autoArchiveAfter)
         try container.encode(littleOpenAutoArchiveAfter, forKey: .littleOpenAutoArchiveAfter)
         try container.encode(searchEngineID, forKey: .searchEngineID)
+        try container.encode(sleepMode, forKey: .sleepMode)
     }
 }
 
