@@ -34,6 +34,7 @@
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "open/browser/tab_strip/hidden_browser.h"
+#include "open/browser/tab_strip/tab_groups.h"
 #include "open/browser/tab_strip/open_browser_window.h"
 #include "open/browser/tab_strip/open_hosted_platform_delegate.h"
 

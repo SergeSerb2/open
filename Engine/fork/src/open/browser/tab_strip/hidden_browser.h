@@ -5,8 +5,6 @@
 #ifndef OPEN_BROWSER_TAB_STRIP_HIDDEN_BROWSER_H_
 #define OPEN_BROWSER_TAB_STRIP_HIDDEN_BROWSER_H_
 
-#include "cef/libcef/browser/chrome/browser_delegate.h"
-
 class BrowserWindowInterface;
 
 namespace content {
@@ -29,14 +27,6 @@ bool IsHostedTab(content::WebContents* contents);
 // chrome.tabs.discard of a hosted tab: asks the embedder, whose tab sleep
 // unloads the tab later. True if it will (tabs_api.cc, patch 0303).
 bool RequestHostedTabDiscard(content::WebContents* contents);
-
-// False for the CEF params of a hidden tab-strip Browser: Open does not map
-// its folders to tab groups (Arc does not either; docs/re/arccore-engine.md
-// §4.3), so the Browser gets no tab group model and chrome.tabs.group fails
-// with Chrome's "does not support tab groups" error instead of making groups
-// the sidebar cannot show. Called from the Browser constructor
-// (Engine/fork/patches/chromium/0304-open-hidden-browser-no-tab-groups.patch).
-bool SupportsTabGroups(const cef::BrowserDelegate::CreateParams* cef_params);
 
 }  // namespace open_engine
 

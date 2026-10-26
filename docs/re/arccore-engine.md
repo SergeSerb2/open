@@ -202,7 +202,7 @@ Question (lead): does Arc's hidden tab-strip mirror turn sidebar folders into Ch
 
 Guess (not proven, see 3): the bridge serves the Today tab groups of point 4, which come from Arc Max's tab organizing. Arc Max is out of v1 scope.
 
-Decision for Open v1 (lead rule: copy Arc if it groups folders, else no mapping): folders are not tab groups. Folder tabs keep their pinned state in `chrome.tabs` (`groupId` -1), and Open's hidden windows have no tab-group model, so `chrome.tabs.group` fails with Chrome's own "Grouping is not supported by tabs in this window." and `chrome.tabGroups.query` returns nothing (docs/engine-patches.md, P1).
+Decision for Open v1 (lead rule: copy Arc if it groups folders, else no mapping): folders are not tab groups, because there is no evidence that Arc maps them. The rest is **Open's decision, not an Arc fact**: Arc implements a full group bridge (point 3) whose handler could not be traced, so Arc may answer `chrome.tabs.group` with a Today group, and how Arc reports a pinned tab inside a folder is not proven. In Open, folder tabs keep their pinned state in `chrome.tabs` (`pinned: true`, `groupId` -1), and Open's hidden windows have no tab group model (patch 0304), so `chrome.tabs.group` and `chrome.tabs.ungroup` fail with Chrome's own "Grouping is not supported by tabs in this window.", `chrome.tabGroups.query` returns nothing, and `chrome.tabGroups.get` finds no group (docs/engine-patches.md, P1). Ground truth, if wanted: the owner loads `tools/e2e/fixtures/tabs-probe` in Arc and records `chrome.tabs.query` (pinned, groupId of a folder tab), `chrome.tabGroups.query({})`, and the `chrome.tabs.group` result (agents do not run Arc, rule 4).
 
 ### 4.4 CEF gap
 
