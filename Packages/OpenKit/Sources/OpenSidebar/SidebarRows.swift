@@ -168,6 +168,63 @@ final class SidebarRowView: NSTableRowView {
     }
 }
 
+/// A lazy unread layer: no layer is allocated for the usual read row.
+@MainActor
+private final class SidebarUnreadDot {
+    let layer = CALayer()
+    var frame: CGRect { layer.frame }
+    private var shown = false
+    init(host: NSView) {
+        layer.name = "sidebar-unread-dot"
+        layer.opacity = 0
+        host.layer?.addSublayer(layer)
+    }
+    func update(shown: Bool, cell: SidebarCellView) {
+        let m = SpaceListMetrics.self
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.frame = CGRect(x: cell.bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2,
+                             y: m.unreadDotCenterY - m.unreadDotSize / 2, width: m.unreadDotSize, height: m.unreadDotSize)
+        layer.cornerRadius = m.unreadDotSize / 2
+        let color = tracked({ cell.page.map { SidebarRole.unreadDot(style: $0.style, appearance: cell.contentAppearance).cgColor } }) {
+            [weak cell] in cell?.needsLayout = true
+        }
+        layer.backgroundColor = color
+        layer.opacity = shown ? 1 : 0
+        CATransaction.commit()
+        guard shown != self.shown else { return }
+        self.shown = shown
+        let reduced = SidebarDiagnostics.forceReducedMotion ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if reduced { layer.removeAnimation(forKey: "unread-in") }
+        if shown && !reduced {
+            let spring = Motion.unreadAppear.animation(keyPath: "transform.scale")
+            spring.fromValue = 0; spring.toValue = 1
+            layer.add(spring, forKey: "unread-in")
+        } else if !shown {
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 1; fade.toValue = 0; fade.duration = Motion.unreadClearFade
+            layer.add(fade, forKey: "unread-out")
+        }
+    }
+}
+
+@MainActor
+private enum SidebarResetImages {
+    private static let reset = make("arrow.uturn.backward")
+    private static let separate = make("arrow.up.forward.square")
+    static func image(separate: Bool) -> NSImage? { separate ? self.separate : reset }
+    private static func make(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
+    }
+}
+
+@MainActor
+private final class SidebarResetButton: PlateButton {
+    override func mouseDown(with event: NSEvent) {
+        context?.isOptionHeld = event.modifierFlags.contains(.option)
+        super.mouseDown(with: event)
+    }
+}
+
 /// Selected-row and selected-tile shadow. Measured below a selected light row:
 /// 14 % darker 1 px below the fill, 5.5 % at 2 px, 2 % at 3 px, 1 % 1 px above
 /// (F0014). Fitted by the comparison loop (docs/design.md). Dark content: none.
@@ -276,6 +333,11 @@ final class TabCellView: SidebarCellView {
     private(set) var accessory: PlateButton?
     private(set) var peekBadge: PeekBadgeView?
     private var slash: CALayer?
+    private var unread: SidebarUnreadDot?
+    private(set) var resetButton: PlateButton?
+    private var faviconHovered = false
+    private var resetShown = false
+    private var resetSeparate = false
     weak var tab: Tab? { didSet { bind() } }
 
     required init(frame: NSRect) {
@@ -350,6 +412,60 @@ final class TabCellView: SidebarCellView {
     /// selected Today row made by Cmd+T shows none (F0066); hovered rows do (F0013).
     private var showsAccessory: Bool { rowView?.isHovered ?? false }
 
+    @discardableResult
+    func trackFavicon(at point: NSPoint) -> Bool {
+        let over = SpaceListMetrics.resetGlyphPlate(indent: indent).contains(point)
+        if faviconHovered != over { faviconHovered = over; needsLayout = true }
+        let eligible = over && tab?.hasLeftPinnedURL == true && isPinned
+        if eligible { scheduleResetTooltip() }
+        return eligible
+    }
+
+    private func scheduleResetTooltip() {
+        guard let page else { return }
+        TooltipController.shared.schedule(Tooltip(title: context?.isOptionHeld == true ? "Separate From Pinned Tab" : "Back to Pinned URL",
+                                                 placement: .beside, style: page.style), for: self)
+    }
+
+    private func layoutReset(leftPinned: Bool) {
+        let hovered = rowView?.isHovered ?? false
+        let show = tracked({
+            leftPinned && isPinned && hovered && (faviconHovered || context?.forcedFaviconHoverID == tab?.id)
+        }) { [weak self] in self?.needsLayout = true }
+        if show, resetButton == nil {
+            let button = SidebarResetButton(glyph: nil)
+            button.context = context
+            button.plateRadius = 6
+            button.plateColor = { _ in SidebarRole.rowPressed }
+            button.glyphTint = { _ in SidebarRole.rowAccessory.nsColor }
+            button.accessibleTitle = { [weak self] in self?.context?.isOptionHeld == true ? "Separate From Pinned Tab" : "Back to Pinned URL" }
+            button.glyphView.image = { [weak self] in
+                SidebarResetImages.image(separate: self?.context?.isOptionHeld == true)
+            }
+            button.action = { [weak self] in
+                guard let self, let tab = self.tab else { return }
+                self.context?.send(self.context?.isOptionHeld == true ? .separateFromPinned(tabID: tab.id) : .resetToPinnedURL(tabID: tab.id))
+            }
+            addSubview(button)
+            resetButton = button
+        }
+        resetButton?.frame = SpaceListMetrics.resetGlyphPlate(indent: indent)
+        let separate = context?.isOptionHeld ?? false
+        if show != resetShown || (show && separate != resetSeparate) {
+            let fade = CATransition(); fade.type = .fade; fade.duration = Motion.hoverFade
+            (show != resetShown ? layer : resetButton?.glyphView.layer)?.add(fade, forKey: "reset-swap")
+        }
+        if resetShown && !show { TooltipController.shared.cancel(for: self) }
+        resetShown = show; resetSeparate = separate
+        resetButton?.hoverKey = tab.map { .row($0.id) }
+        resetButton?.isHidden = !show
+        favicon.isHidden = show
+        if show {
+            _ = tracked({ context?.isOptionHeld }) { [weak self] in self?.needsLayout = true }
+            if faviconHovered { scheduleResetTooltip() }
+        }
+    }
+
     override func rowStateChanged() {
         let unload = tracked({ showsUnload }) { [weak self] in self?.needsLayout = true }
         let visible = showsAccessory
@@ -370,12 +486,13 @@ final class TabCellView: SidebarCellView {
         let x0 = indent
         // Load the weak tab once; observation is scoped to the fields this row draws.
         let currentTab = tab
-        let (audible, muted, leftPinned, capturing) = tracked({
-            guard let currentTab else { return (false, false, false, false) }
+        let (audible, muted, leftPinned, capturing, isUnread) = tracked({
+            guard let currentTab else { return (false, false, false, false, false) }
             let live = currentTab.live
-            return (live.isAudible, currentTab.isMuted, currentTab.hasLeftPinnedURL, live.isCapturing)
+            return (live.isAudible, currentTab.isMuted, currentTab.hasLeftPinnedURL, live.isCapturing, currentTab.isUnread)
         }) { [weak self] in self?.needsLayout = true }
         favicon.frame = CGRect(x: m.faviconX + x0, y: m.faviconY, width: m.faviconSize, height: m.faviconSize)
+        layoutReset(leftPinned: leftPinned)
         let a = m.accessorySize
         accessory?.frame = CGRect(x: bounds.width - m.accessoryTrailingInset - a, y: m.accessoryY, width: a, height: a)
         var titleX = m.titleX + x0
@@ -406,6 +523,13 @@ final class TabCellView: SidebarCellView {
             titleRight = v.frame.minX - 1
         } else {
             peekBadge?.isHidden = true
+        }
+        let showsUnread = isUnread && !(rowView?.isHovered ?? false) && !badgeShown
+        if showsUnread || unread != nil {
+            let dot = unread ?? SidebarUnreadDot(host: self)
+            unread = dot
+            dot.update(shown: showsUnread, cell: self)
+            if showsUnread { titleRight = min(titleRight, dot.frame.minX - 6) }
         }
         titleRight = layoutMediaAccessories(audible: audible, muted: muted, capturing: capturing, titleX: titleX, titleRight: titleRight)
         title.frame = CGRect(x: titleX, y: 0, width: max(0, titleRight - titleX), height: m.rowHeight)
@@ -498,6 +622,7 @@ final class FolderCellView: SidebarCellView {
     static let identifier = NSUserInterfaceItemIdentifier("folder")
     let icon = FolderIconView()
     let title = TextLabel()
+    private var unread: SidebarUnreadDot?
     weak var folder: Folder? { didSet { bind() } }
 
     required init(frame: NSRect) {
@@ -515,13 +640,36 @@ final class FolderCellView: SidebarCellView {
         icon.cell = self
         title.text = { [weak self] in self?.folder?.title ?? "" }
         title.color = { [weak self] in self?.titleColor() ?? .labelColor }
+        needsLayout = true
+    }
+
+    override func rowStateChanged() { needsLayout = true }
+
+    private func hasUnread(_ nodes: [SidebarNode]) -> Bool {
+        nodes.contains { node in
+            switch node {
+            case .tab(let tab): tab.isUnread
+            case .folder(let folder): hasUnread(folder.children)
+            case .split(let split): split.panes.contains { $0.isUnread }
+            }
+        }
     }
 
     override func layout() {
         super.layout()
         let m = SpaceListMetrics.self
+        let shown = tracked({
+            guard let folder, !folder.isExpanded else { return false }
+            return hasUnread(folder.children) && !(rowView?.isHovered ?? false)
+        }) { [weak self] in self?.needsLayout = true }
         icon.frame = CGRect(x: m.faviconX + indent - 1, y: m.faviconY - 1, width: m.faviconSize + 2, height: m.faviconSize + 2)
-        title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, bounds.width - m.titleTrailingInset - m.titleX - indent), height: m.rowHeight)
+        if shown || unread != nil {
+            let dot = unread ?? SidebarUnreadDot(host: self)
+            unread = dot
+            dot.update(shown: shown, cell: self)
+        }
+        let right = shown ? bounds.width - m.unreadDotTrailingCenter - m.unreadDotSize / 2 - 6 : bounds.width - m.titleTrailingInset
+        title.frame = CGRect(x: m.titleX + indent, y: 0, width: max(0, right - m.titleX - indent), height: m.rowHeight)
     }
 
     func beginRename() {

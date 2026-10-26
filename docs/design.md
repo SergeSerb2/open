@@ -588,3 +588,39 @@ the selection and bulk budgets and verifies row consistency with no full reload.
 The 13-state runner from §16.1 remains the visual regression gate. CU5 additionally
 compares synthetic divider renders at rest and with Clear against main. Native
 App flow E1–E4 and alert/clipboard/form integration remain with the App lane.
+
+## 18. Sidebar completion S3 (2026-10-26)
+
+Unread tabs show a lazy 6 pt accent dot centered at `(W − 26, y + 20)`.
+The title reserves 6 pt before it; hover and Peek take priority. A collapsed
+folder summarizes unread tabs at any depth, including split panes. Expansion
+returns the badge to the visible child. Geometry and accent choice are guesses
+from sidebar-completion §2.7 and [SC §9](re/sidebar-completion.md#9-unread-badge).
+The spring uses response 0.2 / damping 0.8; clear fades for 0.12 s. Reduce Motion
+suppresses the spring. Theme changes update the accent of an existing dot.
+
+A navigated pinned row swaps its favicon for a 22 pt reset plate on favicon
+hover. Its 11 pt Semibold SF Symbol is `arrow.uturn.backward`; Option changes it
+to `arrow.up.forward.square` and "Separate From Pinned Tab" (lead Q10). Normal
+activation sends reset through the model. Separate stays App-owned for live host
+handoff. The glyph swap fades over 0.08 s. Ordinary pinned rows have no plate.
+
+Expansion synchronizes in one native update/animation group and preserves the
+first visible item when it survives the change. Nested folders are included,
+even when they have never been opened. The focused harness checks expansion,
+collapse, one-step undo, same-value no-op, and no full reload. The release
+`sidebar-render bench --expand-all 50` cohort measured p95 5.43 ms for 50 folders
+with 10 children each, over 40 command/observation/layout/display rounds (limit
+16 ms). No timer, target, dependency, or unit test was added.
+
+`sidebar-render check` covers UB1–UB5, SP1–SP4, EA1–EA3, and TT1–TT2 through
+actual rows, events, rendered glyph pixels, tooltips, model commands, and undo.
+The Gmail fixture uses the generic cleanup rule and draws "Inbox (3)"; changing
+its title updates the displayed row with zero tab-row layouts. New render flags
+are `--unread ROW,…` and `--hover-favicon ROW`, combined with `--option-held`.
+The new App unread triggers and live Separate host transfer remain A-lane work.
+
+This branch is based on unreviewed M3 PR #78, branch `t3/sidebar-tidy-titles`, at
+`7e16e6195c0aef187a50edf7f95f4f5c61149890`. The M3 merge kept its tidy-title
+CLI check, stronger B4 removal-order check, and model documentation alongside the
+merged M2 archive flow; lane S adds no model implementation changes.

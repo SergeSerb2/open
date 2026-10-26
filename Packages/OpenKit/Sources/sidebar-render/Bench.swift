@@ -17,6 +17,7 @@ enum Bench {
     }
 
     static func run(_ args: [String]) throws {
+        if let count = RenderCLI.value(args, "--expand-all").flatMap(Int.init) { try expandAll(count: count); return }
         let rows = RenderCLI.value(args, "--rows").flatMap(Int.init) ?? 1000
         let scale = CGFloat(Double(RenderCLI.value(args, "--scale") ?? "2") ?? 2)
         let model = Synthetic.model(bulkRows: rows)
@@ -215,5 +216,35 @@ enum Bench {
         host2.close()
         host.contentView = nil
         host.close()
+    }
+
+    static func expandAll(count: Int) throws {
+        guard count > 0 else { throw CLIError(description: "--expand-all needs a positive folder count") }
+        let model = Synthetic.model(), state = model.windows[0], space = model.spaces[0]
+        space.pinned = (0..<count).map { index in
+            .folder(Folder(title: "Folder \(index)", isExpanded: false, children: (0..<10).map { child in
+                let url = Synthetic.url("expand\(index)-\(child)")
+                return .tab(Tab(url: url, title: "Page \(child)", pinnedURL: url))
+            }))
+        }
+        space.today = []; model.rebuildIndex()
+        let context = SidebarContext(model: model, windowID: state.id), delegate = RecordingDelegate()
+        let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: delegate)
+        let host = OffscreenRenderer.host(scene, scale: 2)
+        defer { host.contentView = nil; host.close() }
+        let reloads = SidebarDiagnostics.fullReloads
+        var times: [Double] = []
+        for _ in 0..<40 {
+            times.append(time {
+                _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: true)
+                OffscreenRenderer.settle(scene, runLoop: 0.0001)
+            })
+            guard scene.sidebar.displayedRows == Checks.expectedRows(context: context) else { throw CLIError(description: "Expand All rows differ from the model") }
+            _ = model.setAllFoldersExpanded(spaceID: space.id, expanded: false)
+            OffscreenRenderer.settle(scene, runLoop: 0.0001)
+        }
+        let p95 = times.sorted()[38]
+        print("EA4 Expand All \(count) folders × 10 rows, 40 rounds (model + observation + layout + display): p95 \(ms(p95)); full reloads \(SidebarDiagnostics.fullReloads - reloads)")
+        guard p95 <= 0.016, SidebarDiagnostics.fullReloads == reloads else { throw CLIError(description: "Expand All performance budget exceeded") }
     }
 }

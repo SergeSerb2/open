@@ -30,6 +30,9 @@ public struct SpringToken: Sendable, Hashable {
 /// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
 /// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
 public enum Motion {
+    /// Sidebar completion guesses until unread motion is captured.
+    public static let unreadAppear = SpringToken(response: 0.2, dampingFraction: 0.8)
+    public static let unreadClearFade: CFTimeInterval = 0.12
     /// Space page slide after a click or shortcut. Visible part ≈ 0.2–0.35 s; the
     /// slide leads the background fade (A0222: slide 0.65, fade 0.53).
     public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)

@@ -345,6 +345,16 @@ extension SidebarView {
         return (cell, cell.clearTitle, cell.clearTooltipTitle)
     }
 
+    public func unreadDotFrame(nodeID: ItemID) -> CGRect? {
+        guard let cell = cell(nodeID: nodeID), let dot = cell.layer?.sublayers?.first(where: { $0.name == "sidebar-unread-dot" }), dot.opacity > 0 else { return nil }
+        return convert(dot.frame, from: cell)
+    }
+
+    public func resetAction(tabID: ItemID) -> NSView? {
+        guard let cell = cell(nodeID: tabID) as? TabCellView, let button = cell.resetButton, !button.isHidden else { return nil }
+        return button
+    }
+
     /// The context menu a row (or empty space, for nil) opens, for checks that run its items.
     public func contextMenu(nodeID: ItemID?) -> NSMenu? {
         guard let page = pager.currentPage else { return nil }

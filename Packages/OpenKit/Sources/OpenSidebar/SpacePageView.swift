@@ -26,6 +26,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
     private var mirroringSelection = false
     private var draggingIDs: Set<ItemID> = []
     private var applyingBulk = false
+    private var syncingExpansion = false
     private var hoveredItem: AnyObject? { didSet { if hoveredItem !== oldValue { updateRowStates(animated: true) } } }
     private var tracking: NSTrackingArea?
 
@@ -358,18 +359,40 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     /// Makes the outline's expanded state match `Folder.isExpanded`.
     func syncExpansion(animated: Bool) {
+        guard !syncingExpansion else { return }
+        syncingExpansion = true
+        let firstRow = outline.row(at: NSPoint(x: 0, y: scroll.contentView.bounds.minY))
+        let firstItem = firstRow >= 0 ? outline.item(atRow: firstRow) : nil
+        let offset = firstRow >= 0 ? scroll.contentView.bounds.minY - outline.rect(ofRow: firstRow).minY : 0
+        var began = false
+        func beginIfNeeded() { if !began { outline.beginUpdates(); began = true } }
         func walk(_ items: [AnyObject]) {
             for case let f as Folder in items {
                 let expanded = outline.isItemExpanded(f)
                 if f.isExpanded, !expanded {
+                    beginIfNeeded()
                     if animated { outline.animator().expandItem(f) } else { outline.expandItem(f) }
                 } else if !f.isExpanded, expanded {
+                    beginIfNeeded()
                     if animated { outline.animator().collapseItem(f) } else { outline.collapseItem(f) }
                 }
                 if f.isExpanded, let kids = folderChildren[ObjectIdentifier(f)] { walk(kids) }
             }
         }
-        walk(rootItems)
+        NSAnimationContext.runAnimationGroup { group in
+            group.duration = animated ? Motion.rowStructure : 0
+            walk(rootItems)
+            if began { outline.endUpdates() }
+        }
+        syncingExpansion = false
+        if let firstItem {
+            let row = outline.row(forItem: firstItem)
+            if row >= 0 {
+                let y = min(max(0, outline.rect(ofRow: row).minY + offset), max(0, outline.frame.height - scroll.contentView.bounds.height))
+                if y != scroll.contentView.bounds.minY { scroll.contentView.scroll(to: NSPoint(x: 0, y: y)); scroll.reflectScrolledClipView(scroll.contentView) }
+            }
+        }
+        if began { updateRowStates(animated: false) }
         pruneSelection()
     }
 
@@ -483,8 +506,12 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         let item = row >= 0 ? outline.item(atRow: row) as AnyObject? : nil
         hoveredItem = item
         if let tab = item as? Tab, let rowView = outline.rowView(atRow: row, makeIfNecessary: false) {
-            TooltipController.shared.schedule(Tooltip(title: tab.displayTitle, subtitle: "Double-click to rename", placement: .beside, style: style),
-                                              for: rowView, at: rowView.convert(point, from: self))
+            let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? TabCellView
+            let reset = cell.map { $0.trackFavicon(at: $0.convert(point, from: self)) } ?? false
+            if !reset {
+                TooltipController.shared.schedule(Tooltip(title: tab.displayTitle, subtitle: "Double-click to rename", placement: .beside, style: style),
+                                                  for: rowView, at: rowView.convert(point, from: self))
+            }
         } else if item is DividerItem, let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false) as? DividerCellView {
             cell.trackPointer(at: cell.convert(point, from: self))
         } else {
@@ -611,8 +638,8 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         configure(rowView, item: outlineView.item(atRow: row) as AnyObject?, current: currentItem, hover: hoverItem(), animated: false)
     }
 
-    func outlineViewItemDidExpand(_ notification: Notification) { pruneSelection(); updateRowStates(animated: false) }
-    func outlineViewItemDidCollapse(_ notification: Notification) { pruneSelection(); updateRowStates(animated: false) }
+    func outlineViewItemDidExpand(_ notification: Notification) { if !syncingExpansion { pruneSelection(); updateRowStates(animated: false) } }
+    func outlineViewItemDidCollapse(_ notification: Notification) { if !syncingExpansion { pruneSelection(); updateRowStates(animated: false) } }
 
     // MARK: Drag and drop
 
