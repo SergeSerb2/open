@@ -174,3 +174,12 @@ EXCLUDE_PAGE_STATE serialization, Chromium history/scroll/form restoration,
 remain unverified until the engine and app steps. The fixtures are ready
 for those checks. The existing routing and scripting targets were kept;
 the plan's earlier target inventory predates them.
+
+Before publication, `git fetch origin && git merge origin/main` merged
+`922fe5f05934555ff132f960a9a5ac445d01d8dc` without conflicts. That merge
+added documentation only. The built Swift sources were unchanged. Imported
+round-trip, the 48-hour simulation, and both 66/66 command demos passed
+again after the merge.
+
+Verified release `openkit` SHA-256:
+`31506802c2d72b5bd56cef51b7494dbf445ce93c355ab4dfdcb6771452222a6e`.
