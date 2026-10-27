@@ -38,7 +38,13 @@ enum CLI {
             _ = stage.render(scale: scale)
             print(Flows.accessibilityDump(stage.controller.view.panel), terminator: "")
         case "flows": report(Flows.run())
-        case "bench": report(Bench.run())
+        case "bench":
+            let fixture: Bench.Fixture?
+            if let raw = value(args,"--fixture") {
+                guard let selected = Bench.Fixture(rawValue: raw) else { throw CLIError(description: "bench fixture must be skeleton or cold") }
+                fixture = selected
+            } else { fixture = nil }
+            report(Bench.run(only: fixture))
         case "probes":
             var checks: [Flows.Check] = []
             for name in names { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {

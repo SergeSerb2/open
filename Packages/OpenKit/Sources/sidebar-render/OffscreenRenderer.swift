@@ -200,6 +200,7 @@ enum LayerCloner {
         dst.shadowRadius = src.shadowRadius
         dst.shadowOffset = src.shadowOffset
         dst.shadowPath = src.shadowPath
+        dst.allowsGroupOpacity = src.allowsGroupOpacity
         dst.allowsEdgeAntialiasing = src.allowsEdgeAntialiasing
         if let m = model.mask { dst.mask = clone(m, presentation: presentation) }
         for sub in model.sublayers ?? [] { dst.addSublayer(clone(sub, presentation: presentation)) }

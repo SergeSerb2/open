@@ -55,8 +55,19 @@ enum Checks {
     }
 
     static func run(_ args: [String]) throws {
-        // Concurrent runs share the process preferences domain, so preferences
-        // the checks write go to a per-run suite that is removed at the end.
+        if args == ["--media-lifecycle-only"] {
+            MediaLifecycleChecks.run()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
+        if args == ["--media-motion-only"] {
+            MediaMotionChecks.run()
+            print("\nchecks: \(passes) passed, \(failures) failed")
+            if failures > 0 { exit(1) }
+            return
+        }
+        // Checks that write preferences use one disposable suite per run.
         let suite = "com.open.sidebar-render-check.\(UUID().uuidString)"
         SidebarHaptics.defaults = UserDefaults(suiteName: suite)!
         let model = Synthetic.model()
@@ -300,6 +311,8 @@ enum Checks {
 
         MediaChecks.runRowIndicators()
         MediaChecks.runMiniPlayers()
+        MediaMotionChecks.run()
+        MediaLifecycleChecks.run()
         ReviewChecks.run()
         VisualFinishChecks.run()
         CompletionChecks.run()
