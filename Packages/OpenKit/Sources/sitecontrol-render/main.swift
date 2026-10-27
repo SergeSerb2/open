@@ -62,14 +62,18 @@ enum CLI {
             } } }
             report(checks)
         case "check":
-            var checks = Flows.run()+EditorFlows.run()
+            // I_accepted was recorded with cold-measure at process entry. AppKit's
+            // process-wide view/font caches change after unrelated UI suites.
+            // Keep this same warmup/workload span before those suites run.
+            var checks = Bench.run(only: .cold)
+            checks += Flows.run()+EditorFlows.run()
             for name in sccNames { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
                 autoreleasepool {
                     let stage = Stage(state: name,scale: scale,appearance: appearance)
                     checks += ChromeProbes.run(stage,appearance: appearance)
                 }
             } } }
-            checks += EditorFlows.renders(); checks += try receipts(); checks += Bench.run()+EditorBench.run(); report(checks)
+            checks += EditorFlows.renders(); checks += try receipts(); checks += Bench.run(only: .skeleton)+EditorBench.run(); report(checks)
         case "screens":
             guard let out = value(args,"--out") else { throw CLIError(description: "screens requires --out") }
             let states = value(args,"--group") == "editor" ? editorNames : names
