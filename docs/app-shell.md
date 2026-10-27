@@ -1223,3 +1223,13 @@ normal EME `NotSupportedError` rejection, and a live page/app with no dialog.
 Socket timeouts and crashes fail. CDM presence before/after the request or at
 app exit fails; an intentionally unsupported feature no longer remains a FAIL
 by design. This changes the v1 acceptance contract, not the engine.
+
+The boundary pass also found Chromium truncates alert messages to 10 KiB before
+its callback. The App limit is therefore 8 KiB, below that upstream cap; the
+harness checks the actual callback byte count at 8192 and refusal at 8193.
+Prompt defaults use 4096/4097. Oversize checks wait for a refusal event before
+reading page results. A broken guard leaves a held callback and fails quickly;
+finally-based cleanup cancels it. A timeout run also exposed a skipped Quit
+when the executable-path probe was unavailable. Quit now verifies the launch
+through its private PID/root socket and keeps the root PID in its kill inventory.
+The original timeout and cleanup FAIL remain recorded.

@@ -212,9 +212,11 @@ class Open:
 
     def call(self, cmd, timeout=120, **args):
         foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
-        if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
-            # `NSApp.activate()` is a request, not a grant. Renew the explicit
-            # foreground request if another app took focus. Address the exact
+        if foreground_input and self.pid:
+            # Request exact-PID activation before EVERY native step, including
+            # an active app whose document lost key status after a popover.
+            # NSApp.isActive alone does not establish a native key window.
+            # Address the exact
             # verified PID; a bundle identifier can name another Open worktree.
             activation = subprocess.run([self.activator, str(self.pid), self.executable], capture_output=True, text=True, timeout=10)
             if activation.returncode:
@@ -900,7 +902,7 @@ def page_chrome_checks(factory, results, tmp):
                 refusal=wait_until(lambda:next((e for e in app.call('events') if e['type']=='pageChromeRefused'),None),timeout=3,step=.02)
                 # Read a renderer only after refusal; a broken guard leaves its
                 # alert held. The finally block cancels it without human input.
-                done=bool(refusal) and app.eval(tab,'window.boundaryDone',timeout=1) is True
+                done=bool(refusal) and bool(wait_until(lambda:app.eval(tab,'window.boundaryDone',timeout=1) is True,timeout=3,step=.02))
                 results['dialog_'+kind+'_limit']={'ok':at_bytes==limit and bool(done) and app.call('page-dialog-state')['pending']==0,'atBytes':at_bytes,'overBytes':limit+1}
         with dialog_case(app,'dialog queue boundary'):
             app.call('policy',dialogs='hold')
@@ -911,8 +913,9 @@ def page_chrome_checks(factory, results, tmp):
                 assert wait_until(lambda:app.call('page-dialog-state')['pending']==i+1,timeout=5,step=.02)
             overflow=app.call('open',url=origin+'/page?queue=overflow')['id'];queued.append(overflow);app.call('wait',tab=overflow);app.call('events')
             app.eval(overflow,'window.overflowDone=false;setTimeout(()=>{alert("overflow");window.overflowDone=true},0);true')
-            refused=wait_until(lambda:app.eval(overflow,'window.overflowDone') is True,timeout=3,step=.02)
-            results['dialog_queue_limit']={'ok':bool(refused) and app.call('page-dialog-state')['pending']==8 and any(e['type']=='pageChromeRefused' for e in app.call('events')),'at':8,'over':9}
+            refusal=wait_until(lambda:next((e for e in app.call('events') if e['type']=='pageChromeRefused'),None),timeout=3,step=.02)
+            refused=bool(refusal) and bool(wait_until(lambda:app.eval(overflow,'window.overflowDone',timeout=1) is True,timeout=3,step=.02))
+            results['dialog_queue_limit']={'ok':bool(refused) and app.call('page-dialog-state')['pending']==8,'at':8,'over':9}
             for q in queued:app.call('close',tab=q)
             assert wait_until(lambda:app.call('page-dialog-state')['pending']==0 and not {t['id'] for t in app.call('tabs')}.intersection(queued),timeout=8,step=.02)
         app.call('select',tab=tab);app.call('wait',tab=tab);app.call('focus',tab=tab);app.call('policy',dialogs='')
@@ -954,7 +957,7 @@ def page_chrome_checks(factory, results, tmp):
                 results['context_url_limit_over']={'ok':bool(refused) and app.call('context-menu-state')['completed'] and app.call('context-menu-state')['items']==[],'bytes':length}
         app.eval(tab,'document.querySelector("#link-target").href="/link";true')
         anchor=app.call('site-controls-state')['anchor'];assert anchor[2:]==[30,30],anchor
-        app.call('mouse',action='move',x=anchor[0]+anchor[2]/2,y=anchor[1]+anchor[3]/2)
+        app.call('mouse',action='hover',x=anchor[0]+anchor[2]/2,y=anchor[1]+anchor[3]/2)
         app.call('focus',tab=tab);shown=app.call('site-controls');site=app.call('site-controls-state')
         results['site_control_shell']={'ok':shown and site['available'] and site['visible'] and site['request']['profile']==app.tab(tab)['profile'] and site['request']['anchor']==anchor,'state':site}
         assert site['visible'],site
@@ -965,7 +968,7 @@ def page_chrome_checks(factory, results, tmp):
             candidate=tab if pressed!='w' else app.call('open',url=origin+'/page?scc-close')['id']
             app.call('wait',tab=candidate);app.call('focus',tab=candidate)
             anchor=app.call('site-controls-state')['anchor']
-            app.call('mouse',action='move',x=anchor[0]+15,y=anchor[1]+15)
+            app.call('mouse',action='hover',x=anchor[0]+15,y=anchor[1]+15)
             assert app.call('site-controls'),app.call('site-controls-state')
             before={t['id'] for t in app.call('tabs')}
             key(pressed,**({'modifiers':['cmd']} if pressed!='return' else {}))
