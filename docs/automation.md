@@ -367,6 +367,7 @@ no remote debugging port. It never opens or copies Arc.
 | `space-manager-state` | Reads the **attached** native manager, its class/identity/context ID, model and undo identity, isolated/global preview flags, columns, grabber points, up to 200 visible-outline rows per column, browser switcher order from real view positions, real model UndoManager notification count, and this App's window records. Points use the existing `mouse` command's window coordinates. Available after the last browser closes. |
 | `space-manager-drag` | `space=<ID> to=<zero-based index>` drags the real visible grabber through `OEApplication.sendEvent`; the native tracking loop dequeues the drag/up events. Rejects invalid IDs/indices and offscreen grabbers. Returns manager state. |
 | `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
+| `space-manager-intent` | `kind=openURL space=<ID> url=<URL> [section=pinned]` sends the production intent that a URL drop on that Manager column sends (index 0 of Today, or Pinned). The native drop mapping itself is checked offscreen by `sidebar-render`. |
 | `library-close` | Closes the shared Library window, cancelling any attached sheet first. Reports `closed` and the sheet window numbers it cancelled. Available with no browser window. |
 
 Use existing `key route=app window=<Library number>` for Cmd+Z and other
