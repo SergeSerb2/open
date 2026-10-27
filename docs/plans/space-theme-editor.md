@@ -159,6 +159,8 @@ the dark text that light content uses (both from the semantic palettes). Bias: A
 
 ### 2.2 Pad mapping
 
+**Superseded by §17.1 (decoded 2026-10-26).** The range below is the empty-editor case only.
+
 **Provisional, not a parity gate:** capture session 2 contradicts this
 linear radius law. See the dated lead amendment and mandatory Step 9 gate
 below. Keep current stored styles and mathVersion semantics until that work
@@ -411,6 +413,8 @@ and primary/semantic palette derivation remain unchanged. F0139 is checked
 with `compare --spec theme-window` over six background-only regions.
 
 ### 4.5 Intensity
+
+**Superseded by §17.2 (decoded 2026-10-26):** `a = 0.2 + 0.55 × intensity` with a dark wash.
 
 `ThemeField.layerAlpha` becomes `ThemeField.layerAlpha(intensity:)`. Ship the
 provisional law `alpha = 0.8 × intensity` (0.64 at the default 0.8, so every
@@ -1187,7 +1191,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | 6 | Icon picker: panel, Emoji page (`gen-emoji-index.py`, index JSON), Icons page, Remove; `changeSpaceIcon`, `changeIcon`, `change-space-icon`. | picker files, `CommandRegistry`, `SuggestAdapter`, `BrowserWindowController` | I1 PASS; `commands-dump` exit 0 with the new id. |
 | 7 | New Space form: sidebar page, cards, Profile card (+ New Profile…), theme card → editor (draft mode), splash, `moveToNewSpace`, `turnFolderIntoSpace`, rename dialog, Change Profile menu. | creation files, `SidebarView`, `SpacePagerView`, `BrowserWindowController` | C1 PASS; `create` renders at all 5 widths in both appearances. |
 | 8 | App: automation commands (§10.5), e2e suite `space-editor`. Starts after app-shell Step B. | `AutomationController.swift`, `engine_e2e.py` | A1–A7 PASS. |
-| 9 | Calibration (needs the §15 capture session): intensity law, harmony knob art, page-2 swatch art, creation layout and timing, light appearance tokens, automatic bias. | tokens, `ThemeField`, views | §12.3 targets met on the new captures; each changed value cites its frame. |
+| 9 | Calibration: **§17 pad, intensity, and texture law (spec ready; lands before or with Step 5)**; then harmony knob art, page-2 swatch art, creation layout and timing, light appearance tokens, automatic bias. | `ThemeColorMath`, `ThemeEditorState`, `ThemeField`, `ThemeTuning`, `ThemeTexture`, views | §17.4 table PASS; §12.3 targets met on the new captures; each changed value cites its frame. |
 
 ## 14. Risks
 
@@ -1208,7 +1212,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | Q1 | Emoji data source for the picker. | Generate `emoji-index.json` from Unicode `emoji-test.txt` (Unicode License V3, pinned version + SHA-256) with our script, and add a row for it to `docs/release/licenses.md` in the same PR. Not the macOS Character Viewer (not Arc's look) and never Arc's `emojis.json`. |
 | Q2 | Which theme a brand-new Space starts with. | **Answered by capture session 2 (2026-10-26):** no theme. A new Space keeps the default theme (no stored `windowTheme`) unless the user picks a color in the New Space form. Evidence: both test Spaces made in session 2 had no `windowTheme` until the theme editor gave one a color (`docs/re/interaction-states.md` §20.0, §20.8; `appsupport/s2-final/StorableSidebar.json`; `docs/re/capture-session-2-results.md` C10). Replaces the Brand preset `spaces.count mod 9` recommendation. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
-| Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
+| Q4 | Intensity effect. | **Answered (§17.2):** opacity `0.2 + 0.55 × intensity` (0.2 tint at 0), plus a dark wash of black 0.35 × `min(opacity, 0.5)` under it. |
 | Q4 review capture detail | Intensity zero. | Capture intensity **0** explicitly and determine whether Arc keeps a visible tint. Keep Open's current gray-at-zero result and provisional law until Step 9. |
 | Q5 | Page 2 of the presets. | Brand 1–9 with 3 analogous colors. Evidence: 2 of 3 stored gradients are Brand5 / Brand6 with exactly ±40°. |
 | Q6 | New Space form placement. | Sidebar page (code evidence: 190 / 227 pt width breakpoints). Ask the user for a 30 s capture of "New Space…" before Step 7 if certainty is needed. |
@@ -1240,6 +1244,162 @@ on both pages; the same editor in macOS Light.
 | 7 | | |
 | 8 | | |
 | 9 | | |
+
+## 17. Step 9 calibration — decoded Arc pad, intensity, and texture law (2026-10-26)
+
+Evidence: `docs/re/features-core.md` §2.3 item 17 (addresses, constants,
+capture fit). This section is the implementation spec. It replaces the
+provisional §2.2 range rule, the §4.5 opacity law, and the §4.4 / D-8
+equal-darkness rule. Step 9 lands it as one PR. It must land before or
+together with Step 5 (`edit-theme` wiring), per the round-3 gate. Values
+are decoded facts unless marked **fit** (our fit to captures) or **guess**.
+
+### 17.1 Pad law (`ThemeColorMath`, `ThemeEditorState`)
+
+The lightness range and the saturation become editor state. They are not
+stored in `SpaceStyle`, and they are not a function of the mode alone. Arc
+does not store them either; it rebuilds them each time the editor opens.
+
+```text
+autoRange(l)   = max(0.01, l − 0.25) … min(0.97, l + 0.25)
+forcedRange    = Light 0.575…0.97, Dark 0.01…0.425
+widen(R, l)    = min(R.lo, l) … max(R.hi, l)
+sat(key)       = max(0.01, hsl(key).s)          (P3 HSL)
+```
+
+| Event | `range` | `saturation` |
+|---|---|---|
+| Editor opens, no style | 0.01…0.97 | 1.0 (was 0.8: a defect, 0.8 is the default intensity) |
+| Editor opens on a style, Automatic | `autoRange(l)` | `sat(key)` |
+| Editor opens on a style, forced Light / Dark | `widen(forcedRange, l)` | `sat(key)` |
+| `selectPreset`, Automatic | `autoRange(l of the preset key)` | `sat(preset key)` |
+| `selectPreset`, forced | unchanged | `sat(preset key)` |
+| `setAppearance(.light / .dark)` | `forcedRange`; key `l' = lo' + t·(hi' − lo')` with `t = clamp((l − lo)/(hi − lo))` from the **current** range; hue and saturation kept | unchanged |
+| `setAppearance(.automatic)` | unchanged, key unchanged (**guess**: Arc handles it outside the reducer; no re-centering code exists) | unchanged |
+| Drag, keyboard, add, remove, intensity, noise, texture | unchanged | unchanged |
+| `removeColor` at count 1 (empty) | 0.01…0.97 | 1.0 |
+
+Knob → color and color → knob keep today's formulas
+(`color(at:saturation:range:)`, `knob(for:range:)`), with the state's
+`range` and `saturation`. Keyboard hue keeps `l`.
+
+Code changes:
+
+1. `ThemeColorMath.swift`: add `autoRange(lightness:)`,
+   `forcedRange(_ mode:)`, `widen(_:_:)`, and
+   `editorRange(key: P3?, mode:) -> ClosedRange<Double>` for the open rule.
+   Keep `lightnessRange(_:)` only as `forcedRange` for `.light` / `.dark`.
+   Remove the `.automatic` constant from call sites.
+2. `ThemeEditorState.swift`: store `range` and `saturation` as `var`s. Set
+   them in `init(style:)` with the open rule. Update them in `.selectPreset`
+   and `.setAppearance` as in the table above. Reset them when the style
+   becomes `nil`. `setAppearance` computes `t` with the old stored range.
+   The empty-state default `saturation` becomes 1.0.
+3. `ColorPadView.swift` / `PresetStripView.swift`: read the range from the
+   state, not from the mode.
+4. No stored-value or `mathVersion` change: the key color is still the only
+   stored output, and rendering does not read the range.
+
+### 17.2 Sidebar opacity, wash, and compositing (`ThemeField`, `ThemeTuning`)
+
+```text
+a(i)        = 0.2 + 0.55 · clamp(i, 0, 1)                    theme layer opacity
+w(i)        = 0.35 · min(a(i), 0.5)                          dark wash, black
+underlay(i) = U0 · (1 − w(i)) / (1 − 0.35·0.5)               U0 = today's fitted gray
+pixel       = a · key + (1 − a) · underlay                   gamma-encoded Display P3
+```
+
+- `ThemeField.layerAlpha(intensity:)` returns `a(i)`. It equals 0.64 at
+  0.8, so every intensity-0.8 fit and compare is unchanged.
+- `U0` keeps `lightUnderlayActive` 0.694 and `lightUnderlayInactive` 0.83.
+  Dividing by 0.825 keeps both values exact at intensity ≥ 0.55. This is
+  equivalent to a material of 0.8412 (active) under Arc's wash (**fit**; this
+  capture's material is 0.8246; every §17.4 sidebar row passes with either value).
+  Inactive scaling by the same wash is a **guess**.
+- The black wash applies when the window's color scheme is Dark. The
+  capture is macOS Dark with `translucencyStyle: light`. In Light, Arc's
+  other branch is a white wash at `min(a, 0.5)`. It is not captured over a
+  theme, so in Light keep today's underlays without a wash (**guess**).
+- Composite editor styles in gamma-encoded Display P3: convert the key to P3
+  (it already is, from `ThemeColorMath`), mix with the gray underlay, then
+  convert the result to extended sRGB for the field image. The pad-center
+  frame fits at ΔE00 1.23 in P3 and 2.55 in sRGB (**fit**). For gradients,
+  convert the OKLab result to P3 before the final mix with the underlay.
+- Legacy imports and mapped stops (`usesLegacyIntensity`): keep 0.64 and the
+  sRGB path in this PR. Run F0069 (stored intensity 1.0) with `a = 0.75` and
+  the P3 mix. Switch legacy themes only if F0069's worst ΔE00 stays ≤ 2.38
+  (today's value). Record both numbers in the PR either way.
+
+Add to `ThemeTuning`:
+
+```swift
+public static let intensityAlphaFloor = 0.2       // 0x101532458
+public static let intensityAlphaSlope = 0.55      // 0x101532444
+public static let darkWashAlpha = 0.35            // 0x101532414
+public static let washOpacityCap = 0.5            // 0x101532464
+public static let textureNoiseScale: [SpaceStyleTexture: Double] =
+    [.grain: 0.80, .sand: 0.15, .denim: 0.60, .tweed: 0.40]   // 0x10153258c
+public static let textureTileDarkness: [SpaceStyleTexture: Double] =
+    [.grain: 0.060, .sand: 0.316, .denim: 0.122, .tweed: 0.262] // fit, §17.3
+```
+
+### 17.3 Textures (`ThemeTexture`)
+
+The §4.4 equal-mean-darkness rule and its base-alpha layer are removed. The
+lead's round-3 note already supersedes them. Each texture draws its own
+black tile (Open's own pattern) at layer opacity
+`noise × textureNoiseScale[t]`.
+
+- Tile mean alpha: `textureTileDarkness[t]`. Then the mean darkening is
+  `noise × k × D`: at noise 0.8, grain 0.0386, sand 0.0379, denim 0.0586,
+  tweed 0.0838 (multiplicative, encoded values).
+- Contrast: tune each pattern's alpha spread so the sidebar L* standard
+  deviation over x 30–200, y 820–1020 at noise 0.8, intensity 1 is grain
+  2.02, sand 1.53, denim 1.28, tweed 0.92 (±0.3). Tweed must be the
+  smoothest: a soft mottle, not sharp dashes.
+- Monochrome: no per-channel tint. Arc's darkening differs by ≤ 0.001
+  between channels. The F0139 per-channel grain note stays open, because
+  this session shows none.
+- Grain: rescale today's `Grain.tile` alpha so its mean is 0.060 at layer
+  opacity 1. Keep its pattern. Check F0139 (noise 0.45): it must stay
+  ≤ 0.84 ΔE00, or report the change.
+- Cache key unchanged (texture, noise bucket, scale). The tile no longer
+  depends on noise; only layer opacity does. One tile per (texture, scale)
+  is enough.
+
+### 17.4 Acceptance (`space-editor-render compare --spec session2-pad`, new)
+
+Inputs: the local session 2 item 17 frames (never committed). Colors: convert
+the capture's embedded display profile to Display P3. Sidebar sample: mean of
+x 30–200, y 820–1020 of the main-window image (`win-70352`). Render Open's
+window with the key from Open's own pad math at Arc's knob position and
+Arc's intensity and noise. Brand 8 state: P3 HSL h 200.5°, s 0.5176,
+l 0.6667, range 0.4167…0.9167.
+
+| Check | Arc input (unit knob position, intensity) | Target |
+|---|---|---|
+| Knob, Greyscale 1–9 (0027–0045) | preset tap, Automatic | ≤ 1.5 pt each (decoded ≤ 0.9) |
+| Knob, Brand 8 (0065) | preset tap, Automatic | ≤ 1.5 pt (decoded 0.7; today 30.6) |
+| Key, pad center (0092) | r 0.004, hue from Arc's knob 337.1°, 0.8 | ΔE00 ≤ 2 vs knob P3 (163, 53, 95) (decoded 0.39) |
+| Key, mid radius (0093) | (0.485, −0.003), 0.8 | ΔE00 ≤ 2 vs (213, 125, 126) (decoded 0.37) |
+| Key, edge at rest (0098) | (0.932, −0.004), 0 | ΔE00 ≤ 2 vs (242, 213, 213) (decoded 0.40) |
+| Sidebar, center (0092) | as above, 0.8 | ΔE00 ≤ 2 (decoded 0.94 with `U0`; today 29.8) |
+| Sidebar, mid (0093) | as above, 0.8 | ΔE00 ≤ 2 (0.35; today 13.7) |
+| Sidebar, edge (0095) | key of 0098, 0.8 | ΔE00 ≤ 2 (0.22; today 2.5) |
+| Sidebar, intensity 0 / 0.5 / 1 (0098 / 0100 / 0102) | key of 0098; 0, 0.495, 1 | ΔE00 ≤ 2 each (0.82 / 0.51 / 0.32; today 6.98 / 2.49 / 2.60) |
+| Sidebar, Brand 8 (0065) | preset, 0.8 | ΔE00 ≤ 2 (0.55) |
+| Textures (0112 / 0114 / 0116 / 0118) | key of 0098, 1, noise 0.8 | mean ΔE00 ≤ 2 vs Arc; L* sd within ±0.3 of §17.3 |
+| Mode remap | Brand 8, Dark then Light | Dark: `l' = 0.01 + 0.415·t`; Light: `0.575 + 0.395·t`, with `t` from 0.4167…0.9167 |
+| Empty open | no style | range 0.01…0.97, saturation 1.0; F0137 knob at 45.98 pt (Arc 45.26) |
+
+Also run `sidebar-render check`, the F0069 compare (§17.2), F0139, and the
+existing editor checks. Frame 0091 is not a gate frame: its second window
+image is mid-drag, and there the sidebar lags the knob. Use 0092, which has
+the same knob at rest.
+
+Remaining unknowns, not gates: the Metal renderer's own config fill (the
+capture fits the SwiftUI law), the light-mode wash, the inactive-window
+material, and Automatic-return behavior.
 
 ## Appendix — Lead decisions (2026-10-25)
 
