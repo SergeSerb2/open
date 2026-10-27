@@ -60,7 +60,7 @@ open class ColorPadView: NSView {
         setAccessibilityElement(true); setAccessibilityRole(.slider); setAccessibilityLabel("Color")
         refreshAppearance()
     }
-    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    @available(*, unavailable) public required init?(coder: NSCoder) { fatalError() }
     open override var isFlipped: Bool { true }
     open override var acceptsFirstResponder: Bool { interactionEnabled }
     open override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
