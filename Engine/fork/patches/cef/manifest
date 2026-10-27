@@ -8,3 +8,7 @@ paths: cef/BUILD.gn cef/libcef/browser/browser_host_base.h cef/libcef/browser/br
 paths: cef/libcef/browser/chrome/chrome_context_menu_handler.cc
 # 0304-open-extension-popups.patch
 paths: cef/libcef/browser/chrome/chrome_browser_delegate.h
+# 0310-open-adblock-service-owner.patch
+paths: cef/libcef/browser/browser_context.h cef/libcef/browser/browser_context.cc
+# 0314-open-adblock-cefsimple-smoke.patch
+paths: cef/tests/cefsimple/simple_app.cc
