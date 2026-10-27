@@ -73,12 +73,13 @@ final class Stage {
         }
         for b in controller.view.panel.controls {
             let id = b.controlID.replacingOccurrences(of: "action.",with: "")
-            if let phase = MaterialFallback.phases[id] { b.symbolPhase = phase }
+            if let phase = MaterialFallback.phases[b.symbol == "gearshape.fill" ? "gear" : id] { b.symbolPhase = phase }
         }
         prepareMaterial(); OffscreenRenderer.settle(root)
         openCPU = Double(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)-cpu)/1_000_000; openWall = Double(DispatchTime.now().uptimeNanoseconds-wall)/1_000_000
         if state == "scc-picker" { controller.present(anchor: .urlField,tabID: self.source.tabID,mode: .extensionPicker,animated: false) }
         if state == "scc-reload" { controller.view.panel.showsReload = true; self.source.changed(); prepareMaterial() }
+        if state == "scc-focus-boost",let row = controller.view.panel.controls.first(where: { $0.controlID.hasSuffix(".row") }) { controller.view.panel.focus(row) }
         if state == "scc-keyboard-focus" { controller.view.panel.focus(controller.view.panel.control(id: "extension.add")!) }
         if state == "scc-hover-label" { controller.view.panel.control(id: "section.extensions")?.mouseEntered(with: NSEvent()); OffscreenRenderer.settle(root); RunLoop.main.run(until: Date().addingTimeInterval(Motion.hoverFade+0.01)) }
         if state == "scc-hover-boost",let row = controller.view.panel.controls.first(where: { $0.controlID.hasSuffix(".row") }) { row.mouseEntered(with: NSEvent()); OffscreenRenderer.settle(root) }
@@ -135,8 +136,12 @@ final class Stage {
             }
             return overlayCapture!.composite(root,scale: scale,at: CGPoint(x: controller.view.panelFrame.maxX-26,y: controller.view.panelFrame.maxY-26))
         }
-        if state == "scc-tooltip" {
-            let tooltip = TooltipView(tooltip: Tooltip(title: "Capture a portion of this page",keys: ["⇧","⌘","2"],style: .defaultTheme(system: appearance)))
+        if state.hasPrefix("scc-tooltip") {
+            let owner: SiteControlButton?
+            if state == "scc-tooltip" { owner = controller.view.panel.control(id: "action.capture") }
+            else if state == "scc-tooltip-private" { owner = controller.view.panel.controls.first { $0.controlID.hasSuffix(".row") } }
+            else { owner = controller.view.panel.control(id: "contentBlocking") }
+            let tooltip = TooltipView(tooltip: Tooltip(title: owner?.tooltipTitle ?? "",keys: owner?.tooltipKeys ?? [],style: .defaultTheme(system: appearance)))
             tooltip.frame = CGRect(origin: CGPoint(x: controller.view.panelFrame.minX+78,y: controller.view.panelFrame.minY+48),size: tooltip.fittingSize)
             root.addSubview(tooltip); defer { tooltip.removeFromSuperview() }
             OffscreenRenderer.settle(root)

@@ -36,7 +36,7 @@ enum MaterialFallback {
         }
         if let values = try values("--glow-rim") { glowRim = values }
         if let values = try values("--glow-inner") { glowInner = values }
-        for id in ["share","newBoost","capture","captureFull","more"] {
+        for id in ["share","newBoost","capture","captureFull","more","gear"] {
             if let raw = CLI.value(args,"--phase-"+id) {
                 let xy = raw.split(separator: ",").compactMap { Double($0) }
                 guard xy.count == 2,xy.allSatisfy({ $0.isFinite && abs($0)<=1 }) else { throw CLIError(description: "phase requires x,y within one point") }

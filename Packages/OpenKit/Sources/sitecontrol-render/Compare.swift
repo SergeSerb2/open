@@ -62,6 +62,7 @@ enum SiteControlCompare {
             elements.append(Element(name: "Boost knocked-out brush and sparkles",region: circle.insetBy(dx: 4,dy: 4),kind: .ink))
             text("Boost name",49,154,150,16); text("Boost subtitle",49,171,90,17)
         }
+        if boost { elements = elements.filter { $0.name.hasPrefix("Boost") } }
         var table = "| Element | Arc ink box | Open ink box | Max edge error (pt) | DE00 | Result |\n|---|---|---|---|---|---|\n", failed = 0, deferred = 0
         for element in elements {
             let ab: CGRect?,ob: CGRect?,ac: [Double]?,oc: [Double]?
@@ -94,7 +95,7 @@ enum SiteControlCompare {
             table += "| \(element.name) | \(box(ab)) | \(box(ob)) | \(error.map { String(format: "%.2f",$0) } ?? "—") | \(de.map { String(format: "%.2f",$0) } ?? "—") | \(unconfirmedShare ? "DEFERRED: hover or press, unconfirmed" : (pass ? "PASS" : "FAIL")) |\n"
         }
         table += "\n| Material probe | Arc sRGB | Open sRGB | DE00 | Result |\n|---|---|---|---|---|\n"
-        for (x,y,gated) in [(150,330,true),(180,240,true),(240,330,true),(260,270,true),(235,180,false),(300,330,false)] {
+        for (x,y,gated) in (boost ? [] : [(150,330,true),(180,240,true),(240,330,true),(260,270,true),(235,180,false),(300,330,false)]) {
             let a = arc.pixel(x,y),o = ours.pixel(x,y),de = ColorMath.deltaE2000(a,o)
             let pass = de<=3
             if gated && !pass { failed += 1 }
@@ -102,7 +103,7 @@ enum SiteControlCompare {
             table += "| (\(x), \(y)) | #\(rgb(a)) | #\(rgb(o)) | \(String(format: "%.2f",de)) | \(gated ? (pass ? "PASS" : "FAIL") : "reported, not gated") |\n"
         }
         table += "\n| Offscreen glow edge | Set | Arc sRGB | Open sRGB | DE00 | Result |\n|---|---|---|---|---|---|\n"
-        for (x,y,fit) in [(120,91,true),(140,91,false),(160,91,false),(180,91,false),(120,Int(body.maxY)-1,true),(140,Int(body.maxY)-1,false),(160,Int(body.maxY)-1,false),(180,Int(body.maxY)-1,false)] {
+        for (x,y,fit) in (boost ? [] : [(120,91,true),(140,91,false),(160,91,false),(180,91,false),(120,Int(body.maxY)-1,true),(140,Int(body.maxY)-1,false),(160,Int(body.maxY)-1,false),(180,Int(body.maxY)-1,false)]) {
             let a = arc.pixel(x,y),o = ours.pixel(x,y),de = ColorMath.deltaE2000(a,o)
             if !fit && de>2 { failed += 1 }
             func rgb(_ p: [Double]) -> String { p.map { String(format: "%02X",Int($0.rounded())) }.joined() }

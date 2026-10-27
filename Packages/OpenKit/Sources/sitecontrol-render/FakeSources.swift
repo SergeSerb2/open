@@ -27,22 +27,22 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
         let pip = SiteSettingTile(id: "content.automaticPictureInPicture",kind: .content("automaticPictureInPicture"),title: "Automatic Picture-In-Picture",subtitle: "Allowed",state: .on,symbol: "gearshape.fill")
         value?.tiles = [blocking,pip]
         value?.boosts = []
-        if ["scc-boost","scc-boosts-off","scc-incognito","scc-hover-boost"].contains(state) {
+        if ["scc-boost","scc-boosts-off","scc-incognito","scc-hover-boost","scc-focus-boost","scc-tooltip-private"].contains(state) {
             value?.boosts = [Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000001"),name: "My Boost",siteMatch: SiteMatch(domain: "example.com"))]
         }
         switch state {
         case "scc-reload": break
         case "scc-insecure": value?.context.url = URL(string: "http://news.example.com/")!; value?.context.security = .insecure
-        case "scc-adblock-excluded": value?.tiles[0].state = .off; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off for this site."
-        case "scc-adblock-unavailable": value?.tiles[0].state = .unavailable; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off. You can turn it on in Settings."
+        case "scc-adblock-excluded","scc-tooltip-off": value?.tiles[0].state = .off; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off for this site."
+        case "scc-adblock-unavailable","scc-tooltip-unavailable": value?.tiles[0].state = .unavailable; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off. You can turn it on in Settings."
         case "scc-no-boosts": value?.boosts = []
         case "scc-boosts-off": value?.boostsGloballyEnabled = false
-        case "scc-incognito": value?.context.isIncognito = true
+        case "scc-incognito","scc-tooltip-private": value?.context.isIncognito = true
         case "scc-internal-page": value?.context.url = URL(string: "open://settings")!; value?.context.displayHost = "Settings"; value?.context.security = .insecure
         case "scc-many":
             let names = ["Camera", "Microphone", "Location", "Notifications", "Clipboard", "MIDI Devices", "Screen Sharing", "Automatic Downloads", "Storage Access", "Window Management", "Fonts", "Idle Detection"]
                 value?.tiles = [blocking] + SitePermission.allCases.prefix(11).enumerated().map { i, kind in
-                SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: ["video.fill","mic.fill","location.fill","bell.fill","doc.on.clipboard","pianokeys","rectangle.on.rectangle","arrow.down.circle","externaldrive","macwindow","textformat","clock"][i]) }
+                SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: ["video.fill","mic.fill","location.fill","bell.fill","doc.on.clipboard.fill","pianokeys","rectangle.on.rectangle","arrow.down.circle.fill","externaldrive.fill","macwindow.on.rectangle","textformat","moon.zzz.fill"][i]) }
             value?.boosts = (0..<20).map { Boost(id: BoostID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0 + 1)), name: "Boost \($0 + 1)", siteMatch: SiteMatch(domain: "example.com")) }
         default: break
         }

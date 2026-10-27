@@ -19,6 +19,12 @@ enum ChromeProbes {
             check("action gradient top \(top.prefix(3)) ~= #272727",near(top,[39,39,39]))
             check("action gradient bottom \(bottom.prefix(3)) ~= #161616",near(bottom,[22,22,22]))
             check("action outer ring is darker than material",CLI.luminance(pixel(body.minX+34,body.minY+9)) < CLI.luminance(pixel(body.minX+34,body.minY+7)))
+            for offset: CGFloat in [37,180] {
+                let x = body.minX+offset,y = body.maxY-52-1/scale
+                let line = pixel(x,y),above = pixel(x,y-1/scale)
+                let lift = zip(line.prefix(3),above.prefix(3)).map { Int($0)-Int($1) }
+                check("separator additive RGB lift \(lift) ~= +35",lift.allSatisfy { abs($0-35)<=3 })
+            }
             let rim = pixel(body.minX+37,body.minY)
             if body.minX+37 < stage.root.sidebarWidth { check("white 0.20 rim \(rim.prefix(3)) ~= #75738F",near(rim,[117,115,143])) }
         }
@@ -37,7 +43,14 @@ enum ChromeProbes {
             let row = stage.controller.view.panel.control(id: "content.automaticPictureInPicture")!
             let origin = row.convert(row.bounds,to: stage.root).origin
             let center = CGPoint(x: origin.x+26,y: origin.y+16)
-            let core = pixel(center.x+4,center.y),outside = pixel(origin.x+8,center.y)
+            // Pick the opaque core of the cut-out, not an antialiased tooth.
+            // The calibrated glyph's core moves within this fixed 16 pt box.
+            var core = pixel(center.x,center.y)
+            for y in 0..<Int(16*scale) { for x in 0..<Int(16*scale) {
+                let sample = pixel(center.x-8+CGFloat(x)/scale,center.y-8+CGFloat(y)/scale)
+                if CLI.luminance(sample)<CLI.luminance(core) { core = sample }
+            } }
+            let outside = pixel(origin.x+8,center.y)
             let de = ColorMath.deltaE2000(core.prefix(3).map(Double.init),outside.prefix(3).map(Double.init))
             check(String(format: "real Settings gear knock-out equals nearby material DE %.2f",de),de<=3)
             check("297 pt no-Boosts stack",body.height == 297)

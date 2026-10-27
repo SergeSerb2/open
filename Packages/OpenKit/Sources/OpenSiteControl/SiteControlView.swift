@@ -38,6 +38,13 @@ public final class SiteControlView: NSView {
         layoutSubtreeIfNeeded(); window?.displayIfNeeded(); CATransaction.flush()
         positionLayers()
     }
+    func clearStructureAnimations() {
+        func clear(_ layer: CALayer) {
+            for key in layer.animationKeys() ?? [] where key.hasPrefix("rows.") { layer.removeAnimation(forKey: key) }
+            if let mask = layer.mask { clear(mask) }; layer.sublayers?.forEach(clear)
+        }
+        if let layer { clear(layer) }
+    }
     public override func layout() { super.layout(); positionLayers() }
     private func positionLayers() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -171,6 +178,7 @@ public final class SiteControlPanelView: NSView {
         more.frame = CGRect(x: body.maxX-m.padding-m.moreButton,y: footerY,width: m.moreButton,height: m.moreButton)
         let line = CGMutablePath(), y = footerY-m.gapAfterSeparator-1/scale/2
         line.move(to: CGPoint(x: m.padding,y: y)); line.addLine(to: CGPoint(x: body.maxX-m.padding,y: y))
+        separator.compositingFilter = contentAppearance == .dark ? "plusL" : nil
         separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = 1/scale
         CATransaction.commit()
     }
@@ -296,6 +304,7 @@ struct SiteControlStructure {
         for state in states {
             for (key,old) in state.values {
                 let next = state.layer.value(forKeyPath: key)
+                if let oldObject = old as? NSObject,let nextObject = next as? NSObject,oldObject.isEqual(nextObject) { continue }
                 let animation = CABasicAnimation(keyPath: key); animation.fromValue = old; animation.toValue = next
                 animation.duration = duration; animation.timingFunction = timing; state.layer.add(animation,forKey: "rows."+key)
             }
@@ -349,7 +358,18 @@ public class SiteControlButton: NSButton {
     public var showsKeyboardFocus = false { didSet { needsDisplay = true } }
     private let pointSize: CGFloat, weight: NSFont.Weight
     private var trackingPress = false, hovered = false
-    private let wellShadow = CALayer(), gradient = CAGradientLayer(), gradientMask = CAShapeLayer(), ring = CAShapeLayer(), highlight = CAShapeLayer(), glyph = CALayer(), text = CALayer(), focus = CAShapeLayer()
+    // Custom row/section subclasses draw their own layers. Keep default-button
+    // decoration lazy so constructing a long panel does not allocate hundreds
+    // of unused gradient, shadow, text, and focus layers for those controls.
+    private var layersAttached = false
+    private lazy var wellShadow = CALayer()
+    private lazy var gradient = CAGradientLayer()
+    private lazy var gradientMask = CAShapeLayer()
+    private lazy var ring = CAShapeLayer()
+    private lazy var highlight = CAShapeLayer()
+    private lazy var glyph = CALayer()
+    private lazy var text = CALayer()
+    private lazy var focus = CAShapeLayer()
     public override var isFlipped: Bool { true }
     public override var wantsUpdateLayer: Bool { true }
     public override var acceptsFirstResponder: Bool { isEnabled }
@@ -358,8 +378,6 @@ public class SiteControlButton: NSButton {
         super.init(frame: .zero); super.title = ""; symbolPhase = SiteControlMetrics.symbolRasterPhase[symbol] ?? .zero; wantsLayer = true; title = ""; isBordered = false; focusRingType = .none
         setButtonType(.momentaryPushIn); target = self; action = #selector(pressed)
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label); identifier = .init(id)
-        for l in [wellShadow,gradient,ring,highlight,glyph,text,focus] { layer?.addSublayer(l) }
-        gradient.mask = gradientMask
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     @objc private func pressed() { guard isEnabled else { return }; invoke?() }
@@ -379,6 +397,10 @@ public class SiteControlButton: NSButton {
     public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
     public override func keyDown(with event: NSEvent) { activationPoint = nil; if onKey?(event) == true { return }; if !event.modifierFlags.contains(.command) && [36,49].contains(event.keyCode) { showsKeyboardFocus = true; performClick(nil) } else { super.keyDown(with: event) } }
     public override func updateLayer() {
+        if !layersAttached {
+            for item in [wellShadow,gradient,ring,highlight,glyph,text,focus] { layer?.addSublayer(item) }
+            gradient.mask = gradientMask; layersAttached = true
+        }
         let m = SiteControlMetrics.self, appearance = contentAppearance, scale = window?.backingScaleFactor ?? 1
         let radius = style == .more || style == .circle ? bounds.height/2 : style == .pill ? m.pillRadius : m.actionRadius
         let path = SiteControlShape.path(in: bounds,radius: radius)
@@ -410,7 +432,7 @@ public class SiteControlButton: NSButton {
             var disc = (circleOn ? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
             if isHighlighted { disc = SiteControlGlyphRenderer.adjust(disc,levels: m.circlePressedLevels) }
             let previous = glyph.contents
-            glyph.frame = bounds; glyph.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: bounds.size,pointSize: pointSize,disc: disc,sparkles: sparkles,scale: scale)
+            glyph.frame = bounds; glyph.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: bounds.size,pointSize: pointSize,disc: disc,sparkles: sparkles,scale: scale,phase: symbolPhase)
             if animateCircleChange,let previous {
                 let fade = CABasicAnimation(keyPath: "contents"); fade.fromValue = previous; fade.toValue = glyph.contents; fade.duration = Motion.selectionFade; glyph.add(fade,forKey: "toggle")
             }
@@ -477,14 +499,14 @@ enum SiteControlGlyphRenderer {
         } }
         return maxX>minX && maxY>minY ? CGRect(x: CGFloat(minX)/scale,y: CGFloat(minY)/scale,width: CGFloat(maxX-minX)/scale,height: CGFloat(maxY-minY)/scale) : .zero
     }
-    static func circle(symbol name: String,size: CGSize,pointSize: CGFloat,disc: NSColor,sparkles: SiteControlSparkles,scale: CGFloat) -> CGImage? {
-        let key = "\(name)|\(size)|\(pointSize)|\(disc)|\(sparkles)|\(scale)"
+    static func circle(symbol name: String,size: CGSize,pointSize: CGFloat,disc: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,phase: CGPoint = .zero) -> CGImage? {
+        let key = "\(name)|\(size)|\(pointSize)|\(disc)|\(sparkles)|\(scale)|\(phase)"
         if let image = circles[key] { return image }
         let image = canvas(size,scale: scale) { c in
             c.setFillColor(disc.cgColor); c.fillEllipse(in: CGRect(origin: .zero,size: size))
             c.setBlendMode(.destinationOut)
             let fit: CGSize? = name == "gearshape.fill" ? SiteControlMetrics.gearInk : nil
-            if let icon = symbol(name,size: pointSize,weight: .regular,color: .white,sparkles: .none,scale: scale,fit: fit) {
+            if let icon = symbol(name,size: pointSize,weight: .regular,color: .white,sparkles: .none,scale: scale,fit: fit,phase: phase) {
                 let rect = CGRect(x: ((size.width-icon.ink.width)/2*scale).rounded()/scale-icon.ink.minX+(name == "gearshape.fill" ? -1/scale : 0),y: ((size.height-icon.ink.height)/2*scale).rounded()/scale-icon.ink.minY,width: icon.size.width,height: icon.size.height)
                 c.draw(icon.image,in: rect)
             }

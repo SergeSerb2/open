@@ -74,10 +74,19 @@ enum SectionFlows {
         let picker = Stage(open: false); var menuOpens = 0; picker.controller.onMenu = { _,_ in menuOpens += 1 }
         picker.controller.present(anchor: .urlField,tabID: picker.source.tabID,mode: .extensionPicker,animated: false)
         check("picker focuses + without opening a menu",picker.controller.mode == .extensionPicker && picker.focusedID == "extension.add" && menuOpens == 0)
-        check("picker host guard requires the first real item when extensions land",!picker.controller.view.panel.hasExtensionItems && picker.controller.view.panel.extensionPickerFocusResolved)
+        var package = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        while package.path != "/" && !FileManager.default.fileExists(atPath: package.appendingPathComponent("Package.swift").path) { package.deleteLastPathComponent() }
+        let extensionHostLanded = FileManager.default.fileExists(atPath: package.appendingPathComponent("Sources/OpenExtensionsUI").path)
+        // Blocked on OpenExtensionsUI: replace this guard with its real first
+        // pinned-item flow when that target lands; do not silently pass fallback.
+        check("picker host guard requires the first real item when extensions land",!extensionHostLanded && !picker.controller.view.panel.hasExtensionItems && picker.controller.view.panel.extensionPickerFocusResolved)
         picker.key(code: 36,characters: "\r")
         check("picker Return runs Add Extension",picker.source.calls == ["add-extension"] && !picker.controller.isPresented && menuOpens == 0)
         let ax = Flows.accessibilityDump(Stage(state: "scc-boost").controller.view.panel)
+        let headingStage = Stage()
+        let section = headingStage.controller.view.panel.control(id: "section.extensions")!
+        let heading = section.accessibilityChildren()?.first as? NSView
+        check("F21 heading child has a real window and nonzero frame",heading?.window === headingStage.window && (heading?.accessibilityFrame().width ?? 0)>70 && (heading?.accessibilityFrame().height ?? 0)==24)
         check("F21 native section, checkbox, and Boost edit roles",["AXHeading label=Extensions","AXButton label=Extensions, Manage","AXButton label=Add Extension","AXHeading label=Boosts","AXCheckBox label=Enable My Boost","AXButton label=Edit My Boost","AXCheckBox label=Block Ads & Trackers"].allSatisfy(ax.contains))
         check("F21 action AX precedes sections; host exposed once",ax.range(of: "AXButton label=Share")!.lowerBound < ax.range(of: "AXScrollArea")!.lowerBound && ax.components(separatedBy: "news.example.com").count == 2)
         let removal = Stage(state: "scc-boost"); removal.controller.view.panel.focus(removal.controller.view.panel.control(id: "boost.\(id).circle")!); removal.source.value?.boosts = []; removal.source.changed()
@@ -88,6 +97,11 @@ enum SectionFlows {
             check("Command+\(code) never activates \(target)",command.source.calls.isEmpty && !command.controller.isPresented)
         }
         }
+        let stale = Stage(),retainedMenu = stale.controller.makeMenu()
+        stale.controller.dismiss(reason: .escape,animated: false)
+        stale.controller.present(anchor: .urlField,tabID: stale.source.tabID,animated: false)
+        retainedMenu.performActionForItem(at: 0)
+        check("retained native menu cannot act on a later presentation generation",stale.source.calls.isEmpty && !stale.controller.view.panel.showsReload)
         for selecting in [true,false] {
             let native = Stage(); let observed = MenuObservation(); observed.stage = native
             var reason: SiteControlDismissReason?; native.controller.onDismiss = { reason = $0 }
@@ -98,10 +112,19 @@ enum SectionFlows {
                     observed.stage?.key(code: selecting ? 36 : 53,characters: selecting ? "\r" : "\u{1b}")
                 } }; observed.timer = timer; RunLoop.main.add(timer,forMode: .eventTracking)
             }
-            native.tap("more")
+            if selecting {
+                for _ in native.controller.view.panel.focusOrder { native.key(code: 48,characters: "\t") }
+                native.key(code: 36,characters: "\r")
+            } else { native.tap("more") }
             check(selecting ? "native menu Return selects Clear Cookies and keeps Reload" : "native menu Esc dismisses with menuCancelled",selecting ? observed.highlighted == "Clear Cookies" && native.source.calls == ["clear:1"] && native.controller.isPresented && native.controller.view.panel.showsReload : !native.controller.isPresented && reason == .menuCancelled)
             observed.timer?.invalidate(); native.controller.onMenu = nil
         }
+        let resize = Stage()
+        resize.tap("contentBlocking")
+        resize.window.setContentSize(CGSize(width: 800,height: 360)); resize.controller.view.frame = resize.root.bounds
+        resize.controller.layout(); OffscreenRenderer.settle(resize.root)
+        let noStructureAnimation = resize.controller.view.presentationLayers.allSatisfy { layer in !(layer.animationKeys() ?? []).contains { $0.hasPrefix("rows.") } }
+        check("window resize cancels structure motion and applies the current clamp",noStructureAnimation && resize.controller.view.panelFrame.maxY <= resize.root.bounds.maxY-8)
         return result
     }
 }

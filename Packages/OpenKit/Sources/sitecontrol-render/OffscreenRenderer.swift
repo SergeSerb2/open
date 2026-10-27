@@ -174,6 +174,7 @@ enum LayerCloner {
         dst.isGeometryFlipped = src.isGeometryFlipped
         dst.isHidden = src.isHidden
         dst.opacity = src.opacity
+        dst.compositingFilter = src.compositingFilter
         dst.contents = src.contents
         dst.contentsRect = src.contentsRect
         dst.contentsCenter = src.contentsCenter

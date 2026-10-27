@@ -8,6 +8,16 @@ import OpenBoosts
 @MainActor
 enum SiteControlDrawing {
     private static var lines: [String: CTLine] = [:]
+    // Fixed row geometry: a 236 x 32 @2x bitmap is 120,832 bytes.
+    // 48 entries retain at most about 5.6 MiB of row pixels.
+    private static var rowImages: [String: CGImage] = [:]
+    static func cachedRow(_ key: String,size: CGSize,scale: CGFloat,draw: (CGContext) -> Void) -> CGImage? {
+        let identity = key+"|\(size)|\(scale)"
+        if let image = rowImages[identity] { return image }
+        guard let image = bitmap(size: size,scale: scale,draw: draw) else { return nil }
+        if rowImages.count >= 48 { rowImages.removeAll(keepingCapacity: true) }
+        rowImages[identity] = image; return image
+    }
     static func text(_ text: String,x: CGFloat,baseline: CGFloat,width: CGFloat,font: NSFont,color: NSColor,alignment: NSTextAlignment = .left) {
         guard width > 0,!text.isEmpty,let c = NSGraphicsContext.current?.cgContext else { return }
         let key = "\(text)|\(width)|\(font)|\(color)"
@@ -69,12 +79,12 @@ class SiteControlRow: SiteControlButton {
         disc.frame = CGRect(x: m.padding,y: 0,width: m.rowIcon,height: m.rowIcon)
         var color = (circleOn ? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
         if isHighlighted { color = SiteControlGlyphRenderer.adjust(color,levels: m.circlePressedLevels) }
-        disc.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: disc.bounds.size,pointSize: m.rowGlyph,disc: color,sparkles: .none,scale: scale); disc.contentsScale = scale
+        disc.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: disc.bounds.size,pointSize: m.rowGlyph,disc: color,sparkles: .none,scale: scale,phase: symbolPhase); disc.contentsScale = scale
         if let previousDisc {
             let fade = CABasicAnimation(keyPath: "contents"); fade.fromValue = previousDisc; fade.toValue = disc.contents; fade.duration = Motion.selectionFade; disc.add(fade,forKey: "toggle"); self.previousDisc = nil
         }
         labels.frame = bounds; labels.contentsScale = scale
-        labels.contents = SiteControlDrawing.bitmap(size: bounds.size,scale: scale) { c in
+        labels.contents = SiteControlDrawing.cachedRow("\(tile.title)|\(tile.subtitle)|\(tile.inUse)|\(isBoostRow)|\(appearance)",size: bounds.size,scale: scale) { c in
             let width = bounds.width-m.rowTextX-m.rowTitleTrailing-(tile.inUse ? m.inUseDot+4 : 0)-(isBoostRow ? 11 : 0)
             SiteControlDrawing.text(tile.title,x: m.rowTextX,baseline: m.rowTitleBaseline,width: width,font: Typography.siteControlRowTitle.font,color: SiteControlColors.rowTitle.resolved(appearance).nsColor)
             SiteControlDrawing.text(tile.subtitle,x: m.rowTextX,baseline: m.rowSubtitleBaseline,width: bounds.width-m.rowTextX-m.padding,font: Typography.siteControlRowSubtitle.font,color: SiteControlColors.rowSubtitle.resolved(appearance).nsColor)
@@ -139,19 +149,21 @@ final class SiteControlBoostRow: SiteControlRow {
 
 @MainActor
 final class SiteControlSectionButton: SiteControlButton {
-    private let heading: NSTextField
+    private let heading: NSView
+    private let headingText: String
     private let accessory: String
     private var hovered = false
     private let caption = CALayer(), hoverText = CALayer(), rowFocus = CAShapeLayer()
     init(id: String,caption: String,accessory: String) {
-        self.accessory = accessory; heading = NSTextField(labelWithString: caption)
+        self.accessory = accessory; headingText = caption; heading = NSView(frame: .zero)
         super.init(id: id,label: caption+", "+accessory,symbol: "",pointSize: 0)
-        heading.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading")); heading.setAccessibilityLabel(caption)
-        setAccessibilityChildren([heading])
+        heading.setAccessibilityElement(true); heading.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading")); heading.setAccessibilityLabel(caption)
+        addSubview(heading); setAccessibilityChildren([heading])
         for layer in [self.caption,hoverText,rowFocus] { self.layer?.addSublayer(layer) }
         rowFocus.fillColor = nil; rowFocus.lineWidth = SiteControlMetrics.focusWidth
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func layout() { super.layout(); heading.frame = CGRect(x: 10,y: 0,width: max(0,bounds.width-20),height: bounds.height) }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(convert(point,from: superview)) ? self : nil }
     override func mouseEntered(with event: NSEvent) { super.mouseEntered(with: event); hovered = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { super.mouseExited(with: event); hovered = false; needsDisplay = true }
@@ -160,7 +172,7 @@ final class SiteControlSectionButton: SiteControlButton {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for layer in [caption,hoverText] { layer.frame = bounds; layer.contentsScale = scale }
         caption.contents = SiteControlDrawing.bitmap(size: bounds.size,scale: scale) { _ in
-            SiteControlDrawing.text(heading.stringValue,x: 10,baseline: 21,width: bounds.width-20,font: Typography.siteControlLabel.font,color: SiteControlColors.label.resolved(appearance).nsColor)
+            SiteControlDrawing.text(headingText,x: 10,baseline: 21,width: bounds.width-20,font: Typography.siteControlLabel.font,color: SiteControlColors.label.resolved(appearance).nsColor)
         }
         hoverText.contents = SiteControlDrawing.bitmap(size: bounds.size,scale: scale) { _ in
             SiteControlDrawing.text(accessory,x: 10,baseline: 21,width: bounds.width-20,font: Typography.siteControlRowSubtitle.font,color: SiteControlColors.rowSubtitle.resolved(appearance).nsColor,alignment: .right)

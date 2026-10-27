@@ -27,6 +27,29 @@ enum MotionChecks {
                 checks.append(.init(name: "close ends by 0.20 s",pass: (stage.controller.view.panel.layer?.animation(forKey: "close.opacity")?.duration ?? 1) <= 0.20))
             }
         }
+        let height = Stage()
+        let tip = height.controller.view.visibleArrowTip
+        let actionFrames = height.controller.view.panel.controls.prefix(4).map(\.frame)
+        for growing in [true,false] {
+            height.controller.view.panel.showsReload = growing; height.source.changed(); height.prepareMaterial()
+            let duration = growing ? Motion.heightGrow : Motion.heightShrink
+            let configuredDuration = height.controller.view.panel.layer?.animation(forKey: "rows.bounds")?.duration
+            for _ in 0..<3 {
+                OffscreenRenderer.settle(height.root); RunLoop.main.run(until: Date().addingTimeInterval(0.025))
+                let panel = height.controller.view.panel
+                let fixed = height.controller.view.presentationLayers.allSatisfy { layer in
+                    guard let shown = layer.presentation() else { return false }
+                    return hypot(shown.position.x-tip.x,shown.position.y-tip.y)<=0.5
+                }
+                let actions = zip(panel.controls.prefix(4),actionFrames).allSatisfy { button,expected in
+                    guard let shown = button.layer?.presentation() else { return false }
+                    return abs(shown.frame.minX-expected.minX)<=0.5 && abs(shown.frame.minY-expected.minY)<=0.5
+                }
+                checks.append(.init(name: "height \(growing ? "grow" : "shrink") keeps arrow tip and action row fixed",pass: fixed && actions))
+            }
+            checks.append(.init(name: "height \(growing ? "grow" : "shrink") uses configured \(duration)s curve",pass: configuredDuration == duration))
+            RunLoop.main.run(until: Date().addingTimeInterval(duration))
+        }
         return checks
     }
     static func frames(out: URL) throws {
@@ -43,5 +66,18 @@ enum MotionChecks {
                 OffscreenRenderer.writePNG(image,to: out.appendingPathComponent(String(format: "%@-%03.0fms.png",close ? "close" : "open",t*1000)))
             }
         }
+        for growing in [true,false] {
+            let stage = Stage()
+            if !growing { stage.controller.view.panel.showsReload = true; stage.source.changed(); RunLoop.main.run(until: Date().addingTimeInterval(0.25)) }
+            stage.controller.view.panel.showsReload = growing; stage.source.changed(); stage.prepareMaterial()
+            let start = CACurrentMediaTime()
+            for t in [0.0,0.04,0.08,0.17,0.30] {
+                let end = start+t
+                while CACurrentMediaTime()<end { RunLoop.main.run(until: Date().addingTimeInterval(min(0.005,end-CACurrentMediaTime()))) }
+                let image = stage.render(scale: 1,presentation: true)
+                OffscreenRenderer.writePNG(image,to: out.appendingPathComponent(String(format: "%@-%03.0fms.png",growing ? "grow" : "shrink",t*1000)))
+            }
+        }
+
     }
 }

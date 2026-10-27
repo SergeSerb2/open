@@ -18,6 +18,9 @@ enum Bench {
             return [Flows.Check(name: "interactive UI benchmark priority available", pass: false)]
         }
         defer { _ = pthread_set_qos_class_self_np(previousQoS, relativePriority) }
+        var load = [Double](repeating: 0,count: 3)
+        _ = getloadavg(&load,3)
+        print(String(format: "Cold-panel benchmark load1 %.2f load5 %.2f load15 %.2f; 8 ms budget",load[0],load[1],load[2]))
         let stage = Stage(state: "scc-many", scale: 2)
         stage.controller.dismiss(reason: .action, animated: false)
         var wall: [Double] = [], cpuSamples: [Double] = []
@@ -52,6 +55,7 @@ enum Bench {
         }
         func p95(_ values: [Double]) -> Double { values.sorted()[Int(ceil(Double(values.count) * 0.95)) - 1] }
         print(String(format: "Panel first draw: main-thread CPU p95 %.3f ms; wall p95 %.3f ms; 20 Boosts, 12 settings rows, extension + fallback, 2x", p95(cpuSamples), p95(wall)))
+        print(String(format: "Budget lateness: CPU %.3f ms; wall %.3f ms",max(0,p95(cpuSamples)-8),max(0,p95(wall)-8)))
         print("CPU samples ms: " + cpuSamples.map { String(format: "%.3f", $0) }.joined(separator: ", "))
         print("Wall samples ms: " + wall.map { String(format: "%.3f", $0) }.joined(separator: ", "))
         print("CPU parts mean (init/attach/present/display): " + (0..<4).map { column in String(format: "%.3f", parts.map { $0[column] }.reduce(0, +) / Double(parts.count)) }.joined(separator: ", "))
