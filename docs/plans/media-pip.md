@@ -2057,7 +2057,7 @@ stack run shows the cost.
   with this flag or any real title; re-render synthetic titles for commit.
 - `--crop-media-controls` (existing).
 
-#### 13.8.5 `sidebar-render check`: MC1–MC15
+#### 13.8.5 `sidebar-render check`: MC1–MC16
 
 Run them in the composed sidebar at `W` 228, h 900, scale 2, with fake
 hosts and native events, as #92 does. Each line prints PASS or FAIL.
@@ -2068,13 +2068,13 @@ Frames are ± 0.5 pt.
 | MC1 | No source: `C = 0`, and the pager ends at h − 50 (unchanged). |
 | MC2 | One source at rest: `C = 41`; card `[8, h − 83, W − 16, 33]`; the pager ends at h − 91. |
 | MC3 | Rest controls: five 24 × 24 buttons at card y 5 and x 10/52/94/136/178; the glyphs and tooltip titles of §13.4.3–§13.4.4; placement `.beside`; delay 0.45 s. Without the track actions, Previous and Next are present, `isEnabled == false`, tinted `mediaControlGlyphDisabled`; a synthesized hover shows no plate; a click sends no intent. With the actions they are enabled. |
-| MC4 | Hover in (a synthesized `mouseEntered` on the container): the card becomes `[8, h − 116, W − 16, 66]` and `C = 74`; the title row shows: title origin x 14, baseline 22; for a video source PiP `[cardW − 58, 5]` and Close `[cardW − 34, 5]`. An audio-only source has no PiP, and the title's maximum width is `cardW − 58`. Read title frame and baseline through `titleState`. Exit: after 0.15 s the card is still expanded with one pending collapse item; after 0.6 s it is 33 pt again, and the title row has no view that takes a hit. |
+| MC4 | Hover in (a synthesized `mouseEntered` on the container): the card becomes `[8, h − 116, W − 16, 66]` and `C = 74`; the title row shows: title origin x 14, baseline 22; for a video source PiP `[cardW − 58, 5]` and Close `[cardW − 34, 5]`. An audio-only source has no PiP, and the title's maximum width is `cardW − 58`. Read title frame and baseline through `titleState`. Exit: synchronously assert the card is expanded with one pending item and `pendingCollapseDelay == 0.3`; after the delayed work runs it is 33 pt again, and the title row has no view that takes a hit. Do not infer the configured delay from a 0.15 s fixed sleep. |
 | MC5 | Clicks (native events through `window.sendEvent`): Previous, Next, Play/Pause, Volume, PiP, and Close send the §4.2 intents. The favicon, the title, and an empty part of the card send `.backToTab`. No button changes the selection. Volume without EM-2 toggles mute (Q8). Preserve the existing regressions: a retiring card refuses hits during its fade; replacement in one event turn leaves one fresh card; tab close prunes its drawer ID and undo restores a 33 pt card with no drawer. |
-| MC6 | Stack of 3 at rest: `C = 55`. Frames `[8, …, 212, 33]`, `[13, …, 202, 33]`, `[18, …, 192, 33]`, each 7 pt above the one in front. Opacities 1, 0.8, 0.6. No layer masks. A back card's strip takes no hit. Back-card slots in container x at scale 2: 23/62.5/102/141.5/181 and 28/65/102/139/176 (at 1x the halves round up: 23/63/102/142/181, as Arc's E6). Hover: `C = 216`; frames from the bottom `[8, C − 66, …]`, `[8, C − 137, …]`, `[8, C − 208, …]`; all opacities 1; every card has Close. Exit: collapse after 0.3 s. |
+| MC6 | Stack of 3 at rest: `C = 55`. Frames `[8, …, 212, 33]`, `[13, …, 202, 33]`, `[18, …, 192, 33]`, each 7 pt above the one in front. Opacities 1, 0.8, 0.6. No layer masks. A back card's strip takes no hit. Back-card slots in container x at scale 2: 23/62.5/102/141.5/181 and 28/65/102/139/176 (at 1x the halves round up: 23/63/102/142/181, as Arc's E6). Hover: `C = 216`; frames from the bottom `[8, C − 66, …]`, `[8, C − 137, …]`, `[8, C − 208, …]`; all opacities 1; every card has Close. Exit: assert one pending collapse with its configured delay exactly 0.3 s, then wait for the real work to produce collapsed C=55. |
 | MC7 | Title: a long title draws one line that ends in "…" and fits its maximum width. Read the actual drawn text, truncation flag and width from `titleState`. No `MarqueeLabel` exists in the view tree. The title label's layer has no animation keys at rest, expanded, playing, or paused. |
-| MC8 | Idle: a paused card at rest, 1 s after a hover cycle ended. The window's layer tree has no animation keys; there is no media timer or display link; `pendingCollapseCount == 0`; `store.pendingWorkItemCount == 1`; CPU ≤ 0.5 % over 2 s. |
+| MC8 | Idle: a paused card collapsed to 33 pt after a hover cycle ended. The window's layer tree has no animation keys; there is no media timer or display link; `pendingCollapseCount == 0`; `store.pendingWorkItemCount == 1`; CPU ≤ 0.5 % over 2 s. |
 | MC9 | `bench --rows 1000 --media-card` (one paused card at rest, container 41 pt) against main with no card: the paired median and 20%-trimmed mean p95 deltas are ≤ 0.3 ms over 12 interleaved pairs (`step3b/compare-bench.py`). If it fails, use the step3 scroll-investigation method (an A/A control and instructions per scroll step) before you call it a regression. Also report, with no gate, one run with a collapsed stack of three paused cards. |
-| MC10 | A Peek dims the container with the bottom bar (unchanged). |
+| MC10 | A Peek dims the container with the bottom bar; closing it restores opacity 1. |
 | MC11 | Colors: default theme fill `#050627` (dark) and `#FDFDFF` (light); the red theme fills with its parsed `dark.backgroundExtra` and `light.backgroundExtra`; the title, glyph, disabled, and plate colors resolve to the §13.4.1 values (± 0.002 per component). |
 | MC12 | Corner and shadow: the content layer has `cornerRadius` 10, `cornerCurve` `.continuous`, and `masksToBounds`. The shadow layer has an opaque black `shadowColor` (alpha 1), `shadowOpacity` 0.21, `shadowRadius` 4, `shadowOffset` zero, and a `shadowPath` equal to the rounded rect of the card bounds after every frame change. |
 | MC13 | Drawer (a fake host with volume): a click on volume while expanded gives a 99 pt card, `C = 107`, and a drawer row `[0, 33, cardW, 33]` laid out per O2. Collapse closes it (`C = 41`) and removes its ID from `context.mediaDrawers`; re-expansion does not reopen it. |
@@ -2286,6 +2286,42 @@ The §7 comparison tables retain the R3/R4 measurement artifacts accepted by
 design review; no geometry token changed. C5 needs the manual §8.5 pointer check.
 
 [Current evidence and review receipts](../../Packages/OpenKit/MediaRenders/step3b/README.md).
+
+### 13.12 Main merge verification (2026-10-26)
+
+Merged main `9e3473c` with a merge commit. The three conflicts were
+`MediaControlsView.swift`, `Checks.swift` and `MediaChecks.swift`. Keep the
+33/66/99 pt redesign, motion/lifecycle fixes, single-card hover and drawer prune;
+retain main’s scheduled-collapse delay receipt, condition-based waits and UUID
+preferences suite. `cancelCollapse()` clears both the work item and its delay.
+No engine source or key routing was changed by the resolution.
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, through `heavy.sh`
+in a detached session. `sidebar-render check`: **559 PASS, 0 FAIL**.
+Focused motion: **49/49**; lifecycle: **30/30**. Two concurrent full sidebar
+runs with separate temporary directories and UUID preferences suites each pass
+**559/559**. Invalid state/hover CLI cases each exit 1 without writing a PNG.
+MC8 idle CPU: **0.023%**, collapsed 33 pt, no idle animation keys or collapse work.
+
+MC9: **PASS**, 12 interleaved pairs against pinned main `9e3473c`, with
+`/tmp/open-onscreen-e2e.lock` held across the whole series, after all builds and
+focused checks finished. Paired median delta **-0.705 ms**;
+20%-trimmed mean **-0.520 ms** (limit +0.3 ms).
+Baseline/head median p95: 4.035/3.465 ms.
+Three-card report-only p95: 4.11 ms.
+
+All 62 synthetic PNGs were regenerated (62/62 byte-identical to the
+previous receipt). R1–R4 numeric comparisons remain unchanged. R3/R4 are the
+previously accepted measurement artifacts. No Arc pixels or real-title PNGs
+were committed. The renderer hash matches MC9, the render manifest and full
+verification.
+
+C5’s real-pointer check and Step 6 real-window snapshots remain pending;
+§8.5, `docs/followups.md` and the PR checklist state that scope explicitly.
+Historical negative-control receipts describe their original frozen harnesses;
+this refresh retains their defect gates and adapts the delay assertions to main.
+
+[Current merge/checklist receipts](../../Packages/OpenKit/MediaRenders/step3b/evidence/main-refresh/README.md).
 
 ## Appendix — Lead decisions (2026-10-25)
 

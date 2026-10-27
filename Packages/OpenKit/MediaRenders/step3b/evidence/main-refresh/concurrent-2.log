@@ -1,0 +1,613 @@
+structure (model → TreeChange → outline diff)
+  OK   rows match the model: first build
+  OK   rows match the model: newTab at the top of Today
+  OK   new tab sits right under New Tab
+  OK   rows match the model: pinTab moves it to Pinned
+  OK   rows match the model: moveNode to the top of Pinned
+  OK   rows match the model: createFolder with one tab
+  OK   rows match the model: folder collapsed (animated)
+  OK   rows match the model: folder expanded (animated)
+  OK   rows match the model: makeSplit of two Today tabs
+  OK   rows match the model: unsplit
+  OK   rows match the model: closeTab inside the folder
+  OK   rows match the model: undo of the close
+  OK   rows match the model: clearToday removes Today and the divider
+  OK   no divider without Today tabs
+  OK   rows match the model: undo of clearToday brings the divider back
+  OK   no full reloads during edits (reloadData calls: 0)
+favorites
+  OK   addFavorite shows a 7th tile at index 1
+  OK   rows match the model: the tab left Today
+  OK   removeFavorite removes the tile
+clicks (window events → outline action → delegate intent → model)
+  OK   click on a pinned row sends select
+  OK   the model selected it
+  OK   click on a folder row toggles it
+  OK   rows match the model: folder collapsed by click
+  OK   click on New Tab asks for the command bar
+  OK   click on the URL field asks for the command bar
+menus
+  OK   pinned tab menu (F0116 order): Copy Link · Share… · — · Change Icon… · Rename… · Mute · Customize Page… · Edit Pinned Page · — · Add Split View · Duplicate · Move to · — · Remove Pin
+  OK   Today tab menu (capture session 2 frame 0050)
+  OK   folder menu (F0119 order)
+  OK   Space menu on empty space (F0117 order)
+drag and drop targets
+  OK   above the first row → Pinned 0
+  OK   after the last pinned row → end of Pinned
+  OK   between New Tab and Today → Today 0
+  OK   onto a folder → into the folder
+  OK   rows match the model: drop intent moves a pinned row (animated move)
+Space switch and swipe
+  OK   focusSpace slides the pager to page 2 (offset 228.0)
+  OK   background cross-fades to Space 2's theme
+  OK   rows match the model: page 2 rows
+  OK   swipe left sends switchSpace to the next Space
+  OK   focus moved to Space 3
+  OK   a short swipe snaps back
+model followups: live web content, undo, titles, and named icons
+  OK   unloaded pinned tab shows × on hover
+  OK   loaded pinned tab changes to − while hovered
+  OK   pinned − click sends unloadTab and keeps the entry
+  OK   pinned tab returns to × when web content goes away
+  OK   pinned × click closes the entry
+  OK   Today tab shows × even with live web content
+  OK   unloaded Favorite shows × on hover
+  OK   loaded Favorite changes to − while hovered
+  OK   Favorite − click sends unloadTab and keeps the entry
+  OK   Favorite returns to × when web content goes away
+  OK   Favorite × click closes the entry
+  OK   header click uses the collapse command
+  OK   rows match the model: undo of header collapse
+  OK   redo of header collapse
+  OK   sidebar mute intent uses the model command
+  OK   sidebar mute undo
+  OK   sidebar mute redo
+  OK   nil title displays Space 1 in the header and switcher
+  OK   untitled Space follows its 1-based position after reorder
+  OK   an explicit Space title appears unchanged
+  OK   all 55 named-icon mappings and the neutral fallback exist on macOS: missing=[]
+  OK   unknown named icons use the neutral symbol
+  OK   RI1 silent unmuted row builds no speaker
+  OK   RI animation window stays offscreen and non-key (visible true, occlusion 8192)
+  OK   RI1 audible unmuted frame and symbol
+  OK   RI tooltip and help are exact: Mute tab
+  OK   RI4 image changes and an actual approved finite fallback animation is active: ["transition"]
+  OK   RI4 image-view layer has no position or bounds animation
+  OK   RI4 actual transition finishes with no keys
+  OK   RI image-view left edge stays within 0.5 pt (audible Optional(2.0), muted Optional(2.0))
+  OK   RI speaker uses slot x + 2 left anchor
+  OK   RI tooltip and help are exact: Unmute tab
+  OK   RI2 window hitTest resolves speaker button
+  OK   RI2 window events toggle mute without selecting
+  OK   RI2 direct native control click also works
+  OK   RI muted silent row retains speaker
+  OK   RI4 unmute while inaudible hides speaker
+  OK   RI4 reveal does not replay hidden unmute
+  OK   RI3 14x20 recording slot before speaker; exact tooltip
+  OK   RI recording-only row has dot and no speaker
+  OK   RI4 Reduce Motion uses static glyph without animation keys
+  OK   RI static glyph shares the left anchor in both states (Optional(3.5), Optional(3.5)); same button true, hidden false, size (20.0, 20.0)
+  OK   RI narrow deep hovered row hides dot before speaker
+  OK   RI compact PiP play/pause token is 24 pt
+MC1–MC15: real composed sidebar, native events, offscreen layers (MC9 uses compare-bench.py)
+  OK   MC1 no source: C=0, pager ends at h-50
+  OK   MC2 rest card [8,h-83,W-16,33], C=41 and pager h-91: (8.0, 817.0, 212.0, 33.0)
+  OK   MC3 slot, glyph, tooltip: favicon
+  OK   MC3 slot, glyph, tooltip: previous
+  OK   MC3 slot, glyph, tooltip: play
+  OK   MC3 slot, glyph, tooltip: next
+  OK   MC3 slot, glyph, tooltip: volume
+  OK   MC3 disabled previous is present, no tooltip or hover plate
+  OK   MC5 native hit test: previous
+  OK   MC3 disabled previous sends no intent
+  OK   MC3 disabled next is present, no tooltip or hover plate
+  OK   MC5 native hit test: next
+  OK   MC3 disabled next sends no intent
+  OK   MC3 track actions enable both controls
+  OK   MC3 actual delayed tooltip
+  OK   MC15 hover starts card, pager and title-row animations
+  OK   MC4 one card hover expands with title, PiP and Close
+  OK   MC15 all finite hover animations finish
+  OK   MC4 audio-only title ends 10 pt before Close
+  OK   MC5 native hit test: previous
+  OK   MC5 native hit test: next
+  OK   MC5 native hit test: play
+  OK   MC5 native hit test: play
+  OK   MC5 native controls reach host without selecting
+  OK   MC5 native hit test: open drawer
+  OK   MC13 drawer between title and controls gives C=107
+  OK   MC13 33 pt drawer slider geometry
+  OK   MC5 native hit test: volume slider
+  OK   MC5 slider sets host volume
+  OK   MC13 slider AX uses 0.05 steps
+  OK   MC4 exit schedules exactly one collapse at 0.3 s
+  OK   MC4/MC13 collapse closes drawer and hides title hit targets
+  OK   MC5 native hit test: interim mute
+  OK   MC5 Q8 volume toggles mute without EM-2
+  OK   MC6 collapsed stack C=55 and exact hover rect
+  OK   MC6 card 0 frame, opacity, no mask or rasterization
+  OK   MC6 card 1 frame, opacity, no mask or rasterization
+  OK   MC6 back strip 1 takes no hit
+  OK   MC6 back card 1 slot 0 at scale 2
+  OK   MC6 back card 1 slot 1 at scale 2
+  OK   MC6 back card 1 slot 2 at scale 2
+  OK   MC6 back card 1 slot 3 at scale 2
+  OK   MC6 back card 1 slot 4 at scale 2
+  OK   MC6 card 2 frame, opacity, no mask or rasterization
+  OK   MC6 back strip 2 takes no hit
+  OK   MC6 back card 2 slot 0 at scale 2
+  OK   MC6 back card 2 slot 1 at scale 2
+  OK   MC6 back card 2 slot 2 at scale 2
+  OK   MC6 back card 2 slot 3 at scale 2
+  OK   MC6 back card 2 slot 4 at scale 2
+  OK   MC6 back card 1 slot 0 rounds halves up at 1x
+  OK   MC6 back card 1 slot 1 rounds halves up at 1x
+  OK   MC6 back card 1 slot 2 rounds halves up at 1x
+  OK   MC6 back card 1 slot 3 rounds halves up at 1x
+  OK   MC6 back card 1 slot 4 rounds halves up at 1x
+  OK   MC6 back card 2 slot 0 rounds halves up at 1x
+  OK   MC6 back card 2 slot 1 rounds halves up at 1x
+  OK   MC6 back card 2 slot 2 rounds halves up at 1x
+  OK   MC6 back card 2 slot 3 rounds halves up at 1x
+  OK   MC6 back card 2 slot 4 rounds halves up at 1x
+  OK   MC6 expanded stack C=216, 5 pt gaps, all Close buttons
+  OK   MC6 exit schedules exactly one collapse at 0.3 s
+  OK   MC6 real delayed work collapses to C=55
+  OK   MC7 long title draws one static, bounded line at baseline 22 (ink 1904, outside 0, pixels 66)
+  OK   MC7 public title receipt contains the actual tail ellipsis and fits its width
+  OK   MC7 title has no animation for playing
+  OK   MC7 title has no animation for paused
+  OK   MC7 title hover cross-fade ends
+  OK   MC8 paused at rest: collapsed 33 pt, zero layer keys, zero collapse work, one store expiry
+  OK   MC8 paused idle CPU 0.016% (≤0.5%); no media timer/display link
+  OK   MC10 Peek dims controls with bottom bar
+  OK   MC10 closing Peek restores opacity
+  OK   MC11 default dark fill
+  OK   MC11 title, enabled/disabled glyph and plate roles dark
+  OK   MC11 red dark parsed backgroundExtra
+  OK   MC11 default light fill
+  OK   MC11 title, enabled/disabled glyph and plate roles light
+  OK   MC11 red light parsed backgroundExtra
+  OK   MC3 all five slots at W=164.0
+  OK   MC12 corner/shadow follow frame at W=164.0, expanded=false
+  OK   MC12 corner/shadow follow frame at W=164.0, expanded=true
+  OK   MC3 all five slots at W=228.0
+  OK   MC12 corner/shadow follow frame at W=228.0, expanded=false
+  OK   MC12 corner/shadow follow frame at W=228.0, expanded=true
+  OK   MC3 all five slots at W=500.0
+  OK   MC12 corner/shadow follow frame at W=500.0, expanded=false
+  OK   MC12 corner/shadow follow frame at W=500.0, expanded=true
+  OK   MC15 Reduce Motion has one 0.1s container cross-fade and no pager or child animation
+  OK   MC15 Reduce Motion keeps pager and container fully opaque at +16ms
+  OK   MC15 Reduce Motion leaves no keys
+  OK   MC5 native hit test: PiP
+  OK   MC5 PiP reaches host and hides card
+  OK   MC5 native hit test: favicon
+  OK   MC5 favicon returns to tab
+  OK   MC5 native hit test: title
+  OK   MC5 title returns to tab
+  OK   MC5 native hit test: body
+  OK   MC5 body returns to tab
+  OK   MC5 native hit test: Close
+  OK   MC5 Close pauses and removes last card
+  OK   MC retiring card fades but cannot take hits
+  OK   MC5 native hit test: replacement during fade
+  OK   MC replacement receives exactly one action
+  OK   MC replacement removes retired view
+  OK   MC5 native hit test: drawer before tab close
+  OK   MC13 drawer is open before tab close
+  OK   MC5 tab close prunes its drawer ID
+  OK   MC5 undo returns a 33 pt card without a stale drawer
+  OK   MC14 recording uses slots 0/1/2 only
+  OK   MC5 native hit test: microphone
+  OK   MC5 native hit test: camera
+  OK   MC14 recording actions update glyphs
+MC15 motion regression: anchored starts, interruption continuity and clipped rows
+  OK   MC15 motion host is offscreen and non-key
+  OK   MC15 F7 Reduce Motion OFF uses the shipping native pause image
+  OK   MC15 F7 live native pause path draws ink without the layer cloner
+  OK   MC15 F7 native events replace pause with play with Reduce Motion OFF
+  OK   MC15 F1 1 cards: height animation starts at on-screen positions, including non-centered anchors
+  OK   MC15 F1 1 cards: pager stays at its on-screen x/y 16 ms after hover
+  OK   MC15 F3 1 cards expand +16ms, card 0: title never overlaps controls (4.05650257319212, 4.05650257319212)
+  OK   MC15 F3 1 cards expand +50ms, card 0: title never overlaps controls (17.564833760261536, 17.564833760261536)
+  OK   MC15 F2 1 cards: real delayed collapse starts
+  OK   MC15 F3 1 cards collapse +50ms, card 0: title never overlaps controls (16.599733382463455, 16.599733382463455)
+  OK   MC15 F2 1 cards: pager/container retarget from their presentation values
+  OK   MC15 F2 1 cards: card/content retarget from their presentation values
+  OK   MC15 F2 title opacity retargets from visible opacity (0.74402165)
+  OK   MC15 F2 shadow retargets from the visible path
+  OK   MC15 F2 1 cards: interrupted collapse has no backward jump at +16ms (container 57.599733382463455 → 59.19047436818781)
+  OK   MC15 F3 1 cards interrupted +16ms, card 0: title never overlaps controls (18.190474368187807, 18.190474368187807)
+  OK   MC15 F1 drawer starts at its on-screen container position
+  OK   MC15 F3 1 cards drawer +16ms, card 0: title never overlaps controls (33.0, 33.588520964607596)
+  OK   MC15 F3 drawer +16ms, card 0: drawer never overlaps controls
+  OK   MC15 F4 mini-player plate radius is 5 continuous
+  OK   MC15 motion ends without idle animation keys or collapse work
+  OK   MC15 motion host is offscreen and non-key
+  OK   MC15 F1 3 cards: height animation starts at on-screen positions, including non-centered anchors
+  OK   MC15 F1 3 cards: pager stays at its on-screen x/y 16 ms after hover
+  OK   MC15 F3 3 cards expand +16ms, card 0: title never overlaps controls (3.5242238715291023, 3.5242238715291023)
+  OK   MC15 F3 3 cards expand +16ms, card 1: title never overlaps controls (3.5242238715291023, 3.5242238715291023)
+  OK   MC15 F3 3 cards expand +16ms, card 2: title never overlaps controls (3.5242238715291023, 3.5242238715291023)
+  OK   MC15 F3 3 cards expand +50ms, card 0: title never overlaps controls (17.06858915090561, 17.06858915090561)
+  OK   MC15 F3 3 cards expand +50ms, card 1: title never overlaps controls (17.06858915090561, 17.06858915090561)
+  OK   MC15 F3 3 cards expand +50ms, card 2: title never overlaps controls (17.06858915090561, 17.06858915090561)
+  OK   MC15 F2 3 cards: real delayed collapse starts
+  OK   MC15 F3 3 cards collapse +50ms, card 0: title never overlaps controls (16.313556432724, 16.313556432724)
+  OK   MC15 F3 3 cards collapse +50ms, card 1: title never overlaps controls (16.313556432724, 16.313556432724)
+  OK   MC15 F3 3 cards collapse +50ms, card 2: title never overlaps controls (16.313556432724, 16.313556432724)
+  OK   MC15 F2 3 cards: pager/container retarget from their presentation values
+  OK   MC15 F2 3 cards: card/content retarget from their presentation values
+  OK   MC15 F2 title opacity retargets from visible opacity (0.73666406)
+  OK   MC15 F2 shadow retargets from the visible path
+  OK   MC15 F2 3 cards: interrupted collapse has no backward jump at +16ms (container 134.59038138389587 → 143.50561095454114)
+  OK   MC15 F3 3 cards interrupted +16ms, card 0: title never overlaps controls (18.140901624222717, 18.140901624222717)
+  OK   MC15 F3 3 cards interrupted +16ms, card 1: title never overlaps controls (18.140901624222717, 18.140901624222717)
+  OK   MC15 F3 3 cards interrupted +16ms, card 2: title never overlaps controls (18.140901624222717, 18.140901624222717)
+  OK   MC15 F1 drawer starts at its on-screen container position
+  OK   MC15 F3 3 cards drawer +16ms, card 0: title never overlaps controls (33.0, 33.567001881077886)
+  OK   MC15 F3 drawer +16ms, card 0: drawer never overlaps controls
+  OK   MC15 F3 3 cards drawer +16ms, card 1: title never overlaps controls (33.0, 33.0)
+  OK   MC15 F3 3 cards drawer +16ms, card 2: title never overlaps controls (33.0, 33.0)
+  OK   MC15 F4 mini-player plate radius is 5 continuous
+  OK   MC15 motion ends without idle animation keys or collapse work
+MC16 code-review regressions: reduced-motion cross-fade, direct width drag, lifecycle
+  OK   MC16 C3 expanded add gives two titled cards and C=145 (Reduce Motion false)
+  OK   MC16 C3 expanded removal returns to one card and C=74 (Reduce Motion false)
+  OK   MC16 C2 width drag attaches no animations (expanded false, Reduce Motion false)
+  OK   MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded false, Reduce Motion false)
+  OK   MC16 C2 width drag attaches no animations (expanded true, Reduce Motion false)
+  OK   MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded true, Reduce Motion false)
+  OK   MC16 C4 collapse is scheduled at 0.3 s before hiding the sidebar
+  OK   MC16 C4 hiding cancels work and resets to collapsed C=55
+  OK   MC16 C4 shown sidebar stays at rest without another pointer event
+  OK   MC16 lifecycle finishes without animation keys
+  OK   MC16 C1 hover in: no view opacity animation starts at zero
+  OK   MC16 C1 hover in: one container cross-fade and no pager animation
+  OK   MC16 C1 hover in: pager/container retain full presentation opacity at +16ms
+  OK   MC16 C3 expanded add gives two titled cards and C=145 (Reduce Motion true)
+  OK   MC16 C3 expanded removal returns to one card and C=74 (Reduce Motion true)
+  OK   MC16 C1 hover out: no view opacity animation starts at zero
+  OK   MC16 C1 hover out: one container cross-fade and no pager animation
+  OK   MC16 C1 hover out: pager/container retain full presentation opacity at +16ms
+  OK   MC16 C1 fourth source, unchanged height: no view opacity animation starts at zero
+  OK   MC16 C1 fourth source, unchanged height: one container cross-fade and no pager animation
+  OK   MC16 C1 fourth source, unchanged height: pager/container retain full presentation opacity at +16ms
+  OK   MC16 C1 fourth source keeps C=55
+  OK   MC16 C2 width drag attaches no animations (expanded false, Reduce Motion true)
+  OK   MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded false, Reduce Motion true)
+  OK   MC16 C2 width drag attaches no animations (expanded true, Reduce Motion true)
+  OK   MC16 C2 400→228 drag ends at exact inset widths in model and presentation (expanded true, Reduce Motion true)
+  OK   MC16 C4 collapse is scheduled at 0.3 s before hiding the sidebar
+  OK   MC16 C4 hiding cancels work and resets to collapsed C=55
+  OK   MC16 C4 shown sidebar stays at rest without another pointer event
+  OK   MC16 lifecycle finishes without animation keys
+review: drop feedback and actual command results
+  OK   outline rejects a folder into itself
+  OK   outline rejects a folder into its descendant
+  OK   illegal acceptDrop returns false from the model
+  OK   outline rejects split-pane sources
+  OK   outline permits a split inside a folder
+  OK   Favorites rejects folders, splits, and split panes in validation and acceptance
+  OK   drop handlers propagate a delegate refusal
+  OK   legal drop reaches the model
+  OK   pinned ancestry stays pinned after a folder drop
+review: accessibility dump (NSAccessibility APIs, synthetic titles)
+  AX AXButton | Design notes | expanded=false
+  AX AXButton | Team chat | expanded=false
+  AX AXButton | Release checklist | expanded=false
+  AX AXButton | Analytics | expanded=false
+  AX AXButton | Docs home | expanded=false
+  AX AXButton | Roadmap | expanded=false
+  AX AXButton | Inbox zero | expanded=false
+  AX AXButton | Style guide | expanded=false
+  AX AXButton | Status page | expanded=false
+  AX AXButton | Parent | expanded=true
+  AX AXButton | Child | expanded=true
+  AX AXButton | Grandchild | expanded=true
+  AX AXButton | Project board | expanded=false
+  AX AXButton | New Tab | expanded=false
+  AX AXButton | Split View: Pane A, Pane B | expanded=false
+  AX AXButton | Search results | expanded=false
+  AX AXButton | Long article about gardens | expanded=false
+  AX AXButton | Recipe: lemon tart | expanded=false
+  OK   all exposed outline rows are named AX buttons
+  OK   split AX label names both panes
+  OK   folder AX exposes its title and expanded state
+  AX AXButton | Mail
+  AX AXButton | Calendar
+  AX AXButton | Docs
+  AX AXButton | Music
+  AX AXButton | Notes
+  AX AXButton | Maps
+  OK   every favorite tile is a named AX button
+  OK   all visible PlateButtons have AX labels
+  OK   favorite AX press selects the actual model tab
+review: keyboard events → real outline → delegate → model
+  OK   Down exposes one keyboard focus ring through AX
+  OK   Down moves keyboard focus without selecting
+  OK   Return selects the focused tab
+  OK   Space selects the next focused tab
+  OK   Up moves focus back
+  OK   Delete archives the focused tab through the model
+  OK   Left collapses the focused folder
+  OK   folder AX expanded state updates after keyboard collapse
+  OK   Right expands the focused folder
+  OK   Return activates a focused folder
+review: tooltip delay stays armed across pointer movement
+  OK   same Today row and tooltip schedule and show once during continuous movement
+review: mixed Favorites reload batches
+  OK   32 seeded multi-permutation + insert + delete reloads match collection counts, tile order, and model IDs
+review: spring-loaded cross-Space drag
+  OK   Space icon registers the sidebar drag type
+  OK   Space icon accepts a legal multi-tab drag
+  OK   spring loading waits before switching
+  OK   hover switches Space after 0.5 seconds despite drag updates
+  OK   dropping on the Space icon succeeds
+  OK   multi-tab drop keeps order at Today top and preserves the pinned section
+  OK   cross-Space drop preserves Today and Pinned URL rules
+  OK   Space icon rejects a split pane
+  OK   Space icon rejects a stale source
+  OK   leaving a Space icon cancels spring loading
+  OK   Space drop propagates delegate refusal
+review: theme rebuild count across 120 resize steps
+  OK   live resize performs no theme field rebuilds
+  OK   120 resize steps cause 1 theme rebuild(s), limit 2
+review: teardown with queued observations
+  OK   sidebar, favorites, and pager release safely with queued observation work
+split row (F0081)
+  OK   unselected split row: divider, no pane cells
+  OK   selected split row: one 28 pt cell per pane, 4 pt inside the card, no divider ((12.0, 713.0, 100.0, 28.0) (116.0, 713.0, 100.0, 28.0))
+  OK   selected split: the sidebar toolbar keeps only the toggle (F0081)
+split row menu (Arc builder order)
+  OK   split menu: Separate All Tabs · Add Tab… · Convert to Vertical Split View · — · Tab Options · Pane A · A pane title that runs well pa… · — · Duplicate · Move to · — · Archive Item
+  OK   "Tab Options" is a header
+  OK   pane submenu items
+  OK   Convert runs setSplitOrientation and flips the title
+  OK   Add Tab… is disabled at four panes
+  OK   four-pane selected row has four cells
+  OK   four-pane split titles do not overflow their cells (0 cells with ink)
+  OK   Separate from Split View takes that pane out
+Peek badge and dim (F0090, F0101)
+  OK   a selected tab brings back, forward, and reload back
+  OK   no badge without a Peek
+  OK   a badge on lays out only its own row (1 row layouts; 14 tab rows shown)
+  OK   a Peek URL or favicon change redraws the badge only (0 row layouts, 1 badge draws)
+  OK   badge plate [W − 38, y + 8, 24, 24] ((190.0, 247.0, 24.0, 24.0))
+  OK   the source row trades the selected fill for the lighter Peek fill (235 → 151)
+  OK   toolbar row and bottom bar sit under the Peek dim
+  OK   URL field shows the Peek host (example.org)
+  OK   hovered source row shows its close button in the badge slot (badge hidden, button true)
+  OK   hidden Peek keeps the badge and lifts the dim (F0101)
+  OK   closing the Peek removes the badge
+  OK   MS1 first Cmd-click includes current and clicked rows, keeps model selection
+  OK   MS1 only affected rows lay out (0 passes)
+  OK   MS2 Shift-click spans Pinned and Today, skips all sentinels
+  OK   MS4 plain click clears selection and selects through the delegate
+  OK   MS5 Shift+Down three times selects four rows
+  OK   MS5 AXSelected attribute API exposes selected and unselected real rows
+  OK   MS5 Escape clears selection
+  OK   MS5 plain Up clears selection
+  OK   MS2 Shift range shrinks and preserves Cmd-selected rows outside it
+  OK   MS3 collapse prunes selected descendants
+  OK   MS3 lost anchor moves to the nearest kept row
+  OK   MS3 Shift+Down after anchor collapse extends from the nearest kept row
+  OK   MS3 range skips collapsed children and includes the folder
+  OK   MS3 collapsing Pinned prunes hidden rows
+  OK   MS3 removal prunes the deleted row
+  OK   MS1–MS5 no full reloads during selection or pruning
+  OK   MS6 light multi-fill pixel ΔE00 0.304 ≤ 0.5
+  OK   MS6 light multi-fill uses row geometry, radius 12, no shadow
+  OK   MS6 light current row keeps selected fill and shadow
+  OK   MS6 hover keeps the multi-fill
+  OK   MS6 dark multi-fill pixel ΔE00 0.302 ≤ 0.5
+  OK   MS6 dark multi-fill uses row geometry, radius 12, no shadow
+  OK   MS6 dark current row keeps selected fill and shadow
+  OK   MS6 hover keeps the multi-fill
+  OK   MS13 Space switch clears the selection
+  OK   MS1 Cmd-click with no current row selects folders and splits without activating them
+  OK   MS6 indented multi-selected split uses one fill and keeps its pane cells hidden
+  OK   MS3 a structural move keeps selected IDs in display order
+  OK   MS4 plain Favorite activation clears the row selection and selects the actual tab
+  OK   MS7 selected accessory press neither activates nor renames
+  OK   MS7 tabs selection menu order and titles
+  OK   menu exposes Copy links as Markdown
+  OK   MS7 Copy Links passes ordered IDs to the App and preserves selection
+  OK   menu exposes New Space…
+  OK   MS7 New Space passes the full selection; an unhandled App form preserves it
+  OK   menu exposes New Folder with 3 Items
+  OK   MS8 one folder insert and three moves, at the first selected slot
+  OK   MS8 inline rename starts and consumes selection (responder Optional(<NSTextView: 0x7c29362800>
+    Frame = {{0.00, 0.00}, {168.00, 20.00}}, Bounds = {{0.00, 0.00}, {168.00, 20.00}}
+    Horizontally resizable: YES, Vertically resizable: YES
+    MinSize = {168.00, 20.00}, MaxSize = {40000.00, 40000.00}
+))
+  OK   MS8 one undo restores the complete pre-folder order
+  OK   MS7 mixed menu has Delete only and no pin action
+  OK   menu exposes Delete
+  OK   MS7 Delete requests the App confirmation; no premature model or selection change
+  OK   Delete on a mixed selection requests one confirmation for one eventual bulk archive
+  OK   menu exposes Archive Items
+  OK   MS9 mixed Archive Items preserves its untouched selected folder
+  OK   MS7 folders-only selection hides Archive Item
+  OK   curly folder title and Q1 Delete-only menu
+  OK   menu exposes Delete
+  OK   real SQLite archive read completes
+  OK   Q1 folder Delete writes one real folder archive record
+  OK   folder Delete undo restores the subtree
+  OK   menu exposes Archive Items
+  OK   real SQLite archive read completes
+  OK   MS9 three removes, one sink batch, three persisted SQLite rows
+  OK   MS9 outline follows archive and selection clears
+  OK   real SQLite archive read completes
+  OK   MS9 one undo restores all tabs and removes their archive rows
+  OK   MS11 Cmd+D pins a mixed pinned/Today selection
+  OK   MS11 Cmd+D again unpins all
+  OK   menu exposes Duplicate
+  OK   selection Duplicate creates three real tabs
+  OK   one undo removes all selection duplicates
+  OK   menu exposes Reading
+  OK   MS10 Move to sends three moves, retaining order at each section top
+  OK   MS10 move into an unfocused Space marks unread and consumes selection
+  OK   MS12 native selectedRowIndexes and production writers yield three ordered pasteboard items
+  OK   MS12 unselected-row writer/drop works with an empty selection
+  OK   MS12 whole-selection drop reaches the real outline destination
+  OK   MS12 one bulk drop moves all three in pasteboard order
+  OK   MS12 one undo restores every drag source
+  OK   MS12 an incoming split-pane source is skipped while both legal nodes move
+  OK   MS12 an entirely refused drop preserves selection
+  OK   MS12 Favorites bulk drop preserves tab order and skips the folder
+  OK   MS12 one Favorites undo restores source order
+  OK   MS12 Space icon drop uses one bulk command and preserves order
+  OK   MS12 a refused Space drop preserves the source and selection
+  OK   MS8–MS12 edits perform no full outline reload
+  OK   CU1 Clear label and real scheduled tooltip at rest
+  OK   CU1 Q14 Option changes only the tooltip without pointer movement
+  OK   CU1 window resignation clears monitored Option state
+  OK   CU2 Option Clear keeps current and selection with one reload
+  OK   CU4 one undo restores every cleared row
+  OK   Q16 single Today menu has Archive Tab then normal Archive Tabs Below
+  OK   menu exposes Archive Tabs Below
+  OK   Q16 Archive Tabs Below archives only later Today rows in one batch
+  OK   Q16 one undo restores every tab below
+  OK   Q16 last Today row keeps Archive Tabs Below visible and disabled
+  OK   CU3 Archive Other Tabs is the native Option alternate immediately after Archive Tab
+  OK   menu exposes Archive Other Tabs
+  OK   CU3 Archive Other Tabs keeps its tab
+  OK   TF1 Space export menu uses curly quotes and lists all Spaces
+  OK   menu exposes Studio
+  OK   TF2 export inserts one folder at Pinned top and removes the source Space
+  OK   TF3 one undo restores the source Space, its rows, and window focus
+  OK   UB1 unread dot is 6 pt at (W − 26, y + 20)
+  OK   UB1 themed light actual unread dot contrast 3.55:1 ≥ 3:1 (guess pending C5)
+  OK   UB1 unthemed light dot keeps the passing blue Space accent in rendered ink
+  OK   UB1 unthemed light actual unread dot contrast 5.57:1 ≥ 3:1 (guess pending C5)
+  OK   UB1 unthemed dark actual unread dot contrast 11.29:1 ≥ 3:1 (guess pending C5)
+  OK   UB1 unread dot survives real SnapshotStore save/load and rebuilt sidebar
+  OK   UB2 hover gives the dot slot to the close button
+  OK   UB5 Peek badge wins over unread
+  OK   UB3 real row activation selects the unread tab
+  OK   UB3 selecting clears unread with at most its own row layout (1)
+  OK   UB4 collapsed folder summarizes an unread descendant
+  OK   UB4 expanding moves unread back to its child
+  OK   SP1 favicon hover shows reset plate and tooltip
+  OK   SP2 Option swaps the actual rendered glyph, label, and tooltip
+  OK   SP3 Option reset routes separate to the App without resetting the model early
+  OK   SP3 normal reset routes through the real model
+  OK   SP4 no reset plate when the pinned URL is current
+  OK   TT1 the real Gmail row uses its tidy display title
+  OK   TT2 title change updates its row title without laying out any tab row
+  OK   EA1 Expand All loads and expands every depth, including previously hidden children
+  OK   EA2 Collapse All matches the model
+  OK   EA2 one undo reopens all folders
+  OK   EA3 same-value Expand All creates no undo or full reload
+  OK   SM1 real Library columns follow model order and 244/16/12 geometry
+  OK   SM2 real header title, grabber, and one-Profile chip suppression
+  OK   SM2 grabber uses the shared capsule tooltip
+  OK   SM1 hidden Manager defers structural outline work
+  OK   SM1 showing Manager reconciles final lists without reloadData
+  OK   SM2 two Profiles show the Space's real Profile chip
+  OK   SM5 header menu has other-Space destinations and enabled Delete
+  OK   SM3 native mid-drag fill grows to centered 1.02 bounds, with its content and rim
+  OK   SM3 native mid-drag shadow draws and fades below the lifted column
+  OK   SM3 native grabber tracking commits one moveSpace at release
+  OK   HG4 Manager reorder crosses two slots: alignment ×2 (bottom reorder omitted by Q5)
+  OK   SM3 Escape cancels native reorder without a model command
+  OK   SM3 reorder and undo keep built column pages
+  OK   SM4 real source writer and destination outline accept cross-column drop
+  OK   SM4 cross-column move updates both cached outlines
+  OK   HG1 three distinct outline insertion points and successful drop: alignment ×3, generic ×1
+  OK   SM4 source row remains available after drop undo
+  OK   SM4 source row remains available after drop undo
+  OK   SM4 native Cmd-click multi-select works in a Manager column
+  OK   SM4 selection menu creates one folder and starts the real inline editor
+  OK   HG3 changing the setting off suppresses real drop and reorder haptics
+  OK   SM5 Delete is disabled with one Space
+  .. SM6 first layout attempt 1 54.82 ms, load1 7.61
+  OK   SM6 10×100 Library to first layout 54.82 ms ≤ 120 ms; only 4 visible columns built — attempt 1 54.82 ms, load1 7.61
+  OK   SM6 horizontal scroll builds newly visible pages once (added 4, reloads 4, visible (1700.0, 0.0, 900.0, 700.0))
+  OK   SM6 model property changes cause no full reload
+  OK   SM3 focused pager re-offsets after Space order changes without rebuilding its page
+  OK   HG2 Space swipe crosses threshold once: levelChange ×1
+  OK   HG2 short Space swipe has no haptic
+  OK   HG3 setting off also suppresses a threshold-crossing swipe
+  SKIP SW1–SW4: lead Q5 prohibits bottom-switcher reorder; existing Space-icon drops remain covered by MS12
+  OK   HP2 disabled hover schedules no timer and installs no monitor/observer work
+  OK   HP1 moving inside the pinned row does not restart its 0.5 s task
+  OK   HP6 an armed preview suppresses row tooltip scheduling
+  OK   HP1 pinned row emits the App request at its scheduled 0.5 s deadline
+  OK   HP1 request carries the real row's window anchor
+  .. HP1 real-time attempt 1 fired at 0.505 s (lateness +5 ms), load1 7.61
+  OK   HP1 real-time 5 ms run-loop slices deliver preview at 0.5 s ±50 ms — attempt 1 fired at 0.505 s (lateness +5 ms), load1 7.61
+  OK   HP5 captured source window resignation dismisses a preview held by the card
+  OK   HP1 folder row emits its request at the configured deadline
+  OK   HP1 Favorite tile emits its page request after 0.5 s
+  OK   HP4 entering the preview card cancels the outside-row dismissal
+  OK   HP4 leaving row and card hides after 0.25 s
+  OK   HP4 another target within one second swaps immediately without a new show task
+  OK   HP5 requesting the production row menu dismisses its preview
+  OK   HP5 a production drag destination cancels shown and armed previews
+  OK   HP5 real Space switch dismisses preview state
+  OK   HP1 Today rows never arm a preview
+  OK   HP1 split rows never arm a preview
+  OK   HP5 the real inline editor blocks previews
+  OK   HP5 scrolling the real list dismisses its preview
+  OK   HP1 the current pinned row never previews itself
+  OK   HP1 the current Favorite never previews itself
+  OK   HP2 the Folders source switch gates the real row
+  OK   HP2 the Pinned tabs and Favorites switch gates page previews
+  OK   HP2 disabling an existing tracker removes its installed work
+  OK   HP3 real native folder card is 300 wide, has 32 pt rows, search above eight tabs, and ten visible rows
+  OK   HP3 actual row/header glyphs match for folder glyph
+  OK   HP3 actual row/header glyphs match for ⭐️
+  OK   HP3 actual row/header glyphs match for star.fill
+  OK   HP3 shared iconOverride provider precedes customIcon in row and header
+  OK   HP3 header uses the row's 20 pt icon canvas, centered on the 36 pt header
+  OK   HP3 row and header both draw the open folder glyph without customIcon
+  OK   HP3 custom folder icon changes the actual header pixels
+  OK   HP3 real search field filters the depth-first native rows
+  OK   HP3 Down from the real search editor focuses the result rows
+  OK   HP3 Down/Return selects through the model and expands the folder chain
+  OK   HP3 Return from search selects the real split and focuses its matching pane
+  OK   HP3 a no-match search has no activation on Return
+  OK   HP3 folder card stays 300 pt at sidebar width 228
+  OK   HP3 folder card stays 300 pt at sidebar width 500
+  OK   HP3 empty folder has no selectable rows or search field
+  OK   BN1 opaque banner, unclipped text, and list ending 8 pt above card at width 228 (height 138)
+  OK   BN1 opaque banner, unclipped text, and list ending 8 pt above card at width 500 (height 108)
+  OK   BN1 Settings remains underlined in light
+  OK   BN1/BN4 Studio light width 228: opaque card, no row overlap, link contrast 6.76:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in light
+  OK   BN1/BN4 Studio light width 500: opaque card, no row overlap, link contrast 6.76:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in dark
+  OK   BN1/BN4 Studio dark width 228: opaque card, no row overlap, link contrast 6.76:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in dark
+  OK   BN1/BN4 Studio dark width 500: opaque card, no row overlap, link contrast 6.76:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in light
+  OK   BN1 unthemed light Settings keeps the passing blue Space accent
+  OK   BN1/BN4 Space 3 light width 228: opaque card, no row overlap, link contrast 6.50:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in light
+  OK   BN1 unthemed light Settings keeps the passing blue Space accent
+  OK   BN1/BN4 Space 3 light width 500: opaque card, no row overlap, link contrast 6.50:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in dark
+  OK   BN1/BN4 Space 3 dark width 228: opaque card, no row overlap, link contrast 6.03:1 ≥ 4.5:1
+  OK   BN1 Settings remains underlined in dark
+  OK   BN1/BN4 Space 3 dark width 500: opaque card, no row overlap, link contrast 6.03:1 ≥ 4.5:1
+  OK   BN3 banner uses the Profile's real 1 hour threshold
+  OK   BN3 banner uses the Profile's real 6 hours threshold
+  OK   BN3 banner uses the Profile's real 12 hours threshold
+  OK   BN3 banner uses the Profile's real 24 hours threshold
+  OK   BN3 banner uses the Profile's real 7 days threshold
+  OK   BN3 banner uses the Profile's real 30 days threshold
+  OK   BN1 banner uses the curly apostrophe
+  OK   BN2 Got it hover uses GrayA5
+  OK   BN2 Got it exit restores GrayA4
+  OK   BN2 native mouse tracking uses GrayA6 while pressed and restores GrayA4
+  OK   BN2 native Got it button sends the App dismissal intent
+  OK   BN2 clicking the real Settings text link sends the current Profile ID
+  OK   BN4 dismissed banner is hidden and restores the list inset
+  OK   BN4 ineligible windows show no banner
+  OK   BN3 never-archive Profile has no education threshold or banner
+
+checks: 559 passed, 0 failed
