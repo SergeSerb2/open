@@ -723,16 +723,6 @@ extension EngineWebContentHostFactory {
     focus(space: model.spaces[(i + delta + model.spaces.count) % model.spaces.count])
   }
 
-  func handlePageChromeKey(_ event: NSEvent) -> Bool {
-    guard event.type == .keyDown else { return false }
-    if event.keyCode == 53, extensionPopup.panel?.isKeyWindow == true { extensionPopup.dismiss(); return true }
-    guard event.window === window, window?.isKeyWindow == true, findFieldCreated, findBar?.isHidden == false,
-          window?.firstResponder === findField || window?.firstResponder === findField.currentEditor(),
-          event.modifierFlags.intersection([.command, .option, .control]).isEmpty else { return false }
-    if event.keyCode == 36 || event.keyCode == 76 { searchFind(forward: !event.modifierFlags.contains(.shift)); return true }
-    if event.keyCode == 53 { hideFind(); return true }
-    return false
-  }
   @objc func showFind(_ sender: Any?) {
     guard app.engineReady, !isClosing, selectedContent != nil else { return }
     _ = findField
@@ -743,7 +733,7 @@ extension EngineWebContentHostFactory {
   func hideFind() {
     guard findFieldCreated else { return }
     findPage?.stopFinding(clearSelection: true); findPage = nil; findQuery = ""; activatedFindMatch = false
-    findField.stringValue = ""; findField.isHidden = true; findBar?.isHidden = true
+    findBar?.resetEditing(); findField.stringValue = ""; findField.isHidden = true; findBar?.isHidden = true
     findBar?.update(count: 0, active: 0); layoutViews()
     // This is an explicit user dismissal, never an async load completion.
     if NSApp.isActive, window?.isKeyWindow == true { selectedContent?.focusPage() }

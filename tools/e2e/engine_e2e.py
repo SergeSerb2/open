@@ -68,14 +68,16 @@ class FocusTracker:
             checkpoint = self.checkpoints.get(app.pid, 0)
             steps = app.native_steps[checkpoint:] + [t["start"] for t in app.timing_steps[self.timing_checkpoints.get(app.pid, 0):]]
             if not steps:
-                continue
+                observations = app.observation_steps[self.observation_checkpoints.get(app.pid, 0):]
+                steps = observations[:1]
+                if not steps: continue
             events = app.activation_trace if app.closed else app.call("activation-events")
             # Untimed pointer/model work may run in the background. Native
             # input and timed intervals both retain their own trace bounds.
             for event in events:
                 resigned = event["event"] == "NSApplicationDidResignActiveNotification"
                 outside = event["event"] == "frontmostChanged" and event.get("frontmostPID") not in (None, 0, app.pid)
-                if event["uptime"] >= min(steps) and (resigned or outside):
+                if event["uptime"] >= min(steps) and (resigned or outside or event["event"] == "hardwareInteraction"):
                     interruptions.append(dict(event, openPID=app.pid))
         return interruptions
 
@@ -133,7 +135,7 @@ class Open:
         self.observation_steps = []
         self.activation_trace = []
         self.focus_tracker = None
-        env = dict(os.environ, OPEN_USER_DATA=user_data)
+        env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_AUTOMATION_VIRTUAL_INPUT="1")
         env.update(extra_env or {})
         args = [app, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
@@ -805,6 +807,8 @@ def feature_checks(app, style, results, tmp):
     def run(name, fn):
         try:
             results[name] = fn()
+        except FocusInterruption:
+            raise
         except Exception as e:
             results[name] = {"ok": False, "error": str(e), "trace": traceback.format_exc()[-600:]}
 

@@ -164,6 +164,19 @@
         w.pendingSaveChoice = nil
         panel.sheetParent?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil)
         choice(URL(fileURLWithPath: path)); return true
+      case "virtual-input-state":
+        return ["enabled": ProcessInfo.processInfo.environment["OPEN_AUTOMATION_VIRTUAL_INPUT"] == "1"]
+      case "queued-key-control":
+        guard ProcessInfo.processInfo.environment["OPEN_AUTOMATION_VIRTUAL_INPUT"] == "1", let target = w.window else {
+          throw Failure(message: "control requires an explicit virtual-input profile")
+        }
+        for type in [NSEvent.EventType.keyDown, .keyUp] {
+          if let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+              windowNumber: target.windowNumber, context: nil, characters: "UNTRUSTED_CONTROL", charactersIgnoringModifiers: "UNTRUSTED_CONTROL", isARepeat: false, keyCode: 0) {
+            NSApp.postEvent(event, atStart: false)
+          }
+        }
+        return true
       case "find-state": return w.findState
       case "page-dialog-state": return w.dialogState
       case "page-dialog-press": return w.pageDialogs.press(accepted: a["accept"] as? Bool ?? true, text: a["text"] as? String)
@@ -369,6 +382,7 @@
         }
         let action = a["action"] as? String
         if action == "queued-click" {
+          app.activationTrace.tagSyntheticPointer(motionTag)
           let point = NSPoint(x: a["x"] as? Double ?? 0, y: target.frame.height - (a["y"] as? Double ?? 0))
           BrowserWindowController.automationPointer = (number, point)
           let delivered = Mutex(false)

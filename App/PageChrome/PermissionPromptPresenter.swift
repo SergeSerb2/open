@@ -12,6 +12,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   private let popover = NSPopover()
   private let view = PermissionPromptView()
   private var finishing = false
+  private var presentedRequest: OEPermissionRequest?
   private var activationObserver: (any NSObjectProtocol)?
   private(set) var decisions = 0
 
@@ -48,13 +49,13 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     view.origin.stringValue = (origin.host() ?? origin.absoluteString) + (origin.port.map { ":\($0)" } ?? "")
     let names = Self.kinds.filter { first.request.kinds.contains($0.0) }.map(\.1)
     view.message.stringValue = "Wants to use \(names.isEmpty ? "additional permissions" : names.joined(separator: " and "))"
-    view.remember.state = .off
+    view.remember.state = .off; presentedRequest = first.request
     popover.show(relativeTo: CGRect(x: min(160, container.bounds.midX), y: 0, width: 1, height: 1), of: container, preferredEdge: .maxY)
   }
   func answer(_ state: OEPermissionState?) {
     guard !finishing, !pending.isEmpty else { return }
     finishing = true
-    let first = pending.removeFirst()
+    let first = pending.removeFirst(); presentedRequest = nil
     if let state, view.remember.state == .on {
       for (kind, _) in Self.kinds where first.request.kinds.contains(kind) {
         first.page.context.setPermissionState(state, for: kind, origin: first.request.origin)
@@ -70,16 +71,18 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     let wasFirst = pending.first?.page === page
     let removed = pending.filter { $0.page === page }; pending.removeAll { $0.page === page }
     for item in removed { item.request.dismiss() }
-    if wasFirst { finishing = true; popover.close(); finishing = false }
+    if wasFirst { presentedRequest = nil; finishing = true; popover.close(); finishing = false }
     presentPending()
   }
   func close() {
-    finishing = true
+    finishing = true; presentedRequest = nil
     for item in pending { item.request.dismiss() }; pending.removeAll(); popover.close()
     finishing = false
     if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) }; activationObserver = nil
   }
-  func popoverDidClose(_ notification: Notification) { if !finishing, !pending.isEmpty { answer(nil) } }
+  func popoverDidClose(_ notification: Notification) {
+    if !finishing, !popover.isShown, let presentedRequest, pending.first?.request === presentedRequest { answer(nil) }
+  }
   @discardableResult func press(allow: Bool, remember: Bool) -> Bool {
     guard popover.isShown else { return false }
     view.remember.state = remember ? .on : .off

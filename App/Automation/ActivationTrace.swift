@@ -7,9 +7,29 @@ import AppKit
 final class ActivationTrace {
   private(set) var events: [[String: Any]] = []
   private var applicationObservers: [any NSObjectProtocol] = []
+  private var hardwareMonitor: Any?
+  private var syntheticPointerTags: Set<Int> = []
   private var workspaceObserver: (any NSObjectProtocol)?
 
   init() {
+    // Only explicit short-lived e2e profiles use virtual input. Local monitors
+    // see native queued input; socket key events use sendEvent directly. Drop
+    // untrusted key events before a field can retain text from the shared Mac.
+    if ProcessInfo.processInfo.environment["OPEN_AUTOMATION_VIRTUAL_INPUT"] == "1" {
+      hardwareMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp, .leftMouseDown, .rightMouseDown]) { [weak self] event in
+        let dropKey = MainActor.assumeIsolated {
+          if event.type == .leftMouseDown || event.type == .rightMouseDown {
+            if self?.syntheticPointerTags.remove(event.eventNumber) == nil {
+              self?.append(["event": "hardwareInteraction", "kind": "pointer", "uptime": ProcessInfo.processInfo.systemUptime])
+            }
+            return false
+          }
+          if event.type == .keyDown { self?.append(["event": "hardwareInteraction", "kind": "key", "uptime": ProcessInfo.processInfo.systemUptime]) }
+          return true // no characters or key codes are retained in the trace
+        }
+        return dropKey ? nil : event
+      }
+    }
     for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
       applicationObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
         let eventName = notification.name.rawValue
@@ -31,11 +51,13 @@ final class ActivationTrace {
       }
     }
   }
+  func tagSyntheticPointer(_ tag: Int) { if hardwareMonitor != nil { syntheticPointerTags.insert(tag) } }
   private func append(_ event: [String: Any]) {
     events.append(event)
     if events.count > 512 { events.removeFirst(events.count - 512) }
   }
   isolated deinit {
+    if let hardwareMonitor { NSEvent.removeMonitor(hardwareMonitor) }
     applicationObservers.forEach(NotificationCenter.default.removeObserver)
     if let workspaceObserver { NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver) }
   }
