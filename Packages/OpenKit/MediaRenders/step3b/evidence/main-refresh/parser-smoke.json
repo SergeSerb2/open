@@ -1,0 +1,12 @@
+[
+  {
+    "case": "unknown-state",
+    "exit": 1,
+    "png_created": false
+  },
+  {
+    "case": "unknown-hover",
+    "exit": 1,
+    "png_created": false
+  }
+]
