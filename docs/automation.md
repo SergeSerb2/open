@@ -369,3 +369,12 @@ runs the action/menu in the same socket turn. `ext-menu snapshot=true` returns
 the action snapshot before yielding. `window-close releaseBrowsers=true` drops
 the mirror's browsers without calling `OEBrowser.close` and reports whether they
 were released; this covers the destructor path with an open popup.
+
+For a revision-specific engine gate, pass `--engine-sha256 <64 lowercase hex>`.
+The runner requires the complete Vendor framework to match that exact digest.
+Xcode re-signs the embedded copy, so it also compares every byte of both binaries
+after removing signatures on private APFS clones and normalizing only the
+signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launch if the code
+fingerprints differ. Receipts record raw and code fingerprints, the required
+Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
+engine revision. Real app/Vendor bundles are never modified by the comparison.
