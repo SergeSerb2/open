@@ -1,10 +1,10 @@
 import Foundation
 import QuartzCore
+import AppKit
 
-/// Motion tokens. PROVISIONAL: Arc stores its spring and duration numbers in
-/// compiled code, not in strings (docs/re/design-tokens.md §4.3). These are our
-/// best estimates from 4 fps captures and must be re-measured with a high-rate
-/// capture. Keep every animation on these tokens so a later fix is one edit.
+/// Spring parameters use SwiftUI-style response and damping. Window motion is
+/// fitted to capture session 2 (docs/plans/app-shell.md §3.3); other tokens remain
+/// estimates from the first capture. Keep animation parameters in these tokens.
 public struct SpringToken: Sendable, Hashable {
     /// SwiftUI-style response (seconds) and damping fraction.
     public var response: Double
@@ -27,9 +27,10 @@ public struct SpringToken: Sendable, Hashable {
     }
 }
 
-/// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
-/// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
+/// Motion tokens. Evidence and remaining estimates: docs/design.md §2.4.
 public enum Motion {
+    /// Process-only automation negative control; nil on the shipping path.
+    @MainActor public static var sidebarDelayOverride: CFTimeInterval?
     /// Theme editor container motion; PROVISIONAL, plan §5.10.
     public static let editorOpen = SpringToken(response: 0.25, dampingFraction: 0.85)
     public static let editorFade: CFTimeInterval = 0.12
@@ -38,14 +39,12 @@ public enum Motion {
     /// Sidebar completion guesses until unread motion is captured.
     public static let unreadAppear = SpringToken(response: 0.2, dampingFraction: 0.8)
     public static let unreadClearFade: CFTimeInterval = 0.12
-    /// Space page slide after a click or shortcut. Visible part ≈ 0.2–0.35 s; the
-    /// slide leads the background fade (A0222: slide 0.65, fade 0.53).
-    public static let spaceSwitch = SpringToken(response: 0.3, dampingFraction: 1.0)
+    /// Space page slide: capture session 2 V 35.05 / 43.63 s, response 0.20 s.
+    public static let spaceSwitch = SpringToken(response: 0.20, dampingFraction: 1.0)
     /// Snap after a two-finger swipe ends.
     public static let spaceSwipeSnap = SpringToken(response: 0.26, dampingFraction: 0.92)
-    /// Background cross-fade on a Space switch: linear, 0.21 s. With the 0.3 s
-    /// critically damped slide this reproduces both measured progress pairs
-    /// (slide 0.65 / fade 0.53 and slide 0.88 / fade 0.77, A0222 and A0227).
+    /// Background cross-fade: linear, 0.21 s; unchanged from the first capture fit.
+    /// Session 2 used equal themes and did not re-measure the cross-fade.
     public static let themeCrossfade: CFTimeInterval = 0.21
     public static var themeCrossfadeTiming: CAMediaTimingFunction { CAMediaTimingFunction(name: .linear) }
     /// Row hover fill fade in and out.
@@ -57,7 +56,15 @@ public enum Motion {
     /// Tooltip fade in and out.
     public static let tooltipFade: CFTimeInterval = 0.12
     /// Sidebar hide and show (Cmd+S) slide.
-    public static let sidebarToggle = SpringToken(response: 0.3, dampingFraction: 1.0)
+    public static let sidebarToggle = SpringToken(response: 0.10, dampingFraction: 0.95)
+    /// Capture session 2, V 26.63 s; app-shell §3.3: 2.9 pt overshoot on 223 pt travel.
+    public static let revealCardIn = SpringToken(response: 0.164, dampingFraction: 0.81)
+    public static let revealCardOut: CFTimeInterval = 0.105
+    /// Process-local automation override; never changes the system preference.
+    @MainActor public static var reduceMotionOverride: Bool?
+    @MainActor public static var reducesMotion: Bool {
+        reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
     public static var easeInOut: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeInEaseOut) }
     public static var easeOut: CAMediaTimingFunction { CAMediaTimingFunction(name: .easeOut) }
 

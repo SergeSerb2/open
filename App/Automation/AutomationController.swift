@@ -8,6 +8,7 @@
   import OpenSidebar
   import OpenCommands
   import OpenSettings
+  import OpenDesign
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -383,11 +384,18 @@
         func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
           NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
             modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
-            context: nil, eventNumber: type == .mouseMoved ? motionTag : 0, clickCount: 1,
+            context: nil, eventNumber: motionTag, clickCount: a["clickCount"] as? Int ?? 1,
             pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
         }
         let action = a["action"] as? String
-        if action == "move" || action == "hover" {
+        if action == "down" || action == "drag" || action == "up" {
+          let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
+          BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
+          target.layoutIfNeeded()
+          let type: NSEvent.EventType = action == "down" ? .leftMouseDown : action == "drag" ? .leftMouseDragged : .leftMouseUp
+          if let e = event(type, point) { NSApp.sendEvent(e) }
+        } else if action == "move" || action == "hover" {
           // Local event monitors run on AppKit's native dequeue path. Queue
           // motion just like real input, including after a Space transition.
           // From the first synthetic move on, pointer-driven window logic (the
@@ -442,23 +450,24 @@
           BrowserWindowController.automationPointer = (number, point)
           func click(_ type: NSEvent.EventType) -> NSEvent? {
             NSEvent.mouseEvent(with: type, location: point, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-              windowNumber: number, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+              windowNumber: number, context: nil, eventNumber: 0, clickCount: a["clickCount"] as? Int ?? 1, pressure: type == .leftMouseDown ? 1 : 0)
           }
           // Real input arrives after the display cycle has laid the window out (the window
           // buttons are placed at its end); run that pass before hit-testing.
           target.layoutIfNeeded()
           if let up = click(.leftMouseUp) { NSApp.postEvent(up, atStart: false) }
-          if let down = click(.leftMouseDown) { target.sendEvent(down) }
+          if let down = click(.leftMouseDown) { NSApp.sendEvent(down) }
         } else if let start = a["from"] as? [Double], let end = a["to"] as? [Double], start.count == 2, end.count == 2 {
           // The real resize handle consumes these own-window events through
           // NSWindow.nextEvent. No system cursor or keyboard is touched.
-          for type in [NSEvent.EventType.leftMouseDragged, .leftMouseUp] {
-            if let e = event(type, end) { NSApp.postEvent(e, atStart: false) }
+          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
+          for (type, point) in [(NSEvent.EventType.leftMouseDown, start), (.leftMouseDragged, end), (.leftMouseUp, end)] {
+            BrowserWindowController.automationPointer = (number, NSPoint(x: point[0], y: target.frame.height - point[1]))
+            if let e = event(type, point) { NSApp.sendEvent(e) }
           }
-          if let e = event(.leftMouseDown, start) { target.sendEvent(e) }
         } else {
           for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            if let e = event(type, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { target.sendEvent(e) }
+            if let e = event(type, [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]) { NSApp.sendEvent(e) }
           }
         }
         return true
@@ -641,6 +650,25 @@
           }
         }
         return dismissed
+      case "window-motion":
+        guard let controller = w.controller else { throw Failure(message: "no window") }
+        if let reduced = a["reduced"] as? Bool { Motion.reduceMotionOverride = reduced }
+        if let delay = a["sidebarDelay"] as? Double { Motion.sidebarDelayOverride = min(0.5, max(0, delay)) }
+        if let sample = a["sampleCard"] as? Bool { controller.samplesCardMotion = sample }
+        func token(_ s: SpringToken) -> [String: Any] { ["response": s.response, "damping": s.dampingFraction] }
+        let travel = controller.context.sidebarWidth + WindowMetrics.revealCardInset - PanelMetrics.inset
+        return ["reduced": Motion.reducesMotion,
+          "tokens": ["sidebarToggle": token(Motion.sidebarToggle), "revealCardIn": token(Motion.revealCardIn),
+            "revealCardOut": Motion.revealCardOut, "spaceSwitch": token(Motion.spaceSwitch)] as [String: Any],
+          "cardCurve": [0.112, 0.140, 0.210].map { ["time": $0, "pastRest": (Motion.springProgress(Motion.revealCardIn, at: $0) - 1) * travel] },
+          "toggleRemainderAt130ms": (1 - Motion.springProgress(Motion.sidebarToggle, at: 0.130)) * (WindowMetrics.defaultSidebarWidth - PanelMetrics.inset),
+          "spaceRemainderAt300ms": (1 - Motion.springProgress(Motion.spaceSwitch, at: 0.300)) * controller.context.sidebarWidth,
+          "sidebar": controller.sidebarAnimations.mapValues(describeAnimation),
+          "card": controller.cardAnimations.mapValues(describeAnimation),
+          "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
+          "space": controller.sidebar.spaceSlideAnimation.map(describeAnimation) ?? [:],
+          "active": ["sidebar": controller.sidebar.layer?.animationKeys() ?? [],
+            "panel": controller.container.layer?.animationKeys() ?? []]] as [String: Any]
       case "window-state":
         // `id` reads another standard window without making it key.
         let w = (a["id"] as? String).flatMap { id in app.windowControllers.first { $0.windowID.description == id } }
@@ -669,6 +697,11 @@
           "screenFrame": win.screen.map { rect($0.frame) } ?? [],
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
+          "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
+          "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
+          "sidebarResizeActive": controller.sidebarResizeActive,
+          "sidebarWidthCommits": controller.sidebarWidthCommits, "sidebarGestureHides": controller.sidebarGestureHides,
+          "sidebarGeometryChanges": controller.sidebarGeometryChanges,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
           "sidebarClass": String(reflecting: type(of: controller.sidebar)),
           "panel": [panel.minX, panel.minY, panel.width, panel.height],
@@ -1060,6 +1093,31 @@
       return ["inside": inside.values.map(name).sorted(), "entered": entered.map(name).sorted(), "moved": moving.values.map(name).sorted()]
     }
 
+    private func describeAnimation(_ animation: CAAnimation) -> [String: Any] {
+      var value: [String: Any] = ["duration": animation.duration, "beginTime": animation.beginTime,
+        "type": String(describing: type(of: animation))]
+      if let requestedAt = animation.value(forKey: "openRequestedAt") as? Double {
+        value["requestedAt"] = requestedAt
+        value["scheduledDelay"] = animation.beginTime - requestedAt
+      }
+      if let basic = animation as? CABasicAnimation {
+        value["keyPath"] = basic.keyPath ?? ""
+        value["from"] = (basic.fromValue as? NSNumber) ?? NSNull()
+        value["to"] = (basic.toValue as? NSNumber) ?? NSNull()
+      }
+      if let spring = animation as? CASpringAnimation {
+        value["response"] = 2 * Double.pi / sqrt(spring.stiffness / spring.mass)
+        value["damping"] = spring.damping / (2 * sqrt(spring.stiffness * spring.mass))
+        value["initialVelocity"] = spring.initialVelocity
+      }
+      if let timing = animation.timingFunction {
+        value["timing"] = (0..<4).map { index -> [Float] in
+          var p: [Float] = [0, 0]; timing.getControlPoint(at: index, values: &p); return p
+        }
+      }
+      if let group = animation as? CAAnimationGroup { value["children"] = (group.animations ?? []).map(describeAnimation) }
+      return value
+    }
     private func rect(_ r: CGRect) -> [Double] { [r.minX, r.minY, r.width, r.height].map(Double.init) }
 
     private func legacyAX(_ object: NSObject, _ attribute: String) -> String {
@@ -1295,8 +1353,18 @@
       let number = a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
       else { throw Failure(message: "no window") }
-      let method = try await WindowSnapshot.capture(target, to: url)
-      return ["path": path, "method": method]
+      var keyTime: Double?
+      var capturedAfterKey: Double?
+      let toggle = a["toggleSidebar"] as? Bool == true
+      let method = try await WindowSnapshot.capture(target, to: url, afterPreparation: toggle ? {
+        let time = ProcessInfo.processInfo.systemUptime
+        if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: time,
+          windowNumber: target.windowNumber, context: nil, characters: "s", charactersIgnoringModifiers: "s", isARepeat: false, keyCode: 1) {
+          keyTime = CACurrentMediaTime()
+          NSApp.sendEvent(event)
+        }
+      } : nil, atCapture: { capturedAfterKey = keyTime.map { CACurrentMediaTime() - $0 } })
+      return ["path": path, "method": method, "capturedAfterKey": capturedAfterKey ?? NSNull()] as [String: Any]
     }
 
     private func metrics(interval: Double) async -> [String: Any] {

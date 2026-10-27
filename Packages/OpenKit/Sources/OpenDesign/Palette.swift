@@ -69,9 +69,11 @@ public enum WindowControlColors {
     public static let ringOpacity = (light: 0.06, dark: 0.34)
     /// Ring colors, fitted by least squares at those alphas: dark from F0131 and F0129 (the
     /// two frames agree within 2 levels), light from F0001 (a faint ring, so less certain).
+    /// Dark minimize/zoom refitted to live snapshot PNGs: S2 03/0003 and 05/0009,
+    /// r 6.5–7.5 band, ΔE00 <= 1 (docs/design.md §23.3).
     public static let closeRing = DesignColor(light: RGBA(hex: 0xDB3B3C), dark: RGBA(hex: 0xFE8179))
-    public static let minimizeRing = DesignColor(light: RGBA(hex: 0xD4A201), dark: RGBA(hex: 0xFECE3F))
-    public static let zoomRing = DesignColor(light: RGBA(hex: 0x2FB513), dark: RGBA(hex: 0x70D249))
+    public static let minimizeRing = DesignColor(light: RGBA(hex: 0xD4A201), dark: RGBA(hex: 0xFFDA09))
+    public static let zoomRing = DesignColor(light: RGBA(hex: 0x2FB513), dark: RGBA(hex: 0x4DDD31))
 }
 
 /// Command bar and the URL field (`Resources/Assets.car`, `ARC_CommandBar`).
