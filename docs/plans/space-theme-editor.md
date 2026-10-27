@@ -1295,6 +1295,11 @@ Code changes:
    and `.setAppearance` as in the table above. Reset them when the style
    becomes `nil`. `setAppearance` computes `t` with the old stored range.
    The empty-state default `saturation` becomes 1.0.
+   Lead clarification (2026-10-26 17:14 America/Vancouver): in-session undo
+   snapshots include the style, range, and saturation. Undo/redo restore the
+   exact earlier knob and editor state, without reconstructing a range from
+   the restored key. Reopening the editor still uses the open rule above.
+   None of these transient range/saturation values are written to disk.
 3. `ColorPadView.swift` / `PresetStripView.swift`: read the range from the
    state, not from the mode.
 4. No stored-value or `mathVersion` change: the key color is still the only
@@ -1400,6 +1405,39 @@ the same knob at rest.
 Remaining unknowns, not gates: the Metal renderer's own config fill (the
 capture fits the SwiftUI law), the light-mode wash, the inactive-window
 material, and Automatic-return behavior.
+
+Implementation notes (Step 9):
+
+- `compare --spec session2-pad --capture-root SESSION17 --out .re/DIR`
+  measures the **main-window `win-70352`** images in Display P3. The extra
+  window image can lag a preset tap; F0039 and F0041 both show Greyscale 7
+  in the main image. Open's preset positions are measured from its rendered
+  white ring, not from the state formula. The Brand-8 mode expectation uses
+  the independent decoded range 0.4167…0.9167.
+- Neutral P3 presets canonicalize an undefined hue to zero when round-trip
+  channel spread is below 0.000001 (less than 0.001 of an 8-bit level).
+  This prevents numerical ColorSync noise rotating grey knobs off the axis.
+- Cached ColorSync linear-primary matrices and the shared transfer curve
+  implement the encoded-P3 mix without allocating a CGColor per field pixel.
+  The three-color field rebuild measured about 1 ms instead of 21 ms on
+  this machine; this is a harness measurement, not the Step 5 B1 acceptance.
+- Texture contrast is an Open fit: alpha spreads 0.167 / 0.0353 / 0.0371
+  for sand / denim / tweed; grain's existing hashed marks receive a 1.25
+  contrast stretch and mean normalization to 0.060. There is no separate
+  base-alpha layer or per-channel tint. Noise changes only the layer opacity.
+- The F0069 diagnostic measured worst ΔE00 **2.38 legacy / 2.29 decoded**.
+  This PR retains the legacy opacity, sRGB path, and exact grain bytes so
+  the 13 stored/imported capture tables can remain byte-identical. The
+  qualifying diagnostic is not an automatic migration of stored themes.
+- **F0139 editor-style diagnostic changes from 0.84 to 1.89 ΔE00** (worst
+  of six regions). The new encoded-P3 fill and calibrated grain replace the
+  prior sRGB-clamped fit. This is the §17.3 report-change branch; it is not
+  described as preserving the old 0.84 fit or as changing the legacy tables.
+- The private compare input is bounded to 512 root entries, 64 MiB per PNG,
+  4096×4096 pixels, 4096 chunks, and a 128 MiB decoded source. The synthetic
+  CLI boundary driver is `Fixtures/space-editor-step9/check-inputs.py` in
+  OpenKit. It includes the accepted limits, one-over refusals, and trailing
+  data/unknown-option refusals. Capture pixels remain local and uncommitted.
 
 ## Appendix — Lead decisions (2026-10-25)
 

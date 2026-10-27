@@ -247,6 +247,7 @@ final class ThemeLayer: CALayer {
             field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
         }
         let noise = theme.noiseFactor
+        grainTile.opacity = theme.usesLegacyIntensity ? 1 : Float(ThemeTexture.layerAlpha(theme.texture, noiseFactor: noise))
         guard noise > 0 else { grainColumns.isHidden = true; return rebuilt }
         let gkey = GrainKey(noise: noise, scale: scale, texture: theme.texture)
         if gkey != grainKey {

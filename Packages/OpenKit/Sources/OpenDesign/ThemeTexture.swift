@@ -6,11 +6,8 @@ import OpenModel
 @MainActor
 public enum ThemeTexture {
     public struct Metrics: Sendable {
-        public var baseAlpha: Double
-        public var patternMean: Double
         public var meanAlpha: Double
-        public var peakMarksMeanAlpha: Double
-        public var markCoverage: Double
+        public var standardDeviation: Double
     }
     private struct Key: Hashable { var texture: SpaceStyleTexture; var noiseBucket: Int; var scale: CGFloat }
     private struct Tile { var image: CGImage; var metrics: Metrics }
@@ -18,13 +15,13 @@ public enum ThemeTexture {
     private static var order: [Key] = []
     public static let cacheLimit = 32
     public static var cachedTileCount: Int { cache.count }
-    private struct GrainKey: Hashable { var bucket: Int; var scale: CGFloat }
-    private static var grains: [GrainKey: (CGImage, Double)] = [:]
-    private static var grainOrder: [GrainKey] = []
-    private static var denimPatterns: [CGFloat: [Double]] = [:]
-    private static var denimOrder: [CGFloat] = []
     public private(set) static var denimGenerationCount = 0
     public private(set) static var generationCount = 0
+
+    public static func layerAlpha(_ texture: SpaceStyleTexture, noiseFactor: Double) -> Double {
+        let noise = noiseFactor.isFinite ? min(1, max(0, noiseFactor)) : 0
+        return noise * ThemeTuning.textureNoiseScale[texture]!
+    }
 
     public static func period(_ t: SpaceStyleTexture) -> CGFloat {
         switch t { case .grain: 100; case .sand: 96; case .denim: 300; case .tweed: 128 }
@@ -110,102 +107,76 @@ public enum ThemeTexture {
 
     private static func cached(_ t: SpaceStyleTexture, noise: Double, scale: CGFloat) -> Tile? {
         guard noise.isFinite, noise > 0, scale > 0, scale.isFinite else { return nil }
-        let bucket = min(20, max(0, Int((noise * 20).rounded())))
-        guard bucket > 0 else { return nil }
-        let key = Key(texture: t, noiseBucket: bucket, scale: scale)
+        // §17.3: noise affects layer opacity only. Canonicalize the bucket so
+        // all positive noise values share one tile per texture and scale.
+        let key = Key(texture: t, noiseBucket: 0, scale: scale)
         if let tile = cache[key] { return tile }
-        let factor = Double(bucket) / 20
-        let grainKey = GrainKey(bucket: bucket, scale: scale)
-        let grain: CGImage, grainMean: Double
-        if let found = grains[grainKey] { (grain, grainMean) = found }
-        else {
-            guard let image = Grain.tile(noiseFactor: factor, scale: scale), let data = image.dataProvider?.data else { return nil }
-            let bytes = CFDataGetBytePtr(data)!
-            grain = image
-            grainMean = (0..<(image.width * image.height)).reduce(0.0) { $0 + Double(bytes[$1 * 4 + 3]) / 255 } / Double(image.width * image.height)
-            if grainOrder.count >= 64 {
-                for old in grainOrder.prefix(32) { grains[old] = nil }; grainOrder.removeFirst(32)
-            }
-            grains[grainKey] = (grain, grainMean); grainOrder.append(grainKey)
-        }
-        if t == .grain {
-            let tile = Tile(image: grain, metrics: Metrics(baseAlpha: 0, patternMean: grainMean, meanAlpha: grainMean,
-                                                          peakMarksMeanAlpha: factor * 0.1, markCoverage: 1))
-            insert(tile, for: key)
-            return tile
-        }
-        let n = max(1, Int((period(t) * scale).rounded())), peak = factor * 0.1
+        let n = max(1, Int((period(t) * scale).rounded()))
         var marks = [Double](repeating: 0, count: n * n)
         func put(_ x: Int, _ y: Int, _ alpha: Double) {
             let x = (x % n + n) % n, y = (y % n + n) % n
             marks[y * n + x] = max(marks[y * n + x], alpha)
         }
         switch t {
+        case .grain:
+            guard let grain = Grain.tile(noiseFactor: 1, scale: scale), let data = grain.dataProvider?.data else { return nil }
+            let bytes = CFDataGetBytePtr(data)!
+            marks = (0..<(n * n)).map { Double(bytes[$0 * 4 + 3]) / 255 }
         case .sand:
-            // 48% of 2×2 cells have a one- or two-pixel dot: 18% coverage.
+            // Our own sparse dots, with the captured mean and contrast below.
             for y in stride(from: 0, to: n, by: 2) {
                 for x in stride(from: 0, to: n, by: 2) where random(x, y, 1) < 0.48 {
                     let dx = Int(random(x, y, 2) * 2), dy = Int(random(x, y, 3) * 2)
-                    let alpha = peak * (0.4 + 0.6 * random(x, y, 4))
+                    let alpha = 0.4 + 0.6 * random(x, y, 4)
                     put(x + dx, y + dy, alpha)
                     if random(x, y, 5) < 0.5 { put(x + 1 - dx, y + dy, alpha) }
                 }
             }
         case .denim:
-            if let pattern = denimPatterns[scale] { marks = pattern.map { $0 * peak } }
-            else {
-            for y in 0..<n {
-                for x in 0..<n {
-                    let u = Double(x) / scale, v = Double(y) / scale
-                    let across = ((v - u).truncatingRemainder(dividingBy: 3) + 3).truncatingRemainder(dividingBy: 3)
-                    if across < 1 {
-                        let along = (u + v).truncatingRemainder(dividingBy: 300) / 10
-                        let cell = Int(floor(along)), fraction = along - floor(along)
-                        let line = Int(floor((v - u) / 3))
-                        let a = random(cell, line, 6), b = random((cell + 1) % 30, line, 6)
-                        let smooth = fraction * fraction * (3 - 2 * fraction)
-                        marks[y * n + x] = 0.4 + 0.6 * (a + (b - a) * smooth)
-                    }
+            for y in 0..<n { for x in 0..<n {
+                let u = Double(x) / scale, v = Double(y) / scale
+                let across = ((v - u).truncatingRemainder(dividingBy: 3) + 3).truncatingRemainder(dividingBy: 3)
+                if across < 1 {
+                    let along = (u + v).truncatingRemainder(dividingBy: 300) / 10
+                    let cell = Int(floor(along)), fraction = along - floor(along)
+                    let line = Int(floor((v - u) / 3))
+                    let a = random(cell, line, 6), b = random((cell + 1) % 30, line, 6)
+                    let smooth = fraction * fraction * (3 - 2 * fraction)
+                    marks[y * n + x] = 0.4 + 0.6 * (a + (b - a) * smooth)
                 }
-            }
-            if denimOrder.count >= 4 {
-                for old in denimOrder.prefix(2) { denimPatterns[old] = nil }; denimOrder.removeFirst(2)
-            }
-            denimPatterns[scale] = marks; denimOrder.append(scale); denimGenerationCount += 1
-            marks = marks.map { $0 * peak }
-            }
+            } }
+            denimGenerationCount += 1
         case .tweed:
-            let cells = Int(ceil(period(t) / 3))
-            for gy in 0..<cells {
-                for gx in 0..<cells {
-                    let x = Int((Double(gx) * 3 + random(gx, gy, 7) - 0.5) * scale)
-                    let y = Int((Double(gy) * 3 + random(gx, gy, 8) - 0.5) * scale)
-                    let length = Int((4 + 3 * random(gx, gy, 9)) * scale)
-                    let horizontal = random(gx, gy, 10) < 0.5
-                    let alpha = peak * (0.4 + 0.6 * random(gx, gy, 11))
-                    for d in 0..<length {
-                        for width in 0..<max(1, Int(scale.rounded())) {
-                            put(x + (horizontal ? d : width), y + (horizontal ? width : d), alpha)
-                        }
-                    }
-                }
+            // Original, seamless value-noise mottle. No sharp woven dashes.
+            let cells = 32
+            func smooth(_ u: Double, _ v: Double) -> Double {
+                let gx = Int(floor(u)), gy = Int(floor(v)), fx = u - floor(u), fy = v - floor(v)
+                let sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy)
+                func at(_ x: Int, _ y: Int) -> Double { random(x % cells, y % cells, 91) }
+                let a = at(gx, gy), b = at(gx + 1, gy), c = at(gx, gy + 1), d = at(gx + 1, gy + 1)
+                return (a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy
             }
-        case .grain: break
+            for y in 0..<n { for x in 0..<n {
+                marks[y * n + x] = smooth(Double(x) * Double(cells) / Double(n), Double(y) * Double(cells) / Double(n))
+            } }
         }
-        let patternMean = marks.reduce(0, +) / Double(marks.count)
-        // Open design, lead decision 2026-10-25 23:58 PDT. Calibrate in Step 9.
-        let base = max(0, grainMean - patternMean)
-        // Black grayscale + 16-bit alpha keeps the shared cache at four bytes
-        // per pixel, without rounding the low-noise uniform base to 8-bit alpha.
+        let mean = marks.reduce(0, +) / Double(marks.count)
+        let deviation = sqrt(marks.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(marks.count))
+        let darkness = ThemeTuning.textureTileDarkness[t]!
+        // Alpha spreads are Open's capture fit; the means and layer multipliers
+        // follow §17.3. Grain retains its hashed marks, with contrast tuning.
+        let spread: Double
+        switch t { case .grain: spread = 1.25 * deviation * darkness / mean; case .sand: spread = 0.167; case .denim: spread = 0.0353; case .tweed: spread = 0.0371 }
+        let alphas = marks.map { min(1, max(0, darkness + ($0 - mean) * spread / max(1e-12, deviation))) }
+        // Contrast tuning may clip the lowest grain values. Normalize its mean
+        // again, keeping the same hashed marks and the required 0.060 darkness.
+        let normalization = darkness / (alphas.reduce(0, +) / Double(alphas.count))
         var pixels = [UInt16](repeating: 0, count: marks.count * 2)
-        var total = 0.0, peakTotal = 0.0, peakCount = 0, markCount = 0
-        for (i, mark) in marks.enumerated() {
-            let alpha = base + mark * (1 - base)
-            pixels[i * 2 + 1] = UInt16((alpha * 65535).rounded())
-            let storedAlpha = Double(pixels[i * 2 + 1]) / 65535
-            total += storedAlpha
-            if mark > 0 { markCount += 1 }
-            if mark >= peak * 0.9 { peakTotal += storedAlpha; peakCount += 1 }
+        var total = 0.0, squared = 0.0
+        for (i, alpha) in alphas.enumerated() {
+            pixels[i * 2 + 1] = UInt16((min(1, alpha * normalization) * 65535).rounded())
+            let stored = Double(pixels[i * 2 + 1]) / 65535
+            total += stored; squared += stored * stored
         }
         let bytes = pixels.withUnsafeBytes { Data($0) }
         guard let provider = CGDataProvider(data: bytes as CFData),
@@ -214,9 +185,9 @@ public enum ThemeTexture {
                                   bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue
                                       | CGBitmapInfo.byteOrder16Little.rawValue),
                                   provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
-        let tile = Tile(image: image, metrics: Metrics(baseAlpha: base, patternMean: patternMean,
-            meanAlpha: total / Double(marks.count), peakMarksMeanAlpha: peakCount > 0 ? peakTotal / Double(peakCount) : base,
-            markCoverage: Double(markCount) / Double(marks.count)))
+        let average = total / Double(marks.count)
+        let tile = Tile(image: image, metrics: Metrics(meanAlpha: average,
+            standardDeviation: sqrt(max(0, squared / Double(marks.count) - average * average))))
         insert(tile, for: key)
         return tile
     }
