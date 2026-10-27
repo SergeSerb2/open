@@ -3734,8 +3734,13 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     for t in app.call("tabs"):
         app.call("close", tab=t["id"])
     gone = wait_until(lambda: (lambda r: r if not r["ready"] else None)(actions()), timeout=15)
-    told = [e for e in app.call("events") if e["type"] == "extensionActions"]
-    idle = {"not_ready": bool(gone), "notified_gone": any(e.get("ready") is False for e in told)}
+    told = []
+    def notified_gone():
+        told.extend(e for e in app.call("events") if e["type"] == "extensionActions")
+        return any(e.get("ready") is False for e in told)
+    # The model transition is visible to getters before its posted delegate
+    # notification arrives. Await that real event, not one immediate drain.
+    idle = {"not_ready": bool(gone), "notified_gone": bool(wait_until(notified_gone, timeout=10))}
     if gone:
         listed = [x for x in gone["actions"] if x["id"] == bitwarden]
         idle["listed"] = listed[0] if listed else None
@@ -3746,7 +3751,11 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     back = wait_until(lambda: (lambda r: r if r["ready"] and [x for x in r["actions"] if x["id"] == bitwarden and x["live"]]
                                else None)(actions()), timeout=20)
     idle["live_again"] = bool(back)
-    idle["notified_back"] = any(e["type"] == "extensionActions" and e.get("ready") is True for e in app.call("events"))
+    back_told = []
+    def notified_back():
+        back_told.extend(e for e in app.call("events") if e["type"] == "extensionActions")
+        return any(e.get("ready") is True for e in back_told)
+    idle["notified_back"] = bool(wait_until(notified_back, timeout=10))
     results["no_live_tab_actions"] = {
         "ok": idle["not_ready"] and bool(idle.get("listed")) and idle["listed"]["pinned"] and not idle["listed"]["live"]
               and idle.get("ran") is False and not idle.get("popup") and idle["live_again"]
