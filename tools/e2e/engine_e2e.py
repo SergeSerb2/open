@@ -594,7 +594,15 @@ def page_chrome_checks(factory, results, tmp):
     origins = ['http://127.0.0.1:%d' % server.server_address[1] for server in servers]
     origin = origins[0]; app = factory(urls=(origin + '/page',), fresh=True)
     try:
-        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab); app.call('focus', tab=tab)
+        tab = app.call('tabs')[0]['id']; app.call('wait', tab=tab)
+        refused_permission = refused_window = False
+        try: app.call('permission-setting',tab=tab,origin=origin,kind=64)
+        except RuntimeError as error: refused_permission = 'no persistent setting' in str(error)
+        results['permission_transient_setting_refused']={'ok':refused_permission and app.call('ping')['pid']==app.pid}
+        try: app.call('snapshot',window=-1,path=str(Path(tmp)/'missing-window.png'))
+        except RuntimeError as error: refused_window = 'owned window no longer exists' in str(error)
+        results['capture_missing_window_refused']={'ok':refused_window}
+        app.call('focus', tab=tab)
         app.call('policy', dialogs='', permissions='', contextMenu='hold')
         def key(name=None, **args): return app.call('key', **dict(args, **({'key': name} if name else {})))
         def find_state(): return app.call('find-state')
