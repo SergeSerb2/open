@@ -80,7 +80,7 @@ public extension AutoArchiveInterval {
         "open.advanced.enablePictureInPictureOnLeave": true, "open.advanced.allowWindowDraggingFromWebTop": false,
         "open.advanced.showFullURLWithToolbar": false, "open.advanced.enableBoosts": true,
         "open.boosts.hasDismissedInterstitial": false, "open.boosts.hasDismissedJSNotice": false,
-        "open.boosts.codeEditorSize": "560x640",
+        "open.boosts.codeEditorSize": "480x588",
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,
         "open.advanced.playSoundEffects": false, "open.advanced.hapticOnTabReorder": true,
         "open.advanced.tabSleepMode": "automatic", "open.appIcon.selectedID": "openDefault",

@@ -55,40 +55,59 @@ public enum SiteControlColors {            // macOS Dark measured (IS §20.15); 
 public enum BoostGlyph {                    // one token for the Boost identity (§3.4, §3.7, §4.11, §4.13); Open's own sparkles as layers
     public static let outline = "paintbrush.pointed", fill = "paintbrush.pointed.fill"
 }
-public enum BoostEditorMetrics {          // §4
-    public static let width: CGFloat = 268, inset: CGFloat = 14, headerHeight: CGFloat = 52
-    public static let wheelArea: CGFloat = 176, ringDiameter: CGFloat = 128, ringWidth: CGFloat = 18, padRadius: CGFloat = 46, puck: CGFloat = 24
-    public static let sideButton: CGFloat = 28, sliderRow: CGFloat = 28
-    public static let fontChip = CGSize(width: 56, height: 36), toolTile: CGFloat = 54, toolGap: CGFloat = 8
-    public static let zapRow: CGFloat = 30, zapVisibleRows = 5
-    public static let codeDefault = CGSize(width: 560, height: 640), codeMinimum = CGSize(width: 420, height: 360)
-    public static let gutterWidth: CGFloat = 36, codeFontSize: CGFloat = 12, codeLineHeight: CGFloat = 16
-    public static let contentInset: CGFloat = 12   // from the web panel's top-right corner
-    public static let cornerRadius: CGFloat = 12, shadowSide: CGFloat = 30, shadowTop: CGFloat = 24, shadowBottom: CGFloat = 36
-    public static let wheelY: CGFloat = 60, sideButtonsY: CGFloat = 240, bannerHeight: CGFloat = 28
-    public static let fontGap: CGFloat = 6, fontStripHeight: CGFloat = 44, blockGap: CGFloat = 12
-    public static let fontEdgeInset: CGFloat = 4, fontViewport: CGFloat = 232, fontFade: CGFloat = 12
-    public static let noteY: CGFloat = 215, slidersY: CGFloat = 268, sliderLabelY: CGFloat = 275, sliderLabelWidth: CGFloat = 102, fontsY: CGFloat = 280
-    public static let fontStep: CGFloat = 62
-    public static let sliderX: CGFloat = 124, sliderWidth: CGFloat = 130
-    public static let colorDuration: CFTimeInterval = 0.22
-    public static let interstitialHeight: CGFloat = 326, interstitialFooter: CGFloat = 64, illustration: CGFloat = 70
+public enum BoostEditorMetrics {           // §4, editor-window points; AX S2 10/0030 unless noted
+    public static let window = CGSize(width: 183, height: 588), codeWindow = CGSize(width: 480, height: 588)
+    public static let cornerRadius: CGFloat = 12, topOffset: CGFloat = 160, screenMargin: CGFloat = 8   // m / m (one sample) / o
+    public static let headerHeight: CGFloat = 40, inset: CGFloat = 18
+    public static let done = CGRect(x: 0, y: 0, width: 40, height: 40), name = CGRect(x: 46, y: 8, width: 91, height: 24)
+    public static let undo = CGRect(x: 143, y: 0, width: 40, height: 40)
+    public static let ringFrame = CGRect(x: 18, y: 58, width: 147, height: 147), plate = CGRect(x: 25, y: 65, width: 133, height: 133)
+    public static let ringRadius: CGFloat = 20, plateRadius: CGFloat = 13.5, padRadius: CGFloat = 66.5  // m / m / g (theme rule)
+    public static let dotPitch: CGFloat = 4, dotSize: CGFloat = 1                                     // m
+    public static let primaryDisc: CGFloat = 30, primaryDragDisc: CGFloat = 38, knobRing: CGFloat = 2  // m
+    public static let knobGradientTop: CGFloat = -14, knobGradientBottom: CGFloat = 12              // m (levels vs the center color)
+    public static let secondaryDisc: CGFloat = 19, secondaryOffsetDegrees: CGFloat = 45               // m
+    public static let defaultKnobAngle: CGFloat = 0, defaultKnobRadius: CGFloat = 40, guideWidth: CGFloat = 2  // m
+    public static let colorButtons = [CGRect(x: 18, y: 220, width: 42, height: 38), CGRect(x: 70, y: 220, width: 43, height: 38),
+                                      CGRect(x: 123, y: 220, width: 42, height: 38)]
+    public static let buttonRadius: CGFloat = 9                                                         // g (visual)
+    public static let fontCard = CGRect(x: 18, y: 273, width: 147, height: 120), fontCardRadius: CGFloat = 11  // m / g (visual)
+    public static let fontColumns: [CGFloat] = [23, 51, 79, 106, 134], fontRows: [CGFloat] = [281, 307, 333, 359], fontCell: CGFloat = 26
+    public static let size = CGRect(x: 18, y: 408, width: 70, height: 38), textCase = CGRect(x: 96, y: 408, width: 69, height: 38)
+    public static let zap = CGRect(x: 18, y: 461, width: 147, height: 38), code = CGRect(x: 18, y: 514, width: 147, height: 38)
+    public static let rowLabelInset: CGFloat = 12, rowGlyphTrailingInset: CGFloat = 15                 // m (ink)
+    public static let nameChevronGap: CGFloat = 11, nameChevron: CGFloat = 12                          // m (ink)
+    public static let advancedWindow = CGRect(x: -34, y: 258, width: 250, height: 232), advancedSlider = CGSize(width: 186, height: 16)
+    public static let advancedLabelY: [CGFloat] = [299, 361, 423], advancedSliderY: [CGFloat] = [318, 380, 442]
+    public static let codeHeader: CGFloat = 40, codeBottomBar: CGFloat = 70, codeButton: CGFloat = 38
+    public static let back = CGRect(x: 10, y: 9, width: 60, height: 23), segment = CGSize(width: 50, height: 24)
+    public static let codeMinimum = CGSize(width: 360, height: 420), gutterWidth: CGFloat = 36   // o
+    public static let firstRunCardTop: CGFloat = 271, makeABoost = CGRect(x: 14, y: 493, width: 155, height: 38)
+    public static let maybeLater = CGRect(x: 46, y: 541, width: 91, height: 31), firstRunIcon: CGFloat = 70  // m / BO-17 asset size
+    public static let titleBaselines: [CGFloat] = [347, 370, 393], waveCrestY: CGFloat = 463          // m
+    public static let waveAmplitude: CGFloat = 1.95, wavePeriod: CGFloat = 17, waveFirstCrestX: CGFloat = 7 // m
+    public static let badgeBorder: CGFloat = 3, badgeRotationDegreesCCW: CGFloat = 12                  // m (border, direction) / g (angle)
+    public static let zapDone = CGSize(width: 59, height: 38), zapDoneRadius: CGFloat = 8, zapDoneTop: CGFloat = 10 // m
+    public static let bannerLine: CGFloat = 28, bannerTwoLines: CGFloat = 42                       // o (lead round 2)
 }
-public enum BoostEditorColors {           // BO-22 values (facts); usage per §4 (guess)
-    public static let segmentBackground = DesignColor(light: .black(0.07), dark: .white(0.10))
-    public static let segmentSelection = DesignColor(light: .white(1), dark: .white(0.30))
-    public static let sliderTrack = DesignColor(light: RGBA(hex: 0x3B3746, alpha: 0.05), dark: .white(0.12))
-    public static let headerButton = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9), dark: .white(0.9))
-    public static let sliderTint = DesignColor(RGBA(hex: 0x017AFF))
-    public static let warning = DesignColor(RGBA(hex: 0xFF5A5F))
-    public static let puck = DesignColor(RGBA(hex: 0xFAFBFF))
-    public static let puckPad = DesignColor(light: .black(0.04), dark: .white(0.06))
-    public static let label = DesignColor(light: .white(1), dark: .black(0.80))
-    public static let zapPreview = DesignColor(RGBA(hex: 0xD9D9D9))
-    public static let interstitialForeground = DesignColor(RGBA(hex: 0x2E2740))
-    public static let interstitialFooter = DesignColor(RGBA(hex: 0xCEDBFC))
-    public static let accents: [DesignColor] = [0x300EFF, 0x55B948, 0xDD0EFF, 0xFF560E, 0xFF0E82, 0x860EFF, 0xFF0E0E, 0xF1A23C]
-        .enumerated().map { DesignColor(RGBA(hex: UInt32($0.element), [1, 7].contains($0.offset) ? .displayP3 : .sRGB)) }
+public enum BoostEditorColors {            // light only; IS §20.15 and §20.6
+    public static let header = RGBA(hex: 0xF5F5F7), hairline = RGBA(hex: 0xE9E9EB), background = RGBA(hex: 0xFDFDFF)
+    public static let button = RGBA(hex: 0xEBEBED), buttonPressed = RGBA(hex: 0xDFDFE0), buttonOn = RGBA(hex: 0x333333)
+    public static let advancedOn = RGBA(hex: 0x474747), label = RGBA(hex: 0x3A3A3B), title = RGBA(hex: 0x252526)
+    public static let headerGlyph = RGBA(hex: 0xACACAD), chevron = RGBA(hex: 0x949495), disabledGlyph = RGBA(hex: 0xBDBDBF)
+    public static let fontGlyph = RGBA(hex: 0x999999), fontSelected = RGBA(hex: 0xD9D9D9), fontSelectedGlyph = RGBA(hex: 0x8C8C8C)
+    public static let plate = RGBA(hex: 0xFAFAFA), dot = RGBA.black(0.075), guide = RGBA.black(0.06)
+    public static let secondaryOutline = RGBA(hex: 0xC8C2CA)
+    public static let ringStops: [(degrees: CGFloat, color: UInt32)] = [(0, 0xEB4838), (30, 0xEB7636), (60, 0xF4BA49), (90, 0xD4FD58),
+        (120, 0x90FC74), (150, 0x80FCAD), (180, 0x7CF8F1), (210, 0x356FF6), (240, 0x392EF4), (270, 0x8237F5), (300, 0xDD31BF), (330, 0xDF3470), (360, 0xEB4838)]
+    public static let noColorKnobs = (primary: RGBA(hex: 0x717171), secondary: RGBA(hex: 0x333333))
+    public static let warning = RGBA(hex: 0xFF5A5F)                                   // BO-22; banners
+    public static let firstRunDim = RGBA.black(0.30), firstRunTitle = RGBA(hex: 0x3139FF), firstRunBody = RGBA(hex: 0x95939F)
+    public static let makeABoost = (top: RGBA(hex: 0x4E4FFF), bottom: RGBA(hex: 0x333AFF)), firstRunFooter = RGBA(hex: 0xCEDBFC) // m (vertical)
+    public static let maybeLater = RGBA(hex: 0x7F819E)
+    public static let zapFrame = RGBA(hex: 0x3139FF), zapBar = RGBA(hex: 0xFBFBFD), zapDone = RGBA(hex: 0xEDEEFF)
+    public static let zapBarTextPopupOpen = RGBA(hex: 0xDBDFFF)                     // m (darkest pixel, popup open)
+    public static let advancedMaterialOverWhite = RGBA(hex: 0xEDEDED)               // m (S2 10/0042, editor (91, 300)); calibration only
 }
 public extension SiteControlMetrics {
     static let disabledAlpha: CGFloat = 0.3, focusWidth: CGFloat = 2, moreGlyph: CGFloat = 13
@@ -111,10 +130,13 @@ extension Motion {
     public static let popoverOpen = SpringToken(response: 0.20, dampingFraction: 0.8)
     public static let popoverOpenFade: CFTimeInterval = 0.08, popoverClose: CFTimeInterval = 0.19
     public static let heightGrow: CFTimeInterval = 0.20, heightShrink: CFTimeInterval = 0.25
+    public static let knobRelease = SpringToken(response: 0.2,dampingFraction: 0.9)
+    public static let boostEditorOpenDuration: CFTimeInterval = 0.15,boostEditorCloseDuration: CFTimeInterval = 0.12,codeModeResize: CFTimeInterval = 0.20
 }
 extension Typography {
     public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold)
     public static let siteControlRowSubtitle = FontToken(13, .regular), siteControlPill = FontToken(14, .medium)
     public static let siteControlSecondary = FontToken(13, .regular)
-    public static let editorTitle = FontToken(14, .semibold)
+    public static let editorName = FontToken(13,.medium),editorButton = FontToken(14,.medium),editorSlider = FontToken(13,.regular)
+    public static let firstRunTitle = FontToken(22,.bold),firstRunPrimary = FontToken(14,.medium),firstRunSecondary = FontToken(12,.medium)
 }

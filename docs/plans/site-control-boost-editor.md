@@ -1654,7 +1654,7 @@ extension Motion {
     public static let popoverOpenFade: CFTimeInterval = 0.08, popoverClose: CFTimeInterval = 0.19   // g / m duration (theme popover); close curve and scale g
     public static let knobRelease = SpringToken(response: 0.2, dampingFraction: 0.9)    // g; also the press growth
     public static let heightGrow: CFTimeInterval = 0.20, heightShrink: CFTimeInterval = 0.25       // m (folder expand / collapse curves, IS §20.12) / g for the panel
-    public static let editorOpen: CFTimeInterval = 0.15, editorClose: CFTimeInterval = 0.12, codeModeResize: CFTimeInterval = 0.20 // g
+    public static let boostEditorOpenDuration: CFTimeInterval = 0.15, boostEditorCloseDuration: CFTimeInterval = 0.12, codeModeResize: CFTimeInterval = 0.20 // g
 }
 extension Typography {
     public static let siteControlLabel = FontToken(14, .semibold), siteControlRowTitle = FontToken(14, .semibold) // m (ink width, S2 09/0010)
@@ -1665,6 +1665,8 @@ extension Typography {
     public static let firstRunTitle = FontToken(22, .bold), firstRunPrimary = FontToken(14, .medium), firstRunSecondary = FontToken(12, .medium) // m (ink width, S2 10/0018); SF Pro default design
 }
 ```
+
+Implementation naming note (2026-10-26, #103): main already owns `Motion.editorOpen` as the theme editor’s `SpringToken(response: 0.25, dampingFraction: 0.85)`. The Boost fade durations therefore use `boostEditorOpenDuration` / `boostEditorCloseDuration`; the §4.2 values and theme spring stay unchanged.
 
 Removed from the first version: the 320 width, header, tile, switch, and edit-button metrics; the
 hue-ring wheel (128 / 18 / 46 / puck 24), font strip, tool tiles, accent colors, and every dark

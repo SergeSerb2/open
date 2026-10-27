@@ -3,7 +3,8 @@ import AppKit
 public struct ColorPadKnob {
     public let position: CGPoint
     public let fill: CGColor
-    public init(position: CGPoint,fill: CGColor) { self.position = position; self.fill = fill }
+    public var topFill: CGColor?,bottomFill: CGColor?
+    public init(position: CGPoint,fill: CGColor,topFill: CGColor? = nil,bottomFill: CGColor? = nil) { self.position = position; self.fill = fill; self.topFill = topFill; self.bottomFill = bottomFill }
 }
 @MainActor public protocol ColorPadLaw {
     associatedtype State
@@ -22,10 +23,15 @@ public enum ColorPadInput {
     public var primarySize: CGFloat = 44,secondarySize: CGFloat = 27
     public var primaryRing: CGFloat = 5,secondaryRing: CGFloat = 3
     public var dotPitch: CGFloat = 4.25
+    public var plateInset: CGFloat = 0,plateCornerRadius: CGFloat = 4,focusOutset: CGFloat = 0
     public var dragScale: CGFloat = 1.136,hoverScale: CGFloat = 1.09,secondaryActiveScale: CGFloat = 30.0/27
     public var returnSpring = Motion.editorKnobReturn
     public var keyboardFocusOnly = false
     public var focusOnMouseDown = true
+    public var keyboardEndDelay: TimeInterval = 0
+    public var springOnPress = false
+    public var shadowOpacity: Float = 0.06,shadowRadius: CGFloat = 2,shadowOffset: CGFloat = 2
+    public var secondaryOutline: CGColor?
     public var fill: (ContentAppearance) -> CGColor = { ThemeEditorColors.padFill.cgColor($0) }
     public var dotColor: (ContentAppearance) -> CGColor = { ThemeEditorColors.dot.cgColor($0) }
     public var contrastColor: (ContentAppearance) -> CGColor = { ThemeEditorColors.glyph.cgColor($0) }
@@ -44,6 +50,11 @@ open class ColorPadView: NSView {
     public let style: ColorPadStyle
     public private(set) var isGestureInProgress = false
     private var values: [ColorPadKnob] = []
+    private lazy var plate = CALayer()
+    public var ringLayer: CALayer? { didSet { oldValue?.removeFromSuperlayer(); if let ringLayer { layer?.insertSublayer(ringLayer,at: 0) } } }
+    public var guideLayer: CALayer? { didSet { oldValue?.removeFromSuperlayer(); if let guideLayer { layer?.insertSublayer(guideLayer,below: knobs.last!.outer) } } }
+    private var keyboardActive = false
+    private var keyboardEnd: DispatchWorkItem?
     private var arrowKeys: Set<UInt16> = []
     private let dots = CALayer()
     private let knobs = (0..<3).map { _ in KnobLayers() }
@@ -55,17 +66,20 @@ open class ColorPadView: NSView {
     public init(frame: NSRect,style: ColorPadStyle) { self.style = style; super.init(frame: frame); setup() }
     private func setup() {
         wantsLayer = true; layer?.cornerRadius = style.cornerRadius; layer?.masksToBounds = style.clipsKnobs
-        layer?.addSublayer(dots)
+        if style.plateInset>0 {
+            layer?.addSublayer(plate); plate.cornerRadius = style.plateCornerRadius; plate.masksToBounds = true; plate.addSublayer(dots)
+        } else { layer?.addSublayer(dots) }
         for knob in knobs.reversed() { layer?.addSublayer(knob.outer) }
         setAccessibilityElement(true); setAccessibilityRole(.slider); setAccessibilityLabel("Color")
         refreshAppearance()
     }
     @available(*, unavailable) public required init?(coder: NSCoder) { fatalError() }
+    isolated deinit { keyboardEnd?.cancel() }
     open override var isFlipped: Bool { true }
     open override var acceptsFirstResponder: Bool { interactionEnabled }
     open override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    open override var focusRingMaskBounds: NSRect { bounds }
-    open override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: style.cornerRadius, yRadius: style.cornerRadius).fill() }
+    open override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: -style.focusOutset,dy: -style.focusOutset) }
+    open override func drawFocusRingMask() { NSBezierPath(roundedRect: focusRingMaskBounds, xRadius: style.cornerRadius+style.focusOutset, yRadius: style.cornerRadius+style.focusOutset).fill() }
     open override func draw(_ dirtyRect: NSRect) {
         if window?.firstResponder === self && (!style.keyboardFocusOnly || showsKeyboardFocus) { NSFocusRingPlacement.only.set(); drawFocusRingMask() }
     }
@@ -75,12 +89,14 @@ open class ColorPadView: NSView {
         needsDisplay = true; return true
     }
     public func finishKeyboardGesture() {
-        if !arrowKeys.isEmpty { arrowKeys.removeAll(); onInput?(.endKeyboardGesture) }
+        keyboardEnd?.cancel(); keyboardEnd = nil
+        if keyboardActive { keyboardActive = false; arrowKeys.removeAll(); onInput?(.endKeyboardGesture) }
     }
     open override func layout() {
         super.layout(); layoutPassCount += 1
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        dots.frame = bounds
+        if style.plateInset>0 { plate.frame = bounds.insetBy(dx: style.plateInset,dy: style.plateInset); dots.frame = plate.bounds }
+        else { dots.frame = bounds }
         CATransaction.commit()
         paintKnobs()
     }
@@ -116,8 +132,10 @@ open class ColorPadView: NSView {
     open override func mouseUp(with event: NSEvent) { onInput?(.endDrag) }
     open override func keyDown(with event: NSEvent) {
         if [123, 124, 125, 126].contains(event.keyCode) {
-            if arrowKeys.isEmpty { onInput?(.beginKeyboardGesture) }
+            guard interactionEnabled else { return }; showsKeyboardFocus = true
+            if !keyboardActive { keyboardActive = true; onInput?(.beginKeyboardGesture) }
             arrowKeys.insert(event.keyCode)
+            if style.keyboardEndDelay>0 { scheduleKeyboardEnd() }
         }
         let shifted = event.modifierFlags.contains(.shift)
         switch event.keyCode {
@@ -133,11 +151,22 @@ open class ColorPadView: NSView {
     }
     open override func keyUp(with event: NSEvent) {
         if arrowKeys.remove(event.keyCode) != nil {
-            if arrowKeys.isEmpty { onInput?(.endKeyboardGesture) }
+            if arrowKeys.isEmpty { if style.keyboardEndDelay>0 { scheduleKeyboardEnd() } else { finishKeyboardGesture() } }
         } else { super.keyUp(with: event) }
     }
     open override func accessibilityPerformIncrement() -> Bool { onInput?(.keyboardHue(5)); return !values.isEmpty }
     open override func accessibilityPerformDecrement() -> Bool { onInput?(.keyboardHue(-5)); return !values.isEmpty }
+    public func accessibilityStep(hue: Double? = nil,radius: Double? = nil) -> Bool {
+        guard interactionEnabled else { return false }
+        if !keyboardActive { keyboardActive = true; onInput?(.beginKeyboardGesture) }
+        if let hue { onInput?(.keyboardHue(hue)) }; if let radius { onInput?(.keyboardRadius(radius)) }
+        if style.keyboardEndDelay>0 { scheduleKeyboardEnd() } else { finishKeyboardGesture() }; return true
+    }
+    private func scheduleKeyboardEnd() {
+        keyboardEnd?.cancel()
+        let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated { self?.finishKeyboardGesture() } }; keyboardEnd = work
+        DispatchQueue.main.asyncAfter(deadline: .now()+style.keyboardEndDelay,execute: work)
+    }
     open override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
@@ -155,7 +184,8 @@ open class ColorPadView: NSView {
         guard layer != nil else { return }
         let appearance = contentAppearance
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        layer?.backgroundColor = style.fill(appearance)
+        if style.plateInset>0 { layer?.backgroundColor = nil; plate.backgroundColor = style.fill(appearance) }
+        else { layer?.backgroundColor = style.fill(appearance) }
         layer?.borderWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1 : 0
         layer?.borderColor = style.contrastColor(appearance)
         dots.contents = DotGrid.image(side: style.radius*2,pitch: style.dotPitch,color: style.dotColor(appearance),scale: renderScale)
@@ -180,12 +210,18 @@ open class ColorPadView: NSView {
             knob.inner.frame = knob.outer.bounds; knob.rim.frame = knob.outer.bounds
             knob.inner.path = CGPath(ellipseIn: knob.outer.bounds.insetBy(dx: ring,dy: ring),transform: nil)
             knob.inner.fillColor = value.fill
+            if let top = value.topFill,let bottom = value.bottomFill {
+                let gradient = knob.gradient ?? CAGradientLayer()
+                if knob.gradient == nil { knob.inner.addSublayer(gradient); gradient.mask = knob.gradientMask; knob.gradient = gradient }
+                gradient.frame = knob.inner.bounds; knob.gradientMask.frame = gradient.bounds; knob.gradientMask.path = knob.inner.path
+                gradient.colors = [top,value.fill,bottom]; gradient.locations = [0,0.5,1]; gradient.startPoint = CGPoint(x: 0.5,y: 0); gradient.endPoint = CGPoint(x: 0.5,y: 1)
+            } else { knob.gradient?.removeFromSuperlayer(); knob.gradient = nil }
             knob.rim.path = CGPath(ellipseIn: knob.outer.bounds.insetBy(dx: 0.5,dy: 0.5),transform: nil)
             knob.rim.fillColor = nil; knob.rim.lineWidth = 1
-            knob.rim.strokeColor = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? style.contrastColor(contentAppearance) : nil
+            knob.rim.strokeColor = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? style.contrastColor(contentAppearance) : index>0 ? style.secondaryOutline : nil
             knob.outer.shadowColor = CGColor(gray: contentAppearance == .light ? 0 : 1,alpha: 1)
-            knob.outer.shadowOpacity = 0.06; knob.outer.shadowRadius = 2
-            knob.outer.shadowOffset = CGSize(width: 0,height: 2); knob.outer.shadowPath = knob.outer.path
+            knob.outer.shadowOpacity = style.shadowOpacity; knob.outer.shadowRadius = style.shadowRadius
+            knob.outer.shadowOffset = CGSize(width: 0,height: style.shadowOffset); knob.outer.shadowPath = knob.outer.path
             knob.outer.contentsScale = renderScale; knob.inner.contentsScale = renderScale; knob.rim.contentsScale = renderScale
         }
         CATransaction.commit()
@@ -200,9 +236,10 @@ open class ColorPadView: NSView {
             let layer = knob.outer
             let old = layer.transform.m11
             guard abs(old - desired) > 0.001 else { continue }
-            let animation: CABasicAnimation = isGestureInProgress ? CABasicAnimation(keyPath: "transform.scale") : style.returnSpring.animation(keyPath: "transform.scale")
+            let basicPress = isGestureInProgress && !style.springOnPress
+            let animation: CABasicAnimation = basicPress ? CABasicAnimation(keyPath: "transform.scale") : style.returnSpring.animation(keyPath: "transform.scale")
             animation.fromValue = layer.presentation()?.transform.m11 ?? old; animation.toValue = desired
-            if isGestureInProgress { animation.duration = 0.12; animation.timingFunction = Motion.easeOut }
+            if basicPress { animation.duration = 0.12; animation.timingFunction = Motion.easeOut }
             CATransaction.begin(); CATransaction.setDisableActions(true)
             layer.transform = CATransform3DMakeScale(desired, desired, 1)
             if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { layer.add(animation, forKey: "knob-scale") }
@@ -213,6 +250,8 @@ open class ColorPadView: NSView {
 
 @MainActor private final class KnobLayers {
     let outer = CAShapeLayer(), inner = CAShapeLayer(), rim = CAShapeLayer()
+    var gradient: CAGradientLayer?
+    lazy var gradientMask = CAShapeLayer()
     init() { outer.addSublayer(inner); outer.addSublayer(rim) }
 }
 
