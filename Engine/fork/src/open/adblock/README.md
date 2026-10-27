@@ -17,11 +17,16 @@ Rules for the Rust shim:
   `-Cpanic=abort` (`build/config/compiler/BUILD.gn`), so `catch_unwind`
   cannot help, and an allocation failure aborts too. A crate call that
   returns a `Result` can still panic or allocate without bound on hostile
-  input (a DAT of 4 bytes or less panicked, review 98-3; a 15-byte DAT made
-  `rmp-serde` allocate 512 MiB, review R2-1): guard each known case before
-  the call, index nothing unchecked, and fuzz the rest
-  (`docs/followups.md`). A DAT passes a bounded MessagePack walk before the
-  crate reads it (`check_dat` in `lib.rs`).
+  input (a DAT of 4 bytes or less panicked, review 98-3; a 14-byte DAT made
+  `rmp-serde` allocate 512 MiB, review R2-1; a 42.7 MiB DAT and a 16 MiB
+  list each made one request over PartitionAlloc's 2^31 − 2 MiB ceiling,
+  review R3): guard each known case before the call, index nothing
+  unchecked, bound the decoded result and not only the raw bytes, and fuzz
+  the rest (`docs/followups.md`). A DAT passes a bounded MessagePack walk
+  before the crate reads it (`check_dat` in `lib.rs`: lengths, counts,
+  2^24 values, 32 levels, no trailing bytes), and a build refuses more than
+  2^21 list lines or 64 MiB of cosmetic selector copies before it parses
+  (`check_build_limits`).
 - No CSS text is built in Rust: cosmetic results are sanitized, sorted hide
   selectors (adblock-fork §5.2, §8.3), and the renderer inserts one rule per
   selector. The crate's `:style()`, `:remove*()` and scriptlet output is
