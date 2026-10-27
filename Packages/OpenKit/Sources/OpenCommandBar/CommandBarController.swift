@@ -52,6 +52,8 @@ public final class CommandBarController: NSObject {
     public var onSnapshotApplied: ((SuggestionSnapshot) -> Void)?
     /// Called when a query is submitted (diagnostics and end-to-end flows).
     public var onQueryStarted: ((String) -> Void)?
+    /// The App uses the same enabled-state validation as its menus.
+    public var isActionEnabled: ((String, SpaceID?) -> Bool)?
 
     private var panel: PanelView { view.panel }
     private var streamTask: Task<Void, Never>?
@@ -72,6 +74,7 @@ public final class CommandBarController: NSObject {
         view.onClickOutside = { [weak self] in self?.dismiss(reason: .clickOutside) }
         let field = panel.input.field
         field.delegate = self
+        panel.input.editor.onModifiedReturn = { [weak self] flags in self?.handle(#selector(NSResponder.insertNewline(_:)), flags: flags) ?? false }
         panel.input.editor.onCompositionEnded = { [weak self] in
             self?.queriedText = nil
             self?.textChanged()
@@ -145,6 +148,10 @@ public final class CommandBarController: NSObject {
         selectAllOnFocus = preview.selectAllText
         focusInput()
         view.container.animateIn(animated: false)
+    }
+
+    public func editingUndoManager(for responder: NSResponder?) -> UndoManager? {
+        responder === panel.input.editor ? panel.input.editor.undoManager : nil
     }
 
     public func dismiss(reason: CommandBarDismissReason, animated: Bool = true) {
@@ -223,7 +230,11 @@ public final class CommandBarController: NSObject {
         guard snapshot.query == text, !panel.input.editor.hasMarkedText(), !panel.input.editor.isUpdatingComposition else { return }
         let appliedGeneration = generation
         let r = request
-        let visible = snapshot.suggestions.filter { $0.kind != .siteSearchHint }
+        let visible = snapshot.suggestions.filter {
+            guard $0.kind != .siteSearchHint else { return false }
+            if $0.kind == .action, let id = $0.actionID { return isActionEnabled?(id, $0.spaceID) ?? true }
+            return true
+        }
         let newRows = visible.map {
             RowPresentation.row($0, mode: r?.mode ?? .newTab, currentSpaceID: r?.spaceID, currentURL: r?.currentTabURL, currentTitle: r?.currentTabTitle)
         }
@@ -349,6 +360,9 @@ public final class CommandBarController: NSObject {
     public func choose(_ index: Int, modifiers: CommandBarModifiers = []) {
         guard suggestions.indices.contains(index), let r = request else { return }
         let s = suggestions[index]
+        if s.kind == .action, let id = s.actionID, isActionEnabled?(id, s.spaceID) == false {
+            runQuery(text); return
+        }
         let destination: CommandBarDestination = r.mode == .editCurrentURL ? .currentTab : .newTab
         let intent: CommandBarIntent?
         switch s.kind {

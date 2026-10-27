@@ -1,0 +1,21 @@
+[
+  {
+    "case": "reject AX title output outside .re",
+    "status": "PASS",
+    "exit_code": 1
+  },
+  {
+    "case": "reject old hover vocabulary",
+    "status": "PASS",
+    "exit_code": 1
+  },
+  {
+    "case": "expired paused source succeeds",
+    "status": "PASS",
+    "exit_code": 0,
+    "empty_crop_size_px": [
+      228,
+      62
+    ]
+  }
+]

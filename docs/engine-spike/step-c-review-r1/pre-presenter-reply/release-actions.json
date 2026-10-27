@@ -1,0 +1,983 @@
+{
+  "actions": {
+    "action_pin-tab": {
+      "ok": true
+    },
+    "action_unpin-tab": {
+      "ok": true
+    },
+    "calculator_copy": {
+      "clipboard": "84",
+      "ok": true
+    },
+    "cmd_l_selection": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:58723/new",
+        "final": true,
+        "firstResultsMs": 18.071249999999964,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 18.730624999999918,
+        "presented": true,
+        "profile": "67993478-0FFC-439F-BA4A-D5A2F8367228",
+        "range": [
+          0,
+          26
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:58723/new",
+            "url": "http://127.0.0.1:58723/new"
+          }
+        ],
+        "selected": 0,
+        "space": "2E9DB18B-07DB-463E-9D35-FFE0E002C566",
+        "text": "http://127.0.0.1:58723/new",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      }
+    },
+    "cmd_s_page_swallowing_keys": {
+      "ok": true
+    },
+    "cmd_t_mode": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": false,
+        "firstResultsMs": 25.027124999999955,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 29.598208333333332,
+        "presented": true,
+        "profile": "67993478-0FFC-439F-BA4A-D5A2F8367228",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "2E9DB18B-07DB-463E-9D35-FFE0E002C566",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      }
+    },
+    "command_return_background": {
+      "ok": true
+    },
+    "custom_search_engine_navigation": {
+      "expectedURL": "http://127.0.0.1:58723/search?q=local%20custom%20query",
+      "ok": true
+    },
+    "double_press_shared_router": {
+      "first": false,
+      "ok": true,
+      "second": true
+    },
+    "duplicate_folder_lazy": {
+      "folders": [
+        {
+          "children": [
+            {
+              "id": "6FC0164D-08E4-4999-98E6-4467060A5681",
+              "kind": "tab",
+              "loaded": true,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:58723/cross"
+            }
+          ],
+          "id": "CA0D586B-563F-40D3-BCF8-DCD39D96870F",
+          "kind": "folder",
+          "title": "Copy subtree"
+        },
+        {
+          "children": [
+            {
+              "id": "3E8AA8CA-4B61-470F-AA10-6B8B0C38FDF7",
+              "kind": "tab",
+              "loaded": false,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:58723/cross"
+            }
+          ],
+          "id": "8E0279A3-4A67-497C-83FB-F21D74EEF928",
+          "kind": "folder",
+          "title": "Copy subtree"
+        }
+      ],
+      "ok": true
+    },
+    "duplicate_single_undo": {
+      "ok": true
+    },
+    "duplicate_split_lazy": {
+      "copy": {
+        "children": [
+          {
+            "id": "80F55D3D-6875-46DC-B7D8-45D343663DF5",
+            "kind": "tab",
+            "loaded": false,
+            "title": "",
+            "url": "http://127.0.0.1:58723/split"
+          },
+          {
+            "id": "2E9C4FAA-EF3C-4E76-9B0E-B27BA976A560",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:58723/cross"
+          }
+        ],
+        "id": "5D7D73A7-749B-4302-BB32-85C95E855C76",
+        "kind": "split"
+      },
+      "ok": true
+    },
+    "duplicate_tab_lazy": {
+      "copies": [
+        {
+          "id": "DB6FE615-F458-4E11-B3F8-0D7B87228C76",
+          "kind": "tab",
+          "loaded": false,
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:58723/cross"
+        }
+      ],
+      "ok": true
+    },
+    "dynamic_menus": {
+      "entries": 169,
+      "ok": true
+    },
+    "edit_current_tab": {
+      "ok": true,
+      "title": "Shell C /edited"
+    },
+    "escape_then_page": {
+      "keys": [
+        "Escape"
+      ],
+      "ok": true
+    },
+    "first_open_results_budget": {
+      "milliseconds": 29.598208333333332,
+      "ok": true,
+      "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+    },
+    "first_results_budget": {
+      "milliseconds": 10.459083333333638,
+      "ok": true,
+      "scope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+    },
+    "global_hotkey_toggle": {
+      "off": {
+        "attempts": 5,
+        "enabled": false,
+        "error": "",
+        "prepared": true,
+        "registered": false
+      },
+      "ok": true,
+      "on": {
+        "attempts": 6,
+        "enabled": true,
+        "error": "",
+        "prepared": true,
+        "registered": true
+      }
+    },
+    "invalid_overrides_fallback": {
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "library_archive_restore": {
+      "ok": true
+    },
+    "library_history_profile_open": {
+      "ok": true
+    },
+    "library_shared_window": {
+      "ok": true
+    },
+    "native_field_undo_preserves_model": {
+      "after": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 8.547958333333327,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 18.300166666666883,
+        "presented": true,
+        "profile": "67993478-0FFC-439F-BA4A-D5A2F8367228",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:45DEE195-D5E4-4FB2-95FA-8F64C670B1B5",
+            "kind": "switchToTab",
+            "space": "2E9DB18B-07DB-463E-9D35-FFE0E002C566",
+            "tab": "45DEE195-D5E4-4FB2-95FA-8F64C670B1B5",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:58723/start"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:58723/edited",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:58723/edited"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:58723/new",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:58723/new"
+          }
+        ],
+        "selected": 0,
+        "space": "2E9DB18B-07DB-463E-9D35-FFE0E002C566",
+        "text": "",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "before": {
+        "created": true,
+        "editorCanUndo": true,
+        "editorText": "word",
+        "final": true,
+        "firstResultsMs": 18.96391666666659,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 18.300166666666883,
+        "presented": true,
+        "profile": "67993478-0FFC-439F-BA4A-D5A2F8367228",
+        "range": [
+          4,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "word",
+            "url": "https://www.google.com/search?q=word"
+          },
+          {
+            "action": "import-from-browser",
+            "id": "action:import-from-browser",
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Import from Another Browser",
+            "url": ""
+          }
+        ],
+        "selected": 0,
+        "space": "2E9DB18B-07DB-463E-9D35-FFE0E002C566",
+        "text": "word",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "ok": true,
+      "route": {
+        "barPresented": true,
+        "firstResponder": "CommandBarFieldEditor",
+        "keyWindow": 125684,
+        "sidebarMode": "anchored"
+      }
+    },
+    "native_font_traits": {
+      "ok": true
+    },
+    "native_menu_registration": {
+      "menus": {
+        "font": true,
+        "services": true,
+        "window": true
+      },
+      "ok": true
+    },
+    "override_menu_and_router": {
+      "ok": true
+    },
+    "page_copy_native_responder": {
+      "clipboard": "PAGE COPY",
+      "ok": true
+    },
+    "page_cut_native_responder": {
+      "ok": true
+    },
+    "page_paste_native_responder": {
+      "ok": true
+    },
+    "page_select_all_native_responder": {
+      "ok": true
+    },
+    "page_undo_native_responder": {
+      "ok": true
+    },
+    "rename_tab_inline": {
+      "editor": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": true,
+        "navigationDecisions": 2,
+        "owner": "sidebar",
+        "responder": "NSTextView",
+        "sheet": false
+      },
+      "engineHeartbeatAdvanced": true,
+      "ok": true
+    },
+    "save_page_sheet": {
+      "last": {
+        "number": 125731,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      },
+      "ok": true,
+      "state": {
+        "number": 125731,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      }
+    },
+    "settings_shared_window": {
+      "ok": true
+    },
+    "suggest_profile_isolation": {
+      "ok": true
+    },
+    "suite": {
+      "error": "",
+      "ok": false
+    },
+    "switch_tab_across_spaces": {
+      "barAfterReturn": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 10.699208333333445,
+        "mode": "newTab",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 17.06145833333312,
+        "presented": false,
+        "profile": "67993478-0FFC-439F-BA4A-D5A2F8367228",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:6FC0164D-08E4-4999-98E6-4467060A5681",
+            "kind": "switchToTab",
+            "space": "B425A533-12D3-459F-8898-D228DF4D429E",
+            "tab": "6FC0164D-08E4-4999-98E6-4467060A5681",
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:58723/cross"
+          },
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "Shell C /cross",
+            "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+          }
+        ],
+        "selected": 0,
+        "space": "2E9DB18B-07DB-463E-9D35-FFE0E002C566",
+        "text": "Shell C /cross",
+        "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
+      },
+      "expectedSpace": "B425A533-12D3-459F-8898-D228DF4D429E",
+      "expectedTab": "6FC0164D-08E4-4999-98E6-4467060A5681",
+      "ok": true,
+      "returnRouting": {
+        "barPresented": false,
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "keyWindow": 125684,
+        "sidebarMode": "anchored"
+      },
+      "rows": [
+        {
+          "action": "",
+          "id": "tab:6FC0164D-08E4-4999-98E6-4467060A5681",
+          "kind": "switchToTab",
+          "space": "B425A533-12D3-459F-8898-D228DF4D429E",
+          "tab": "6FC0164D-08E4-4999-98E6-4467060A5681",
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:58723/cross"
+        },
+        {
+          "action": "",
+          "id": "typed:search",
+          "kind": "search",
+          "space": "",
+          "tab": "",
+          "title": "Shell C /cross",
+          "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+        }
+      ],
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "automationPointer": null,
+        "axWindowButtons": [
+          {
+            "attribute": "AXCloseButton",
+            "role": "AXButton",
+            "subrole": "AXCloseButton"
+          },
+          {
+            "attribute": "AXMinimizeButton",
+            "role": "AXButton",
+            "subrole": "AXMinimizeButton"
+          },
+          {
+            "attribute": "AXZoomButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          },
+          {
+            "attribute": "AXFullScreenButton",
+            "role": "AXButton",
+            "subrole": "AXFullScreenButton"
+          }
+        ],
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          2444,
+          267
+        ],
+        "engineSelected": 4,
+        "engineURL": "http://127.0.0.1:58723/cross",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "FBC34138-9EDC-4B00-8D2E-695C166AC061",
+        "isKeyWindow": true,
+        "key": true,
+        "keyWindow": 125684,
+        "layoutPasses": 1172,
+        "miniaturized": false,
+        "number": 125684,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "6FC0164D-08E4-4999-98E6-4467060A5681"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "6FC0164D-08E4-4999-98E6-4467060A5681",
+        "shownPages": [
+          "6FC0164D-08E4-4999-98E6-4467060A5681"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "B425A533-12D3-459F-8898-D228DF4D429E",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "trafficLightButtons": [
+          {
+            "action": "_close:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "miniaturize:",
+            "alpha": 0.001,
+            "hidden": false
+          },
+          {
+            "action": "_setNeedsZoom:",
+            "alpha": 0.001,
+            "hidden": false
+          }
+        ],
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsDimmed": true,
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "trafficLightsHovered": false,
+        "visible": true,
+        "zoomed": false
+      }
+    },
+    "system_menu_nil_targets": {
+      "ok": true,
+      "rows": [
+        {
+          "action": "hide:",
+          "enabled": true,
+          "id": "hide-open",
+          "key": "h",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Open"
+        },
+        {
+          "action": "hideOtherApplications:",
+          "enabled": true,
+          "id": "hide-others",
+          "key": "h",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Others"
+        },
+        {
+          "action": "unhideAllApplications:",
+          "enabled": false,
+          "id": "show-all",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show All"
+        },
+        {
+          "action": "terminate:",
+          "enabled": true,
+          "id": "quit-open",
+          "key": "q",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Quit Open"
+        },
+        {
+          "action": "performClose:",
+          "enabled": true,
+          "id": "close-window",
+          "key": "w",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Close Window"
+        },
+        {
+          "action": "undo:",
+          "enabled": true,
+          "id": "undo",
+          "key": "z",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Undo"
+        },
+        {
+          "action": "redo:",
+          "enabled": true,
+          "id": "redo",
+          "key": "z",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Redo"
+        },
+        {
+          "action": "cut:",
+          "enabled": true,
+          "id": "cut",
+          "key": "x",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Cut"
+        },
+        {
+          "action": "copy:",
+          "enabled": true,
+          "id": "copy",
+          "key": "c",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Copy"
+        },
+        {
+          "action": "paste:",
+          "enabled": true,
+          "id": "paste",
+          "key": "v",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste"
+        },
+        {
+          "action": "pasteAsPlainText:",
+          "enabled": false,
+          "id": "paste-and-match-style",
+          "key": "v",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste and Match Style"
+        },
+        {
+          "action": "selectAll:",
+          "enabled": true,
+          "id": "select-all",
+          "key": "a",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Select All"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find",
+          "key": "f",
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Find\u2026"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find-next",
+          "key": "g",
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Find Next"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find-previous",
+          "key": "g",
+          "payload": "",
+          "tag": 3,
+          "targetNil": true,
+          "title": "Find Previous"
+        },
+        {
+          "action": "startSpeaking:",
+          "enabled": true,
+          "id": "start-speaking",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Start Speaking"
+        },
+        {
+          "action": "stopSpeaking:",
+          "enabled": true,
+          "id": "stop-speaking",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Stop Speaking"
+        },
+        {
+          "action": "orderFrontFontPanel:",
+          "enabled": true,
+          "id": "show-fonts",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show Fonts"
+        },
+        {
+          "action": "addFontTrait:",
+          "enabled": false,
+          "id": "font-bold",
+          "key": "b",
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Bold"
+        },
+        {
+          "action": "addFontTrait:",
+          "enabled": false,
+          "id": "font-italic",
+          "key": "i",
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Italic"
+        },
+        {
+          "action": "underline:",
+          "enabled": true,
+          "id": "font-underline",
+          "key": "u",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Underline"
+        },
+        {
+          "action": "orderFrontCharacterPalette:",
+          "enabled": true,
+          "id": "emoji-and-symbols",
+          "key": " ",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Emoji & Symbols"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "enabled": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "enabled": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "performMiniaturize:",
+          "enabled": true,
+          "id": "minimize-window",
+          "key": "m",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Minimize"
+        },
+        {
+          "action": "performZoom:",
+          "enabled": true,
+          "id": "zoom-window",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Zoom"
+        },
+        {
+          "action": "arrangeInFront:",
+          "enabled": true,
+          "id": "bring-all-to-front",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Bring All to Front"
+        }
+      ]
+    },
+    "tabs_reveal_registered": {
+      "ok": true
+    },
+    "typed_top_today": {
+      "ok": true,
+      "tab": "1ED98D67-B0B9-40D7-A522-BB3393FC76AC"
+    },
+    "unsupported_disabled": {
+      "ok": true
+    },
+    "view-archive_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": false,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 125728,
+        "librarySection": "archive",
+        "sameSnapshot": true,
+        "settings": 125727,
+        "sharedArchives": true
+      }
+    },
+    "view-downloads_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": false,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 125728,
+        "librarySection": "downloads",
+        "sameSnapshot": true,
+        "settings": 125727,
+        "sharedArchives": true
+      }
+    },
+    "view-history_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": false,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 125728,
+        "librarySection": "history",
+        "sameSnapshot": true,
+        "settings": 125727,
+        "sharedArchives": true
+      }
+    }
+  },
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "started": "2026-10-26 15:52:19",
+  "style": "chrome"
+}

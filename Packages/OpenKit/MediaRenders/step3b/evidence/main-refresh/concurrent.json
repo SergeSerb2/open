@@ -1,0 +1,10 @@
+{
+  "command": "sidebar-render check",
+  "concurrent_processes": 2,
+  "separate_temporary_working_directories": true,
+  "per_process_preferences_suite": "com.open.sidebar-render-check.<UUID>",
+  "exit_codes": [
+    0,
+    0
+  ]
+}

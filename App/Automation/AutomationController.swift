@@ -1,10 +1,13 @@
 #if OPEN_AUTOMATION
   import AppKit
+  import CryptoKit
   import OpenEngine
   import OpenModel
   import OpenWeb
   import OpenFeatures
   import OpenSidebar
+  import OpenCommands
+  import OpenSettings
   import Synchronization
 
   /// Executes automation commands (docs/automation.md) on the main actor.
@@ -19,10 +22,10 @@
     private let blockCounter = BlockCounter()
     /// An action menu kept by `ext-menu keep`, for a later `stale` select.
     private var staleMenu: OEExtensionActionMenu?
+    private var pointerRequestID = 0
+    private var nativeInputStart: Double = 0
 
-    init(app: AppDelegate) {
-      self.app = app
-    }
+    init(app: AppDelegate) { self.app = app }
 
     var window: EngineWebContentHostFactory {
       get throws {
@@ -32,14 +35,18 @@
     }
 
     func handle(_ data: Data) async -> Data {
+      let observationStart = ProcessInfo.processInfo.systemUptime
       var id: Any = NSNull()
       var response: [String: Any]
+      var inputCommand = false
       do {
         guard let request = try JSONSerialization.jsonObject(with: data) as? [String: Any],
           let cmd = request["cmd"] as? String
         else { throw Failure(message: "expected {\"cmd\": …}") }
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
+        inputCommand = cmd == "key" || cmd == "focus" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
         response = ["id": id, "ok": true, "result": result]
       } catch let failure as Failure {
@@ -47,10 +54,21 @@
       } catch {
         response = ["id": id, "ok": false, "error": "\(error.localizedDescription)"]
       }
+      response["observationStart"] = observationStart
+      if inputCommand { response["nativeInputStart"] = nativeInputStart }
       let safe =
         JSONSerialization.isValidJSONObject(response)
         ? response : ["id": id, "ok": false, "error": "unserializable result"]
       return (try? JSONSerialization.data(withJSONObject: safe, options: [.sortedKeys])) ?? Data("{}".utf8)
+    }
+
+    static func mallocZoneNames() -> [String] {
+      var zones: UnsafeMutablePointer<vm_address_t>?
+      var count: UInt32 = 0
+      guard malloc_get_all_zones(mach_task_self_, nil, &zones, &count) == KERN_SUCCESS, let zones else { return [] }
+      return (0..<Int(count)).map { i in
+        UnsafePointer<malloc_zone_t>(bitPattern: UInt(zones[i]))?.pointee.zone_name.map { String(cString: $0) } ?? ""
+      }
     }
 
     // MARK: Dispatch
@@ -63,7 +81,58 @@
           "pid": Int(getpid()), "chromium": OEEngine.shared.chromiumVersion, "cef": OEEngine.shared.cefVersion,
           "userData": OEEngine.shared.configuration.userDataDirectory.path,
           "root": app.directories.root.path,
+          // Malloc zone names in registration order: with OpenEngine's early
+          // delegating zone, PartitionAlloc replaced it in place, so the
+          // system zone stays second (docs/engine-fork.md).
+          "mallocZones": Self.mallocZoneNames(),
         ]
+      case "menu-context":
+        return ["services": NSApp.servicesMenu?.title == "Services", "window": NSApp.windowsMenu?.title == "Window",
+          "font": NSFontManager.shared.fontMenu(false)?.title == "Font"]
+      case "activation-events": return app.activationTrace.events
+      case "yield-activation":
+        guard let pid = a["pid"] as? Int32, pid != getpid(),
+          let target = NSRunningApplication(processIdentifier: pid),
+          target.executableURL?.resolvingSymlinksInPath() == Bundle.main.executableURL?.resolvingSymlinksInPath()
+        else { throw Failure(message: "activation peer must be another instance of this exact Open executable") }
+        NSApp.yieldActivation(to: target); return true
+      case "native-focus-state":
+        return ["active": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
+          "uptime": ProcessInfo.processInfo.systemUptime,
+          "frontmostApp": NSWorkspace.shared.frontmostApplication?.localizedName ?? "unknown",
+          "frontmostPID": NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0] as [String: Any]
+      case "menu-state":
+        NSApp.mainMenu?.update()
+        return menuRows(NSApp.mainMenu)
+      case "menu-perform":
+        guard let id = a["id"] as? String, let (menu, index) = findMenuItem(id, in: NSApp.mainMenu) else { throw Failure(message: "unknown menu item") }
+        let item = menu.item(at: index)!
+        guard menuEnabled(item) else { throw Failure(message: "disabled menu item") }
+        menu.performActionForItem(at: index); return true
+      case "reload-keybindings": app.prepareCommandServices(); app.reloadKeyBindings(); return true
+      case "hotkey-state":
+        return ["prepared": app.commandServicesPrepared, "attempts": app.hotkeyAttempts, "registered": app.hotkeyService?.isRegistered ?? false,
+          "error": app.hotkeyError ?? "", "enabled": UserDefaults.standard.object(forKey: "open.links.littleOpenHotkeyEnabled") as? Bool ?? true] as [String: Any]
+      case "settings-state":
+        let adapter = app.settingsPresenter
+        return ["settings": adapter.settingsPresenter.window?.windowNumber ?? 0,
+          "library": adapter.libraryPresenter?.window?.windowNumber ?? 0,
+          "librarySection": adapter.library?.section.rawValue ?? "", "archiveRows": adapter.library?.archiveRows.count ?? 0,
+          "historyRows": adapter.library?.historyRows.count ?? 0,
+          "archive": (adapter.library?.archiveRows ?? []).map { ["id": $0.id.description, "url": $0.url.absoluteString] },
+          "sharedArchives": adapter.library?.archives.allSatisfy { $0.value === app.archiveSink.store(for: $0.key) } ?? false,
+          "sameSnapshot": adapter.settings.snapshot === app.snapshotStore,
+          "hotkey": adapter.settings.bool("open.links.littleOpenHotkeyEnabled"),
+          "external": adapter.settings.bool("open.links.externalInLittleOpen")] as [String: Any]
+      case "settings-toggle":
+        let settings = app.settingsPresenter.settings
+        if a["name"] as? String == "hotkey" { settings.links.littleOpenHotkeyEnabled.toggle() }
+        else { settings.links.externalLinksInLittleOpen.toggle() }
+        return settings.commitLinks()
+      case "pasteboard": return NSPasteboard.general.string(forType: .string) ?? ""
+      case "pasteboard-write":
+        guard let value = a["text"] as? String else { throw Failure(message: "missing clipboard text") }
+        NSPasteboard.general.clearContents(); return NSPasteboard.general.setString(value, forType: .string)
       case "shell-windows":
         return app.windowControllers.map { ["id": $0.windowID.description, "number": $0.window?.windowNumber ?? 0] as [String: Any] }
       case "window-reopen":
@@ -81,6 +150,46 @@
       switch cmd {
 
       // Model-level tabs (the sidebar).
+      case "settings-custom-engine":
+        let settings = app.settingsPresenter.settings
+        guard let template = a["template"] as? String, let profile = w.focusedProfile else { throw Failure(message: "missing search template") }
+        settings.profiles.select(profile.id)
+        guard settings.profiles.saveEngine(id: "custom-e2e", name: "Local Search", keyword: "local-search", template: template) else { throw Failure(message: settings.profiles.errorText) }
+        settings.profiles.searchEngineID = "custom-e2e"; return true
+      case "library-restore":
+        guard let library = app.settingsPresenter.library, let raw = a["id"] as? String, let uuid = UUID(uuidString: raw) else { throw Failure(message: "missing Archive row") }
+        await library.restore(id: ItemID(rawValue: uuid)); return library.statusText
+      case "library-history-open":
+        guard let library = app.settingsPresenter.library, let url = (a["url"] as? String).flatMap(URL.init(string:)) else { throw Failure(message: "Library not open") }
+        library.actions.openHistoryItem(url: url); return true
+      case "save-page-state": return ["requests": w.savePageRequestCount, "visible": w.pendingSavePanel?.isVisible == true, "pending": w.pendingSavePanel != nil, "number": w.pendingSavePanel?.windowNumber ?? 0] as [String: Any]
+      case "focus-state":
+        let owner = (a["id"] as? String).flatMap { id in app.hostFactories.first { $0.key.description == id }?.value } ?? w
+        return owner.focusStateForAutomation()
+      case "background-read":
+        guard let tab = w.selectedTab, let host = w.hosts[tab.id] else { throw Failure(message: "no live tab") }
+        host.refreshPageBackground(); return true
+      case "async-engine-state":
+        return ["captures": w.saveCaptureTasks.count, "background": w.hosts.values.filter(\.hasBackgroundTask).count]
+      case "save-page-choose":
+        guard let panel = w.pendingSavePanel, let choice = w.pendingSaveChoice,
+              let path = a["path"] as? String else { throw Failure(message: "no Save sheet") }
+        // Complete the owned presenter's choice through the socket, like our
+        // dialog/permission replies. The actual engine capture is unchanged.
+        w.pendingSaveChoice = nil
+        panel.sheetParent?.endSheet(panel, returnCode: .cancel); panel.orderOut(nil)
+        choice(URL(fileURLWithPath: path)); return true
+      case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]
+      case "suggest-remote":
+        guard let profile = w.focusedProfile else { throw Failure(message: "no profile") }
+        var settings = profile.settings; settings.searchSuggestEnabled = a["enabled"] as? Bool ?? false
+        return app.model.updateProfileSettings(id: profile.id, settings: settings)
+      case "sidebar-duplicate":
+        guard let id = (a["id"] as? String).flatMap(UUID.init(uuidString:)).map({ ItemID(rawValue: $0) }) else { throw Failure(message: "missing id") }
+        return w.controller?.sidebar(w.controller!.sidebar, didRequest: .duplicate(nodeID: id)) == true
+      case "sidebar-tree":
+        guard let space = w.focusedSpace else { throw Failure(message: "no space") }
+        return ["pinned": space.pinned.map(describeNode), "today": space.today.map(describeNode)]
       case "tabs":
         return w.orderedTabs.map { describe($0, in: w) }
       case "tab-state":
@@ -221,15 +330,26 @@
           "Input.insertText", parameters: ["text": a["text"] as? String ?? ""])
         return true
       case "focus":
-        try content(a, w).focusPage()
-        return true
+        let page = try content(a, w)
+        if let target = page.view.window { try await activateForInput(target) }
+        page.focusPage()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while ContinuousClock.now < deadline {
+          let responder = page.view.window?.firstResponder as? NSView
+          let nativeFocus = responder.map { $0 === page.view || $0.isDescendant(of: page.view) } == true
+          if nativeFocus, try await page.evaluateJavaScript("document.hasFocus()") as? Bool == true { return true }
+          try await Task.sleep(for: .milliseconds(10))
+        }
+        throw Failure(message: "page focus not ready")
       case "mouse":
         let number = a["window"] as? Int ?? w.window?.windowNumber ?? 0
         guard let target = NSApp.windows.first(where: { $0.windowNumber == number }) else { throw Failure(message: "no window \(number)") }
+        pointerRequestID += 1
+        let motionTag = Self.syntheticPointerTag + pointerRequestID
         func event(_ type: NSEvent.EventType, _ point: [Double]) -> NSEvent? {
           NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: target.frame.height - point[1]),
             modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: number,
-            context: nil, eventNumber: type == .mouseMoved ? Self.syntheticPointerTag : 0, clickCount: 1,
+            context: nil, eventNumber: type == .mouseMoved ? motionTag : 0, clickCount: 1,
             pressure: type == .leftMouseDown || type == .leftMouseDragged ? 1 : 0)
         }
         let action = a["action"] as? String
@@ -239,10 +359,26 @@
           // From the first synthetic move on, pointer-driven window logic (the
           // sidebar hover reveal) follows only these tagged events, so the
           // hardware pointer of whoever uses the Mac cannot disturb a check.
-          BrowserWindowController.pointerEventFilter = { $0.eventNumber == AutomationController.syntheticPointerTag }
+          BrowserWindowController.pointerEventFilter = { $0.eventNumber == motionTag }
           let point = [a["x"] as? Double ?? 0, a["y"] as? Double ?? 0]
+          let owner = app.windowControllers.first { $0.window === target }
+          let count = owner?.revealState.pointerEvents
+          let delivered = Mutex(false)
+          let monitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { e in
+            if e.windowNumber == number && e.eventNumber == motionTag { delivered.withLock { $0 = true } }
+            return e
+          }
+          defer { if let monitor { NSEvent.removeMonitor(monitor) } }
           let location = NSPoint(x: point[0], y: target.frame.height - point[1])
           if let e = event(.mouseMoved, point) { NSApp.postEvent(e, atStart: false) }
+          // The local monitor consumes motion on native dequeue. A second
+          // queued move must not overtake/coalesce the leave-edge event that
+          // clears reveal suppression. Acknowledge actual delivery, not a delay.
+          let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+          while !delivered.withLock({ $0 }) || (owner != nil && owner!.revealState.pointerEvents <= count!) {
+              guard ContinuousClock.now < deadline else { throw Failure(message: "pointer motion was not dequeued") }
+              try await Task.sleep(for: .milliseconds(5))
+          }
           // Tracking areas follow the hardware pointer, so `hover` also delivers
           // enter, move, and exit to the owners of the areas under the point. The automation
           // pointer moves only afterwards: `hover` first rebuilds every tracking area, and state
@@ -293,7 +429,7 @@
         }
         return true
       case "key":
-        return try sendKey(a, w)
+        return try await sendKey(a, w)
       case "events":
         return w.drainEvents()
       case "find":
@@ -368,12 +504,14 @@
         return true
       case "ext-run":
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        try focusActionPane(a, w)
         let source: OEBrowser.ExtensionActionSource =
           switch a["source"] as? String { case "menu": .menuEntry; case "command": .command; default: .toolbarButton }
         return try focusedBrowser(w).executeExtensionAction(id, source: source)
       case "ext-menu":
         // The action's context menu: its items, or select one by title.
         guard let id = a["extension"] as? String else { throw Failure(message: "missing extension") }
+        try focusActionPane(a, w)
         let browser = try focusedBrowser(w)
         guard let menu = browser.contextMenu(forExtensionAction: id, source: a["source"] as? String == "menu" ? .menuItem : .toolbarAction)
         else { throw Failure(message: "no menu") }
@@ -402,6 +540,9 @@
         } else {
           menu.cancel()
         }
+        if a["snapshot"] as? Bool == true {
+          return ["items": listed, "action": browser.extensionActions.first(where: { $0.extensionIdentifier == id }).map(describe) ?? [:]] as [String: Any]
+        }
         return listed
       case "ext-popup":
         let browser = try focusedBrowser(w)
@@ -409,6 +550,13 @@
         return ["open": true, "page": describe(popup, in: w), "extension": browser.extensionPopupExtensionIdentifier ?? "",
                 "source": ["user", "command", "api"][browser.extensionPopupSource.rawValue],
                 "staysOpenOnBlur": browser.extensionPopupStaysOpenOnBlur] as [String: Any]
+      case "popup-callback-close":
+        if a["phase"] as? String == "clear" { w.popupCallbackClose = nil; return true }
+        guard let phase = a["phase"] as? String, ["open", "resize", "ready"].contains(phase) else {
+          throw Failure(message: "expected popup callback phase: open, resize, ready")
+        }
+        w.popupCallbackClose = (phase, a["toggle"] as? Bool ?? false)
+        return true
       case "activate":
         // Makes Open's window key (Chrome's "active window"), even with an
         // action popup's panel in front.
@@ -418,7 +566,11 @@
 
       // Windows and pixels (Open's own windows only).
       case "windows":
-        return NSApp.windows.map(describe)
+        return NSApp.windows.map { nativeWindow in
+          var row = describe(nativeWindow)
+          if a["accessibility"] as? Bool == true { row["text"] = windowText(nativeWindow) }
+          return row
+        }
       case "panel-close":
         // The close button of the panel that shows page `page` (performClose).
         guard let n = a["page"] as? Int, let aux = w.auxiliaryPages.first(where: { $0.content.identifier == n })
@@ -430,6 +582,10 @@
         // (Save As), and windows that are not Open's (DevTools, Chrome
         // windows). Open's browser windows and panels stay.
         var dismissed: [String] = []
+        staleMenu?.cancel(); staleMenu = nil
+        for owner in app.hostFactories.values {
+          while owner.completePendingDialog(accept: false, text: nil) { dismissed.append("javascript") }
+        }
         if let modal = NSApp.modalWindow {
           dismissed.append("modal:" + String(describing: type(of: modal)))
           NSApp.abortModal()
@@ -472,6 +628,11 @@
         func inRoot(_ r: CGRect?) -> Any { r.map { rect(root.convert($0, from: sidebar)) } ?? NSNull() }
         let titlebar = win.standardWindowButton(.closeButton)?.superview.map { rect(root.convert($0.bounds, from: $0)) } ?? []
         return ["id": w.windowState.id.description, "number": win.windowNumber,
+          "appActive": NSApp.isActive, "keyWindow": NSApp.keyWindow?.windowNumber ?? 0,
+          "isKeyWindow": win.isKeyWindow, "visible": win.isVisible,
+          "firstResponder": win.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+          "activationPolicy": NSApp.activationPolicy().rawValue,
+          "screenFrame": win.screen.map { rect($0.frame) } ?? [],
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           "sidebarVisible": !controller.sidebar.isHidden, "revealed": controller.isSidebarRevealed,
@@ -499,7 +660,7 @@
           },
           "automationPointer": BrowserWindowController.automationPointer.map { p -> Any in
             p.window == win.windowNumber ? [Double(p.location.x), Double(win.frame.height - p.location.y)] : NSNull() } ?? NSNull(),
-          "key": win.isKeyWindow, "appActive": NSApp.isActive, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
+          "key": win.isKeyWindow, "miniaturized": win.isMiniaturized, "zoomed": win.isZoomed,
           "trafficLightsHidden": controller.trafficLightFrames.map(\.hidden), "titlebar": titlebar,
           "reveal": ["phase": reveal.phase, "shows": reveal.shows, "hides": reveal.hides, "pointerEvents": reveal.pointerEvents,
             "dwell": reveal.dwell, "zone": reveal.zone, "offset": reveal.offset.isFinite ? Double(reveal.offset) : NSNull(),
@@ -530,9 +691,12 @@
       case "window-focus":
         guard let id = a["id"] as? String, let controller = app.windowControllers.first(where: { $0.windowID.description == id }) else { throw Failure(message: "unknown window") }
         app.focusWindow(controller.windowID, activate: a["activate"] as? Bool == true)
+        if a["activate"] as? Bool == true, let target = controller.window { try await activateForInput(target) }
         return true
       case "window-close":
-        w.window?.performClose(nil); return true
+        let released = a["releaseBrowsers"] as? Bool == true ? w.releaseBrowsersForAutomation() : [:]
+        w.window?.performClose(nil)
+        return released.isEmpty ? true : released as Any
       case "window-fullscreen":
         w.window?.toggleFullScreen(nil); return true
       case "window-deminiaturize":
@@ -749,12 +913,34 @@
     }
 
     private func describe(_ action: OEExtensionAction) -> [String: Any] {
-      func png(_ image: NSImage?) -> [String: Any] {
-        guard let image, let data = EngineWebContentHostFactory.pngData(image) else { return ["bytes": 0] }
-        // Each representation's pixel size: 1x and 2x.
-        let reps = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }.sorted { $0[0] < $1[0] }
-        return ["bytes": data.count, "hash": data.hashValue, "width": image.size.width, "pixels": reps,
-                "object": ObjectIdentifier(image).hashValue]
+      func pixels(_ image: NSImage?) -> [String: Any] {
+        guard let image else { return ["bytes": 0] }
+        let reps = image.representations.compactMap { $0 as? NSBitmapImageRep }
+          .sorted { $0.pixelsWide < $1.pixelsWide }
+        guard !reps.isEmpty, reps.count <= 4 else { return ["bytes": 0] }
+        var hash = SHA256(), byteCount = 0
+        for rep in reps {
+          let width = rep.pixelsWide, height = rep.pixelsHigh
+          // Automation only. Largest permitted single allocation: 256 * 256 * 4 = 262144 bytes.
+          guard width > 0, height > 0, width <= 256, height <= 256, let source = rep.cgImage,
+                let space = CGColorSpace(name: CGColorSpace.sRGB) else { return ["bytes": 0] }
+          var rgba = Data(count: width * height * 4)
+          let drawn = rgba.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: width, height: height,
+              bitsPerComponent: 8, bytesPerRow: width * 4, space: space,
+              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue)
+            else { return false }
+            context.draw(source, in: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            return true
+          }
+          guard drawn else { return ["bytes": 0] }
+          hash.update(data: Data("\(width)x\(height):".utf8))
+          hash.update(data: rgba)
+          byteCount += rgba.count
+        }
+        return ["bytes": byteCount, "hash": hash.finalize().map { String(format: "%02x", $0) }.joined(),
+          "width": image.size.width, "pixels": reps.map { [$0.pixelsWide, $0.pixelsHigh] },
+          "object": ObjectIdentifier(image).hashValue]
       }
       func hex(_ color: NSColor?) -> Any {
         guard let c = color?.usingColorSpace(.sRGB) else { return NSNull() }
@@ -767,7 +953,7 @@
         "badgeColor": hex(action.badgeBackgroundColor), "badgeTextColor": hex(action.badgeTextColor),
         "enabled": action.isEnabled, "hasPopup": action.hasPopup, "pinned": action.isPinned,
         "pinnedIndex": action.pinnedIndex, "wantsToRun": action.wantsToRun, "siteAccess": action.siteAccess.rawValue,
-        "showingPopup": action.isShowingPopup, "toolbarImage": png(action.toolbarImage), "icon": png(action.icon),
+        "showingPopup": action.isShowingPopup, "toolbarImage": pixels(action.toolbarImage), "icon": pixels(action.icon),
         "live": action.isLive,
       ]
     }
@@ -863,7 +1049,40 @@
       ]
     }
 
+    /// Bounded accessibility text from this process's own windows. Used to
+    /// identify Chromium's uninstall confirmation, not merely any new window.
+    private func windowText(_ window: NSWindow) -> [String] {
+      var seen: Set<ObjectIdentifier> = [], text: Set<String> = []
+      func walk(_ object: NSObject, depth: Int) {
+        guard depth <= 16, seen.count < 512, seen.insert(ObjectIdentifier(object)).inserted else { return }
+        for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue"] {
+          let selector = NSSelectorFromString(name)
+          if object.responds(to: selector), let value = object.perform(selector)?.takeUnretainedValue() as? String,
+             !value.isEmpty { text.insert(String(value.prefix(400))) }
+        }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if object.responds(to: children), let nodes = object.perform(children)?.takeUnretainedValue() as? [NSObject] {
+          for child in nodes.prefix(512) { walk(child, depth: depth + 1) }
+        }
+        if let view = object as? NSView { for child in view.subviews.prefix(512) { walk(child, depth: depth + 1) } }
+      }
+      walk(window, depth: 0)
+      if let content = window.contentView { walk(content, depth: 0) }
+      return text.sorted()
+    }
+
     // MARK: Helpers
+
+    /// Focus the actual Split View pane and execute in this same socket turn.
+    /// This is the pane-toolbar click path: no yield can flush the engine for it.
+    private func focusActionPane(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws {
+      guard let handle = a["focusTab"] else { return }
+      let tab = try modelTab(["tab": handle], w)
+      guard let controller = w.controller, let split = controller.splitController.split,
+            split.panes.contains(where: { $0.id == tab.id }) else { throw Failure(message: "tab is not a split pane") }
+      controller.splitController.focus(tab.id)
+    }
+
 
     private func waitForLoad(_ page: OEWebContent, timeout: Double) async throws -> [String: Any] {
       let deadline = Date().addingTimeInterval(timeout)
@@ -911,16 +1130,71 @@
       return String(arr.dropFirst().dropLast())
     }
 
+    private func describeNode(_ node: SidebarNode) -> [String: Any] {
+      switch node {
+      case .tab(let tab): return ["id": tab.id.description, "kind": "tab", "url": tab.url.absoluteString, "title": tab.displayTitle, "loaded": tab.live.hasWebContent]
+      case .folder(let folder): return ["id": folder.id.description, "kind": "folder", "title": folder.title, "children": folder.children.map(describeNode)]
+      case .split(let split): return ["id": split.id.description, "kind": "split", "children": split.panes.map { describeNode(.tab($0)) }]
+      }
+    }
+    private func menuEnabled(_ item: NSMenuItem) -> Bool {
+      guard let action = item.action else { return item.isEnabled }
+      let target = item.target ?? NSApp.target(forAction: action, to: nil, from: item)
+      if let validator = target as? NSMenuItemValidation { return validator.validateMenuItem(item) }
+      if let validator = target as? NSUserInterfaceValidations { return validator.validateUserInterfaceItem(item) }
+      return target != nil
+    }
+    private func menuRows(_ menu: NSMenu?) -> [[String: Any]] {
+      (menu?.items ?? []).flatMap { item -> [[String: Any]] in
+        if let submenu = item.submenu { return menuRows(submenu) }
+        guard !item.isSeparatorItem else { return [] }
+        return [["id": item.identifier?.rawValue ?? "", "title": item.title, "key": item.keyEquivalent,
+          "enabled": menuEnabled(item), "targetNil": item.target == nil, "tag": item.tag, "action": item.action.map(NSStringFromSelector) ?? "", "payload": (item.representedObject as? [String: String])?["payload"] ?? ""]]
+      }
+    }
+    private func findMenuItem(_ id: String, in menu: NSMenu?) -> (NSMenu, Int)? {
+      guard let menu else { return nil }
+      for (index, item) in menu.items.enumerated() {
+        if item.identifier?.rawValue == id { return (menu, index) }
+        if let found = findMenuItem(id, in: item.submenu) { return found }
+      }
+      return nil
+    }
+
+    private func activateForInput(_ target: NSWindow) async throws {
+      // Activation is asynchronous. Never inject into an inactive app after a
+      // fixed grace period: its production router correctly declines the key.
+      // Make the requested window key again once activation has completed.
+      target.makeKeyAndOrderFront(nil); NSApp.activate()
+      let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+      while true {
+        // Log the same predicate values that refused input. Re-reading only
+        // NSApp.keyWindow in the error can hide a changing native key flag.
+        let active = NSApp.isActive, targetIsKey = target.isKeyWindow
+        let keyWindow = NSApp.keyWindow
+        if active && targetIsKey {
+          nativeInputStart = ProcessInfo.processInfo.systemUptime
+          return
+        }
+        guard ContinuousClock.now < deadline else {
+          let foreground = NSWorkspace.shared.frontmostApplication
+          throw Failure(message: "key focus not ready: active=\(active) target=\(target.windowNumber) targetIsKey=\(targetIsKey) key=\(keyWindow?.windowNumber ?? 0) keySameObject=\(keyWindow === target) frontmost=\(foreground?.localizedName ?? "unknown") frontmostPID=\(foreground?.processIdentifier ?? 0)")
+        }
+        if active { target.makeKeyAndOrderFront(nil) }
+        try await Task.sleep(for: .milliseconds(10))
+      }
+    }
+
     /// Posts a key event inside Open. `route: "app"` (default) goes through
     /// NSApplication.sendEvent, like a real key press; `route: "window"`
     /// sends it straight to the window's first responder (the page view when
     /// it has focus), which exercises the engine's pre-key hook. In-process
     /// only: the system keyboard is never touched.
-    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) throws -> Any {
-      // `window: "popup"`: the action popup's panel (with `route: "window"`,
-      // straight to the popup page).
-      guard let target: NSWindow = a["window"] as? String == "popup" ? w.popupPanel : w.window
+    private func sendKey(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {
+      guard let target = a["window"] as? String == "popup" ? w.popupPanel :
+        (a["window"] as? Int).flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
       else { throw Failure(message: "no window") }
+      try await activateForInput(target)
       if let text = a["text"] as? String {
         // Plain characters to the first responder (the address field, a
         // text field in a page, ...).
@@ -935,12 +1209,13 @@
             }
           }
         }
+        try? await Task.sleep(for: .milliseconds(20))
         return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
       }
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
-        "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
-        "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
+        "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
+        "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
         "up": (String(Character(UnicodeScalar(NSUpArrowFunctionKey)!)), 126),
       ]
@@ -966,7 +1241,12 @@
         else { continue }
         if route == "window" { target.sendEvent(event) } else { NSApp.sendEvent(event) }
       }
-      return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
+      // CEF's window key callback is asynchronous. Report after its next pump
+      // turn, as a user-facing automation caller expects.
+      try? await Task.sleep(for: .milliseconds(20))
+      return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none",
+        "sidebarMode": w.windowState.sidebarMode.rawValue, "barPresented": w.commandBarSession?.isPresented == true,
+        "keyWindow": NSApp.keyWindow?.windowNumber ?? 0] as [String: Any]
     }
 
     private func snapshot(_ a: [String: Any], _ w: EngineWebContentHostFactory) async throws -> Any {

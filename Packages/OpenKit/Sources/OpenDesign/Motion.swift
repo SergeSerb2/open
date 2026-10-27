@@ -30,6 +30,11 @@ public struct SpringToken: Sendable, Hashable {
 /// Every number below is PROVISIONAL. Evidence: docs/re/interaction-states.md §9–§10
 /// (frames ≈ 0.47 s apart, so only progress points and upper bounds exist).
 public enum Motion {
+    /// Theme editor container motion; PROVISIONAL, plan §5.10.
+    public static let editorOpen = SpringToken(response: 0.25, dampingFraction: 0.85)
+    public static let editorFade: CFTimeInterval = 0.12
+    public static let editorCloseScale: Double = 0.96
+    public static let editorKnobReturn = SpringToken(response: 0.2, dampingFraction: 0.85)
     /// Sidebar completion guesses until unread motion is captured.
     public static let unreadAppear = SpringToken(response: 0.2, dampingFraction: 0.8)
     public static let unreadClearFade: CFTimeInterval = 0.12
@@ -71,7 +76,8 @@ extension Motion {
     /// Guesses centralized per media plan §4.2.7 and §4.4.7; reduce motion uses fades.
     /// Finite fallback approved after the native offscreen transition produced no effect keys.
     public static let rowMediaFallback: CFTimeInterval = 0.25
-    public static let miniPlayerStack = SpringToken(response: 0.3, dampingFraction: 1)
+    // Media plan §13.6: guess from the measured 0.20 s Space spring (§20.12); pending mini-player O9 capture.
+    public static let miniPlayerStack = SpringToken(response: 0.2, dampingFraction: 1)
     public static let miniPlayerResize: CFTimeInterval = 0.2
     public static let miniPlayerTitle: CFTimeInterval = 0.12
     public static let miniPlayerReveal: CFTimeInterval = 0.15

@@ -89,7 +89,7 @@ Ship Arc's media features in Open:
 |---|---|---|
 | D-1 | The media UI is one app-wide store of media sources plus one mini player stack per window. A window shows only its own sources. | PP-14, PP-18: one `MediaControlsDataStore`, one `MediaControlsFeatureController` per window ID. |
 | D-2 | The mini player uses the tab title and favicon. It does not use media-session metadata or artwork. | PP-15: the player observes only `title`, `icon`, `mediaSessionState`, `isTabMuted`, `tabURL`. ArcCore has no metadata delegate call (arccore-engine §2.6). |
-| D-3 | The mini player stack lives in its own container between the Space pager and the bottom bar. The bottom bar gets no media button. | PP-20; the measured bottom bar is Home, switcher, plus (runtime-observations §1.1). Placement is a guess until screenshot S3. |
+| D-3 | The mini player stack lives in its own container between the Space pager and the bottom bar. The bottom bar gets no media button. | PP-20; the measured bottom bar is Home, switcher, plus (runtime-observations §1.1). Placement is confirmed by S2 14b/0014: the stack touches the bottom bar, with 8 pt above (§13.3.1). |
 | D-4 | Auto-PiP opens on tab leave (tab switch, Space switch, or a split change that stops showing the tab) only. Window minimize, occlusion, and app hide do not open it in v1. | PP-3: occlusion is a separate engine flag; Chromium's `kAutoPictureInPictureOnWindowOccluded` is off by default (`media/base/media_switches.cc:374`). Q4. |
 | D-5 | Auto-PiP needs an audible playing video, unless the site rule says `activatesWhenInaudible` (YouTube). | PP-11 (`activatesWhenInaudible` exists only to relax an audible rule). |
 | D-6 | Open ships its own site-rule file with the same facts as Arc's `pipDisallowList` and `pipSiteConfigs`, in Open's own JSON format. | PP-11, PP-12. Facts are allowed; the file is not copied (AGENTS.md rule 1). |
@@ -97,7 +97,7 @@ Ship Arc's media features in Open:
 | D-8 | Phase 1 uses Chromium's own PiP window (it works today: `docs/engine-spike.md`, "Picture in Picture | pass", a 384×216 `NativeWidgetMacFramelessNSWindow`). Phase 2 replaces it with Open's own window when engine request EM-4 lands. Rules, menu state, and the mini player do not change between phases. | PP-10: Arc hosts the engine's video view in its own window. Shipping behavior first keeps the UI work unblocked. |
 | D-9 | Now Playing and media keys come from Chromium's stock system media controls. Open adds no MediaPlayer code of its own. | PP-22. |
 | D-10 | Packages never import OpenEngine. Media logic lives in a new `OpenMedia` library over new `OpenWeb` protocols. Views live in `OpenSidebar` (mini players, row indicator) and `OpenFeatures` (PiP windows). Only `App/` joins them to the engine. | `docs/architecture.md`; app-shell D2. |
-| D-11 | Every animation uses Core Animation and stops when it ends. Nothing ticks while media is paused or hidden. The marquee runs only while its source plays and its window is visible. | AGENTS.md performance budgets (idle CPU near zero). |
+| D-11 | Every animation uses Core Animation and stops when it ends. Nothing ticks while media is paused or hidden. ~~The marquee runs only while its source plays and its window is visible.~~ Step 3b removes the marquee (§13.2), so the mini player has no repeating animation at all. | AGENTS.md performance budgets (idle CPU near zero). |
 
 ## 1. What Arc does (summary of the evidence)
 
@@ -108,11 +108,10 @@ Full rules with evidence: `docs/re/features-advanced.md` §8. In short:
   microphone use; Mute/Unmute in the tab menu; "Mute all tabs" and
   "Unmute all tabs" in the command bar (features-core rule 10, PP-19,
   PP-21).
-- Mini players: per window, a stack of cards. Each card has a title row
-  (favicon, marquee title, back-to-PiP button, close on hover) and a
-  controls row (previous, play/pause, next, volume with a drawer; or
-  microphone and camera toggles for a recording source). Hover expands
-  the stack (PP-14…PP-17).
+- Mini players: per window, a stack of cards. The controls row contains
+  favicon, previous, play/pause, next, and volume (or recording toggles).
+  Hover expands every card to show a static title, back-to-PiP, and Close;
+  there is no marquee (§13 supersedes the old design; PP-14…PP-17).
 - Auto-PiP: leaving a tab with a playing video opens PiP; returning
   closes it. A global setting, a per-host "Turn off" in the PiP menu, a
   disallow list (Slack, Meet, Teams), and per-site control rules apply.
@@ -130,6 +129,10 @@ Full rules with evidence: `docs/re/features-advanced.md` §8. In short:
 What no capture shows (all layout below is code constants or guesses):
 the mini player, the PiP window, the Document PiP window, the recording
 indicator. §11 lists the screenshots the lead must ask the user for.
+Update 2026-10-26: capture session 2 shows the mini player at rest,
+expanded, and stacked, and the auto-PiP window at rest. Its 33 pt
+controls-only card at rest replaces the card described above; §13 is the
+mini player spec now.
 
 ## 2. Current state (merged tree, origin/main c95be65, 2026-10-25)
 
@@ -248,8 +251,35 @@ Keep the existing slot logic in `TabCellView.layout()` (the button sits
 `RowMediaMetrics` (OpenDesign): `buttonSize 20`, `gapAfterTitle 2`,
 `y 10`, `recordingDot 7`, `recordingSlotWidth 14`, `glyphInsetX 2`.
 
-Lead review decisions (2026-10-26): speaker images share a left anchor at
-slot x + 2 pt on one fixed image-view frame in both states. Keep native
+**Capture session 2 amendment (2026-10-26; follow-up Step 2b to merged #67).**
+Arc's row speaker is **leading**, not after the title, and uses outline
+glyphs (`docs/re/interaction-states.md` §20.7; `docs/re/capture-session-2-results.md`
+C18). Evidence: **S2 12/0022** (audible), **0027** (muted), **0013** (first
+frame with audio) = frames of `.re/runtime/sessions/20261026-102922-12-media-row/`.
+These rows replace the "Speaker button" row above and the trailing slot logic:
+
+| Item | Spec | Mark, evidence |
+|---|---|---|
+| Speaker button | 26 × 26 at `[41, y + 7, 26, 26]`, right after the favicon (`[17, y + 11, 18, 18]`), on every row that is audible or muted. AX id parity `sidebarTabCellMuteButton`. | measured (AX frame, S2 12/0013, 0022, 0027) |
+| Title | While the speaker shows, the title's AX frame moves from x 43 to x 69 and narrows by 26: Open's text origin moves from 44 to 70 (the 1 pt inset rule of `docs/design.md` §2.3). The right end is unchanged (close-button slot rule). | measured (AX title frames) |
+| Glyph | Outline SF Symbols: `speaker.wave.2` (audible) and `speaker.slash` (muted), Regular, sized so the ink is ≈ 19 × 13 and ≈ 16 × 16 (start at 13 pt and fit in Step 2b), centered in the button. Not the `.fill` variants. | ink sizes measured; symbol size fitted |
+| Tint | White ≈ 0.65 on the selected row (peak `#B8B8BE`), i.e. the row accessory tone; keep `SidebarRole.rowAccessory` and check it against the peak. | measured (S2 12/0022) |
+| When | From the first frame with audio. | measured (S2 12/0013) |
+| Hover plate | Like the close button: plate = button frame, radius 6, the row hover plate tone. | **guess** (the pointer did not trigger hover feedback) |
+| Tooltip | Unchanged ("Mute tab" / "Unmute tab", guess): the speaker tooltip did not show for the synthetic pointer. | not captured |
+| Recording dot | Not captured (the microphone steps were skipped). Keep it in the one placement function; default now **leading** too: a 14 pt slot directly after the favicon, before the speaker, and the title moves right by the slot width as well (**guess**: Arc names `hasLeadingRecordingIndicator`). | guess |
+| Click, mute transition, build on demand | Unchanged (§4.1 rows above). | — |
+
+`RowMediaMetrics` after Step 2b: `buttonSize 26`, `buttonX 41`, `buttonY 7`
+(row-relative), `titleShift 26`, `recordingSlotWidth 14`, `recordingDot 7`;
+`gapAfterTitle` and `glyphInsetX` are deleted.
+
+Lead review decisions (2026-10-26): ~~speaker images share a left anchor at
+slot x + 2 pt on one fixed image-view frame in both states.~~ **Superseded
+2026-10-26 (capture session 2, C18; review r1 F8):** in the 26 pt leading
+button both glyphs are centered (ink x 44–62 audible and 46–61 muted, centers
+53.0 and 53.5 against the button center 54, S2 12/0022, 0027); keep one fixed
+image-view frame equal to the button, centered. Keep native
 replace outside a disable-actions transaction (lead clarification 2026-10-26).
 If the unwrapped native call is proven to start no symbol-effect animation,
 a finite 0.25 s Core Animation cross-fade is allowed as a fallback (lead
@@ -272,8 +302,11 @@ bottomBar:      [0, h − 50, W, 50]
 ```
 
 `C` is 0 when the window has no visible source. Otherwise
-`C = 4 + stackHeight + 4`. The pager keeps its scroll offset from the
-top when `C` changes. Guess (PP-20); fix with screenshot S3.
+~~`C = 4 + stackHeight + 4`~~ **superseded (Step 3b, §13.3.1):**
+`C = 8 + stackHeight` (8 pt above the stack, 0 below; the card touches
+the bottom bar). The pager keeps its scroll offset from the top when `C`
+changes. ~~Guess (PP-20); fix with screenshot S3.~~ Fact since capture
+session 2 (S2 14b/0014).
 
 In the floating-card presentation (sidebar hidden and revealed) the
 container works the same way. In a Peek the container dims with the
@@ -310,38 +343,53 @@ last got user interaction. Little Open and Peek windows have no sidebar,
 so their tabs never show mini players. Incognito windows show their own
 sources only.
 
-#### 4.2.3 Card layout (`MiniPlayerMetrics`)
+#### 4.2.3 Card layout (`MiniPlayerMetrics`) — superseded
 
-| Element | Frame (card-relative) / value | Notes |
+**Tombstone (2026-10-26).** PR #92 built this table from guesses. Capture
+session 2 measured Arc's mini player, and Step 3b (§13) replaces every row.
+Do not build from the struck values. They stay here only so a reader can
+see what changed.
+
+| Element | Superseded value (#92) | Replaced by (Step 3b) |
 |---|---|---|
-| Card | `[8, …, W − 16, 68]` (212 wide at 228), corner 10, fill `SidebarRole.miniPlayerFill` = `SidebarColors.itemBackground`, hover fill `SidebarColors.itemHoveredBackground` (fade `Motion.hoverFade`) | Insets and radius match row fills (measured, `SpaceListMetrics`). Fill guess. |
-| Title row | `[0, 0, cardW, 36]` | |
-| Favicon | `[9, 9, 18, 18]`, 16 pt ink, the tab's favicon (same provider as rows) | Lines up with row favicons (x 17 in the sidebar). |
-| Title | x 35, baseline 23, right edge `cardW − 9` (minus 26 per visible right button), font `Typography.miniPlayerTitle` = 13 Medium (guess), color: the tab row title color | Marquee §4.2.5. On title-row hover the text cross-fades to "Back to Tab" (0.12 s; guess from `backToTabTitle`, PP-16). |
-| Open Picture in Picture | `[cardW − 30, 6, 24, 24]` (left of Close when Close shows), SF `pip` 12 pt, tint `SidebarRole.mediaControlGlyph` | For a video source (`hasVideo`) with no open PiP. Arc names it a back-to-PiP button (`isBackToPIPButtonEnabled`, PP-15); guess: Open shows it for every video source, because the action is the same. Tooltip "Open Picture in Picture". |
-| Close | `[cardW − 30, 6, 24, 24]`, SF `xmark` 14 pt | Width 0 when the pointer is outside the card, 24 inside (PP-16); animate width and opacity 0.15 s. Tooltip "Close Mini Player". |
-| Controls row | `[0, 36, cardW, 32]`; buttons 24×24 at y 40 | |
-| Play group (audio/video source) | Previous `[6]`, Play/Pause `[34]`, Next `[62]` (x positions); without Previous, Play/Pause starts at 6. SF `backward.end.fill`, `play.fill`/`pause.fill`, `forward.end.fill`, 14 pt | Previous/Next show only when the session offers them (PP-15 `hasPreviousTrack`/`hasNextTrack`). Tooltips "Previous Track", "Play"/"Pause", "Next Track". |
-| Volume | `[cardW − 30, 40, 24, 24]`, SF `speaker.wave.2.fill` or `speaker.slash.fill` (muted), 14 pt | Tooltip "Adjust Tab Volume". Click toggles the volume drawer when the engine offers tab volume (EM-2); before that it toggles mute. |
-| Recording source | Microphone `[6]` (`mic.fill` / `mic.slash.fill`), Camera `[34]` (`video.fill` / `video.slash.fill`), 14 pt; no play group, no volume | Shown only for actions the page offers (EM-1 `toggleMicrophone`, `toggleCamera`). Tooltips "Toggle Microphone", "Toggle Camera". |
-| Glyph color | `SidebarRole.mediaControlGlyph` = `CommandBarColors.accessoryForeground` (black 0.50 / white 0.66) | Same values as Arc `PlaybackControlForeground` (design-tokens §1.8). Hover: plate `SidebarRole.buttonHover` 24×24 radius 6. Pressed: `SidebarRole.buttonPressed`. |
-| Tooltips | Above the card (`placement: .above`), delay 0.45 s (`MiniPlayerMetrics.tooltipDelay`, from code, PP-6) | |
-| Volume drawer | Adds a 28 pt row `[0, 68, cardW, 28]`: `speaker.wave.1.fill` 12 pt at `[9, 74, 16, 16]` (click toggles mute), slider track `[31, 80, cardW − 62, 4]` radius 2, track `SidebarColors.separator`, fill `SidebarRole.mediaControlGlyph`, knob 12 pt white circle with `SidebarColors.tabShadowSelected` shadow; `speaker.wave.3.fill` 12 pt at `[cardW − 25, 74, 16, 16]` (click sets 100%) | Card height becomes 96. Drawer opens and closes with `Motion.miniPlayerResize` (0.2 s ease-in-out). Values 0…1 in steps of 0.05. Guess layout (PP-16 names the parts). |
+| Card | ~~`[8, …, W − 16, 68]`, corner 10, fill `SidebarColors.itemBackground`, hover fill `SidebarColors.itemHoveredBackground`~~ | 33 pt at rest, 66 pt expanded; corner 10 continuous (now a fit); fill = the Space palette's `backgroundExtra`, opaque; no hover fill (§13.3.2, §13.4) |
+| Title row | ~~`[0, 0, cardW, 36]`, always shown~~ | 33 pt row, shown only while expanded (§13.3.3) |
+| Favicon | ~~`[9, 9, 18, 18]` in the title row~~ | controls slot 0: a 16 pt favicon in a 24 pt button (§13.3.2) |
+| Title | ~~x 35, baseline 23, 13 Medium, the row title color, marquee~~ | x 14, baseline 22, 13 Regular, `Core.foregroundPrimary`, static tail truncation (§13.3.3, §13.4) |
+| Open Picture in Picture | ~~`[cardW − 30, 6, 24, 24]`, `pip` 12 pt Regular~~ | `[cardW − 58, 5, 24, 24]`, `pip` 12 pt Medium (§13.3.3) |
+| Close | ~~`[cardW − 30, 6, 24, 24]`, width 0 ↔ 24 on card hover~~ | `[cardW − 34, 5, 24, 24]`, always in the title row (§13.3.3) |
+| Controls row | ~~`[0, 36, cardW, 32]`, buttons at y 40~~ | `[0, H − 33, cardW, 33]`, buttons at row y 5 (§13.3.2) |
+| Play group | ~~x 6 / 34 / 62 (pitch 28); Previous/Next hidden without the actions~~ | five even slots; Previous/Next always shown, disabled without the actions (§13.3.2) |
+| Volume | ~~`[cardW − 30, 40, 24, 24]`, `speaker.wave.2.fill` 14 pt Regular~~ | slot 4, `speaker.wave.3.fill` 14 pt Medium (§13.4.3) |
+| Recording source | ~~Microphone x 6, Camera x 34~~ | slots 1 and 2 (guess, §13.7 O5) |
+| Glyph color | `SidebarRole.mediaControlGlyph` (kept) | plus a disabled role (§13.4.1) |
+| Tooltips | ~~`placement: .above`~~; delay 0.45 s (kept) | `.beside` (§13.4.4) |
+| Volume drawer | ~~28 pt row under the controls, card 96~~ | 33 pt row between the title row and the controls row, only while expanded (guess, §13.7 O2) |
 
-Click targets: the title row and empty parts of the controls row select
-the source tab ("Back to Tab": selects the tab in its window, switches
-the window to the tab's Space, brings the window front). Buttons do not
-select.
+Click targets (kept, with one addition): the title, the favicon button
+(new, guess), and empty parts of the card select the source tab ("Back to
+Tab": selects the tab in its window, switches the window to the tab's
+Space, brings the window front). Other buttons do not select.
 
-#### 4.2.4 Stack
+#### 4.2.4 Stack — superseded
 
-| State | Layout |
+**Tombstone (2026-10-26).** Replaced by §13.3.4: back cards 7 pt up, 5 pt
+inset per side per level, opacity `1 − 0.2·i`, not masked, no top edge;
+expanded cards 66 pt and 5 pt apart; one card also expands on hover. The
+struck rows below are #92's guesses.
+
+| State | Layout (superseded) |
 |---|---|
-| One source | One card. `stackHeight = 68` (96 with the drawer). |
-| Several, pointer outside the container | The front card (most recent) is laid out as above. Card `i` (1, 2) sits behind it, offset up by `5·i` pt, inset `6·i` pt on each side, opacity `1 − 0.3·i`. Only its top 5 pt show. Each back card has a 0.5 pt top edge in `SidebarColors.separator` at the card opacity (review-r1 guess; confirm S6). `stackHeight = 68 + 5·(n − 1)`. Guess from `MiniPlayerViewState{yOffset, widthOffset, opacity}` (PP-14). |
-| Several, pointer over the container | Cards lay out top to bottom, oldest on top, front card at the bottom, 6 pt apart. `stackHeight = Σ heights + 6·(n − 1)`. Expand at once on pointer enter; collapse 0.3 s after pointer exit (Arc has an immediate and a debounced hover-off; values guessed). Spring `Motion.miniPlayerStack` (response 0.3, damping 1.0). The pager shrinks with it. |
+| One source | ~~One card. `stackHeight = 68` (96 with the drawer).~~ |
+| Several, pointer outside the container | ~~The front card (most recent) is laid out as above. Card `i` (1, 2) sits behind it, offset up by `5·i` pt, inset `6·i` pt on each side, opacity `1 − 0.3·i`. Only its top 5 pt show. Each back card has a 0.5 pt top edge in `SidebarColors.separator` at the card opacity (review-r1 guess; confirm S6). `stackHeight = 68 + 5·(n − 1)`.~~ Guess from `MiniPlayerViewState{yOffset, widthOffset, opacity}` (PP-14). |
+| Several, pointer over the container | ~~Cards lay out top to bottom, oldest on top, front card at the bottom, 6 pt apart. `stackHeight = Σ heights + 6·(n − 1)`.~~ Expand at once on pointer enter; collapse 0.3 s after pointer exit (Arc has an immediate and a debounced hover-off; values guessed; kept in §13.6). Spring `Motion.miniPlayerStack` (response 0.2, damping 1.0; guess from the measured Space spring). The pager shrinks with it (kept; fact in S2 14b/0024). |
 
-#### 4.2.5 Marquee title
+#### 4.2.5 Marquee title — removed
+
+**Tombstone (2026-10-26).** Step 3b removes the marquee (§13.2). Arc showed
+a static, tail-truncated title with "…" on every captured title (S2
+14b/0024; 16/0012, three cards). The PP-17 numbers stay valid as code facts
+if a later capture shows scrolling (§13.7 O12). The text below is history.
 
 Our `MarqueeLabel` is a layer: a text layer inside a container with a
 gradient mask. When the title is wider than its slot, it scrolls: wait
@@ -359,9 +407,12 @@ of the title with the right fade.
 
 #### 4.2.6 States
 
+Step 3b (§13.5) adds the visual states (rest, expanded, hover, disabled,
+light). The rows below still hold, except the struck text.
+
 | State | Mini player |
 |---|---|
-| Playing | Pause glyph; marquee may run. |
+| Playing | Pause glyph; ~~marquee may run~~ static title (§13.2). |
 | Paused | Play glyph; static title; auto-dismiss after 60 min without interaction (§4.2.2). |
 | Muted tab | Volume glyph `speaker.slash.fill`. |
 | Video source, PiP open | No card (rule 3). |
@@ -375,13 +426,16 @@ of the title with the right fade.
 
 #### 4.2.7 Transitions
 
+Step 3b (§13.6) is the full transition table. It keeps the rows below
+except the struck one, and adds hover expand and collapse.
+
 | Change | Animation |
 |---|---|
 | First card appears | Container height 0 → `C` with `Motion.rowStructure` (0.22 s ease-in-out); card fades in 0.15 s, starting 0.05 s after the height starts. |
 | Last card leaves | Card fades out 0.12 s, then height `C` → 0 in 0.22 s. |
 | Card added or removed in a stack | Cards move with `Motion.miniPlayerStack`; the leaving card fades 0.12 s. |
 | Play/pause glyph | `.replace` symbol transition (system). |
-| Close button reveal | Width 0 ↔ 24 and opacity, 0.15 s. |
+| Close button reveal | ~~Width 0 ↔ 24 and opacity, 0.15 s.~~ Removed: Close is part of the title row (§13.3.3). |
 | Reduce Motion | All of the above become 0.1 s cross-fades without movement. |
 
 ### 4.3 Media source model (`OpenMedia`)
@@ -1206,7 +1260,7 @@ PASS/FAIL per row; exits non-zero on failure. Add to `verify-all.sh`.
 
 New flags: `--media "SPEC"` where SPEC is a comma list of
 `row=state[:video][:muted][:recording][:paused-min=N]` (rows use the
-existing `today:N`/`pinned:N` syntax), `--media-hover card:N|title:N|stack`,
+existing `today:N`/`pinned:N` syntax), `--media-hover expanded|title:N` (§13.8.4),
 `--media-drawer N`, `--reduce-motion`. Fake `WebMediaHost`s record the
 actions they get.
 
@@ -1222,6 +1276,7 @@ widths 228 and 500.
 | RI2 | Clicking the speaker sends `.toggleMute` and does not change selection. |
 | RI3 | A capturing row shows the recording dot before the speaker; its tooltip text is exact. |
 | RI4 | The symbol transition runs once per mute change and leaves no animation on the layer afterwards. |
+| RI5 | Step 2b: an audible row draws the speaker at `[41, y + 7, 26, 26]` with the outline glyph and the title origin at x 70; `sidebar-render compare` against S2 12/0022 (audible) and 0027 (muted) is within 1 pt and ΔE00 2 for the button frame, glyph ink box and peak, and title start (favicon and title text masked). RI1 and RI3 use the new frames. |
 | MC1 | No source → container height 0 and the pager ends at `h − 50` (no layout change from today). |
 | MC2 | One source → container `C = 76`, card frame `[8, h − 50 − 72, W − 16, 68]` ± 0.5 pt. |
 | MC3 | Each button's frame, glyph, and tooltip match §4.2.3; Previous/Next hide without the actions. |
@@ -1232,6 +1287,9 @@ widths 228 and 500.
 | MC8 | Idle: with a paused card on screen, the window has no running `CAAnimation`, no display link, and no timer other than the one dismiss work item (§4.3). |
 | MC9 | `bench --rows 1000` with one card on screen: scroll p95 within 0.3 ms of the baseline. |
 | MC10 | The container is dimmed with the bottom bar while a Peek is open. |
+
+Step 3b replaces MC1–MC10 with the values in §13.8.5 (MC1–MC15). The
+numbers above (C = 76, 68 pt cards, the marquee) describe #92 only.
 
 Comparison: once the user provides screenshots S3–S8 (§11), add
 `sidebar-render compare` runs for them with the `docs/design.md` §8
@@ -1331,6 +1389,10 @@ need Open's controls are `blocked: EM-4`). Phase 2 reruns them all.
    artwork; its buttons work.
 3. With music playing in Open and in another app, the media keys go to
    the app that played last (system rule).
+4. Expand two mini-player cards. Click the top card’s title (Back to Tab) or
+   Close, then move the pointer over the tab list. The remaining card must
+   collapse. Code review C5 needs this real-pointer check; agents must not
+   attempt it or change tracking behavior without its result.
 
 ## 9. Implementation order (small PRs; each step: files, then acceptance)
 
@@ -1352,7 +1414,9 @@ spot before Step 3; otherwise proceed after the plain-row gate passes.
 | 0 | Screenshots S1–S12 from the user (§11), through the lead. Runs in parallel; Steps 1–5 do not wait. | — | Lead files them under `.re/runtime/` (git-ignored) and adds measured values to `docs/re/interaction-states.md`. |
 | 1 | `OpenMedia` target: store, policy, session, site rules, settings; `OpenWeb` media types; `OpenSleep` `mediaControls` field; `openkit media-demo`; the two new defaults in `SettingsDefaults` (registry rows are already in settings-library §2.1). | §3.1 rows for `OpenMedia`, `OpenWeb`, `OpenSleep`, `OpenSettings`, `openkit`; `Package.swift`; `tools/verify-all.sh` | `media-demo` all PASS; `sleep-demo` still 105/105; `settings-preview` still PASS; `verify-all.sh` PASS. |
 | 2 | Tokens and row indicator: `MiniPlayerMetrics`, `PiPMetrics`, `RowMediaMetrics`, roles, fonts, motion, glyphs; speaker transition, tooltip, recording dot. | `OpenDesign/*` (listed), `OpenSidebar/SidebarRows.swift`, `sidebar-render` RI checks | RI1–RI4 PASS; existing `sidebar-render check` PASS; bench p95 unchanged. |
+| 2b | Follow-up to merged #67 (capture session 2, C18): leading 26 × 26 speaker after the favicon, outline glyphs, title shift, recording dot leading (§4.1 amendment). | `OpenDesign/FeatureMetrics.swift` (`RowMediaMetrics`), `OpenDesign/Icons.swift` (outline symbols), `OpenSidebar/SidebarRows.swift` (`TabCellView.layout()`), `sidebar-render` RI checks and a new RI5 | RI1–RI5 PASS; existing `sidebar-render check` PASS; the plain-row and mixed-row scroll budgets of the 2026-10-26 performance decision hold. |
 | 3 | Mini player stack in the sidebar with fake hosts. | `OpenSidebar/MediaControlsView.swift`, `MiniPlayerCardView.swift`, `MarqueeLabel.swift`, `SidebarView.swift`, `SidebarContext.swift`, `SidebarIntent.swift`, `ModelSidebarActions.swift`; `sidebar-render` media scenes | MC1–MC10 PASS; renders attached to the PR. |
+| 3b | Mini-player redesign from capture session 2 (§13). | `OpenDesign/FeatureMetrics.swift`, `Palette.swift`, `SpaceThemeStyle.swift`, `Typography.swift`, `Icons.swift`, `Motion.swift` (comments); `OpenSidebar/MiniPlayerCardView.swift`, `MediaControlsView.swift`, `SidebarContext.swift`; delete `OpenSidebar/MarqueeLabel.swift`; `sidebar-render` `MediaScene.swift`, `MediaChecks.swift`, `Bench.swift`, new `MediaCompare.swift`, `RenderCLI.swift`; `MediaRenders/step3b/` | MC1–MC15 PASS (§13.8.5); compare runs R1–R4 meet the §13.8.6 targets or name each miss with numbers; MC9 PASS; renders attached. |
 | 4 | Phase 2 PiP window and Document PiP window with a fake video view; menu builder. | `OpenFeatures/PictureInPictureWindowController.swift`, `PiPOverlayView.swift`, `PiPScrubberView.swift`, `PiPMenuBuilder.swift`, `DocumentPiPWindowController.swift`; `features-render` pip | PP1–PP8 PASS. |
 | 5 | [ENGINE] EM-1a, EM-5 interim, EM-8 (OpenEngine only, stock-CEF compatible). | `Engine/OpenEngine/src/OEApp.mm`, `OEWebContent.mm`, `include/OpenEngine/OEWebContent.h`; `docs/engine-api.md` | `--only features` unchanged; a `media` dump of `audio.html` shows playback and metadata. |
 | 6 | [APP, after app-shell B and G] `MediaCoordinator`, `EngineBridge` conformance, event map §7.2, leave events, auto-PiP phase 1, mini player with interim actions, Mute All/Unmute All, sleep feed, automation commands, `--only media`. | `App/Media/MediaCoordinator.swift`, `App/EngineBridge.swift`, `App/Automation/AutomationController.swift`, `docs/automation.md`, `tools/e2e/*` | E-M1, E-M3, E-M5…E-M12, E-M14, E-M15 PASS (phase 1 limits stated); E-M2, E-M4, E-M13 report `blocked`. |
@@ -1380,7 +1444,7 @@ checks prove the effects after these calls, not that future App callers are wire
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | Mini player placement (above the bottom bar) is a guess (PP-20). | Build it there (D-3); confirm with S3. |
+| Q1 | Mini player placement (above the bottom bar) is a guess (PP-20). | Build it there (D-3); confirm with S3. **Resolved 2026-10-26:** the stack sits on the bottom bar's top edge, 8 pt below the tab list (S2 14b/0014, §13.3.1). |
 | Q2 | How many mini players show (`maxActiveMediaControls` unknown)? | 3, newest first. |
 | Q3 | Paused cards: auto-dismiss after 60 min and sleep protection while shown? | Yes to both (Chromium precedent; bounded memory cost). |
 | Q4 | Should window minimize, occlusion, or app hide open auto-PiP? | No in v1 (D-4). Ask the user to test it in Arc (S10). |
@@ -1394,7 +1458,7 @@ checks prove the effects after these calls, not that future App callers are wire
 | Q12 | Meet chat toggle in the Document PiP top bar. | Defer; Meet-specific. |
 | Q13 | Recording cards (microphone/camera toggles) need EM-1b actions. | Ship with Step 8. |
 | Q14 | Do Favorites tiles show an audio badge? | Not in v1 unless screenshot S9 shows one. |
-| Q15 | The marquee flag. | Ship on; no setting (Arc's flag is remote config). |
+| Q15 | The marquee flag. | ~~Ship on; no setting (Arc's flag is remote config).~~ **Superseded 2026-10-26:** Arc showed a static tail-truncated title in every captured state, so Open ships no marquee (§13.2, §13.7 O12). |
 | Q16 | EM-4 is the largest engine item (2–3 weeks guess). Its order versus P1–P3. | Queue after P1; phase 1 covers users meanwhile. |
 | Q17 | PiP menu: does "Turn off" get the check mark after it is chosen, or does the menu change? (The decompiled branch always checks "Open automatically".) | Radio pair with the check on the current state (§4.4.5); confirm with S2. |
 
@@ -1434,6 +1498,10 @@ stays in `.re/` and is never committed.
 | S11 | A Google Meet Document PiP window (if the user has a Meet call). | §4.6 top bar |
 | S12 | Settings ▸ Advanced, the PiP row. | Label and position |
 
+Capture session 2 (2026-10-26) answered S3 in Dark with the default
+theme, S6, and part of S4 (the expanded card). S3 in Light, the rest of S4,
+S5, S7, and S8 are still open; §13.7 lists them with provisional designs.
+
 ## 12. Evidence index
 
 - Rules PP-1…PP-22: `docs/re/features-advanced.md` §8.
@@ -1447,11 +1515,847 @@ stays in `.re/` and is never committed.
   `ghidra-media.txt`, `assets-*.json`, `arccore-strings.txt`).
 - Chromium 156 sources: paths with line numbers in §2 and §6
   (`~/Developer/open-engine/chromium_git/chromium/src`).
+- Mini player captures (local only): capture session 2 items 14b and 16
+  (§13.1); analysis scripts in `.re/runtime/analysis-s2/s3b/`.
+
+## 13. Step 3b: mini-player redesign (capture session 2)
+
+Status: design spec, 2026-10-26. This step replaces the card that PR #92
+(Step 3) shipped. #92 built a 68 pt card with a title row from guesses.
+Capture session 2 measured Arc's mini player, and Arc's design is
+different. Where this section and §4.2 disagree, this section wins (lead
+decision 2026-10-26, Appendix). §4.2.2 (which sources show) and §4.3 (the
+store) do not change.
+
+Labels used below:
+
+- **fact**: measured in a capture frame (the frame is cited).
+- **code**: decoded from Arc's types or strings (PP-n).
+- **fit**: the best of several candidates against a frame (numbers given).
+- **derived**: computed from facts with a stated rule.
+- **guess**: Open's provisional design. Keep each guess in one token, so a
+  later capture can fix it in one edit.
+
+### 13.1 Evidence
+
+All frames are window-relative points at 1x, in sRGB after the display
+profile (`docs/re/interaction-states.md` §20.0; window 1728 × 1084,
+sidebar 228, default dark theme, macOS Dark). Frames and crops stay in
+`.re/` (git-ignored). The video titles in these frames are not quoted and
+must never be committed.
+
+| Ref | Frame | State |
+|---|---|---|
+| E1 | S2 14b/0012 | The same window with no mini player (background reference). Pager scroll area `[0, 82, 228, 952]`. |
+| E2 | S2 14b/0014 | One video source, pointer away: the rest card. |
+| E3 | S2 14b/0024 | The pointer on the volume button, just after a click on it: the expanded card, a plate on volume, the tooltip "Adjust Tab Volume". |
+| E4 | S2 14b/0025 | 1.2 s later. No plate (the pointer has left): the rest card again (AX still reports 66 pt for this one frame). |
+| E5 | S2 14b/0027 | After a click on the card body: the video tab is selected and the card is gone. |
+| E6 | S2 16/0005 (pixels: 16/0004) | Three video sources, pointer away: the collapsed stack. |
+| E7 | S2 16/0012 (its own PNG; near-identical to 0011) | The pointer on the bottom card's pause button: the expanded stack. |
+| E8 | S2 16/0013 | The pointer away (notes 10:46:52): collapsed again. |
+
+Methods (scripts in `.re/runtime/analysis-s2/s3b/`):
+
+- Geometry: the AX `rel` frames in each `ax.json` (`ax.py`, `ax2.py`).
+- Coverage: `(bg − px)·(bg − fill) / |bg − fill|²` per pixel, with E1 as the
+  background (`meas2.py`).
+- Corner: the four corners of E2 and E3 against Core Animation renders of a
+  `CALayer` with `cornerRadius` 6…11 and `cornerCurve` `.continuous` or
+  `.circular`, drawn at 1x with `render(in:)` (`swift/corner.swift`,
+  `cafit.py`). A control on a shape without a shadow: E2's selected tab row
+  (`[9, 463, 210, 36]`) fits 12 continuous with RMS 0.059 (12 circular:
+  0.080; 11 continuous: 0.116), so the method separates both the radius and
+  the curve (`cafitrow.py`). Follow-up outside this step: that is more than
+  the radius 10 that `docs/design.md` §2.2 lists for row fills.
+- Glyph size and weight: the ink mass (sum of coverage) of each Arc glyph
+  against SF Symbols rendered at 12–15 pt in four weights
+  (`swift/mass.swift`, `massarc.py`). Ink boxes at 50 % of peak contrast
+  (`ink.py`, `swift/ink.swift`).
+- Title font: Core Text renders of the same string at 12–14 pt in three
+  weights (`swift/text.swift`). The string is read from the local AX dump.
+- Symbol names: Arc gives these buttons no labels, so AX reports each
+  symbol's default accessibility description. On macOS 26,
+  `NSImage(systemSymbolName:accessibilityDescription: nil).accessibilityDescription`
+  narrows each description to candidates (`swift/main.swift`). PP-16 names
+  and filled ink disambiguate Previous/Next variants.
+
+### 13.2 What happens to #92's parts
+
+| #92 part | Decision | Reason |
+|---|---|---|
+| 68 pt card: a 36 pt title row that always shows, and a 32 pt controls row | **Change**: a 33 pt controls-only card at rest; 66 pt (title row + controls row) while expanded | C19; E2, E3 |
+| Favicon in the title row | **Change**: controls slot 0, as a button | E2 |
+| Play group at the left (x 6/34/62), volume at the right | **Change**: five evenly spaced slots | E2; E6 (the rule holds at three card widths) |
+| Previous/Next hidden without the actions | **Change**: always shown; disabled without the actions | E2 (AX `disabled`, dim glyphs) |
+| Fill `SidebarColors.itemBackground` and a hover fill | **Change**: the Space palette's `backgroundExtra`, opaque. **Remove** the hover fill. | E2, E3 (fill unchanged under the pointer); §13.4.2 |
+| Corner 10 | **Keep**. It is now a fit (10 continuous), not a guess. | §13.3.2 |
+| No shadow | **Change**: black 0.21, radius 4 | E2 vs E1 |
+| Margins 4 above and 4 below (`C = 4 + stack + 4`) | **Change**: 8 above, 0 below | E2 AX |
+| Stack: 5 pt up, 6 pt inset, opacity `1 − 0.3·i`, masked to 5 pt, 0.5 pt top edge | **Change**: 7 pt up, 5 pt inset per side, opacity `1 − 0.2·i`, no mask. **Remove** the top edge. | E6 |
+| Expanded gap 6 | **Change**: 5 | E7 |
+| Hover expands only a stack of 2 or more | **Change**: one card expands too | E3 vs E4; PP-14 |
+| Close: 0 ↔ 24 pt width on card hover | **Change**: Close is part of the title row and shows whenever the row shows. **Remove** the width animation. | E7 (Close on all three cards with the pointer on one) |
+| Marquee (`MarqueeLabel`) | **Remove**: a static title with tail truncation | E3, E7: "…" on all four titles. The marquee is the mini player's only repeating animation, so removing it also helps idle CPU. |
+| "Back to Tab" title swap on title hover | **Keep** (guess) | code `backToTabTitle` (PP-16); not captured |
+| Volume drawer: a 28 pt row under the controls | **Change** (guess): a 33 pt row between the title row and the controls row, only while expanded. The code path stays behind EM-2 (Q8). | No drawer seen (E3); §13.7 O2 |
+| Glyphs 14 pt Regular, `pip` 12 pt Regular, `speaker.wave.2.fill` | **Change**: Medium weight; `speaker.wave.3.fill` | §13.4.3 |
+| Title 13 Medium in the row title color | **Change**: 13 Regular in `ForegroundPrimary` | §13.4.1, §13.4.3 |
+| Tooltip placement `.above` | **Change**: `.beside` | E3 |
+| Click targets, store rules, max 3, 60 min expiry, Peek dim, Reduce Motion, Increase Contrast | **Keep** | agree with E5 or are Open choices |
+
+### 13.3 Geometry
+
+All values are points at sidebar width `W` (default 228), with a top-left
+origin. `cardW` is the card width, `H` the card height.
+
+#### 13.3.1 Container
+
+```text
+mediaControls:  [0, h − 50 − C, W, C]
+C = 0                           when the window shows no card
+C = 8 + stackHeight             otherwise (8 pt above the stack, 0 pt below)
+pager:          ends at h − 50 − C (unchanged code path)
+hover rect:     [8, 8, W − 16, stackHeight] in container coordinates
+```
+
+Evidence (fact): E2 card `[8, 1001, 212, 33]`; its bottom edge is the
+bottom bar's top edge (y 1034). The pager scroll area goes from 952 pt
+(E1) to 911 pt (E2), so it ends at 993 = 1001 − 8. E3: card
+`[8, 968, 212, 66]`, pager 878 pt, ends at 960 = 968 − 8. E6: stack
+`[8, 987, 212, 47]`, pager ends at 979. E7: stack `[8, 826, 212, 208]`,
+pager ends at 818. The hover rect leaves out the 8 pt gap and the side
+insets (guess).
+
+#### 13.3.2 Card and controls row
+
+| Item | Value | Status |
+|---|---|---|
+| Row height | 33 | fact: E2, E3 (66 = 2 × 33), E7 |
+| Card | x 8, width `W − 16`; height 33 at rest, 66 expanded, 99 expanded with the volume drawer | fact (E2, E3); 99 guess |
+| Corner | 10, `cornerCurve = .continuous` | fit: RMS coverage error 0.139 at 10 continuous, 0.148 at 9 continuous, 0.163 at 10 circular, 0.199 at 8 continuous (E2); 10 continuous is also best on E3 (0.246). The capture doc's "≈ 6" was a visual estimate. |
+| Fill | opaque and uniform (§13.4) | fact: clean samples have modal fill `#050627`, while the sidebar behind it varies; isolated pixels vary by 1–2 channel counts |
+| Shadow | black, opacity 0.21, `shadowRadius` 4, offset 0, with a `shadowPath` | fit: E2 against E1 darkens the sidebar by 9.2 % at 0.5 pt, 5.4 % at 2.5 pt, and 2.7 % at 4.5 pt, the same on all four sides. The reveal card's shadow (0.17, radius 4) gives 7.5 / 4.3 / 2.0 %, about 1.25 times less. |
+| Controls row | `[0, H − 33, cardW, 33]` | fact |
+| Slot `k` (0…4) | button `[x_k, H − 28, 24, 24]`; `x_k = 10 + k·(cardW − 44)/4`, rounded to the backing pixel grid (halves round up) | fact: E2 x 18/60/102/144/186 (card x 8). E6 back cards: 23/63/102/142/181 (card 13…215) and 28/65/102/139/176 (card 18…210). The rule holds at all three widths. |
+| Slot use (audio or video source) | 0 favicon, 1 previous, 2 play/pause, 3 next, 4 volume | fact E2 |
+| Favicon | 16 × 16, centered in its 24 × 24 button: `[x_0 + 4, H − 24, 16, 16]` | fact E2 (ink x 22…37) |
+| Glyphs | the SF Symbol image centered in its 24 × 24 button | image centering is the placement rule; ink-box centers can be offset by up to 1 pt (E2, E3) |
+| Hover plate | the whole 24 × 24 button, radius 5 continuous (`MiniPlayerMetrics.buttonPlateRadius`) | fit E3/E7: RMS 0.034 at 5 continuous vs 0.116 at 6; independent design review r1 |
+
+At `W` 228 the slots are at card x 10/52/94/136/178 (pitch 42). At 500
+the pitch is 110; at the 164 minimum it is 26, which leaves 2 pt between
+buttons (derived from the rule).
+
+#### 13.3.3 Title row (expanded only)
+
+| Item | Value | Status |
+|---|---|---|
+| Row | `[0, 0, cardW, 33]`, at the top of the card | fact E3 |
+| Close | `[cardW − 34, 5, 24, 24]` | fact: E3 `[186, 973]` with the card at x 8, y 968 |
+| Open Picture in Picture | `[cardW − 58, 5, 24, 24]`, only for a video source with no open PiP | fact: E3 `[162, 973]`. Hidden for an audio-only source: guess. |
+| Title | origin x 14, baseline y 22. Maximum width = `(PiP shown ? cardW − 58 : cardW − 34) − 24` (a 14 pt leading inset and a 10 pt gap before the button). | fact: E3 AX text `[22, 976.5, 130, 16]`; ink x 23…149; the first capital's rows 980…989, so the baseline is 990 (card y 968 → 22). The formula gives 130 at `cardW` 212. |
+| Truncation | one line, tail, "…" | fact: E3 and E7 (three titles) |
+
+The mini-player plate radius is a fit from E3/E7, not the separate toolbar
+plate measurement. Evidence: `.re/reviews/pr110-scripts/platefit.py` and
+`platefit2.py` (32× analytic coverage, calibrated against Open's known 6 pt
+plate); 5 continuous RMS 0.034, 6 continuous RMS 0.116.
+
+PP-16's 0 ↔ 24 pt Close width is read as title-row presence under
+stack hover. E2 has no title-row buttons, while E7 shows Close on all cards;
+there is no per-card width state in the captured states, so Open builds no
+Close width animation.
+
+#### 13.3.4 Stack
+
+`n` is the number of cards (1…3). Card `i = 0` is the newest (the front
+card, at the bottom).
+
+Collapsed (the pointer is not in the hover rect):
+
+```text
+stackHeight     = 33 + 7·(n − 1)                      (33, 40, 47)
+card i frame    = [8 + 5i, C − 33 − 7i, W − 16 − 10i, 33]
+card i opacity  = 1 − 0.2·i                           (1, 0.8, 0.6)
+z-order         = card 0 on top
+```
+
+Back cards are not masked. Each one draws its full card, so the card
+behind shows through a back card. Only card 0 takes clicks: back cards
+return nil from `hitTest` while collapsed. They stay in the accessibility
+tree, as Arc's do (E6 lists all three sets of buttons).
+
+Expanded (the pointer is in the hover rect; any `n ≥ 1`):
+
+```text
+stackHeight     = Σ h_i + 5·(n − 1)                   (h_i = 66, or 99 with the drawer)
+card i frame    = [8, C − Σ_{j ≤ i} h_j − 5i, W − 16, h_i]
+opacity         = 1; every card shows its title row
+```
+
+From top to bottom the order is the oldest card first and the newest at
+the bottom.
+
+Evidence: E6 AX (fact): the stack is `[8, 987, 212, 47]`, the pause buttons
+are at y 992/999/1006, and the slot rule gives the card x ranges 8…220,
+13…215, and 18…210. Strip colors (fit): E6 shows the third card at
+`#14112C` and the second at `#090827`. The model above gives `#15122E`
+(ΔE00 0.46) and `#080828` (0.52). #92's masked `1 − 0.3·i` model gives
+2.34 and 1.99. The third card's favicon and glyph tops show faintly
+through the second card's strip (E6, y 998–1000), so back cards are not
+masked (fact). E7 AX (fact): `[8, 826, 212, 208]` = 3 × 66 + 2 × 5; the
+gaps at y 892–896 and 963–967 show the sidebar; Close shows on all three
+cards.
+
+### 13.4 Colors, type, and glyphs
+
+#### 13.4.1 Roles
+
+Dark values are measured on E2, E3, and E7 (ΔE00 of the token against the
+frame). Light values are derived or guessed: no light frame exists.
+
+| Role (token) | Dark | Light | Status |
+|---|---|---|---|
+| Card fill: `SpaceThemeStyle.miniPlayerFill(_:)` (new) | palette `dark.backgroundExtra`; default theme `#050627` | palette `light.backgroundExtra`; default theme `#FDFDFF` | dark default: fact. Rule: §13.4.2. |
+| Glyph: `SidebarRole.mediaControlGlyph` (kept) | white 0.66 | black 0.50 | code PP-16 (`PlaybackControlForeground`); dark fact `#ABAAB5` (ΔE00 0.65) |
+| Disabled glyph: `SidebarRole.mediaControlGlyphDisabled` (new) | white 0.22 | black 0.17 | dark fact `#3C3C56` (ΔE00 0.43), which is the glyph at 1/3 opacity; light guess (the same 1/3) |
+| Title: `SidebarRole.miniPlayerTitle` (new) = `Core.foregroundPrimary` | white 0.80 | `#0E0F10` at 0.90 (P3) | dark fact `#CDCDD4` (ΔE00 0.24). Light: the catalog token's light value; guess that Arc uses it. |
+| Hover plate: `SidebarRole.buttonHover` (`GrayA4`, kept) | white 0.08 | black 0.07 | dark fact `#191938` (ΔE00 0.49); light guess |
+| Pressed plate: `SidebarRole.buttonPressed` (`GrayA6`, kept) | white 0.13 | black 0.11 | guess (not captured) |
+| Shadow: `MiniPlayerMetrics.shadowOpacity` | opaque black color (alpha 1), layer opacity 0.21, radius 4 | the same | dark fit; light guess; opacity is applied once |
+| Increase Contrast border | 1 pt `SidebarColors.separator` | the same | Open choice (kept from #92) |
+
+#### 13.4.2 Theme rule
+
+The card fill is the Space palette's `backgroundExtra` for the sidebar's
+content appearance, opaque:
+
+```swift
+/// Mini-player card fill (media plan §13.4.2).
+public func miniPlayerFill(_ appearance: ContentAppearance) -> RGBA {
+    if let palette = palette(for: appearance) { return palette.backgroundExtra.withAlpha(1) }
+    return appearance == .dark ? DefaultThemePalette.darkBackgroundExtra : DefaultThemePalette.lightBackgroundExtra
+}
+```
+
+How the rule was found:
+
+1. Arc computes `dark.backgroundExtra = shadedDark @0.15 over black` and
+   `light.title = shadedDark @0.30 over black` (decoded,
+   `docs/re/design-tokens.md` §6.5). So in every palette
+   `dark.backgroundExtra = light.title × 0.5`.
+2. Space 1: `light.title` `#320E00` and `dark.backgroundExtra` `#190700`,
+   exactly half (`docs/re/runtime-observations.md` §3.3). Arc paints the
+   command bar's (i) circle with `dark.backgroundExtra` (`#190700` exact,
+   `docs/commandbar.md`).
+3. The default theme has no stored palette. Tooltips paint `light.title`.
+   E3's tooltip and the link status bubble (S2 04/0021) are both `#0A0D4F`.
+   Half of that is `#050627`: the mini player (E2, E6, E7), the Peek
+   control circles (F0090, F0102; `PeekMetrics.defaultControls`), and the
+   command bar (i) circle (A0327; `CommandBarRole.defaultInfoFill`).
+4. The same default `shadedDark` (`#0A0D4F` / 0.30) predicts `dark.title`
+   `#DEDFFF` (the measured default tab title is `#DDDEFF`, ΔE00 0.51) and
+   `light.focus` `#9095FF` (the measured light command bar selection is
+   `#8E95FF`, S2 20/0018, ΔE00 0.43). So the default theme behaves as one
+   palette, and its `light.backgroundExtra` (`shadedDark @0.01 over white`)
+   is `#FDFDFF` (derived).
+5. Arc passes the Space palette into the media views:
+   `MediaControlsFeatureControllerInput{…, colorPalette, …}` and
+   `MiniPlayerView{colorPalette, colorScheme, …}` (code, PP-14, PP-16).
+
+How sure:
+
+| Case | Confidence |
+|---|---|
+| Default theme, dark content | Fact: an exact match on three surfaces. |
+| Themed Space, dark content | Derived, high: the role and the × 0.5 identity hold in Space 1 and in the default theme. No themed mini player was captured. |
+| Light content (macOS Light with the default theme, or any Space with dark text) | Guess, medium. `PlaybackControlForeground` has a light variant (black 0.50), so the card can be light, and `light.backgroundExtra` is the lightest palette color as `dark.backgroundExtra` is the darkest. The alternative, if a capture disagrees: the card stays `dark.backgroundExtra` with the dark-variant glyphs, as tooltips stay dark. |
+| Which appearance applies | Guess: the focused Space's content appearance (`context.appearance(for:)`), the rule for every sidebar element (`docs/design.md` §3.4). |
+
+In the default light theme the card (`#FDFDFF`) sits on the sidebar
+bottom (`#E8E0ED`, S2 20/0015; ΔE00 8.7), so it reads as a light card.
+Its glyphs (black 0.50) come out `#7E7E80`.
+
+#### 13.4.3 Type and glyphs
+
+The sizes 14 pt and 12 pt are code (PP-16). The Medium weight comes from
+the ink-mass fit.
+
+| Item | Value | Evidence |
+|---|---|---|
+| Title font | `Typography.miniPlayerTitle` = 13 Regular | fit E3: Arc ink 127 × 12, mass 468. Core Text 13 Regular: 126 × 12, 467. 13 Medium: 130 × 12, 530. |
+| Previous | `backward.end.fill`, 14 Medium | PP-16 name; AX "Go To End" is consistent but also matches non-fill/alt variants, excluded by PP-16 and filled ink; ink 13 × 11; mass 99.0 (14 Medium 100.4, 14 Regular 91.9) |
+| Play / Pause | `play.fill` / `pause.fill`, 14 Medium | Pause: AX id `mediaControlsPauseButton`; ink 9 × 12; mass 79.9 (14 Medium 81.5). `play.fill`: code PP-16, not captured. |
+| Next | `forward.end.fill`, 14 Medium | PP-16 name; AX "Go To Start" is consistent but also matches non-fill variants, excluded by PP-16 and filled ink; ink 13 × 11 |
+| Volume | `speaker.wave.3.fill`, 14 Medium | AX "Volume Higher" (exactly this symbol's description); ink 19 × 14; mass 105.6 (14 Medium 105.6) |
+| Volume, muted | `speaker.slash.fill`, 14 Medium | guess |
+| Open Picture in Picture | `pip`, 12 Medium | AX "Picture In Picture Window"; ink 15 × 13; mass 64.3 (12 Medium 64.0) |
+| Close | `xmark`, 14 Medium | AX "Close"; ink 11 × 11; mass 42.9 (14 Medium 42.4) |
+| Microphone, camera | `mic.fill` / `mic.slash.fill`, `video.fill` / `video.slash.fill`, 14 Medium | names code PP-16; weight guess |
+| Drawer ends | `speaker.wave.1.fill`, `speaker.wave.3.fill`, 12 Medium | names code PP-16; size and weight guess |
+
+#### 13.4.4 Tooltips and accessibility
+
+| Item | Value | Status |
+|---|---|---|
+| Tooltip titles | "Previous Track", "Play" / "Pause", "Next Track", "Adjust Tab Volume", "Open Picture in Picture", "Close Mini Player", "Toggle Microphone", "Toggle Camera" | code PP-16; "Adjust Tab Volume" fact (E3) |
+| Delay | 0.45 s | code PP-6 |
+| Placement | `.beside`: below and to the right of the pointer, as row tooltips | fact: in E3 the tooltip window `[171, 992, 193, 93]` (with shadow margins) puts the capsule below and right of the pointer on the volume button. #92 used `.above`. |
+| Disabled buttons | no tooltip, no plate | guess |
+| Favicon button | no tooltip; AX label "Back to Tab" | guess (Arc's button has no label) |
+| AX labels | the tooltip titles | Open choice (Arc exposes only symbol descriptions) |
+| Default-theme tooltip fill | `#0A0D4F` (E3). Open's default guess `#1C1B22` is wrong. Fix it outside this step (one token, `SpaceThemeStyle.tooltipFill`, sidebar lane). | fact; follow-up |
+
+### 13.5 States
+
+| State | Look and behavior | Status |
+|---|---|---|
+| Rest (the pointer is not in the hover rect) | the 33 pt controls-only card; a collapsed stack | fact E2, E6 |
+| Pointer in the hover rect | expanded: every card shows its title row, and a stack fans out | derived, high: E3 (expanded, with the pointer on volume) against E4 (rest, 1.2 s later, no plate); E7 (stack); PP-14 has one `isExpanded` on `MediaControlsView` and hover-off subjects. The notes say "a click on volume expands", but the synthetic click and the pointer arrived together, so the capture cannot separate them (§13.7 O6). |
+| Button hover | the plate (§13.4.1); the tooltip after 0.45 s | fact E3, E7 |
+| Button pressed | the pressed plate | guess |
+| Disabled (no previous or next track) | the disabled glyph color; no plate; no action; AX disabled | fact E2 (AX `disabled`, `#3C3C56`); no plate: guess |
+| Pointer on the card body | no fill change | fact E3 (`#050627` under the pointer) |
+| Click on the body, the title, or the favicon | Back to Tab (§4.2.3). The card then leaves, because its tab is now displayed. | body: fact (notes 10:33:43; E5). Favicon: guess. |
+| Playing | `pause.fill` | fact |
+| Paused | `play.fill`; the card stays (60 min rule, §4.2.2) | guess for the glyph (code name) |
+| Muted tab | `speaker.slash.fill` | guess |
+| Video source with no open PiP | the PiP button in the title row | fact (every captured source was a video) |
+| Audio-only source | no PiP button; the title runs to Close − 10 | guess |
+| PiP window shows | no card | fact (S2 13; `interaction-states.md` §20.7) |
+| Source is the visible tab | no card | fact (S2 12) |
+| Recording source | §13.7 O5 | guess |
+| Peek open | the container dims with the bottom bar | Open (kept; MC10) |
+| Inactive window | colors unchanged | guess |
+| Light content | §13.4 | guess |
+| Reduce Motion | 0.1 s cross-fades, no movement | Open (kept) |
+
+### 13.6 Transitions
+
+No capture timed the mini player (the item 21 video has none). Every
+timing below reuses an existing `Motion` token and is a guess. Every
+animation is a finite Core Animation animation. Nothing runs, redraws, or
+waits on a timer while the card is at rest (D-11, MC8, MC9).
+
+| Change | What moves | Timing | Status |
+|---|---|---|---|
+| Hover in | One card: its top edge moves up 33 pt; its bottom edge stays. A stack: each card moves to its expanded frame, widens, and goes to opacity 1; the slots re-space with the width. The pager's bottom edge moves up by the same amount. | starts on pointer enter; spring `Motion.miniPlayerStack` (response 0.2, damping 1.0) for every frame and opacity change | guess (the end states are fact) |
+| Title rows appear | opacity 0 → 1 at their final place; the card's clipped content reveals them as the top edge rises | `Motion.miniPlayerReveal` (0.15 s), ease-out, starting with the spring | guess |
+| Hover out | the reverse of hover in | starts `MiniPlayerMetrics.collapseDelay` (0.3 s) after the pointer leaves the hover rect; the same spring | delay guess (PP-14 has a debounced hover-off). E4 and E8 show the collapse finished within about 1.3 s. |
+| Title rows leave | opacity 1 → 0 | `Motion.miniPlayerDisappear` (0.12 s), ease-in, starting with the spring | guess |
+| First card appears | the container grows 0 → 41 (the pager bottom moves up 41); the card fades in | `Motion.rowStructure` (0.22 s ease-in-out); fade `Motion.miniPlayerReveal` (0.15 s) after `Motion.miniPlayerAppearDelay` (0.05 s) | kept from #92; guess |
+| Last card leaves | the card fades out, then the container shrinks 41 → 0 | 0.12 s fade, then 0.22 s ease-in-out | kept; guess |
+| Card added to a stack | the new card fades in at slot 0; the older cards move back one level (7 pt up, 5 pt inset, opacity −0.2) | spring; fade 0.15 s | guess |
+| Card removed from a stack (Close, the source ends, the tab is shown) | the card fades out; the others move forward one level | fade 0.12 s; spring | guess |
+| A 4th source | the oldest card leaves and the new one enters in the same transaction | as above | guess |
+| Play ↔ pause glyph | `.replace` symbol transition | system | kept |
+| Volume drawer opens or closes | the card grows 66 ↔ 99 (the top edge moves) | `Motion.miniPlayerResize` (0.2 s ease-in-out) | guess |
+| Reduce Motion | one container cross-fade covers the whole card subtree; the pager applies its final frame immediately, with no animation. No card/row/button opacity fades or geometry animations. | `Motion.reducedMedia` (0.1 s) | kept |
+
+For context only: capture session 2 measured faster sidebar motion than
+our tokens (Space switch spring 0.20 s, folder expand 0.20 s ease-out;
+`interaction-states.md` §20.12). If a mini-player capture shows the same,
+change `Motion.miniPlayerStack` only.
+
+How to animate: capture each layer's current presentation position, bounds size,
+opacity and shadow path before changing its model values whenever a `media.*`
+animation is active. Otherwise derive the start position from the old frame and
+the layer's `anchorPoint` (AppKit backing layers anchor at `(0,0)`, not the center).
+Set the final frames once. Then, in one `CATransaction`, add `CASpringAnimation`s
+from the captured on-screen values (`position`,
+`bounds.size`, `opacity`, and the shadow layer's `shadowPath`) to each card,
+its content view, and each row and button that moved. Add no per-frame
+code, display link, or timer. The pager keeps the `.stack` height transition in `SidebarView.layout()`.
+Both the pager and container use anchor-correct start positions and retarget from
+presentation values during an interruption. Title and drawer rows keep their
+on-screen place while the content clip reveals them:
+`titleRow.y = bounds.height - cardHeight(expanded: true, drawer: drawerIsOpen)`;
+`drawerRow.y = bounds.height - 2 * rowHeight`. The row frame changes use the same
+spring as the card; their final expanded positions remain 0 and 33.
+
+Only real media changes (expand, collapse, source add/remove/replacement, or
+drawer resize) set a pending transition. The container consumes it once and
+passes the animation flag to each card’s next layout. Sidebar width changes
+apply frames immediately with implicit actions disabled, and cancel in-flight
+media animations in the pager/container/card subtree. Under Reduce Motion,
+use one `CATransition(.fade, 0.1 s)` on the container, including source changes
+that keep the same height. Never fade a persistent view in from opacity zero.
+Hiding the sidebar cancels pending collapse work and resets an unforced stack
+to collapsed without animation; showing it does not restore stale expansion.
+
+### 13.7 Open items (provisional designs, to capture later)
+
+Each design below is a guess. Build it in one token or one function.
+
+| # | Item | Provisional Open design | Capture needed |
+|---|---|---|---|
+| O1 | Paused and muted glyphs | `play.fill` 14 Medium; `speaker.slash.fill` 14 Medium | a paused card and a muted card (S8) |
+| O2 | The volume click and the drawer | Q8 stays: until EM-2, a click on volume toggles mute. With tab volume (EM-2, and the fake host in the harness), a click on volume while expanded opens a 33 pt drawer row `[0, 33, cardW, 33]` between the title row and the controls row (card 99). The row holds `speaker.wave.1.fill` 12 Medium at `[10, 38, 24, 24]` (click: toggle mute); a slider `[44, 33, cardW − 88, 33]` with a 4 pt track centered in the row (radius 2; track `mediaControlGlyphDisabled`, fill `mediaControlGlyph`), a 12 pt white knob with the `SidebarColors.tabShadowSelected` shadow, knob centers 6 … trackWidth − 6, values 0…1 in steps of 0.05; and `speaker.wave.3.fill` 12 Medium at `[cardW − 34, 38, 24, 24]` (click: 100 %). Collapsing the stack closes the drawer. | In Arc the click did not mute (E3 keeps `speaker.wave.3.fill`, AX "Volume Higher"), and no drawer showed within about 2 s. Capture: click volume and wait 3 s; then hover the volume button; drag a slider if one shows (S5). |
+| O3 | What Close does to playback | Close pauses the media and removes the card. The card comes back when the source plays again (lead Q5, unchanged). | click Close on a playing card and check playback (item 15) |
+| O4 | Back to PiP | The PiP button opens a manual PiP for the tab; the card leaves while PiP shows (rule 3). After the user minimizes the PiP, the card comes back with the same button. | minimize a PiP, then click the card's PiP button (S7, item 15) |
+| O5 | Recording source | Controls slots 0 favicon, 1 microphone, 2 camera; slots 3 and 4 stay empty. The title row is unchanged. Ships with Step 8 (Q13). | a Meet or camera tab in the background (S9) |
+| O6 | One card, hover without a click | It expands (§13.5). | hover a lone card for 3 s without a click |
+| O7 | Audio-only source | no PiP button | a music site in the background |
+| O8 | Light content and themed Spaces | the §13.4.2 rule | one card in macOS Light (default theme), and one each in a dark-content and a light-content themed Space (step 8 of item 14 was skipped) |
+| O9 | Timing | the §13.6 tokens | a screen video of hover in and out, stack expand and collapse, card add and remove |
+| O10 | Favicon button | click = Back to Tab; a plate on hover | hover and click the favicon |
+| O11 | Title hover | keep #92's "Back to Tab" cross-fade (`Motion.miniPlayerTitle`, 0.12 s) | hover the title of an expanded card |
+| O12 | Marquee | off (static truncation). If a capture shows scrolling, restore #92's `MarqueeLabel` from git history with the PP-17 numbers. | keep the pointer on an expanded card with a long title for 5 s or more |
+
+### 13.8 Implementation plan
+
+One PR stacked on `t3/mini-player-capture-redesign` (#109): "Media Step 3b: mini-player redesign from capture session 2". No new
+dependencies. No unit tests (AGENTS.md rule 6). Verify with
+`sidebar-render check`, offscreen renders, the compare runs in §13.8.6,
+and MC9. Run heavy jobs through
+`~/Library/Caches/OpenRE/scripts/heavy.sh`.
+
+#### 13.8.1 Files and types
+
+| File | Change |
+|---|---|
+| `OpenDesign/FeatureMetrics.swift` | Replace `MiniPlayerMetrics` with the block below. |
+| `OpenDesign/SpaceThemeStyle.swift` | Add `miniPlayerFill(_:)` (§13.4.2) and `public enum DefaultThemePalette { public static let darkBackgroundExtra = RGBA(hex: 0x050627); public static let lightBackgroundExtra = RGBA(hex: 0xFDFDFF) }` with a comment that cites §13.4.2 (dark: fact; light: derived). |
+| `OpenDesign/Palette.swift` | In `SidebarRole`: remove `miniPlayerFill` and `miniPlayerHoverFill`. Add `mediaControlGlyphDisabled = DesignColor(light: .black(0.17), dark: .white(0.22))`, `miniPlayerTitle = Core.foregroundPrimary` (the existing `ForegroundPrimary` token). Keep `mediaControlGlyph` and `mediaDrawerKnob`. |
+| `OpenDesign/Typography.swift` | `miniPlayerTitle = FontToken(13, .regular)`. |
+| `OpenDesign/Icons.swift` | `mediaPlay`, `mediaPause`, `mediaPrevious`, `mediaNext`, `mediaClose`, `mediaVolumeMuted`, `mediaMicrophone`, `mediaMicrophoneMuted`, `mediaCamera`, `mediaCameraOff`: 14 pt `.medium`. `mediaVolume`: `speaker.wave.3.fill`, 14 pt `.medium`. `mediaPiP`: `pip`, 12 pt `.medium`. `mediaVolumeLow` and `mediaVolumeHigh`: 12 pt `.medium`. Fill `arcInk` with the §13.4.3 ink boxes; note "media plan §13.4.3". Do not change the `pip*` glyphs of the PiP window. |
+| `OpenDesign/Motion.swift` | Mini-player spring response 0.2 s, damping 1; keep it a guess until O9. Other motion tokens stay unchanged. |
+| `OpenSidebar/MiniPlayerCardView.swift` | Rewrite the layout (§13.8.2, §13.8.3). Expose `titleState: MiniPlayerTitleState` and register `control(named: "favicon")`. |
+| `OpenSidebar/Controls.swift` | Add an optional Core Text draw receipt for the title hook; keep `TextLabel` internal. Only the mini-player title installs the receipt. |
+| `OpenSidebar/MediaControlsView.swift` | Rewrite the stack math and the hover (§13.8.3). |
+| `OpenSidebar/MarqueeLabel.swift` | Delete it. |
+| `OpenSidebar/SidebarContext.swift` | `SidebarMediaHover` becomes `case expanded, title(ItemID)` (remove `stack` and `card`). |
+| `OpenSidebar/SidebarView.swift` | Keep geometry driven by `requiredHeight`. Anchor-correct animation starts and presentation-based retargeting for pager/container height changes; retain the `.stack` spring path. |
+| `sidebar-render/MediaScene.swift` | The flags in §13.8.4. |
+| `sidebar-render/MediaChecks.swift`, `MediaMotionChecks.swift`, `MediaLifecycleChecks.swift`, `Checks.swift` | MC1–MC16 (§13.8.5), including native offscreen motion/lifecycle gates and focused `--media-motion-only` and `--media-lifecycle-only` runs. RI checks are unchanged. |
+| `sidebar-render/MediaCompare.swift` (new), `RenderCLI.swift` | `compare-media` (§13.8.6). |
+| `sidebar-render/OffscreenRenderer.swift` | Preserve `allowsGroupOpacity` when cloning layers, so back cards composite as one image (§13.8.2). |
+| `sidebar-render/Bench.swift` | The `--media-card` log line reports the new height (`container 41.0 pt`). |
+| `Packages/OpenKit/MediaRenders/step3b/` (new) | `render-scenes.py`, `compare-bench.py` (a copy of step3's that asserts `container 41.0 pt`), `README.md`, our renders, and the compare tables (numbers only). |
+| `docs/plans/media-pip.md` §13, `docs/design.md` §22 | Record the results. Change a status to "fact" only with a frame cite. |
+
+`MiniPlayerMetrics`, exact:
+
+```swift
+/// Media plan §13 (Step 3b). Capture session 2 frames are cited per value.
+public enum MiniPlayerMetrics {
+    public static let inset: CGFloat = 8                  // fact E2
+    public static let gapAbove: CGFloat = 8               // fact E2: the pager ends 8 pt above the stack
+    public static let rowHeight: CGFloat = 33             // fact E2, E3
+    public static let cornerRadius: CGFloat = 10          // fit E2, E3; cornerCurve .continuous
+    public static let button: CGFloat = 24                // code PP-16; fact E2
+    public static let buttonY: CGFloat = 5                // inside a row; fact E2, E3
+    public static let buttonPlateRadius: CGFloat = 5      // fit E3/E7: continuous RMS 0.034 vs 0.116 at 6
+    public static let slotInset: CGFloat = 10             // first slot x, and the gap after the last slot; fact E2, E6
+    public static let slotCount = 5                       // fact E2
+    public static let faviconSize: CGFloat = 16           // fact E2
+    public static let titleX: CGFloat = 14                // fact E3
+    public static let titleBaseline: CGFloat = 22         // fact E3
+    public static let titleGap: CGFloat = 10              // title end → first title-row button; fact E3
+    public static let closeTrailing: CGFloat = 34         // Close x = cardW − 34; fact E3
+    public static let pipTrailing: CGFloat = 58           // PiP x = cardW − 58; fact E3
+    public static let stackOffset: CGFloat = 7            // fact E6
+    public static let stackInset: CGFloat = 5             // per side, per level; fact E6
+    public static let stackOpacityStep: CGFloat = 0.2     // fit E6
+    public static let expandedGap: CGFloat = 5            // fact E7
+    public static let shadowOpacity: Float = 0.21         // fit E2
+    public static let shadowRadius: CGFloat = 4           // fit E2
+    public static let collapseDelay: TimeInterval = 0.3   // guess
+    public static let tooltipDelay: TimeInterval = 0.45   // code PP-6
+    // Volume drawer: guess (§13.7 O2).
+    public static let drawerSliderInset: CGFloat = 44
+    public static let drawerTrackHeight: CGFloat = 4
+    public static let drawerTrackRadius: CGFloat = 2
+    public static let drawerKnob: CGFloat = 12
+    public static let drawerShadowBlur: CGFloat = 2
+    public static let drawerShadowOffset = CGSize(width: 0, height: -1)
+    public static let volumeStep: Double = 0.05
+
+    /// Card height: one row at rest, two expanded, three with the drawer.
+    public static func cardHeight(expanded: Bool, drawer: Bool) -> CGFloat {
+        expanded ? (drawer ? 3 : 2) * rowHeight : rowHeight
+    }
+    /// Slot k's x in a card of width w, on the backing pixel grid (halves round up). Fact E2, E6.
+    public static func slotX(_ k: Int, cardWidth w: CGFloat, scale: CGFloat) -> CGFloat {
+        let x = slotInset + CGFloat(k) * (w - 2 * slotInset - button) / CGFloat(slotCount - 1)
+        return (x * scale + 0.5).rounded(.down) / scale
+    }
+}
+```
+
+Remove: `verticalInset`, `height`, `titleRowHeight`, `titleTrailing`,
+`rightButtonPitch`, `favicon`, `faviconInk`, `rightButtonInset`,
+`titleButtonY`, `controlsY`, `controlsInset`, `controlsPitch`,
+`stackWidthOffset`, `stackOpacity`, `stackEdge`, `drawerIconX`,
+`drawerIconY`, `drawerIcon`, `drawerTrailingIconInset`, `drawerSliderX`,
+`drawerSliderY`, `drawerSliderHeight`, `drawerTrackY`, `drawerHeight`, and
+every `marquee*` constant.
+
+#### 13.8.2 View tree
+
+```text
+MediaControlsView                [0, h − 50 − C, W, C]; no clipping; one tracking area = the hover rect
+└─ MiniPlayerCardView × n        z: newest on top; alphaValue = the §13.3.4 opacity
+   ├─ shadowLayer (CALayer)      first sublayer, frame = bounds; shadowColor opaque black (alpha 1), shadowOpacity 0.21,
+   │                             shadowRadius 4, shadowOffset 0, shadowPath = CGPath(roundedRect: bounds, 10, 10)
+   └─ contentView                frame = bounds; fill = miniPlayerFill; cornerRadius 10, cornerCurve .continuous,
+      │                          masksToBounds = true; 1 pt separator border only with Increase Contrast
+      ├─ titleRow  [0, 0, cardW, 33]           only while expanded (alpha 0 and hidden after the fade otherwise)
+      │  ├─ titleLabel: TextLabel              13 Regular, baseline 22, tail truncation, x 14
+      │  ├─ pip: MediaControlButton            [cardW − 58, 5, 24, 24]
+      │  └─ close: MediaControlButton          [cardW − 34, 5, 24, 24]
+      ├─ drawerRow [0, 33, cardW, 33]          only when the drawer is open (O2)
+      └─ controlsRow [0, H − 33, cardW, 33]
+         └─ favicon (button with a FaviconView), previous, play, next, volume  (or microphone, camera)
+```
+
+Put the shadow on its own sublayer: AppKit owns the shadow properties of a
+view's backing layer and resets them (the `RevealCardShadowView` pattern).
+Use `MiniPlayerMetrics.shadowOpacity` as the only shadow alpha source; do not
+also use a 0.21-alpha shadow color. Set `layer.allowsGroupOpacity = true`
+on each card, so a back card composites as one image at its opacity. The §13.3.4 fit assumes this.
+Without it, the card's own shadow, which also lies under its fill, would
+show through the fill. Do not set `shouldRasterize`. MC9's report-only
+stack run shows the cost.
+
+#### 13.8.3 Behavior
+
+`MediaControlsView`:
+
+- `isExpanded` becomes true at once when the pointer enters the hover rect,
+  for any `n ≥ 1`, or while `forcedMediaHover != nil`. On exit, one
+  `DispatchWorkItem` clears it after `collapseDelay`. Cancel the item on
+  re-entry, on hide, and on window close (keep #92's mechanism).
+- In `measure()`, first set each card's `isExpanded` and level `i`, and
+  close drawers when collapsing. Only then sum `cardHeight` values. Layout
+  places the §13.3.4 frames and opacity; it does not change expansion state.
+  Card `i > 0` returns nil from `hitTest` unless the stack is expanded.
+- `requiredHeight = cards.isEmpty ? 0 : gapAbove + stackHeight`.
+- Update the tracking area to the hover rect on every layout.
+- Delete the `CAShapeLayer` masks and the stack-edge layer.
+- Height transitions: `.stack` (spring) for hover changes and for adds and
+  removes within a stack; `.structure` for the first and the last card;
+  `.drawer` for the drawer.
+
+`MiniPlayerCardView`:
+
+- Inputs: `source`, `isExpanded`, `level`, and `drawerIsOpen` (the drawer
+  opens only while expanded).
+- `cardHeight = MiniPlayerMetrics.cardHeight(expanded:drawer:)`.
+- Layout passes `window?.backingScaleFactor ?? 2` to `slotX`; never hardcode 2.
+- Collapse removes the card's ID from `context.mediaDrawers`, so the next
+  expansion starts with the drawer closed.
+- Previous and Next: always present for an audio or video source;
+  `isEnabled = actions.contains(.previousTrack / .nextTrack)`; tint
+  `enabled ? mediaControlGlyph : mediaControlGlyphDisabled`. Hide them only
+  for a recording source.
+- PiP: shown when `isExpanded` and `source.hasVideo`. Close: shown when
+  `isExpanded`. No width animation.
+- Title: a `TextLabel` with the tab's display title, or "Back to Tab" while
+  the title is hovered (a 0.12 s cross-fade, `Motion.miniPlayerTitle`).
+- Favicon: a plate button around a `FaviconView`; action `.backToTab`; AX
+  label "Back to Tab". Register it as `control(named: "favicon")`.
+- Public title hook: `titleState: MiniPlayerTitleState` exposes the title
+  frame, baseline, font size, actual drawn text, drawn width, and truncation
+  flag. `TextLabel` stays internal. Its optional `onDrawnLine` receipt reports
+  the real Core Text line, so MC4/MC7 can read baseline 22 and the actual
+  tail ellipsis without replacing the rendering path.
+- A click on the body (mouse up inside, not on a button) sends
+  `.backToTab` (kept).
+- Fill: `context.style(for: focusedSpace).miniPlayerFill(context.appearance(for: focusedSpace))`.
+  Keep the observation reads of the theme and the appearance.
+- Tooltips: `placement: .beside`, `showDelay: MiniPlayerMetrics.tooltipDelay`.
+- No hover fill and no marquee.
+
+#### 13.8.4 Harness flags (`sidebar-render render`)
+
+- `--media "SPEC"` (existing): flags `audible`, `playing`, `paused`,
+  `silent`, `muted`, `recording`, `video`, `tracks`, `long`,
+  `paused-min=N`.
+- `--media-hover expanded|title:N` (replaces `stack` and `card:N`).
+- `--media-button-hover ID[:N]` and `--media-button-pressed` (existing; add
+  the card index `N`, default 0 = the newest card).
+- `--media-drawer N` (existing; it has an effect only with
+  `--media-hover expanded`).
+- `--media-theme default|red` (existing).
+- `--media-title-from-ax PATH` (new): read the last `AXStaticText` value
+  inside the mini-player hosting view of a local Arc `ax.json`, and use it
+  as the title of every media tab. Never print it or write a text copy to a file.
+  Use it only for local compare runs under `.re/`. Never commit a PNG made
+  with this flag or any real title; re-render synthetic titles for commit.
+- `--crop-media-controls` (existing).
+
+#### 13.8.5 `sidebar-render check`: MC1–MC16
+
+Run them in the composed sidebar at `W` 228, h 900, scale 2, with fake
+hosts and native events, as #92 does. Each line prints PASS or FAIL.
+Frames are ± 0.5 pt.
+
+| ID | Check |
+|---|---|
+| MC1 | No source: `C = 0`, and the pager ends at h − 50 (unchanged). |
+| MC2 | One source at rest: `C = 41`; card `[8, h − 83, W − 16, 33]`; the pager ends at h − 91. |
+| MC3 | Rest controls: five 24 × 24 buttons at card y 5 and x 10/52/94/136/178; the glyphs and tooltip titles of §13.4.3–§13.4.4; placement `.beside`; delay 0.45 s. Without the track actions, Previous and Next are present, `isEnabled == false`, tinted `mediaControlGlyphDisabled`; a synthesized hover shows no plate; a click sends no intent. With the actions they are enabled. |
+| MC4 | Hover in (a synthesized `mouseEntered` on the container): the card becomes `[8, h − 116, W − 16, 66]` and `C = 74`; the title row shows: title origin x 14, baseline 22; for a video source PiP `[cardW − 58, 5]` and Close `[cardW − 34, 5]`. An audio-only source has no PiP, and the title's maximum width is `cardW − 58`. Read title frame and baseline through `titleState`. Exit: synchronously assert the card is expanded with one pending item and `pendingCollapseDelay == 0.3`; after the delayed work runs it is 33 pt again, and the title row has no view that takes a hit. Do not infer the configured delay from a 0.15 s fixed sleep. |
+| MC5 | Clicks (native events through `window.sendEvent`): Previous, Next, Play/Pause, Volume, PiP, and Close send the §4.2 intents. The favicon, the title, and an empty part of the card send `.backToTab`. No button changes the selection. Volume without EM-2 toggles mute (Q8). Preserve the existing regressions: a retiring card refuses hits during its fade; replacement in one event turn leaves one fresh card; tab close prunes its drawer ID and undo restores a 33 pt card with no drawer. |
+| MC6 | Stack of 3 at rest: `C = 55`. Frames `[8, …, 212, 33]`, `[13, …, 202, 33]`, `[18, …, 192, 33]`, each 7 pt above the one in front. Opacities 1, 0.8, 0.6. No layer masks. A back card's strip takes no hit. Back-card slots in container x at scale 2: 23/62.5/102/141.5/181 and 28/65/102/139/176 (at 1x the halves round up: 23/63/102/142/181, as Arc's E6). Hover: `C = 216`; frames from the bottom `[8, C − 66, …]`, `[8, C − 137, …]`, `[8, C − 208, …]`; all opacities 1; every card has Close. Exit: assert one pending collapse with its configured delay exactly 0.3 s, then wait for the real work to produce collapsed C=55. |
+| MC7 | Title: a long title draws one line that ends in "…" and fits its maximum width. Read the actual drawn text, truncation flag and width from `titleState`. No `MarqueeLabel` exists in the view tree. The title label's layer has no animation keys at rest, expanded, playing, or paused. |
+| MC8 | Idle: a paused card collapsed to 33 pt after a hover cycle ended. The window's layer tree has no animation keys; there is no media timer or display link; `pendingCollapseCount == 0`; `store.pendingWorkItemCount == 1`; CPU ≤ 0.5 % over 2 s. |
+| MC9 | `bench --rows 1000 --media-card` (one paused card at rest, container 41 pt) against main with no card: the paired median and 20%-trimmed mean p95 deltas are ≤ 0.3 ms over 12 interleaved pairs (`step3b/compare-bench.py`). If it fails, use the step3 scroll-investigation method (an A/A control and instructions per scroll step) before you call it a regression. Also report, with no gate, one run with a collapsed stack of three paused cards. |
+| MC10 | A Peek dims the container with the bottom bar; closing it restores opacity 1. |
+| MC11 | Colors: default theme fill `#050627` (dark) and `#FDFDFF` (light); the red theme fills with its parsed `dark.backgroundExtra` and `light.backgroundExtra`; the title, glyph, disabled, and plate colors resolve to the §13.4.1 values (± 0.002 per component). |
+| MC12 | Corner and shadow: the content layer has `cornerRadius` 10, `cornerCurve` `.continuous`, and `masksToBounds`. The shadow layer has an opaque black `shadowColor` (alpha 1), `shadowOpacity` 0.21, `shadowRadius` 4, `shadowOffset` zero, and a `shadowPath` equal to the rounded rect of the card bounds after every frame change. |
+| MC13 | Drawer (a fake host with volume): a click on volume while expanded gives a 99 pt card, `C = 107`, and a drawer row `[0, 33, cardW, 33]` laid out per O2. Collapse closes it (`C = 41`) and removes its ID from `context.mediaDrawers`; re-expansion does not reopen it. |
+| MC14 | Recording source: slots 0/1/2 hold the favicon, the microphone, and the camera; there is no Play, Previous, Next, or Volume. |
+| MC15 | Motion regressions in the composed sidebar: the height-animation start equals the current on-screen position for non-centered anchors; at +16 ms the pager stays at its model x/y. Re-enter 50 ms into a real delayed collapse: the container, pager, card, content, title opacity and shadow start from presentation values; at +16 ms the visible card/container height has no backward jump. Title/drawer rows never overlap the controls during motion. Run one- and three-card cases and the drawer. With Reduce Motion OFF, native play/pause image replacement and live AppKit ink are checked. `check --media-motion-only` runs this same focused flow. Transitions run and end: on hover in, the cards, the pager, and the title rows carry animation keys; 0.8 s later no key remains. With Reduce Motion there is one container `CATransition(.fade, 0.1 s)`, no pager animation, and no descendant opacity animation starting at zero. At +16 ms the pager and container remain fully opaque. |
+| MC16 | `check --media-lifecycle-only`: hover in/out and a fourth source at unchanged height use one container cross-fade, no opacity-from-zero on any view, and full pager/container opacity at +16 ms. Width drags in both motion modes (400 → 228 pt) fit model and presentation widths immediately with no attached animation keys. Add/remove while expanded gives C=145 → 74 with titles. Hide/show during the collapse delay restores collapsed C=55 with no pending work. |
+
+#### 13.8.6 Comparison with Arc (`docs/design.md` §7 method)
+
+New subcommand:
+
+```text
+sidebar-render compare-media --arc FRAME.png --ours RENDER.png --out DIR
+                             --state rest|expanded|stack|stack-expanded
+                             [--arc-reference E1.png --ours-reference RENDER-NO-MEDIA.png]
+                             [--mask X,Y,W,H …]
+```
+
+It loads both PNGs into sRGB (Core Graphics converts through the embedded
+display profile, §7 step 3). It places the §13.3 metrics in the window
+frame (1728 × 1084, `W` 228, bottom bar at y 1034) and measures each
+element in both images:
+
+| Element | Measure | Target |
+|---|---|---|
+| Card edges (each card) | the edges of the fill's ink box | ≤ 1 pt per edge |
+| Card fill | the mean of a 6 × 4 sample between slots 2 and 3, and one in the title row right of the title | ΔE00 ≤ 2 |
+| Glyphs: Previous, Play/Pause, Next, Volume, PiP, Close | the ink box (50 % of peak contrast against a plane fit to a 1 px ring, §7 step 4) and the core color (≥ 85 % of peak) | box edges ≤ 1 pt; ΔE00 ≤ 2 |
+| Title | the ink box's left, top, and bottom edges (the right edge only when both strings are the same), and the core color | ≤ 1 pt; ΔE00 ≤ 2 |
+| Hover plate | box edges and a fill sample | ≤ 1 pt; ΔE00 ≤ 2 |
+| Back strips (collapsed stack) | a fill sample in the middle of each 7 pt strip, x 40…190 | ΔE00 ≤ 2 |
+| Expanded gaps | a row sample at the middle of each 5 pt gap | ΔE00 ≤ 2 |
+| Shadow | the darkening at 0.5, 2.5, and 4.5 pt below the front card, as a fraction of the reference without media | within ±1.5 percentage points of Arc (9.2 %, 5.4 %, 2.7 %) |
+
+Masks exclude pixels from fill/background samples and the diff pane only;
+ink boxes and glyph/title core colors still use the original pixels. The
+local Arc/Open panes remain intact. Masks: the favicon slot of every card;
+in E3 the tooltip capsule plus shadow (`--mask 198,1018,30,66`; the real
+capsule within the sidebar is x 204–227, y 1025–1051); everything from y
+1034 down (the bottom bar shows the user's own Space icons). This leaves
+the Volume glyph measurable. Shadow samples below y 1034 are explicitly
+exempt from the bottom-bar mask and use the no-media reference. Output: `table.md` (element
+names and numbers only) and `side-by-side.png` (Arc | Open | diff × 4). The
+side-by-side image has Arc pixels: write `--out` under `.re/` and never
+commit it. Commit `table.md` only after you check that it holds no title
+text.
+
+Runs (local). Common flags: `--size 1728x1084 --width 228 --scale 1
+--appearance dark --media-theme default --media-title-from-ax <the frame's ax.json>`.
+
+| Run | Arc frame | Open render flags | `--state` |
+|---|---|---|---|
+| R1 rest | E2 (14b/0014) | `--media today:0=playing:video` | `rest` |
+| R2 hovered and expanded | E3 (14b/0024) | R1 + `--media-hover expanded --media-button-hover volume` | `expanded` |
+| R3 stack collapsed | E6 (16/0004 pixels) | `--media today:0=playing:video,today:1=playing:video,today:2=playing:video` | `stack` |
+| R4 stack expanded | E7 (16/0012) | R3 + `--media-hover expanded --media-button-hover play:0` | `stack-expanded` |
+
+In R3 and R4 all Open titles are the same string and Arc's differ, so
+compare only the left, top, and bottom title edges there. Use E1 and a
+render without `--media` as the shadow references. Pass rule: every
+element meets its target, or the PR names each miss with its numbers and
+a cause (as `docs/design.md` §8 and §9 do). Light content has no Arc frame:
+render it, and keep its values marked guess.
+
+#### 13.8.7 Renders to commit (`MediaRenders/step3b/`, our own only)
+
+At scale 2, `W` 228 and 500, light and dark, default theme: rest (playing
+video), paused, muted, disabled tracks, audio-only expanded, video
+expanded with the volume plate, button pressed, tooltip, stack collapsed,
+stack expanded, drawer (fake volume), recording, the red theme (light and
+dark), the 164 pt minimum (rest and expanded), and Increase Contrast.
+Re-render the same four R1–R4 states at 1x with synthetic titles for commit.
+Every committed PNG must use synthetic titles only. AX-title renders,
+even though they contain only Open pixels, stay under `.re/` with the
+comparison images and must never be committed.
+
+#### 13.8.8 Order of work
+
+1. Tokens: `MiniPlayerMetrics`, the roles, `miniPlayerFill`, the title
+   font, the glyphs. Build.
+2. `MiniPlayerCardView`: the rows, the slots, disabled tracks, the favicon
+   button, the title label, the shadow layer, the clipped content.
+3. `MediaControlsView`: the stack math, hover for `n ≥ 1`, the opacities,
+   no masks, the hover rect, the animations.
+4. Delete `MarqueeLabel.swift` and fix its references.
+5. The harness flags; rewrite MC1–MC15. RI checks stay as they are. Carry
+   over all unnumbered current MC regressions unless §13 explicitly replaces
+   them, including retiring/replacement hits and drawer prune/undo.
+6. `compare-media`; run R1–R4 locally. Tune only values marked guess or
+   fit. Never change a fact to make a check pass.
+7. Renders, MC9, and `tools/verify-all.sh` through the heavy-job script.
+8. Update §13 and `docs/design.md` §22 with the compare tables and any
+   changed values.
+
+Acceptance: MC1–MC15 PASS; every other `sidebar-render check` line PASS;
+R1–R4 meet the targets or name each miss; MC9 PASS; `tools/verify-all.sh`
+PASS.
+
+### 13.9 Initial implementation results (head 85fd361, 2026-10-26)
+
+Implemented on `feature/media-step3b-mini-player`, stacked on #109. The
+F1–F11 Muse review corrections above ship with the implementation: one shadow
+alpha source, expansion before measurement, explicit masks, the public title
+receipt, retained retiring/replacement/drawer-prune checks, and the wording fixes.
+`Core.foregroundPrimary` is the existing catalog token used for the title.
+
+| Run / Arc frame | Worst edge error (pt), target ≤1 | Worst ΔE00, target ≤2 | Worst shadow error (pp), target ≤1.5 |
+|---|---|---|---|
+| R1 / E2 | 0 | 0.56 | 0.91 |
+| R2 / E3 | 0 | 0.73 | 0.93 |
+| R3 / E6 | 2 | 0.56 | 0.91 |
+| R4 / E7 | 2 | 0.86 | 0.93 |
+
+Named misses under §13.8.6's rule: R3's back card 1 strip has a 2 pt
+right-edge difference (Arc x=212, Open x=210 in the threshold scan). Cause
+(inference): the rounded translucent strip and its background give a different
+threshold box; native MC6 verifies the exact full card frames. R4's middle title
+has a 2 pt bottom-edge difference (919 vs 921) because the different strings have
+different descenders. Its top edge matches and left edge differs by 1 pt. All
+other glyph/title edges match; no fact token was changed to hide a miss.
+
+MC9: 12 interleaved pairs against pinned main `f3c9cc5`, with the on-screen
+lock held for the entire series. Paired median delta **−0.005 ms**, 20%-trimmed
+mean **−0.085 ms** (limit +0.3 ms); PASS. Baseline/head median p95:
+2.035/1.980 ms. Three-card stack report-only: 2.22 ms p95. The required 20-pair
+A/A control passed at +0.070/+0.121 ms. The initial contended, pre-review run
+failed at +0.390/+0.402 ms; its receipt and the pre-merge runs are retained.
+
+`sidebar-render check`: **476 passed, 0 failed**. MC8 idle CPU: **0.011%** over
+2 s, no animation keys, no collapse work, one store expiry item.
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through the
+heavy-job wrapper in a detached session after merging main. The final renderer
+hash matches the renders, A/A control and MC9 receipts.
+
+All 62 committed PNGs use synthetic titles. No AX-title PNG or real video
+title was committed or pushed. Real-title comparisons and Arc/Open/diff images
+remain under `.re/`. The CLI rejects AX-title output outside `.re/`. E3's capture
+has one extra trailing row (1085 → 1084); it is omitted without moving the origin.
+Collapsed E2/E6 have no AX title, so the local runs use E3/E7 titles respectively.
+Light/themed fills, drawer and motion retain their provisional labels.
+
+Full numeric tables, render matrix, binary hashes and runtime receipts:
+[Step 3b evidence](../../Packages/OpenKit/MediaRenders/step3b/README.md).
+The §7 sRGB/plane/ink/CIEDE2000 method is implemented by `compare-media`.
+
+### 13.10 Design review r1 fixes and verification (2026-10-26)
+
+| Finding | Status | Change and evidence |
+|---|---|---|
+| F1: height-change fly-in | Fixed | Anchor-correct starts for pager/container; new checks compare animation starts with the on-screen position and sample the pager at +16 ms. They fail on `85fd361`. |
+| F2: interrupted collapse snaps backward | Fixed | Capture presentation position, size, opacity and shadow path before model changes for container, pager, cards, child views and title fades. Stale title-fade completions are ignored. One- and three-card re-entry checks fail on `85fd361` and pass after the fix. |
+| F3: title/drawer overlap controls | Fixed | Pin row frames using the reviewed formulas; the clipped content edge reveals them. Presentation samples during expand, collapse, re-entry and drawer opening show no control-row overlap. |
+| F4: plate radius | Fixed | `MiniPlayerMetrics.buttonPlateRadius = 5`, continuous, applied only to mini-player buttons. Spec/design now label the value as an E3/E7 fit. |
+| F5: default tooltip fill | Deferred at design review; now inherited from main #113 | The separate token task owns the measured `#0A0D4F` fill. No mini-player-specific token fix. |
+| F6: spring response | Fixed, still a guess | Mini-player stack response is 0.2 s, damping 1, based on the measured sidebar spring. O9 still needs a mini-player motion capture. |
+| F7: native play/pause coverage | Added | Reduce Motion OFF: check the shipping `NSImageView` path, live AppKit ink, and native-event pause/play replacement. Actual App-window comparison remains with Step 6 integration. |
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
+`heavy.sh` in a detached session after merging main `d92a695`.
+`sidebar-render check`: **525 passed, 0 failed**, including **49 motion checks**.
+MC8 idle CPU: **0.014%** over 2 s, no idle animation keys or collapse work.
+The focused motion suite passes **49/49**. The identical harness fails the old
+`85fd361` production code with **36 failures** (13 PASS), proving the F1/F2 gates
+are sensitive to the reported defects.
+
+MC9: **PASS**, 12 interleaved pairs against main `d92a695`, with
+`/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
+**-0.155 ms**, 20%-trimmed mean **-0.275 ms** (limit +0.3 ms).
+Baseline/head median p95: 4.350/4.140 ms.
+Collapsed 3-card report-only: 3.76 ms p95.
+
+Independent design review confirmed that the R3/R4 2 pt values in the initial
+tables are measurement artifacts: rounded-strip ring sampling and different
+strings/descenders, respectively. No product geometry correction is needed for
+those values. All 62 synthetic renders were regenerated; the raw comparison tables
+remain available. Tooltip F5 was deferred at design review; the current main merge inherits the separate #113 token fix.
+
+[Final evidence and review receipts](../../Packages/OpenKit/MediaRenders/step3b/README.md).
+
+### 13.11 Code review r1 fixes and verification (2026-10-26)
+
+| Finding | Status | Change and evidence |
+|---|---|---|
+| C1: Reduce Motion blink | Fixed | One 0.1 s container CATransition cross-fades the subtree. Pager and child frames apply immediately. Hover in/out and same-height fourth-source checks reject opacity-from-zero and verify full pager/container opacity at +16 ms. |
+| C2: width drag trails and re-animates | Fixed | Container/card flags allow animation only for media changes. Width drags cancel existing media animations and apply geometry with implicit actions disabled. 400 → 228 pt drags check every step for no keys and exact model/presentation widths, in both motion modes and expanded/collapsed states. |
+| C3: missing assertions | Added | MC6 asserts exit collapse, MC8 asserts collapsed 33 pt rest, MC10 asserts Peek opacity restoration. Expanded add/remove checks assert visible title rows and C=145 → 74. MC15 asserts one root cross-fade and full presentation opacity. |
+| C4: hidden sidebar keeps stale expansion | Fixed | Hide cancels collapse work and resets an unforced stack to collapsed without animation. Hide/show within the 0.3 s delay checks C=55, 33 pt cards, no pending collapse, and clean layers. |
+| C5: removal under real pointer | Manual check pending | No tracking-area behavior change. §8.5 asks the user to expand two cards, click the top title or Close, move over the tab list, and confirm collapse. The agent cannot confirm this without driving the real pointer. |
+| C6: stale flags and dead hitTest branch | Fixed | §8.2 uses expanded\|title:N and points to §13.8.4; the card returns super.hitTest after its visibility/retiring guard. |
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, exit 0, through
+`heavy.sh` in a detached session after merging main `ebea09f`.
+`sidebar-render check`: **558 passed, 0 failed**, including **49 motion** and
+**30 lifecycle checks**. MC8 idle CPU: **0.013%** over 2 s, collapsed 33 pt,
+no idle animation keys or collapse work, one store expiry item.
+The identical lifecycle harness fails frozen `3504776` with **18 failures**
+(12 PASS) and passes the fixes **30/30**. Existing motion remains **49/49**.
+
+MC9: **PASS**, 12 interleaved pairs against pinned main `ebea09f`, with
+`/tmp/open-onscreen-e2e.lock` held across the full series. Paired median delta
+**-0.105 ms**, 20%-trimmed mean **-0.135 ms** (limit +0.3 ms).
+Baseline/head median p95: 3.100/2.885 ms.
+Collapsed 3-card report-only: 3.24 ms p95.
+
+Tooltip F5 was owned by the separate token task. Its fix merged in main #113
+and is inherited here; no mini-player-specific tooltip color change was made.
+All 62 PNGs were regenerated with synthetic titles and this final renderer.
+The §7 comparison tables retain the R3/R4 measurement artifacts accepted by
+design review; no geometry token changed. C5 needs the manual §8.5 pointer check.
+
+[Current evidence and review receipts](../../Packages/OpenKit/MediaRenders/step3b/README.md).
+
+### 13.12 Main merge verification (2026-10-26)
+
+Merged main `9e3473c` with a merge commit. The three conflicts were
+`MediaControlsView.swift`, `Checks.swift` and `MediaChecks.swift`. Keep the
+33/66/99 pt redesign, motion/lifecycle fixes, single-card hover and drawer prune;
+retain main’s scheduled-collapse delay receipt, condition-based waits and UUID
+preferences suite. `cancelCollapse()` clears both the work item and its delay.
+No engine source or key routing was changed by the resolution.
+
+`tools/verify-all.sh`: **20/20 PASS**, no skips or retries, through `heavy.sh`
+in a detached session. `sidebar-render check`: **559 PASS, 0 FAIL**.
+Focused motion: **49/49**; lifecycle: **30/30**. Two concurrent full sidebar
+runs with separate temporary directories and UUID preferences suites each pass
+**559/559**. Invalid state/hover CLI cases each exit 1 without writing a PNG.
+MC8 idle CPU: **0.023%**, collapsed 33 pt, no idle animation keys or collapse work.
+
+MC9: **PASS**, 12 interleaved pairs against pinned main `9e3473c`, with
+`/tmp/open-onscreen-e2e.lock` held across the whole series, after all builds and
+focused checks finished. Paired median delta **-0.705 ms**;
+20%-trimmed mean **-0.520 ms** (limit +0.3 ms).
+Baseline/head median p95: 4.035/3.465 ms.
+Three-card report-only p95: 4.11 ms.
+
+All 62 synthetic PNGs were regenerated (62/62 byte-identical to the
+previous receipt). R1–R4 numeric comparisons remain unchanged. R3/R4 are the
+previously accepted measurement artifacts. No Arc pixels or real-title PNGs
+were committed. The renderer hash matches MC9, the render manifest and full
+verification.
+
+C5’s real-pointer check and Step 6 real-window snapshots remain pending;
+§8.5, `docs/followups.md` and the PR checklist state that scope explicitly.
+Historical negative-control receipts describe their original frozen harnesses;
+this refresh retains their defect gates and adapts the delay assertions to main.
+
+[Current merge/checklist receipts](../../Packages/OpenKit/MediaRenders/step3b/evidence/main-refresh/README.md).
 
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the media controls + Picture in Picture plan. Steps 1–5 start now: they need no App window. Step 6 and later App steps wait for app-shell Step B (#52) and Step G (sleep).
-- Q1 Mini players sit above the bottom bar. This is provisional until screenshot S3, then follow Arc.
+- Q1 Mini players sit above the bottom bar. This is provisional until screenshot S3, then follow Arc. (Resolved 2026-10-26, below.)
 - Q2 Up to 3 mini players, newest first.
 - Q3 Paused mini players hide after 60 min. A tab stays awake while its mini player shows.
 - Q4 Auto-PiP on window minimize, occlusion, or app hide: follow Arc. Screenshot S10 decides. Until then, it is off.
@@ -1465,7 +2369,30 @@ stays in `.re/` and is never committed.
 - Q12 The Meet chat toggle in Document PiP is deferred.
 - Q13 Mic and camera mini players ship with Step 8.
 - Q14 No audio badge on Favorites tiles, unless screenshot S9 shows one.
-- Q15 The scrolling title is on, with no setting.
+- Q15 ~~The scrolling title is on, with no setting.~~ Superseded 2026-10-26 (below): no marquee.
 - Q16 Engine queue: Step 5 (EM-1a, EM-5 interim, EM-8) is OpenEngine-only and goes to the Steps 1–5 implementer, not the engine lead. The fork requests EM-1b, EM-2, EM-3 (P6), and EM-5 (fork path) queue after P2. EM-6 and EM-7 follow them. EM-4 (own PiP window) queues after the ad-block and tab-sleep patch series.
 - Q17 The PiP menu check mark shows the current state.
 - Screenshots S1–S12: the lead asks the user in one batch with the other plans' screenshot needs. Step 12 waits for them.
+
+## Appendix — Lead decisions (2026-10-26, capture session 2)
+
+- The tab-row speaker is **leading**: a 26 × 26 button with an outline glyph right after the favicon, and the title moves right by 26 (C18; S2 12/0022, 0027). This supersedes the trailing 20 × 20 filled speaker that #67 built. Follow-up Step 2b changes it; the recording dot follows the same leading slot until a capture shows otherwise.
+- Out of this amendment (handled separately): the mini player look and the PiP window size.
+
+## Appendix — Lead decisions (2026-10-26)
+
+- **Capture session 2 facts override the 68 pt card design.** Step 3b
+  (§13) replaces the card that #92 shipped: a 33 pt controls-only card at
+  rest; a 66 pt card with a title row while the pointer is over the
+  stack (one card included); 8 pt above the stack and 0 below; back cards
+  7 pt up, 5 pt inset per side, opacity `1 − 0.2·i`, not masked; expanded
+  cards 5 pt apart; the fill is the Space palette's `backgroundExtra`;
+  glyphs are Medium; the title is 13 Regular and static. Struck values in
+  §4.2 are tombstones; do not build from them.
+- Q1 is resolved: the stack sits on the bottom bar's top edge, 8 pt below
+  the tab list (S2 14b/0014).
+- Q15 is superseded: Arc showed a static, tail-truncated title, so Open
+  ships no marquee. §13.7 O12 says how to restore it if a capture shows
+  scrolling.
+- Q5 (Close pauses) and Q8 (the volume control toggles mute until EM-2)
+  stay. Both are listed for a future capture (§13.7 O2, O3).

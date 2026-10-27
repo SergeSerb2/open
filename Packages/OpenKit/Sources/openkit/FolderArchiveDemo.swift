@@ -26,6 +26,8 @@ func runFolderArchiveDemo(root: URL, check: (Bool, String) -> Void) async throws
     let deep = model.createFolder(in: .spacePinned(space.id), title: "Deep", withNodes: [split.id])!
     let folder = model.createFolder(in: .spacePinned(space.id), title: "Archived", withNodes: [a.id, deep.id])!
     folder.customIcon = "folder.badge.plus"; folder.isExpanded = false
+    folder.iconOverride = .named("planet"); deep.iconOverride = .named("star")
+    a.iconOverride = .emoji("🧭"); b.iconOverride = .emoji("🌊")
     let parent = model.createFolder(in: .spacePinned(space.id), title: "Parent", withNodes: [folder.id])!
     let originalIDs = [folder.id, a.id, deep.id, split.id, b.id, c.id]
     undo.removeAllActions(); events = []
@@ -48,6 +50,9 @@ func runFolderArchiveDemo(root: URL, check: (Bool, String) -> Void) async throws
           "FA2 restore reconstructs nested folders, split, metadata, original IDs and order")
     check(model.tab(id: b.id)?.pinnedURL == b.url && model.tab(id: b.id)!.lastActiveAt > record.archivedAt,
           "FA2 restore reapplies pinned URLs and refreshes activity")
+    check(restored?.iconOverride == .named("planet") && model.node(id: deep.id)?.folder?.iconOverride == .named("star")
+          && model.tab(id: a.id)?.iconOverride == .emoji("🧭") && restoredSplit?.panes[0].iconOverride == .emoji("🌊"),
+          "FA2 restore preserves typed icons on the root folder, nested folder, tab, and split pane")
     undo.undo(); sink.flushAll()
     let undoRow = await store.record(id: folder.id)
     check(model.node(id: folder.id) == nil && undoRow?.kind == .folder && !undo.canUndo,

@@ -5,6 +5,8 @@ let package = Package(
     name: "OpenKit",
     platforms: [.macOS(.v26)],
     products: [
+        .library(name: "OpenSiteControl", targets: ["OpenSiteControl"]),
+        .executable(name: "sitecontrol-render", targets: ["sitecontrol-render"]),
         .library(name: "OpenMedia", targets: ["OpenMedia"]),
         .library(name: "OpenSettings", targets: ["OpenSettings"]),
         .executable(name: "settings-preview", targets: ["settings-preview"]),
@@ -24,6 +26,7 @@ let package = Package(
         .executable(name: "openkit", targets: ["openkit"]),
         .executable(name: "commands-dump", targets: ["commands-dump"]),
         .library(name: "OpenDesign", targets: ["OpenDesign"]),
+        .library(name: "OpenSpaceEditor", targets: ["OpenSpaceEditor"]),
         .library(name: "OpenSidebar", targets: ["OpenSidebar"]),
         .executable(name: "sidebar-render", targets: ["sidebar-render"]),
         .executable(name: "space-editor-render", targets: ["space-editor-render"]),
@@ -31,6 +34,8 @@ let package = Package(
         .executable(name: "commandbar-render", targets: ["commandbar-render"]),
     ],
     targets: [
+        .target(name: "OpenSiteControl", dependencies: ["OpenModel", "OpenDesign", "OpenBoosts", "OpenAdBlock", "OpenWeb"]),
+        .executableTarget(name: "sitecontrol-render", dependencies: ["OpenSiteControl", "OpenModel", "OpenDesign", "OpenBoosts", "OpenWeb"]),
         .target(name: "OpenMedia", dependencies: ["OpenModel", "OpenWeb"], resources: [.copy("Resources/pip-site-rules.json")]),
         .target(name: "OpenSettings", dependencies: ["OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenDesign", "OpenAdBlock", "OpenImport"]),
         .executableTarget(name: "settings-preview", dependencies: ["OpenSettings", "OpenModel", "OpenRouting", "OpenCommands", "OpenSuggest", "OpenStore", "OpenImport", "OpenAdBlock"]),
@@ -50,9 +55,10 @@ let package = Package(
         .executableTarget(name: "openkit", dependencies: ["OpenSidebar", "OpenMedia", "OpenFeatures", "OpenModel", "OpenStore", "OpenImport", "OpenSuggest", "OpenRouting", "OpenSleep", "OpenAdBlock"], resources: [.copy("Resources/sleep-schema1.json")]),
         .executableTarget(name: "commands-dump", dependencies: ["OpenCommands", "OpenSuggest"]),
         .target(name: "OpenDesign", dependencies: ["OpenModel"]),
+        .target(name: "OpenSpaceEditor", dependencies: ["OpenModel", "OpenDesign"]),
         .target(name: "OpenSidebar", dependencies: ["OpenMedia", "OpenModel", "OpenDesign"]),
         .executableTarget(name: "sidebar-render", dependencies: ["OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
-        .executableTarget(name: "space-editor-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources")]),
+        .executableTarget(name: "space-editor-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),
     ]

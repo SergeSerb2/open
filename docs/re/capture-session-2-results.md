@@ -30,7 +30,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | C16 | Sidebar §3.16: minimum 228; below it the sidebar slides; release under 180 hides | The resize **continues down to 164**; dragging past 164 slides it out while pressed. Cmd+S restores the pre-drag width. Double-click on the edge resets to 228. (S2 06/0009–0066) | sidebar lane A1 (not opened); app-shell's 180 pt rule |
 | C17 | Sidebar Q13: no hint after a Cmd+S hide | Session 1 showed the hint after a Cmd+S hide (A0438); session 2 showed none on any path. So the hint shows once, on the first hide by any path (guess). (S2 04; notes 10:11:20) | sidebar lane A1 (not opened) |
 | C18 | Media §4.1: speaker 20 x 20 after the title, filled glyphs | **Leading**: 26 x 26 button right after the favicon (x 41), title moves to x 69; outline glyphs. (S2 12/0022, 0027) | merged #67: follow-up PR needed |
-| C19 | Media §4.2.3: card 68 pt with a title row, fill `SidebarColors.itemBackground`, corner 10, play group at the left | At rest a **33 pt** controls-only card: favicon, previous, play/pause, next, volume, evenly spaced (pitch 42); **opaque** `#050627` (default dark theme); corner ≈ 6. The title row appears only when expanded (66 pt). (S2 14b/0014, 0024) | #92 must change |
+| C19 | Media §4.2.3: card 68 pt with a title row, fill `SidebarColors.itemBackground`, corner 10, play group at the left | At rest a **33 pt** controls-only card: favicon, previous, play/pause, next, volume, evenly spaced (pitch 42); **opaque** `#050627` (default dark theme); corner 10 continuous (fit; the first read, ≈ 6, was visual). The title row appears only when expanded (66 pt). (S2 14b/0014, 0024) | #92 must change (spec: `plans/media-pip.md` §13) |
 | C20 | Motion tokens: Space switch spring 0.30 s; command bar opens with a 0.22 s spring | Space switch: critically damped spring **0.20 s**; command bar: **no animation**. (V 35.05, 43.63 s; V 9.70–14.20 s) | #104 has the follow-ups (design.md §2.4 rows) |
 
 ## 2. Routing table by area
@@ -64,7 +64,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Folder expansion (sidebar S3) | `expandedItems` `{expanded: {}}` | Also `{peeked: {_0: [childID]}}`: a collapsed folder shows its last active child, its glyph shows "•••" (`FolderEllipses*` images; the lane S design reviewer saw the same); a click collapses fully, the next expands (S2 08/0090, 0100; V 46.49–55.04 s) | Sidebar S3 #95 | must change (state and glyph); import too |
 | Folder row hover | — | White 0.10 fill and a "—" at the right (S2 08/0090) | #95 | check |
 | New Folder placement | — | Above the Today divider (S2 08/0100) | — | check |
-| Folder hover preview (sidebar §3.6, C4) | Look, size, delay guessed | Not captured (did not appear for synthetic events) | Sidebar S5 #102 | open |
+| Folder hover preview (sidebar §3.6, C4) | Look, size, delay guessed | Seen once in the video (added 2026-10-26, review r1): card ≈ 240 pt wide, 4 pt right of the sidebar, centered on the row, a "Search \<folder\>…" field, rows ≈ 45 pt with "N minutes ago"; hover-to-card ≈ 0.42 s; fade in ≈ 0.08 s, out ≈ 0.10 s. Positions only (V 45.69, 46.11–46.46 s; IS §20.4). No still frame | Sidebar S5 #102; lane C | check (Open keeps 0.5 s as an Open choice) |
 | Previews sheet (sidebar Q3) | Two switches | 7 checkboxes (S2 02/0050) | #102 | C5 |
 | Auto-archive banner (sidebar §3.11, C6, Q12) | Copy from strings | Not captured: options are 12 hours (default), 24 hours, 7 days, 30 days (S2 02/0034) | #102 | open |
 
@@ -108,7 +108,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | Mini player placement (Q1, D-3, PP-20) | Above the bottom bar, 4 pt margins | Card bottom on the bottom bar's top edge (0 gap), 8 pt below the tab list (S2 14b/0014) | #92 | must change (margins) |
 | Card layout (§4.2.3) | 68 pt with title row | 33 pt controls-only at rest; 66 pt expanded (C19) | #92 | must change |
 | Volume (S5, Q8) | Drawer | Click expanded the card; no drawer seen; tooltip "Adjust Tab Volume" (S2 14b/0024) | #92 | check |
-| Stack (S6, Q2, PP-14) | Back cards 5 pt up, 6 pt inset, opacity 1 − 0.3·i; expanded gap 6 | Back cards **7** pt up, insets ≈ **5 / 11**, dimmer; expanded 66 pt cards, gap **5**, newest at the bottom (S2 16/0005, 0012) | #92 | must change (numbers) |
+| Stack (S6, Q2, PP-14) | Back cards 5 pt up, 6 pt inset, opacity 1 − 0.3·i; expanded gap 6 | Back cards **7** pt up, insets **5 / 10** per side (AX button positions), opacity ≈ 0.8 / 0.6, not masked; expanded 66 pt cards, gap **5**, newest at the bottom (S2 16/0005, 0012) | #92 | must change (numbers; `plans/media-pip.md` §13.3.4) |
 | How many (Q2) | 3 | At least 3 shown (S2 16) | #92 | agrees |
 | Auto-PiP window (S1) | Chromium window in phase 1 | 320 x 180, 10 pt from the screen's bottom-right, corner ≈ 6, video only at rest (S2 13/0002; the media lane measured the same). The lead's first-open rule `visibleFrame` / 8 gives 2560 / 8 = 320 here; one display and one 16 : 9 video, so consistent but not proven | #101 | agrees (size and inset); check (other screens) |
 | PiP and the sidebar (MS1) | Source with open PiP has no card | Confirmed: no mini player while PiP shows (S2 13) | #92 | agrees |
@@ -160,7 +160,7 @@ Read these first. Each row is a decision or a written plan answer that the captu
 | What follows the system (interaction-states §19 item 6) | — | A Space without a stored theme follows macOS; themed Spaces follow `contentOverBackgroundAppearance` (session 1) | — | agrees |
 | Card in Light (design.md §16.5 `card_edges_appearance`) | Faint stroke | Faint lighter stroke, visible shadow; fill a little lighter than the sidebar over a white page (S2 20/0040) | — | agrees |
 | Toast on a light Space (PP C-T1) | Theme fill rule | Lavender pill, dark text (S2 20/0048) | — | check |
-| Mini player in Light (MP S3) | — | Not captured | #92 | open |
+| Mini player in Light (MP S3) | — | Not captured. Provisional rule: the fill is the Space palette's `light.backgroundExtra` (`#FDFDFF` for the default theme), guess (`plans/media-pip.md` §13.4.2) | #92 | open |
 
 ### 2.10 Motion (item 21, video)
 
@@ -203,7 +203,7 @@ PR #104's agent timed the same video independently (Cmd+S ≈ 0.1 s each way, sh
 
 - Item 15: back-to-PiP, and what Close on a mini player or PiP does to playback.
 - Item 22: the auto-archive banner. The shortest "Archive tabs after" option is 12 hours, so it could not trigger in the session.
-- The folder hover-preview card (no preview for synthetic pointer events).
+- The folder hover-preview card's colors and type (it appeared once in the video, positions only; IS §20.4).
 - PiP hover controls and the PiP menu (no response to synthetic events).
 - The microphone and recording states (skipped), so the recording dot and recording mini player stay open.
 - The Boost code editor body ("Internal debugging pages are currently disabled").

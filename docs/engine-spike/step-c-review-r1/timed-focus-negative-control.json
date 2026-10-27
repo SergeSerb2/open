@@ -1,0 +1,103 @@
+{
+  "ok": true,
+  "sourceHead": "5d57c969588787c3722da1fab92efd6d85773de2",
+  "method": "Real socket-only polling interval, no native input; an owned Open peer becomes frontmost. The otherwise successful assertion must be stored as INTERRUPTED with no accepted ok flag.",
+  "attempts": [
+    {
+      "attempt": 1,
+      "nativeInputCount": 0,
+      "timedIntervals": 2,
+      "interrupted": true,
+      "result": {
+        "socket_only_timing": {
+          "status": "INTERRUPTED",
+          "assertion": {
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Open",
+              "frontmostPID": 971,
+              "uptime": 143909.20772004168,
+              "openPID": 956
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Open",
+              "frontmostPID": 971,
+              "keyWindow": 0,
+              "uptime": 143909.21110633333,
+              "openPID": 956
+            }
+          ]
+        }
+      }
+    },
+    {
+      "attempt": 2,
+      "nativeInputCount": 0,
+      "timedIntervals": 2,
+      "interrupted": true,
+      "result": {
+        "socket_only_timing": {
+          "status": "INTERRUPTED",
+          "assertion": {
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Open",
+              "frontmostPID": 1040,
+              "uptime": 143910.67161354166,
+              "openPID": 1001
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Open",
+              "frontmostPID": 1040,
+              "keyWindow": 0,
+              "uptime": 143910.6740742917,
+              "openPID": 1001
+            }
+          ]
+        }
+      }
+    },
+    {
+      "attempt": 3,
+      "nativeInputCount": 0,
+      "timedIntervals": 2,
+      "interrupted": true,
+      "result": {
+        "socket_only_timing": {
+          "status": "INTERRUPTED",
+          "assertion": {
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Open",
+              "frontmostPID": 1078,
+              "uptime": 143912.25020575,
+              "openPID": 1064
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Open",
+              "frontmostPID": 1078,
+              "keyWindow": 0,
+              "uptime": 143912.25319433335,
+              "openPID": 1064
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

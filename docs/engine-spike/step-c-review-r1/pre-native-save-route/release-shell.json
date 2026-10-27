@@ -1,0 +1,96 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "4FC6D4BE-1E87-4714-AFBC-2F0BD01A0155",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "keyboard": {
+      "ok": true,
+      "restored_same_id": true,
+      "routes": {
+        "cmd_l_window": "CommandBarFieldEditor",
+        "cmd_t_app": "CommandBarFieldEditor"
+      },
+      "tabs": [
+        3,
+        4,
+        3
+      ]
+    },
+    "persistence": {
+      "loaded_after_launch": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "snapshot": "State/browser.json",
+      "tabs": 4
+    },
+    "split_view": {
+      "ok": true,
+      "panes": [
+        "https://example.org/",
+        "https://example.net/"
+      ],
+      "screenshot": "shell-split-view.png"
+    },
+    "suite": {
+      "error": "save-page-configure: unknown command save-page-configure",
+      "ok": false
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "C925B006-647D-4F70-B6E9-0BA7E89F7901"
+        ],
+        [
+          1,
+          "C6E42462-F155-4AD2-81F3-5B6342791BED"
+        ],
+        [
+          2,
+          "79191CC1-3D7B-4D71-8D63-0F0700481E92"
+        ]
+      ]
+    },
+    "window_png": {
+      "file": "shell-window.png",
+      "method": "windowserver+devtools",
+      "ok": true
+    }
+  },
+  "started": "2026-10-26 15:45:17",
+  "style": "chrome"
+}

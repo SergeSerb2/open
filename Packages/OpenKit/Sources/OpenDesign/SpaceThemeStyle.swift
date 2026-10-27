@@ -71,6 +71,12 @@ public struct SpaceThemeStyle: Sendable, Hashable {
         appearance == .dark ? darkPalette : lightPalette
     }
 
+    /// Mini-player fill: media plan §13.4.2, capture session 2.
+    public func miniPlayerFill(_ appearance: ContentAppearance) -> RGBA {
+        if let palette = palette(for: appearance) { return palette.backgroundExtra.withAlpha(1) }
+        return appearance == .dark ? DefaultThemePalette.darkBackgroundExtra : DefaultThemePalette.lightBackgroundExtra
+    }
+
     /// Tab and folder title color. Measured: fully covered title pixels equal the
     /// theme's `title` for the content appearance (#320E00 in Space 1). Without a
     /// theme: measured on the default dark Space (F0072), see `DefaultThemeText`.
@@ -133,8 +139,13 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     }
 
     /// Tooltip capsule fill: the theme's `light.title`, opaque (exact match, F0021–F0033).
-    /// Without a theme: guess, a neutral near-black.
-    public var tooltipFill: RGBA { lightPalette?.title.withAlpha(1) ?? RGBA(hex: 0x1C1B22) }
+    /// Without a theme (the default theme): `#0A0D4F`, its `light.title` equivalent,
+    /// measured exact after display-profile → sRGB conversion in capture session 2
+    /// (default dark theme: S2 14b/0024, 03/0010, 03/0014, 19/0025; the same capsule
+    /// color as the link status bubble, S2 04/0021). No default-theme tooltip was
+    /// captured in macOS Light (S2 item 20 has no tooltip window), so applying the
+    /// same value there follows the `light.title` role. guess for that case.
+    public var tooltipFill: RGBA { lightPalette?.title.withAlpha(1) ?? RGBA(hex: 0x0A0D4F) }
     /// Tooltip text: light and tinted. guess: the theme's `light.background`.
     public var tooltipText: RGBA { lightPalette?.background.withAlpha(1) ?? RGBA(hex: 0xF4F4F6) }
     /// Keycap plate inside a tooltip. guess: tooltip text at 18 %.
@@ -275,4 +286,10 @@ public enum DefaultThemeText {
     public static let title = DesignColor(light: RGBA(hex: 0x0E0F10, alpha: 0.9, .displayP3), dark: RGBA(hex: 0xDDDEFF))
     /// Split-row titles: dimmer and neutral. Dark: white 0.80 (`ForegroundPrimary`), F0079.
     public static let splitTitle = Core.foregroundPrimary
+}
+
+/// Media plan §13.4.2: dark is fact (E2); light is derived, pending capture.
+public enum DefaultThemePalette {
+    public static let darkBackgroundExtra = RGBA(hex: 0x050627)
+    public static let lightBackgroundExtra = RGBA(hex: 0xFDFDFF)
 }

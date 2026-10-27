@@ -154,8 +154,7 @@ class OEClient;
 /// `create` is YES; nullptr before the context is ready or after -close.
 - (CefRefPtr<CefTabStrip>)oe_tabStripCreatingIfNeeded:(BOOL)create;
 /// NO once the engine refused a hidden Chrome window for this browser's
-/// context (a non-default profile without a disk profile): its Chrome style
-/// pages use Alloy instead.
+/// context: its Chrome style pages use Alloy instead of a Chrome window.
 @property(nonatomic, readonly) BOOL oe_canHostTabs;
 /// Puts Chromium's tab strip in -webContents order on the next turn.
 - (void)oe_setNeedsTabStripSync;

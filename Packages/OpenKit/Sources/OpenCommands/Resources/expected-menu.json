@@ -649,6 +649,12 @@
  },
  {
   "path": "Tabs",
+  "title": "Reveal Tab in Sidebar",
+  "shortcut": "",
+  "inScope": true
+ },
+ {
+  "path": "Tabs",
   "title": "Rename Current Item",
   "shortcut": "",
   "inScope": true
