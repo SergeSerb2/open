@@ -66,8 +66,13 @@ def run(factory, results, scratch, root, wait_until):
         rest = capture('editor-rest', p['number'])
         app.call('mouse', window=p['number'], action='hover', x=151, y=61)
         hovered = capture('editor-hover', p['number'])
-        results['real_window_renders'] = {'ok': all(Path(f).stat().st_size > 0 for f in (empty, rest, hovered)),
-                                          'artifacts': str(output.relative_to(root))}
+        pixels = globals()['read_image']
+        rw, rh, rest_pixel = pixels(rest)
+        hw, hh, hover_pixel = pixels(hovered)
+        changed = sum(rest_pixel(x * rw / 382, y * rh / 534) != hover_pixel(x * hw / 382, y * hh / 534)
+                      for x in range(139, 164) for y in range(48, 72))
+        results['real_window_renders'] = {'ok': rw / rh == hw / hh and rw >= 382 and rh >= 534 and changed > 20,
+                                          'hoverChangedPixels': changed, 'artifacts': str(output.relative_to(root))}
         # Queued drag events use the real panel responder path.
         counters = app.call('frame-save-counters')
         app.call('mouse', window=p['number'], action='drag', **{'from': [223.5, 222.5], 'to': [105, 235]})
@@ -90,6 +95,13 @@ def run(factory, results, scratch, root, wait_until):
         app.call('key', window=p['number'], key='z', modifiers=['cmd', 'shift'], route='app')
         redo = saved_style()
         results['app_key_undo_redo'] = {'ok': undo == first and redo == edited}
+        app.call('mouse', window=p['number'], action='click', x=243.032, y=465)
+        near_end = saved_style()
+        app.call('mouse', window=p['number'], action='hover', x=243.032, y=465)
+        app.call('mouse', window=p['number'], action='click', x=256, y=465)
+        at_end = wait_until(lambda: (lambda s: s if s['intensityFactor'] == 1 else None)(saved_style()), timeout=3, step=.02)
+        results['thumb_overhang_hit_path'] = {'ok': abs(near_end['intensityFactor'] - .98) < .01 and at_end is not None,
+                                             'before': near_end['intensityFactor'], 'after': at_end['intensityFactor'] if at_end else None}
         app.call('key', window=p['number'], key='escape', route='app')
         results['escape_closes_editor'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
         p = opened()
@@ -102,6 +114,9 @@ def run(factory, results, scratch, root, wait_until):
         app.call('key', window=p['number'], key='l', modifiers=['cmd'], route='app')
         results['cmd_l_editor_context'] = {'ok': wait_until(lambda: app.call('commandbar-state')['presented'], timeout=3, step=.02) and not panel()}
         app.call('key', key='escape', route='app')
+        p = opened()
+        app.call('key', window=p['number'], key='w', modifiers=['cmd'], route='app')
+        results['cmd_w_editor_context'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
         p = opened()
         app.call('space', space=data['spaces'][1]['id'])
         results['space_switch_closes_editor'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}

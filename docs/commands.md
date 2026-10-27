@@ -389,3 +389,12 @@ fallback opens the browser find bar.
 `Tabs > Reveal Tab in Sidebar` has no default shortcut, matching the empty
 shortcut cell in docs/re/menus-and-hotkeys.md §Tabs. The separate View command
 keeps Ctrl+Space. The menu comparison JSON includes both titles.
+
+
+### Space theme editing (Step 5)
+
+`edit-theme` opens the theme panel for the focused Space. The Space context
+menu's “Edit Theme Color…” uses the same path, focusing its target first.
+No shortcut is added. Panel keys use the native responder chain; browser
+Cmd+T/L/W close and flush the editor before the existing browser command
+path runs. Undo/redo stay on the model's shared undo manager.

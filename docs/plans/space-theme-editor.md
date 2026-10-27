@@ -796,9 +796,11 @@ normal window).
   from `baseline` to the current value; the controller sets the action name
   "Update Theme"; the app's existing debounced `scheduleSave()` runs. Then
   `baseline` = current value.
-- Undo / redo while the panel is open: the session observes `space.theme`;
-  any change it did not make reseeds the editor state (§4.3) and moves the
-  knobs (no animation for knobs; the background uses `themeDiscrete`).
+- Undo / redo while the panel is open restores the exact paired in-session
+  state: style, knob, lightness range, and saturation (Step 9 lead decision,
+  2026-10-26 17:14). Other external theme changes reseed the state (§4.3).
+  Knobs do not animate; the background uses `themeDiscrete`. The range is
+  never written to disk. Reopening derives it from the key per §17.1.
 - Closing the panel mid-drag (Esc during a drag) commits first.
 - App quit with the panel open: `applicationWillTerminate` closes panels,
   which commits.
@@ -1602,3 +1604,30 @@ dithering; its support stays inside the rim. The ΔE00 ≤2 limit is unchanged.
 F0137/F0138 remain at maximum **1 pt / ΔE00 1.94**. Session-2 slider frames
 0098/0100/0111/0114 remain within **1 pt**. Preview mean-color error is at
 most **ΔE00 1.31** across 0112/0114/0116/0118/0159.
+
+
+### Step 5 implementation — live sessions (2026-10-26)
+
+`ThemeEditSession` owns the current model baseline and draft. The panel's
+single display link writes one preview per frame. The shared
+`ThemePreviewRegistry` publishes after that write, in the same transaction;
+each matching sidebar swaps and rebuilds its field before presentation.
+Other Spaces are not invalidated. Leases are scoped to editor gestures, so
+preset/mode/add/remove/texture and undo/redo keep the discrete 0.21 s fade.
+
+The browser window owns one controller. Both `edit-theme` and
+`editSpaceTheme` use it; the latter focuses its target first without adding
+an undo step. A gesture commit schedules one debounced save. Its undo relay
+keeps the store independently of the original window, so undo/redo still
+save after that window closes. Esc flushes a pending frame before closing.
+Outside mouse down, app deactivation, Space switch/delete, owner close, and
+app termination close the editor. The existing final save after the engine
+message loop follows the termination notification; no new app shutdown
+path is added. Backing-scale changes follow the owner window.
+
+`App/MainMenu.swift` adds only the theme command's feature ownership and a
+small key-window lookup for the panel. Existing generic automation drives
+the real windows in `engine_e2e.py --only theme-live`; Step 8's dedicated
+`editor-*` / `theme-*` APIs, creation form, and icon picker remain deferred.
+The already-landed thumb-overhang `hitTest` path is retained and checked
+through the native panel path.

@@ -504,7 +504,7 @@ extension EngineWebContentHostFactory {
   @objc func focusAddressBar(_ sender: Any?) { showCommandBar(.editCurrentURL) }
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
-    candidate === window || candidate === controller?.themeEditor?.panel || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate }
+    candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate }
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     if current, selectedContent != nil || selectedTab != nil {

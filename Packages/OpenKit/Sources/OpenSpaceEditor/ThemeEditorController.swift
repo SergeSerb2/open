@@ -205,6 +205,7 @@ public final class ThemeEditorController {
         let group = manager.map { $0.groupingLevel == 0 && !$0.isUndoing && !$0.isRedoing } ?? false
         if group { manager?.beginUndoGrouping() }
         defer { if group { manager?.endUndoGrouping() } }
+        var didCommit = false
         let old = EditorUndoSnapshot(state: baselineState, theme: baseline)
         let new = EditorUndoSnapshot(state: state, theme: current)
         if let session {
@@ -213,14 +214,14 @@ public final class ThemeEditorController {
                 // first, then the model; redo reverses that order. Observation
                 // sees lastWritten and does not reconstruct the pad range.
                 if let manager { editorUndo.record(manager: manager, from: old, to: new) }
-                commitCount += 1
+                commitCount += 1; didCommit = true
             }
         } else if let manager {
-            editorUndo.record(manager: manager, from: old, to: new); commitCount += 1
+            editorUndo.record(manager: manager, from: old, to: new); commitCount += 1; didCommit = true
         }
         if manager?.groupingLevel ?? 0 > 0 { manager?.setActionName("Update Theme") }
         baseline = current; baselineState = state; liveGesture = false
-        onCommit?()
+        if didCommit { onCommit?() }
     }
     private func requestFrame() {
         guard displayLink == nil else { return }
@@ -247,7 +248,7 @@ public final class ThemeEditorController {
     }
     private func synchronizeFromModel() {
         guard let model, let spaceID, let theme = model.space(id: spaceID)?.theme, theme != lastWritten else { return }
-        pendingPreview = false; pendingFinish = false; lastWritten = theme; baseline = theme
+        pendingPreview = false; pendingFinish = false; liveGesture = false; lastWritten = theme; baseline = theme
         let page = state.presetPage
         state = ThemeEditorState(style: SpaceStyle.seed(from: theme)); state.presetPage = page
         baselineState = state
@@ -256,7 +257,7 @@ public final class ThemeEditorController {
     }
     fileprivate func restoreEditor(_ snapshot: EditorUndoSnapshot) {
         guard !isClosed else { return }
-        pendingPreview = false; pendingFinish = false
+        pendingPreview = false; pendingFinish = false; liveGesture = false
         state = snapshot.state; baselineState = state
         baseline = snapshot.theme; lastWritten = snapshot.theme
         session?.restored(snapshot.theme, publish: false)
@@ -272,6 +273,12 @@ public final class ThemeEditorController {
                 MainActor.assumeIsolated { self?.close() }
             })
         }
+        lifecycleObservers.append(center.addObserver(forName: NSWindow.didChangeBackingPropertiesNotification, object: ownerWindow, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let owner = self.ownerWindow else { return }
+                self.panel.renderScale = owner.backingScaleFactor
+            }
+        })
         outsideMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
             MainActor.assumeIsolated {
                 if let self, event.window !== self.panel { self.close() }

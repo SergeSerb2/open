@@ -206,7 +206,8 @@ enum LiveThemeChecks {
             for (i, scene) in scenes.enumerated() { maximumRebuilds = max(maximumRebuilds, scene.background.fieldRebuildCount - before[i]) }
         }
         let p95 = times.sorted()[Int(Double(times.count - 1) * 0.95)]
-        print(String(format: "B1 wall p95 %.3f ms (informational); load %@", walls.sorted()[227], ProcessInfo.processInfo.environment["OPEN_LOAD_NOTE"] ?? "see uptime"))
+        var load = [Double](repeating: 0, count: 3); _ = getloadavg(&load, 3)
+        print(String(format: "B1 wall p95 %.3f ms (informational); load %.2f/%.2f/%.2f", walls.sorted()[227], load[0], load[1], load[2]))
         check(p95 <= 4, String(format: "B1 240 ticks, two same-Space windows: main-thread p95 %.3f ms <= 4 ms", p95))
         check(zip(scenes, initialRebuilds).allSatisfy { $0.background.fieldRebuildCount - $1 == 240 },
               "B1 both windows rebuild on every one of the 240 display ticks")

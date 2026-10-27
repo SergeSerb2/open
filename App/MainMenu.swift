@@ -6,7 +6,7 @@ import OpenCommands
 enum MainMenu {
   static func build(factoryOverride: EngineWebContentHostFactory? = nil) -> NSMenu {
     guard let app = NSApp.delegate as? AppDelegate, app.model != nil else { return NSMenu() }
-    let owner = NSApp.keyWindow.flatMap { app.factory(forKeyWindow: $0) }
+    let owner = NSApp.keyWindow.flatMap { factory(for: $0, app: app) }
     let factory = factoryOverride ?? owner ?? (NSApp.keyWindow == nil ? app.frontWindowController.flatMap { app.hostFactories[$0.windowID] } : nil)
     let dispatcher: any CommandDispatcher
     if let controller = factory?.controller { dispatcher = controller } else { dispatcher = app }
@@ -15,11 +15,15 @@ enum MainMenu {
       tabs: (factory?.orderedTabs ?? []).map { TabMenuEntry(id: $0.id.description, title: $0.displayTitle.isEmpty ? $0.url.absoluteString : $0.displayTitle) },
       overrides: app.keyBindings)
   }
+  private static func factory(for window: NSWindow, app: AppDelegate) -> EngineWebContentHostFactory? {
+    app.factory(forKeyWindow: window) ?? app.windowControllers.first { $0.themeEditor?.panel === window }
+      .flatMap { app.hostFactories[$0.windowID] }
+  }
   static func targetWindowCommands(_ target: EngineWebContentHostFactory?) { NSApp.mainMenu = build(factoryOverride: target) }
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     app.prepareCommandServices()
-    if let window = event.window, let factory = app.factory(forKeyWindow: window) {
+    if let window = event.window, let factory = factory(for: window, app: app) {
       return factory.controller?.handleKeyDown(event) == true
     }
     let context = RoutingContext(isAppActive: NSApp.isActive,
