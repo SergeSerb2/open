@@ -15,6 +15,8 @@ public enum CommandBarSource: Sendable, Equatable {
 public enum SidebarIntent: Equatable, Sendable {
     // Window chrome
     case toggleSidebar
+    /// Notification after a resize gesture commits a hidden sidebar (hint owner: lane A1).
+    case sidebarHiddenByGesture
     case goBack
     case goForward
     case reload
