@@ -12,12 +12,11 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cef/include/cef_tab_strip.h"
-#include "base/scoped_observation.h"
-#include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
 class Browser;
 class BrowserWindowInterface;
+class Profile;
 class CefBrowserHostBase;
 class CefBrowserPlatformDelegate;
 class CefBrowserPlatformDelegateNative;
@@ -28,9 +27,14 @@ namespace content {
 class WebContents;
 }
 
+namespace extensions {
+class ExtensionAction;
+}
+
 namespace open_engine {
 
 class OpenBrowserWindow;
+class OpenExtensionsToolbar;
 
 // CefTabStrip (cef/include/cef_tab_strip.h): one hidden Chrome Browser
 // (TYPE_NORMAL, an OpenBrowserWindow, no Views) per embedder window and
@@ -42,9 +46,7 @@ class OpenBrowserWindow;
 // The Browser exists while the strip has tabs: Chrome closes a Browser whose
 // last tab goes away (Browser::TabStripEmpty), so the strip makes a new one
 // for its next tab, and GetWindowId changes then.
-class OpenTabStrip : public CefTabStrip,
-                     public TabStripModelObserver,
-                     public extensions::ExtensionActionDispatcher::Observer {
+class OpenTabStrip : public CefTabStrip, public TabStripModelObserver {
  public:
   OpenTabStrip(CefRefPtr<CefRequestContextImpl> request_context,
                CefRefPtr<CefTabStripHandler> handler);
@@ -86,6 +88,10 @@ class OpenTabStrip : public CefTabStrip,
   int id() const { return id_; }
   // True once Close() was called: the Browser may close for real.
   bool closing() const { return closed_; }
+  CefRefPtr<CefTabStripHandler> handler() const { return handler_; }
+  CefRefPtr<CefRequestContextImpl> request_context() const;
+  // The active tab's WebContents, or nullptr.
+  content::WebContents* ActiveContents() const;
 
   // CefTabStrip:
   bool IsValid() override;
@@ -110,6 +116,26 @@ class OpenTabStrip : public CefTabStrip,
       const CefString& extension_id) override;
   CefString GetExtensionActionTitle(const CefString& extension_id) override;
   bool IsExtensionActionEnabled(const CefString& extension_id) override;
+  bool AreExtensionActionsReady() override;
+  void GetExtensionActionIds(std::vector<CefString>& extension_ids) override;
+  CefRefPtr<CefDictionaryValue> GetExtensionActionState(
+      const CefString& extension_id) override;
+  CefRefPtr<CefImage> GetExtensionActionImage(const CefString& extension_id,
+                                              int size,
+                                              bool toolbar) override;
+  void SetExtensionActionPinned(const CefString& extension_id,
+                                bool pinned) override;
+  void MoveExtensionAction(const CefString& extension_id,
+                           int pinned_index) override;
+  bool ExecuteExtensionAction(const CefString& extension_id,
+                              int source) override;
+  void CloseExtensionPopup() override;
+  bool ExtensionPopupStaysOpenOnBlur() override;
+  CefRefPtr<CefListValue> GetExtensionActionMenu(const CefString& extension_id,
+                                                 int source,
+                                                 int& menu_id) override;
+  bool RunExtensionActionMenuCommand(int menu_id, int command_id) override;
+  void ReleaseExtensionActionMenu(int menu_id) override;
   void Close() override;
 
   // TabStripModelObserver:
@@ -118,13 +144,6 @@ class OpenTabStrip : public CefTabStrip,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
-
-  // extensions::ExtensionActionDispatcher::Observer:
-  void OnExtensionActionUpdated(
-      extensions::ExtensionAction* extension_action,
-      content::WebContents* web_contents,
-      content::BrowserContext* browser_context) override;
-  void OnShuttingDown() override;
 
  private:
   enum class Request { kCreated, kActivate, kMove, kPin };
@@ -143,10 +162,14 @@ class OpenTabStrip : public CefTabStrip,
   // tab, or the default when the strip has none). nullptr if unknown.
   extensions::ExtensionAction* ActionFor(const CefString& extension_id,
                                          int* tab_id);
-  void DeliverActionUpdate(const std::string& extension_id);
 
   Browser* EnsureBrowser();
   void OnBrowserDidClose(BrowserWindowInterface* browser);
+  // The profile, for the action list without a live model; nullptr if the
+  // context is not ready.
+  Profile* GetProfile() const;
+  // CefTabStripHandler::OnExtensionActionsChanged on a later turn.
+  void PostActionsChanged();
   content::WebContents* ContentsFor(CefRefPtr<CefBrowser> browser) const;
   void PostRequest(Request request,
                    content::WebContents* contents,
@@ -176,9 +199,9 @@ class OpenTabStrip : public CefTabStrip,
   // embedder; those changes are not requests.
   int applying_ = 0;
   bool closed_ = false;
-  base::ScopedObservation<extensions::ExtensionActionDispatcher,
-                          extensions::ExtensionActionDispatcher::Observer>
-      action_observation_{this};
+  // Chrome's toolbar action model for the Browser (fork patch P2); exists
+  // with the Browser. The embedder hears when it comes and goes.
+  std::unique_ptr<OpenExtensionsToolbar> toolbar_;
 
   IMPLEMENT_REFCOUNTING(OpenTabStrip);
   base::WeakPtrFactory<OpenTabStrip> weak_ptr_factory_{this};

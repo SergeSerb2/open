@@ -1,0 +1,344 @@
+{
+  "callback_close": {
+    "fixed": {
+      "ok": true,
+      "rows": {
+        "open close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 18,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078282.2459579,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "open toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 19,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078282.3199692,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 22,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078283.569711,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 23,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078284.153744,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 20,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078282.444972,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 21,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078283.00733,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        }
+      }
+    },
+    "mutation": "Remove callback-close deferral in OpenEngine only",
+    "old": {
+      "cleanup": {
+        "error": "[Errno 61] Connection refused",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          77254,
+          77760,
+          77761,
+          77762,
+          77764
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "regression_observed": true
+    }
+  },
+  "cmd_w": {
+    "fixed": {
+      "closed": true,
+      "ctrl_d_stages": [
+        "beforePage",
+        "unconsumed"
+      ],
+      "ok": true,
+      "opened": true,
+      "still_open": true,
+      "tabs_kept": true
+    },
+    "fixed_cleanup": {
+      "forced": false,
+      "ok": true,
+      "owned_pids": [
+        46352,
+        46364,
+        46365,
+        46367,
+        46369,
+        46370,
+        46372,
+        46408,
+        46411
+      ],
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 1
+    },
+    "mutation": "Remove only focused-popup guard in closeTab; same popup_keys helper with route=app.",
+    "old": {
+      "closed": true,
+      "ctrl_d_stages": [
+        "beforePage",
+        "unconsumed"
+      ],
+      "ok": false,
+      "opened": true,
+      "still_open": true,
+      "tabs_kept": false
+    },
+    "old_cleanup": {
+      "forced": false,
+      "ok": true,
+      "owned_pids": [
+        33066,
+        33140,
+        33141,
+        33144,
+        33145,
+        33148,
+        33154,
+        33156
+      ],
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 2
+    }
+  },
+  "code_head": "5bdc0e8ef11c7990cb513fc17245ab9deb143562",
+  "date": "2026-10-26 America/Vancouver",
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "main": "49b566097423213d1bc9aca1426c7e2bb3f5f65b",
+  "split_pane_sync": {
+    "fixed": {
+      "expected_tab": 1391089824,
+      "menu_action_title": "Split right",
+      "ok": true,
+      "popup_stayed_open": true,
+      "popup_tab": 1391089824
+    },
+    "mutation": "Remove pending-sync flush from executeExtensionAction/contextMenuForExtensionAction",
+    "old": {
+      "expected_tab": 1372880409,
+      "menu_action_title": "Split left",
+      "ok": false,
+      "popup_stayed_open": false,
+      "popup_tab": null
+    }
+  },
+  "status": "VALIDATED_NEW_ENGINE",
+  "suites": {
+    "actions": {
+      "cleanup_ok": true,
+      "interrupted_attempts": 0,
+      "owned_process_counts": [
+        0
+      ],
+      "owned_windows": [
+        0
+      ],
+      "pass": 26,
+      "total": 26
+    },
+    "extensions": {
+      "cleanup_ok": true,
+      "interrupted_attempts": 1,
+      "owned_process_counts": [
+        0,
+        0
+      ],
+      "owned_windows": [
+        0,
+        0
+      ],
+      "pass": 8,
+      "total": 8
+    },
+    "tabstrip": {
+      "cleanup_ok": true,
+      "interrupted_attempts": 1,
+      "owned_process_counts": [
+        0,
+        0
+      ],
+      "owned_windows": [
+        0,
+        0
+      ],
+      "pass": 25,
+      "total": 25
+    }
+  },
+  "supersedes": "All earlier stale-engine runtime receipts and proofs are invalid; none are used as acceptance.",
+  "uninstall_failure_cleanup": {
+    "cleanup": {
+      "forced": false,
+      "ok": true,
+      "owned_pids": [
+        33066,
+        33140,
+        33141,
+        33144,
+        33145,
+        33148,
+        33154,
+        33156
+      ],
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 2
+    },
+    "error": "forced early failure in uninstall confirmation case",
+    "injection": "OPEN_E2E_FAIL_UNINSTALL=1 in the shared real action-menu case",
+    "result": {
+      "dialog": [
+        {
+          "class": "NativeWidgetMacNSWindow",
+          "text": [
+            "Cancel",
+            "Remove",
+            "Remove \"Open action probe\"?"
+          ],
+          "title": "Remove \"Open action probe\"?"
+        }
+      ],
+      "dialog_seen": true,
+      "ok": false
+    }
+  },
+  "verify": {
+    "fail": 0,
+    "logs": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-222110.9mIbeY",
+    "pass": 22,
+    "skip": 0
+  },
+  "window_release": {
+    "ok": true,
+    "rows": {
+      "close": {
+        "alive": true,
+        "new_window_popup": false,
+        "ok": true,
+        "opened": true,
+        "popup_page_gone": true,
+        "released_without_close": null,
+        "windows_after_close": true
+      },
+      "dealloc": {
+        "alive": true,
+        "new_window_popup": false,
+        "ok": true,
+        "opened": true,
+        "popup_page_gone": true,
+        "released_without_close": {
+          "hadPopup": true,
+          "released": 1,
+          "remaining": 0
+        },
+        "windows_after_close": true
+      }
+    }
+  }
+}

@@ -92,7 +92,8 @@ extension EngineWebContentHostFactory {
     case "open-command-bar": focusAddressBar(nil)
     case "search-tabs": showCommandBar(.searchTabs)
     case "archive-tab":
-      if controller?.hasPeekController == true, controller?.peekController.isShown == true { controller?.peekController.dismissTop() }
+      if popupPanel?.isKeyWindow == true { closeTab(nil) }
+      else if controller?.hasPeekController == true, controller?.peekController.isShown == true { controller?.peekController.dismissTop() }
       else { closeTab(nil) }
     case "restore-last-closed-tab": restoreLastClosedTab(nil)
     case "pin-unpin-tab": togglePin(nil)

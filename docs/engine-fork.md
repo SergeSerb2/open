@@ -278,14 +278,15 @@ The app now builds against the fork by default (`tools/fetch-cef.sh`,
 | chromium | `0304-open-hidden-browser-no-tab-groups.patch` | +10/−2 | `chrome/browser/ui/browser.cc` (includes the overlay's `tab_groups.h` only) |
 | cef | `0302-open-hosted-tabs.patch` | +79/−6 | `BUILD.gn`, `browser_host_base.h`, `browser_info_manager.cc`, `browser_platform_delegate_create.cc`, `chrome/chrome_browser_delegate.cc`, `chrome/chrome_browser_host_impl.cc` |
 | cef | `0303-open-context-menu-submenu-commands.patch` | +15/−1 | `chrome/chrome_context_menu_handler.cc` |
+| cef | `0304-open-extension-popups.patch` (P2, 2026-10-26) | +6/−0 | `chrome/chrome_browser_delegate.h` (`OpenExtensionPopup` may call `CreateBrowserHostForPopup`) |
 | cef | `0310-open-adblock-service-owner.patch` (ad-block Step 3) | +43/−0 | `browser/browser_context.{h,cc}`: the per-Profile `open_engine::OpenAdBlockService` and the self-test switches. 0302 also gains `deps += open_libcef_deps` (list in `open/open_libcef_sources.gni`) |
 | cef | `0314-open-adblock-cefsimple-smoke.patch` (test only, keep last) | +5/−0 | `tests/cefsimple/simple_app.cc`: no window in `--open-adblock-selftest` mode. Run `cefsimple --use-mock-keychain --open-adblock-dir=<root> --open-adblock-selftest`: without the mock keychain, a rebuilt (newly signed) cefsimple waits on a Keychain access prompt at shutdown, and Chrome's 10 s teardown watchdog exits 2 after PASS. The self-test writes `engine.dat` and its receipt into `<root>`: give each concurrent run its own copy of the root |
 | rust | `0001-adblock-vendor.patch` (ad-block Step 1, 2026-10-26) | 11.3 MB, generated | `third_party/rust/**`: `gnrt vendor` + `gen` output for the adblock 0.8.11 closure, the merged `Cargo.toml` and `gnrt_config.toml`, three crate patches (docs/engine-patches.md P8 "Security review") |
 
-Overlay: `open/browser/tab_strip/*` and `open/open_libcef_sources.gni`
-(about 1,600 lines, compiled into `libcef_static`), and the API header
-`cef/include/cef_tab_strip.h`. What each part does:
-[engine-patches.md](engine-patches.md), P1 status.
+Overlay: `open/browser/tab_strip/*` (P1), `open/browser/extensions/*` (P2,
+about 900 lines) and `open/open_libcef_sources.gni`, compiled into
+`libcef_static`, and the API header `cef/include/cef_tab_strip.h`. What each
+part does: [engine-patches.md](engine-patches.md), P1 and P2 status.
 
 Open's Chromium patches can change lines that CEF's own patches added
 (`browser_window_features.cc` is one). Three tool changes follow from that:
@@ -368,3 +369,37 @@ Rebase watch: the zone name and `kZoneVersion` in OEMallocZone.mm must match
 `partition_alloc/shim/early_zone_registration_utils_apple.h`
 (`kDelegatingZoneName`, `kZoneVersion`). If they drift, PartitionAlloc takes
 the racy path again and `malloc_zones_early` fails.
+
+## Rebase watch list
+
+Things Open copies from upstream or relies on without a patch, so no patch
+conflict flags them. `engine-rebase` step 6 points here: re-check each one
+against the new tree.
+
+### Extension actions and popups (P2 overlay, `src/open/browser/extensions/`)
+
+The overlay drives Chrome's toolbar model without Views and uses these
+Chrome and CEF internals directly:
+
+- `ExtensionsToolbarViewModel`, its `Delegate` and `Observer` interfaces,
+  and its registration as the window's `ExtensionsContainer`
+  (`ScopedUnownedUserData`).
+- `ExtensionActionViewModel::Create`, `ExtensionActionDelegate`,
+  `ToolbarActionViewModel::InvocationSource`, `GetIcon` (draws with
+  `IconWithBadgeImageSource`), and `GetContextMenu`: Open builds the
+  `ExtensionContextMenuModel` itself with the same arguments, so re-check
+  them.
+- `ExtensionView` and `ExtensionViewHost` (`set_view`, `SetCloseHandler`,
+  `CreateRendererSoon`, the popup's web-modal handler, Escape handling).
+- Rules Open copies from Chrome's Views popup and toolbar:
+  `ExtensionPopup::OnTabStripModelChanged` (close on a tab switch),
+  `ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog` (stay open on
+  blur), `ExtensionsToolbarDesktop::CanShowToolbarActionPopupForAPICall`
+  (`openPopup` guard), and the error texts in `extension_action_api.cc`
+  (the e2e expects "Failed to open popup.").
+- CEF: `ChromeBrowserDelegate::CreateBrowserHostForPopup` (private; patch
+  0304 makes the popup a friend) and
+  `CefBrowserContentsDelegate::HandleKeyboardEvent` (popup keys).
+- Chrome's popup size limits, 25×25 to 800×600 (`extension_popup_types.h`),
+  copied into `open_extension_popup.cc` and `OEBrowser.mm`.
+
