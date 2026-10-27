@@ -97,6 +97,8 @@ enum RenderCLI {
         case "fit-light-glyphs": try LightGlyphFit.run(rest)
         case "math": try Checks.math(rest)
         case "check": try Checks.run()
+        case "lifetime-check": try EditorChecks.releasedControllerUndo()
+        case "compat-range-check": EditorChecks.compatibilityRange()
         case "window": try window(rest)
         case "editor": try EditorScene.render(rest)
         case "compare":

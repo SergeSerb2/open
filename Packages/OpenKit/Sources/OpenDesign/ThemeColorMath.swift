@@ -156,11 +156,12 @@ public enum ThemeColorMath {
         switch mode {
         case .light: 0.575...0.97
         case .dark: 0.01...0.425
-        case .automatic: preconditionFailure("Automatic uses the editor's stored lightness range")
+        case .automatic: 0.01...0.97  // Compatibility default; the editor uses its stored range.
         }
     }
 
-    /// Compatibility spelling for forced modes only; Automatic is editor state.
+    /// Compatibility defaults. Automatic returns the empty-editor range; an
+    /// open editor uses its stored range instead of this mode-only API.
     public static func lightnessRange(_ mode: SpaceStyleAppearance) -> ClosedRange<Double> { forcedRange(mode) }
 
     public static func widen(_ range: ClosedRange<Double>, _ lightness: Double) -> ClosedRange<Double> {
