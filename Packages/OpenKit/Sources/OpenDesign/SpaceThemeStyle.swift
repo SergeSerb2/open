@@ -36,8 +36,10 @@ public struct SpaceThemeStyle: Sendable, Hashable {
     public var fill: Fill
     /// Grain amount, 0…1 (`modifiers.noiseFactor`).
     public var noiseFactor: Double
-    /// Editor opacity is 0.8 × intensity; imports keep the fitted opacity until calibration.
+    /// Editor opacity is 0.2 + 0.55 × intensity; imports retain the legacy path.
     public var intensityFactor: Double
+    /// Window color scheme, independent of the theme's text palette; not stored.
+    public var windowColorScheme: ContentAppearance
     public var texture: SpaceStyleTexture
     /// Imported/stops themes keep their original field, opacity, and exact grain path.
     public var usesLegacyIntensity: Bool
@@ -56,12 +58,14 @@ public struct SpaceThemeStyle: Sendable, Hashable {
                 contentAppearance: ContentAppearance? = .light, isVibrant: Bool = true,
                 lightPalette: SemanticPalette? = nil, darkPalette: SemanticPalette? = nil, accent: RGBA? = nil,
                 shadedDarkAccent: RGBA? = nil, tintedLightAccent: RGBA? = nil,
-                texture: SpaceStyleTexture = .grain, usesLegacyIntensity: Bool = false) {
+                texture: SpaceStyleTexture = .grain, usesLegacyIntensity: Bool = false,
+                windowColorScheme: ContentAppearance = .dark) {
         self.fill = fill; self.noiseFactor = noiseFactor; self.intensityFactor = intensityFactor
         self.translucency = translucency; self.contentAppearance = contentAppearance; self.isVibrant = isVibrant
         self.lightPalette = lightPalette; self.darkPalette = darkPalette; self.accent = accent
         self.shadedDarkAccent = shadedDarkAccent; self.tintedLightAccent = tintedLightAccent
         self.texture = texture; self.usesLegacyIntensity = usesLegacyIntensity
+        self.windowColorScheme = windowColorScheme
     }
 
     /// Content appearance after applying the system fallback.
@@ -161,7 +165,7 @@ public struct SpaceThemeStyle: Sendable, Hashable {
             ? [RGBA(hex: 0x252538), RGBA(hex: 0x322438), RGBA(hex: 0x2C2437), RGBA(hex: 0x342237)]
             : [RGBA(hex: 0xEDEDF1), RGBA(hex: 0xEDEBF1), RGBA(hex: 0xEAE9EF), RGBA(hex: 0xEAE8EF)]
         return SpaceThemeStyle(fill: .corners(corners), noiseFactor: 0, translucency: system == .dark ? .dark : .light,
-                               contentAppearance: nil, isVibrant: true)
+                               contentAppearance: nil, isVibrant: true, windowColorScheme: system)
     }
 
     // MARK: From the model
@@ -206,7 +210,7 @@ public struct SpaceThemeStyle: Sendable, Hashable {
                   lightPalette: palettes.light, darkPalette: palettes.dark, accent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shaded)),
                   shadedDarkAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.shadedDark)),
                   tintedLightAccent: RGBA(rgba: ThemeColorMath.toExtendedSRGB(primary.tintedLight)),
-                  texture: style.texture, usesLegacyIntensity: false)
+                  texture: style.texture, usesLegacyIntensity: false, windowColorScheme: system)
     }
 
     /// Parses Arc's `customInfo.windowTheme` object (schema in

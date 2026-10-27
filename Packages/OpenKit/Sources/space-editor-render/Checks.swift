@@ -119,7 +119,7 @@ enum Checks {
         check(hueError <= 0.1 && slError < 1e-9, String(format: "M2 preserved analogous and complementary offsets (180 / 150,210), n=1...3 hueMax=%.8f slMax=%.8f", hueError, slError))
         var random = Random(), maxError = 0.0
         for mode in SpaceStyleAppearance.allCases {
-            let range = ThemeColorMath.lightnessRange(mode)
+            let range = ThemeColorMath.editorRange(key: key, mode: mode)
             for _ in 0..<2000 {
                 let h = random.next(), s = 0.01 + 0.99 * random.next()
                 let l = range.lowerBound + random.next() * (range.upperBound - range.lowerBound)
@@ -146,22 +146,19 @@ enum Checks {
     static func textures() {
         for scale in [1.0, 2.0] {
             for noise in [0.25, 0.5, 1.0] {
-                let grain = ThemeTexture.metrics(.grain, noiseFactor: noise, scale: scale)!
                 for texture in SpaceStyleTexture.allCases {
                     let value = ThemeTexture.metrics(texture, noiseFactor: noise, scale: scale)!
-                    check(abs(value.meanAlpha - grain.meanAlpha) <= grain.meanAlpha * 0.1,
-                          String(format: "M5 %@ noise=%.2f scale=%.0f mean=%.6f grain=%.6f", texture.rawValue, noise, scale, value.meanAlpha, grain.meanAlpha))
-                    if texture == .sand && noise == 1 {
-                        check(value.peakMarksMeanAlpha - value.baseAlpha >= 0.03,
-                              String(format: "M5 sand peak marks minus base=%.6f scale=%.0f", value.peakMarksMeanAlpha - value.baseAlpha, scale))
-                    }
+                    let expected = ThemeTuning.textureTileDarkness[texture]!
+                    check(abs(value.meanAlpha - expected) <= 0.0001
+                          && abs(ThemeTexture.layerAlpha(texture, noiseFactor: noise) - noise * ThemeTuning.textureNoiseScale[texture]!) < 1e-12,
+                          String(format: "M5 calibrated %@ noise=%.2f scale=%.0f tileMean=%.6f layerAlpha=%.4f", texture.rawValue, noise, scale, value.meanAlpha, ThemeTexture.layerAlpha(texture, noiseFactor: noise)))
                 }
             }
         }
         let before = ThemeTexture.generationCount
         _ = ThemeTexture.tile(.sand, noiseFactor: 0.51, scale: 2)
         _ = ThemeTexture.tile(.sand, noiseFactor: 0.50, scale: 2)
-        check(ThemeTexture.generationCount == before, "M5 tile cache shares texture/noise-bucket/scale")
+        check(ThemeTexture.generationCount == before, "M5 noise changes reuse one tile per texture/scale")
     }
 
     static func persistence() throws {
@@ -230,6 +227,8 @@ enum Checks {
         }
         check(ThemeTexture.cachedTileCount <= ThemeTexture.cacheLimit, "M5 tile cache stays bounded after bucket churn")
         check(ThemeTexture.denimGenerationCount == denimBefore, "M5 denim normalized pattern is reused across buckets")
+        for index in 1...40 { _ = ThemeTexture.tile(.grain, noiseFactor: 0.8, scale: 1 + Double(index) / 100) }
+        check(ThemeTexture.cachedTileCount <= ThemeTexture.cacheLimit, "M5 oldest-half eviction stays bounded across backing scales")
         check(ThemeTexture.knobPreview(.grain, diameter: 40, scale: 0).width == 40
               && ThemeTexture.knobPreview(.grain, diameter: 40, scale: .nan).height == 40,
               "M5 invalid-scale preview returns a neutral disc without a missing-tile crash")
