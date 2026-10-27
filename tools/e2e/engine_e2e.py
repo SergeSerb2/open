@@ -3727,23 +3727,30 @@ def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup,
     # it still owns its popup/toolbar (the round 1 double-delete path).
     closing_rows = {}
     for release in (False, True):
-        app.call("select", tab=fresh)
-        wait_until(lambda: actions()["ready"], timeout=15)
-        state = open_popup(bitwarden)
-        closing = {"opened": bool(state)}
-        popup_page = state["page"]["identifier"] if state else None
-        released = app.call("window-close", releaseBrowsers=release)
-        closing["released_without_close"] = released if release else None
-        closing["windows_after_close"] = bool(wait_until(lambda: len(app.call("shell-windows")) == 0, timeout=10))
-        closing["alive"] = app.call("ping") is not None
-        app.call("window-reopen")
-        wait_until(lambda: app.call("shell-windows"), timeout=10)
-        closing["popup_page_gone"] = bool(wait_until(lambda: popup_page not in [p["identifier"] for p in app.call("pages")], timeout=10))
-        closing["new_window_popup"] = app.call("ext-popup").get("open")
-        closing["ok"] = (closing["opened"] and closing["windows_after_close"] and closing["alive"]
-                         and closing["popup_page_gone"] and not closing["new_window_popup"]
-                         and (not release or (released.get("released", 0) > 0 and released.get("remaining") == 0 and released.get("hadPopup"))))
-        closing_rows["dealloc" if release else "close"] = closing
+        try:
+            app.call("select", tab=fresh)
+            wait_until(lambda: actions()["ready"], timeout=15)
+            state = open_popup(bitwarden)
+            closing = {"opened": bool(state)}
+            popup_page = state["page"]["identifier"] if state else None
+            released = app.call("window-close", releaseBrowsers=release)
+            closing["released_without_close"] = released if release else None
+            closing["windows_after_close"] = bool(wait_until(lambda: len(app.call("shell-windows")) == 0, timeout=10))
+            closing["alive"] = app.call("ping") is not None
+            app.call("window-reopen")
+            wait_until(lambda: app.call("shell-windows"), timeout=10)
+            closing["popup_page_gone"] = bool(wait_until(lambda: popup_page not in [p["identifier"] for p in app.call("pages")], timeout=10))
+            closing["new_window_popup"] = app.call("ext-popup").get("open")
+            closing["ok"] = (closing["opened"] and closing["windows_after_close"] and closing["alive"]
+                             and closing["popup_page_gone"] and not closing["new_window_popup"]
+                             and (not release or (released.get("released", 0) > 0 and released.get("remaining") == 0 and released.get("hadPopup"))))
+            closing_rows["dealloc" if release else "close"] = closing
+        except Exception as error:
+            dict.__setitem__(results, "window_close_with_popup", {"ok": False, "release": release,
+                             "error": str(error), "rows": closing_rows})
+            raise
+        finally:
+            app.cleanup_surfaces()
     results["window_close_with_popup"] = {"ok": all(row["ok"] for row in closing_rows.values()), "rows": closing_rows}
 
 
