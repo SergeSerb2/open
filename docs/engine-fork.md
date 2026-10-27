@@ -278,6 +278,8 @@ The app now builds against the fork by default (`tools/fetch-cef.sh`,
 | chromium | `0304-open-hidden-browser-no-tab-groups.patch` | +10/−2 | `chrome/browser/ui/browser.cc` (includes the overlay's `tab_groups.h` only) |
 | cef | `0302-open-hosted-tabs.patch` | +79/−6 | `BUILD.gn`, `browser_host_base.h`, `browser_info_manager.cc`, `browser_platform_delegate_create.cc`, `chrome/chrome_browser_delegate.cc`, `chrome/chrome_browser_host_impl.cc` |
 | cef | `0303-open-context-menu-submenu-commands.patch` | +15/−1 | `chrome/chrome_context_menu_handler.cc` |
+| cef | `0310-open-adblock-service-owner.patch` (ad-block Step 3) | +43/−0 | `browser/browser_context.{h,cc}`: the per-Profile `open_engine::OpenAdBlockService` and the self-test switches. 0302 also gains `deps += open_libcef_deps` (list in `open/open_libcef_sources.gni`) |
+| cef | `0314-open-adblock-cefsimple-smoke.patch` (test only, keep last) | +5/−0 | `tests/cefsimple/simple_app.cc`: no window in `--open-adblock-selftest` mode. Run `cefsimple --use-mock-keychain --open-adblock-dir=<root> --open-adblock-selftest`: without the mock keychain, a rebuilt (newly signed) cefsimple waits on a Keychain access prompt at shutdown, and Chrome's 10 s teardown watchdog exits 2 after PASS. The self-test writes `engine.dat` and its receipt into `<root>`: give each concurrent run its own copy of the root |
 | rust | `0001-adblock-vendor.patch` (ad-block Step 1, 2026-10-26) | 11.3 MB, generated | `third_party/rust/**`: `gnrt vendor` + `gen` output for the adblock 0.8.11 closure, the merged `Cargo.toml` and `gnrt_config.toml`, three crate patches (docs/engine-patches.md P8 "Security review") |
 
 Overlay: `open/browser/tab_strip/*` and `open/open_libcef_sources.gni`
@@ -315,3 +317,54 @@ files byte-identical to before; a second run `0 applied, 3 already applied`
 with the patcher skipped. With only the CEF patch reversed, apply peeled both
 Open Chromium patches, ran the patcher, and re-applied them (same 10 files
 identical).
+
+## PartitionAlloc and the launch race (2026-10-26)
+
+A Release launch in the window suite crashed 1 s after start with
+`[FATAL:allocator_shim_apple.cc(61)] Check failed: false. Oops! No zone found`
+on a CoreSpotlight dispatch queue (`Open-2026-10-26-110130.ips`: SIGTRAP in
+`allocator_shim::TryFreeDefaultFallbackToFindZoneAndFree`, called from
+`-[__NSDictionaryM dealloc]` in `-[CSInlineDonation _reportErrorWithCode:…]`).
+
+Cause, in our startup order, not in the fork's patches. The framework's
+PartitionAlloc makes itself the default malloc zone from a load-time
+constructor (`InitializeDefaultMallocZoneWithPartitionAlloc`,
+`partition_alloc/shim/allocator_shim_override_apple_default_zone.h`). When no
+delegating zone is registered, it takes the path its own comment calls racy:
+`malloc_zone_register(PartitionAlloc)`, `malloc_zone_unregister(system)`,
+`malloc_zone_register(system)`. Between the last two, a `free()` of a system
+pointer on another thread reaches PartitionAlloc's `try_free_default`, finds
+no zone that owns the pointer, and the CHECK fires. Chrome avoids this with
+`partition_alloc::EarlyMallocZoneRegistration()` at the top of `main()`
+(`chrome/app/chrome_exe_main_mac.cc`); CEF's samples load the framework
+before any thread starts. Open shows its first window before it loads the
+framework (`App/main.swift` calls `OEEngine.start(configuration:)` after the
+first frame, and that loads it with `CefScopedLibraryLoader::LoadInMain`), so
+AppKit, CoreSpotlight and other system threads are already running then.
+
+Fix: `Engine/OpenEngine/src/OEMallocZone.mm`, a load-time constructor of the
+OpenEngine framework (so it runs before `main()` in the app and in every
+helper), installs Chrome's delegating zone: it forwards allocations to the
+system zone, owns nothing, and is named `DelegatingDefaultZoneForPartitionAlloc`
+with zone version 13. PartitionAlloc recognizes the name and swaps itself in
+for it in one step; the system zone is registered throughout. The code is
+adapted from Chromium's `base/allocator/early_zone_registration_apple.cc`
+(BSD license).
+
+Evidence:
+
+- Repro (`.re/malloc-zone-race/probe.mm`): 8 threads free system-zone blocks
+  while the main thread dlopens the fork's framework, as `LoadInMain` does.
+  Without the zone: 50 of 50 runs end in the same `Oops! No zone found` FATAL.
+  With `OEMallocZone.mm` linked: 50 of 50 exit cleanly; zone 0 is
+  `DelegatingDefaultZoneForPartitionAlloc` before the dlopen and
+  `PartitionAlloc` after it.
+- In the app: `ping` reports the zone names (`mallocZones`); the window
+  suite's `malloc_zones_early` check requires `PartitionAlloc` first and the
+  system zone before the purgeable zone (on the racy path the system zone is
+  registered again at the end).
+
+Rebase watch: the zone name and `kZoneVersion` in OEMallocZone.mm must match
+`partition_alloc/shim/early_zone_registration_utils_apple.h`
+(`kDelegatingZoneName`, `kZoneVersion`). If they drift, PartitionAlloc takes
+the racy path again and `malloc_zones_early` fails.

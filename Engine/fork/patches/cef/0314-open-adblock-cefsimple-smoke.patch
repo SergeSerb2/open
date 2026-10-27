@@ -1,0 +1,17 @@
+diff --git a/cef/tests/cefsimple/simple_app.cc b/cef/tests/cefsimple/simple_app.cc
+index 302d00ec3..5f023e427 100644
+--- a/cef/tests/cefsimple/simple_app.cc
++++ b/cef/tests/cefsimple/simple_app.cc
+@@ -112,6 +112,12 @@ void SimpleApp::OnContextInitialized() {
+   CefRefPtr<CefCommandLine> command_line =
+       CefCommandLine::GetGlobalCommandLine();
+ 
++  // Open: --open-adblock-selftest runs without a window and quits by itself
++  // (docs/plans/adblock-fork.md §13.1).
++  if (command_line->HasSwitch("open-adblock-selftest")) {
++    return;
++  }
++
+   // Check if Alloy style will be used.
+   cef_runtime_style_t runtime_style = CEF_RUNTIME_STYLE_DEFAULT;
+   bool use_alloy_style = command_line->HasSwitch("use-alloy-style");
