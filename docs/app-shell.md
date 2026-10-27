@@ -1233,3 +1233,8 @@ finally-based cleanup cancels it. A timeout run also exposed a skipped Quit
 when the executable-path probe was unavailable. Quit now verifies the launch
 through its private PID/root socket and keeps the root PID in its kill inventory.
 The original timeout and cleanup FAIL remain recorded.
+
+The download flow found CEF clears suggestedFilename after choosing a destination.
+The shared provider now displays the actual destination filename, with a plain
+fallback before a destination exists. The first download receipt retains the
+empty-name FAIL; the engine downloaded the correct bytes to the correct path.

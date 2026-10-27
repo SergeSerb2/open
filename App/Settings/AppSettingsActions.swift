@@ -56,7 +56,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         guard !removedDownloads.contains(id) else { return nil }
         let state: DownloadState
         switch download.state { case .complete: state = .completed; case .cancelled: state = .cancelled; case .interrupted: state = .failed; default: state = pausedDownloads.contains(id) ? .paused : .inProgress }
-        var snapshot = DownloadItemSnapshot(id: id, fileName: download.suggestedFilename,
+        var snapshot = DownloadItemSnapshot(id: id, fileName: download.destinationURL?.lastPathComponent ?? (download.suggestedFilename.isEmpty ? "Download" : download.suggestedFilename),
           sourceHost: download.sourceURL.host() ?? "", receivedBytes: download.receivedBytes,
           totalBytes: download.totalBytes >= 0 ? download.totalBytes : nil, state: state,
           filePath: download.destinationURL?.path, startedAt: downloadStarted[id] ?? Date(), profileID: profile.id)
