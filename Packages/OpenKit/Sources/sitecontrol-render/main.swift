@@ -4,7 +4,7 @@ import CryptoKit
 
 MainActor.assumeIsolated {
     _ = NSApplication.shared
-    NSApp.setActivationPolicy(.prohibited)
+    NSApp.setActivationPolicy(CommandLine.arguments.contains("editor-native-key") ? .regular : .prohibited)
     NSApp.finishLaunching()
     do { try CLI.run(Array(CommandLine.arguments.dropFirst())) }
     catch { FileHandle.standardError.write(Data("sitecontrol-render: \(error)\n".utf8)); exit(1) }
@@ -32,7 +32,7 @@ enum CLI {
         guard let appearance = ContentAppearance(rawValue: appearanceName) else { throw CLIError(description: "appearance must be light or dark") }
         switch command {
         case "editor-native-key":
-            guard let out = value(args,"--out") else { throw CLIError(description:"native key flow requires --out") };try EditorNativeKey.runHere(out:out)
+            guard let out = value(args,"--out") else { throw CLIError(description:"native key flow requires --out") };EditorNativeKey.enterAppLoop(out:out)
         case "render":
             guard let out = value(args, "--out") else { throw CLIError(description: "render requires --out") }
             let image = render(state,scale: scale,appearance: appearance)
@@ -119,7 +119,7 @@ enum CLI {
         while !FileManager.default.fileExists(atPath: root.appendingPathComponent("AGENTS.md").path) && root.path != "/" { root.deleteLastPathComponent() }
         let scc = Set(sccNames.flatMap { name in ["light","dark"].flatMap { mode in [1,2].map { "\(name)-\(mode)@\($0)x.png" } } })
         let editor = Set(editorNames.flatMap { name in [1,2].map { "\(name)-light@\($0)x.png" } })
-        return try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2"),required: scc)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4"),required: editor)
+        return try receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-2"),required: scc)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4"),required: editor)+receiptChecks(root.appendingPathComponent("docs/sitecontrol/step-4/detail"),required: Set(["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected"].map { $0+"@1x.png" }))
     }
     static func receiptChecks(_ directory: URL,required: Set<String>) throws -> [Flows.Check] {
         let lines = try String(contentsOf: directory.appendingPathComponent("SHA256SUMS"), encoding: .utf8).split(separator: "\n")

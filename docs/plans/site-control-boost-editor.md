@@ -760,7 +760,7 @@ edge. Window 250 × 232 at editor (−34, 258); body ≈ 222 × 205 (14 pt shado
 - Placement: the popover clamps inside the `visibleFrame` of the editor's screen (§4.2) with 8 pt
   margins; the arrow stays on the button within the §3.1 corner limits.
 
-Content inset 18:
+Content inset 18. The label y values below are the AX label-frame tops; the 13 pt text baseline is 12 pt below that top (S2 10/0042).
 
 | Row | Label (13 pt Regular #3A3A3B) | Slider |
 |---|---|---|
@@ -1848,3 +1848,13 @@ Conflicts resolved:
   browser went inactive only when the editor became key). Behavior is the plan review's area, so the
   trigger is now stated, but it follows the capture and adds the system "Move focus to floating
   window" shortcut for keyboard entry.
+
+### #103 published comparison residuals (2026-10-27)
+
+The lead's final token ruling (2026-10-26 23:50) keeps the thresholds and asks that any remaining
+rows be reported. The numeric tables in `docs/sitecontrol/step-4/comparisons/` retain those FAIL
+rows: no-color 55/60, color 54/60, dragging 4/7, advanced 11/25; first-run 22/22 and selected font
+2/2 pass. All font-cell boxes and all 12 measured grey ring stops pass. The remaining rows concern
+SF glyph cores, one primary gradient sample, three drag-guide samples, and advanced arrow/label
+ink. No threshold was widened. These tables are separate from the native flow/frame/AX harness
+acceptance and the full consolidated gate. Raw captures and private composites remain local.

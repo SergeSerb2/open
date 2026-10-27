@@ -24,8 +24,18 @@ import AppKit
             while process.isRunning && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
             if process.isRunning { process.terminate();process.waitUntilExit() }
             guard let data = try? Data(contentsOf: result),data.count <= 65536,let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],!rows.isEmpty,rows.count<=32 else { return [.init(name:"F25 registered native harness produced its result",pass:false)] }
-            return rows.compactMap { row in guard let name = row["name"] as? String,let pass = row["pass"] as? Bool else { return nil };return .init(name:name,pass:pass) }
+            var checks: [Flows.Check] = rows.compactMap { row in guard let name = row["name"] as? String,let pass = row["pass"] as? Bool else { return nil };return .init(name:name,pass:pass) }
+            checks.append(.init(name:"F25 native suite completes all nine checks and exits",pass:rows.count == 9 && process.terminationStatus == 0));return checks
         } catch { return [.init(name:"F25 registered native harness launch: \(error)",pass:false)] }
+    }
+    static func enterAppLoop(out: String) {
+        let timer = Timer(timeInterval: 0,repeats: false) { _ in MainActor.assumeIsolated {
+            do { try runHere(out: out) } catch { FileHandle.standardError.write(Data("native editor harness: \(error)\n".utf8)) }
+            NSApp.stop(nil)
+            if let wake = NSEvent.otherEvent(with: .applicationDefined,location: .zero,modifierFlags: [],timestamp: ProcessInfo.processInfo.systemUptime,windowNumber: 0,context: nil,subtype: 0,data1: 0,data2: 0) { NSApp.postEvent(wake,atStart: true) }
+        } }
+        RunLoop.main.add(timer,forMode: .default)
+        NSApp.run()
     }
     static func runHere(out: String) throws {
         NSApp.setActivationPolicy(.regular);NSApp.activate()
@@ -40,7 +50,9 @@ import AppKit
             let before = p.parent.isKeyWindow && !p.panel.isKeyWindow
             p.drag();p.tap("editor.font.0");p.tap("editor.tool.case")
             check("F25 pointer pad/buttons/font cells keep the native browser window key",before && p.parent.isKeyWindow && !p.panel.isKeyWindow)
-            p.tap("editor.color.advanced");let popup = p.view.advancedPopover!,frame = p.panel.convertFromScreen(popup.panel.frame)
+            p.tap("editor.color.advanced")
+            guard let popup = p.view.advancedPopover else { check("F24 advanced popover opens after colors are ready=\(p.session.colorsReady)",false);return }
+            let frame = p.panel.convertFromScreen(popup.panel.frame)
             check("F24 advanced window frame is (-34,258,250,232)",abs(frame.minX+34)<0.01 && abs(p.panel.frame.height-frame.maxY-258)<0.01 && frame.size == CGSize(width:250,height:232))
             check("F25 advanced pointer use keeps browser key",p.parent.isKeyWindow && !popup.panel.isKeyWindow)
             p.key(53,"\u{1b}",window:popup.panel);p.settle(0.25)
@@ -52,8 +64,10 @@ import AppKit
             p.alert("Cancel");p.panel.makeKey();p.settle()
             check("F25 native floating-window key entry focuses Done",p.panel.isKeyWindow && p.panel.firstResponder === p.view.control(id:"editor.done"))
             p.key(48,"\t");check("F25 Tab follows Done with the name menu",p.panel.firstResponder === p.view.control(id:"editor.name"))
-            p.tap("editor.done");p.settle(0.2)
-            check("F25 Done returns key to the native browser window",p.controller.panel == nil && p.parent.isKeyWindow)
+            let closing = p.panel;p.tap("editor.done")
+            let closeDeadline = Date().addingTimeInterval(3)
+            while closing.isVisible && Date()<closeDeadline { p.settle(0.01) }
+            check("F25 Done returns key to the native browser window (closed=\(p.controller.panel == nil), visible=\(closing.isVisible), parentKey=\(p.parent.isKeyWindow), active=\(NSApp.isActive), sheet=\(p.controller.activeAlert != nil))",p.controller.panel == nil && p.parent.isKeyWindow)
         }
         let rows = checks.map { ["name":$0.name,"pass":$0.pass] as [String:Any] }
         try JSONSerialization.data(withJSONObject:rows,options:[.sortedKeys]).write(to:URL(fileURLWithPath:out),options:.atomic)

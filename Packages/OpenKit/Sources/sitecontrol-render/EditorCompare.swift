@@ -5,22 +5,47 @@ import OpenSiteControl
 /// Capture pixels and comparison sheets remain in the private .re directory.
 @MainActor
 enum EditorCompare {
-    enum Kind { case text,ink,blue,fill(CGRect),box(CGRect) }
+    enum Kind { case text,ink,blue,arrow,fill(CGRect),box(CGRect) }
     struct Element { let name: String,rect: CGRect,kind: Kind }
     static func run(_ args: [String]) throws {
         guard let path = CLI.value(args,"--arc"),let out = CLI.value(args,"--out") else { throw CLIError(description: "editor compare requires --arc --out (.re only)") }
         let directory = URL(fileURLWithPath: out).standardizedFileURL.resolvingSymlinksInPath()
         guard directory.pathComponents.contains(".re") else { throw CLIError(description: "private comparisons must stay in .re") }
-        let state = CLI.value(args,"--state") ?? "editor-no-color",arc = try Bitmap(path: path),stage = EditorStage(state: state)
-        let image = stage.editorImage(),ours = Bitmap(image: image)
+        let state = CLI.value(args,"--state") ?? "editor-no-color",stage = EditorStage(state: state)
+        var arc = try Bitmap(path: path)
+        let advanced = state == "editor-advanced"
+        let image = advanced ? OffscreenRenderer().snapshot(stage.view.advancedPopover!.panel.contentView!,scale: 1) : stage.editorImage(),ours = Bitmap(image: image)
         let p3 = CGColorSpace(name: CGColorSpace.displayP3)!,arcP3 = try Bitmap(path: path,space: p3),openP3 = Bitmap(image: image,space: p3)
-        guard arc.width == 183,arc.height == 588 else { throw CLIError(description: "editor capture must be the complete 183x588 window") }
+        // The native popover capture includes the editor and child in one 250x588
+        // backing image, despite the child's 250x232 window frame in windows.tsv.
+        if advanced && arc.width == 250 && arc.height == 588 {
+            var child = Bitmap(width: 250,height: 232,fill: 255)
+            for y in 0..<232 { for x in 0..<250 { child.set(x,y,arc.pixel(x,y+258)) } };arc = child
+        }
+        guard advanced ? (arc.width == 250 && arc.height == 232) : (arc.width == 183 && arc.height == 588) else { throw CLIError(description: "editor capture dimensions do not match the complete native window") }
         var elements: [Element] = []
         func text(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .text)) }
         func ink(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .ink)) }
         func fill(_ name: String,_ r: CGRect) { elements.append(.init(name: name,rect: r,kind: .fill(r))) }
         func box(_ name: String,_ r: CGRect,_ sample: CGRect) { elements.append(.init(name: name,rect: r,kind: .box(sample))) }
-        if state == "editor-first-run" {
+        if advanced {
+            for y in 2..<13 { elements.append(.init(name: "advanced arrow row \(y)",rect: CGRect(x: 104,y: y,width: 43,height: 1),kind: .arrow)) }
+            for (i,title) in ["Contrast","Brightness","Original Saturation"].enumerated() {
+                text(title,CGRect(x: 30,y: 39+i*62,width: 190,height: 23))
+                fill(title+" track filled",CGRect(x: 50,y: 66+i*62,width: 12,height: 2))
+                fill(title+" track unfilled",CGRect(x: 195,y: 66+i*62,width: 12,height: 2))
+                box(title+" knob",CGRect(x: 112,y: 57+i*62,width: 26,height: 22),CGRect(x: 122,y: 64+i*62,width: 4,height: 3))
+            }
+            fill("advanced material over editor",CGRect(x: 125,y: 42,width: 1,height: 1))
+            fill("advanced material over button",CGRect(x: 60,y: 212,width: 1,height: 1))
+        } else if state == "editor-font-selected" {
+            box("selected Charter circle",CGRect(x: 132,y: 305,width: 30,height: 30),CGRect(x: 145,y: 328,width: 3,height: 2))
+            text("selected Charter ink",CGRect(x: 134,y: 307,width: 26,height: 22))
+        } else if state == "editor-dragging" {
+            let center = stage.view.pad.primaryKnobCenter!,p = CGPoint(x: center.x+18,y: center.y+58),r = hypot(center.x-73.5,center.y-73.5)
+            ink("dragging primary disc",CGRect(x: p.x-20,y: p.y-20,width: 40,height: 40))
+            for degrees in [0,45,90,135,180,225] { let a = Double(degrees) * .pi/180;fill("guide circle \(degrees) degrees",CGRect(x: floor(91.5+cos(a)*r),y: floor(131.5+sin(a)*r),width: 1,height: 1)) }
+        } else if state == "editor-first-run" {
             fill("top dim",CGRect(x: 5,y: 100,width: 6,height: 10));fill("card",CGRect(x: 5,y: 400,width: 5,height: 10))
             elements.append(.init(name: "own badge saturated-blue ink box",rect: CGRect(x: 40,y: 230,width: 105,height: 94),kind: .blue))
             for (i,y) in [347,370,393].enumerated() { text("title line \(i+1)",CGRect(x: 8,y: y-22,width: 167,height: 24)) }
@@ -69,6 +94,7 @@ enum EditorCompare {
             case .blue:
                 func blue(_ bitmap: Bitmap) -> CGRect? { var box: CGRect?;let (x0,y0,x1,y1) = bitmap.clamp(e.rect);for y in y0..<y1 { for x in x0..<x1 { let p = bitmap.pixel(x,y);if p[2]>160 && p[2]-max(p[0],p[1])>80 { box = (box ?? CGRect(x: x,y: y,width: 0,height: 0)).union(CGRect(x: x,y: y,width: 1,height: 1)) } } };return box }
                 a = blue(arcP3);o = blue(openP3);ac = nil;oc = nil;position = true;color = false
+            case .arrow: (a,ac) = arc.arrowInk(e.rect);(o,oc) = ours.arrowInk(e.rect);position = true;color = true
             case .text: (a,ac) = arc.ink(e.rect);(o,oc) = ours.ink(e.rect);position = true;color = false
             case .ink: (a,ac) = arc.ink(e.rect);(o,oc) = ours.ink(e.rect);position = true;color = true
             case .fill(let r):a = nil;o = nil;ac = arc.mean(r);oc = ours.mean(r);position = false;color = true

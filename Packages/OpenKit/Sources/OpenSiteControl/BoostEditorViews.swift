@@ -33,7 +33,7 @@ enum EditorRaster {
     static func glyph(_ name: String,in rect: CGRect,size: CGFloat,color: NSColor,weight: NSFont.Weight = .regular) {
         let c = NSGraphicsContext.current!.cgContext,scale = hypot(c.ctm.a,c.ctm.b)
         let fits: [String: CGSize] = ["lightbulb": CGSize(width: 9,height: 16),"lightbulb.fill": CGSize(width: 9,height: 16),"slider.horizontal.3": CGSize(width: 14,height: 12),"nosign": CGSize(width: 14,height: 14),"arrow.counterclockwise": CGSize(width: 13,height: 16),"chevron.down": CGSize(width: 11,height: 6)]
-        guard let value = SiteControlGlyphRenderer.symbol(name,size: size,weight: weight,color: color,sparkles: .none,scale: scale,fit: fits[name]) else { return }
+        guard let value = SiteControlGlyphRenderer.symbol(name,size: size,weight: weight,color: color,sparkles: .none,scale: scale,fit: fits[name],symbolScale: ["lightbulb","lightbulb.fill","slider.horizontal.3","nosign","arrow.counterclockwise"].contains(name) ? .small : nil) else { return }
         let frame = CGRect(x: floor((rect.midX-value.ink.width/2-value.ink.minX)*scale)/scale,y: floor((rect.midY-value.ink.height/2-value.ink.minY)*scale)/scale+(["lightbulb","lightbulb.fill","nosign","arrow.counterclockwise","chevron.down"].contains(name) ? 1 : 0),width: value.size.width,height: value.size.height)
         NSImage(cgImage: value.image,size: value.size).draw(in: frame,from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: true,hints: nil)
     }

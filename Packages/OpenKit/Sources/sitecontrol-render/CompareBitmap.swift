@@ -34,6 +34,7 @@ struct Bitmap {
         let w = width,h = height
         data.withUnsafeMutableBytes { bytes in
             let c = CGContext(data: bytes.baseAddress,width: w,height: h,bitsPerComponent: 8,bytesPerRow: w*4,space: space,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            c.setFillColor(CGColor(gray: 1,alpha: 1));c.fill(CGRect(x: 0,y: 0,width: w,height: h))
             c.draw(image,in: CGRect(x: 0,y: 0,width: w,height: h))
         }
     }

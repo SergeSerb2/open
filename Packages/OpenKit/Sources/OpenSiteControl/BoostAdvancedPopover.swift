@@ -77,7 +77,8 @@ private final class AdvancedSurface: NSView {
         CATransaction.begin();CATransaction.setDisableActions(true)
         effect.frame = bounds;mask.frame = bounds;mask.path = path;fallback.frame = bounds
         let fmask = CAShapeLayer();fmask.path = path;fallback.mask = fmask
-        rim.path = path;rim.fillColor = nil;rim.strokeColor = SiteControlColors.rim.cgColor(.light);rim.lineWidth = 1/(window?.backingScaleFactor ?? 1)
+        rim.path = path;rim.fillColor = nil;rim.strokeColor = SiteControlColors.rim.cgColor(.light);rim.lineWidth = 2/(window?.backingScaleFactor ?? 1)
+        let edgeMask = CAShapeLayer();edgeMask.frame = bounds;edgeMask.path = path;rim.mask = edgeMask
         surfaceShadow.frame = bounds;surfaceShadow.shadowPath = path;surfaceShadow.shadowColor = NSColor.black.cgColor;surfaceShadow.shadowOpacity = PopoverMaterial.shadowOpacity;surfaceShadow.shadowRadius = PopoverMaterial.shadowRadius;surfaceShadow.shadowOffset = CGSize(width: 0,height: PopoverMaterial.shadowOffsetY)
         CATransaction.commit()
         labels.frame = bounds
@@ -107,7 +108,7 @@ private final class AdvancedLabels: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func updateLayer() {
         EditorRaster.display(self) {
-            for (i,title) in ["Contrast","Brightness","Original Saturation"].enumerated() { SiteControlDrawing.text(title,x: 32,baseline: 53+CGFloat(i)*62,width: 186,font: Typography.editorSlider.font,color: BoostEditorColors.label.nsColor) }
+            for (i,title) in ["Contrast","Brightness","Original Saturation"].enumerated() { SiteControlDrawing.text(title,x: 32,baseline: BoostEditorMetrics.advancedLabelY[i]-BoostEditorMetrics.advancedWindow.minY+12,width: 186,font: Typography.editorSlider.font,color: BoostEditorColors.label.nsColor) }
         }
     }
 }

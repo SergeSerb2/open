@@ -1,0 +1,186 @@
+{
+  "method": "ImageCms embedded AW2726DM to Display P3; editor child-window capture only; parent omits child-window content",
+  "stable": {
+    "ring": {
+      "frames": [
+        "0030",
+        "0031"
+      ],
+      "max_channel_difference": 0,
+      "pixels_over_1": 0
+    },
+    "fonts": {
+      "frames": [
+        "0030",
+        "0031"
+      ],
+      "max_channel_difference": 0,
+      "pixels_over_1": 0
+    },
+    "badge": {
+      "frames": [
+        "0018",
+        "0019"
+      ],
+      "max_channel_difference": 0,
+      "pixels_over_1": 0
+    }
+  },
+  "grey_ring": [
+    {
+      "degrees": 0,
+      "point": [
+        161,
+        131
+      ],
+      "Display_P3": [
+        113,
+        113,
+        113
+      ]
+    },
+    {
+      "degrees": 30,
+      "point": [
+        161,
+        171
+      ],
+      "Display_P3": [
+        141,
+        141,
+        141
+      ]
+    },
+    {
+      "degrees": 60,
+      "point": [
+        131,
+        201
+      ],
+      "Display_P3": [
+        191,
+        191,
+        191
+      ]
+    },
+    {
+      "degrees": 90,
+      "point": [
+        91,
+        201
+      ],
+      "Display_P3": [
+        233,
+        233,
+        233
+      ]
+    },
+    {
+      "degrees": 120,
+      "point": [
+        51,
+        201
+      ],
+      "Display_P3": [
+        226,
+        226,
+        226
+      ]
+    },
+    {
+      "degrees": 150,
+      "point": [
+        21,
+        171
+      ],
+      "Display_P3": [
+        227,
+        227,
+        227
+      ]
+    },
+    {
+      "degrees": 180,
+      "point": [
+        21,
+        131
+      ],
+      "Display_P3": [
+        227,
+        227,
+        227
+      ]
+    },
+    {
+      "degrees": 210,
+      "point": [
+        21,
+        91
+      ],
+      "Display_P3": [
+        117,
+        117,
+        117
+      ]
+    },
+    {
+      "degrees": 240,
+      "point": [
+        51,
+        61
+      ],
+      "Display_P3": [
+        72,
+        72,
+        72
+      ]
+    },
+    {
+      "degrees": 270,
+      "point": [
+        91,
+        61
+      ],
+      "Display_P3": [
+        92,
+        92,
+        92
+      ]
+    },
+    {
+      "degrees": 300,
+      "point": [
+        131,
+        61
+      ],
+      "Display_P3": [
+        110,
+        110,
+        110
+      ]
+    },
+    {
+      "degrees": 330,
+      "point": [
+        161,
+        91
+      ],
+      "Display_P3": [
+        107,
+        107,
+        107
+      ]
+    }
+  ],
+  "badge": {
+    "threshold": "B > 160 and B - max(R,G) > 80 in Display P3",
+    "ink_box": [
+      64,
+      256,
+      53,
+      54
+    ],
+    "canvas": 70,
+    "art_scale": 0.71
+  }
+}

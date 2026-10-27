@@ -1,60 +1,50 @@
-# Step 4: native Boost editor, review round 2
+# Step 4: shared pad and native Boost editor
 
-The editor keeps the existing Profile BoostStore and matcher. All sites, page pixels, and preferences in these fixtures are synthetic.
+All page data, preferences, Boosts, and backdrops in these renders are synthetic. No capture pixels or personal data are committed. The editor is always light. The old wheel, strip, dark variants, and duplicate pad drawing/input implementation are removed.
 
-The 23 states cover light/dark at 1x/2x (92 PNGs). [SHA256SUMS](SHA256SUMS) binds every PNG. The real harness checks the receipts, native event flows, real AX hierarchy, on-disk commit/delete durability, legacy undo, saved IP/path scope, and performance budgets.
+The 28 full contact sheets cover 14 states at 1x and 2x. [SHA256SUMS](SHA256SUMS) binds each image. Six [detail renders](detail/) show only our native editor/popover; their [receipts](detail/SHA256SUMS) are also verified by `sitecontrol-render check`. The comparison command rendered those details on the synthetic host; it used the private captures only for numeric comparison.
 
-The font strip keeps 56 pt chips and 6 pt gaps. Its 232 pt viewport scrolls, has a trailing fade, and fully reveals the keyboard-focused chip, per the lead's 2026-10-26 10:00 decision.
+The shared `OpenDesign/ColorPad.swift` owns dots, knobs, gradients, and input. The theme editor is a thin state/law wrapper; its existing verification targets and baselines are unchanged. The Boost adapter owns the two-knob color law, ring, guide, legacy note, and AX axes.
 
-Menu and sheet contact sheets use AppKit's native view capture, composited beside the editor. The opaque plate replaces the WindowServer material unavailable to offscreen rendering; it is evidence layout only. The editor itself is captured with Core Animation/Metal. Hover fixtures set the native hover state; press and keyboard fixtures use window.sendEvent.
+## Verification
 
-| State | Light 1x | Light 2x | Dark 1x | Dark 2x |
-|---|---|---|---|---|
-| editor-interstitial | [light 1x](editor-interstitial-light@1x.png) | [light 2x](editor-interstitial-light@2x.png) | [dark 1x](editor-interstitial-dark@1x.png) | [dark 2x](editor-interstitial-dark@2x.png) |
-| editor-simple | [light 1x](editor-simple-light@1x.png) | [light 2x](editor-simple-light@2x.png) | [dark 1x](editor-simple-dark@1x.png) | [dark 2x](editor-simple-dark@2x.png) |
-| editor-advanced-color | [light 1x](editor-advanced-color-light@1x.png) | [light 2x](editor-advanced-color-light@2x.png) | [dark 1x](editor-advanced-color-dark@1x.png) | [dark 2x](editor-advanced-color-dark@2x.png) |
-| editor-neutral-page | [light 1x](editor-neutral-page-light@1x.png) | [light 2x](editor-neutral-page-light@2x.png) | [dark 1x](editor-neutral-page-dark@1x.png) | [dark 2x](editor-neutral-page-dark@2x.png) |
-| editor-not-active | [light 1x](editor-not-active-light@1x.png) | [light 2x](editor-not-active-light@2x.png) | [dark 1x](editor-not-active-dark@1x.png) | [dark 2x](editor-not-active-dark@2x.png) |
-| editor-global-off | [light 1x](editor-global-off-light@1x.png) | [light 2x](editor-global-off-light@2x.png) | [dark 1x](editor-global-off-dark@1x.png) | [dark 2x](editor-global-off-dark@2x.png) |
-| editor-legacy | [light 1x](editor-legacy-light@1x.png) | [light 2x](editor-legacy-light@2x.png) | [dark 1x](editor-legacy-dark@1x.png) | [dark 2x](editor-legacy-dark@2x.png) |
-| editor-menu | [light 1x](editor-menu-light@1x.png) | [light 2x](editor-menu-light@2x.png) | [dark 1x](editor-menu-dark@1x.png) | [dark 2x](editor-menu-dark@2x.png) |
-| editor-scope-host | [light 1x](editor-scope-host-light@1x.png) | [light 2x](editor-scope-host-light@2x.png) | [dark 1x](editor-scope-host-dark@1x.png) | [dark 2x](editor-scope-host-dark@2x.png) |
-| editor-scope-ip | [light 1x](editor-scope-ip-light@1x.png) | [light 2x](editor-scope-ip-light@2x.png) | [dark 1x](editor-scope-ip-dark@1x.png) | [dark 2x](editor-scope-ip-dark@2x.png) |
-| editor-rename | [light 1x](editor-rename-light@1x.png) | [light 2x](editor-rename-light@2x.png) | [dark 1x](editor-rename-dark@1x.png) | [dark 2x](editor-rename-dark@2x.png) |
-| editor-reset | [light 1x](editor-reset-light@1x.png) | [light 2x](editor-reset-light@2x.png) | [dark 1x](editor-reset-dark@1x.png) | [dark 2x](editor-reset-dark@2x.png) |
-| editor-delete | [light 1x](editor-delete-light@1x.png) | [light 2x](editor-delete-light@2x.png) | [dark 1x](editor-delete-dark@1x.png) | [dark 2x](editor-delete-dark@2x.png) |
-| editor-double-banner | [light 1x](editor-double-banner-light@1x.png) | [light 2x](editor-double-banner-light@2x.png) | [dark 1x](editor-double-banner-dark@1x.png) | [dark 2x](editor-double-banner-dark@2x.png) |
-| editor-hover-side | [light 1x](editor-hover-side-light@1x.png) | [light 2x](editor-hover-side-light@2x.png) | [dark 1x](editor-hover-side-dark@1x.png) | [dark 2x](editor-hover-side-dark@2x.png) |
-| editor-pressed-side | [light 1x](editor-pressed-side-light@1x.png) | [light 2x](editor-pressed-side-light@2x.png) | [dark 1x](editor-pressed-side-dark@1x.png) | [dark 2x](editor-pressed-side-dark@2x.png) |
-| editor-focus-side | [light 1x](editor-focus-side-light@1x.png) | [light 2x](editor-focus-side-light@2x.png) | [dark 1x](editor-focus-side-dark@1x.png) | [dark 2x](editor-focus-side-dark@2x.png) |
-| editor-hover-chip | [light 1x](editor-hover-chip-light@1x.png) | [light 2x](editor-hover-chip-light@2x.png) | [dark 1x](editor-hover-chip-dark@1x.png) | [dark 2x](editor-hover-chip-dark@2x.png) |
-| editor-pressed-chip | [light 1x](editor-pressed-chip-light@1x.png) | [light 2x](editor-pressed-chip-light@2x.png) | [dark 1x](editor-pressed-chip-dark@1x.png) | [dark 2x](editor-pressed-chip-dark@2x.png) |
-| editor-focus-chip | [light 1x](editor-focus-chip-light@1x.png) | [light 2x](editor-focus-chip-light@2x.png) | [dark 1x](editor-focus-chip-dark@1x.png) | [dark 2x](editor-focus-chip-dark@2x.png) |
-| editor-hover-tile | [light 1x](editor-hover-tile-light@1x.png) | [light 2x](editor-hover-tile-light@2x.png) | [dark 1x](editor-hover-tile-dark@1x.png) | [dark 2x](editor-hover-tile-dark@2x.png) |
-| editor-pressed-tile | [light 1x](editor-pressed-tile-light@1x.png) | [light 2x](editor-pressed-tile-light@2x.png) | [dark 1x](editor-pressed-tile-dark@1x.png) | [dark 2x](editor-pressed-tile-dark@2x.png) |
-| editor-focus-tile | [light 1x](editor-focus-tile-light@1x.png) | [light 2x](editor-focus-tile-light@2x.png) | [dark 1x](editor-focus-tile-dark@1x.png) | [dark 2x](editor-focus-tile-dark@2x.png) |
+- [Native flows](checks.txt): 103/103 PASS. Real BoostStore, matcher, planner, fresh-store durability, undo groups, legacy byte-identical restore, saved IP paths, native sheets, and keyboard events.
+- [Frame, gradient, and AX probes](probes.txt): 82/82 PASS at 1x/2x.
+- [Registered native-app focus suite](native-key-checks.txt): 10/10 PASS; no `isKeyWindow` override. This temporary harness app is launched and cleaned under the machine-wide on-screen lock.
+- [Bench](bench.txt): six budgets PASS; CPU p95 and wall diagnostics are named separately. Full drag-frame display work is included.
+- The full consolidated gate is recorded in the PR body on the pushed head.
+- S11–S13 and the real-app snapshot compare are **deferred to Step 3 per plan §12/§11**. Zap mode and code mode remain deferred to P7/Steps 6–7.
 
-Verification receipts: [focused checks](checks.txt), [full gate](verify-all.txt), [AX hierarchy](accessibility.txt). The PR body maps each review item to its change. All geometry remains a plan guess pending capture session 2.
+## Capture comparisons
 
-## Final verification, 2026-10-26
+The original limits remain position ≤1 pt and non-text core/fill ΔE00 ≤2. Remaining rows below are FAIL, not hidden or relabeled PASS. The lead's final token ruling requires publishing these residuals. [Stability and fit values](comparisons/stability-and-fits.json) record ImageCms conversion from the embedded AW2726DM profile to Display P3. Ring/font 0030–0031 and badge 0018–0019 regions are byte-stable after conversion (maximum channel difference 0).
 
-Tested code: e5ba994bbe7cf9aa6790e74b8ebed63283e889fd. The stack contains origin/main
-15e261e4fe06fb77149ddda446b9e4f0522490b8, #69 and #96 through merge commits.
-The full gate passes 16/17 rows. Site Control passes 1149/1152 checks; only timing checks fail.
-All native flows, real rendered contrast/hollow-marker checks, AX, render receipts and the
-Boosts browser harness pass. The first full gate is retained in review-r2-initial-*;
-its first-popup capture race was fixed in #96 and is clear in the final run.
+| Child-window capture | State | Passed | Remaining |
+|---|---|---:|---|
+| S2 10/0018 | [editor-first-run](comparisons/editor-first-run.md) | 22/22 | None |
+| S2 10/0030 | [editor-no-color](comparisons/editor-no-color.md) | 55/60 | Name chevron, Undo, color glyph 1, color glyph 2, color glyph 3 |
+| S2 10/0039 | [editor-dragging](comparisons/editor-dragging.md) | 4/7 | guide circle 45 degrees, guide circle 135 degrees, guide circle 225 degrees |
+| S2 10/0041 | [editor-color](comparisons/editor-color.md) | 54/60 | Name chevron, Undo, knob 1 gradient bottom, color glyph 1, color glyph 2, color glyph 3 |
+| S2 10/0042 | [editor-advanced](comparisons/editor-advanced.md) | 11/25 | advanced arrow row 2, advanced arrow row 3, advanced arrow row 4, advanced arrow row 5, advanced arrow row 6, advanced arrow row 7, advanced arrow row 8, advanced arrow row 9, advanced arrow row 10, advanced arrow row 11, advanced arrow row 12, Contrast, Brightness, Original Saturation |
+| S2 10/0046 | [editor-font-selected](comparisons/editor-font-selected.md) | 2/2 | None |
 
-| Failed timing | Measured | Budget |
+The popover's 0042 PNG includes the editor backing image (250×588); its child is selected at y258 with the recorded 250×232 window frame. Arrow/label rows and the three guide-circle samples still have the reported ink/color residuals. No threshold was widened. The font boxes, grey stops, first-run card, and selected font pass.
+
+## Renders
+
+| State | Light 1x | Light 2x |
 |---|---|---|
-| SCC first draw CPU p95 | 11.872 ms | <8 ms |
-| SCC first draw wall p95 | 13.240 ms | <8 ms |
-| Simple editor open p95 | 16.799 ms | <12 ms |
-
-Timing budgets failed under heavy machine load (lead exception, 2026-10-26). Rerun before merge.
-
-Full drag frame (native event + display) p95 1.486 ms, max 3.258 ms (100 frames;
-diagnostic, no separate plan budget). Wheel event p95 0.078 ms against <2 ms;
-59 previews during a one-second 120 Hz drag; idle main-thread CPU 1.585 ms in two seconds;
-ten-page refresh max 0.123 ms; off-main hue sampling 6.897 ms. Dark first-run rendered contrast:
-title 11.19:1, body 5.16:1, footer label 10.24:1.
+| editor-advanced | [1x](editor-advanced-light@1x.png) | [2x](editor-advanced-light@2x.png) |
+| editor-color | [1x](editor-color-light@1x.png) | [2x](editor-color-light@2x.png) |
+| editor-delete-alert | [1x](editor-delete-alert-light@1x.png) | [2x](editor-delete-alert-light@2x.png) |
+| editor-dragging | [1x](editor-dragging-light@1x.png) | [2x](editor-dragging-light@2x.png) |
+| editor-first-run | [1x](editor-first-run-light@1x.png) | [2x](editor-first-run-light@2x.png) |
+| editor-font-selected | [1x](editor-font-selected-light@1x.png) | [2x](editor-font-selected-light@2x.png) |
+| editor-global-off | [1x](editor-global-off-light@1x.png) | [2x](editor-global-off-light@2x.png) |
+| editor-legacy | [1x](editor-legacy-light@1x.png) | [2x](editor-legacy-light@2x.png) |
+| editor-name-menu | [1x](editor-name-menu-light@1x.png) | [2x](editor-name-menu-light@2x.png) |
+| editor-neutral-page | [1x](editor-neutral-page-light@1x.png) | [2x](editor-neutral-page-light@2x.png) |
+| editor-no-color | [1x](editor-no-color-light@1x.png) | [2x](editor-no-color-light@2x.png) |
+| editor-not-active | [1x](editor-not-active-light@1x.png) | [2x](editor-not-active-light@2x.png) |
+| editor-scope-menu | [1x](editor-scope-menu-light@1x.png) | [2x](editor-scope-menu-light@2x.png) |
+| editor-zap-count | [1x](editor-zap-count-light@1x.png) | [2x](editor-zap-count-light@2x.png) |

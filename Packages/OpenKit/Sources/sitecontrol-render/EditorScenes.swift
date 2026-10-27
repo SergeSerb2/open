@@ -91,7 +91,7 @@ final class EditorStage {
         if ["editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-on","editor-zap-count"].contains(state) {
             seed.colorWheel = BoostColorWheel(hue: 252.3,intensity: 46.2/(66.5*0.99),baseHue: 125);seed.colorAdjustment = seed.colorWheel?.adjustment
         }
-        if state == "editor-font-selected" { seed.fontFamily = BoostEditorFonts.available[7].css }
+        if state == "editor-font-selected" { seed.fontFamily = BoostEditorFonts.available[9].css }
         if state == "editor-zap-count" { seed.zaps = [ZappedElement(selector: ".ad")] }
         initialID = seed.id;if !isNew { _ = host.boostStore.upsert(seed) }
         backdrop.appearance = appearance.nsAppearance
@@ -108,7 +108,7 @@ final class EditorStage {
         settle(waitForColors ? 0.2 : 0)
         if state == "editor-color",let button = view.control(id: "editor.color.advanced") { mouse(.leftMouseDown,point: CGPoint(x: button.bounds.midX,y: button.bounds.midY),in: button);settle() }
         if state == "editor-advanced" { tap("editor.color.advanced");configureAdvancedFallback();settle(0.35) }
-        if state == "editor-dragging" { mouse(.leftMouseDown,point: view.pad.primaryKnobCenter ?? CGPoint(x: 90,y: 74),in: view.pad);mouse(.leftMouseDragged,point: CGPoint(x: 55,y: 26),in: view.pad);settle(0.3) }
+        if state == "editor-dragging" { mouse(.leftMouseDown,point: view.pad.primaryKnobCenter ?? CGPoint(x: 90,y: 74),in: view.pad);mouse(.leftMouseDragged,point: CGPoint(x: 60,y: 29.5),in: view.pad);settle(0.3) }
         if state == "editor-delete-alert" { menu("Delete this Boost");settle(0.3) }
     }
     isolated deinit { controller.close();parent.contentView = nil;parent.close();defaults.removePersistentDomain(forName: suite);CATransaction.flush() }

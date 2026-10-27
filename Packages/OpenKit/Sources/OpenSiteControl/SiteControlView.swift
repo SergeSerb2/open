@@ -506,10 +506,11 @@ enum SiteControlGlyphRenderer {
         c.scaleBy(x: scale,y: scale); NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: c,flipped: false); draw(c); NSGraphicsContext.restoreGraphicsState(); return c.makeImage()
     }
     static func sparkle(_ c: CGContext,at p: CGPoint,size: CGFloat,alpha: CGFloat) { let path = CGMutablePath(); path.move(to: CGPoint(x: p.x,y: p.y-size/2)); path.addQuadCurve(to: CGPoint(x: p.x+size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y+size/2),control: p); path.addQuadCurve(to: CGPoint(x: p.x-size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y-size/2),control: p); c.setAlpha(alpha); c.addPath(path); c.fillPath(); c.setAlpha(1) }
-    static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero) -> Image? {
-        let key = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)"
+    static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero,symbolScale: NSImage.SymbolScale? = nil) -> Image? {
+        let key = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)|\(String(describing: symbolScale))"
         if let cached = symbols[key] { return cached }
-        guard let source = NSImage(systemSymbolName: name,accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size,weight: weight)) else { return nil }
+        let configuration = symbolScale.map { NSImage.SymbolConfiguration(pointSize: size,weight: weight,scale: $0) } ?? .init(pointSize: size,weight: weight)
+        guard let source = NSImage(systemSymbolName: name,accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return nil }
         let nativeSize = CGSize(width: ceil(source.size.width),height: ceil(source.size.height))
         func draw(_ c: CGContext) {
             source.draw(in: CGRect(origin: .zero,size: source.size),from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: false,hints: nil)
