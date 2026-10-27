@@ -1205,6 +1205,11 @@ path for profiling; `check` always runs both. Each benchmark uses at most three
 attempts (30 samples and 5 warmups each), prints CPU p95, diagnostic wall p95,
 load1, and CPU lateness, and retains the 8 ms main-thread CPU limit (lead ruling,
 2026-10-26). Wall time is diagnostic, per the user ruling at 20:25.
+`cold-measure --thread-instructions` is an optional harness-only diagnostic of the
+same cold-open span (5 warmups, 30 samples). It reads the current main thread
+through dynamically resolved `thread_selfcounts(THSC_CPI=1)` with an ABI check.
+It does not change or replace the CPU gate. The lead requested five A/B runs per
+variant on 2026-10-26; no counter code is linked into App or library targets.
 
 States: `scc-no-boosts` (S2 09/0010 content: "+", Developer Mode hidden, one allowed setting),
 `scc-boost` (S2 11/0005 content plus one Boost), `scc-adblock-on`, `scc-adblock-excluded`,

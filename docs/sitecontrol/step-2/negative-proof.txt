@@ -1,0 +1,34 @@
+## flows
+| FAIL | F3 complete captured section/row Tab order |
+| FAIL | F3 Tab wraps |
+| FAIL | F3 Right arrow stays inside actions |
+| FAIL | F8 New Boost action and menu with scc-boost |
+| FAIL | F9 exact captured menu always includes both Boost commands |
+| FAIL | F9 E2 capability adds Clear Cache |
+| FAIL | F20 private window disables creation, toggle, and edit |
+| FAIL | picker focuses + without opening a menu |
+| FAIL | picker host guard requires the first real item when extensions land |
+| FAIL | picker Return runs Add Extension |
+| FAIL | Tab works after focused row removal |
+| FAIL | retained native menu cannot act on a later presentation generation |
+## probes
+| FAIL | scc-no-boosts light 1x four 48x32 actions at measured positions |
+| FAIL | scc-no-boosts light 2x four 48x32 actions at measured positions |
+| FAIL | scc-no-boosts dark 1x four 48x32 actions at measured positions |
+| FAIL | scc-no-boosts dark 1x real Settings gear knock-out equals nearby material DE 61.30 |
+| FAIL | scc-no-boosts dark 2x four 48x32 actions at measured positions |
+| FAIL | scc-no-boosts dark 2x real Settings gear knock-out equals nearby material DE 62.61 |
+| FAIL | scc-boost light 1x four 48x32 actions at measured positions |
+| FAIL | scc-boost light 2x four 48x32 actions at measured positions |
+| FAIL | scc-boost dark 1x four 48x32 actions at measured positions |
+| FAIL | scc-boost dark 2x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-on light 1x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-on light 2x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-on dark 1x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-on dark 2x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-excluded light 1x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-excluded light 2x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-excluded dark 1x four 48x32 actions at measured positions |
+| FAIL | scc-adblock-excluded dark 2x four 48x32 actions at measured positions |
+## compare
+| PiP knocked-out gear | 102,298 13x13 | 102,299 12x13 | 1.00 | 50.09 | FAIL |
