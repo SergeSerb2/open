@@ -37,6 +37,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         self.menus = menus
         header = SpaceHeaderView(context: context, space: space)
         super.init(frame: .zero)
+        SidebarDiagnostics.spacePageBuilds += 1
         wantsLayer = true
         header.page = self
         addSubview(header)
@@ -105,6 +106,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     override func layout() {
         super.layout()
+        SidebarDiagnostics.spacePageLayouts += 1
         let w = bounds.width
         header.frame = CGRect(x: 0, y: 0, width: w, height: SpaceListMetrics.headerHeight)
         let headerHeight = displaysHeader ? SpaceListMetrics.headerHeight : 0
@@ -889,6 +891,31 @@ final class SidebarOutlineView: NSOutlineView {
     override func reloadData() {
         SidebarDiagnostics.fullReloads += 1
         super.reloadData()
+    }
+
+    override func insertItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.insertItems(at: indexes, inParent: parent, withAnimation: animationOptions)
+    }
+
+    override func removeItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.removeItems(at: indexes, inParent: parent, withAnimation: animationOptions)
+    }
+
+    override func moveItem(at fromIndex: Int, inParent oldParent: Any?, to toIndex: Int, inParent newParent: Any?) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.moveItem(at: fromIndex, inParent: oldParent, to: toIndex, inParent: newParent)
+    }
+
+    override func reloadItem(_ item: Any?, reloadChildren: Bool) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.reloadItem(item, reloadChildren: reloadChildren)
+    }
+
+    override func noteNumberOfRowsChanged() {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.noteNumberOfRowsChanged()
     }
 
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool {

@@ -118,6 +118,62 @@ runs. Raw traces stay local; commit only synthetic numeric evidence and hashes.
 The Site Control A/B report is in `docs/sitecontrol/step-2/performance/README.md`.
 This method does not claim that other existing harnesses have already migrated.
 
+### SM6 structural and machine-specific cost gates
+
+SM6 constructs the real 10-Space × 100-row Library and lays it out at 900×700,
+scale 1, with three synchronous settle passes. It requires page builds to equal
+built visible columns (1…4), exactly one full outline reload per built page,
+zero incremental outline item updates during first layout, and model-matching
+row counts. Existing scroll-builds-once and rename-no-reload checks remain.
+Production diagnostics use plain main-actor integer increments without locks,
+allocation or logging. AppKit layout callback counts remain unpinned.
+
+The default `sidebar-render check` also runs `sm6-cost`: one discarded warm-up
+process, then five fresh `sm6-measure --thread-instructions` processes. Each child
+has isolated home/tmp/preferences, a 15-second timeout, a 65,536-byte output cap
+and owned-PID cleanup. Known CPU-brand/macOS-build keys enforce
+`median <= ceil(acceptedMedian × 1.10)` from the versioned resource
+`sidebar-render/Resources/sm6-cost-baselines.json`. Fixture updates need lead
+approval. Unknown keys report the measured count as INFO, never cost PASS.
+Invalid or unavailable known-machine counters fail without fallback.
+
+Only the harness binary resolves `thread_selfcounts` through `dlsym`; no App or
+OpenKit library uses it. Wall time, lateness versus 120 ms, thread CPU, process
+instructions, load and the wider thread census are diagnostics. Raw output and
+cleanup state are retained in `SM6_JSON`. Instructions do not guarantee latency:
+the 120 ms product budget is checked separately in a quiet M5 window. Helper
+threads, draw/GPU completion and deferred work remain gaps; see
+`docs/followups.md`.
+
+Build before running:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
+Packages/OpenKit/.build/release/sidebar-render sm6-measure --thread-instructions
+Packages/OpenKit/.build/release/sidebar-render sm6-cost
+python3 tools/sm6-proof.py --binary Packages/OpenKit/.build/release/sidebar-render \
+  --out /tmp/sm6-cleanup-UNIQUE --load low --case early-failure --runs 1
+```
+
+`sm6-measure --fail-after-host` and `sm6-cost --fail-child-after-host` intentionally
+fail and must clean all owned hosts/processes. Proof output directories must be
+new. The proof tool bounds runs to 1…5, reaps only its recorded children and
+records cleanup in `receipt.json`. Its `--load high` mode starts owned burners;
+use it only for an explicitly authorized load proof. A full `--case check` run
+also needs `/usr/bin/lockf /tmp/open-onscreen-e2e.lock`, with no concurrent build.
+
+M5 review r2 (section 1, 2026-10-27, M5 Pro / 26B5112a, built-in 2x panel as the
+main display, load1 4.5–5.2). The sampler is stable: three `sm6-cost` runs gave
+medians 680,241,245 / 680,144,454 / 683,041,525 (within-run range/median 0.6–0.8 %),
+0.4–0.8 % above the accepted 677,429,195, so the accepted M5 fixture stands. Wall time
+stayed diagnostic at 61.7–67.8 ms. Negative proof: one temporary O(n) pass in
+`SpaceManagerView.layout` that sizes every row title once with the real system font
+(1,000 rows) kept every structural check at 4 builds / 4 reloads / 0 item updates but
+raised the median to 785,999,099 > 745,172,115, and `sm6-cost` exited 1. The source was
+restored and the gate passed again at 680,827,395. `sm6-proof.py --case early-failure`
+and `sm6-cost --fail-child-after-host` both reaped their children (`cleanup: True`,
+hosts 0, visible 0).
+
 ## Logs and privacy
 
 The default directory is `$TMPDIR/open-verify-<local timestamp>.<unique suffix>/`

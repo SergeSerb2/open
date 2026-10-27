@@ -837,8 +837,16 @@ HG4 checks the two-slot reorder in the Manager instead.
 
 Column shells and headers exist in model order. Row pages and theme backgrounds
 build when a column first enters the horizontal viewport and stay cached. The
-real 10-Space × 100-row harness verifies the ≤120 ms initial build budget, lazy
-scroll-in, and no full reloads of existing pages. Initial page setup fills the
+real 10-Space × 100-row harness gates page builds equal to the 1–4 built visible
+columns, one full outline load per page, model-matching outline row counts, lazy
+scroll-in, and no full reloads of existing pages. Wall time versus the historical
+120 ms reference, CPU, and process instructions are diagnostic. A separate harness
+child sampler uses one discarded fresh-process warm-up plus five fresh processes
+to gate median main-thread instructions against lead-approved CPU/OS fixtures
+(ceil accepted × 1.10). Unknown machines report INFO without cost PASS. This
+bounds synchronous main-thread computation on known keys; helper-thread,
+draw/GPU and deferred work remain outside the cost gate.
+Initial page setup fills the
 root cache and installs its delegate before the native data source, whose setter
 performs the initial reload; the old redundant empty/explicit pair is gone.
 Model edits still send per-node events and the Manager batches view updates
@@ -876,8 +884,10 @@ Manager renders use LibraryContent’s `SettingsTokens.content` background in bo
 appearances. Dark columns have a 1 pt white 0.30 rim (guess pending C2).
 Hidden Managers keep one dirty flag; visibility reconciles cached final parent
 lists in one bulk native update, without reloadData or a queued event history.
-The earlier SM6 number means **36 ms to first layout**, excluding GPU snapshot
-and real favicon loading. C2/C5/C7 values remain guesses until capture session 2.
+The earlier **36 ms Library-build** figure is not the same-section SM6 calibration
+basis. Later M5 same-section logs span 59.7–87.2 ms (15 runs, median ≈70 ms),
+excluding GPU snapshot and real favicon loading. C2/C5/C7 values remain guesses
+until capture session 2.
 
 ## 21. Sidebar completion S5 (2026-10-26)
 

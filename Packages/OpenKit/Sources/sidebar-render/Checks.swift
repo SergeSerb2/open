@@ -40,6 +40,10 @@ enum Checks {
     /// Display rows the outline should show for the focused Space.
     static func expectedRows(context: SidebarContext) -> [String] {
         guard let space = context.focusedSpace else { return [] }
+        return expectedRows(space: space)
+    }
+
+    static func expectedRows(space: Space) -> [String] {
         var r = ["spacer"]
         func walk(_ nodes: [SidebarNode]) {
             for n in nodes {
