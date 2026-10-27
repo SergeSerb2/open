@@ -1789,6 +1789,17 @@ def wait_card(app, shown, timeout=3.0, step=0.015):
 def window_flow_checks(factory, results, tmp):
     app = factory(urls=(), fresh=True)
     try:
+        # OpenEngine registers a delegating malloc zone before main(), so the
+        # engine's PartitionAlloc replaces it in place and the system zone
+        # is never out of the zone list (the launch race of 2026-10-26). On
+        # the racy path the system zone is registered again, after the
+        # purgeable zone (docs/engine-fork.md).
+        zones = app.call("ping").get("mallocZones", [])
+        results["malloc_zones_early"] = {
+            "ok": zones[:1] == ["PartitionAlloc"] and "DefaultMallocZone" in zones
+                  and "DefaultPurgeableMallocZone" in zones
+                  and zones.index("DefaultMallocZone") < zones.index("DefaultPurgeableMallocZone"),
+            "zones": zones}
         first = app.call("window-state")
         w1 = first["id"]
         results["native_window"] = {
@@ -1908,16 +1919,35 @@ def window_flow_checks(factory, results, tmp):
         full_dismiss = wait_card(app, False)
         app.call("key", key="s", modifiers=["cmd"], route="app")
         sidebar_anchored(app)
-        request = app.eval(c, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        # Wait for the real state before the page call: the second window in
+        # front with its full-screen transition over, and tab C's own page
+        # there live. Automation resolves a tab in the front window; a page
+        # call that lands while it has no live browser fails with
+        # OEErrorWebContentClosed (code 4). If it still fails, record why.
+        def fullscreen_diag():
+            return {"front": app.call("window-state")["id"], "w1": w1, "w2": w2, "tab": app.tab(c),
+                    "pages": [[p.get("identifier"), p.get("live"), p.get("url", "")[-40:]] for p in app.call("pages")]}
+        def page_ready():
+            state = app.call("window-state")
+            return (state["id"] == w2 and state["fullscreen"] and not state["fullscreenTransition"]
+                    and app.page(c).get("live"))
+        ready = wait_until(page_ready, timeout=10, step=0.1)
+        before_request = fullscreen_diag()
+        try:
+            request = app.eval(c, 'document.documentElement.requestFullscreen().then(() => "ok", e => e.message)')
+        except RuntimeError as e:
+            results["html_fullscreen_in_native"] = {"ok": False, "error": str(e), "ready": bool(ready),
+                                                    "before": before_request, "after": fullscreen_diag()}
+            raise
         page_full = wait_until(lambda: app.call("window-state")["pageFullscreen"], timeout=5, step=0.1)
         page_state = app.call("window-state")
         app.call("fullscreen-exit", tab=c)
         page_exit = wait_until(lambda: not app.call("window-state")["pageFullscreen"], timeout=5, step=0.1)
         after_page = app.call("window-state")
-        results["html_fullscreen_in_native"] = {"ok": request == "ok" and bool(page_full) and bool(page_exit)
+        results["html_fullscreen_in_native"] = {"ok": bool(ready) and request == "ok" and bool(page_full) and bool(page_exit)
             and not page_state["sidebarVisible"] and page_state["panel"] == [0, 0] + page_state["frame"][2:]
             and after_page["fullscreen"] and after_page["sidebarVisible"] and after_page["panel"][0] == 228,
-            "page_state": page_state, "after_exit": after_page}
+            "ready": bool(ready), "page_state": page_state, "after_exit": after_page}
         app.call("window-fullscreen")
         exited = wait_until(lambda: finished_fullscreen(False, before["fullscreenChanges"] + 2), timeout=15, step=0.1)
         results["fullscreen"] = {"ok": bool(entered) and bool(exited) and check_page(app, c, "Window C")}
