@@ -122,6 +122,16 @@ An explicit `--out` must name a new private directory. Receipts include `envKey`
 existing input/binary digests and per-attempt results. Recording receipts keep
 all measurements and the proposed caps. Never commit private outputs.
 
+Checkpoint, 2026-10-26: the unchanged release build passed. Its real 13-state
+self-comparison passed 10/13 under the old M5 caps, with the three expected
+absolute-color failures, exact paired geometry/ink, zero color drift, and zero
+paired flat-fill channel difference. No diagnosis stop condition fired. The
+trusted-main record completed all 39 samples and passed its guards; all 634
+exported package files still matched the pinned commit. Python syntax passed.
+The keyed focused gate, break/revert proofs, full gate and M5 same-head proof
+are pending. A user stop order canceled the queued proof job before it started;
+no temporary production edit ran. This is a WIP checkpoint, not merge readiness.
+
 ## Logs and privacy
 
 The default directory is `$TMPDIR/open-verify-<local timestamp>.<unique suffix>/`
