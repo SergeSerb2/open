@@ -197,7 +197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
       return createWindowController(state: state)
     }
     guard let spaceID = focusedSpaceID ?? frontWindowController?.context.focusedSpace?.id ?? model.spaces.first?.id,
-      let state = model.createWindow(focusedSpaceID: spaceID) else { return nil }
+      let state = withoutWindowUndo({ model.createWindow(focusedSpaceID: spaceID) }) else { return nil }
     let offset = Double(windowControllers.count * 24)
     state.frameX += offset; state.frameY -= offset
     let controller = createWindowController(state: state)
@@ -221,7 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
 
   func windowDidClose(_ id: WindowID) {
     if model.windows.filter({ $0.style == .standard }).count > 1 {
-      model.closeWindow(windowID: id)
+      withoutWindowUndo { model.closeWindow(windowID: id) }
     }
     windowControllers.removeAll { $0.windowID == id }; hostFactories[id] = nil
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
@@ -235,6 +235,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     let space = Space(title: "Space", profileID: profile.id)
     let window = BrowserWindowState(focusedSpaceID: space.id)
     return BrowserModel(profiles: [profile], spaces: [space], windows: [window])
+  }
+
+  /// Shell window lifetime cannot be undone as a sidebar edit. Preserve an
+  /// enclosing caller's disabled registration state, including on early return.
+  private func withoutWindowUndo<T>(_ body: () -> T) -> T {
+    let wasEnabled = undoManager.isUndoRegistrationEnabled
+    if wasEnabled { undoManager.disableUndoRegistration() }
+    defer { if wasEnabled { undoManager.enableUndoRegistration() } }
+    return body()
   }
 
   func scheduleSave() {

@@ -11,7 +11,7 @@ import OpenStore
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
         if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
-        if section == .spaces { refreshSpaceManagerView() }
+        if section == .spaces, cachedSpaceManagerView == nil { refreshSpaceManagerView() }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]

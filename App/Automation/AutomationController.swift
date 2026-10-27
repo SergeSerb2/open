@@ -169,6 +169,15 @@
         if let sheet = target?.attachedSheet { dialogs.append(sheet.windowNumber); target?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
         target?.performClose(nil)
         return ["closed": target?.isVisible != true, "dialogs": dialogs] as [String: Any]
+      case "space-manager-lifecycle": return spaceManagerLifecycle()
+      case "space-manager-row-controls": return try spaceManagerRowControls(a)
+      case "space-manager-scroll":
+        let (manager, _) = try realSpaceManager()
+        guard let x = a["x"] as? Double, x.isFinite, x >= 0, x <= 100_000 else { throw Failure(message: "invalid manager scroll origin") }
+        let clip = manager.scrollView.contentView
+        var bounds = clip.bounds; bounds.origin.x = x
+        clip.scroll(to: clip.constrainBoundsRect(bounds).origin); manager.scrollView.reflectScrolledClipView(clip)
+        return spaceManagerLifecycle()
       default: break
       }
       let w = try window
@@ -1239,6 +1248,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
+        "delete": ("\u{7f}", 51),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
@@ -1421,6 +1431,52 @@
       else { throw Failure(message: "manager menu item is unavailable") }
       menu.performActionForItem(at: index)
       return true
+    }
+    /// Passive cache read: do not layout/build the hidden manager while checking focus work.
+    private func spaceManagerLifecycle() -> [String: Any] {
+      let adapter = app.settingsPresenter
+      let manager = adapter.library?.spaceManagerView as? SpaceManagerView
+      let target = adapter.libraryPresenter?.window
+      var sectionRows: [[String: Any]] = [], visited = 0
+      func findSections(_ view: NSView, depth: Int) {
+        guard depth <= 24, visited < 512 else { return }; visited += 1
+        if let table = view as? NSTableView, table.tableColumns.contains(where: { $0.identifier.rawValue == "section" }) {
+          for (row, section) in LibrarySection.allCases.enumerated() where row < table.numberOfRows {
+            let rect = table.convert(table.rect(ofRow: row), to: nil)
+            sectionRows.append(["section": section.rawValue, "point": [rect.midX, (target?.frame.height ?? 0) - rect.midY]])
+          }
+        }
+        for child in view.subviews.prefix(512) { findSections(child, depth: depth + 1) }
+      }
+      if let content = target?.contentView { findSections(content, depth: 0) }
+      return ["identity": manager.map { String(describing: ObjectIdentifier($0)) } ?? "",
+        "contextWindow": manager?.context.windowID.description ?? "", "builtColumns": manager?.builtColumnIDs.count ?? 0,
+        "origin": [manager?.scrollView.contentView.bounds.origin.x ?? 0, manager?.scrollView.contentView.bounds.origin.y ?? 0],
+        "systemAppearance": manager.map { String(describing: $0.context.systemAppearance) } ?? "",
+        "appAppearance": NSApp.appearance?.name.rawValue ?? "", "visible": target?.isVisible == true,
+        "key": target?.isKeyWindow == true, "section": adapter.library?.section.rawValue ?? "",
+        "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows] as [String: Any]
+    }
+    /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
+    private func spaceManagerRowControls(_ args: [String: Any]) throws -> Any {
+      let (manager, target) = try realSpaceManager()
+      guard let space = args["space"] as? String, let node = args["node"] as? String,
+        let id = manager.columnOrder.first(where: { $0.description == space }), let outline = manager.outline(spaceID: id),
+        let row = (0..<min(outline.numberOfRows, 200)).first(where: { (outline.item(atRow: $0) as? Tab)?.id.description == node }),
+        let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false)
+      else { throw Failure(message: "visible manager row is unavailable") }
+      var controls: [[String: Any]] = [], visited = 0
+      func walk(_ view: NSView, depth: Int) {
+        guard depth <= 12, visited < 256 else { return }; visited += 1
+        if let label = view.accessibilityLabel(), !label.isEmpty, !view.isHiddenOrHasHiddenAncestor, !view.visibleRect.isEmpty {
+          let rect = view.convert(view.bounds, to: nil)
+          controls.append(["label": String(label.prefix(160)), "point": [rect.midX, target.frame.height - rect.midY]])
+        }
+        for child in view.subviews.prefix(256) { walk(child, depth: depth + 1) }
+      }
+      walk(cell, depth: 0)
+      let rect = outline.convert(outline.rect(ofRow: row), to: nil)
+      return ["frame": [rect.minX, target.frame.height - rect.maxY, rect.width, rect.height], "controls": controls] as [String: Any]
     }
     isolated deinit {
       if let managerUndoObserver { NotificationCenter.default.removeObserver(managerUndoObserver) }

@@ -59,13 +59,22 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     let manager = SpaceManagerView(context: context)
     manager.onIntent = { [weak self, weak context] intent in
       guard let self, let context, self.app.model.windows.contains(where: { $0.id == context.windowID }) else { return false }
-      if case .hoverPreview = intent { return true }
       switch intent {
-      case .select, .selectFavorite, .switchSpace:
-        // Model selection alone leaves a restored/sleeping tab's placeholder.
-        // Use the existing App path to wake/show it in this live browser.
-        guard let factory = self.app.hostFactories[context.windowID] else { return false }
-        return factory.performSidebar(intent) ?? false
+      case .hoverPreview: return true
+      case .toggleSidebar, .openCommandBar, .newTab, .goBack, .goForward, .reload, .stopLoading,
+           .copyCurrentURL, .showLibrary, .manageSpaces: return false
+      default: break
+      }
+      if let factory = self.app.hostFactories[context.windowID], let handled = factory.performSidebar(intent) { return handled }
+      // No live browser (or a model-only intent): closing a pin must never archive it.
+      switch intent {
+      case .unloadTab: return false
+      case .close(let id) where self.app.model.isPinned(tabID: id): return false
+      case .copyLink(let id, let markdown):
+        guard let tab = self.app.model.tab(id: id) else { return false }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string)
+        return true
       default: break
       }
       let accepted = ModelSidebarActions(context: context).perform(intent)

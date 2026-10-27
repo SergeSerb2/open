@@ -437,3 +437,38 @@ signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launc
 fingerprints differ. Receipts record raw and code fingerprints, the required
 Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
 engine revision. Real app/Vendor bundles are never modified by the comparison.
+
+### Manager review acceptance (round 1)
+
+`sidebar-completion` also drives pinned-row Delete, the real loaded-row unload
+button, Copy Link and the native pasteboard, Unmute against the live engine
+host after the real command bar mutes tabs, and the pinned URL reset button. Selected Today archive must keep a live
+neighbor selected. With no browser, Copy Link still works and the existing retained model window
+remains the sole saved window. The App fallback refuses pinned close/unload.
+
+For each window lifetime case, a real Space drag comes first, then actual New
+Window or Close Window, then Library Cmd+Z with no intervening edit. The suite
+requires exactly one model undo notification, the prior Space order, and saved
+window IDs equal to shell controller IDs. This ordering detects undoable window
+creation and closed-window ghosts. Window lifetime suppression preserves an
+already-disabled UndoManager registration state.
+
+The bounded `space-manager-lifecycle` readout reports cached view identity,
+context, built-column count, horizontal origin, section row coordinates, App and
+manager appearance, key/visible state, and undo-registration state. It does not
+layout or build a hidden manager. `space-manager-scroll x=<0...100000>` scrolls
+the real manager clip view (clamped to the document). `space-manager-row-controls
+space=<ID> node=<ID>` reads the real row frame and visible accessibility labels
+and control points; traversal is limited to 200 rows, 256 views and 12 levels.
+Input still uses existing `mouse`/`key route=app` events. `key=delete` supplies the
+native Delete key. Browserless Copy Link uses the existing real manager menu
+and creates no browser or model.
+
+The suite checks that hidden Library focus changes keep its cache and built
+columns, visible replacement preserves horizontal origin, a native Library
+section click fills the cache, and App-only appearance changes reach the manager
+and are restored in `finally`. Focus assertions require Library visibility/key
+ownership after Cmd+L, Escape and Return, command bar dismissal after each Escape,
+and unchanged browser tab IDs across Library Cmd+W. The invalid drag-index case
+is named `automation_reorder_index_boundary_self_check`; it proves only the
+harness boundary, not a product reorder rule.
