@@ -1,6 +1,6 @@
 {
   "appBuild": {
-    "log": ".re/space-manager/review-r1/build-final.log",
+    "log": ".re/space-manager/review-r1/postmerge/build.log",
     "result": "PASS",
     "warnings": "No new Manager Swift warnings. Initial build also reports warnings on untouched main lines: existing ExistentialAny uses, OpenEngine bitmap enum expression, project headermaps/signing/metadata notices."
   },
@@ -21,7 +21,7 @@
     "recordedSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
     "signing": "tools/embed-cef.sh ad-hoc signing reproduced on disposable clone when needed",
     "stamp": "fork /Users/m1-dev/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034",
-    "suppliedProvenance": "M5 21:38 copy recorded21:23:54 main4c40ebd+PR93"
+    "suppliedProvenance": "M5 21:38 copy recorded21:23:54 main4c40ebd+PR93; App main f668a90"
   },
   "engineFingerprint": {
     "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
@@ -37,27 +37,26 @@
   "focusedPackageChecks": [
     {
       "errors": 0,
-      "log": ".re/space-manager/review-r1/focused-final-settings/build.log",
+      "log": ".re/space-manager/review-r1/postmerge/focused/build.log",
       "name": "build",
       "result": "PASS",
-      "seconds": 31,
+      "seconds": 50,
       "warnings": 0
     },
     {
       "failed": 0,
-      "log": ".re/space-manager/review-r1/focused-final-settings/settings-preview.log",
+      "log": ".re/space-manager/review-r1/postmerge/focused/settings-preview.log",
       "name": "settings-preview",
       "passed": 37,
       "result": "PASS",
-      "seconds": 88
+      "seconds": 81
     },
     {
       "failed": 0,
-      "log": ".re/space-manager/review-r1/focused-initial/sidebar-render.log",
+      "log": ".re/space-manager/review-r1/postmerge/focused/sidebar-render.log",
       "name": "sidebar-render",
       "passed": 559,
       "result": "PASS",
-      "scope": "Same unchanged OpenSidebar source. Later cache fill guard changes only OpenSettings; settings-preview and real App were rerun.",
       "seconds": 106
     }
   ],
@@ -73,7 +72,7 @@
     "expectedError": "deliberate early failure with Library open",
     "processCleanup": true,
     "realManagerOpened": true,
-    "receipt": ".re/space-manager/review-r1/final-early-failure-results.json"
+    "receipt": ".re/space-manager/review-r1/postmerge/final-early-failure-results.json"
   },
   "historicalChecks": {
     "additionalSkip": "space-pad-compare: existing target, private capture inputs absent. Not relabeled baseline.",
@@ -95,7 +94,9 @@
     "Parent/M5 owns any remaining review, design comparison and counted full merge gate.",
     "No PR/watch/merge, Chromium tree work, subagents, unit tests, new mocks, desktop input or private fixtures."
   ],
+  "managerE2ERegionUnchangedSinceFixCommit": true,
   "mergeBeforeFixCommit": "fcfe948",
+  "mergeDetails": "Merged #94 context-menu allowlist and Site Control main as db508fa. Only docs/automation.md conflicted; kept both appended sections. No StepD or Package.swift conflict. Protected source remains exactly main.",
   "negativeProofs": [
     {
       "actualFailedChecks": [
@@ -242,11 +243,25 @@
     }
   ],
   "parentMinorCommit": "d5f0959ba100fe4aeee6895db4ae99f03c1434a9",
+  "postMergeCodeHead": "db508fae2be08b48b3787b6c0a57b273376fff2e",
+  "postMergeValidationLimits": [
+    "Focused package build/settings-preview/sidebar-render and real Manager positive/early-failure were rerun after main f668a90.",
+    "Five negative proofs are before the last main merge. Their AppDelegate/AppSettingsActions source hashes and the complete Manager e2e function region are unchanged.",
+    "No new full gate, Site Control/context-menu/extension suite, load campaign or reviewer was started. Protected main changes retain their M5 ownership.",
+    "Prior full gate at 7c07aa6/main49b5660 remains historical. No PR or merge readiness claim."
+  ],
+  "preMergeCheckpoint": {
+    "baseMain": "f668a90e19020c83227154ef68c789ca7063eee3",
+    "fixCommit": "9a649d8",
+    "focusedSettingsReceipt": ".re/space-manager/review-r1/focused-final-settings/settings-preview.log",
+    "negativeProofs": "Recorded before the final main merge. AppDelegate and AppSettingsActions hashes are unchanged; all five mutations stop before the removed optional browserless key path.",
+    "realAppReceipt": ".re/space-manager/review-r1/final-positive-results.json"
+  },
   "realApp": {
     "captures": {
       "comparison": "C2/session2 manager references absent on M1; no pixel comparison claimed",
-      "hovered": "/Users/m1-dev/.t3/worktrees/open/t3-03a0d44c/.re/space-manager/review-r1/run-53298-b0304932/manager-hovered.png",
-      "rest": "/Users/m1-dev/.t3/worktrees/open/t3-03a0d44c/.re/space-manager/review-r1/run-53298-b0304932/manager-rest.png"
+      "hovered": "/Users/m1-dev/.t3/worktrees/open/t3-03a0d44c/.re/space-manager/review-r1/postmerge/run-57736-7b5ac541/manager-hovered.png",
+      "rest": "/Users/m1-dev/.t3/worktrees/open/t3-03a0d44c/.re/space-manager/review-r1/postmerge/run-57736-7b5ac541/manager-rest.png"
     },
     "checks": {
       "E5_all_entries_one_library": true,
@@ -301,8 +316,8 @@
     "failed": 0,
     "passed": 41,
     "processCleanup": true,
-    "receipt": ".re/space-manager/review-r1/final-positive-results.json",
-    "started": "2026-10-26 23:15:13",
+    "receipt": ".re/space-manager/review-r1/postmerge/final-positive-results.json",
+    "started": "2026-10-26 23:28:58",
     "style": "chrome"
   },
   "sourcesSHA256": {
@@ -310,7 +325,7 @@
     "App/Automation/AutomationController.swift": "cb31121fbbe936086fe2a78f55be03cd45c537138f139bc89207dd1149f5244e",
     "App/Settings/AppSettingsActions.swift": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
     "Packages/OpenKit/Sources/OpenSettings/LibraryViewModel.swift": "19399945095a5239443375349442b78de25ba3b79929d29ae250fbb95198325d",
-    "tools/e2e/engine_e2e.py": "5db31099995addc7491caf3118223b21260d6b0c36c6d752b9063add45b3052e"
+    "tools/e2e/engine_e2e.py": "3858bd848dbeea603aeeccd27e1c8dd1cd909dd9fee0db3611d9ad16487c2ce5"
   },
   "status": "review-r1 fixes verified; pause checkpoint; no PR or watch"
 }
