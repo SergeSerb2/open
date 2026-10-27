@@ -380,3 +380,5 @@ signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launc
 fingerprints differ. Receipts record raw and code fingerprints, the required
 Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
 engine revision. Real app/Vendor bundles are never modified by the comparison.
+
+`window-motion sidebarDelay=0.29` is a process-only negative control: it delays the actual sidebar layer animations, while the controller records a separate request time before model/layout work. `scheduledDelay` is layer begin time minus that independent request time; normal input must schedule within one frame. Reset the control to zero after use. `snapshot toggleSidebar=true` prepares page underlays, dispatches Cmd+S through `OEApplication.sendEvent`, and captures the window server image after a scheduled 25 ms; `capturedAfterKey` reports the capture request time for load/lateness evidence. This avoids the ordinary snapshot preparation wait hiding a short window animation.

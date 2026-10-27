@@ -88,6 +88,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var pointerMonitor: Any?
     private var sidebarAnimationGeneration = 0
     private var anchoredSliding = false
+    private var sidebarMotionRequestedAt: CFTimeInterval?
     private var dragStartWidth: CGFloat?
     /// Actual animations read back from the layer when scheduled, retained after completion.
     public private(set) var sidebarAnimations: [String: CAAnimation] = [:]
@@ -261,6 +262,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if emptyPanelHost.frame != root.bounds { emptyPanelHost.frame = root.bounds }
         emptyPanelHost.isHidden = !container.isHidden
         let animate = animated && window?.isVisible == true && !Motion.reducesMotion
+        let requestedAt = sidebarMotionRequestedAt ?? CACurrentMediaTime()
+        if animate { sidebarMotionRequestedAt = nil }
         // Presentation reads are needed only to start/reverse a visible animation,
         // never while building the first window or following a plain width/resize tick.
         let oldPanel = animate ? (container.layer?.presentation()?.frame ?? container.frame) : container.frame
@@ -292,6 +295,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 sidebarAnimationGeneration += 1
                 let generation = sidebarAnimationGeneration
                 anchoredSliding = animate
+                container.setSidebarSliding(animate)
                 sidebarAnimations = [:]
                 sidebar.isHidden = animate ? false : hidden
                 positionTrafficLights()
@@ -299,7 +303,17 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                 CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated {
                     guard let self, self.sidebarAnimationGeneration == generation else { return }
                     self.anchoredSliding = false
-                    if self.cardState == .off { self.sidebar.isHidden = hidden; self.positionTrafficLights() }
+                    self.container.setSidebarSliding(false)
+                    if self.cardState == .off {
+                        self.sidebar.isHidden = hidden
+                        // Keep the live width through a flick's hide animation. Restoring
+                        // the stored width before completion would cancel the slide.
+                        if hidden && !self.resizingSidebar && self.context.sidebarWidthOverride != nil {
+                            self.context.sidebarWidthOverride = nil
+                            self.layoutContent()
+                        }
+                        self.positionTrafficLights()
+                    }
                 } }
                 let layers = [sidebar.layer, dimmedLights.layer].compactMap { $0 }
                     + Self.trafficLightKinds.compactMap { window?.standardWindowButton($0)?.layer }
@@ -309,7 +323,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                     if animate {
                         let spring = Motion.sidebarToggle.animation(keyPath: "transform.translation.x")
                         spring.fromValue = oldOffset; spring.toValue = targetOffset
-                        addMotion(spring, to: layer, key: "sidebarToggle")
+                        addMotion(spring, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                         if index == 0 { sidebarAnimations["sidebar"] = layer.animation(forKey: "sidebarToggle") }
                     }
                 }
@@ -323,7 +337,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
                             frameSpring("position", from: NSValue(point: fromPosition), to: NSValue(point: layer.position)),
                             frameSpring("bounds.size", from: NSValue(size: oldPanel.size), to: NSValue(size: panelFrame.size))]
                         group.duration = group.animations!.map(\.duration).max() ?? 0
-                        addMotion(group, to: layer, key: "sidebarToggle")
+                        addMotion(group, to: layer, key: "sidebarToggle", requestedAt: requestedAt)
                         sidebarAnimations[name] = layer.animation(forKey: "sidebarToggle")
                     }
                 }
@@ -347,10 +361,11 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         spring.fromValue = from; spring.toValue = to
         return spring
     }
-    private func addMotion(_ animation: CAAnimation, to layer: CALayer, key: String) {
-        let scheduledAt = layer.convertTime(CACurrentMediaTime(), from: nil)
-        animation.beginTime = scheduledAt
-        animation.setValue(scheduledAt, forKey: "openScheduledAt")
+    private func addMotion(_ animation: CAAnimation, to layer: CALayer, key: String, requestedAt: CFTimeInterval? = nil) {
+        let request = requestedAt ?? CACurrentMediaTime()
+        animation.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil)
+            + (key == "sidebarToggle" ? Motion.sidebarDelayOverride ?? 0 : 0)
+        animation.setValue(layer.convertTime(request, from: nil), forKey: "openRequestedAt")
         layer.add(animation, forKey: key)
     }
 
@@ -597,7 +612,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         finishCardHide(cardGeneration)
     }
     public func toggleSidebar() {
+        sidebarMotionRequestedAt = CACurrentMediaTime()
         guard let state = context.window else { return }
+        if !resizingSidebar { context.sidebarWidthOverride = nil }
         removeRevealCard()
         model.setSidebarMode(windowID: windowID, mode: state.sidebarMode == .hidden ? .anchored : .hidden)
         layoutContent(animated: true); changed()
@@ -614,11 +631,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         let hidden = x < WindowMetrics.sidebarDragHidePoint
         context.sidebarWidthOverride = min(WindowMetrics.maxSidebarWidth, max(WindowMetrics.minSidebarWidth, x))
         let crossed = (state.sidebarMode == .hidden) != hidden
-        if crossed { model.setSidebarMode(windowID: windowID, mode: hidden ? .hidden : .anchored) }
+        if crossed {
+            sidebarMotionRequestedAt = CACurrentMediaTime()
+            model.setSidebarMode(windowID: windowID, mode: hidden ? .hidden : .anchored)
+        }
         layoutContent(animated: crossed)
         guard ended else { return }
         if hidden {
-            // Width in the model still equals the drag-start width. Do not commit 164.
+            // Width in the model still equals the drag-start width. Do not commit the floor.
             sidebarGestureHides += 1
             _ = self.sidebar(sidebar, didRequest: .sidebarHiddenByGesture)
         } else {
@@ -627,8 +647,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         resizingSidebar = false; dragStartWidth = nil
         resizeHandle.isHidden = hidden
-        context.sidebarWidthOverride = nil
-        // Hidden geometry is already offscreen; restore the stored width on the next show.
+        if !hidden || !anchoredSliding { context.sidebarWidthOverride = nil }
+        // A hidden flick keeps the live width until the running slide completes.
         changed()
     }
     private func resetSidebarWidth() {

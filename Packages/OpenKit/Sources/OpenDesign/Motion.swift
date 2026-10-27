@@ -29,6 +29,8 @@ public struct SpringToken: Sendable, Hashable {
 
 /// Motion tokens. Evidence and remaining estimates: docs/design.md §2.4.
 public enum Motion {
+    /// Process-only automation negative control; nil on the shipping path.
+    @MainActor public static var sidebarDelayOverride: CFTimeInterval?
     /// Theme editor container motion; PROVISIONAL, plan §5.10.
     public static let editorOpen = SpringToken(response: 0.25, dampingFraction: 0.85)
     public static let editorFade: CFTimeInterval = 0.12

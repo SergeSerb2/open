@@ -339,7 +339,7 @@ public enum SidebarDiagnostics {
 extension NSView {
     /// Structural and Space-switch animations run only in visible windows: an
     /// offscreen window never completes them, and nobody would see them.
-    var animatesSidebarChanges: Bool { !Motion.reducesMotion && ((window?.isVisible ?? false) || SidebarDiagnostics.forceAnimations) }
+    var animatesSidebarChanges: Bool { (window?.isVisible ?? false) || SidebarDiagnostics.forceAnimations }
 }
 
 extension SidebarView {
@@ -480,6 +480,9 @@ extension SidebarView {
 
     /// Back, forward, and reload show in the sidebar toolbar.
     public var toolbarNavigationVisible: Bool { !toolbar.back.isHidden && !toolbar.forward.isHidden && !toolbar.reload.isHidden }
+    public var toolbarGeometry: [String: CGRect] {
+        ["toggle": toolbar.toggle.frame, "back": toolbar.back.frame, "forward": toolbar.forward.frame, "reload": toolbar.reload.frame]
+    }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }
@@ -542,7 +545,7 @@ extension SidebarView {
         opacity.fromValue = wanted ? 0 : 1; opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
         let group = CAAnimationGroup(); group.animations = [opacity]; group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if !Motion.reducesMotion {
             let slide = CABasicAnimation(keyPath: "transform.translation.y")
             slide.fromValue = wanted ? 12 : 0; slide.toValue = wanted ? 0 : 12; slide.duration = duration
             group.animations?.append(slide)

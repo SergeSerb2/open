@@ -1961,8 +1961,8 @@ def window_flow_checks(factory, results, tmp):
         wide = app.call("window-state")
         app.call("mouse", **{"from": [500, 300], "to": [190, 300]})
         narrow = app.call("window-state")
-        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 190 and narrow["sidebarMode"] == "anchored"}
-        app.call("mouse", **{"from": [190, 300], "to": [60, 300]})
+        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 218 and narrow["sidebarMode"] == "anchored"}
+        app.call("mouse", **{"from": [218, 300], "to": [60, 300]})
         hidden = sidebar_hidden(app) or app.call("window-state")
         # The first reveal right after the hide: every wait below is a condition (the
         # card settled or gone), never a fixed sleep.
@@ -2418,7 +2418,7 @@ def dimmed_look(png, scale, centers, mode, ring=True):
             ring_expected = (floating if centers[0][0] == 25 else anchored)[index]
             samples = [px(x, y) for y in range(int((cy-8)*scale), int((cy+8)*scale))
                        for x in range(int((cx-8)*scale), int((cx+8)*scale))
-                       if 6.5 <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < 7.5]
+                       if inner <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < outer]
             ring_px = [statistics.mean(c[k] for c in samples) for k in range(3)]
             ring_err = chrome_delta_e(ring_px, ring_expected)
             plain_err = chrome_delta_e(ring_px, bg)
@@ -2699,13 +2699,13 @@ def chrome_delta_e(c1, c2):
     return math.sqrt(dl*dl+dc*dc+dh*dh+Rt*dc*dh)
 
 
-def chrome_ring(png, center):
+def chrome_ring(png, center, inner=6.5, outer=7.5):
     w, _, px = read_image(png, srgb=True)
     scale = w / 1728
     cx, cy = center
     colors = [px(x,y) for y in range(int((cy-8)*scale), int((cy+8)*scale))
               for x in range(int((cx-8)*scale), int((cx+8)*scale))
-              if 6.5 <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < 7.5]
+              if inner <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < outer]
     return [statistics.mean(c[k] for c in colors) for k in range(3)]
 
 
@@ -2713,10 +2713,10 @@ def chrome_capture_comparison(snapshots):
     common = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, text=True).strip()
     capture_root = os.environ.get("OPEN_ARC_CAPTURE_ROOT", os.path.join(os.path.dirname(os.path.realpath(os.path.join(ROOT, common))), ".re"))
     sessions = os.path.join(capture_root, "runtime", "sessions")
-    rows=[]; rings=[]
+    rows=[]; rings=[]; profiles=[]
     for name, session, frame, edge, sample in [
             ("rest-364", "20261026-100848-03-active-window", 3, 364, (8,600)),
-            ("mid-drag-164", "20261026-101147-06-sidebar-width", 29, 164, (8,600)),
+            ("mid-drag-218", "20261026-101147-06-sidebar-width", 29, 218, (8,600)),
             ("hidden-held", "20261026-101147-06-sidebar-width", 53, 10, (4,600)),
             ("cmd-s-restored", "20261026-101147-06-sidebar-width", 66, 228, (8,600)),
             ("card-revealed", "20261026-101324-05-reveal-card", 9, 233, (100,600))]:
@@ -2731,16 +2731,20 @@ def chrome_capture_comparison(snapshots):
             return next(x for x in range(1,600) if min(P(x*s,600*s)) >= 230)
         ae=white_edge(A,1); oe=white_edge(O,scale)
         rows.append({"state":name,"capture":"S2 %s/%04d"%(session.split('-')[2],frame),
-            "position_error_pt":abs(ae-oe),"arc_edge":ae,"open_edge":oe,
+            "position_error_pt":abs(ae-oe),"implementation_error_pt":abs(edge-oe),"interim_floor":name=="mid-drag-218","arc_edge":ae,"open_edge":oe,
             "arc_rgb":ca,"open_rgb":co,"delta_e00":chrome_delta_e(ca,co)})
         if name in ("rest-364","card-revealed"):
             inset=5 if name=="card-revealed" else 0
-            for label,x in (("minimize",43),("zoom",66)):
+            for label,x in (("close",20),("minimize",43),("zoom",66)):
                 c=(x+inset,24+inset); ca=chrome_ring(arc,c); co=chrome_ring(ours,c)
-                rings.append({"state":name,"button":label,"arc_rgb":ca,"open_rgb":co,"delta_e00":chrome_delta_e(ca,co)})
-    return ({"ok":all(r["position_error_pt"]<=1 and (r["state"] == "card-revealed" or r["delta_e00"]<=2) for r in rows),
+                if label != "close":
+                    rings.append({"state":name,"button":label,"arc_rgb":ca,"open_rgb":co,"delta_e00":chrome_delta_e(ca,co)})
+                profiles.append({"state":name,"button":label,"non_gating":True,"half_bands":[
+                    {"band":[lo,hi],"delta_e00":chrome_delta_e(chrome_ring(arc,c,lo,hi),chrome_ring(ours,c,lo,hi))}
+                    for lo,hi in ((6.5,7),(7,7.5))]})
+    return ({"ok":all((r["implementation_error_pt"] if r["interim_floor"] else r["position_error_pt"])<=1 and (r["state"] == "card-revealed" or r["delta_e00"]<=2) for r in rows),
              "color_scope":"Anchored/hidden background samples; card material is deferred to Part B, retained below without acceptance.", "rows":rows},
-            {"ok":all(r["delta_e00"]<=1 for r in rings),"band":"6.5 <= r < 7.5 pt", "rows":rings})
+            {"ok":all(r["delta_e00"]<=1 for r in rings),"band":"6.5 <= r < 7.5 pt", "rows":rings, "non_gating_stroke_profile":profiles, "scale_scope":"1x proven; 2x M1 unproven (followups: Verification portability)"})
 
 
 def window_chrome_followup_checks(factory, results, tmp):
@@ -2768,7 +2772,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         return wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
     def spring(a, response, damping, path=None):
         return (a.get("type") == "CASpringAnimation" and abs(a.get("response", 0) - response) < 1e-6
-                and abs(a.get("damping", 0) - damping) < 1e-6 and a.get("scheduledDelay", a.get("beginTime")) == 0
+                and abs(a.get("damping", 0) - damping) < 1e-6 and 0 <= a.get("scheduledDelay", -1) <= 1/60
                 and (path is None or a.get("keyPath") == path))
     def snap(name):
         path = os.path.join(private, name + ".png")
@@ -2788,10 +2792,16 @@ def window_chrome_followup_checks(factory, results, tmp):
         pointer("down", 364)
         high = pointer("drag", 700)
         low = pointer("drag", 150)
-        mid_png = snap("mid-drag-164")
+        mid_png = snap("mid-drag-218")
+        toolbar = low["toolbarFrames"]
+        lights_right = max(r[0]+r[2] for r in low["trafficLightFrames"])
+        results["width_toolbar_floor"] = {"ok":low["sidebarLiveWidth"]==218 and toolbar["toggle"][0]-lights_right>=3
+            and toolbar["back"][0]-(toolbar["toggle"][0]+toolbar["toggle"][2])>=3
+            and all(toolbar[b][0]>=toolbar[a][0]+toolbar[a][2] for a,b in (("back","forward"),("forward","reload"))),
+            "floor":low["sidebarLiveWidth"],"toolbar":toolbar,"traffic_lights_right":lights_right}
         edge = pointer("drag", 82)
         results["width_live_limits"] = {"ok": high["sidebarLiveWidth"] == 500 and high["panel"][0] == 500
-            and low["sidebarLiveWidth"] == edge["sidebarLiveWidth"] == 164 and edge["sidebarMode"] == "anchored"
+            and low["sidebarLiveWidth"] == edge["sidebarLiveWidth"] == 218 and edge["sidebarMode"] == "anchored"
             and all(s["sidebarWidth"] == 364 and s["sidebarWidthCommits"] == before["sidebarWidthCommits"] for s in (high, low, edge))
             and app.call("frame-save-counters")["scheduled"] == saves,
             "high": high["sidebarLiveWidth"], "low": low["sidebarLiveWidth"], "model": edge["sidebarWidth"]}
@@ -2802,14 +2812,14 @@ def window_chrome_followup_checks(factory, results, tmp):
             and spring(hide_motion["sidebar"].get("sidebar", {}), .1, .95), "state": gone}
         back = pointer("drag", 82)
         results["width_show_before_release"] = {"ok": back["sidebarResizeActive"] and back["sidebarMode"] == "anchored"
-            and back["sidebarLiveWidth"] == 164 and back["panel"][0] == 164 and back["sidebarWidth"] == 364}
+            and back["sidebarLiveWidth"] == 218 and back["panel"][0] == 218 and back["sidebarWidth"] == 364}
         visible = pointer("up", 82)
         after_save = app.call("frame-save-counters")["scheduled"]
-        results["width_visible_commit_once"] = {"ok": visible["sidebarWidth"] == 164
+        results["width_visible_commit_once"] = {"ok": visible["sidebarWidth"] == 218
             and visible["sidebarWidthCommits"] == before["sidebarWidthCommits"] + 1 and after_save == saves + 1,
             "scheduled_delta": after_save - saves}
         settled()
-        drag(164, 364)
+        drag(218, 364)
         before = state(); saves = app.call("frame-save-counters")["scheduled"]
         pointer("down", 364); pointer("drag", 60)
         settled(); hidden_png = snap("hidden-held")
@@ -2824,6 +2834,18 @@ def window_chrome_followup_checks(factory, results, tmp):
         results["width_cmd_s_restores_start"] = {"ok": shown["sidebarMode"] == "anchored" and shown["sidebarWidth"] == 364 and shown["panel"][0] == 364}
         drag(364, 228)
         key(); settled(); key(); settled(); show_png = snap("cmd-s-restored")
+        key(); settled()
+        app.begin_timing("Cmd+S show snapshot at 25ms")
+        slide_png = os.path.join(private,"show-25ms.png")
+        slide = app.call("snapshot",path=slide_png,toggleSidebar=True)
+        sw,_,SP = read_image(slide_png); ss=sw/1728
+        white = [x for x in range(sw) if min(SP(x,600*ss))>=230]
+        left,right=min(white)/ss,(max(white)+1)/ss
+        results["motion_show_panel_right_edge"] = {"ok":slide["method"]=="windowserver+devtools" and 10<left<227 and abs(right-1718)<=1,
+            "left_pt":left,"right_pt":right,"snapshot":slide,"requested_after_key_s":.025,
+            "capture_lateness_s":slide.get("capturedAfterKey",.025)-.025,"load_average":list(os.getloadavg())}
+        print("show at25ms:",results["motion_show_panel_right_edge"],flush=True)
+        settled()
         reset_rows = []
         for width in (364, 500):
             drag(state()["sidebarWidth"], width)
@@ -2843,8 +2865,23 @@ def window_chrome_followup_checks(factory, results, tmp):
         results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
             and all(spring(a, .1, .95) for a in m["sidebar"].get("panel", {}).get("children", []))
             and len(m["sidebar"].get("panel", {}).get("children", [])) == 2
+            and 0<=m["sidebar"].get("panel",{}).get("scheduledDelay",-1)<=1/60
             and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
             "scheduled": [m["sidebar"] for m in motions]}
+        settled()
+        app.call("window-motion", sidebarDelay=.29)
+        key(); delayed=app.call("window-motion")["sidebar"].get("panel",{})
+        results["motion_delay_negative_control"] = {"ok":.29<=delayed.get("scheduledDelay",-1)<.31,
+            "scheduled":delayed,"injected_begin_time_delay":.29}
+        settled();app.call("window-motion",sidebarDelay=0);key();settled()
+        results["motion_end_frame_curves"] = {"ok":abs(toggle_show["toggleRemainderAt130ms"])<=.5 and abs(toggle_show["spaceRemainderAt300ms"])<=.5,
+            "toggle_130ms_pt":toggle_show["toggleRemainderAt130ms"],"space_300ms_pt":toggle_show["spaceRemainderAt300ms"]}
+        settled()
+        drag(state()["sidebarWidth"],364)
+        pointer("down",364);pointer("drag",60);pointer("up",60)
+        flick=app.call("window-motion")
+        results["motion_hide_release_continues"] = {"ok":"sidebarToggle" in flick["active"]["panel"],"active":flick["active"]}
+        settled();key();settled();drag(state()["sidebarWidth"],228)
         settled(); key(); settled()
         reveal_card_and_wait(app)
         card_in = app.call("window-motion")

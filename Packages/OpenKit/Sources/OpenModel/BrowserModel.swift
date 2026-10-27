@@ -2179,7 +2179,7 @@ public final class BrowserModel {
 
     public func setSidebarWidth(windowID: WindowID, width: Double) {
         guard width.isFinite, let state = windows.first(where: { $0.id == windowID }) else { return }
-        let old = state.sidebarWidth, value = min(500, max(164, width))
+        let old = state.sidebarWidth, value = min(500, max(BrowserWindowState.minimumSidebarWidth, width))
         guard value != old else { return }; state.sidebarWidth = value
         registerChange(undo: { state.sidebarWidth = old }, redo: { state.sidebarWidth = value })
     }

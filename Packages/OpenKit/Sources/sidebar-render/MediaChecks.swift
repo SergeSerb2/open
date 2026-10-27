@@ -146,12 +146,12 @@ extension MediaChecks {
         let tab = model.newTab(in: space.id, url: URL(string: "https://media.example.test/song")!, title: "A short media title")
         let scene = RenderScene(context: context, options: RenderScene.Options(), delegate: delegate)
         let windowHost = OffscreenRenderer.host(scene, scale: 2), controls = scene.sidebar.mediaControls
-        let priorForce = SidebarDiagnostics.forceAnimations
+        let priorForce = SidebarDiagnostics.forceAnimations, priorReduce = Motion.reduceMotionOverride
         SidebarDiagnostics.forceAnimations = true; SidebarDiagnostics.mediaReduceMotionOverride = false
         windowHost.orderBack(nil)
         defer {
             windowHost.orderOut(nil); windowHost.contentView = nil; windowHost.close()
-            SidebarDiagnostics.forceAnimations = priorForce; SidebarDiagnostics.mediaReduceMotionOverride = nil
+            SidebarDiagnostics.forceAnimations = priorForce; SidebarDiagnostics.mediaReduceMotionOverride = nil; Motion.reduceMotionOverride = priorReduce
         }
         func pump(_ seconds: Double = 0.05) { OffscreenRenderer.settle(scene, runLoop: seconds / 3) }
         func event(_ type: NSEvent.EventType, _ view: NSView, fraction: CGFloat = 0.5) -> NSEvent {
@@ -326,16 +326,18 @@ extension MediaChecks {
         }
         window.sidebarWidth = 228; pump(0.8)
         controls.mouseExited(with:event(.mouseMoved,controls)); pump(0.8)
-        SidebarDiagnostics.mediaReduceMotionOverride = true
+        SidebarDiagnostics.mediaReduceMotionOverride = nil
+        Motion.reduceMotionOverride = true
         controls.mouseEntered(with:event(.mouseMoved,controls)); pump(0.005)
         func animations(_ l:CALayer?) -> [CAAnimation] { guard let l else {return []}; return (l.animationKeys() ?? []).compactMap {l.animation(forKey:$0)} + (l.sublayers ?? []).flatMap(animations) }
         let reduced = animations(controls.layer)+animations(pager()?.layer)
-        Checks.check(animations(pager()?.layer).isEmpty && reduced.count == 1 && (reduced.first as? CATransition)?.type == .fade && abs((reduced.first?.duration ?? 0)-0.1)<0.001,
-                     "MC15 Reduce Motion has one 0.1s container cross-fade and no pager or child animation")
+        Checks.check(Motion.reducesMotion && SidebarDiagnostics.mediaReducesMotion && animations(pager()?.layer).isEmpty && reduced.count == 1 && (reduced.first as? CATransition)?.type == .fade && abs((reduced.first?.duration ?? 0)-0.1)<0.001,
+                     "MC15 shared Reduce Motion setting keeps one 0.1s media cross-fade and no pager or child movement")
         pump(0.016)
         Checks.check((pager()?.layer?.presentation()?.opacity ?? 0) >= 0.99 && (controls.layer?.presentation()?.opacity ?? 0) >= 0.99,
                      "MC15 Reduce Motion keeps pager and container fully opaque at +16ms")
         pump(0.8); Checks.check(animationKeys(scene.layer).isEmpty,"MC15 Reduce Motion leaves no keys")
+        Motion.reduceMotionOverride = nil
         SidebarDiagnostics.mediaReduceMotionOverride = false
         if let b=first.control(named:"pip")?.view {click(b,"PiP")}
         Checks.check(mediaHost.calls.contains(.enterPiP) && controls.cards.isEmpty,"MC5 PiP reaches host and hides card")

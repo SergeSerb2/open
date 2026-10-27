@@ -619,6 +619,7 @@
       case "window-motion":
         guard let controller = w.controller else { throw Failure(message: "no window") }
         if let reduced = a["reduced"] as? Bool { Motion.reduceMotionOverride = reduced }
+        if let delay = a["sidebarDelay"] as? Double { Motion.sidebarDelayOverride = min(0.5, max(0, delay)) }
         if let sample = a["sampleCard"] as? Bool { controller.samplesCardMotion = sample }
         func token(_ s: SpringToken) -> [String: Any] { ["response": s.response, "damping": s.dampingFraction] }
         let travel = controller.context.sidebarWidth + WindowMetrics.revealCardInset - PanelMetrics.inset
@@ -626,6 +627,8 @@
           "tokens": ["sidebarToggle": token(Motion.sidebarToggle), "revealCardIn": token(Motion.revealCardIn),
             "revealCardOut": Motion.revealCardOut, "spaceSwitch": token(Motion.spaceSwitch)] as [String: Any],
           "cardCurve": [0.112, 0.140, 0.210].map { ["time": $0, "pastRest": (Motion.springProgress(Motion.revealCardIn, at: $0) - 1) * travel] },
+          "toggleRemainderAt130ms": (1 - Motion.springProgress(Motion.sidebarToggle, at: 0.130)) * (WindowMetrics.defaultSidebarWidth - PanelMetrics.inset),
+          "spaceRemainderAt300ms": (1 - Motion.springProgress(Motion.spaceSwitch, at: 0.300)) * controller.context.sidebarWidth,
           "sidebar": controller.sidebarAnimations.mapValues(describeAnimation),
           "card": controller.cardAnimations.mapValues(describeAnimation),
           "cardSamples": controller.cardMotionSamples.map { ["time": $0.time, "offset": $0.offset] },
@@ -661,6 +664,7 @@
           "frame": [win.frame.minX, win.frame.minY, win.frame.width, win.frame.height],
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
+          "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
           "sidebarResizeActive": controller.sidebarResizeActive,
           "sidebarWidthCommits": controller.sidebarWidthCommits, "sidebarGestureHides": controller.sidebarGestureHides,
           "sidebarGeometryChanges": controller.sidebarGeometryChanges,
@@ -1058,8 +1062,9 @@
     private func describeAnimation(_ animation: CAAnimation) -> [String: Any] {
       var value: [String: Any] = ["duration": animation.duration, "beginTime": animation.beginTime,
         "type": String(describing: type(of: animation))]
-      if let scheduledAt = animation.value(forKey: "openScheduledAt") as? Double {
-        value["scheduledDelay"] = animation.beginTime - scheduledAt
+      if let requestedAt = animation.value(forKey: "openRequestedAt") as? Double {
+        value["requestedAt"] = requestedAt
+        value["scheduledDelay"] = animation.beginTime - requestedAt
       }
       if let basic = animation as? CABasicAnimation {
         value["keyPath"] = basic.keyPath ?? ""
@@ -1313,8 +1318,18 @@
       let number = a["window"] as? Int
       guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
       else { throw Failure(message: "no window") }
-      let method = try await WindowSnapshot.capture(target, to: url)
-      return ["path": path, "method": method]
+      var keyTime: Double?
+      var capturedAfterKey: Double?
+      let toggle = a["toggleSidebar"] as? Bool == true
+      let method = try await WindowSnapshot.capture(target, to: url, afterPreparation: toggle ? {
+        let time = ProcessInfo.processInfo.systemUptime
+        if let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: time,
+          windowNumber: target.windowNumber, context: nil, characters: "s", charactersIgnoringModifiers: "s", isARepeat: false, keyCode: 1) {
+          keyTime = CACurrentMediaTime()
+          NSApp.sendEvent(event)
+        }
+      } : nil, atCapture: { capturedAfterKey = keyTime.map { CACurrentMediaTime() - $0 } })
+      return ["path": path, "method": method, "capturedAfterKey": capturedAfterKey ?? NSNull()] as [String: Any]
     }
 
     private func metrics(interval: Double) async -> [String: Any] {
