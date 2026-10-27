@@ -1,0 +1,127 @@
+{
+  "domain": "com.open.previews-e2e.f2fb7833907e49a2a138a7db90de3ecd",
+  "data": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-e6af05754ae94d78",
+  "cache": "/Users/m1-dev/Library/Caches/Open-E2E-previews-e6af05754ae94d78",
+  "forcedFailure": true,
+  "engine": {
+    "expectedSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "stamp": "fork /Users/m1-dev/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034",
+    "signingRecipe": "tools/embed-cef.sh: sign Libraries/*.dylib, then framework; ad hoc, timestamp=none",
+    "replayedSignedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "runningBundleSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2"
+  },
+  "pid": 29748,
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 29748,
+    "root": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-e6af05754ae94d78",
+    "userData": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-e6af05754ae94d78/Engine"
+  },
+  "sheet": {
+    "attachedSheet": 0,
+    "class": "SheetPresentationWindow",
+    "firstResponder": "SheetPresentationWindow",
+    "frame": "{{302, 365}, {480, 320}}",
+    "key": true,
+    "level": 0,
+    "number": 6617,
+    "parent": 0,
+    "sheet": true,
+    "title": "",
+    "visible": true
+  },
+  "error": "FORCED: early failure while the real Previews sheet is open",
+  "cleanupBefore": [
+    {
+      "attachedSheet": 0,
+      "class": "BrowserWindow",
+      "firstResponder": "FavoritesCollectionView",
+      "frame": "{{100, 100}, {1280, 800}}",
+      "key": false,
+      "level": 0,
+      "number": 6615,
+      "parent": 0,
+      "sheet": false,
+      "title": "about:blank",
+      "visible": true
+    },
+    {
+      "attachedSheet": 6617,
+      "class": "NSWindow",
+      "firstResponder": "NSWindow",
+      "frame": "{{200, 200}, {684, 650}}",
+      "key": false,
+      "level": 0,
+      "number": 6616,
+      "parent": 0,
+      "sheet": false,
+      "title": "General",
+      "visible": true
+    },
+    {
+      "attachedSheet": 0,
+      "class": "SheetPresentationWindow",
+      "firstResponder": "SheetPresentationWindow",
+      "frame": "{{302, 365}, {480, 320}}",
+      "key": true,
+      "level": 0,
+      "number": 6617,
+      "parent": 0,
+      "sheet": true,
+      "title": "",
+      "visible": true
+    }
+  ],
+  "cleanupAfter": [
+    {
+      "attachedSheet": 0,
+      "class": "BrowserWindow",
+      "firstResponder": "FavoritesCollectionView",
+      "frame": "{{100, 100}, {1280, 800}}",
+      "key": false,
+      "level": 0,
+      "number": 6615,
+      "parent": 0,
+      "sheet": false,
+      "title": "about:blank",
+      "visible": true
+    },
+    {
+      "attachedSheet": 0,
+      "class": "NSWindow",
+      "firstResponder": "NSWindow",
+      "frame": "{{200, 200}, {684, 650}}",
+      "key": true,
+      "level": 0,
+      "number": 6616,
+      "parent": 0,
+      "sheet": false,
+      "title": "General",
+      "visible": true
+    }
+  ],
+  "quit": {
+    "reply": true,
+    "observedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-xjjf0t4x/Open.app/Contents/MacOS/Open",
+    "expectedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-xjjf0t4x/Open.app/Contents/MacOS/Open",
+    "forced": false
+  },
+  "remainingWindows": [],
+  "remainingProcesses": [],
+  "rootsRemoved": true,
+  "cleanupErrors": [],
+  "cleanup": "PASS"
+}
