@@ -6,14 +6,15 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
+  "interrupted_attempts": [],
   "profiles": {
     "disk_profiles_on_disk": {
       "info_cache": [
         "Default",
-        "Profile-9C42A73C"
+        "Profile-A126F477"
       ],
       "ok": true,
-      "work_chrome_window": 1071367638
+      "work_chrome_window": 1324938171
     },
     "durable_second_profile": {
       "default_cookie": "oe_default=1",
@@ -30,9 +31,9 @@
         "modes": {
           "Engine": "0o700",
           "Engine/Default": "0o700",
-          "Engine/Profile-9C42A73C": "0o700",
+          "Engine/Profile-A126F477": "0o700",
           "Profiles/Default": "0o700",
-          "Profiles/Profile-9C42A73C": "0o700"
+          "Profiles/Profile-A126F477": "0o700"
         },
         "profiles_default": [
           "AdBlock",
@@ -41,7 +42,7 @@
         ]
       },
       "ok": true,
-      "work_dir": "Profile-9C42A73C"
+      "work_dir": "Profile-A126F477"
     },
     "extension_isolation": {
       "default_profile_probe_sees": {
@@ -50,7 +51,7 @@
           "https://example.com/?profile=default"
         ],
         "windows": [
-          1071367642
+          1324938175
         ]
       },
       "incognito_access": "ok",
@@ -61,7 +62,7 @@
           "https://example.com/?profile=work"
         ],
         "windows": [
-          1071367638
+          1324938171
         ]
       }
     },
@@ -140,7 +141,7 @@
     "migration_engine_in_use": {
       "log": [
         "engine layout: moved 34 Chromium item(s) to Engine/",
-        "engine layout: moved cache /Users/serge/Library/Caches/Open-E2E-profiles-chrome-89340-41a6ea68/Profiles/Default -> /Users/serge/Library/Caches/Open-E2E-profiles-chrome-89340-41a6ea68/Engine/Default",
+        "engine layout: moved cache /Users/serge/Library/Caches/Open-E2E-profiles-chrome-26041-80b69d21/Profiles/Default -> /Users/serge/Library/Caches/Open-E2E-profiles-chrome-26041-80b69d21/Engine/Default",
         "engine layout: skipped Profiles/Default: Engine/Default is in use; 73 old Chromium item(s) left in Profiles/Default"
       ],
       "ok": true
@@ -175,12 +176,12 @@
         "alive": true,
         "default_cookie": "oe_default=1",
         "deferred_log_lines": [
-          "Open: profile Profile-9C42A73C unavailable this launch (engine data still in the old layout)"
+          "Open: profile Profile-A126F477 unavailable this launch (engine data still in the old layout)"
         ],
         "exit": 0,
         "log": [
           "engine layout: legacy layout for this launch, retried next launch: Profiles/Default/Open E2E locked.bin: locked (immutable or append-only flag)",
-          "Open: engine layout legacy in 4.7 ms"
+          "Open: engine layout legacy in 3.5 ms"
         ],
         "new_work_tab_live": false,
         "page_contexts": [
@@ -202,6 +203,6 @@
       ]
     }
   },
-  "started": "2026-10-26 16:06:40",
+  "started": "2026-10-26 16:38:40",
   "style": "chrome"
 }
