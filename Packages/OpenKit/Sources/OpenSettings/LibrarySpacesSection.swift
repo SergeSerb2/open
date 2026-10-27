@@ -18,6 +18,12 @@ private struct InjectedSpaceManager: NSViewRepresentable {
     let manager: NSView
     func makeNSView(context: Context) -> NSView {
         let host = NSView()
+        install(in: host)
+        return host
+    }
+    private func install(in host: NSView) {
+        guard host.subviews.first !== manager else { return }
+        for view in host.subviews { view.removeFromSuperview() }
         manager.removeFromSuperview()
         manager.translatesAutoresizingMaskIntoConstraints = false
         host.addSubview(manager)
@@ -27,9 +33,8 @@ private struct InjectedSpaceManager: NSViewRepresentable {
             manager.topAnchor.constraint(equalTo: host.topAnchor),
             manager.bottomAnchor.constraint(equalTo: host.bottomAnchor)
         ])
-        return host
     }
-    func updateNSView(_ host: NSView, context: Context) {}
+    func updateNSView(_ host: NSView, context: Context) { install(in: host) }
     static func dismantleNSView(_ host: NSView, coordinator: ()) {
         for view in host.subviews { view.removeFromSuperview() }
     }

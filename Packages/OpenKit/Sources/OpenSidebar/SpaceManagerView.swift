@@ -58,6 +58,10 @@ public final class SpaceManagerView: NSView {
     }
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        context.systemAppearance = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    }
 
     private var visibilityDirty = false
     func deferHiddenUpdates() -> Bool {

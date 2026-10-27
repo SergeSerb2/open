@@ -1,0 +1,341 @@
+{
+  "appBuild": {
+    "log": ".re/space-manager/review-r1/frozen-main/build.log",
+    "result": "PASS",
+    "warnings": "No new Manager Swift warnings. Initial build also reports warnings on untouched main lines: existing ExistentialAny uses, OpenEngine bitmap enum expression, project headermaps/signing/metadata notices."
+  },
+  "baseMain": "8b83c7e827db2d0bb52d49cfaaf75b0984445c74",
+  "diagnosticCorrections": [
+    "Initial focused settings-preview failed because section entry called the supplier again despite a cached view; fixed the source guard, without changing its existing checks.",
+    "Pinned Delete needs native Down keyboard focus after a mouse activation; corrected the real event sequence.",
+    "The exploratory audio fixture played but reported no audibility; final flow seeds real host mute through the command bar and tests Manager Unmute. No audibility claim.",
+    "Data URLs do not give the existing reset glyph a distinct host/path; final reset fixture uses two synthetic local HTML file paths.",
+    "Removed the optional browserless keyboard extension; shared key and activation handlers retain their original code. Browserless Copy Link and retained model IDs remain covered.",
+    "Old routing first failed Today neighbor selection. That failure is still asserted; stopping was deferred until the two required pinned/Copy Link checks also recorded their failures."
+  ],
+  "engine": {
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "expectedSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "ok": true,
+    "recordedAfterEmbedSigningSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "recordedSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "signing": "tools/embed-cef.sh ad-hoc signing reproduced on disposable clone when needed",
+    "stamp": "fork /Users/m1-dev/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034",
+    "suppliedProvenance": "M5 21:38 copy recorded21:23:54 main4c40ebd+PR93; App frozen main8b83c7e"
+  },
+  "engineFingerprint": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "source": "fork",
+    "stamp": "fork /Users/m1-dev/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
+  },
+  "finalHarnessStrengthening": "Cmd+W starts with a selected Today tab, and checks that it remains selected immediately before closing the Library. An accidental browser close would archive it and fail the tab-ID comparison. The final frozen-main real flow includes this stronger tail.",
+  "focusedPackageChecks": [
+    {
+      "errors": 0,
+      "log": ".re/space-manager/review-r1/frozen-main/focused/build.log",
+      "name": "build",
+      "result": "PASS",
+      "seconds": 66,
+      "warnings": 0
+    },
+    {
+      "failed": 0,
+      "log": ".re/space-manager/review-r1/frozen-main/focused/settings-preview.log",
+      "name": "settings-preview",
+      "passed": 37,
+      "result": "PASS",
+      "seconds": 80
+    },
+    {
+      "failed": 0,
+      "log": ".re/space-manager/review-r1/frozen-main/focused/sidebar-render.log",
+      "name": "sidebar-render",
+      "passed": 559,
+      "result": "PASS",
+      "seconds": 107
+    }
+  ],
+  "forcedFailure": {
+    "cleanup": {
+      "dialogsAtCleanup": [],
+      "errors": [],
+      "ok": true,
+      "remainingProcesses": [],
+      "remainingWindows": []
+    },
+    "enginePinned": true,
+    "expectedError": "deliberate early failure with Library open",
+    "processCleanup": true,
+    "realManagerOpened": true,
+    "receipt": ".re/space-manager/review-r1/frozen-main/final-early-failure-results.json"
+  },
+  "historicalChecks": {
+    "additionalSkip": "space-pad-compare: existing target, private capture inputs absent. Not relabeled baseline.",
+    "fail": 3,
+    "fullGateSummary": ".re/space-manager/full-step9/summary.txt",
+    "head": "7c07aa639981c8ff0a361f02cddf88ab116d7a2f",
+    "m1BaselineFailures": [
+      "space-legacy",
+      "space-editor",
+      "sidebar-compare"
+    ],
+    "main": "49b566097423213d1bc9aca1426c7e2bb3f5f65b",
+    "note": "Historical only. No new full gate was run for this explicitly requested pause checkpoint.",
+    "pass": 18,
+    "skip": 1
+  },
+  "integrationFreeze": "User 23:36 PDT: freeze at the already fetched main8b83c7e; no further fetch. Reuse this local origin/main snapshot immediately before push. Any later main movement is later work.",
+  "limits": [
+    "No matching C2 Manager capture on M1; no pixel comparison claimed.",
+    "Parent/M5 owns any remaining review, design comparison and counted full merge gate.",
+    "No PR/watch/merge, Chromium tree work, subagents, unit tests, new mocks, desktop input or private fixtures."
+  ],
+  "managerE2EPrefixThroughNegativeChecksUnchangedSinceFixCommit": true,
+  "mergeBeforeFixCommit": "fcfe948",
+  "mergeDetails": "Merged frozen main8b83c7e as d6cbb29, preserving M5 media/model/window-chrome changes. Kept both appended docs sections, Manager suite choice and main --window-chrome-only branch. No StepD or Package.swift conflict.",
+  "negativeProofs": [
+    {
+      "actualFailedChecks": [
+        "manager_copy_link_pasteboard",
+        "manager_pinned_delete_retains_pin",
+        "manager_today_archive_selects_neighbor",
+        "suite"
+      ],
+      "cleanup": {
+        "dialogsAtCleanup": [],
+        "errors": [],
+        "ok": true,
+        "remainingProcesses": [],
+        "remainingWindows": []
+      },
+      "currentSourceSHA256": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+      "expectedFailures": [
+        "manager_pinned_delete_retains_pin",
+        "manager_copy_link_pasteboard"
+      ],
+      "flowExit": 1,
+      "mutatedSHA256": "bceada66ee1458865d47eb2cf1f56f52a3ee9f13ac6bb7d88491fb1730c37e0d",
+      "mutation": "old-routing",
+      "ok": true,
+      "originalSHA256": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+      "processCleanup": {
+        "ok": true
+      },
+      "receipt": ".re/space-manager/review-r1/negative-final/old-routing-results.json",
+      "source": "App/Settings/AppSettingsActions.swift",
+      "sourceRestoredExactly": true
+    },
+    {
+      "actualFailedChecks": [
+        "library_undo_after_window_create",
+        "suite"
+      ],
+      "cleanup": {
+        "dialogsAtCleanup": [],
+        "errors": [],
+        "ok": true,
+        "remainingProcesses": [],
+        "remainingWindows": []
+      },
+      "currentSourceSHA256": "cc382fe6c15b5c1d4ceece483267e55a1b0319ceff30c3b6d5d1d75cc6226123",
+      "expectedFailures": [
+        "library_undo_after_window_create"
+      ],
+      "flowExit": 1,
+      "mutatedSHA256": "bc2683b5009898bb268ba067a2a3705691143ae57d93acb07a44724e75f3ef4d",
+      "mutation": "undo-window-create",
+      "ok": true,
+      "originalSHA256": "cc382fe6c15b5c1d4ceece483267e55a1b0319ceff30c3b6d5d1d75cc6226123",
+      "processCleanup": {
+        "ok": true
+      },
+      "receipt": ".re/space-manager/review-r1/negative-final/undo-window-create-results.json",
+      "source": "App/AppDelegate.swift",
+      "sourceRestoredExactly": true
+    },
+    {
+      "actualFailedChecks": [
+        "library_undo_after_window_close",
+        "suite"
+      ],
+      "cleanup": {
+        "dialogsAtCleanup": [],
+        "errors": [],
+        "ok": true,
+        "remainingProcesses": [],
+        "remainingWindows": []
+      },
+      "currentSourceSHA256": "cc382fe6c15b5c1d4ceece483267e55a1b0319ceff30c3b6d5d1d75cc6226123",
+      "expectedFailures": [
+        "library_undo_after_window_close"
+      ],
+      "flowExit": 1,
+      "mutatedSHA256": "13955b369ed9a3fcde4652c616f30f62d18b50fbdd20755e079092bbe816010e",
+      "mutation": "undo-window-close",
+      "ok": true,
+      "originalSHA256": "cc382fe6c15b5c1d4ceece483267e55a1b0319ceff30c3b6d5d1d75cc6226123",
+      "processCleanup": {
+        "ok": true
+      },
+      "receipt": ".re/space-manager/review-r1/negative-final/undo-window-close-results.json",
+      "source": "App/AppDelegate.swift",
+      "sourceRestoredExactly": true
+    },
+    {
+      "actualFailedChecks": [
+        "rebound_manager_intents",
+        "suite"
+      ],
+      "cleanup": {
+        "dialogsAtCleanup": [],
+        "errors": [],
+        "ok": true,
+        "remainingProcesses": [],
+        "remainingWindows": []
+      },
+      "currentSourceSHA256": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+      "expectedFailures": [
+        "rebound_manager_intents"
+      ],
+      "flowExit": 1,
+      "mutatedSHA256": "da7f622ad6c243b074d1258371374580bb3d9d7cb6a5103bd1da0172ae57a8dd",
+      "mutation": "model-only-select",
+      "ok": true,
+      "originalSHA256": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+      "processCleanup": {
+        "ok": true
+      },
+      "receipt": ".re/space-manager/review-r1/negative-final/model-only-select-results.json",
+      "source": "App/Settings/AppSettingsActions.swift",
+      "sourceRestoredExactly": true
+    },
+    {
+      "actualFailedChecks": [
+        "E5_menu_real_manager",
+        "suite"
+      ],
+      "cleanup": {
+        "dialogsAtCleanup": [],
+        "errors": [],
+        "ok": true,
+        "remainingProcesses": [],
+        "remainingWindows": []
+      },
+      "currentSourceSHA256": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+      "expectedFailures": [
+        "E5_menu_real_manager"
+      ],
+      "flowExit": 1,
+      "mutatedSHA256": "dd36c67131afa93f639935d6423382449852bef6daedc41ad4cba92b384b7013",
+      "mutation": "standard-preview-prefs",
+      "ok": true,
+      "originalSHA256": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+      "processCleanup": {
+        "ok": true
+      },
+      "receipt": ".re/space-manager/review-r1/negative-final/standard-preview-prefs-results.json",
+      "source": "App/Settings/AppSettingsActions.swift",
+      "sourceRestoredExactly": true
+    }
+  ],
+  "parentMinorCommit": "d5f0959ba100fe4aeee6895db4ae99f03c1434a9",
+  "postMergeCodeHead": "d6cbb292513e0f291a2c32718b04b86c1d809876",
+  "postMergeValidationLimits": [
+    "Package build/settings-preview/sidebar-render and real Manager positive/early-failure were rerun once on frozen main8b83c7e.",
+    "Five negative proofs ran before removal of optional browserless key automation and the final main merges. Their AppDelegate/AppSettingsActions hashes match this checkpoint. All five expected failures precede the removed path and later focus-key tail.",
+    "The named Manager helper functions and suite prefix through the negative checks are unchanged from fix commit9a649d8. Final positive and forced-failure runs use the current full e2e file hash recorded above.",
+    "No further fetch, new full gate, Site Control/context-menu/extension/window-chrome suite, load campaign, PR/watch or reviewer. Protected main changes retain M5 ownership.",
+    "Prior full gate at7c07aa6/main49b5660 is historical. Later remote main movement is unintegrated later work; this is a pause checkpoint, not a merge candidate."
+  ],
+  "preMergeCheckpoint": {
+    "baseMain": "f668a90e19020c83227154ef68c789ca7063eee3",
+    "fixCommit": "9a649d8",
+    "focusedSettingsReceipt": ".re/space-manager/review-r1/focused-final-settings/settings-preview.log",
+    "negativeProofs": "Recorded before the final main merge. AppDelegate and AppSettingsActions hashes are unchanged; all five mutations stop before the removed optional browserless key path.",
+    "realAppReceipt": ".re/space-manager/review-r1/final-positive-results.json"
+  },
+  "preservedVerifiedPushedCheckpoint": "a824af338244ac417037635b6d465df65a462386",
+  "previousPostMergeCheckpoint": {
+    "baseMain": "f668a90e19020c83227154ef68c789ca7063eee3",
+    "codeHead": "db508fae2be08b48b3787b6c0a57b273376fff2e",
+    "focusedSummary": ".re/space-manager/review-r1/postmerge/focused/summary.txt",
+    "realAppReceipt": ".re/space-manager/review-r1/postmerge/final-positive-results.json"
+  },
+  "realApp": {
+    "captures": {
+      "comparison": "C2/session2 manager references absent on M1; no pixel comparison claimed",
+      "hovered": "/Users/m1-dev/.t3/worktrees/open/t3-03a0d44c/.re/space-manager/review-r1/frozen-main/run-61155-b69d38e1/manager-hovered.png",
+      "rest": "/Users/m1-dev/.t3/worktrees/open/t3-03a0d44c/.re/space-manager/review-r1/frozen-main/run-61155-b69d38e1/manager-rest.png"
+    },
+    "checks": {
+      "E5_all_entries_one_library": true,
+      "E5_commandbar_return_library": true,
+      "E5_menu_real_manager": true,
+      "E6_native_drag_and_switcher": true,
+      "E6_relaunch_preserves_ids": true,
+      "automation_reorder_index_boundary_self_check": true,
+      "browser_cmd_z_exactly_once": true,
+      "cleanup_no_owned_windows": true,
+      "closed_presenter_rebinds_live_window": true,
+      "commandbar_finds_manager": true,
+      "commandbar_opens_for_manager": true,
+      "engine_framework_provenance": true,
+      "hidden_manager_focus_does_not_rebind": true,
+      "last_window_reopen_recovers": true,
+      "library_cmd_z_exactly_once": true,
+      "library_focus_keys": true,
+      "library_section_click_fills_cache": true,
+      "library_undo_after_window_close": true,
+      "library_undo_after_window_create": true,
+      "manager_app_appearance_dark": true,
+      "manager_app_appearance_light": true,
+      "manager_app_appearance_restored": true,
+      "manager_archive_real_store": true,
+      "manager_archive_restore_original_id": true,
+      "manager_copy_link_pasteboard": true,
+      "manager_delete_space": true,
+      "manager_delete_space_undo_ids": true,
+      "manager_loaded_pin_unloads_host": true,
+      "manager_mute_command_available": true,
+      "manager_mute_fixture_real_host": true,
+      "manager_pinned_delete_retains_pin": true,
+      "manager_rebind_second_and_first": true,
+      "manager_reset_fixture_navigated": true,
+      "manager_reset_updates_real_host": true,
+      "manager_today_archive_selects_neighbor": true,
+      "manager_unmute_updates_real_host": true,
+      "no_browser_copy_link_retains_model_ids": true,
+      "no_browser_reuses_retained_model_window": true,
+      "no_browser_window": true,
+      "rebound_manager_intents": true,
+      "visible_manager_rebind_keeps_horizontal_origin": true
+    },
+    "cleanup": {
+      "dialogsAtCleanup": [],
+      "errors": [],
+      "ok": true,
+      "remainingProcesses": [],
+      "remainingWindows": []
+    },
+    "failed": 0,
+    "passed": 41,
+    "processCleanup": true,
+    "receipt": ".re/space-manager/review-r1/frozen-main/final-positive-results.json",
+    "started": "2026-10-26 23:45:00",
+    "style": "chrome"
+  },
+  "sourcesSHA256": {
+    "App/AppDelegate.swift": "cc382fe6c15b5c1d4ceece483267e55a1b0319ceff30c3b6d5d1d75cc6226123",
+    "App/Automation/AutomationController.swift": "f5be5cd7856e0a7638b1eb55b7ceba4e713091a1664b5c94ad6e43cab5c0c3d1",
+    "App/Settings/AppSettingsActions.swift": "7b9f8490e8cd0f4625c130ee8f016c1d2a805c7637114e553992ab224b1cb3b0",
+    "Packages/OpenKit/Sources/OpenSettings/LibraryViewModel.swift": "19399945095a5239443375349442b78de25ba3b79929d29ae250fbb95198325d",
+    "tools/e2e/engine_e2e.py": "0c4998539b9d1d4726f64a286f2dd50fe9559faf9be9efa5384289b180a1f969"
+  },
+  "status": "review-r1 fixes verified; pause checkpoint; no PR or watch"
+}

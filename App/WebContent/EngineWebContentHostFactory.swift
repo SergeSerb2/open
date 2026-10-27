@@ -368,8 +368,10 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
       NSPasteboard.general.setString(markdown ? "[\(tab.displayTitle)](\(tab.url.absoluteString))" : tab.url.absoluteString, forType: .string); return true
     case .duplicate(let id): return model.duplicateNode(id: id) != nil
     case .showLibrary: app.settingsPresenter.showLibrary(); return true
-    case .showSiteControls, .manageSpaces, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .exportSpaceIntoFolder, .editPinnedURL, .share, .changeIcon, .customizePage,
+    case .manageSpaces:
+      app.settingsPresenter.showLibrary(section: .spaces); return true
+    case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
+         .editPinnedURL, .share, .changeIcon, .customizePage,
          .copyAllLinks, .turnFolderIntoSpace, .moveToNewSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

@@ -350,6 +350,66 @@ ordering check queues actual Save/background work with the automation-only
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
 
+## Library Space Manager (App lane 1b)
+
+The `sidebar-completion` suite currently covers E5/E6 (menu, App command,
+Space-header menu, and command bar search plus Return), plus the manager's
+undo, archive/restore, window replacement, and no-browser reopen flows. It uses the
+real built App, real model/stores, native menus, and native mouse/key events.
+It creates a temporary copy of **Open's own** bundle with a unique bundle ID
+and re-signs that copy locally. This gives every run a separate preferences
+domain, data root, engine cache, and socket. It uses synthetic data URLs and
+no remote debugging port. It never opens or copies Arc.
+
+| Command | Arguments and result |
+|---|---|
+| `library-open` | `entry=command` (default) dispatches App `manage-spaces`; `entry=space-menu` performs the existing Space-header menu's “Manage Spaces…” item. Both use the shared Library presenter on `.spaces`. For the app menu, use existing `menu-perform id=manage-spaces`. Returns manager state. |
+| `space-manager-state` | Reads the **attached** native manager, its class/identity/context ID, model and undo identity, isolated/global preview flags, columns, grabber points, up to 200 visible-outline rows per column, browser switcher order from real view positions, real model UndoManager notification count, and this App's window records. Points use the existing `mouse` command's window coordinates. Available after the last browser closes. |
+| `space-manager-drag` | `space=<ID> to=<zero-based index>` drags the real visible grabber through `OEApplication.sendEvent`; the native tracking loop dequeues the drag/up events. Rejects invalid IDs/indices and offscreen grabbers. Returns manager state. |
+| `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
+| `space-manager-intent` | `kind=openURL space=<ID> url=<URL> [section=pinned]` sends the production intent that a URL drop on that Manager column sends (index 0 of Today, or Pinned). The native drop mapping itself is checked offscreen by `sidebar-render`. |
+| `library-close` | Closes the shared Library window, cancelling any attached sheet first. Reports `closed` and the sheet window numbers it cancelled. Available with no browser window. |
+
+Use existing `key route=app window=<Library number>` for Cmd+Z and other
+Library keys. Undo uses AppKit's nil-target Edit menu action and the Library
+window's real model UndoManager. It has no second key handler.
+Use existing `library-restore` for archive restore and `snapshot window=<number>`
+for full-resolution real-window captures.
+
+On M1, hold the outer validation lock once per job, plus the on-screen lock
+for one suite invocation:
+
+```sh
+/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
+```
+
+The suite saves rest/hover PNGs, its App log, and `cleanup.json` in
+`.re/space-manager/run-<unique ID>/`. C2/session2 manager references are not
+available on M1. Supplied Settings/folder session2 frames do not contain this
+manager page. These are capture-ready artifacts, without a claimed pixel
+comparison. The M5 lead owns capture comparison and design review.
+
+Every exit cancels opened sheets, closes Library/browser windows, terminates
+only processes whose executable is inside this suite's copied bundle, and
+checks the system's on-screen window metadata for those PIDs. A dialog left
+at cleanup makes the suite fail, even if it was cancelled during cleanup.
+`OPEN_SPACE_MANAGER_EARLY_FAILURE=1` forces an assertion immediately after the
+real Library opens; the suite must fail and still write a passing cleanup
+receipt. Remove that environment variable for the passing flow.
+
+For a recorded engine refresh, pin `OPEN_SPACE_MANAGER_ENGINE_SHA256` to the
+supplied framework SHA256. The suite streams hashes of both the embedded App
+framework and `Vendor/cef/Release` framework, and records the fork stamp.
+The recorded framework must match the pinned hash. Because `embed-cef.sh`
+re-signs the embedded copy, the suite reproduces that existing ad-hoc signing
+step on a disposable APFS clone and requires exact embedded-byte equality
+with the re-signed clone. It records all three hashes and fails before launch
+on a mismatch. It never changes the recorded distribution. `OPEN_SPACE_MANAGER_ENGINE_PROVENANCE`
+records the supplied distribution label; it is a label, not an inferred build
+revision. `OPEN_SPACE_MANAGER_EVIDENCE_ROOT` separates current and historical
+receipts/PNGs. Rebuild against the refreshed distribution before rerunning real
+flow, forced-failure cleanup, and break-and-revert proofs.
+
 ### Unattended cleanup
 
 Every suite closes owned dialogs and popups from `finally`, then terminates every
@@ -388,6 +448,41 @@ signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launc
 fingerprints differ. Receipts record raw and code fingerprints, the required
 Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
 engine revision. Real app/Vendor bundles are never modified by the comparison.
+
+### Manager review acceptance (round 1)
+
+`sidebar-completion` also drives pinned-row Delete, the real loaded-row unload
+button, Copy Link and the native pasteboard, Unmute against the live engine
+host after the real command bar mutes tabs, and the pinned URL reset button. Selected Today archive must keep a live
+neighbor selected. With no browser, Copy Link still works and the existing retained model window
+remains the sole saved window. The App fallback refuses pinned close/unload.
+
+For each window lifetime case, a real Space drag comes first, then actual New
+Window or Close Window, then Library Cmd+Z with no intervening edit. The suite
+requires exactly one model undo notification, the prior Space order, and saved
+window IDs equal to shell controller IDs. This ordering detects undoable window
+creation and closed-window ghosts. Window lifetime suppression preserves an
+already-disabled UndoManager registration state.
+
+The bounded `space-manager-lifecycle` readout reports cached view identity,
+context, built-column count, horizontal origin, section row coordinates, App and
+manager appearance, key/visible state, and undo-registration state. It does not
+layout or build a hidden manager. `space-manager-scroll x=<0...100000>` scrolls
+the real manager clip view (clamped to the document). `space-manager-row-controls
+space=<ID> node=<ID>` reads the real row frame and visible accessibility labels
+and control points; traversal is limited to 200 rows, 256 views and 12 levels.
+Input still uses existing `mouse`/`key route=app` events. `key=delete` supplies the
+native Delete key. Browserless Copy Link uses the existing real manager menu
+and creates no browser or model.
+
+The suite checks that hidden Library focus changes keep its cache and built
+columns, visible replacement preserves horizontal origin, a native Library
+section click fills the cache, and App-only appearance changes reach the manager
+and are restored in `finally`. Focus assertions require Library visibility/key
+ownership after Cmd+L, Escape and Return, command bar dismissal after each Escape,
+and unchanged browser tab IDs across Library Cmd+W. The invalid drag-index case
+is named `automation_reorder_index_boundary_self_check`; it proves only the
+harness boundary, not a product reorder rule.
 
 `window-motion sidebarDelay=0.29` is a process-only negative control: it delays the actual sidebar layer animations, while the controller records a separate request time before model/layout work. `scheduledDelay` is layer begin time minus that independent request time; normal input must schedule within one frame. Reset the control to zero after use. `snapshot toggleSidebar=true` prepares page underlays, dispatches Cmd+S through `OEApplication.sendEvent`, and captures the window server image after a scheduled 25 ms; `capturedAfterKey` reports the capture request time for load/lateness evidence. This avoids the ordinary snapshot preparation wait hiding a short window animation.
 

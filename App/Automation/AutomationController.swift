@@ -25,6 +25,8 @@
     private var staleMenu: OEExtensionActionMenu?
     private var pointerRequestID = 0
     private var nativeInputStart: Double = 0
+    private var managerUndoObserver: (any NSObjectProtocol)?
+    private var managerUndoCount = 0
 
     init(app: AppDelegate) { self.app = app }
 
@@ -47,6 +49,7 @@
         id = request["id"] ?? NSNull()
         let args = request["args"] as? [String: Any] ?? [:]
         inputCommand = cmd == "key" || cmd == "focus" || (cmd == "window-focus" && args["activate"] as? Bool == true)
+        if cmd == "space-manager-drag" { inputCommand = true }
         if inputCommand { nativeInputStart = 0 }
         let result = try await run(cmd, args)
         response = ["id": id, "ok": true, "result": result]
@@ -145,6 +148,46 @@
       case "quit":
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { NSApp.terminate(nil) }
         return true
+      case "library-open":
+        switch a["entry"] as? String ?? "command" {
+        case "command": app.performCommand("manage-spaces")
+        case "space-menu":
+          let factory = try window
+          guard let menu = factory.controller?.sidebar.contextMenu(nodeID: nil),
+            let index = menu.items.firstIndex(where: { $0.title == "Manage Spaces…" && $0.isEnabled })
+          else { throw Failure(message: "Space menu has no Manage Spaces entry") }
+          menu.performActionForItem(at: index)
+        default: throw Failure(message: "unknown Library entry")
+        }
+        await Task.yield()
+        return spaceManagerState()
+      case "space-manager-state": return spaceManagerState()
+      case "space-manager-drag": return try await dragSpaceManager(a)
+      case "space-manager-menu": return try performSpaceManagerMenu(a)
+      case "space-manager-intent":
+        // The production intent a native URL drop on a Manager column sends (the drop
+        // mapping itself is checked offscreen in sidebar-render).
+        let (manager, _) = try realSpaceManager()
+        guard a["kind"] as? String == "openURL", let raw = a["space"] as? String,
+          let space = app.model.spaces.first(where: { $0.id.description == raw }),
+          let text = a["url"] as? String, let url = URL(string: text) else { throw Failure(message: "invalid Manager intent") }
+        let parent: NodeParent = a["section"] as? String == "pinned" ? .spacePinned(space.id) : .spaceToday(space.id)
+        return manager.onIntent?(.openURL(url, in: parent, index: 0)) == true
+      case "library-close":
+        let target = app.settingsPresenter.libraryPresenter?.window
+        var dialogs: [Int] = []
+        if let sheet = target?.attachedSheet { dialogs.append(sheet.windowNumber); target?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
+        target?.performClose(nil)
+        return ["closed": target?.isVisible != true, "dialogs": dialogs] as [String: Any]
+      case "space-manager-lifecycle": return spaceManagerLifecycle()
+      case "space-manager-row-controls": return try spaceManagerRowControls(a)
+      case "space-manager-scroll":
+        let (manager, _) = try realSpaceManager()
+        guard let x = a["x"] as? Double, x.isFinite, x >= 0, x <= 100_000 else { throw Failure(message: "invalid manager scroll origin") }
+        let clip = manager.scrollView.contentView
+        var bounds = clip.bounds; bounds.origin.x = x
+        clip.scroll(to: clip.constrainBoundsRect(bounds).origin); manager.scrollView.reflectScrolledClipView(clip)
+        return spaceManagerLifecycle()
       default: break
       }
       let w = try window
@@ -1272,6 +1315,7 @@
       }
       let keys: [String: (String, UInt16)] = [
         "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
+        "delete": ("\u{7f}", 51),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
@@ -1349,6 +1393,182 @@
         "totalRSS": footprints.reduce(UInt64(0)) { $0 + $1.rss },
         "livePages": OEEngine.shared.allWebContents.filter(\.isLive).count,
       ]
+    }
+
+    // MARK: Real Library Space Manager
+
+    private func hostedSpaceManagers(in view: NSView?) -> [SpaceManagerView] {
+      guard let view else { return [] }
+      return (view as? SpaceManagerView).map { [$0] } ?? view.subviews.flatMap { hostedSpaceManagers(in: $0) }
+    }
+    private func spaceManagerState() -> [String: Any] {
+      if managerUndoObserver == nil {
+        managerUndoObserver = NotificationCenter.default.addObserver(forName: .NSUndoManagerDidUndoChange, object: app.undoManager, queue: .main) { [weak self] _ in
+          MainActor.assumeIsolated { self?.managerUndoCount += 1 }
+        }
+      }
+      let adapter = app.settingsPresenter
+      let target = adapter.libraryPresenter?.window
+      target?.layoutIfNeeded(); target?.contentView?.layoutSubtreeIfNeeded()
+      let managers = hostedSpaceManagers(in: target?.contentView)
+      let manager = managers.first
+      let columns: [[String: Any]] = manager.map { manager in
+        manager.columnOrder.map { id in
+          let grabber = manager.controls(spaceID: id)?.grabber
+          let rect = grabber.map { $0.convert($0.bounds, to: nil) } ?? .zero
+          let outline = manager.outline(spaceID: id)
+          let rows: [[String: Any]] = (0..<min(outline?.numberOfRows ?? 0, 200)).compactMap { row in
+            guard let outline else { return nil }
+            let item = outline.item(atRow: row)
+            guard let nodeID = (item as? Tab)?.id ?? (item as? Folder)?.id ?? (item as? Split)?.id else { return nil }
+            let frame = outline.convert(outline.rect(ofRow: row), to: nil)
+            return ["id": nodeID.description, "point": [frame.midX, (target?.frame.height ?? 0) - frame.midY]]
+          }
+          // Spec geometry (plan §3.2, S4 R1): column frame in the manager's flipped
+          // coordinates (scroll origin removed) and header parts in column coordinates.
+          let origin = manager.scrollView.contentView.bounds.origin
+          let column = manager.columnFrame(spaceID: id).map { $0.offsetBy(dx: -origin.x, dy: -origin.y) } ?? .zero
+          let parts = (manager.controls(spaceID: id)?.partFrames ?? [:]).mapValues { [$0.minX, $0.minY, $0.width, $0.height] }
+          return ["id": id.description, "grabber": [rect.midX, (target?.frame.height ?? 0) - rect.midY], "rows": rows,
+            "column": [column.minX, column.minY, column.width, column.height], "header": parts,
+            "managerSize": [manager.bounds.width, manager.bounds.height]]
+        }
+      } ?? []
+      let switchers = app.windowControllers.map { controller -> [String: Any] in
+        controller.window?.layoutIfNeeded(); controller.sidebar.layoutSubtreeIfNeeded()
+        let items = app.model.spaces.compactMap { space -> (String, CGFloat)? in
+          guard let view = controller.sidebar.spaceSwitcher(spaceID: space.id) else { return nil }
+          return (space.id.description, view.convert(view.bounds, to: nil).minX)
+        }.sorted { $0.1 < $1.1 }
+        return ["window": controller.windowID.description, "order": items.map(\.0)]
+      }
+      return ["window": target?.windowNumber ?? 0, "visible": target?.isVisible == true,
+        "section": adapter.library?.section.rawValue ?? "", "hostedManagers": managers.count,
+        "managerClass": manager.map { String(reflecting: type(of: $0)) } ?? "",
+        "identity": manager.map { String(describing: ObjectIdentifier($0)) } ?? "",
+        "contextWindow": manager?.context.windowID.description ?? "",
+        "contextValid": manager?.context.window != nil,
+        "sameModel": manager?.context.model === app.model && adapter.library?.model === app.model,
+        "sameUndoManager": target?.undoManager === app.model.undoManager,
+        "undoEnabled": SystemCommandActions.isEnabled("undo"),
+        "undoTarget": SystemCommandActions.sender(for: "undo").flatMap { item in
+          item.action.flatMap { NSApp.target(forAction: $0, to: nil, from: item) }.map { String(reflecting: type(of: $0)) }
+        } ?? "",
+        "modelUndoCount": managerUndoCount,
+        "previewsEnabled": manager?.context.previewPreferences.bool(forKey: "open.general.previewsEnabled") ?? true,
+        "globalPreviewsEnabled": UserDefaults.standard.object(forKey: "open.general.previewsEnabled") as? Bool ?? true,
+        "columns": columns, "switchers": switchers, "windows": NSApp.windows.map(describe)] as [String: Any]
+    }
+    private func realSpaceManager() throws -> (SpaceManagerView, NSWindow) {
+      guard let target = app.settingsPresenter.libraryPresenter?.window, target.isVisible,
+        let manager = hostedSpaceManagers(in: target.contentView).first
+      else { throw Failure(message: "real SpaceManagerView is unavailable") }
+      target.layoutIfNeeded(); manager.layoutSubtreeIfNeeded()
+      return (manager, target)
+    }
+    private func dragSpaceManager(_ args: [String: Any]) async throws -> Any {
+      let (manager, target) = try realSpaceManager()
+      guard let id = args["space"] as? String,
+        let source = manager.columnOrder.first(where: { $0.description == id }),
+        let index = args["to"] as? Int, manager.columnOrder.indices.contains(index),
+        let grabber = manager.controls(spaceID: source)?.grabber,
+        let destination = manager.controls(spaceID: manager.columnOrder[index])?.grabber
+      else { throw Failure(message: "invalid Space reorder") }
+      try await activateForInput(target)
+      let startRect = grabber.convert(grabber.bounds, to: nil)
+      let endRect = destination.convert(destination.bounds, to: nil)
+      let start = NSPoint(x: startRect.midX, y: startRect.midY)
+      let end = NSPoint(x: endRect.midX, y: endRect.midY)
+      guard grabber.visibleRect.contains(NSPoint(x: grabber.bounds.midX, y: grabber.bounds.midY)),
+        destination.visibleRect.contains(NSPoint(x: destination.bounds.midX, y: destination.bounds.midY))
+      else { throw Failure(message: "Space grabber is outside the visible Library") }
+      func event(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent? {
+        NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
+      }
+      // The native grabber's tracking loop dequeues drag/up. Only the initial
+      // down is dispatched here, through OEApplication's production event path.
+      guard let down = event(.leftMouseDown, start), let drag = event(.leftMouseDragged, end), let up = event(.leftMouseUp, end)
+      else { throw Failure(message: "could not create Space drag events") }
+      NSApp.postEvent(drag, atStart: false); NSApp.postEvent(up, atStart: false)
+      NSApp.sendEvent(down)
+      await Task.yield()
+      return spaceManagerState()
+    }
+    private func performSpaceManagerMenu(_ args: [String: Any]) throws -> Any {
+      let (manager, target) = try realSpaceManager()
+      guard let raw = args["space"] as? String, let id = manager.columnOrder.first(where: { $0.description == raw }),
+        let title = args["item"] as? String else { throw Failure(message: "missing Space menu target") }
+      let menu: NSMenu?
+      if let nodeID = args["node"] as? String, let outline = manager.outline(spaceID: id) {
+        guard let row = (0..<outline.numberOfRows).first(where: { row in
+          let item = outline.item(atRow: row)
+          return (item as? Tab)?.id.description == nodeID || (item as? Folder)?.id.description == nodeID || (item as? Split)?.id.description == nodeID
+        }) else { throw Failure(message: "manager row is unavailable") }
+        let rect = outline.convert(outline.rect(ofRow: row), to: nil)
+        guard let event = NSEvent.mouseEvent(with: .rightMouseDown, location: NSPoint(x: rect.midX, y: rect.midY), modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: target.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        else { throw Failure(message: "could not create row menu event") }
+        menu = outline.menu(for: event)
+      } else { menu = manager.controls(spaceID: id)?.makeMenu() }
+      // "Turn into Folder/<Space>" walks one submenu level per path component.
+      var level = menu
+      let path = title.split(separator: "/").map(String.init)
+      for (depth, component) in path.enumerated() {
+        guard let current = level, let index = current.items.firstIndex(where: { $0.title == component && $0.isEnabled })
+        else { throw Failure(message: "manager menu item is unavailable") }
+        if depth == path.count - 1 { current.performActionForItem(at: index) } else { level = current.items[index].submenu }
+      }
+      return true
+    }
+    /// Passive cache read: do not layout/build the hidden manager while checking focus work.
+    private func spaceManagerLifecycle() -> [String: Any] {
+      let adapter = app.settingsPresenter
+      let manager = adapter.library?.spaceManagerView as? SpaceManagerView
+      let target = adapter.libraryPresenter?.window
+      var sectionRows: [[String: Any]] = [], visited = 0
+      func findSections(_ view: NSView, depth: Int) {
+        guard depth <= 24, visited < 512 else { return }; visited += 1
+        if let table = view as? NSTableView, table.tableColumns.contains(where: { $0.identifier.rawValue == "section" }) {
+          for (row, section) in LibrarySection.allCases.enumerated() where row < table.numberOfRows {
+            let rect = table.convert(table.rect(ofRow: row), to: nil)
+            sectionRows.append(["section": section.rawValue, "point": [rect.midX, (target?.frame.height ?? 0) - rect.midY]])
+          }
+        }
+        for child in view.subviews.prefix(512) { findSections(child, depth: depth + 1) }
+      }
+      if let content = target?.contentView { findSections(content, depth: 0) }
+      return ["identity": manager.map { String(describing: ObjectIdentifier($0)) } ?? "",
+        "contextWindow": manager?.context.windowID.description ?? "", "builtColumns": manager?.builtColumnIDs.count ?? 0,
+        "origin": [manager?.scrollView.contentView.bounds.origin.x ?? 0, manager?.scrollView.contentView.bounds.origin.y ?? 0],
+        "systemAppearance": manager.map { String(describing: $0.context.systemAppearance) } ?? "",
+        "appAppearance": NSApp.appearance?.name.rawValue ?? "", "visible": target?.isVisible == true,
+        "key": target?.isKeyWindow == true, "section": adapter.library?.section.rawValue ?? "",
+        "undoRegistrationEnabled": app.undoManager.isUndoRegistrationEnabled, "sectionRows": sectionRows] as [String: Any]
+    }
+    /// Coordinates of actual visible row controls; input still uses OEApplication.sendEvent.
+    private func spaceManagerRowControls(_ args: [String: Any]) throws -> Any {
+      let (manager, target) = try realSpaceManager()
+      guard let space = args["space"] as? String, let node = args["node"] as? String,
+        let id = manager.columnOrder.first(where: { $0.description == space }), let outline = manager.outline(spaceID: id),
+        let row = (0..<min(outline.numberOfRows, 200)).first(where: { (outline.item(atRow: $0) as? Tab)?.id.description == node }),
+        let cell = outline.view(atColumn: 0, row: row, makeIfNecessary: false)
+      else { throw Failure(message: "visible manager row is unavailable") }
+      var controls: [[String: Any]] = [], visited = 0
+      func walk(_ view: NSView, depth: Int) {
+        guard depth <= 12, visited < 256 else { return }; visited += 1
+        if let label = view.accessibilityLabel(), !label.isEmpty, !view.isHiddenOrHasHiddenAncestor, !view.visibleRect.isEmpty {
+          let rect = view.convert(view.bounds, to: nil)
+          controls.append(["label": String(label.prefix(160)), "point": [rect.midX, target.frame.height - rect.midY]])
+        }
+        for child in view.subviews.prefix(256) { walk(child, depth: depth + 1) }
+      }
+      walk(cell, depth: 0)
+      let rect = outline.convert(outline.rect(ofRow: row), to: nil)
+      return ["frame": [rect.minX, target.frame.height - rect.maxY, rect.width, rect.height], "controls": controls] as [String: Any]
+    }
+    isolated deinit {
+      if let managerUndoObserver { NotificationCenter.default.removeObserver(managerUndoObserver) }
     }
 
     private func timing(_ w: EngineWebContentHostFactory) async -> [String: Any] {

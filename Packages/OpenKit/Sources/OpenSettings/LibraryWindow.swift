@@ -87,7 +87,8 @@ private struct LibrarySidebar:NSViewRepresentable {
 }
 @MainActor public enum LibraryWindow {
     public static func makeWindow(viewModel:LibraryViewModel)->NSWindow {
-        let window=NSWindow(contentRect:.init(x:0,y:0,width:960,height:640),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
+        let window=LibraryNativeWindow(contentRect:.init(x:0,y:0,width:960,height:640),styleMask:[.titled,.closable,.miniaturizable,.resizable,.fullSizeContentView],backing:.buffered,defer:false)
+        window.libraryModel = viewModel.model
         window.titlebarAppearsTransparent=true;window.titleVisibility = .hidden
         window.contentViewController=NSHostingController(rootView:LibraryContent(viewModel:viewModel));window.title=viewModel.section.title;window.minSize = .init(width:720,height:480);window.isReleasedWhenClosed=false
         window.setFrame(.init(x:200,y:200,width:960,height:640),display:false);return window
@@ -96,8 +97,33 @@ private struct LibrarySidebar:NSViewRepresentable {
 @MainActor public final class LibraryPresenter:NSObject,NSWindowDelegate {
     public let viewModel:LibraryViewModel;public private(set) var window:NSWindow?
     public init(viewModel:LibraryViewModel){self.viewModel=viewModel;super.init()}
-    public func show(section:LibrarySection?=nil){if let section {viewModel.section=section};if window == nil {window=LibraryWindow.makeWindow(viewModel:viewModel);window?.delegate=self};Task {await viewModel.refreshExternalState()};window?.makeKeyAndOrderFront(nil)}
-    public func windowDidBecomeKey(_ notification:Notification){Task {await viewModel.refreshExternalState()}}
+    public func show(section:LibrarySection?=nil){if let section {viewModel.section=section};viewModel.refreshSpaceManagerView();if window == nil {window=LibraryWindow.makeWindow(viewModel:viewModel);window?.delegate=self};Task {await viewModel.refreshExternalState()};window?.makeKeyAndOrderFront(nil)}
+    public func windowDidBecomeKey(_ notification:Notification){viewModel.refreshSpaceManagerView();Task {await viewModel.refreshExternalState()}}
+}
+
+/// Supply undo before NSHostingController reads the window's environment.
+/// A delegate installed after hosting can leave NSWindow's default manager cached.
+private final class LibraryNativeWindow: NSWindow {
+    weak var libraryModel: BrowserModel?
+    private lazy var textUndoManager = UndoManager()
+    override var undoManager: UndoManager? {
+        if firstResponder is NSTextView || firstResponder is NSTextField { return textUndoManager }
+        return libraryModel?.undoManager ?? super.undoManager
+    }
+    // Nil-target Edit menu actions. There is no separate key monitor/router.
+    @objc func undo(_ sender: Any?) { undoManager?.undo() }
+    @objc func redo(_ sender: Any?) { undoManager?.redo() }
+    override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(undo(_:)) {
+            menuItem.title = undoManager?.undoMenuItemTitle ?? "Undo"
+            return undoManager?.canUndo == true
+        }
+        if menuItem.action == #selector(redo(_:)) {
+            menuItem.title = undoManager?.redoMenuItemTitle ?? "Redo"
+            return undoManager?.canRedo == true
+        }
+        return super.validateMenuItem(menuItem)
+    }
 }
 
 /// Native table selection and keyboard navigation, with system accent painting in the
