@@ -10,6 +10,7 @@ import OpenModel
     private var observation: ObservationLoop?
     private var tracking: NSTrackingArea?
     private var collapseWork: DispatchWorkItem?
+    private var collapseDelay: TimeInterval?
     private var byID: [ItemID: MiniPlayerCardView] = [:]
     private var retiring: [ObjectIdentifier: MiniPlayerCardView] = [:]
     private var ordered: [ItemID] = []
@@ -21,6 +22,8 @@ import OpenModel
     public var requiredHeight: CGFloat { stackHeight == 0 ? 0 : 2 * MiniPlayerMetrics.verticalInset + stackHeight }
     public var cards: [MiniPlayerCardView] { ordered.compactMap { byID[$0] } }
     public var pendingCollapseCount: Int { collapseWork == nil ? 0 : 1 }
+    /// Delay the pending collapse was scheduled with, nil when none is pending.
+    public var pendingCollapseDelay: TimeInterval? { collapseWork == nil ? nil : collapseDelay }
 
     public init(context: SidebarContext) {
         self.context = context
@@ -65,8 +68,8 @@ import OpenModel
             ordered = ids
             for id in ids.reversed() { if let card = byID[id] { addSubview(card, positioned: .above, relativeTo: nil) } }
         }
-        if context.forcedMediaHover != nil { collapseWork?.cancel(); collapseWork = nil; isExpanded = ids.count > 1 }
-        else if ids.count < 2 { isExpanded = false; collapseWork?.cancel(); collapseWork = nil }
+        if context.forcedMediaHover != nil { collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil; isExpanded = ids.count > 1 }
+        else if ids.count < 2 { isExpanded = false; collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil }
         measure(changed && (wasEmpty || ids.isEmpty) ? .structure : .stack)
     }
     private func retire(_ card: MiniPlayerCardView) {
@@ -133,20 +136,21 @@ import OpenModel
         addTrackingArea(area); tracking = area
     }
     public override func mouseEntered(with event: NSEvent) {
-        collapseWork?.cancel(); collapseWork = nil
+        collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil
         if ordered.count > 1 { isExpanded = true; measure(.stack) }
     }
     public override func mouseExited(with event: NSEvent) {
-        collapseWork?.cancel()
+        collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil
         guard isExpanded, context.forcedMediaHover == nil else { return }
+        let delay = MiniPlayerMetrics.collapseDelay
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
-            self?.collapseWork = nil; self?.isExpanded = false; self?.measure(.stack)
+            self?.collapseWork = nil; self?.collapseDelay = nil; self?.isExpanded = false; self?.measure(.stack)
         } }
-        collapseWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + MiniPlayerMetrics.collapseDelay, execute: work)
+        collapseWork = work; collapseDelay = delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     public override func viewDidHide() {
-        super.viewDidHide(); collapseWork?.cancel(); collapseWork = nil
+        super.viewDidHide(); collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil
         for card in cards { card.marquee.refreshAnimation() }
     }
     public override func viewDidUnhide() { super.viewDidUnhide(); for card in cards { card.marquee.refreshAnimation() } }
