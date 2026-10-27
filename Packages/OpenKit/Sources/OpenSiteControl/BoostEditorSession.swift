@@ -131,13 +131,13 @@ public final class BoostEditorSession {
     public static let textSizes: [Double?] = [0.9, nil, 1.1, 1.25, 1.5]
     public static let textSizeNames = ["Small", "Normal", "Medium", "Large", "Larger"]
     public static let textCases: [String?] = [nil, "capitalize", "uppercase", "lowercase"]
-    public static let textCaseNames = ["Original", "Abc", "AB", "ab"]
+    public static let textCaseNames = ["Original", "Capitalize", "Uppercase", "Lowercase"]
     public var textSizeIndex: Int { Self.textSizes.firstIndex(of: boost.textZoom) ?? 1 }
     public var textCaseIndex: Int { Self.textCases.firstIndex(of: boost.textTransform) ?? 0 }
     public func setTextSize(index: Int) { guard Self.textSizes.indices.contains(index) else { return }; change("Change text size") { $0.textZoom = Self.textSizes[index] } }
     public func setTextCase(index: Int) { guard Self.textCases.indices.contains(index) else { return }; change("Change text case") { $0.textTransform = Self.textCases[index] } }
     public func cycleTextSize(backwards: Bool = false) { setTextSize(index: (textSizeIndex + (backwards ? 4 : 1)) % 5) }
-    public func cycleTextCase() { setTextCase(index: (textCaseIndex + 1) % 4) }
+    public func cycleTextCase(backwards: Bool = false) { setTextCase(index: (textCaseIndex + (backwards ? 3 : 1)) % 4) }
     public func shuffle(font: String, hue: Double = Double.random(in: 0..<360), intensity: Double = Double.random(in: 0.6...1)) {
         guard colorsReady else { return }
         change("Shuffle") { b in
