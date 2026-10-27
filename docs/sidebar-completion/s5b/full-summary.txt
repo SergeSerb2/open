@@ -1,11 +1,12 @@
 
 NAME                   RESULT SECONDS
-build                  PASS   2
-commands-demo          PASS   0
-roundtrip              PASS   1
-space-legacy           FAIL   0
+build                  PASS   57
+commands-demo          PASS   1
+roundtrip              PASS   0
+space-legacy           FAIL   1
 space-editor           FAIL   3
-suggest-check          PASS   16
+space-pad-compare      SKIP   0
+suggest-check          PASS   17
 commands-dump          PASS   0
 route                  PASS   1
 favicons               PASS   0
@@ -14,12 +15,12 @@ sleep-demo             PASS   0
 adblock-perf           PASS   1
 adblock-catalog        PASS   0
 profiles               PASS   0
-settings-preview       PASS   87
+settings-preview       PASS   91
 sidebar-render         PASS   106
-sidebar-compare        FAIL   38
-commandbar-render      FAIL   18
-features-render        PASS   24
+sidebar-compare        FAIL   133
+commandbar-render      FAIL   17
+features-render        PASS   26
 sitecontrol-render     PASS   4
 boosts                 PASS   3
 
-Logs: /Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/final-full/
+Logs: /Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/post-step9-full/

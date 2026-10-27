@@ -56,7 +56,7 @@ PASS profile-archive-scope
 PASS profile-downloads
 ACTION clearBrowsingData 10000000-0000-0000-0000-000000000001 kinds=3 range=All time
 PASS clear-data
-ACTION deleteProfileData 6958CE91-80B0-4E0A-8E9B-4925550872D2
+ACTION deleteProfileData 28384AB3-3FC2-48E9-B2C2-05FA89549D43
 PASS profile-guards
 PASS links-rules
 ACTION keyBindingsDidChange
@@ -105,8 +105,8 @@ PASS archive-save-failure
 ACTION deleteArchived 50000000-0000-0000-0000-000000000001
 ACTION deleteArchived 50000000-0000-0000-0000-000000000003
 PASS archive-owner-partial
-ACTION setAdBlockExcludedDomains example.org 7461531F-B3E6-42F4-9D97-571B9C58FC65
-ACTION deleteProfileData 7461531F-B3E6-42F4-9D97-571B9C58FC65
+ACTION setAdBlockExcludedDomains example.org 508FEFE3-E0F5-448E-8364-D88AFA5EAB49
+ACTION deleteProfileData 508FEFE3-E0F5-448E-8364-D88AFA5EAB49
 PASS adblock-profile-lifecycle
 PASS suggestion-notice
 ACTION keyBindingsDidChange
@@ -116,12 +116,12 @@ ACTION keyBindingsDidChange
 PASS shortcuts-recording-admission
 PASS archive-paging
 PASS links-save-failure
-ACTION setAdBlockExcludedDomains example.org 3C7CE174-0581-461B-9FEB-ED9240D74F5E
-ACTION deleteProfileData 3C7CE174-0581-461B-9FEB-ED9240D74F5E
+ACTION setAdBlockExcludedDomains example.org 1886AED4-2523-4E76-B89A-7634BBEF758D
+ACTION deleteProfileData 1886AED4-2523-4E76-B89A-7634BBEF758D
 PASS adblock-readiness
 ACTION keyBindingsDidChange
 PASS settings-caches
-ACTION restoreArchived 5013A5E2-3C60-460D-941E-6D4115F1724D
+ACTION restoreArchived E9389773-2DA4-4DCF-B740-D80197D859C2
 ACTION viewSpace 20000000-0000-0000-0000-000000000001
 PASS library-folder-archive
 T2 archive Gmail raw search, tidy display, custom title, and real Arc import passed
@@ -142,7 +142,7 @@ PASS first-run-actions-and-adapter-gate
 ACTION finishFirstRun imported=false
 ACTION finishFirstRun imported=false
 ACTION runImport spaces=true archive=true history=false secrets=false
-PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.002366625
+PROBE fixture spaces=2 items=4 archive=2 raw-archive=3 history=3 saved=4; WAL history=4; empty sidebar=false; seconds=0.002780875
 PASS first-run-probe
 PARITY actual-import archive=2 profiles=2 engines=2 history=3(partial) saved=4(partial)
 PASS first-run-count-parity

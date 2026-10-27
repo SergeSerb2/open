@@ -20,6 +20,6 @@
 | 5. Reduce Motion path | N/A | No animation or motion path changed; MC8/MC9 retained. |
 | 5. Interrupted animation starts from presentation | N/A | No animation change. |
 | 5. Width/hide/resize avoid content animation | N/A | No frame/layout/motion code changed; existing 480×320 sheet retained. |
-| 5. Real rest/hover PNGs compared with Arc | PASS | comparison.md and two native 2x snapshots; accepted Open differences recorded. Local Opus design review 1 PASS; parent owns review 2/code signoff. |
+| 5. Real rest/hover PNGs compared with Arc | PASS | comparison.md and two native 2x snapshots; accepted Open differences recorded. Local Opus design review 1 PASS; parent reports Opus review 2 MERGE, no P0–P2; optional diagnostic nit remains parent-owned. |
 | 6. Docs/comments describe current behavior/numbers | PASS | armDelay Open-choice comment; two exact 37-check receipts; current sheet gallery; S5b evidence. |
 | 6. Plan/followups/PR agree on completed/deferred work | PASS | S5b only; parent code/design review and M5 counted gate remain; no S6 or lane1b claims. |

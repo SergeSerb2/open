@@ -20,3 +20,14 @@ These warning classes already occur in the saved earlier cold build.
 Raw current log: build/xcodebuild-Debug.log; prior log: .re/s5b/historical-xcodebuild-Debug.log.
 No warning-free App claim. The new engine rebuild changes no warning-bearing
 App/config source. All five paths listed above remain identical to main.
+
+Post-main-49b5660 App rebuild: exit 0. The six distinct source warning sites
+(and their exact messages) all occur in the saved preexisting cold build.
+Current warning-bearing App files and project.yml equal origin/main byte-for-byte.
+App/AppDelegate.swift:41:30 — use of protocol 'NSObjectProtocol' as a type must be written 'any NSObjectProtocol'; this will be an error in a future Swift language mode [#ExistentialAny]
+App/Automation/ActivationTrace.swift:10:34 — use of protocol 'NSObjectProtocol' as a type must be written 'any NSObjectProtocol'; this will be an error in a future Swift language mode [#ExistentialAny]
+App/Automation/ActivationTrace.swift:9:38 — use of protocol 'NSObjectProtocol' as a type must be written 'any NSObjectProtocol'; this will be an error in a future Swift language mode [#ExistentialAny]
+App/Automation/AutomationController.swift:981:37 — use of protocol 'NSMenuItemValidation' as a type must be written 'any NSMenuItemValidation'; this will be an error in a future Swift language mode [#ExistentialAny]
+App/Automation/AutomationController.swift:982:37 — use of protocol 'NSUserInterfaceValidations' as a type must be written 'any NSUserInterfaceValidations'; this will be an error in a future Swift language mode [#ExistentialAny]
+App/WebContent/EngineWebContentHostFactory.swift:19:22 — use of protocol 'NSObjectProtocol' as a type must be written 'any NSObjectProtocol'; this will be an error in a future Swift language mode [#ExistentialAny]
+Current raw log: build/xcodebuild-Debug.log; job log: .re/s5b/post-step9-app-build-job.log.

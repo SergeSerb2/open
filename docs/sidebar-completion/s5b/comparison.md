@@ -20,7 +20,7 @@ that same frame without inferring a new Arc hover color or motion value.
 No cross-product pixel-equality claim is made for these intentionally different
 sheet layouts. The parent owns formal code and UI review.
 
-The real Open run is `app-flow.json`: `SheetPresentationWindow` 5959 was
+The real Open run is `app-flow.json`: `SheetPresentationWindow` 6555 was
 visible, key, attached to General Settings, and exactly 480×320 pt. Both
 [rest](previews-rest@2x.png) and [Done hovered](previews-hover@2x.png) are
 960×640 window-server captures (`windowserver+devtools`), not offscreen

@@ -24,8 +24,8 @@ byte-identical for all 13 states, with zero color drift. Master/source
 gating, row-motion not rearming, and MC8/MC9 remain in the real sidebar flow.
 
 Both `docs/settings/checks.txt` and `docs/first-run/checks.txt` are the exact
-same output through `SUMMARY 37 checks passed, 0 failed` from this focused
-run's actual `settings-preview check`. They contain no delay default. The
+same output through `SUMMARY 37 checks passed, 0 failed` from the latest post-merge full
+gate's actual `settings-preview check`. They contain no delay default. The
 same acceptance run rendered the two updated Settings gallery PNGs; their
 SHA-256 entries were recomputed from those generated files.
 
@@ -60,8 +60,7 @@ the run's files and preferences. Each output directory must be new.
 ## App build limitation
 
 The real Debug App build exits 0. Its existing source/configuration emits
-Xcode headermap/strip/App Intents diagnostics and six `ExistentialAny`
-warnings in `ActivationTrace`, `AppDelegate`, `EngineWebContentHostFactory`,
+Xcode headermap/strip/App Intents diagnostics and `ExistentialAny` warnings at six source sites in `ActivationTrace`, `AppDelegate`, `EngineWebContentHostFactory`,
 and `AutomationController`. Those files and `project.yml` are byte-identical
 to `origin/main` at `7e689d5`. S5b introduces no App change. The package builds
 emit no warnings; the App build does not satisfy a
@@ -113,11 +112,12 @@ Local parent reports: `/Users/m1-dev/.t3/projects/open/.re/m1-s5b-review-r1.md`
 and `/Users/m1-dev/.t3/projects/open/.re/m1-s5b-opus-design-r1.md`.
 
 The initial [pre-review full run](pre-review-full-summary.txt) found three
-black command-bar 2× renders in addition to the known M1 baselines. This
-was not relabeled as a baseline. A real diagnostic run of unmodified main
-and this branch passed 78/78 on each ([receipt](commandbar-diagnostic.txt)).
-The final full gate also failed the same three black command-bar renders. That remains an unapproved extra failure; this receipt does not qualify for the four known M1 exceptions. No command-bar code
-or tolerance changed.
+black command-bar 2× renders in addition to the known M1 baselines. A separate
+real diagnostic run of unmodified main and this branch passed 78/78 on each
+([receipt](commandbar-diagnostic.txt)). The pre-Step-9 full run again failed
+three renders. The latest post-Step-9 full run fails two: `empty` and
+`typing-git` at 2× (76/78). These are unresolved extra failures, never labeled
+M1 baseline. No command-bar code or tolerance changed.
 
 ## Settings guard break-and-revert proofs
 
@@ -137,26 +137,54 @@ The parent replaced the stale 10:41 engine distribution at 21:38. Earlier
 App flows and images are retained under [historical-engine-1041](historical-engine-1041/README.md)
 and do not count as final acceptance. The new expected framework SHA-256 is
 `61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8`.
-Only the rebuilt App flows with matching provenance count. The offscreen
+The parent reports this distribution was recorded on M5 at 21:23:54, from
+main `4c40ebd` plus the #93 extension-popup engine, with main ad-block and
+tab-strip work. Local stamp: `1793075034`. Only rebuilt App flows with the
+verified canonical-to-signed hash chain count. The offscreen
 package checks and break-and-revert proofs are engine-independent.
 
-Muse's local quota is exhausted (HTTP 429); the parent routes fresh review 2
-to M5 Opus. The earlier design review covered unchanged S5b UI on the prior
-distribution; the new-engine captures are supplied for the final review.
+Muse's local quota is exhausted (HTTP 429). The parent reports M5 Opus
+review 2: MERGE, P2 closed, no P0–P2 findings. The earlier design review
+covered the unchanged S5b UI; the current rebuilt-App images are byte-identical.
+The parent owns the optional popup diagnostic wording change and its focused
+validation separately from this checkpoint. It is not included here.
 
-[Latest full gate](full-summary.txt): 17 PASS, 4 FAIL, 0 SKIP. The build has
-zero warnings/errors. Three failed targets are the known M1 baselines;
-`commandbar-render` is an additional unresolved failure (the same three
-black-pixel smoke checks). `suggest-check` passes. This is reported as a
-gate blocker, not a green gate or an allowed baseline.
+[Latest full gate](full-summary.txt), after merging main `49b5660`:
+17 PASS, 4 FAIL, 1 SKIP. The package build has zero warnings/errors.
+Three failed targets are the known M1 baselines; `commandbar-render` is an
+additional unresolved failure. `suggest-check` passes. The new main
+`space-pad-compare` gate skips because its private capture root is absent.
+That skip is recorded separately, not labeled a baseline or PASS. See the
+[exact gate blockers](gate-blockers.txt). A fresh unmodified-main comparison
+renderer was built; all 13 sidebar tables match the branch byte-for-byte.
 
 The new-engine normal flow exits 0. The forced-failure run exits 1 only after
 opening its real sheet; both verify the supplied canonical hash and the same
 signing-derived embedded/running hash. Both clean up without forced termination.
 The [signing receipt](engine-signing-proof.json) records the independently
-replayed transformation. Current normal sheet ID: 5959; forced-failure sheet
-ID: 5969. No earlier native run is counted as final proof.
+replayed transformation. Current normal sheet ID: 6555; forced-failure sheet
+ID: 6617. No earlier native run is counted as final proof.
 
 The user explicitly requested that the PR remain held while the additional
 `commandbar-render` failure is unresolved. The feature branch can be pushed
 for parent review; no PR is opened under that rule.
+
+The user ordered a checkpoint and pause: no PR, no further campaigns or full
+gate retries. The existing App proof finishes before the clean commit/push.
+The unresolved full-gate failures and private-input skip stay explicit.
+
+The last current [native sidebar App proof](sidebar-app.json) exits 0:
+17 checks PASS, including empty and refused-move cases, on the verified new
+engine and a fresh bundle/preferences/data/cache/profile/socket. Cleanup
+reports no surviving processes, windows, or roots. This invokes the existing
+`engine_e2e.main --only sidebar --style chrome`; its output is private at
+`.re/s5b/new-engine-sidebar-app/`. The one-off launch wrapper is
+`.re/s5b/sidebar-app-proof.py`; it changes no production or suite assertions.
+The suite has two explicit SKIPs: its older F0001 whole-window comparison
+(no such capture/snapshot in the supplied empty synthetic capture root), and
+durable-profile storage (delegated by the existing suite to `--only profiles`).
+Neither is claimed here. The supplied S2 Previews reference comparison is
+complete, and the full sidebar compare gate retains all 13 actual states.
+
+S5b active jobs: none. All intended evidence is committed for the checkpoint;
+the parent's separate diagnostic edit is excluded from this commit.
