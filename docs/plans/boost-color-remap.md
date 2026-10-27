@@ -2,7 +2,9 @@
 
 Status: plan, 2026-10-26; revised same day for PR #119 review round 1 (Opus architecture review:
 transport and per-frame install reworked, scheme channel dropped from v1 by lead ruling, coverage
-and gates tightened; see plan §4, §5.2, §5.6, §11). Implementer: one engine agent (tree owner) plus one shell-side helper
+and gates tightened; see plan §4, §5.2, §5.6, §11). A re-check against the tree then moved the
+CEF API to global functions with one owner patch per hook file (§5.4, §10.1) and replaced the
+first-paint hook, which does not exist in 156, with view paint stamps (§5.2, §5.4). Implementer: one engine agent (tree owner) plus one shell-side helper
 (no tree build). Parent decisions: `docs/plans/site-control-boost-editor.md` Step 4R (§10, line
 1353), Q12 ruling (§11.2), R-2, D-7, §4.4.5, and the Step 4R gates at §7 (line 1157). Color facts:
 `docs/re/features-advanced.md` §4.8, BO-23. Engine boundary facts: `docs/re/arccore-engine.md`
@@ -161,12 +163,12 @@ stay unremapped. Painters need no changes: unlike auto-dark, Boost enablement do
 OpenKit (Swift)                     App                     OpenEngine (ObjC++)          CEF / Chromium (fork)
 ─────────────────                   ───                     ───────────────────          ─────────────────────
 Boost.colorWheel (#103)
-  └─ BoostColorMatrix.make ──► BoostEngineAdapter ──► OEBrowserContext            ──► CefRequestContext
-     (20 floats)                 (pattern diff +        -registerBoostColorFilter:      ::RegisterBoostColorFilter
+  └─ BoostColorMatrix.make ──► BoostEngineAdapter ──► OEBrowserContext            ──► CefRegisterBoostColorFilter
+     (20 floats)                 (pattern diff +        -registerBoostColorFilter:      (global fn, cef_boost_color.h)
                                   per-page apply)       forHostPattern:pathPrefix:  └─► open_engine::BoostColorRegistry
                                 OEWebContent                                            (per BrowserContext)
-                                  -applyBoostColorFilter: ──► CefBrowser            │  on every change: snapshot
-                                  -removeBoostColorFilter     ::ApplyBoostColorFilter│  (patterns + per-browser values
+                                  -applyBoostColorFilter: ──► CefApplyBoostColorFilter│  on every change: snapshot
+                                  -removeBoostColorFilter     (global fn)            │  (patterns + per-browser values
                                                                                      │   + generation) to every
 renderer (each process of the Profile)                                               │  renderer process, over a
   BoostColorThreadObserver (RenderThreadObserver) ◄──────────────────────────────────┘  channel-associated interface
@@ -193,14 +195,27 @@ the push raced navigations (`CefFrameHostImpl` queues frame actions while the pi
   `RegisterMojoInterfaces` (`content/public/renderer/render_thread_observer.h:29`; Chrome's use at
   `chrome_render_thread_observer.cc:171-182`). Channel-associated messages are FIFO with the
   frame commit messages on the same channel, so a document always sees every snapshot sent
-  before its commit — first paint is correct with no sync IPC and no UI-thread wait.
+  before its commit — first paint is correct with no sync IPC and no UI-thread wait. Evidence
+  that commits ride the same channel: `CommitNavigation` goes over `mojom::NavigationClient`,
+  an associated remote from the frame's route provider
+  (`render_frame_host_impl.cc:14157-14160`, `:3969-3975`), whose agent scheduling group uses
+  the process channel (`agent_scheduling_group_host.cc:248-252`). Mojo's multiplex router
+  keeps one in-order queue for every associated endpoint on a pipe, even when the renderer binds
+  them on different main-thread task runners (`NavigationClient` uses
+  `kInternalNavigationAssociated`, `render_frame_impl.cc:2166`). G6 proves the ordering on the
+  real build, and its break arm shows the gate fails when the order is wrong (§11.2).
 - The renderer resolves locally: the snapshot holds the pattern table (with optional path
   prefixes, m4) plus per-browser values keyed by CEF browser id. Each frame agent resolves its
   own frame at document start from its real URL (no renderer-supplied strings cross a trust
   boundary — resolution happens renderer-side from the frame's own state); on each snapshot
   update the thread observer re-resolves every live frame in the process, which also covers
   prerendered and BFCached frames (m5).
-- An empty registry sends nothing — not at launch, not ever — so "off" has no IPC at all.
+- A registry that has never held an entry sends nothing — not at launch, not ever — so "off"
+  has no IPC at all. The launch send skips any empty snapshot. A change broadcast always sends,
+  because a change that empties the registry must still clear live frames (§5.4). The one
+  exception is the verification switch `--open-boost-color-paint-reports` (§5.4 readback):
+  with it, the launch send also carries an empty snapshot so the reports turn on. Only the e2e
+  suite sets that switch, and the zero-cost gates run without it (§11.3).
 - Cost accepted: every renderer of the Profile learns the Boosted-host list. Chrome accepts the
   same exposure for content-setting rules, and the rejected pull allowed probing for it anyway.
 - This removes the `cef.mojom` method, the `CefFrameImpl` receiver, all browser-side frame
@@ -280,7 +295,7 @@ Hook patch 0401 touches exactly these upstream files:
 | `third_party/blink/renderer/platform/graphics/graphics_context.h` | Add `void SetBoostColorFilter(BoostColorFilter*)` (non-owning), `BoostColorFilter* GetBoostColorFilter() const`, a `ScopedBoostColorFilter` RAII (save/set/restore, modeled on `ScopedAutoDarkModeState`), and member `BoostColorFilter* boost_color_filter_ = nullptr;` next to `dark_mode_filter_` |
 | `third_party/blink/renderer/platform/graphics/graphics_context.cc` | In `DarkModeColor()`: after the dark-mode branch, `if (auto* f = context.GetBoostColorFilter()) return f->RemapColor(color);` (order rule §3.4.1 — apply to the possibly-inverted color). In `DarkModeFlags` ctor: after the dark-mode branch, if a boost filter exists, run `ApplyToFlags` on the (possibly dark-rewritten) flags. In `CopyConfigFrom` (:232-237): copy `boost_color_filter_` (SVG markers record through `PaintRecordBuilder(paint_info.context)`, `svg_shape_painter.cc:314` — review M1). Rename no helper; keep each hunk small |
 | `third_party/blink/renderer/platform/graphics/gradient.h/.cc` | §5.3 |
-| `third_party/blink/renderer/core/frame/local_frame_view.h/.cc` | Add `void SetBoostColorState(BoostColorState, std::optional<BoostHslaMatrix>)`, members `boost_state_`, `std::unique_ptr<BoostColorFilter> boost_color_filter_;`, `std::optional<BoostHslaMatrix> boost_matrix_;`, and `uint64_t boost_generation_ = 0;` (snapshot generation that produced the state, for the G6 readback). In `PaintFrame` (:4454): wrap the body in the scoped swap — `kUnset` leaves the context as-is, `kNone` installs nullptr, `kValue` installs the filter. Do **not** touch the :3292 construction site (the context starts null, B2). `SetBoostColorState` compares (state, matrix) exactly, no-ops when equal (generation still updates), otherwise replaces the filter and invalidates paint (§6.2). Identity matrix collapses to `kNone`. Also the `DocumentBackgroundColor` branch (§5.3b) |
+| `third_party/blink/renderer/core/frame/local_frame_view.h/.cc` | Add `void SetBoostColorState(BoostColorState, std::optional<BoostHslaMatrix>)`, members `boost_state_`, `std::unique_ptr<BoostColorFilter> boost_color_filter_;`, `std::optional<BoostHslaMatrix> boost_matrix_;`, and `uint64_t boost_generation_ = 0;` (snapshot generation that produced the state). Paint stamps for the §5.4 readback: `std::optional<BoostPaintStamp> boost_first_paint_` (set once, at this view's first `PaintFrame`) and `BoostPaintStamp boost_last_paint_` (updated at every `PaintFrame`), each `{generation, state}`; that is two small stores per frame paint, not per draw op, so recorded ops do not change. A cross-document navigation makes a new `LocalFrameView`, so "first" means the document's first paint. In `PaintFrame` (:4454): wrap the body in the scoped swap — `kUnset` leaves the context as-is, `kNone` installs nullptr, `kValue` installs the filter. Do **not** touch the :3292 construction site (the context starts null, B2). `SetBoostColorState` compares (state, matrix) exactly, no-ops when equal (generation still updates), otherwise replaces the filter and invalidates paint (§6.2). Identity matrix collapses to `kNone`. Also the `DocumentBackgroundColor` branch (§5.3b) |
 | `third_party/blink/renderer/core/paint/box_painter_base.cc` | `ResolveShadowColor` boost branch (§5.3b) |
 | `third_party/blink/renderer/core/paint/text_painter.cc` | `CreateDrawLooper` text-shadow branch (§5.3b) |
 | `third_party/blink/renderer/core/paint/decoration_line_painter.cc` | Wavy-decoration branch (§5.3b; optional — may be stated as a gap instead, one line either way) |
@@ -361,17 +376,17 @@ class BoostColorRegistry : public base::SupportsUserData::Data {
   // path_prefix empty = whole host. Refused (logged, no crash) past the limits below.
   void Register(std::string host_pattern, std::string path_prefix, BoostColorValue value);
   void Unregister(const std::string& host_pattern, const std::string& path_prefix);
-  void SetPerBrowserValue(int browser_id, std::optional<BoostColorValue> value);
-  void ClearPerBrowserValue(int browser_id);  // browser closed
-  // Send the current snapshot to one renderer process (launch) or to every live
-  // process of this context (change). Sends nothing while the snapshot is empty
-  // AND generation_ == 0; once non-empty snapshots have gone out, an emptied
-  // registry still broadcasts (frames must clear).
+  // Also attaches a WebContentsObserver; WebContentsDestroyed clears the entry.
+  void SetPerBrowserValue(int browser_id, content::WebContents* contents,
+                          std::optional<BoostColorValue> value);
+  // Launch send: skips an empty snapshot unless paint reports are on (§4).
   void SendSnapshotTo(content::RenderProcessHost* host);
   uint64_t generation() const { return generation_; }
+  uint64_t snapshots_sent() const { return snapshots_sent_; }  // G8 zero-cost readback
  private:
-  void Broadcast();
+  void Broadcast();  // change send: always, to every live process of this context
   uint64_t generation_ = 0;
+  uint64_t snapshots_sent_ = 0;
   // patterns_ keyed by (host_pattern, path_prefix); per_browser_ by CEF browser id.
 };
 }
@@ -406,40 +421,79 @@ class BoostColorRegistry : public base::SupportsUserData::Data {
   message is ordered before any frame commit on that channel.
 - **Per-tab apply** is `SetPerBrowserValue` + broadcast: same transport, no second pipe.
   Precedence is resolved renderer-side: per-browser value beats pattern value for every frame of
-  that browser (§5.5). The entry is cleared when the browser host closes (forwarder hook beside
-  the `CefBrowser` API implementation), so a reused browser id never inherits a value.
-- **First-paint readback (for G6/G7, review M5).** The browser must be able to prove which
-  generation a document's first paint used, without polling screenshots. The frame agent reports
-  (frame URL host, generation, first-paint `base::TimeTicks`) once per document over the
-  existing CEF process-message path (`CefFrame::SendProcessMessage`, name
-  `OpenBoostColorFirstPaint`); OpenEngine stores the latest report per `OEWebContent` and exposes
-  it to automation (§9.2). This is a debug/verification channel only — no product behavior reads
-  it, and it carries no page content.
+  that browser (§5.5). The registry clears the entry when that browser's `WebContents` is
+  destroyed (its own `content::WebContentsObserver`, overlay code, no CEF hook), so a reused
+  browser id never inherits a value.
+- **Paint readback (for G5/G6/G7, review M5).** The browser must be able to prove which
+  generation and state a document's first paint used, and when a changed value reached the
+  screen, without polling screenshots. This is on only when the browser process has the
+  switch `--open-boost-color-paint-reports`; the registry reads it once and sets
+  `paint_reports` in every snapshot it sends. With the bit on, the frame agent asks for a
+  presentation callback after each resolution (document start, a changed snapshot, a BFCache
+  restore) through `WebFrameWidget::NotifyPresentationTime` (`web_frame_widget.h:171`). In the
+  callback it reads the view's paint stamps (§5.2) through the blink glue and sends one report:
+  frame host, renderer pid (`base::GetCurrentProcId()`), first-paint `{generation, state}`,
+  last-paint `{generation, state}`, and the presentation `base::TimeTicks`. If the view has no
+  paint stamp yet, it asks again, at most 10 times, then sends a "never painted" report. The
+  callback holds a weak pointer to the agent, so a frame destroyed first sends nothing. The
+  report travels over the existing CEF process-message path (`CefFrame::SendProcessMessage`,
+  name `OpenBoostColorPaint`); OpenEngine keeps the latest report per frame and exposes them to
+  automation (§9.2). This is a verification channel only. No product behavior reads it, it
+  carries no page content, and without the switch it costs nothing (no callback, no message).
 
-CEF public API (new header `cef/include/cef_boost_color.h`, overlay; all new methods guarded with
-`CEF_API_ADDED(CEF_API_VERSION_EXPERIMENTAL)`, C API regenerated by the version manager, never
-hand-edited — `docs/engine-patches.md` storage rules):
+CEF public API: a new overlay header `cef/include/cef_boost_color.h` with **global functions
+only**, in the `CefSetOSModalLoop` style (a global function guarded by `#if CEF_API_ADDED(…)`,
+`cef/include/cef_app.h:142`). Every function is guarded with
+`CEF_API_ADDED(CEF_API_VERSION_EXPERIMENTAL)`; the version manager regenerates the C API and it
+is never hand-edited (`docs/engine-patches.md` storage rules). Global functions keep every
+existing CEF header and implementation class untouched. That matters for two reasons. First,
+`CefBrowser` is also implemented in the renderer (`CefBrowserImpl`,
+`cef/libcef/renderer/browser_impl.h:35`), so a browser-only method does not belong there.
+Second, `cef/libcef/browser/browser_host_base.h` already belongs to patch 0302, and two logical
+patches must never share a path (`docs/engine-fork.md:119`).
 
 ```cpp
-// On CefRequestContext (cef/include/cef_request_context.h):
-// path_prefix may be empty (whole host). Returns false on invalid input
-// (non-finite or |m| > 16 matrix values, malformed pattern, registry full).
-virtual bool RegisterBoostColorFilter(const CefString& host_pattern,
-                                      const CefString& path_prefix,
-                                      const float matrix[20]) = 0;
-virtual void UnregisterBoostColorFilter(const CefString& host_pattern,
-                                        const CefString& path_prefix) = 0;
-
-// On CefBrowser (cef/include/cef_browser.h):
+#if CEF_API_ADDED(CEF_API_VERSION_EXPERIMENTAL)
+// UI thread. path_prefix may be empty (whole host). matrix must hold exactly 20
+// finite values with |m| <= 16. Returns false on invalid input, a malformed
+// pattern, or a full registry.
+/*--cef(optional_param=path_prefix)--*/
+bool CefRegisterBoostColorFilter(CefRefPtr<CefRequestContext> context,
+                                 const CefString& host_pattern,
+                                 const CefString& path_prefix,
+                                 const std::vector<float>& matrix);
+/*--cef(optional_param=path_prefix)--*/
+void CefUnregisterBoostColorFilter(CefRefPtr<CefRequestContext> context,
+                                   const CefString& host_pattern,
+                                   const CefString& path_prefix);
 // Per-tab value for every frame of this browser, regardless of pattern.
-// A null matrix clears it (frames fall back to pattern resolution).
-virtual bool ApplyBoostColorFilter(const float* matrix /*[20] or nullptr*/) = 0;
+// An empty matrix clears it (frames fall back to pattern resolution).
+/*--cef()--*/
+bool CefApplyBoostColorFilter(CefRefPtr<CefBrowser> browser,
+                              const std::vector<float>& matrix);
+// Verification readback (§11): {"generation", "snapshots_sent"} for the context,
+// plus "page_background" (ARGB int; absent when the page reported none) from
+// content::WebContents::GetBackgroundColor() (web_contents.h:686) when a
+// browser is given.
+/*--cef(optional_param=browser)--*/
+CefRefPtr<CefDictionaryValue> CefGetBoostColorDebugState(
+    CefRefPtr<CefRequestContext> context, CefRefPtr<CefBrowser> browser);
+#endif
 ```
 
-No scheme enum ships in v1 (§5.6). Implementations live in the overlay and are called from hook
-patches in `cef/libcef/browser/request_context_impl.cc` and
-`cef/libcef/browser/browser_host_base.cc` (one forwarding function each; match how P1's
-`0302-open-hosted-tabs.patch` forwards into `//open` code).
+Implementer checkpoint: the translator already accepts vectors of simple types
+(`cef_task_manager.h:52`, `std::vector<int64_t>`; `float` is in `_simpletypes`,
+`cef/tools/cef_parser.py:559`). If it refuses `std::vector<float>` as an input parameter, pass a
+`CefRefPtr<CefBinaryValue>` of exactly 80 bytes (20 little-endian float32) instead. Do not use a
+raw `float[20]`: the translator has no fixed-array type. No scheme function ships in v1 (§5.6).
+The functions live in `open/browser/boost_color/boost_color_api.cc`. They reach the
+`BrowserContext` through `CefRequestContextImpl::GetBrowserContext()`
+(`request_context_impl.h:75`) and the `WebContents` through `CefBrowserHostBase::FromBrowser`
+(`browser_host_base.h:139`, `GetWebContents()` at :406), both internal to `libcef_static`. A
+request context that has not initialized yet has no browser context: the call returns false,
+and OpenEngine queues registrations until
+`CefRequestContextHandler::OnRequestContextInitialized`. The only upstream hunk on the browser
+side is the launch send (§10.1).
 
 Mojom (overlay, `open/boost_color/mojom/boost_color.mojom`) — one channel-associated interface,
 browser → renderer only:
@@ -454,6 +508,7 @@ struct BoostColorPatternEntry {
 struct BoostColorBrowserEntry { int32 browser_id; array<float, 20> matrix; };
 struct BoostColorSnapshot {
   uint64 generation;
+  bool paint_reports;  // verification switch only (§5.4 readback); false in product use
   array<BoostColorPatternEntry> patterns;
   array<BoostColorBrowserEntry> browsers;
 };
@@ -484,11 +539,12 @@ class BoostColorThreadObserver : public content::RenderThreadObserver,
 class BoostColorFrameAgent : public content::RenderFrameObserver {
  public:
   explicit BoostColorFrameAgent(content::RenderFrame* render_frame);
-  void ResolveNow();  // from snapshot; http(s) only; sets tri-state via blink glue
-  // RenderFrameObserver:
-  void DidCreateDocumentElement() override;     // ResolveNow (document start)
-  void DidSetPageLifecycleState(...) override;  // BFCache restore / prerender activation: ResolveNow
-  void DidFirstVisuallyNonEmptyPaint() override;  // stamp generation + TimeTicks, report (§5.4)
+  void ResolveNow();  // from snapshot; http(s) only; sets tri-state via blink glue;
+                      // with paint_reports on, arms the §5.4 presentation callback
+  // RenderFrameObserver (render_frame_observer.h):
+  void DidCreateDocumentElement() override;  // :129, ResolveNow (document start)
+  void DidSetPageLifecycleState(blink::BFCacheStateChange change) override;
+      // :121, ResolveNow on kRestoredFromBFCache only
   void OnDestruct() override;
 };
 }
@@ -501,13 +557,14 @@ class BoostColorFrameAgent : public content::RenderFrameObserver {
   singleton, like other thread observers — state the ownership in the header). The frame agent
   is created in the same file's `RenderFrameCreated` (:42), after the `CefRenderFrameObserver`:
   `new open_engine::BoostColorFrameAgent(render_frame);  // Deletes itself.`
-  Both lines live in patch 0402 (one file, one feature per patch, §10.1) — the same file the
-  ad-block agent hook uses (§10.4 watch entry).
+  Both lines go into the one owner patch of that file. The ad-block agent hook uses the same
+  file, so the file has one owner patch shared by both features (§10.1).
 - **Resolution.** At `DidCreateDocumentElement` the agent reads its frame's committed URL from
-  the `RenderFrame` itself and its CEF browser id from the CEF frame glue (implementer
-  checkpoint: the id `CefFrameImpl` carries for its browser; if it is not reachable from a
-  `RenderFrameObserver` without new plumbing, the thread observer keeps a routing-id → browser-id
-  map filled at agent creation from `CefRenderManager`). Non-http(s) documents do not resolve:
+  the `RenderFrame` itself and its CEF browser id from
+  `CefRenderManager::Get()->GetBrowserForView(render_frame->GetWebView())`
+  (`cef/libcef/renderer/render_manager.h:65`) → `CefBrowserImpl::browser_id()`
+  (`browser_impl.h:81`). If no CEF browser exists for the view, per-browser values do not
+  apply and the frame resolves by pattern only. Non-http(s) documents do not resolve:
   the view stays `kUnset` and inherits at paint (about:blank / srcdoc children, §6.4). Every
   http(s) document resolves to `kNone` or `kValue` — including with an empty snapshot, which is
   what makes an unboosted child under a boosted parent paint unremapped (G5).
@@ -519,10 +576,15 @@ class BoostColorFrameAgent : public content::RenderFrameObserver {
   `WebLocalFrameImpl::FromFrame(frame)->GetFrame()->View()->SetBoostColorState(...)` (checkpoint:
   exact accessor names; the glue file is the only place allowed to include
   `web_local_frame_impl.h`, mirroring `cef/libcef/renderer/blink_glue.cc`).
-- **Generation stamp.** `ResolveNow` records the snapshot generation it used;
-  `DidFirstVisuallyNonEmptyPaint` reports it with the paint `TimeTicks` (§5.4 readback). A
-  document that never paints reports nothing; the e2e treats a missing report as a failure, not
-  a skip.
+- **Generation stamp.** `ResolveNow` passes the snapshot generation into
+  `SetBoostColorState`; `PaintFrame` copies `{generation, state}` into the view's paint stamps
+  (§5.2), and the presentation callback reports them (§5.4 readback). `RenderFrameObserver` has
+  no first-paint hook in 156, which is why the stamp lives in the view. A document with no report
+  is a failure in the e2e, not a skip.
+- **Prerender.** No activation hook is needed. Blink activates a prerendered page through
+  `WebViewImpl::ActivatePrerenderedPage` (`web_view_impl.cc:3736`), which does not call
+  `DidSetPageLifecycleState`. The prerendered frame is a live agent, so every snapshot update
+  has already re-resolved it (m5).
 
 ### 5.6 Color scheme channel: dropped from v1 (lead ruling, review r1 M4)
 
@@ -581,8 +643,8 @@ caching in the engine.
 | Cross-document navigation, same process | The agent resolves locally at `DidCreateDocumentElement` from the process snapshot — document-start, before first paint, no IPC. Channel FIFO guarantees the snapshot includes every change sent before this document's commit (§4) |
 | New subframe (any origin) | Its agent resolves its own URL at its document start. Per-browser value (if any) wins; else pattern+path match on the subframe's own URL. Non-http(s) children (about:blank, srcdoc) do not resolve and inherit (§6.4) |
 | Renderer process swap (cross-site navigation, crash + reload) | The new process received the current snapshot at `RenderProcessWillLaunch`, before any commit on its channel. No replay, no browser-side frame tracking |
-| Prerendered page activation (review m5) | The prerendered frame's agent resolved at its document start and re-resolves on every snapshot update like any live frame; on activation it re-resolves once more (`DidSetPageLifecycleState`). If CEF never prerenders in Open's configuration, the row is inert — the rule costs one compare |
-| Back/forward, incl. BFCache restore | While frozen, snapshot updates still re-resolve the frame (it is a live agent), and on restore the agent re-resolves again (`DidSetPageLifecycleState`). A Boost changed while cached therefore takes effect before the restored page paints. G9 proves the restore really came from BFCache |
+| Prerendered page activation (review m5) | The prerendered frame's agent resolved at its document start and re-resolves on every snapshot update like any live frame, so at activation it already holds the latest value. Activation does not fire `DidSetPageLifecycleState` (`web_view_impl.cc:3736`), and no extra step is needed (§5.5). If CEF never prerenders in Open's configuration, the row is inert |
+| Back/forward, incl. BFCache restore | While frozen, snapshot updates still re-resolve the frame (it is a live agent; the snapshot arrives on the thread observer, not on a frozen frame queue). On restore Blink calls `DidSetPageLifecycleState(kRestoredFromBFCache)` on every local frame (`web_view_impl.cc:2742-2752`), and the agent re-resolves once more (normally an equal-value no-op). A Boost changed while cached therefore takes effect before the restored page paints. G9 proves the restore really came from BFCache |
 | Tab sleep / discard (shell unloads the page) | The `OEWebContent` closes; the per-browser entry clears. On reload the pattern resolution reapplies. Chromium never discards hosted tabs itself (P1, patch 0303) |
 | Peek pages | Peek pages are Alloy `OEWebContent`s in a Profile context (P1 shell rules). Their renderer processes get the same snapshot — the Site Control *panel* is unavailable in Peek (site-control non-goals), but an existing Boost still applies. Arc parity unobserved (guess: applies; capture C-4R-10) |
 | Little Open pages | Same rule: any live page in a context with registrations remaps |
@@ -867,14 +929,23 @@ implementation in `src/OEBoostColor.mm` plus small additions to `OEBrowserContex
 @property (nonatomic, readonly, getter=isIdentity) BOOL identity;
 @end
 
-// First-paint readback (§5.4; verification only, no product behavior reads it).
-@interface OEBoostColorFirstPaint : NSObject
-@property (nonatomic, readonly) uint64_t generation;   // snapshot generation at first paint
-@property (nonatomic, readonly) NSTimeInterval paintTime;  // mach-monotonic seconds of that paint
-@property (nonatomic, readonly, copy) NSString *host;  // document host that painted
+// Paint readback (§5.4; verification only, no product behavior reads it).
+// Reports exist only when the engine runs with --open-boost-color-paint-reports.
+typedef NS_ENUM(NSInteger, OEBoostColorState) {
+  OEBoostColorStateUnset, OEBoostColorStateNone, OEBoostColorStateValue };
+@interface OEBoostColorPaintReport : NSObject
+@property (nonatomic, readonly, copy) NSString *frameIdentifier;  // CEF frame id
+@property (nonatomic, readonly, copy) NSString *host;             // document host
+@property (nonatomic, readonly) int32_t processIdentifier;        // renderer pid (G5b)
+@property (nonatomic, readonly) BOOL painted;                     // NO = "never painted"
+@property (nonatomic, readonly) uint64_t firstPaintGeneration;    // document's first paint
+@property (nonatomic, readonly) OEBoostColorState firstPaintState;
+@property (nonatomic, readonly) uint64_t lastPaintGeneration;     // latest paint
+@property (nonatomic, readonly) OEBoostColorState lastPaintState;
+@property (nonatomic, readonly) NSTimeInterval presentationTime;  // seconds, TimeTicks clock
 @end
 
-// OEBrowserContext (profile registry; forwards to CefRequestContext, §5.4)
+// OEBrowserContext (profile registry; calls the cef_boost_color.h functions, §5.4)
 - (BOOL)registerBoostColorFilter:(OEBoostColorFilter *)filter
                   forHostPattern:(NSString *)hostPattern
                       pathPrefix:(nullable NSString *)pathPrefix;
@@ -882,13 +953,18 @@ implementation in `src/OEBoostColor.mm` plus small additions to `OEBrowserContex
                                       pathPrefix:(nullable NSString *)pathPrefix;
 - (nullable OEBoostColorFilter *)boostColorFilterForHostPattern:(NSString *)hostPattern
                                                       pathPrefix:(nullable NSString *)pathPrefix;
-@property (nonatomic, readonly) uint64_t boostColorGeneration;  // registry generation
+@property (nonatomic, readonly) uint64_t boostColorGeneration;     // debug state "generation"
+@property (nonatomic, readonly) uint64_t boostColorSnapshotsSent;  // debug state "snapshots_sent"
 
-// OEWebContent (per-tab live apply; forwards to CefBrowser::ApplyBoostColorFilter)
+// OEWebContent (per-tab live apply; calls CefApplyBoostColorFilter)
 - (BOOL)applyBoostColorFilter:(OEBoostColorFilter *)filter;
 - (void)removeBoostColorFilter;                       // clears; frames fall back to patterns
 @property (nonatomic, readonly, nullable) OEBoostColorFilter *boostColorFilter;  // last applied
-@property (nonatomic, readonly, nullable) OEBoostColorFirstPaint *boostColorFirstPaint;  // §5.4
+@property (nonatomic, readonly) NSTimeInterval boostColorApplyTime;      // last apply/remove, TimeTicks clock
+@property (nonatomic, readonly) uint64_t boostColorApplyGeneration;      // generation that call produced
+@property (nonatomic, readonly, copy) NSArray<OEBoostColorPaintReport *> *boostColorPaintReports;
+    // latest report per frame, at most 64 frames (oldest dropped); empty without the switch
+@property (nonatomic, readonly, nullable) NSColor *pageBackgroundColor;  // debug state "page_background" (G10)
 ```
 
 Rules: a nil or identity filter to `registerBoostColorFilter:` unregisters (one code path in the
@@ -898,11 +974,16 @@ never a crash on App input). Matrix validation (finite, |m| ≤ 16) happens in
 `OEBoostColorFilter` construction **and** again at the CEF boundary (§5.4), so no caller of
 either layer can smuggle a NaN into a renderer. On stock CEF (`CEF_SOURCE=cdn`) these methods
 exist but log once and no-op, so the App builds and runs against both distributions;
-`boostColorFilter` still returns the last applied value and `boostColorFirstPaint` stays nil, so
-automation can tell "applied but engine ignored it" apart from "never applied" (the G-suite
-break proof, §11.2). Apply latency (G7): `applyBoostColorFilter:` records its call time in the
-same mach-monotonic clock the renderer's `base::TimeTicks` report uses; automation computes
-apply→first-paint from the two engine stamps, never from screenshot polling.
+`boostColorFilter` still returns the last applied value and `boostColorPaintReports` stays
+empty, so automation can tell "applied but engine ignored it" apart from "never applied" (the
+G-suite break proof, §11.2). Apply latency (G7): `applyBoostColorFilter:` and
+`removeBoostColorFilter` record `boostColorApplyTime` from `mach_absolute_time()` converted to
+microseconds, which is the same clock as `base::TimeTicks::Now()` on macOS
+(`base/time/time_apple.mm:87`). They then read `boostColorApplyGeneration` from
+`CefGetBoostColorDebugState` in the same UI-thread turn. Automation computes latency as the
+`presentationTime` of the first report with `lastPaintGeneration` ≥ that generation, minus
+`boostColorApplyTime`. It never polls screenshots. OpenEngine receives the
+`OpenBoostColorPaint` process messages in its existing CEF client and stores them per frame.
 
 `OpenWeb` protocols gain the neutral mirror so OpenKit never imports OpenEngine
 (`docs/engine-api.md` layering): `WebBoostColorFilter` (20 `[Float]`),
@@ -929,14 +1010,17 @@ The adapter owns all engine color state. On every `BoostStore` mutation for a Pr
    (app-shell §4.5) no longer carries color at all for wheel Boosts: patterns cover future and
    live pages alike, including pages opened before the Boost existed (snapshot re-resolution,
    §5.5). The plan flow still carries CSS/JS/font/zaps and legacy filters (§9.4).
-3. Automation: add `boosts color` readback to the automation channel (registered patterns +
-   generation of the selected tab's context; the tab's `boostColorFilter` and
-   `boostColorFirstPaint`) in the same style as the existing `boosts` commands
-   (`docs/automation.md`). The e2e suite uses store-level Boost creation (existing automation)
-   plus this readback; no new "set matrix directly" test hook — tests go through the real store
-   path. Domain-level checks that need a second host use Chromium host-resolver rules
-   (`a.boost.test` / `b.boost.test` → 127.0.0.1) passed as an engine switch by the suite
-   (implementer checkpoint: `OEEngineConfiguration.additionalSwitches`, `docs/engine-api.md`).
+3. Automation: add `boosts color` readback to the automation channel in the same style as the
+   existing `boosts` commands (`docs/automation.md`). It returns the registered patterns, the
+   context's `boostColorGeneration` and `boostColorSnapshotsSent`, and for the selected tab
+   `boostColorFilter`, `boostColorApplyTime`, `boostColorApplyGeneration`,
+   `boostColorPaintReports`, and `pageBackgroundColor` (§9.2). The e2e suite uses store-level
+   Boost creation (existing automation) plus this readback; no new "set matrix directly" test
+   hook — tests go through the real store path. The suite passes two engine switches through
+   `OEEngineConfiguration.additionalSwitches` (`docs/engine-api.md`; implementer checkpoint):
+   host-resolver rules (`a.boost.test` / `b.boost.test` → 127.0.0.1) for checks that need a
+   second host, and `--open-boost-color-paint-reports` for the readback, except in the
+   zero-cost runs (§11.3).
 
 ### 9.4 Migration from the filter runtime
 
@@ -962,13 +1046,29 @@ when overlay headers under `cef/include/` change — `docs/engine-fork.md`, P1 s
 | Patch | Series file line (rationale after `#`) | Upstream files touched (manifest `paths:`) |
 |---|---|---|
 | `chromium/0401-open-boost-color-blink.patch` | `0401-open-boost-color-blink.patch  # Step 4R: per-frame HSLA remap in Blink paint (GraphicsContext, Gradient, LocalFrameView, shadow/text bypass sites)` | `third_party/blink/renderer/platform/graphics/graphics_context.{h,cc}`, `gradient.{h,cc}`, `third_party/blink/renderer/core/frame/local_frame_view.{h,cc}`, `third_party/blink/renderer/core/paint/box_painter_base.cc`, `text_painter.cc`, `decoration_line_painter.cc` (if the §5.3b branch is taken), `third_party/blink/renderer/core/layout/svg/layout_svg_resource_gradient.cc` (or `svg_object_painter.cc`), `third_party/blink/renderer/platform/BUILD.gn` (or its graphics sources `.gni` — checkpoint §5.2) |
-| `cef/0401-open-boost-color-api.patch` | `0401-open-boost-color-api.patch  # Step 4R: CefRequestContext/CefBrowser boost color API + snapshot send at RenderProcessWillLaunch` | `cef/include/cef_browser.h`, `cef/include/cef_request_context.h`, `cef/libcef/browser/browser_host_base.cc`, `cef/libcef/browser/request_context_impl.cc`, `cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc` (launch-send call only), `cef/BUILD.gn` (only if the `.gni` include needs a new entry — prefer extending `open_libcef_sources.gni` with no BUILD.gn change). **No `cef.mojom` edit, no `frame_impl.{h,cc}` hunks** (review B1 removes both) |
-| `cef/0402-open-boost-color-renderer-agent.patch` | `0402-open-boost-color-renderer-agent.patch  # Step 4R: boost color thread observer + per-frame agent creation` | `cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc` only (one include; observer in `RenderThreadStarted`, agent in `RenderFrameCreated`) |
+| `cef/0401-open-browser-client-hooks.patch` (owner patch, see below) | `0401-open-browser-client-hooks.patch  # Open hooks in ChromeContentBrowserClientCef, one forwarding line per feature: Boost color snapshot send at RenderProcessWillLaunch (Step 4R)` | `cef/libcef/browser/chrome/chrome_content_browser_client_cef.h`, `.cc`. Boost adds one include and one call after the base call in `RenderProcessWillLaunch` (`:321`); no `.h` change, because CEF already overrides it |
+| `cef/0402-open-renderer-client-hooks.patch` (owner patch, see below) | `0402-open-renderer-client-hooks.patch  # Open hooks in ChromeContentRendererClientCef, one creation line per feature: Boost color thread observer + frame agent (Step 4R)` | `cef/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc`. Boost adds one include, the observer in `RenderThreadStarted` (`:30`), and the agent in `RenderFrameCreated` (`:42`) |
+
+No other CEF file is patched. The API is global functions in an overlay header (§5.4), so
+`cef_browser.h`, `cef_request_context.h`, `browser_host_base.*`, and `request_context_impl.*`
+stay untouched. The C API and wrappers are generated and untracked
+(`docs/engine-fork.md:307-311`). `cef/BUILD.gn` stays untouched too: it belongs to 0302, whose
+generic `open_libcef_deps` hook already reads `open/open_libcef_sources.gni`. There is **no
+`cef.mojom` edit and no `frame_impl.{h,cc}` hunk** (review B1 removes both).
+
+**One owner patch per file.** Two logical patches must never share a path
+(`docs/engine-fork.md:119`); refresh captures every hunk of a path into the one patch whose
+manifest lists it. The ad-block plan puts its hooks in these same two files (adblock-fork P-3
+owns `chrome_content_browser_client_cef.{h,cc}`, P-4 owns `chrome_content_renderer_client_cef.cc`).
+Neither patch is in the CEF series on 2026-10-26 (`0302`, `0303`, `0310`, `0314`). So:
+- If ad-block's P-3/P-4 land first, Boost creates no patch for these files. It adds its lines to
+  their owner patches and appends "Boost color (Step 4R)" to those series rationales.
+- If Boost lands first, E2 creates the two feature-neutral owner patches above, and ad-block's
+  P-3/P-4 add their lines to them. Tell the ad-block owner in the E2 PR.
+Either way, each file ends with one owner patch.
 
 Never hand-edit patch hunks; refresh via `engine-refresh-patches` and prove the round-trip
-(`docs/engine-fork.md` patch workflow). Paths of different logical patches must not overlap —
-0402 exists solely so the renderer-client file (shared with the ad-block agent hook) carries one
-feature per patch.
+(`docs/engine-fork.md` patch workflow).
 
 ### 10.2 Overlay (`Engine/fork/src/`, mirrors `chromium/src`)
 
@@ -981,8 +1081,8 @@ open/boost_color/mojom/BUILD.gn                 # mojom("mojom") — open_engine
 open/boost_color/mojom/boost_color.mojom
 open/browser/boost_color/boost_color_registry.h
 open/browser/boost_color/boost_color_registry.cc   # registry + snapshot broadcast (§5.4)
-open/browser/boost_color/boost_color_api.h      # entry points the CEF forwarders + launch hook call
-open/browser/boost_color/boost_color_api.cc
+open/browser/boost_color/boost_color_api.h      # launch-send entry point for the 0401 hook
+open/browser/boost_color/boost_color_api.cc     # the cef_boost_color.h global functions (§5.4)
 open/renderer/boost_color/boost_color_thread_observer.h
 open/renderer/boost_color/boost_color_thread_observer.cc  # snapshot store + resolver (§5.5)
 open/renderer/boost_color/boost_color_frame_agent.h
@@ -1023,9 +1123,10 @@ precedent (`open/browser/tab_strip/*`).
 | `gradient.cc` | Stop-color handling moves with CSS gradient work | The `is_dark_mode_enabled_` block is the anchor; re-find it by that member name |
 | `local_frame_view.cc` (`PaintFrame`, `DocumentBackgroundColor`) | Lifecycle/paint churn | Anchors: the `PaintFrame` signature and the dark branch inside `DocumentBackgroundColor` |
 | `box_painter_base.cc`, `text_painter.cc` | Shadow/decoration paint churn (review r1: rebase risk concentrates here with `graphics_context.cc`) | Anchors: `ResolveShadowColor` and `CreateDrawLooper` by name; keep each boost branch ≤ 3 lines |
-| `chrome_content_renderer_client_cef.cc` | Shared with ad-block's agent hook (same two functions) | Series order: keep ad-block's renderer-hook patch and 0402 adjacent; resolve by keeping all creation lines |
-| `chrome_content_browser_client_cef.cc` `RenderProcessWillLaunch` | CEF launch-hook churn | One overlay call after the base call; re-add beside it. (No `ExposeInterfacesToRenderer` or `cef.mojom` hunk remains after B1 — two fewer shared files than the pull/push design) |
-| `cef/include/cef_browser.h`, `cef_request_context.h` | API additions per CEF branch | Re-run the version manager; never merge generated C API by hand |
+| `chrome_content_renderer_client_cef.cc` | One owner patch shared with ad-block's agent hook (§10.1) | Keep every feature's creation lines; each is one line, so re-adding them is trivial |
+| `chrome_content_browser_client_cef.cc` `RenderProcessWillLaunch` | CEF launch-hook churn; one owner patch shared with ad-block's network hooks (§10.1) | One overlay call after the base call; re-add beside it. (No `ExposeInterfacesToRenderer` or `cef.mojom` hunk remains after B1) |
+| `cef/include/cef_boost_color.h` (overlay) and the translator | Global-function rules or the experimental guard change per CEF branch | Re-run the version manager; never merge generated C API by hand. If the translator stops accepting `std::vector<float>`, switch to the 80-byte `CefBinaryValue` form (§5.4) |
+| `content/public/renderer/render_frame_observer.h`, `web_frame_widget.h` | `DidSetPageLifecycleState`, `DidCreateDocumentElement`, and `NotifyPresentationTime` signatures | Overlay code only (no hunk), but the build breaks on rename: re-find by name |
 
 ## 11. Acceptance checks (all must be able to fail)
 
@@ -1040,8 +1141,11 @@ No unit tests (rule 6). Two harnesses, both real-app/real-engine:
   `/usr/bin/lockf /tmp/open-onscreen-e2e.lock tools/e2e/engine_e2e.py --style chrome --only boostcolor`.
   The suite serves `tools/e2e/fixtures/boost-color/` from a local HTTP server on an ephemeral
   port and creates Boosts through the real automation/store path. Hosts: `a.boost.test` and
-  `b.boost.test` via host-resolver rules (§9.3) — same site, different hosts, same process, which
-  is exactly the B2 case — plus `127.0.0.1` vs `localhost` for the cross-process (OOPIF) case.
+  `b.boost.test` via host-resolver rules (§9.3) — same site, different hosts. They share a
+  process because origin-keyed processes are off by default in 156
+  (`kOriginKeyedProcessesByDefault`, `content/public/common/content_features.cc:875`), and the
+  gate checks that precondition through the report pids instead of trusting it. `127.0.0.1` vs
+  `localhost` give the cross-process (OOPIF) case.
 
 **Color space of every compare (review M5).** Window snapshots carry the display ICC profile;
 S2-22 values were converted from display ICC to sRGB (interaction-states §20.15 header). Rule:
@@ -1058,8 +1162,8 @@ unremapped values); G11 asserts exactly that.
 
 Timing checks follow review checklist §4: assert engine-reported scheduled values, not wall-clock
 polling; at most one real-time check per behavior, ≤ 3 attempts, printing lateness and load
-average. G6/G7 use the §5.4 engine readbacks (`boostColorFirstPaint`, registry generation, apply
-timestamps) — no screenshot polling anywhere.
+average. G5/G6/G7 use the §5.4 engine readbacks (`boostColorPaintReports`, registry
+generation, apply time and generation) — no screenshot polling anywhere.
 
 Fixture pages (shell helper, §12 S3): `fixture.html` (§8 capture fixture — the same file the user
 opens in Arc), `frame.html` (grey ramp, iframe content on both host pairs), `heavy-1.html` (5,000
@@ -1072,14 +1176,14 @@ bordered/text divs, tall), `heavy-2.html` (500 gradient/shadow boxes, tall), `he
 |---|---|---|
 | G1 | White page: Boost with S2-22 inputs (θ 252°, ρ 0.69) on `fixture.html`; `#FFFFFF` and `#FCF5E6` swatches | Op-log fill equals the builder prediction exactly; sRGB pixel within ΔE00 3 of `#E4E2F3` / `#D4C7F8` |
 | G2 | Dark: `#222222`, `#333333` swatches (same Boost) | Op-log exact; sRGB pixel within ΔE00 3 of `#56285D` / `#632F6F` |
-| G3 | Untouched: raster `<img>`, CSS `background-image`, canvas rect, luminance-mask coverage, default `<button>` and checkbox (M2 guard) | Each channel within 1 level (sRGB) of the same run's no-Boost baseline |
+| G3 | Untouched: raster `<img>`, CSS `background-image`, canvas rect, luminance-mask coverage, default `<button>` face and checkbox box (M2 guard; probe points away from label text, which is ordinary text paint and does remap) | Each channel within 1 level (sRGB) of the same run's no-Boost baseline |
 | G4 | Remove while showing: delete the Boost's color via automation; JS marker (`window.__alive`) survives; re-probe G1–G3 | All points back within 1 level of baseline; marker intact (no reload); op log shows original colors |
-| G5 | Frames, four cases. (a) same-origin child, own pattern matches; (b) **same-site different host** (`a.boost.test` page, `b.boost.test` child, pattern for b only, same process — the B2 case); (c) cross-process child (`127.0.0.1` → `localhost`), pattern for parent only; (d) `srcdoc` child under a boosted parent | (a) child remapped; (b) child remapped, parent not; (c) child unchanged; (d) child inherits the parent's remap (§6.4). Second pass with per-tab apply: all frames remapped. Child assertions read the child's own `#FFFFFF` swatch |
-| G6 | **No-flash proof:** register the pattern, then navigate (same-process and cross-site/process-swap variants). Read `boostColorFirstPaint` | First paint's generation ≥ the registration's generation, and its op log already carries remapped colors. Break arm (§11.2): register *after* navigation start → the same assertion must FAIL (generation too old), proving the gate can see a late arrival |
-| G7 | Live preview latency: store edit → `applyBoostColorFilter:` stamp vs first-paint-after-apply stamp (engine clocks, §9.2) | < 100 ms, ≤ 3 attempts, lateness + load average printed. Final color probed once (G1 method), not polled |
+| G5 | Frames, five cases. (a) same-origin child, own pattern matches; (b) **same-site different host** (`a.boost.test` page, `b.boost.test` child, pattern for b only — the B2 case); (c) cross-process child (`127.0.0.1` → `localhost`), pattern for parent only; (d) `srcdoc` child under a boosted parent; (e) **same-origin child under an unboosted parent** (`a.boost.test/` page, child at `/child/`, Boost path-scoped to `/child/` — in-process by definition, so the B2 case cannot fall back to OOPIF) | (a) child remapped; (b) and (e) child remapped, parent not, and the parent's and child's reports carry the **same pid** (else the case FAILs as "precondition not met", never passes as an OOPIF); (c) child unchanged, pids differ; (d) child inherits the parent's remap (§6.4). Second pass with per-tab apply: all frames remapped. Child assertions read the child's own `#FFFFFF` swatch and the child's report state |
+| G6 | **No-flash proof:** register the pattern, read `boostColorGeneration` (G_reg), then navigate (same-process and cross-site/process-swap variants). Read the main frame's report in `boostColorPaintReports` | `painted`, `firstPaintState == Value`, and `firstPaintGeneration ≥ G_reg`: the document's very first paint already used the registration. Break arm (§11.2): register *after* navigation start → the same assertion must FAIL (first paint at an older generation or state `None`), proving the gate can see a late arrival |
+| G7 | Live preview latency: store edit → `boostColorApplyTime` / `boostColorApplyGeneration` vs the `presentationTime` of the first report with `lastPaintGeneration` ≥ that generation (one clock, §9.2) | < 100 ms, ≤ 3 attempts, lateness + load average printed. Final color probed once (G1 method), not polled |
 | G8 | Performance (§11.3) | Budgets below |
 | G9 | Back/forward with **proven BFCache**: boosted page → other page → back; assert `pageshow.persisted === true` by eval (a fresh load fails the gate, not skips it) | Remapped on return; disable the Boost on the other page, back again → unremapped, `persisted` still true |
-| G10 | Coverage (M1/M2/m1/m9): box-shadow and text-shadow swatch pixels; browser-side document background readback on a white boosted page; black→white gradient midpoint; 50%-alpha overlay pair | Shadows within ΔE00 3 of builder prediction for their colors; background readback equals the remapped white (op-exact); gradient midpoint within ΔE00 3 of the per-pixel prediction (subdivision, §5.3); alpha pair within ΔE00 3 of remap-then-blend prediction (remap runs before compositing) |
+| G10 | Coverage (M1/M2/m1/m9): box-shadow and text-shadow swatch pixels; browser-side document background readback (`pageBackgroundColor`, from `WebContents::GetBackgroundColor()`, §5.4) on a white boosted page; black→white gradient midpoint; 50%-alpha overlay pair | Shadows within ΔE00 3 of builder prediction for their colors; background readback equals the builder's remapped white exactly, and equals plain white with the Boost removed; gradient midpoint within ΔE00 3 of the per-pixel prediction (subdivision, §5.3); alpha pair within ΔE00 3 of remap-then-blend prediction (remap runs before compositing) |
 | G11 | DOM truth: with the remap on, `getComputedStyle(document.body).backgroundColor` and canvas `getImageData` | Original values (paint-only effect, §3.3) |
 | G12 | Two Boosts, one host (one wheel, one legacy-filter); plus a path-scoped Boost (`/only/`) probed on matching and non-matching paths | Exactly one color system active (planner rule §9.4); path-scoped: remapped under the prefix from first paint (generation check as G6), unremapped outside it |
 
@@ -1113,9 +1217,9 @@ median reported.
 
 | Gate | Budget |
 |---|---|
-| **Zero cost when off (exact):** `snapshotCommandLog` for heavy-1, fork build with empty registry vs `CEF_SOURCE=cdn` build | **Byte-identical op logs.** This proves the §3.2 claim directly: no Boost → the recorded display list does not change at all. Also: registry generation stays 0 and no snapshot message is sent at launch (readback) |
+| **Zero cost when off (exact):** `snapshotCommandLog` for heavy-1, fork build with empty registry vs `CEF_SOURCE=cdn` build, both without the paint-report switch | **Byte-identical op logs.** This proves the §3.2 claim directly: no Boost → the recorded display list does not change at all. Also `boostColorSnapshotsSent == 0` on the fork build (no launch message, readback §9.2) |
 | Zero cost when off (time): Tracing paint+record total over the heavy-1 scroll script, fork (empty registry) vs CDN build | Δ ≤ 2% (paired medians). The op-log identity above is the real gate; this bounds anything outside recording |
-| Navigation with empty registry | No budget needed beyond identity: no IPC exists to pay for (empty registry sends nothing, §4). Assert `boostColorFirstPaint.generation == 0`, not a duration |
+| Navigation with empty registry | No budget needed beyond identity: no IPC exists to pay for (§4). Without the paint-report switch, load heavy-1, navigate 10 times (same- and cross-process), then assert `boostColorSnapshotsSent == 0` and `boostColorGeneration == 0`. A count, not a duration. Break arm: the same run with one registered-then-removed pattern must read `boostColorSnapshotsSent > 0` |
 | One Boost color: Tracing paint+record total per scroll pass on heavy-1/2/3, remap on vs off, same build/run | On ≤ off × 1.10 per fixture, and rAF p95 stays ≤ 8.3 ms (120 Hz) on each. Scroll replay after first paint records nothing new, so steady-scroll cost should be ~0; > 10% means invalidation is over-firing |
 | Toggle: apply a matrix to the visible heavy-1 page | One full repaint only: Tracing shows one paint of the view between apply stamp and first-paint stamp (G7's numbers); no second full paint within the following 500 ms at rest |
 | Drag: 2 s of 60 Hz snapshot updates to the visible page | rAF p95 during drag ≤ pre-drag p95 + one vsync step (8.3 ms); if missed, App coalescing drops to 30 Hz (§6.2) and the gate reruns. Lateness + load printed |
@@ -1132,8 +1236,8 @@ parallel from day one. Estimates are guesses for planning, not commitments.
 | Step | Owner | Work | Proof before moving on |
 |---|---|---|---|
 | E1 | engine | Blink filter + per-frame hook + gradient + §5.3b branches (§5.1–5.3b, patch 0401). No transport yet; the tri-state is unreachable (every view `kUnset`, context null) so the patch is inert — do not add an env-var back door | Dev build green (`engine-build`, own session per rule 9); cefsimple loads example.com; op-log identity spot check (§11.3 zero-cost method) on a fixture page; patch round-trip (`engine-apply` after manual revert, byte-identical — the P1 proof shape) |
-| E2 | engine | Registry + snapshot broadcast + thread observer + frame agent + blink glue (§5.4–5.5, patches 0401-cef, 0402). No scheme (§5.6) | Dev build green; with S2's App wiring behind the capability check, G1–G3 pass by hand on the fixture |
-| E3 | engine | CEF API surface (§5.4) + translator run + OpenEngine ObjC incl. first-paint readback (§9.2) | App builds against the new headers (`heavy.sh tools/build.sh`); G1–G12 pass in the suite except perf |
+| E2 | engine | Registry + snapshot broadcast + thread observer + frame agent + blink glue (§5.4–5.5; the two CEF owner-patch hooks, §10.1). No scheme (§5.6) | Dev build green; patch round-trip; the zero-cost op-log identity still holds with the transport in (an empty registry sends nothing). Remap behavior is first proven in E3, once the API exists — no temporary registration back door |
+| E3 | engine | CEF global functions (§5.4) + translator run + OpenEngine ObjC incl. the paint readback and debug state (§9.2) | App builds against the new headers (`heavy.sh tools/build.sh`); G1–G12 pass in the suite except perf |
 | E4 | engine | Distrib (`engine-distrib --run` in its own session), app fetch, full e2e | `--only boostcolor` green incl. all §11.2 break arms recorded |
 | E5 | engine | Perf gates (§11.3); tune only if a gate misses (LRU size, invalidation scope, drag rate — in that order) | G8 table filled with measured numbers in the PR |
 | S1 | shell | `BoostColorMatrix.swift` (two-stage builder) + planner fields + harness numeric/continuity cases (§9.1) | `boosts` harness green under `verify-all.sh --only boosts` (through `heavy.sh`) |
@@ -1177,7 +1281,7 @@ with commands, not prose.
 | Item | Result | Evidence |
 |---|---|---|
 | 1. Input and memory limits | N/A (docs) — planned: matrix is fixed 20 floats at every boundary, finite and \|m\| ≤ 16 refused otherwise (review m3); registry caps 1024 patterns / 256 per-browser values, pattern ≤ 253 chars, prefix ≤ 1024; LRU 256 | §5.4, §9.1, §9.2 |
-| 2. Lifetimes and callbacks | N/A (docs) — planned: per-tab registry entries cleared on browser close; equal-value resolutions no-op; snapshot broadcast is one-way (no callback can free its caller); browser-id reuse cannot inherit a value | §6.1, §5.2, §5.4 |
+| 2. Lifetimes and callbacks | N/A (docs) — planned: per-tab registry entries cleared when the browser's `WebContents` is destroyed (registry-owned observer); the presentation callback re-reads the frame through the agent and drops the report if the frame is gone; equal-value resolutions no-op; snapshot broadcast is one-way (no callback can free its caller); browser-id reuse cannot inherit a value | §6.1, §5.2, §5.4 |
 | 3. Real event paths | N/A — no keys or focus paths | — |
 | 4. Checks that prove the change | PASS for the plan: every gate names its failing mode; break arms cover the CDN build, late registration (G6), and the B2 install-site variant; op-log asserts are color-management-free, pixel asserts state sRGB | §11 |
 | 5. UI and motion | N/A (docs) — no UI in this plan; the editor plan owns Reduce Motion | — |
