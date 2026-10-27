@@ -5355,6 +5355,10 @@ def space_manager_checks(results, tmp, config, style):
                 and recovered['contextValid'], state=recovered)
         # Native nil-target undo stays menu-owned. Other context keys exercise
         # the same OEApplication path and leave no panels or command bar open.
+        # A selected Today tab makes accidental browser Cmd+W observable as an archive.
+        app.call('window-focus', id=second, activate=True); app.call('select', tab=other)
+        close_fixture = app.tab(other)
+        app.call('library-open')
         key_states = []
         for key, modifiers in [('l', ['cmd']), ('escape', []), ('return', [])]:
             library_key(app, key, modifiers)
@@ -5364,13 +5368,15 @@ def space_manager_checks(results, tmp, config, style):
         bar_after_escape = app.call('commandbar-state')
         app.call('library-open')
         tabs_before_close = sorted(t['id'] for t in app.call('tabs'))
+        selected_before_close = app.call('window-state')['selected']
         library_key(app, 'w', ['cmd'])
         tabs_after_close = sorted(t['id'] for t in app.call('tabs'))
-        require('library_focus_keys', all(k['library']['visible'] and k['library']['key'] for k in key_states)
+        require('library_focus_keys', close_fixture['section'] == 'today' and close_fixture['selected'] and selected_before_close == other
+                and all(k['library']['visible'] and k['library']['key'] for k in key_states)
                 and all(not k['bar'].get('presented') for k in key_states if k['key'] == 'escape')
                 and not bar_after_escape.get('presented') and not state(app)['visible']
                 and len(app.call('shell-windows')) == 1 and tabs_before_close == tabs_after_close,
-                keys=key_states, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
+                keys=key_states, closeFixture=close_fixture, selectedBeforeClose=selected_before_close, barAfterEscape=bar_after_escape, tabsBeforeClose=tabs_before_close, tabsAfterClose=tabs_after_close, state=state(app))
     finally:
         dialogs, cleanup_errors = [], []
         owned_pids.update(space_manager_owned_processes(bundle))

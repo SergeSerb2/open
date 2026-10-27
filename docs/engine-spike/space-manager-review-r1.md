@@ -4,7 +4,7 @@ The dedicated Manager now sends row intents through the live App sidebar handler
 
 Browser create/close mutations now run with undo registration suppressed only for that mutation. The helper restores the caller's prior registration state. Library Cmd+Z immediately after either lifetime step undoes a preceding Space drag exactly once. Saved window IDs match the real shell controllers; the explicit retained-last-window rule is checked separately.
 
-The parent minor fixes from `d5f0959` remain. The superseded command bar hook and early command branches stay removed. Menu, command bar, App command and Space-header entry all pass through the single existing command path. Main #93 and then main `f668a90` (#94 context-menu allowlist and Site Control) were merged. Both appended docs sections and the auto-merged e2e branches are preserved. No StepD or Package.swift conflict occurred.
+The parent minor fixes from `d5f0959` remain. The superseded command bar hook and early command branches stay removed. Menu, command bar, App command and Space-header entry all pass through the single existing command path. Main #93, then `f668a90` (#94 and Site Control), and finally the frozen `8b83c7e` snapshot (M5 media/model and #122 window chrome) were merged. Both appended docs sections, Manager suite choice and main `--window-chrome-only` branch are preserved. No StepD or Package.swift conflict occurred.
 
 | Review finding | Result and evidence |
 |---|---|
@@ -20,12 +20,12 @@ The parent minor fixes from `d5f0959` remain. The superseded command bar hook an
 
 | Validation | Result |
 |---|---|
-| Real App build after final main merge | PASS; `postmerge/build.log` |
-| Real Manager flow | 41 PASS, 0 FAIL; `postmerge/final-positive-results.json` |
+| Real App build after final main merge | PASS; `frozen-main/build.log` |
+| Real Manager flow | 41 PASS, 0 FAIL; `frozen-main/final-positive-results.json` |
 | Intentional early failure with real Library open | Expected FAIL; real manager/provenance PASS and both cleanup receipts PASS |
-| Focused package build | PASS, zero warnings/errors (50 s) |
-| settings-preview | 37/37 PASS (81 s) |
-| sidebar-render | 559/559 PASS (106 s), rerun after final main merge |
+| Focused package build | PASS, zero warnings/errors (66 s) |
+| settings-preview | 37/37 PASS (80 s) |
+| sidebar-render | 559/559 PASS (107 s), rerun after frozen main merge |
 
 | Mutation | Expected real FAIL | Restored |
 |---|---|---|
@@ -35,10 +35,10 @@ The parent minor fixes from `d5f0959` remain. The superseded command bar hook an
 | model-only-select | `rebound_manager_intents` | PASS |
 | standard-preview-prefs | `E5_menu_real_manager` | PASS |
 
-The five negative proofs ran before the final main merge and before the optional browserless keyboard path was removed. Both major-fix source files are byte-identical, and all five expected failure points precede the removed path. The complete Manager e2e region is unchanged since fix commit `9a649d8`, after that trim. Focused checks and both real App flows were rerun after the final main merge. Every mutation is restored byte-for-byte in `finally`. Both major source files match the recorded originals. All negative and positive runs use the pinned new engine, fresh synthetic roots/cache/preferences and real App events. Every cleanup reports zero remaining owned dialogs, processes and windows. Outer/heavy/on-screen locks are retained, with one outer acquisition per active job and no build during an on-screen run.
+The five negative proofs ran before the final merges and before removal of the optional browserless keyboard path. Both major-fix source files are byte-identical, and all five failures precede that removed path and the later focus-key tail. Named Manager helpers and the suite prefix through the negative checks match fix commit `9a649d8`. Focused checks and both real App flows were rerun on frozen main `8b83c7e`. The final Cmd+W check selects a Today tab so accidental browser close would archive it and fail. Every mutation is restored byte-for-byte in `finally`. Both major source files match the recorded originals. All negative and positive runs use the pinned new engine, fresh synthetic roots/cache/preferences and real App events. Every cleanup reports zero remaining owned dialogs, processes and windows. Outer/heavy/on-screen locks are retained, with one outer acquisition per active job and no build during an on-screen run.
 
-The recorded Vendor framework SHA256 is `61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8`. Signing-aware embedded and normalized fingerprints are in the [receipt](results-space-manager-review-r1.json). Runtime provenance is the M5 21:38 PDT copy, recorded 21:23:54, main `4c40ebd` plus #93; App source main is `f668a90`.
+The recorded Vendor framework SHA256 is `61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8`. Signing-aware embedded and normalized fingerprints are in the [receipt](results-space-manager-review-r1.json). Runtime provenance is the M5 21:38 PDT copy, recorded 21:23:54, main `4c40ebd` plus #93; App source main is frozen `8b83c7e` (`8b83c7e827db2d0bb52d49cfaaf75b0984445c74`); the built product source head is `d6cbb292513e0f291a2c32718b04b86c1d809876`. Exact current source hashes are in the receipt. The fully verified pushed `a824af3` checkpoint remains in ancestry.
 
 Local raw receipts, logs and capture-ready rest/hover PNG paths are recorded in that JSON under `.re/space-manager/review-r1/`. No matching C2 Manager reference exists on M1, so no pixel comparison is claimed. Parent/M5 owns remaining review and the counted full merge gate. Earlier full-gate receipts at `7c07aa6`/main `49b5660` remain historical: 18 PASS, three known M1 baseline FAIL rows and the extra private-input `space-pad-compare` SKIP. No new full gate or load campaign was run for this checkpoint.
 
-No extra Site Control/context-menu/extension suite or new full gate was run for this pause. Those protected main changes retain their M5 ownership. No PR or watch is opened. This is a verified, unmerged pause checkpoint.
+The user froze integration at the already fetched `8b83c7e` snapshot at 23:36 PDT. No further fetch is allowed. Before push, the local `origin/main` snapshot is merged again; later main movement is later work. No extra Site Control/context-menu/extension/window-chrome suite or new full gate was run for this pause. Those protected main changes retain their M5 ownership. No PR or watch is opened. This is a verified, unmerged pause checkpoint.
