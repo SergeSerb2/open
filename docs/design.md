@@ -47,7 +47,7 @@ Every catalog color from `design-tokens.md` §1 is a `DesignColor` (light and da
 | "Clear" | `SidebarForeground`; `SidebarForegroundDarker` on hover | same tokens | F0041 |
 | Row close and unload glyphs | black 0.56 `GrayA11` | `GrayA11` | F0013 ΔE 1.39, F0015 1.23 |
 | Switcher, other Spaces | emoji in grayscale (Rec. 709 luma) at opacity 0.55 | same | F0001 two-channel fit gives 0.48 at full coverage; 0.55 matches the darkest pixels at 12 pt |
-| Tooltip | fill theme `light.title`; text theme `light.background` (guess); keycaps text at 18 % (guess) | same | F0021–F0033 fill exact |
+| Tooltip | fill theme `light.title`; default theme (no stored palette) `#0A0D4F`; text theme `light.background` (guess); keycaps text at 18 % (guess) | same | F0021–F0033 fill exact (themed Space 1, `#320E00` = its stored `light.title`). Default dark theme: `#0A0D4F` exact, 2026-10-26 (S2 14b/0024, 03/0010, 03/0014, 19/0025; sidebar `#252538` confirms the default theme). No default-theme tooltip exists in macOS Light (S2 item 20), so the same value there is a guess from the role. `re/interaction-states.md` §5 |
 | Split cells in a selected split row | black 0.07 `TabCellChildBackground` (guess: no light capture) | white 0.07 | F0081 ΔE 1.34 / 1.39 |
 | Peek badge plate | `TabCellChildBackground` | same | F0090 ΔE 0.76 (F0101 white ≈ 0.075) |
 | Source row while its Peek shows | `SidebarItemBackground` (black 0.05; guess) | white 0.10 | F0090 ΔE 0.09 |
@@ -64,7 +64,7 @@ All values are points at sidebar width 228, top-left origin. Widths that scale u
 | URL field | `[8, 46, W − 16, 36]`, radius 10 continuous; magnifier `[14, 52, 24, 24]`; placeholder origin x 42, baseline y 69; host origin x 21; copy and Site Control `[W − 70 / W − 42, 49, 30, 30]`; hover darkens the fill, same frame | measured, text origin fitted |
 | Favorites | inset 8, gaps 8, tile height 47, radius 10; columns = balanced rows of at most 4 (1, 2, 3, 4 → one row; 5 and 6 → 3 columns, the short row left-aligned); no favorites: an 8 pt section | measured for 1–6 (session 2 07/0043–0139, F0016); 7 and more guess. **Change pending:** with no Favorites Arc shows the dashed "Drag to add Favorites" card (105 pt section at width 228) until it is dismissed; our 8 pt section is fitted to the window-only sidebar (§16) and stays only for the dismissed state (guess) (`re/interaction-states.md` §20.3) |
 | Space header | 36 pt band; icon frame `[13, 5, 26, 26]`; title origin x 44, baseline 23; hover fill `[8, 0, W − 16, 36]`, chevron in place of the icon, "…" at the right. Without favorites the band starts at y 90, 8 pt below the URL field | measured, text origin fitted |
-| Tab list | 3 pt spacer row, then 41 pt rows; favicon `[17, y + 11, 18, 18]` (16 ink); title origin x 44, baseline y + 25; fill `[8 + indent, y + 2, W − 16 − indent, 36]`, radius 10 continuous | measured, baseline fitted (ink bottom at y + 24) |
+| Tab list | 3 pt spacer row, then 41 pt rows; favicon `[17, y + 11, 18, 18]` (16 ink); title origin x 44, baseline y + 25; fill `[8 + indent, y + 2, W − 16 − indent, 36]`, radius 12 continuous | measured, baseline fitted (ink bottom at y + 24). Radius corrected 2026-10-26: selected-row corners fit 12 continuous in session 2 (14b/0014, 03/0001, 16/0004) and session 1 (F0015, F0066, F0084); see `re/interaction-states.md` §3 |
 | Close / unload | `[W − 39, y + 7, 26, 26]`; the title then ends at its left edge | measured |
 | Folders | 16 pt indent per level; folder title 14 Semibold | measured |
 | Split row | cells of `(W − 16 − indent − 4) / n`; icon at cell + 0, title at cell + 28, divider 10 pt left of the next cell | measured at depth 1 (icons x 33 / 129) |
@@ -248,7 +248,7 @@ A same-parent move downward subtracts one, because the model counts the position
 
 Context menus are native `NSMenu`s built per target, in the captured order: Today tab (F0115), pinned tab (F0116), folder (F0119), and Space on the title or empty space (F0117). Favorite and bottom plus menus were guesses; capture session 2 shows both (`re/interaction-states.md` §20.3, §20.8). **Change pending:** Favorite tile: Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute · Customize Page… · Edit Pinned Page ▸ · — · Open in Split View · Duplicate · Move to ▸ (Profiles, not Spaces) · — · Remove Favorite. Plus button: an Arc popover with a bottom arrow, not an `NSMenu`: New Space · New Folder · — · New Easel ⌃⇧E · New Boost · — · New Split ⌃⇧= · New Tab ⌘T (Easels are out of scope for Open). Session 2's Today tab menu is longer than F0115's (Share, Change Icon…, Rename…, Mute, Customize Page…, Duplicate, and Archive Tab · Archive Tabs Below with the ⌥ alternates Archive Other Tabs · Archive Tabs Above); why F0115 was shorter is not known. The split row menu follows Arc's menu builder (`re/menus-and-hotkeys.md`, "Split row menu"): Separate All Tabs · Add Tab… · Convert to Vertical/Horizontal Split View · — · Tab Options · one submenu per pane (Separate from Split View · — · Mute · Copy Link · Copy Link as Markdown · — · Archive Item) · — · Duplicate · Move to · — · Archive Item. Each item sends an intent. "Rename…" starts the inline editor.
 
-Tooltips are our own capsule (`TooltipView`) in a borderless child panel: 27 pt tall, radius = height / 2; two lines 42 pt. Fill is the theme's `light.title`. Keycaps follow the label. Placement: below toolbar buttons, above the bottom bar, beside the pointer on rows. Delay 0.6 s and fades are guesses.
+Tooltips are our own capsule (`TooltipView`) in a borderless child panel: 27 pt tall, radius = height / 2; two lines 42 pt. Fill is the theme's `light.title`. A Space with no stored theme uses `#0A0D4F` for that role (measured, session 2; see §2.1). Keycaps follow the label. Placement: below toolbar buttons, above the bottom bar, beside the pointer on rows. Delay 0.6 s and fades are guesses.
 
 ### 5.7 Animations and offscreen windows
 
@@ -964,29 +964,59 @@ captured weakly at show time, so resignation still dismisses after the owner
 view is gone. A real-time timer check advances the main run loop in 5 ms slices
 for at most 0.6 s and requires the 0.5 s deadline within ±50 ms.
 
-## 22. Media tokens (review r1, 2026-10-26)
+## 22. Media tokens (review r1, 2026-10-26; mini player from capture session 2)
 
-No Arc capture yet shows these surfaces. **Code** means a value decoded from
-Arc's types; **fact** means a measured existing sidebar token; **guess** means
-Open's provisional design pending capture session 2. The full specification
-and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
-[features-advanced.md](re/features-advanced.md) §8 (PP-1…PP-22).
+**Code** means a value decoded from Arc's types or strings (PP-n). **fact**
+means measured in a capture frame (cited; S2 = capture session 2,
+notation in [interaction-states.md](re/interaction-states.md) §20.0); a
+**fit** is the best candidate against a frame. **guess** means Open's
+provisional design. The full mini-player spec, with the evidence and the
+method, is [media-pip.md](plans/media-pip.md) §13 (Step 3b); the PiP spec
+is §4.4. Rules PP-1…PP-22 are in
+[features-advanced.md](re/features-advanced.md) §8.
+
+Mini player (Step 3b). Frames: S2 14b/0012 (no card), 14b/0014 (rest),
+14b/0024 (expanded, volume plate), 16/0005 (collapsed stack), 16/0012
+(expanded stack).
+
+| Token | Value | Status |
+|---|---|---|
+| Container | `C = 8 + stackHeight`: 8 pt between the tab list and the stack, 0 pt to the bottom bar | fact S2 14b/0014 (card `[8, 1001, 212, 33]`; the pager ends at 993) |
+| Row and card height | rows 33; a card is 33 at rest, 66 expanded (title row + controls row) | fact S2 14b/0014, 14b/0024 |
+| Card frame | x 8, width W − 16 | fact S2 14b/0014 |
+| Corner | 10, continuous | fit S2 14b/0014, 14b/0024 (Core Animation renders; RMS 0.139 vs 0.148 at 9 and 0.163 at 10 circular) |
+| Fill | the Space palette's `backgroundExtra` for the content appearance, opaque. Default theme: dark `#050627`, light `#FDFDFF` | dark default fact S2 14b/0014; themed dark derived (media-pip §13.4.2); light guess |
+| Shadow | black 0.21, radius 4, offset 0 | fit S2 14b/0014 vs 14b/0012 (dark); light guess |
+| Controls | 5 slots of 24 × 24 at row y 5; `x = 10 + k·(cardW − 44)/4` on the pixel grid: favicon, previous, play/pause, next, volume | fact S2 14b/0014, 16/0005 (three card widths) |
+| Favicon | 16 pt, centered in slot 0 | fact S2 14b/0014 |
+| Glyphs | SF 14 pt Medium: `backward.end.fill`, `play.fill`/`pause.fill`, `forward.end.fill`, `speaker.wave.3.fill` (muted `speaker.slash.fill`), `xmark`; `pip` 12 pt Medium | sizes Code PP-16; names fact (AX symbol descriptions, S2 14b/0014, 14b/0024); weight fit (ink mass); muted guess |
+| Glyph color | white 0.66 / black 0.50 (`PlaybackControlForeground`) | Code design-tokens §1.8; dark fact S2 14b/0014 (ΔE00 0.65) |
+| Disabled glyph | white 0.22 / black 0.17 | dark fact S2 14b/0014 (ΔE00 0.43); light guess |
+| Hover plate | 24 × 24, radius 6; `GrayA4` (white 0.08 / black 0.07); pressed `GrayA6` | dark fact S2 14b/0024, 16/0012 (ΔE00 0.49); light and pressed guess |
+| Title row | title x 14, baseline 22, ends 10 pt before PiP `[cardW − 58, 5]`; Close `[cardW − 34, 5]`; shown only while expanded | fact S2 14b/0024, 16/0012 |
+| Title type | 13 Regular; `ForegroundPrimary` (white 0.80 / `#0E0F10` 0.90); one line, tail "…"; no marquee | dark fact S2 14b/0024 (ΔE00 0.24; Core Text fit); light guess |
+| Collapsed stack | back card i: 7·i pt up, 5·i pt inset per side, opacity 1 − 0.2·i, not masked | geometry fact S2 16/0005 (AX); opacity fit (ΔE00 0.46 / 0.52) |
+| Expanded stack | 66 pt cards, 5 pt apart, newest at the bottom; one card also expands on hover | fact S2 16/0012; the single-card hover derived (S2 14b/0024 vs 0025) |
+| Media tooltip | beside the pointer; delay 0.45 s | placement fact S2 14b/0024; delay Code PP-6; titles Code PP-16 |
+| Motion | hover: spring response 0.3 / damping 1, collapse 0.3 s after exit; title rows fade in 0.15 s, out 0.12 s; first card 0.22 s; Reduce Motion 0.1 s fades | guess (no capture timed it) |
+| Volume drawer | a 33 pt row above the controls while expanded (card 99); track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | guess (not captured; behind EM-2) |
+
+Removed by Step 3b (superseded by S2 facts): the 68 pt card with an
+always-on title row, the hover fill, the 4/4 margins, the stack values
+5 / 6 / 1 − 0.3i with a mask and a 0.5 pt top edge, the 6 pt gap, the
+marquee (fade 4 / 8, delay 3 s, 30 pt/s, gap 32), and the `.above` tooltip.
+
+Picture in Picture:
 
 | Surface / token | Value | Status |
 |---|---|---|
-| Mini-player card | Insets 8/4, height 68, corner 10; title 13 Medium | Insets/corner reuse sidebar facts; height/font/fill guess |
-| Mini-player controls | 24×24, radius 6; foreground black .50 / white .66 | Code PP-16 / design-tokens §1.8; placement guess |
-| Media tooltip | Above, delay .45 s | Code PP-6; title wording PP-16 |
-| Volume drawer | +28 pt; track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | Guess; inset correction from design r1 |
-| Collapsed stack | Offset 5, width inset 6, opacity 1−.3i; back-card top edge .5 pt separator | Guess; top edge added by design r1, confirm S6 |
-| Expanded stack | Gap 6; collapse delay .3 s; spring response .3/damping 1 | Guess, PP-14 names states |
-| Marquee | Fade 4 left/8 right; delay 3 s; speed 30 pt/s; gap 32 | Left fade code PP-17; remainder guess |
 | PiP window | Corner 12, minimum 284×160 landscape / 160×284 portrait, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
 | PiP corners | Buttons 28×28, padding 8 compact / 10 regular | Code PP-6 |
 | PiP scrubber | Bar 4/6 pt, hit 20; precision step 40 pt, cap 8× | Hit height code PP-7; other geometry/math Open design |
 | Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
 
-Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.
+Keep guesses marked until S1, S2, S4, S5, S7, S8, S10, and S11 establish
+pixel and timing evidence (media-pip §11, §13.7).
 
 Media review-r1 PiP refinements (Open design; no Arc capture yet): SF skip glyphs
 20/16 pt, hidden below 168 pt; no center plate at rest; whole-window black .25

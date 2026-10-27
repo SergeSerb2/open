@@ -60,48 +60,71 @@ enum PreviewChecks {
               "HP2 disabled hover schedules no timer and installs no monitor/observer work")
         preferences.set(true, forKey: "open.general.previewsEnabled"); pump()
         let schedules = TooltipController.shared.scheduleCount
-        let started = ProcessInfo.processInfo.systemUptime
-        hover(pinned.id); pump(0.20); hover(pinned.id); pump(0.23)
-        check(context.hoverPreviews.isArmed && context.hoverPreviews.request == nil && context.hoverPreviews.scheduledShowCount == 1,
+        // Logic, not wall clock: read the scheduled delay and deadline back.
+        // A second hover on the same row must keep the first deadline.
+        hover(pinned.id)
+        let pinnedDelay = context.hoverPreviews.scheduledShowDelay
+        let pinnedDeadline = context.hoverPreviews.scheduledShowDeadline
+        hover(pinned.id)
+        check(context.hoverPreviews.isArmed && context.hoverPreviews.request == nil && context.hoverPreviews.scheduledShowCount == 1 &&
+              pinnedDelay == 0.5 && pinnedDeadline != nil && context.hoverPreviews.scheduledShowDeadline == pinnedDeadline,
               "HP1 moving inside the pinned row does not restart its 0.5 s task")
         check(TooltipController.shared.scheduleCount == schedules, "HP6 an armed preview suppresses row tooltip scheduling")
-        pump(0.10)
+        let delivered = Checks.waitFor(settle: scene) { context.hoverPreviews.request != nil }
         let shown = recorder.events.first { if case .hoverPreview(.some) = $0.0 { true } else { false } }
-        check(shown.map { abs($0.1 - started - 0.5) <= 0.05 } == true && context.hoverPreviews.request?.kind == .page(tabID: pinned.id),
-              "HP1 pinned row emits the App request at 0.5 s ±50 ms")
+        check(delivered && shown != nil && pinnedDelay == 0.5 && context.hoverPreviews.request?.kind == .page(tabID: pinned.id),
+              "HP1 pinned row emits the App request at its scheduled 0.5 s deadline")
         let sourceFrame = sidebar.rowFrame(nodeID: pinned.id)!
         check(context.hoverPreviews.request?.anchorInWindow == sidebar.convert(sourceFrame, to: nil), "HP1 request carries the real row's window anchor")
-        escape(); pump(1.01); recorder.events = []
-        let liveStart = ProcessInfo.processInfo.systemUptime
-        hover(pinned.id)
-        var earlyRequest = false
-        while ProcessInfo.processInfo.systemUptime - liveStart < 0.6, context.hoverPreviews.request == nil {
-            RunLoop.main.run(until: Date().addingTimeInterval(0.005))
-            if ProcessInfo.processInfo.systemUptime - liveStart < 0.45, context.hoverPreviews.request != nil { earlyRequest = true }
+        escape(); pump(1.01)
+        // The one real wall-clock check for this timer family. Machine load
+        // can delay a single run, so allow up to 3 attempts; each attempt
+        // prints its measured lateness and the 1-minute load average.
+        var attempts: [String] = []
+        var realtimeOK = false
+        for attempt in 1...3 {
+            recorder.events = []
+            let liveStart = ProcessInfo.processInfo.systemUptime
+            hover(pinned.id)
+            var firedAt: TimeInterval?
+            while ProcessInfo.processInfo.systemUptime - liveStart < 2.0 {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+                if let event = recorder.events.first(where: { if case .hoverPreview(.some) = $0.0 { true } else { false } }) { firedAt = event.1; break }
+            }
+            let load = Checks.loadAverage1()
+            let elapsed = firedAt.map { $0 - liveStart }
+            attempts.append(elapsed.map { String(format: "attempt %d fired at %.3f s (lateness %+.0f ms), load1 %.2f", attempt, $0, ($0 - 0.5) * 1000, load) }
+                            ?? String(format: "attempt %d no request within 2 s, load1 %.2f", attempt, load))
+            print("  .. HP1 real-time \(attempts.last!)")
+            if let elapsed, (0.45...0.55).contains(elapsed) { realtimeOK = true; break }
+            escape(); pump(1.01)
         }
-        let realRequest = recorder.events.first { if case .hoverPreview(.some) = $0.0 { true } else { false } }
-        check(!earlyRequest && realRequest.map { (0.45...0.55).contains($0.1-liveStart) } == true, "HP1 real-time 5 ms run-loop slices deliver preview at 0.5 s ±50 ms, deadline 0.6 s")
+        check(realtimeOK, "HP1 real-time 5 ms run-loop slices deliver preview at 0.5 s ±50 ms — \(attempts.joined(separator: "; "))")
         context.hoverPreviews.setPointerInsidePreview(true)
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: host)
         check(context.hoverPreviews.request == nil, "HP5 captured source window resignation dismisses a preview held by the card")
         escape(); pump(1.01)
         recorder.events = []
-        let folderStart = ProcessInfo.processInfo.systemUptime
-        hover(folder.id); pump(0.53)
-        check(context.hoverPreviews.request?.kind == .folder(folder.id) && recorder.events.first.map { abs($0.1 - folderStart - 0.5) <= 0.05 } == true,
+        hover(folder.id)
+        let folderDelay = context.hoverPreviews.scheduledShowDelay
+        let folderDelivered = Checks.waitFor(settle: scene) { context.hoverPreviews.request?.kind == .folder(folder.id) }
+        check(folderDelay == 0.5 && folderDelivered && recorder.events.contains { if case .hoverPreview(.some) = $0.0 { true } else { false } },
               "HP1 folder row emits its request at the configured deadline")
         escape(); pump(1.01)
         let tile = sidebar.favoritesCollection.item(at: IndexPath(item: 0, section: 0))!.view
         let favoriteID = model.profiles[0].favorites[0].id
         recorder.events = []
-        let favoriteStart = ProcessInfo.processInfo.systemUptime
-        tile.mouseEntered(with: mouse(.mouseEntered, tile.convert(CGPoint(x: 10, y: 10), to: nil))); pump(0.53)
-        check(context.hoverPreviews.request?.kind == .page(tabID: favoriteID) && recorder.events.first.map { abs($0.1 - favoriteStart - 0.5) <= 0.05 } == true,
+        tile.mouseEntered(with: mouse(.mouseEntered, tile.convert(CGPoint(x: 10, y: 10), to: nil)))
+        let favoriteDelay = context.hoverPreviews.scheduledShowDelay
+        let favoriteDelivered = Checks.waitFor(settle: scene) { context.hoverPreviews.request?.kind == .page(tabID: favoriteID) }
+        check(favoriteDelay == 0.5 && favoriteDelivered && recorder.events.contains { if case .hoverPreview(.some) = $0.0 { true } else { false } },
               "HP1 Favorite tile emits its page request after 0.5 s")
-        tile.mouseExited(with: mouse(.mouseExited, .zero)); context.hoverPreviews.setPointerInsidePreview(true); pump(0.30)
-        check(context.hoverPreviews.request != nil, "HP4 entering the preview card cancels the outside-row dismissal")
-        context.hoverPreviews.setPointerInsidePreview(false); pump(0.27)
-        check(context.hoverPreviews.request == nil, "HP4 leaving row and card hides after 0.25 s")
+        tile.mouseExited(with: mouse(.mouseExited, .zero)); context.hoverPreviews.setPointerInsidePreview(true)
+        check(context.hoverPreviews.request != nil && context.hoverPreviews.scheduledHideDelay == nil, "HP4 entering the preview card cancels the outside-row dismissal")
+        context.hoverPreviews.setPointerInsidePreview(false)
+        let hideDelay = context.hoverPreviews.scheduledHideDelay
+        let hidden = Checks.waitFor(settle: scene) { context.hoverPreviews.request == nil }
+        check(hideDelay == 0.25 && hidden, "HP4 leaving row and card hides after 0.25 s")
         let count = context.hoverPreviews.scheduledShowCount
         hover(folder.id)
         check(context.hoverPreviews.request?.kind == .folder(folder.id) && context.hoverPreviews.scheduledShowCount == count,

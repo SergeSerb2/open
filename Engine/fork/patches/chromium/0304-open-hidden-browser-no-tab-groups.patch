@@ -1,0 +1,31 @@
+diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
+index 2a0c9a520c3d23e006f2d7ea5ef9e52df749ce14..d1098fe1254b2d7ca710229e6c4e5eabd3dcd8ee 100644
+--- a/chrome/browser/ui/browser.cc
++++ b/chrome/browser/ui/browser.cc
+@@ -177,6 +177,10 @@
+ #include "ui/gfx/text_utils.h"
+ #include "url/scheme_host_port.h"
+ 
++#if BUILDFLAG(IS_MAC)
++#include "open/browser/tab_strip/tab_groups.h"
++#endif
++
+ #if BUILDFLAG(IS_WIN)
+ // windows.h must be included before shellapi.h
+ #include <windows.h>
+@@ -277,8 +281,13 @@ Browser::Browser(BrowserWindowCreateParams params)
+       tab_strip_model_(std::make_unique<TabStripModel>(
+           tab_strip_model_delegate_.get(),
+           profile_,
+-          // Tab groups are disabled for app browsers.
+-          (type_ == TYPE_APP || type_ == TYPE_APP_POPUP)
++          // Tab groups are disabled for app browsers. Open: and for hidden
++          // tab-strip Browsers (folders are not tab groups).
++          (type_ == TYPE_APP || type_ == TYPE_APP_POPUP
++#if BUILDFLAG(IS_MAC)
++           || !open_engine::SupportsTabGroups(params.cef_params.get())
++#endif
++               )
+               ? nullptr
+               : TabGroupModelFactory::GetInstance())),
+       session_id_(SessionID::NewUnique()),
