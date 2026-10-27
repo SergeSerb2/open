@@ -8,5 +8,7 @@ paths: cef/BUILD.gn cef/libcef/browser/browser_host_base.h cef/libcef/browser/br
 paths: cef/libcef/browser/chrome/chrome_context_menu_handler.cc
 # 0310-open-adblock-service-owner.patch
 paths: cef/libcef/browser/browser_context.h cef/libcef/browser/browser_context.cc
+# 0311-open-adblock-network-hooks.patch
+paths: cef/libcef/browser/chrome/chrome_content_browser_client_cef.h cef/libcef/browser/chrome/chrome_content_browser_client_cef.cc
 # 0314-open-adblock-cefsimple-smoke.patch
 paths: cef/tests/cefsimple/simple_app.cc
