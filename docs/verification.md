@@ -203,6 +203,18 @@ Run the cost cross-check after the release build:
   Packages/OpenKit/.build/release/sidebar-render sm6-cost
 ```
 
+Real negative proofs on M1: an added native `outline.reloadData()` produced
+8 full reloads for 4 page builds and failed at load1 1.94 and 15.68. After its
+restoration, focused `sidebar-render` passed. A separate temporary 64-pass loop
+inside the measured span visited the real model tabs and sized each title with
+`NSString.size(withAttributes:)` and the real system font. All six processes
+kept the structural 4-build/4-reload result, but the five-process instruction
+median was 8,965,841,854 >722,869,660 and the cost command exited 1. All children
+were reaped and the source was restored before focused verification (558 checks,
+0 failures; cost median 657,086,884 <=722,869,660). These
+negative edits are not committed. Raw receipts are in
+`.re/sm6-work/negative-receipt.json` and `.re/sm6-cost/negative-cost-receipt.json`.
+
 The absolute 120 ms product budget remains a separate M5 check in a quiet
 window. Historical same-section M5 wall time was 59.7…87.2 ms (median ≈70 ms),
 which is not the earlier 33.7…36 ms Library-build number. The instruction gate
