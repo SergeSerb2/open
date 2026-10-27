@@ -149,11 +149,11 @@ symbols print `unavailable`. The ABI comes from Apple's pinned
 `thread_selfcounts(uint32_t, void *, size_t)`. There is no private symbol lookup
 in App or an OpenKit library.
 
-The M1 driver's `--thread-probe` campaign stops at 2026-10-27 04:35:40 UTC,
+The M1 driver's sole `--thread-probe` campaign stops at 2026-10-27 04:35:40 UTC,
 including research/build/wait time. It converts remaining absolute time to a
 monotonic deadline once per job and reserves cleanup time. Five low and five
-burner samples must all have valid positive monotonic thread counters, with
-combined `(max-min)/median ≤0.03`. Failure, unavailability, or expiration ends
+burner samples used the original acceptance rule: valid positive monotonic
+thread counters and combined `(max-min)/median ≤0.03`. Failure or expiration ended
 the probe; there is no replacement probe or padding. The sole M1 campaign
 completed with ten valid positive monotonic samples but failed the range limit:
 637,692,002 / 655,362,864 / 661,030,831 instructions (min/median/max), spread
@@ -164,6 +164,14 @@ Swift sources are in `ccf0b31`, with later engine/docs-only main merge `4a5b9d3`
 All samples had page builds/reloads 4/4, manager/page/row layouts 1/4/60 and four
 model-matching 105-row outlines. Probing stopped; no instruction budget exists.
 No callback constant is pinned and the runtime cost gap stays open.
+The later lead policy requires an explicit fixed discarded process warm-up,
+an approved five-run warm median keyed by CPU brand and macOS build, and a
+versioned fixture changed only in a lead-approved PR. Its cost limit would be
+`ceil(I_accepted × 1.10)`; unknown machines report counts as INFO, never cost PASS.
+The collected M1 high group has 2.5368% spread but had no predeclared discarded
+warm-up, so it is not relabeled an accepted warm baseline. No fixture or cost
+gate is implemented. The absolute 120 ms product budget remains a separate
+M5 check in a quiet window.
 The historical 15-run same-section M5 wall range was 59.7…87.2 ms (median ≈70 ms),
 which must not be confused with the earlier 33.7…36 ms Library-build number.
 No instruction threshold or negative threshold crossing is claimed here.

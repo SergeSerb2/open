@@ -3,7 +3,7 @@ import Darwin
 import OpenModel
 import OpenSidebar
 
-/// Shared with the existing wall-clock check. No fixture creation is measured.
+/// Shared by the SM6 suite and standalone command. Fixture setup is not measured.
 @MainActor
 enum SM6Fixture {
     struct Work: Codable {
