@@ -12,3 +12,11 @@ Source diagnostics (6): NSObjectProtocol at ActivationTrace:9,10; AppDelegate:41
 Existing configuration also emits traditional-headermap, signed-binary strip, and skipped App Intents metadata diagnostics.
 Raw local evidence: .re/s5b/app-existing-warnings.txt and build/xcodebuild-Debug.log.
 S5b does not edit these files or suppress diagnostics. The package verification build has zero warning/error lines.
+
+New-engine rebuild (21:38 distribution): exit 0, eight Xcode warning lines.
+Seven are the same traditional-headermap diagnostic (OpenEngine, five helper
+targets, Open); one is the same signed OpenEngine strip diagnostic.
+These warning classes already occur in the saved earlier cold build.
+Raw current log: build/xcodebuild-Debug.log; prior log: .re/s5b/historical-xcodebuild-Debug.log.
+No warning-free App claim. The new engine rebuild changes no warning-bearing
+App/config source. All five paths listed above remain identical to main.

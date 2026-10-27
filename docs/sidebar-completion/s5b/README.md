@@ -31,14 +31,18 @@ SHA-256 entries were recomputed from those generated files.
 
 ## Reproduce
 
+Set `OPEN_EXPECTED_ENGINE_SHA256` to the supplied engine distribution hash.
+The driver requires the canonical distribution hash. It replays the exact
+`tools/embed-cef.sh` ad hoc signing steps on a disposable framework copy, then
+requires that signed hash in both the built App and the isolated suite bundle.
 From the repository root, use the shared machine locks. Run each command
 separately; do not build during an on-screen invocation.
 
 ```sh
 /usr/bin/lockf /tmp/open-m1-validation.lock ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only settings-preview,profiles,sidebar-render,sidebar-compare,media-demo --keep-logs
 /usr/bin/lockf /tmp/open-m1-validation.lock ~/Library/Caches/OpenRE/scripts/heavy.sh tools/build.sh Debug
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --out /tmp/open-previews-flow-unique
-/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --out /tmp/open-previews-failure-unique --force-failure
+/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --expected-engine-sha256 "$OPEN_EXPECTED_ENGINE_SHA256" --out /tmp/open-previews-flow-unique
+/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/settings_previews.py --expected-engine-sha256 "$OPEN_EXPECTED_ENGINE_SHA256" --out /tmp/open-previews-failure-unique --force-failure
 ```
 
 The failure invocation must exit 1 with the `FORCED: early failure` message,
@@ -60,7 +64,7 @@ Xcode headermap/strip/App Intents diagnostics and six `ExistentialAny`
 warnings in `ActivationTrace`, `AppDelegate`, `EngineWebContentHostFactory`,
 and `AutomationController`. Those files and `project.yml` are byte-identical
 to `origin/main` at `7e689d5`. S5b introduces no App change. The package builds
-and verification gate are warning-free; the App build does not satisfy a
+emit no warnings; the App build does not satisfy a
 literal zero-warning requirement. The parent must resolve that separate
 baseline. Full local warning evidence is in `.re/s5b/app-existing-warnings.txt`
 and `build/xcodebuild-Debug.log`.
@@ -96,7 +100,7 @@ On this M1, SwiftUI returned an empty AX tree until the renderer enabled
 its own `AXEnhancedUserInterface` state. That state is scoped to the Previews
 render and restored in `defer`. It changes no system accessibility setting
 and adds no timing check. The unsuccessful navigation/legacy-tree probes
-were removed. No S5b production or App-driver code changed after `b9105ab`; the branch also merged `origin/main`.
+were removed. No S5b production code changed after `b9105ab`; the branch also merged `origin/main`. The App driver later added required engine-hash provenance because the parent replaced a stale distribution.
 
 The parent ran local Opus design review 1: PASS, no new material visual
 defect and no weekly-limit error. The two comparison wording corrections
@@ -112,7 +116,7 @@ The initial [pre-review full run](pre-review-full-summary.txt) found three
 black command-bar 2× renders in addition to the known M1 baselines. This
 was not relabeled as a baseline. A real diagnostic run of unmodified main
 and this branch passed 78/78 on each ([receipt](commandbar-diagnostic.txt)).
-The final full gate must also pass commandbar-render. No command-bar code
+The final full gate also failed the same three black command-bar renders. That remains an unapproved extra failure; this receipt does not qualify for the four known M1 exceptions. No command-bar code
 or tolerance changed.
 
 ## Settings guard break-and-revert proofs
@@ -128,3 +132,31 @@ is independent of the UI guard. Both proofs restore their source in `finally`
 and rebuild the real renderer without warnings. The positive
 [guard-focused run](guard-focused-summary.txt) passed at both scales; its
 [control receipts](previews-controls.txt) come from the real AX walk.
+
+The parent replaced the stale 10:41 engine distribution at 21:38. Earlier
+App flows and images are retained under [historical-engine-1041](historical-engine-1041/README.md)
+and do not count as final acceptance. The new expected framework SHA-256 is
+`61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8`.
+Only the rebuilt App flows with matching provenance count. The offscreen
+package checks and break-and-revert proofs are engine-independent.
+
+Muse's local quota is exhausted (HTTP 429); the parent routes fresh review 2
+to M5 Opus. The earlier design review covered unchanged S5b UI on the prior
+distribution; the new-engine captures are supplied for the final review.
+
+[Latest full gate](full-summary.txt): 17 PASS, 4 FAIL, 0 SKIP. The build has
+zero warnings/errors. Three failed targets are the known M1 baselines;
+`commandbar-render` is an additional unresolved failure (the same three
+black-pixel smoke checks). `suggest-check` passes. This is reported as a
+gate blocker, not a green gate or an allowed baseline.
+
+The new-engine normal flow exits 0. The forced-failure run exits 1 only after
+opening its real sheet; both verify the supplied canonical hash and the same
+signing-derived embedded/running hash. Both clean up without forced termination.
+The [signing receipt](engine-signing-proof.json) records the independently
+replayed transformation. Current normal sheet ID: 5959; forced-failure sheet
+ID: 5969. No earlier native run is counted as final proof.
+
+The user explicitly requested that the PR remain held while the additional
+`commandbar-render` failure is unresolved. The feature branch can be pushed
+for parent review; no PR is opened under that rule.

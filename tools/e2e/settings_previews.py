@@ -7,6 +7,7 @@ Only the app's existing automation socket delivers input and captures pixels.
 """
 import argparse
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,28 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine_e2e import Open, ROOT, frame
+
+
+def framework_sha256(path):
+    # Bound each read to 1 MiB instead of allocating the full framework binary.
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def signed_framework_sha256(source):
+    """Replay embed-cef.sh signing on a disposable copy of the distribution."""
+    with tempfile.TemporaryDirectory(prefix="open-previews-engine-proof-") as folder:
+        copied = Path(folder) / source.name
+        subprocess.run(["cp", "-cRp", str(source), str(copied)], check=True)
+        for library in sorted((copied / "Libraries").glob("*.dylib")):
+            subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(library)],
+                           check=True, capture_output=True)
+        subprocess.run(["codesign", "--force", "--sign", "-", "--timestamp=none", str(copied)],
+                       check=True, capture_output=True)
+        return framework_sha256(copied / "Chromium Embedded Framework")
 
 
 def wait_for(read, predicate, message):
@@ -78,7 +101,7 @@ def visible_windows(pids):
     return result
 
 
-def run(config, output, force_failure):
+def run(config, output, force_failure, expected_engine):
     output.mkdir(parents=True, exist_ok=False)
     scratch = Path(tempfile.mkdtemp(prefix="open-previews-"))
     name = "Open-E2E-previews-" + uuid.uuid4().hex[:16]
@@ -91,6 +114,21 @@ def run(config, output, force_failure):
     owned = set()
     cleanup_errors = []
     try:
+        framework = Path("Chromium Embedded Framework.framework/Chromium Embedded Framework")
+        built = Path(ROOT) / "build" / config / "Open.app"
+        report["engine"] = {
+            "expectedSHA256": expected_engine,
+            "distributionSHA256": framework_sha256(Path(ROOT) / "Vendor/cef/Release" / framework),
+            "embeddedSHA256": framework_sha256(built / "Contents/Frameworks" / framework),
+            "stamp": (Path(ROOT) / "Vendor/cef/.open-source").read_text().strip(),
+        }
+        assert report["engine"]["distributionSHA256"] == expected_engine, "distribution framework does not match the supplied engine hash"
+        # embed-cef.sh re-signs the copied framework, which changes its bytes.
+        # Verify that exact transformation instead of accepting only a UUID.
+        report["engine"]["signingRecipe"] = "tools/embed-cef.sh: sign Libraries/*.dylib, then framework; ad hoc, timestamp=none"
+        signed_engine = signed_framework_sha256(Path(ROOT) / "Vendor/cef/Release" / framework.parent)
+        report["engine"]["replayedSignedSHA256"] = signed_engine
+        assert report["engine"]["embeddedSHA256"] == signed_engine, "App framework does not match the signed supplied distribution"
         # A unique bundle ID gives UserDefaults.standard a fresh domain without
         # adding a preferences hook to the App or touching the user's choices.
         subprocess.run(["cp", "-cR", str(Path(ROOT) / "build" / config / "Open.app"), str(bundle)], check=True)
@@ -99,6 +137,8 @@ def run(config, output, force_failure):
         values["CFBundleIdentifier"] = domain
         info.write_bytes(plistlib.dumps(values))
         subprocess.run(["codesign", "--force", "--sign", "-", str(bundle)], check=True, capture_output=True)
+        report["engine"]["runningBundleSHA256"] = framework_sha256(bundle / "Contents/Frameworks" / framework)
+        assert report["engine"]["runningBundleSHA256"] == signed_engine, "suite bundle framework does not match the signed supplied distribution"
         subprocess.run(["defaults", "write", domain, "open.general.previewsDelaySeconds", "-float", "7"], check=True)
         app = Open(str(scratch), "chrome", str(data), ["--use-mock-keychain"], str(output / "app.log"),
                    extra_env={"OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE": "1"})
@@ -205,7 +245,8 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="Debug")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--force-failure", action="store_true")
+    parser.add_argument("--expected-engine-sha256", required=True)
     args = parser.parse_args()
     for sig in (signal.SIGTERM, signal.SIGHUP):
         signal.signal(sig, lambda *_: sys.exit(143))
-    sys.exit(run(args.config, args.out.resolve(), args.force_failure))
+    sys.exit(run(args.config, args.out.resolve(), args.force_failure, args.expected_engine_sha256))

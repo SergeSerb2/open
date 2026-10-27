@@ -20,7 +20,7 @@ that same frame without inferring a new Arc hover color or motion value.
 No cross-product pixel-equality claim is made for these intentionally different
 sheet layouts. The parent owns formal code and UI review.
 
-The real Open run is `app-flow.json`: `SheetPresentationWindow` 2056 was
+The real Open run is `app-flow.json`: `SheetPresentationWindow` 5959 was
 visible, key, attached to General Settings, and exactly 480×320 pt. Both
 [rest](previews-rest@2x.png) and [Done hovered](previews-hover@2x.png) are
 960×640 window-server captures (`windowserver+devtools`), not offscreen
@@ -31,3 +31,7 @@ Done-hover PNGs are byte-identical: the hover point is inside Done, and
 Done button differ from the capture's dark sheet and checkboxes. S5b does
 not change those colors, styles, or the accepted dimensions. No color-fidelity
 claim is made across the two appearances.
+
+This counted run uses the rebuilt 21:38 engine distribution. Its canonical
+framework hash and exact signing transformation are recorded in `app-flow.json`
+and `engine-signing-proof.json`. The earlier engine images are historical.

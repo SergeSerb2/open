@@ -1,9 +1,18 @@
 {
-  "domain": "com.open.previews-e2e.0952bdb511ce4b7da43cf650b7ec566c",
-  "data": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-75e864efee2d4f9f",
-  "cache": "/Users/m1-dev/Library/Caches/Open-E2E-previews-75e864efee2d4f9f",
+  "domain": "com.open.previews-e2e.2547b3aa72204620bf845fc9e49ee694",
+  "data": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-68a9680d45764553",
+  "cache": "/Users/m1-dev/Library/Caches/Open-E2E-previews-68a9680d45764553",
   "forcedFailure": false,
-  "pid": 73364,
+  "engine": {
+    "expectedSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "stamp": "fork /Users/m1-dev/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034",
+    "signingRecipe": "tools/embed-cef.sh: sign Libraries/*.dylib, then framework; ad hoc, timestamp=none",
+    "replayedSignedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "runningBundleSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2"
+  },
+  "pid": 17371,
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
@@ -17,9 +26,9 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 73364,
-    "root": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-75e864efee2d4f9f",
-    "userData": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-75e864efee2d4f9f/Engine"
+    "pid": 17371,
+    "root": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-68a9680d45764553",
+    "userData": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-68a9680d45764553/Engine"
   },
   "sheet": {
     "attachedSheet": 0,
@@ -28,7 +37,7 @@
     "frame": "{{302, 365}, {480, 320}}",
     "key": true,
     "level": 0,
-    "number": 2056,
+    "number": 5959,
     "parent": 0,
     "sheet": true,
     "title": "",
@@ -36,11 +45,11 @@
   },
   "rest": {
     "method": "windowserver+devtools",
-    "path": "/Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/app-flow/previews-rest@2x.png"
+    "path": "/Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/new-engine-app-flow-verified/previews-rest@2x.png"
   },
   "hover": {
     "method": "windowserver+devtools",
-    "path": "/Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/app-flow/previews-hover@2x.png"
+    "path": "/Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/new-engine-app-flow-verified/previews-hover@2x.png"
   },
   "preferences": {
     "open.general.previewsDelaySeconds": 7.0,
@@ -57,7 +66,7 @@
       "frame": "{{100, 100}, {1280, 800}}",
       "key": false,
       "level": 0,
-      "number": 2054,
+      "number": 5957,
       "parent": 0,
       "sheet": false,
       "title": "about:blank",
@@ -70,7 +79,7 @@
       "frame": "{{200, 200}, {684, 650}}",
       "key": true,
       "level": 0,
-      "number": 2055,
+      "number": 5958,
       "parent": 0,
       "sheet": false,
       "title": "General",
@@ -85,7 +94,7 @@
       "frame": "{{100, 100}, {1280, 800}}",
       "key": false,
       "level": 0,
-      "number": 2054,
+      "number": 5957,
       "parent": 0,
       "sheet": false,
       "title": "about:blank",
@@ -98,7 +107,7 @@
       "frame": "{{200, 200}, {684, 650}}",
       "key": true,
       "level": 0,
-      "number": 2055,
+      "number": 5958,
       "parent": 0,
       "sheet": false,
       "title": "General",
@@ -107,8 +116,8 @@
   ],
   "quit": {
     "reply": true,
-    "observedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-946izii0/Open.app/Contents/MacOS/Open",
-    "expectedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-946izii0/Open.app/Contents/MacOS/Open",
+    "observedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-twvx369e/Open.app/Contents/MacOS/Open",
+    "expectedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-twvx369e/Open.app/Contents/MacOS/Open",
     "forced": false
   },
   "remainingWindows": [],
