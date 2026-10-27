@@ -579,10 +579,18 @@ mod ffi {
 
     struct OpenBuildReport {
         lossless: bool,           // false when a list line contains "removeparam" (§9.2.1)
-        lossy_kinds: Vec<String>, // v1: at most ["removeparam"]
+        lossy_kinds: Vec<String>, // any of "removeparam", "remove", "remove-attr", "remove-class" (as built, 98-4)
         resources_loaded: u32,
         resources_error: String,  // "" or a short kind ("json", "too-large")
         list_count: u32,
+        refused: String,          // "" or why the build was refused before parsing (R3-2)
+    }
+
+    struct OpenHiddenSelectors {  // review R3-4
+        selectors: Vec<String>,      // sanitized like hide_selectors (§8.3), sorted
+        dropped_procedural: u32,
+        dropped_unsafe: u32,
+        dropped_over_cap: u32,
     }
 
     struct OpenCosmeticResources {
@@ -612,9 +620,12 @@ mod ffi {
             -> Box<OpenAdblockEngine>;
         fn open_adblock_build_report(engine: &OpenAdblockEngine) -> OpenBuildReport;
         fn open_adblock_serialize(engine: &OpenAdblockEngine) -> Vec<u8>;
-        // false when dat.len() <= 4 (98-3) or on any error; then use_resources(resources_json).
+        // false when the DAT walk refuses it (R2-1, R3-1, R3-5) or on any error;
+        // then use_resources(resources_json).
         fn open_adblock_deserialize(engine: &mut OpenAdblockEngine, dat: &[u8],
                                     resources_json: &str) -> bool;
+        // The DAT walk's verdict: "" or the first problem (logs, self-test).
+        fn open_adblock_dat_check(dat: &[u8]) -> String;
         // Matcher sequence only (§7.6).
         fn open_adblock_check(engine: &OpenAdblockEngine, url: &str, source_url: &str,
                               request_type: OpenRequestType, max_input_bytes: u32)
@@ -624,7 +635,7 @@ mod ffi {
         // Output sanitized like hide_selectors (§8.3).
         fn open_adblock_hidden_selectors(engine: &OpenAdblockEngine, classes: &[String],
                                          ids: &[String], exceptions: &[String])
-            -> Vec<String>;
+            -> OpenHiddenSelectors;
         fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo;
     }
 }
@@ -634,6 +645,13 @@ Rules that bind this surface:
 
 - `source_url` is the request initiator as an origin URL (§7.3); pass `url`
   itself when no initiator exists (first-party by construction).
+- Input limits are enforced **in the shim** (reviews R2-1, R3-1, R3-2): a DAT
+  passes a walk before the crate reads it (every length and count fits in the
+  bytes left, at most 2^24 values and 32 levels, nothing after the root
+  value), and `open_adblock_build` refuses more than 2^21 list lines or more
+  than 64 MiB of cosmetic selector copies before it parses; C++ turns a
+  refused build into a failed load. `docs/engine-patches.md` P8 has the
+  measured worst allocations under PartitionAlloc's ceiling.
 - The 256 KiB payload cap is enforced **in the shim**, in
   `open_adblock_cosmetic`: the unit is the sum of the UTF-8 bytes of the
   kept hide selectors, without the fixed declaration that the renderer
@@ -749,7 +767,7 @@ assignment. §5.2 is the resulting surface.
 | `redirect_data_url` for **every** type: the crate's `data:<mime>;base64,…` verbatim (F-32) | Step 4 | — | C++ decides whether to serve it (§7.4 rule 3) |
 | `open_adblock_deserialize` returns false when `dat.len() <= 4` | Step 4 | 98-3 | A 4-byte DAT panics the crate today |
 | `open_adblock_deserialize` takes `resources_json` and calls `use_resources` after a successful deserialize | Step 7 | 98-4 | F-31: the DAT carries no resources; N-19 proves it |
-| `open_adblock_build_report`: `lossless`, `lossy_kinds`, `resources_loaded`, `resources_error`, `list_count` | Step 4 | 98-4, 98-5, 100-1(b) | `lossless` comes from a conservative scan of the list texts: a non-comment line that contains `removeparam` makes the set lossy. False positives only cost a text build. v1 ignores the `:remove*()` actions (lead ruling 6), so their loss in a DAT (F-31) does not matter in v1; the post-v1 design adds them as lossy kinds with a shim version bump (§8.5) |
+| `open_adblock_build_report`: `lossless`, `lossy_kinds`, `resources_loaded`, `resources_error`, `list_count` | Step 4 | 98-4, 98-5, 100-1(b) | `lossless` comes from a conservative scan of the list texts: a non-comment line that contains `removeparam` makes the set lossy. False positives only cost a text build. As built (98-4), the scan also reports `remove`, `remove-attr`, and `remove-class` (`:remove*()` lines), and any reported kind makes the set lossy, so such lists take a text build. v1 still ignores what the `:remove*()` actions do (lead ruling 6); counting them only costs a text build (F-31) |
 | `open_adblock_engine_format()`: `adblock=0.8.11;shim=<N>;features=<sorted crate features>;regex=<sorted regex features>;dat=v0`. `N` is a constant in `lib.rs`, bumped on any change to `ParseOptions`, permissions, features or bridge semantics | Step 4 | 100-1(a) | The receipt binds it (§9.2.1) |
 | Sanitized cosmetic vectors (`OpenCosmeticResources` of §5.2), the 256 KiB payload cap with `dropped_over_cap`, and sanitized `open_adblock_hidden_selectors` output. The crate's style, remove and scriptlet output is discarded and counted (lead ruling 6). No CSS text is built in Rust | Step 5 | 98-1, 98-2, r1-14 | Sanitizer rules: §8.3. Post-v1 fields: §8.5 |
 
@@ -4108,3 +4126,64 @@ contract, real CLI evidence, and the deferred OpenEngine adapter/resources work.
 - **Size.** `patches/rust/0001-adblock-vendor.patch` is 11.3 MB (gate: 20 MB).
 - **Closure.** 23 new crate directories; all MIT, Apache-2.0, Unicode-3.0 or MPL-2.0 (adblock). No GPL-family license. Rows: `Engine/fork/licenses/THIRD_PARTY.md`.
 - **List pins.** The bundled list pins are stale: EasyList changed upstream. The perf bench used current lists from the official URLs (never Arc's bundle). Refreshing the pins is a reviewed Step 7 action (`docs/followups.md`).
+
+### Step 2 as built (2026-10-26)
+
+- **Files.** `open/adblock/rust/{BUILD.gn,src/lib.rs}` (about 250 lines) and `open/BUILD.gn` (`group("open")`). The shim's `deps`: `//third_party/rust/adblock/v0_8:lib` and `//third_party/rust/serde_json/v1:lib`. `serde_json` is already a Chromium direct dependency with no visibility limit, so the §4.2 fragment needs no line. `visibility` also lists `//open:*`, so the root group can hold the shim until Step 3 adds `//open/adblock`.
+- **Include path.** The generated header is `gen/open/adblock/rust/src/lib.rs.h`. C++ includes `open/adblock/rust/src/lib.rs.h`, namespace `open_adblock` (the plan's expected spelling).
+- **R-2 (resources): JSON form.** `open_adblock_build(list_texts, resources_json)` takes the crate's own serialized `Vec<Resource>`, parsed with `serde_json` (a `Result`, no new parser). The crate's assembler only reads paths, its scriptlet entry point is `#[deprecated]`, and it panics on malformed files (`resource_assembler.rs:125,168,190,248-254,271,295`). Step 7 must produce `resources.json` in that format.
+- **R-3 (no panics).** Chromium builds Rust with `-Cpanic=abort` (`build/config/compiler/BUILD.gn:1035-1041`), so `catch_unwind` cannot help. The shim calls only crate functions that return a `Result` or an empty value: `Request::new`, `deserialize`, `serialize_raw`, and `url_cosmetic_resources` (which returns empty for a bad URL). A failed deserialize resets the engine to empty. Fuzzing the crate's parsers remains a follow-up.
+- **R-5 (redirect).** In 0.8.11, `BlockerResult.redirect` is already a complete `data:` URL (base64; the crate's tests at `blocker.rs:1405,1691`), so there is no percent-encoder. Scripts get the crate's URL. Any other type gets `has_redirect = true` with an empty URL, so C++ blocks it.
+- **R-7.** Selectors are sorted. Removals (`remove_selectors`, `remove_attrs`, `remove_classes`) go to the agent as `window.__openAdBlockProcedural=<JSON>;` ahead of the scriptlets. `exceptions` is sorted.
+- **Build.** `engine-build --target open/adblock/rust:open_adblock_rust` exit 0. The target is reachable through a temporary `root_extra_deps = [ "//open" ]`, which is not committed (Step 3 wires `//open/adblock` into `libcef_static`).
+- **Driver** (`/tmp/adblock-shim-driver`, a Cargo crate with Chromium's `rustc 1.100.0` that compiles this `lib.rs` as a module; not committed):
+  - Build 124 ms. Trackers blocked, first-party CSS and reCAPTCHA allowed, the same after a serialize round trip.
+  - DAT 6.47 MiB (F-15: ~6.8 MiB); serialize 46 ms, deserialize 31 ms.
+  - Script redirect gives a `data:application/javascript;base64,…` URL; image redirect is blocked.
+  - nytimes.com gets 443 hide selectors; `.ad--300x250` gets a generic selector.
+  - Bad URLs, a garbage or truncated DAT, and broken resources JSON all degrade without a panic.
+
+### Step 2, engine review r1 (2026-10-26)
+
+The shim now has the surface the revised plan's §5.5 asks for (PR #105), so
+Steps 4 and 5 need no bridge change. Evidence: the Step 3 self-test in
+cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
+
+- **98-1, 98-2 (cosmetics).** No CSS text is built in Rust.
+  `OpenCosmeticResources` is sanitized vectors: `hide_selectors`,
+  `style_rules` (`selector`, `declarations`), `remove_selectors`,
+  `remove_attrs`, `remove_classes`, `scriptlets`, `exceptions`,
+  `generichide`, `dropped_procedural`, `dropped_unsafe`. Selector rules
+  (§8.3): no `{ } ; < @` or `/*` outside quoted strings, no newline at all,
+  balanced brackets and quotes (`\` escapes), no procedural operator, at most
+  2,048 bytes, a 256 KiB payload cap. **Refinement of §8.3 rule 1:** those
+  characters count only outside quotes, because real list selectors quote
+  `;` in attribute values (`div[id^="st"][style^="z-index: 999999999;"]`, in
+  the generic set every page gets) and a CSS string can only end early at a
+  newline. `:style()` declarations with `url(`, `image(`, `image-set(`,
+  `cross-fade(`, `element(`, `attr(`, `expression(`, `\`, `/*`, braces, `@`,
+  `<` or quotes are dropped; the others get `!important`. `hide_selectors` is
+  in the crate's order (sorting about 450 selectors cost some 30 µs per
+  document); it is sorted only when the payload cap applies. The other vectors
+  are sorted.
+- **Cost.** One cosmetic query on nytimes.com: 56 µs in-tree (budget 100 µs;
+  the crate's own query is about 33 µs of it). The review's injection lines
+  give no CSS; gamedev.net keeps 431 plain selectors and drops one
+  `:has-text()` selector.
+- **98-3.** `open_adblock_deserialize` returns false for a DAT of 4 bytes or
+  less before calling the crate. README and `lib.rs` now say what is true:
+  `Result`-returning crate calls can still panic; known cases are guarded;
+  the rest needs the fuzz follow-up.
+- **98-4 (part).** `open_adblock_deserialize(engine, dat, resources_json)`
+  applies resources after a load. `open_adblock_build_report` returns
+  `lossless`, `lossy_kinds` (`removeparam`, `remove`, `remove-attr`,
+  `remove-class`, from a conservative scan of the list texts),
+  `resources_loaded` and `resources_error`.
+- **98-6.** `OpenRequestType`, a shared enum, replaces the request type
+  string.
+- **§5.5 rows for Step 4.** `open_adblock_engine_format()`
+  (`adblock=0.8.11;shim=2;features=…;regex=…;dat=v0`; bump `SHIM_VERSION`
+  on any semantic change); the 8 KiB match cap with `truncated` (a capped URL
+  is never rewritten); `redirect_data_url` for every request type.
+- **Not done here:** 98-5's per-rule failure counts (the crate does not
+  report them); 98-7 is recorded in the revised plan (D-12).
