@@ -1245,6 +1245,30 @@ def tabstrip_checks(app, results):
         "strip_unchanged": after == before,
         "note": "Little Open is not in this shell yet; its pages will follow the same rule (non-model hosts are Alloy)."}
 
+    # Folders are not tab groups (Open v1 decision: no evidence that Arc maps
+    # them, docs/re/arccore-engine.md §4.3.1). Open windows have no tab group
+    # model (patch 0304): a folder's tabs stay pinned with no group, and the
+    # group calls fail with Chrome's own errors.
+    folder = app.call("folder", tabs=[b], title="Probe folder", section="pinned")
+    def in_folder():
+        rows = {t["id"]: p for t, p in live()}
+        return rows.get(b) if b in rows else None
+    wait_until(in_folder, timeout=10)
+    time.sleep(1)
+    flags = ext_eval(pop, "chrome.tabs.query({currentWindow: true}).then(ts => ts.map(t => ({id: t.id,"
+                          " pinned: t.pinned, groupId: t.groupId})))")
+    grouped = ext_eval(pop, "chrome.tabs.group({tabIds: [%d]}).then(g => 'grouped ' + g, e => e.message)" % b_id)
+    groups = ext_eval(pop, "chrome.tabGroups.query({}).then(gs => gs.length, e => e.message)")
+    ungrouped = ext_eval(pop, "chrome.tabs.ungroup([%d]).then(() => 'ungrouped', e => e.message)" % b_id)
+    group_get = ext_eval(pop, "chrome.tabGroups.get(1).then(g => 'group ' + g.id, e => e.message)")
+    b_flags = [f for f in flags if f["id"] == b_id]
+    results["no_tab_groups"] = {
+        "ok": bool(b_flags) and b_flags[0]["pinned"] and all(f["groupId"] == -1 for f in flags)
+              and "support" in str(grouped) and groups == 0
+              and "support" in str(ungrouped) and "no group" in str(group_get).lower(),
+        "folder": folder, "folder_tab": b_flags, "group_call": grouped, "tab_groups": groups,
+        "ungroup_call": ungrouped, "tab_groups_get": group_get}
+
     ev = events(pop)
     results["events_seen"] = sorted({e["type"] for e in ev})
     app.call("popup-close")

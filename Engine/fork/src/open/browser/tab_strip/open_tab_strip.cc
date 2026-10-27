@@ -34,6 +34,7 @@
 #include "extensions/browser/extension_action_manager.h"
 #include "extensions/browser/extension_registry.h"
 #include "open/browser/tab_strip/hidden_browser.h"
+#include "open/browser/tab_strip/tab_groups.h"
 #include "open/browser/tab_strip/open_browser_window.h"
 #include "open/browser/tab_strip/open_hosted_platform_delegate.h"
 
@@ -645,6 +646,14 @@ bool IsHostedTab(content::WebContents* contents) {
 bool RequestHostedTabDiscard(content::WebContents* contents) {
   OpenTabStrip* strip = OpenTabStrip::FromContents(contents);
   return strip && strip->RequestDiscard(contents);
+}
+
+bool SupportsTabGroups(const cef::BrowserDelegate::CreateParams* cef_params) {
+  // CEF passes only ChromeBrowserHostImpl::DelegateCreateParams here.
+  return !cef_params ||
+         !static_cast<const ChromeBrowserHostImpl::DelegateCreateParams*>(
+              cef_params)
+              ->create_params_.open_tab_strip_id;
 }
 
 }  // namespace open_engine

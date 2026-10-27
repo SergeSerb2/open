@@ -72,7 +72,7 @@
       "extensions": [
         {
           "enabled": true,
-          "icon": "128x128",
+          "icon": "18x18",
           "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
           "name": "1Password \u2013 Password Manager",
           "options": "",
@@ -145,7 +145,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1629013084,
+            "current": 575286046,
             "windows": 1
           }
         },
@@ -169,7 +169,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1629013084,
+            "current": 575286046,
             "windows": 1
           }
         },
@@ -195,7 +195,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1629013084,
+            "current": 575286046,
             "windows": 1
           }
         },
@@ -219,7 +219,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 1629013084,
+            "current": 575286046,
             "windows": 1
           }
         }
@@ -247,10 +247,10 @@
       ],
       "console": [
         "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
-        "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
-        "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
         "%c%s color: red; background: yellow; font-size: 24px; WARNING!",
-        "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand."
+        "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand.",
+        "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
+        "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received"
       ],
       "dialog_click": true,
       "installed": true,
@@ -262,7 +262,7 @@
           "frame": "{{1056, 910}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 131467,
+          "number": 133090,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -293,10 +293,10 @@
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 86740,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-86729-75eaec8b",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-86729-75eaec8b/Engine"
+    "pid": 54711,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-54658-f27fe53d",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-54658-f27fe53d/Engine"
   },
-  "started": "2026-10-26 16:33:19",
+  "started": "2026-10-26 16:41:51",
   "style": "chrome"
 }
