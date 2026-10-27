@@ -4187,3 +4187,76 @@ cefsimple (`--open-adblock-selftest`, in #100) and a throwaway Cargo driver.
   is never rewritten); `redirect_data_url` for every request type.
 - **Not done here:** 98-5's per-rule failure counts (the crate does not
   report them); 98-7 is recorded in the revised plan (D-12).
+
+### Step 3 as built (2026-10-26)
+
+- **Namespace.** `open_engine`, not `open`. A namespace named `open` clashes with POSIX `open()` from `<fcntl.h>`, which Chromium includes widely. The P1/P2 overlay already uses `open_engine`.
+- **Files.**
+  - Overlay: `open/adblock/{open_adblock_types.h, open_adblock_service.{h,cc}, open_adblock_selftest.{h,cc}, BUILD.gn}`. The shim is a `public_deps` because the service header includes `lib.rs.h`.
+  - CEF patch `0310-open-adblock-service-owner.patch`: `CefBrowserContext::open_adblock_service()` (lazy) and the member; `Shutdown()` stops the service first.
+  - Test-only CEF patch `0314-open-adblock-cefsimple-smoke.patch`: no window in `--open-adblock-selftest` mode.
+- **Wiring (deviation).** The plan put `deps += [ "//open/adblock" ]` in P-3. But `browser_context.cc` needs it now, and patch 0302 already owns `cef/BUILD.gn`. So 0302's Open block gains one generic line, `deps += open_libcef_deps`, and the overlay `open/open_libcef_sources.gni` lists `//open/adblock`. Future overlay targets need no CEF patch change.
+- **Self-test location (deviation from §13.1).** cefsimple links only the public C API, so it cannot reach `CefBrowserContext`. The switches are read in `CefBrowserContext::Initialize()` for the first (global) context:
+  - `--open-adblock-dir` (with or without `--open-adblock-selftest`) enables blocking and loads that root.
+  - The self-test ends with `CefQuitMessageLoop()`; cefsimple's exit code is always 0, and the verdict is the `OpenAdBlockSelftest: PASS|FAIL` line.
+  - Step 6 moves the switches to P-6 on the new CEF API and deletes the direct includes.
+- **Verification as built (§9.2).**
+  - Reads only `current.json`, then the live generation's `manifest.json` (SHA-256 against the pointer), then each listed `<listID>.txt` (size and SHA-256). Never enumerates.
+  - Read caps: 64 KiB pointer, 4 MiB manifest and receipt, 64 MiB list, 256 MiB DAT. Links are rejected.
+  - The receipt `engine-inputs.json` = generation, manifest SHA-256, every file's SHA-256, plus the DAT's size and SHA-256. The DAT is used only if the receipt equals the one rebuilt from the verified inputs.
+  - Writes go DAT first, then receipt, each with `ImportantFileWriter::WriteFileAtomically`. A failed write keeps the in-memory engine and sets `last_error`.
+- **Threading as built.** The build runs on a `MayBlock`, `USER_VISIBLE`, `CONTINUE_ON_SHUTDOWN` sequence and holds no service pointer. The reply is posted back to the UI thread with a weak pointer and a load id, so a stale or post-shutdown result is dropped. Checks copy a `shared_ptr` under a shared lock. List text and page tokens cross into Rust with `rust::String::lossy`, because invalid UTF-8 would otherwise abort.
+- **Results** (cefsimple, dev build, root written by `openkit adblock update`, live generation 2 with EasyList + EasyPrivacy):
+  - Run 1, no DAT: `engine_loaded=1 engine_from_dat=0 list_count=2 dat_size_bytes=6786699 last_build_ms=226`, all checks PASS.
+  - Run 2: `engine_from_dat=1 last_build_ms=48`, PASS; the whole process took 0.31 s.
+  - Cosmetic query: mean 66 µs per page (budget ≤ 100 µs).
+- **Shutdown.** Five quits (SIGTERM at 0.3, 0.5, 0.6, 0.8 and 1.0 s) during a 480 ms text build of a 12 MB `/tmp` fixture root. All exited with code 0 within 0.1 s, no `FATAL`, no new crash report, and zero cefsimple processes 1 s later.
+
+
+### Step 3, engine review r1 (2026-10-26)
+
+- **100-1(a).** The DAT receipt binds `engineFormat`
+  (`open_adblock_engine_format()`) and `lossless: true`. A DAT written by
+  another crate, shim or feature set no longer matches, so it is rebuilt
+  from text.
+- **100-1(b) (D-15).** A build whose lists have `$removeparam` or `:remove*()`
+  rules (the shim's build report) writes no DAT, so a DAT never drops them.
+- **100-2.** Engines are freed on the build runner: the old engine after a
+  swap, a dropped stale result, and the engine at `Shutdown()`, which takes
+  it out under the lock and frees it outside it.
+- **100-3.** Patch 0310 reads `--open-adblock-dir` and
+  `--open-adblock-selftest` only without `OFFICIAL_BUILD`, and the self-test
+  sources build only when `!is_official_build`. `tools/release.sh` fails an
+  official framework that contains `open-adblock-`. The dev framework has 3
+  such strings, as it should.
+- **100-4.** `IsExcluded` checks the host and each parent domain at label
+  boundaries down to the registrable domain (the Swift rule), and down to
+  the last label when Chromium knows no registrable domain. IPv6 entries are
+  bracketed before parsing. The self-test asserts behavior:
+  `a.news.example.org`, `news.example.org`, `www.example.com`, `example.com`
+  and `[::1]` are excluded; `example.org`, `other.example.org` and
+  `notexample.com` are not.
+- **100-5 (part).** A 128 MiB cap on a generation's lists together; the texts
+  are freed right after the build; the DAT is written from the Rust buffer
+  without a copy. Sharing engines across Profiles stays with Step 4 (D-16).
+- **100-6.** The accessor returns `nullptr` after `Shutdown()`.
+- **100-9 (part).** `LoadFromDirectory` after shutdown still runs `done`.
+- **Self-test.** Exit code 0 only on PASS (1 on FAIL, 2 without
+  `--open-adblock-dir`, 3 after 10 s). New checks: the review's CSS
+  injection lines give no CSS, a 4-byte DAT is refused, a `$removeparam`
+  list is lossy, the 8 KiB cap, gamedev.net keeps its plain selectors. It
+  prints the network check cost on six realistic URL shapes (about 6 µs in
+  this build). Its last step starts a text build and quits at once, so
+  `Shutdown()` runs with a build in flight.
+- **Results.** Run 1 builds from text and writes the DAT; run 2 loads it
+  (`engine_from_dat=1`, 62 ms). Both PASS. Cosmetic query 56 µs. Quitting
+  during a build: three runs, exit 0, no `FATAL`, no process left after 3 s
+  (a temporary `LOG(WARNING)` confirmed that `Shutdown()` runs; not
+  committed). SIGTERM in cefsimple does not reach `Shutdown()` at all: the
+  process exits at once with code 0, so the earlier SIGTERM test did not
+  exercise it.
+- **Correction.** Links are rejected for the leaf files and the generation
+  folder only, not for `adblock/` or `generations/` (defense in depth under
+  the same-user threat model, review 100-9).
+- **Follow-ups** (`docs/followups.md`): 100-7, 100-8, the rest of 100-9, the
+  0301 build-hook patch.
