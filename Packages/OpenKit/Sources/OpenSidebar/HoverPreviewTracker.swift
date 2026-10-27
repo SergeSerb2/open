@@ -32,6 +32,12 @@ public final class HoverPreviewTracker {
     public var hasInstalledWork: Bool { !observers.isEmpty || eventMonitor != nil || showTask != nil || hideTask != nil }
     public private(set) var request: SidebarHoverPreviewRequest?
     public private(set) var scheduledShowCount = 0
+    /// Delay and `systemUptime` deadline of the pending show work, nil when
+    /// no show is scheduled. Read-back for checks; no behavior depends on it.
+    public private(set) var scheduledShowDelay: TimeInterval?
+    public private(set) var scheduledShowDeadline: TimeInterval?
+    /// Delay of the pending hide work, nil when no hide is scheduled.
+    public private(set) var scheduledHideDelay: TimeInterval?
     public var isArmed: Bool { showTask != nil }
     public var suppressesTooltips: Bool { isArmed || request != nil }
 
@@ -65,12 +71,12 @@ public final class HoverPreviewTracker {
             kind = .page(tabID: nodeID)
         case .split: leaveTarget(); return false
         }
-        hideTask?.cancel(); hideTask = nil
+        hideTask?.cancel(); hideTask = nil; scheduledHideDelay = nil
         self.owner = owner
         let next = SidebarHoverPreviewRequest(kind: kind, anchorInWindow: anchorInWindow)
         if candidate?.kind == kind { candidate = next; return suppressesTooltips }
         candidate = next
-        showTask?.cancel(); showTask = nil
+        showTask?.cancel(); showTask = nil; scheduledShowDelay = nil; scheduledShowDeadline = nil
         TooltipController.shared.cancel(for: nil)
         let now = ProcessInfo.processInfo.systemUptime
         if request != nil || lastHidden.map({ now - $0 <= 1 }) == true { show(next); return true }
@@ -78,10 +84,11 @@ public final class HoverPreviewTracker {
         let delay = configured.isFinite ? max(0, configured) : 0.5
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
             guard let self, self.candidate?.kind == kind, self.suppressed.isEmpty, self.enabled("open.general.previewsEnabled") else { return }
-            self.showTask = nil
+            self.showTask = nil; self.scheduledShowDelay = nil; self.scheduledShowDeadline = nil
             if let candidate = self.candidate { self.show(candidate) }
         } }
         showTask = work; scheduledShowCount += 1
+        scheduledShowDelay = delay; scheduledShowDeadline = ProcessInfo.processInfo.systemUptime + delay
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
         return true
     }
@@ -98,24 +105,25 @@ public final class HoverPreviewTracker {
     }
     private func show(_ next: SidebarHoverPreviewRequest) {
         guard valid(next), let window = owner?.window else { dismiss(); return }
-        showTask?.cancel(); showTask = nil
+        showTask?.cancel(); showTask = nil; scheduledShowDelay = nil; scheduledShowDeadline = nil
         shownWindow = window
         request = next
         context.send(.hoverPreview(next))
     }
     func leaveTarget() {
-        candidate = nil; showTask?.cancel(); showTask = nil
+        candidate = nil; showTask?.cancel(); showTask = nil; scheduledShowDelay = nil; scheduledShowDeadline = nil
         guard request != nil, !insideCard, hideTask == nil else { return }
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
             guard let self, self.candidate == nil, !self.insideCard else { return }
             self.dismiss()
         } }
-        hideTask = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+        let delay: TimeInterval = 0.25
+        hideTask = work; scheduledHideDelay = delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     public func setPointerInsidePreview(_ inside: Bool) {
         insideCard = inside
-        if inside { hideTask?.cancel(); hideTask = nil }
+        if inside { hideTask?.cancel(); hideTask = nil; scheduledHideDelay = nil }
         else if candidate == nil { leaveTarget() }
     }
     public func setSuppressed(_ reason: Suppression, _ value: Bool) {
@@ -123,6 +131,7 @@ public final class HoverPreviewTracker {
     }
     public func dismiss() {
         showTask?.cancel(); showTask = nil; hideTask?.cancel(); hideTask = nil
+        scheduledShowDelay = nil; scheduledShowDeadline = nil; scheduledHideDelay = nil
         candidate = nil; insideCard = false
         guard request != nil else { return }
         request = nil; shownWindow = nil; lastHidden = ProcessInfo.processInfo.systemUptime
