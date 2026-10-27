@@ -18,19 +18,45 @@ public struct ModelSidebarActions {
     @discardableResult
     public func perform(_ intent: SidebarIntent) -> Bool {
         switch intent {
+        case .media: return false
         case .select(let id, let space):
-            model.selectNode(windowID: windowID, spaceID: space, nodeID: id)
+            if case .splitPane(let splitID) = model.parent(of: id) {
+                model.focusSplitPane(splitID: splitID, tabID: id)
+                model.selectNode(windowID: windowID, spaceID: space, nodeID: splitID)
+            } else { model.selectNode(windowID: windowID, spaceID: space, nodeID: id) }
         case .selectFavorite(let id):
             guard let space = context.focusedSpace else { return false }
             model.selectNode(windowID: windowID, spaceID: space.id, nodeID: id)
         case .switchSpace(let id):
             model.focusSpace(windowID: windowID, spaceID: id)
         case .close(let id):
-            if let split = model.node(id: id)?.split {
-                for pane in split.panes { model.closeTab(id: pane.id) }
-            } else {
-                model.closeTab(id: id)
-            }
+            return model.archiveNodes(ids: [id]) > 0
+        case .moveNodes(let ids, let parent, let index):
+            return model.moveNodes(ids: ids, to: parent, at: index) > 0
+        case .moveNodesToSpace(let ids, let space):
+            return model.moveNodes(ids: ids, toSpace: space, markUnread: context.focusedSpace?.id != space) > 0
+        case .archiveNodes(let ids):
+            return model.archiveNodes(ids: ids) > 0
+        case .newFolderFromSelection(let ids):
+            guard let first = ids.first, let parent = model.parent(of: first),
+                  let index = siblings(in: parent).firstIndex(where: { $0.id == first }),
+                  let folder = model.createFolder(in: parent, at: index, withNodes: ids) else { return false }
+            context.sidebar?.renameInsertedNode(folder.id)
+            context.manager?.renameInsertedNode(folder.id)
+            return true
+        case .setPinned(let ids, let pinned):
+            return model.setPinned(ids: ids, pinned: pinned) > 0
+        case .duplicateNodes(let ids):
+            return !model.duplicateNodes(ids: ids).isEmpty
+        case .duplicate(let id):
+            return !model.duplicateNodes(ids: [id]).isEmpty
+        case .clearTodayKeeping(let space, let keep):
+            guard model.space(id: space) != nil else { return false }
+            model.clearToday(space: space, keeping: keep)
+        case .archiveFolder(let id):
+            return model.archiveFolder(id: id)
+        case .exportSpaceIntoFolder(let space, let destination):
+            return model.turnSpaceIntoFolder(id: space, destination: destination) != nil
         case .setExpanded(let id, let expanded):
             model.setExpanded(folderID: id, expanded: expanded)
         case .setPinnedCollapsed(let space, let collapsed):
@@ -104,5 +130,14 @@ public struct ModelSidebarActions {
             return false
         }
         return true
+    }
+
+    private func siblings(in parent: NodeParent) -> [SidebarNode] {
+        switch parent {
+        case .spacePinned(let id): model.space(id: id)?.pinned ?? []
+        case .spaceToday(let id): model.space(id: id)?.today ?? []
+        case .folder(let id): model.node(id: id)?.folder?.children ?? []
+        case .favorites, .splitPane: []
+        }
     }
 }

@@ -162,4 +162,51 @@ func runBulkBench() async {
     print(String(format: "  archiveExpiredTabs on 2000 expired tabs (ArchiveStore):   %.2f ms on the main actor + %.1f ms background write, rows=%d",
                  microseconds(mainTime) / 1000, microseconds(writeTime) / 1000, rows))
     _ = storedArchived
+    await runSelectionBulkBench()
+}
+
+/// Real bulk commands, events, undo, and SQLite archive at the requested selection sizes.
+@MainActor
+private func runSelectionBulkBench() async {
+    let clock = ContinuousClock()
+    for size in [50, 500] {
+        let model = makeMoveBenchModel(), undo = UndoManager()
+        undo.groupsByEvent = false; model.undoManager = undo
+        let ids = model.spaces.prefix(2).flatMap { $0.pinned.prefix(size / 2).map(\.id) }
+        let destination = NodeParent.spaceToday(model.spaces[2].id)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("openkit-bulk-\(UUID().uuidString)")
+        let directories = ProfileDirectories(root: root)
+        let preparation: OpenDataRoot.Preparation
+        do { preparation = try OpenDataRoot.prepare(root: root) } catch { profileCLIError("bulk bench data root failed") }
+        defer { withExtendedLifetime(preparation) {}; try? FileManager.default.removeItem(at: root) }
+        let sink = profileArchiveSink(model: model, directories: directories)
+        model.archiveSink = sink
+        let original = encodedTree(model)
+        var events = 0
+        model.addObserver { _ in events += 1 }
+        var moves: [Double] = [], reorders: [Double] = [], archives: [Double] = []
+        for _ in 0..<20 {
+            undo.removeAllActions(); events = 0
+            var count = 0
+            moves.append(microseconds(clock.measure { count = model.moveNodes(ids: ids, to: destination, at: 110) }) / 1000)
+            guard count == size && events == size else { profileCLIError("bulk bench move events/count mismatch") }
+            let moved = encodedTree(model)
+            reorders.append(microseconds(clock.measure { _ = model.moveNodes(ids: ids.reversed(), to: destination, at: 0) }) / 1000)
+            guard Array(model.spaces[2].today.prefix(size)).map(\.id) == Array(ids.reversed()) else { profileCLIError("bulk bench reorder lost selection order") }
+            undo.undo()
+            guard encodedTree(model) == moved else { profileCLIError("bulk bench reorder undo mismatch") }
+            undo.undo()
+            guard encodedTree(model) == original else { profileCLIError("bulk bench move undo mismatch") }
+            undo.removeAllActions(); events = 0
+            archives.append(microseconds(clock.measure { count = model.archiveNodes(ids: ids) }) / 1000)
+            guard count == size && events == size else { profileCLIError("bulk bench archive events/count mismatch") }
+            sink.flushAll()
+            undo.undo(); sink.flushAll()
+            guard encodedTree(model) == original else { profileCLIError("bulk bench archive undo mismatch") }
+        }
+        func p95(_ values: [Double]) -> Double { values.sorted()[Int(Double(values.count - 1) * 0.95)] }
+        let moveP95 = p95(moves), reorderP95 = p95(reorders), archiveP95 = p95(archives)
+        guard indexMatchesRebuild(model), size != 50 || max(moveP95, reorderP95, archiveP95) <= 16 else { profileCLIError("bulk bench exceeded the 50-node budget or index differs") }
+        print(String(format: "  bulk %d nodes, 20 rounds p95: move %.3f ms, same-parent reorder %.3f ms, archive(SQLite sink) %.3f ms; events/undo/index OK", size, moveP95, reorderP95, archiveP95))
+    }
 }

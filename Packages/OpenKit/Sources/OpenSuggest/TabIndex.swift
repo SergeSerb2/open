@@ -245,7 +245,7 @@ final class TabIndexer {
         let id = ObjectIdentifier(tab)
         let dirty = dirty
         let value = withObservationTracking {
-            (tab.displayTitle, tab.url)
+            (tab.customTitle ?? tab.title, tab.url)
         } onChange: {
             dirty.insert(id)
         }

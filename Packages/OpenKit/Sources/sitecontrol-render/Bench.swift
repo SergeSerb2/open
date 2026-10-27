@@ -51,7 +51,7 @@ enum Bench {
             }
         }
         func p95(_ values: [Double]) -> Double { values.sorted()[Int(ceil(Double(values.count) * 0.95)) - 1] }
-        print(String(format: "Panel first draw: main-thread CPU p95 %.3f ms; wall p95 %.3f ms; 20 Boosts, 12 tiles, extensions unavailable (section hidden), 2x", p95(cpuSamples), p95(wall)))
+        print(String(format: "Panel first draw: main-thread CPU p95 %.3f ms; wall p95 %.3f ms; 20 Boosts, 12 settings rows, extension + fallback, 2x", p95(cpuSamples), p95(wall)))
         print("CPU samples ms: " + cpuSamples.map { String(format: "%.3f", $0) }.joined(separator: ", "))
         print("Wall samples ms: " + wall.map { String(format: "%.3f", $0) }.joined(separator: ", "))
         print("CPU parts mean (init/attach/present/display): " + (0..<4).map { column in String(format: "%.3f", parts.map { $0[column] }.reduce(0, +) / Double(parts.count)) }.joined(separator: ", "))

@@ -151,6 +151,11 @@ public final class BrowserModel {
     /// Injected services. Not persisted, not observed.
     @ObservationIgnored public var archiveSink: (any ArchiveSink)?
     @ObservationIgnored public var undoManager: UndoManager?
+    #if DEBUG
+    /// Debug CLI seam for the rollback code; absent from release builds.
+    @ObservationIgnored public var diagnosticRollbackFailureAtMove: Int?
+    #endif
+    @ObservationIgnored private var spaceCreationEvents: [TreeChange]?
 
     /// Invalidates derived tab ownership after structural edits or a full import/load.
     @ObservationIgnored public private(set) var treeRevision: UInt64 = 0
@@ -188,6 +193,7 @@ public final class BrowserModel {
     public func removeObserver(_ id: UUID) { observers[id] = nil }
 
     private func emit(_ change: TreeChange) {
+        if spaceCreationEvents != nil { spaceCreationEvents?.append(change); return }
         treeRevision &+= 1
         for handler in observers.values { handler(change) }
     }
@@ -385,7 +391,21 @@ public final class BrowserModel {
         }
     }
 
-    private func removeChild(_ id: ItemID, from parent: NodeParent) -> (node: SidebarNode, index: Int)? {
+    private func removeChild(_ id: ItemID, from parent: NodeParent, at knownPosition: Int? = nil) -> (node: SidebarNode, index: Int)? {
+        if let i = knownPosition {
+            switch parent {
+            case .favorites, .splitPane:
+                return withTabList(parent) { list in
+                    guard list.indices.contains(i), list[i].id == id else { return nil }
+                    return (node: SidebarNode.tab(list.remove(at: i)), index: i)
+                }
+            case .spacePinned, .spaceToday, .folder:
+                return withNodeList(parent) { list in
+                    guard list.indices.contains(i), list[i].id == id else { return nil }
+                    return (node: list.remove(at: i), index: i)
+                }
+            }
+        }
         switch parent {
         case .favorites, .splitPane:
             return withTabList(parent) { list in
@@ -434,8 +454,8 @@ public final class BrowserModel {
 
     /// Removes a node and drops its subtree from the index. Emits `.remove`.
     @discardableResult
-    private func detach(_ id: ItemID) -> (node: SidebarNode, parent: NodeParent, index: Int)? {
-        guard let parent = parentByID[id], let removed = removeChild(id, from: parent) else { return nil }
+    private func detach(_ id: ItemID, at knownPosition: Int? = nil) -> (node: SidebarNode, parent: NodeParent, index: Int)? {
+        guard let parent = parentByID[id], let removed = removeChild(id, from: parent, at: knownPosition) else { return nil }
         unregister(removed.node)
         emit(.remove(parent: parent, index: removed.index, nodeID: id))
         return (removed.node, parent, removed.index)
@@ -443,11 +463,11 @@ public final class BrowserModel {
 
     /// Moves a node. The index changes in O(1): only the node's own parent entry moves.
     /// Applies the pinned-URL rule and emits `.move`. Returns the closure that moves it back.
-    private func relocate(_ id: ItemID, to destination: NodeParent, at position: Int?) -> Revert? {
+    private func relocate(_ id: ItemID, to destination: NodeParent, at position: Int?, fromIndex knownPosition: Int? = nil) -> Revert? {
         guard let source = parentByID[id] else { return nil }
         let fromSection = section(of: source)
         let toSection = section(of: destination)
-        guard let removed = removeChild(id, from: source) else { return nil }
+        guard let removed = removeChild(id, from: source, at: knownPosition) else { return nil }
         guard let toIndex = insertChild(removed.node, into: destination, at: position) else {
             _ = insertChild(removed.node, into: source, at: removed.index)
             return nil
@@ -464,8 +484,9 @@ public final class BrowserModel {
     }
 
     /// One archive entry per tab under `node`, each with the tab's direct parent.
-    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date()) -> [ArchiveEntry] {
-        let owning = owner(of: parent)
+    private func archiveEntries(for node: SidebarNode, in parent: NodeParent, reason: ArchiveReason, at date: Date = Date(),
+                                ownership: (space: SpaceID?, profile: ProfileID?)? = nil) -> [ArchiveEntry] {
+        let owning = ownership ?? owner(of: parent)
         var entries: [ArchiveEntry] = []
         func collect(_ node: SidebarNode, _ parent: NodeParent) {
             switch node {
@@ -523,6 +544,49 @@ public final class BrowserModel {
     }
 
     // MARK: - Commands: tabs
+
+    /// Copies a whole sidebar subtree immediately after its source, with fresh
+    /// IDs and runtime state. One undo step removes the complete copy.
+    @discardableResult
+    public func duplicateNode(id: ItemID) -> ItemID? {
+        guard let source = node(id: id), let parent = parent(of: id), let position = position(of: id, in: parent) else { return nil }
+        if case .splitPane(let splitID) = parent, (node(id: splitID)?.split?.panes.count ?? 4) >= 4 { return nil }
+        func copyTab(_ tab: Tab) -> Tab {
+            Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
+                customIcon: tab.customIcon, isMuted: tab.isMuted)
+        }
+        func copyNode(_ node: SidebarNode) -> SidebarNode {
+            switch node {
+            case .tab(let tab): return .tab(copyTab(tab))
+            case .folder(let folder):
+                return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded,
+                    customIcon: folder.customIcon, children: folder.children.map(copyNode)))
+            case .split(let split):
+                let panes = split.panes.map(copyTab)
+                let focused = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
+                return .split(Split(orientation: split.orientation, fractions: split.fractions, panes: panes, focusedPaneID: focused))
+            }
+        }
+        let copied = copyNode(source)
+        let oldFractions: [Double]?
+        if case .splitPane(let splitID) = parent { oldFractions = node(id: splitID)?.split?.fractions }
+        else { oldFractions = nil }
+        guard let index = attach(copied, to: parent, at: position + 1) else { return nil }
+        func updateFractions(_ model: BrowserModel, restoring: Bool) {
+            guard case .splitPane(let splitID) = parent, let split = model.node(id: splitID)?.split else { return }
+            split.fractions = restoring ? (oldFractions ?? []) : Array(repeating: 1 / Double(split.panes.count), count: split.panes.count)
+        }
+        updateFractions(self, restoring: false)
+        let revert: Revert = { model in
+            guard model.detach(copied.id) != nil else { return false }
+            updateFractions(model, restoring: true); return true
+        }
+        registerUndo(revert, reapply: { model in
+            guard model.attach(copied, to: parent, at: index) != nil else { return Self.noRevert }
+            updateFractions(model, restoring: false); return revert
+        })
+        return copied.id
+    }
 
     @discardableResult
     public func newTab(in spaceID: SpaceID, url: URL, title: String = "", at position: Int? = nil, unread: Bool = false) -> Tab {
@@ -719,6 +783,7 @@ public final class BrowserModel {
         var customTitle: String?
         var pinnedURL: String?
         var customIcon: String?
+        var iconOverride: SpaceIcon?
         var createdAt: Double?
         var lastActiveAt: Double?
         var isMuted: Bool?
@@ -735,6 +800,7 @@ public final class BrowserModel {
                    customTitle: payload?.customTitle,
                    pinnedURL: payload?.pinnedURL.flatMap { URL(string: $0) },
                    customIcon: payload?.customIcon,
+                   iconOverride: payload?.iconOverride,
                    createdAt: payload?.createdAt.map { Date(timeIntervalSince1970: $0) } ?? record.archivedAt,
                    lastActiveAt: payload?.lastActiveAt.map { Date(timeIntervalSince1970: $0) } ?? record.archivedAt,
                    isMuted: payload?.isMuted ?? false,
@@ -780,6 +846,7 @@ public final class BrowserModel {
         var title: String
         var isExpanded: Bool
         var customIcon: String?
+        var iconOverride: SpaceIcon?
         var children: [ArchivedNodePayload]
         var originalSection: String?
     }
@@ -807,6 +874,7 @@ public final class BrowserModel {
             return Tab(id: id, url: payload.url.flatMap(URL.init(string:)) ?? URL(string: "about:blank")!,
                        title: payload.title ?? "", customTitle: payload.customTitle,
                        pinnedURL: payload.pinnedURL.flatMap(URL.init(string:)), customIcon: payload.customIcon,
+                       iconOverride: payload.iconOverride,
                        createdAt: payload.createdAt.map(Date.init(timeIntervalSince1970:)) ?? record.archivedAt,
                        lastActiveAt: Date(), isMuted: payload.isMuted ?? false,
                        openerID: payload.openerID.flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) },
@@ -815,6 +883,7 @@ public final class BrowserModel {
         func folder(_ payload: ArchivedFolderPayload) -> Folder? {
             guard let id = identity(payload.id) else { return nil }
             return Folder(id: id, title: payload.title, isExpanded: payload.isExpanded, customIcon: payload.customIcon,
+                          iconOverride: payload.iconOverride,
                           children: payload.children.compactMap(node))
         }
         func node(_ payload: ArchivedNodePayload) -> SidebarNode? {
@@ -982,24 +1051,57 @@ public final class BrowserModel {
         return result.count
     }
 
-    private func moveMany(_ ids: [ItemID], to destination: NodeParent, at position: Int?) -> (count: Int, revert: Revert?) {
+    /// Prefix counts of removed original slots. Keeps bulk positions in O(log n),
+    /// without rescanning a changing source or destination list for each node.
+    private struct RemovalOffsets {
+        var sums: [Int]
+        init(count: Int) { sums = Array(repeating: 0, count: count + 1) }
+        mutating func remove(at position: Int) {
+            var i = position + 1
+            while i < sums.count { sums[i] += 1; i += i & -i }
+        }
+        func before(_ position: Int) -> Int {
+            var i = position, result = 0
+            while i > 0 { result += sums[i]; i -= i & -i }
+            return result
+        }
+    }
+
+    private func moveMany(_ ids: [ItemID], to destination: NodeParent, at position: Int?) -> (count: Int, revert: Revert?, moved: [ItemID]) {
         let moving = topLevelSelection(ids).filter { canMoveNode(id: $0, to: destination) }
-        guard !moving.isEmpty else { return (0, nil) }
+        guard !moving.isEmpty else { return (0, nil, []) }
         let old = childIDs(in: destination), selected = Set(moving)
         let requested = max(0, min(position ?? old.count, old.count))
         let start = requested - old.prefix(requested).filter { selected.contains($0) }.count
         let remaining = old.filter { !selected.contains($0) }
         var target = remaining
         target.insert(contentsOf: moving, at: start)
-        guard old != target else { return (0, nil) }
-        let boundary = start < remaining.count ? remaining[start] : nil
-        var reverts: [Revert] = []
+        guard old != target else { return (0, nil, []) }
+        let sources = Dictionary(uniqueKeysWithValues: moving.compactMap { id in parentByID[id].map { (id, $0) } })
+        let parents = Set(sources.values).union([destination])
+        let positions = Dictionary(uniqueKeysWithValues: parents.map { parent in
+            (parent, Dictionary(uniqueKeysWithValues: childIDs(in: parent).enumerated().map { ($0.element, $0.offset) }))
+        })
+        var offsets = Dictionary(uniqueKeysWithValues: positions.map { ($0.key, RemovalOffsets(count: $0.value.count)) })
+        let boundary = start < remaining.count ? positions[destination]?[remaining[start]] : nil
+        var reverts: [Revert] = [], moved: [ItemID] = []
+        var processed = 0, destinationCount = old.count
         for id in moving {
-            var slot = boundary.flatMap { self.position(of: $0, in: destination) }
-            if let current = self.position(of: id, in: destination), let value = slot, current < value { slot = value - 1 }
-            if let revert = relocate(id, to: destination, at: slot) { reverts.append(revert) }
+            guard let source = sources[id], let original = positions[source]?[id] else { continue }
+            let fromIndex = original - (offsets[source]?.before(original) ?? 0)
+                + (source == destination && boundary.map { original >= $0 } == true ? processed : 0)
+            var slot = boundary.map { $0 - (offsets[destination]?.before($0) ?? 0) + processed } ?? destinationCount
+            if source == destination && fromIndex < slot { slot -= 1 }
+            if source != destination || fromIndex != slot {
+                guard let revert = relocate(id, to: destination, at: slot, fromIndex: fromIndex) else { continue }
+                reverts.append(revert); moved.append(id)
+            }
+            // Even a same-slot item joins the logical inserted block. It emits no move.
+            offsets[source]?.remove(at: original)
+            processed += 1
+            if source != destination { destinationCount += 1 }
         }
-        return (reverts.count, Self.combined(reverts))
+        return (moved.count, Self.combined(reverts), moved)
     }
 
     @discardableResult
@@ -1019,13 +1121,11 @@ public final class BrowserModel {
             guard let parent = parentByID[id] else { continue }
             if case .spacePinned? = section(of: parent) { pinned.append(id) } else { today.append(id) }
         }
-        let unread = selected.compactMap { index[$0] }.flatMap { tabs(under: $0) }.map { ($0, $0.isUnread) }
         let p = moveMany(pinned, to: .spacePinned(spaceID), at: 0)
         let t = moveMany(today, to: .spaceToday(spaceID), at: 0)
         guard let structural = Self.combined([p.revert, t.revert].compactMap { $0 }) else { return (0, nil) }
-        if markUnread {
-            for (tab, _) in unread where owner(of: parentByID[tab.id] ?? .spaceToday(spaceID)).space == spaceID { tab.isUnread = true }
-        }
+        let unread = markUnread ? (p.moved + t.moved).compactMap { index[$0] }.flatMap { tabs(under: $0) }.map { ($0, $0.isUnread) } : []
+        for (tab, _) in unread { tab.isUnread = true }
         return (p.count + t.count, { model in
             guard structural(model) else { return false }
             for (tab, old) in unread where model.tab(id: tab.id) === tab { tab.isUnread = old }
@@ -1050,26 +1150,37 @@ public final class BrowserModel {
             if groups[parent] == nil { parents.append(parent) }
             groups[parent, default: []].append(id)
         }
+        let positions = Dictionary(uniqueKeysWithValues: parents.map { parent in
+            (parent, Dictionary(uniqueKeysWithValues: childIDs(in: parent).enumerated().map { ($0.element, $0.offset) }))
+        })
+        let sources = Dictionary(uniqueKeysWithValues: selected.compactMap { id in parentByID[id].map { (id, $0) } })
         let ordered = parents.flatMap { parent in
-            (groups[parent] ?? []).sorted { (position(of: $0, in: parent) ?? 0) > (position(of: $1, in: parent) ?? 0) }
+            (groups[parent] ?? []).sorted { (positions[parent]?[$0] ?? 0) > (positions[parent]?[$1] ?? 0) }
         }
         let now = Date()
-        // Capture direct parents before collapsing any selected panes.
-        let entries = ordered.flatMap { id -> [ArchiveEntry] in
-            guard let node = index[id], node.folder == nil, let parent = parentByID[id] else { return [] }
-            return archiveEntries(for: node, in: parent, reason: node.folder == nil ? .closed : .folderDeleted, at: now)
-        }
-        let folders = ordered.compactMap { id -> ArchiveFolderEntry? in
-            guard let folder = index[id]?.folder, let parent = parentByID[id] else { return nil }
-            return folderEntry(folder, parent: parent, archivedAt: now)
-        }
+        let ownership = Dictionary(uniqueKeysWithValues: parents.map { ($0, owner(of: $0)) })
+        var entries: [ArchiveEntry] = []
+        var folders: [ArchiveFolderEntry] = []
         var reverts: [Revert] = []
         for id in ordered {
+            guard let node = index[id], let originalParent = sources[id] else { continue }
+            // Preserve the original location before a pane collapse, but publish
+            // archive records only after this node actually leaves the tree.
+            let nodeEntries = node.folder == nil ? archiveEntries(for: node, in: originalParent, reason: .closed, at: now, ownership: ownership[originalParent]) : []
+            let folder = node.folder.map { folderEntry($0, parent: originalParent, archivedAt: now) }
+            let revert: Revert?
             if case .splitPane(let splitID)? = parentByID[id], let split = index[splitID]?.split,
-               let revert = takePane(id, from: split) { reverts.append(revert) }
-            else if let removed = detach(id) {
-                reverts.append { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+               let taken = takePane(id, from: split) { revert = taken }
+            else {
+                let slot = sources[id].flatMap { parent in parentByID[id] == parent ? positions[parent]?[id] : nil }
+                if let removed = detach(id, at: slot) {
+                    revert = { model in model.attach(removed.node, to: removed.parent, at: removed.index) != nil }
+                } else { revert = nil }
             }
+            guard let revert else { continue }
+            reverts.append(revert)
+            entries.append(contentsOf: nodeEntries)
+            if let folder { folders.append(folder) }
         }
         guard let structural = Self.combined(reverts) else { return (0, nil) }
         archiveSink?.archive(entries, folders: folders)
@@ -1147,13 +1258,13 @@ public final class BrowserModel {
     private func copyNode(_ node: SidebarNode) -> SidebarNode {
         func copyTab(_ tab: Tab) -> Tab {
             Tab(url: tab.url, title: tab.title, customTitle: tab.customTitle, pinnedURL: tab.pinnedURL,
-                customIcon: tab.customIcon, isMuted: tab.isMuted)
+                customIcon: tab.customIcon, iconOverride: tab.iconOverride, isMuted: tab.isMuted)
         }
         switch node {
         case .tab(let tab): return .tab(copyTab(tab))
         case .folder(let folder):
             return .folder(Folder(title: folder.title, isExpanded: folder.isExpanded, customIcon: folder.customIcon,
-                                  children: folder.children.map { copyNode($0) }))
+                                  iconOverride: folder.iconOverride, children: folder.children.map { copyNode($0) }))
         case .split(let split):
             let panes = split.panes.map(copyTab)
             let focus = split.panes.firstIndex { $0.id == split.focusedPaneID }.map { panes[$0].id }
@@ -1282,6 +1393,7 @@ public final class BrowserModel {
         if let tab = tab(id: id) {
             let old = tab.customTitle
             let new = title.isEmpty ? nil : title
+            guard title != (old ?? tab.title), new != old else { return }
             tab.customTitle = new
             registerChange(undo: { tab.customTitle = old }, redo: { tab.customTitle = new })
         } else if let folder = index[id]?.folder {
@@ -1448,18 +1560,127 @@ public final class BrowserModel {
 
     // MARK: Spaces
 
+    /// Requires an ID obtained from a live Profile. Data/import/automation IDs
+    /// must use the failable at:moving: overload. A refusal is a programmer error.
     @discardableResult
     public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon? = nil, theme: SpaceTheme = SpaceTheme()) -> Space {
-        let resolvedProfile = profile(id: profileID)?.id ?? defaultProfile?.id ?? profileID
-        let space = Space(title: title, icon: icon, theme: theme, profileID: resolvedProfile)
-        let i = spaces.count
-        insertSpace(space, at: i)
-        emit(.reload(parent: .spaceToday(space.id)))
-        registerUndo({ model in model.removeSpace(space.id); return true }, reapply: { model in
-            model.insertSpace(space, at: i)
-            return { model in model.removeSpace(space.id); return true }
-        })
+        guard let space = createSpace(title: title, profileID: profileID, icon: icon, theme: theme, at: nil, moving: []) else {
+            preconditionFailure("createSpace requires a live Profile ID; invalid profileID: \(profileID)")
+        }
         return space
+    }
+
+    /// Use for IDs supplied by data, import, automation, or restored state.
+    /// Unknown Profile or invalid placement returns nil without writes, undo, events, or save.
+    @discardableResult
+    public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?, theme: SpaceTheme,
+                            at index: Int?, moving nodeIDs: [ItemID]) -> Space? {
+        guard profile(id: profileID) != nil, validSpaceCreation(index: index, moving: nodeIDs) else { return nil }
+        let space = Space(title: title, icon: icon, theme: theme, profileID: profileID)
+        let i = index ?? spaces.count
+        guard let revert = insertSpaceMoving(space, at: i, moving: nodeIDs) else { return nil }
+        registerUndo(revert, reapply: { $0.insertSpaceMoving(space, at: i, moving: nodeIDs) ?? Self.noRevert })
+        return space
+    }
+
+    private func validSpaceCreation(index insertion: Int?, moving ids: [ItemID]) -> Bool {
+        guard insertion.map({ (0...spaces.count).contains($0) }) ?? true,
+              Set(ids).count == ids.count else { return false }
+        // The destination is a fresh Space, so it cannot be a source node's descendant.
+        let moving = Set(ids)
+        for id in ids {
+            guard index[id] != nil, let parent = parentByID[id], position(of: id, in: parent) != nil else { return false }
+            if case .splitPane = parent { return false }
+            var ancestor = parent
+            while case .folder(let parentID) = ancestor {
+                guard !moving.contains(parentID), let next = parentByID[parentID] else { return false }
+                ancestor = next
+            }
+        }
+        return true
+    }
+
+    private func insertSpaceMoving(_ space: Space, at i: Int, moving ids: [ItemID]) -> Revert? {
+        guard self.space(id: space.id) == nil, validSpaceCreation(index: i, moving: ids) else { return nil }
+        // Buffer structural events until all relocations succeed. Rollback uses the
+        // same primitives, and discards both their forward and inverse events.
+        spaceCreationEvents = []
+        insertSpace(space, at: i)
+        var moves: [Revert] = []
+        func rollback() {
+            for revert in moves.reversed() { _ = revert(self) }
+            removeSpace(space.id); spaceCreationEvents = nil
+        }
+        for id in ids {
+            // Every source was validated before the first mutation. The fresh pinned
+            // section accepts tabs, folders (with children), and whole splits.
+            #if DEBUG
+            if diagnosticRollbackFailureAtMove == moves.count { rollback(); return nil }
+            #endif
+            guard let revert = relocate(id, to: .spacePinned(space.id), at: nil) else { rollback(); return nil }
+            moves.append(revert)
+        }
+        emit(.reload(parent: .spaceToday(space.id)))
+        let committedEvents = spaceCreationEvents ?? []
+        spaceCreationEvents = nil
+        for event in committedEvents { emit(event) }
+        let reverts = moves
+        return { model in
+            guard model.space(id: space.id) != nil else { return false }
+            for revert in reverts.reversed() { _ = revert(model) }
+            model.removeSpace(space.id)
+            model.emit(.reload(parent: .spaceToday(space.id)))
+            return true
+        }
+    }
+
+    /// Live preview deliberately registers neither undo nor a structural event.
+    public func previewSpaceTheme(id: SpaceID, theme: SpaceTheme) {
+        guard let space = space(id: id), space.theme != theme else { return }
+        space.theme = theme
+    }
+
+    @discardableResult
+    public func commitSpaceTheme(id: SpaceID, from baseline: SpaceTheme) -> Bool {
+        guard let space = space(id: id), space.theme != baseline else { return false }
+        let current = space.theme
+        registerChange(undo: { space.theme = baseline }, redo: { space.theme = current })
+        return true
+    }
+
+    public func setSpaceIcon(id: SpaceID, icon: SpaceIcon?) {
+        guard let space = space(id: id), space.icon != icon else { return }
+        let old = space.icon
+        space.icon = icon
+        registerChange(undo: { space.icon = old }, redo: { space.icon = icon })
+    }
+
+    @discardableResult
+    public func setNodeIcon(id: ItemID, icon: SpaceIcon?) -> Bool {
+        if let tab = index[id]?.tab {
+            guard tab.iconOverride != icon || tab.customIcon != nil else { return false }
+            let old = tab.iconOverride, legacy = tab.customIcon
+            tab.iconOverride = icon; tab.customIcon = nil
+            registerChange(undo: { tab.iconOverride = old; tab.customIcon = legacy },
+                           redo: { tab.iconOverride = icon; tab.customIcon = nil })
+        } else if let folder = index[id]?.folder {
+            guard folder.iconOverride != icon || folder.customIcon != nil else { return false }
+            let old = folder.iconOverride, legacy = folder.customIcon
+            folder.iconOverride = icon; folder.customIcon = nil
+            registerChange(undo: { folder.iconOverride = old; folder.customIcon = legacy },
+                           redo: { folder.iconOverride = icon; folder.customIcon = nil })
+        } else { return false }
+        return true
+    }
+
+    public func renameSpace(id: SpaceID, title: String) {
+        guard let space = space(id: id) else { return }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        guard space.title != value else { return }
+        let old = space.title
+        space.title = value
+        registerChange(undo: { space.title = old }, redo: { space.title = value })
     }
 
     public func updateSpace(id: SpaceID, title: String? = nil, icon: SpaceIcon?? = nil, theme: SpaceTheme? = nil, profileID: ProfileID? = nil) {

@@ -19,16 +19,19 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
     init() {
         value = SiteControlSnapshot(context: SiteControlContext(tabID: tabID, profileID: profileID,
             url: URL(string: "https://news.example.com/")!, displayHost: "news.example.com", security: .secure),
-            commandsEnabled: ["capture-page": true, "capture-full-page": true, "capture-portrait": true])
+            commandsEnabled: ["capture-page": true, "capture-full-page": true, "share-page": true])
+        configure("scc-no-boosts")
     }
     func configure(_ state: String) {
-        value?.tiles = [
-            SiteSettingTile(id: "contentBlocking", kind: .contentBlocking, title: "Block Ads & Trackers", subtitle: "On", state: .on, symbol: "hand.raised.fill", help: "The built-in ad blocker is on for this site."),
-            SiteSettingTile(id: "permission.camera", kind: .permission(.camera), title: "Camera", subtitle: "Allowed", state: .on, symbol: "video.fill", inUse: true),
-            SiteSettingTile(id: "permission.notifications", kind: .permission(.notifications), title: "Notifications", subtitle: "Blocked", state: .off, symbol: "bell.fill")]
-        value?.boosts = [Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000001"), name: "Calm news", siteMatch: SiteMatch(domain: "example.com")),
-                         Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000002"), name: "Larger type", siteMatch: SiteMatch(domain: "news.example.com"), isEnabled: false)]
+        let blocking = SiteSettingTile(id: "contentBlocking",kind: .contentBlocking,title: "Block Ads & Trackers",subtitle: "On",state: .on,symbol: "hand.raised.fill",help: "The built-in ad blocker is on for this site.")
+        let pip = SiteSettingTile(id: "content.automaticPictureInPicture",kind: .content("automaticPictureInPicture"),title: "Automatic Picture-In-Picture",subtitle: "Allowed",state: .on,symbol: "gearshape.fill")
+        value?.tiles = [blocking,pip]
+        value?.boosts = []
+        if ["scc-boost","scc-boosts-off","scc-incognito","scc-hover-boost"].contains(state) {
+            value?.boosts = [Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000001"),name: "My Boost",siteMatch: SiteMatch(domain: "example.com"))]
+        }
         switch state {
+        case "scc-reload": break
         case "scc-insecure": value?.context.url = URL(string: "http://news.example.com/")!; value?.context.security = .insecure
         case "scc-adblock-excluded": value?.tiles[0].state = .off; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off for this site."
         case "scc-adblock-unavailable": value?.tiles[0].state = .unavailable; value?.tiles[0].subtitle = "Off"; value?.tiles[0].help = "The built-in ad blocker is off. You can turn it on in Settings."
@@ -38,8 +41,7 @@ final class FakeSource: SiteControlDataSource, SiteControlActions {
         case "scc-internal-page": value?.context.url = URL(string: "open://settings")!; value?.context.displayHost = "Settings"; value?.context.security = .insecure
         case "scc-many":
             let names = ["Camera", "Microphone", "Location", "Notifications", "Clipboard", "MIDI Devices", "Screen Sharing", "Automatic Downloads", "Storage Access", "Window Management", "Fonts", "Idle Detection"]
-            let blocking = value!.tiles[0]
-            value?.tiles = [blocking] + SitePermission.allCases.prefix(11).enumerated().map { i, kind in
+                value?.tiles = [blocking] + SitePermission.allCases.prefix(11).enumerated().map { i, kind in
                 SiteSettingTile(id: "permission.\(kind)", kind: .permission(kind), title: names[i], subtitle: "Allowed", state: .on, symbol: ["video.fill","mic.fill","location.fill","bell.fill","doc.on.clipboard","pianokeys","rectangle.on.rectangle","arrow.down.circle","externaldrive","macwindow","textformat","clock"][i]) }
             value?.boosts = (0..<20).map { Boost(id: BoostID(uuidString: String(format: "00000000-0000-0000-0000-%012d", $0 + 1)), name: "Boost \($0 + 1)", siteMatch: SiteMatch(domain: "example.com")) }
         default: break

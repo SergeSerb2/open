@@ -52,6 +52,28 @@ public enum SidebarColors {
     public static let addSpacePlusDeactivated = pair(.black(0.45), .white(0.45))
 }
 
+/// Window buttons at rest: Arc's dimmed look, in every window state (docs/re/interaction-states.md §0).
+/// The pointer over the group shows the system's own buttons instead.
+public enum WindowControlColors {
+    /// `DimmedWindowControls` (`ARCUI_ARCUI.bundle` catalog): black; dark appearance
+    /// (0.953, 0.953, 0.918). Arc's grey circles are this color over the background at
+    /// 0.10 (light content, F0001: `#CD876C` on `#E59678`, 0.099–0.103 per channel) and 0.33
+    /// (dark content, F0079, F0129, F0131: `#686973` on `#242538`, 0.326–0.332; plain white
+    /// would need 0.295 on blue against 0.31 on red and green).
+    public static let dimmed = DesignColor(light: .black(1), dark: RGBA(0.953, 0.953, 0.918))
+    public static let fillOpacity = (light: 0.10, dark: 0.33)
+    /// A 1 pt ring just outside the 12 pt circle (r 6–7) in each button's color, only while
+    /// the window is active: F0001, F0129, F0131, and capture session 2 (03, frames 0003–0005)
+    /// show red, yellow, and green edges; inactive Arc (frame 0016) shows none. Fitted alpha
+    /// 0.06 (light) and 0.34 (dark; RMS 3.5–5.6 levels with the ring against 11.7–16.5 without it).
+    public static let ringOpacity = (light: 0.06, dark: 0.34)
+    /// Ring colors, fitted by least squares at those alphas: dark from F0131 and F0129 (the
+    /// two frames agree within 2 levels), light from F0001 (a faint ring, so less certain).
+    public static let closeRing = DesignColor(light: RGBA(hex: 0xDB3B3C), dark: RGBA(hex: 0xFE8179))
+    public static let minimizeRing = DesignColor(light: RGBA(hex: 0xD4A201), dark: RGBA(hex: 0xFECE3F))
+    public static let zoomRing = DesignColor(light: RGBA(hex: 0x2FB513), dark: RGBA(hex: 0x70D249))
+}
+
 /// Command bar and the URL field (`Resources/Assets.car`, `ARC_CommandBar`).
 public enum CommandBarColors {
     public static let iconActiveBackground = pair(.white(1), RGBA(hex: 0x1A1A1A, .displayP3))
@@ -104,6 +126,8 @@ public enum MenuColors {
 /// docs/re/interaction-states.md §3–§6). One place to change a role.
 /// Theme-driven roles (tab title, selected fill, tooltip) live on `SpaceThemeStyle`.
 public enum SidebarRole {
+    /// Guess pending C5: use the high-contrast Space accent (design review R1).
+    public static func unreadDot(style: SpaceThemeStyle, appearance: ContentAppearance) -> RGBA { style.contrastAccent(appearance) }
     /// Space title. Light: black 0.45 → `SidebarForegroundDarker` (fitted on F0001;
     /// 0.48 / `GrayA10` gave ΔE 1.8). Dark: white 0.55, fitted on the default dark Space (F0079).
     public static let spaceTitle = DesignColor(light: SidebarColors.foregroundDarker.light, dark: .white(0.55))
@@ -137,6 +161,7 @@ public enum SidebarRole {
     /// Selected row in dark content: measured white 0.20 → `TabCellBackgroundCurrent` dark.
     /// Light content uses the theme's `light.background` (see `SpaceThemeStyle.selectedFill`).
     public static let rowSelected = SidebarColors.tabCurrent
+    public static let rowMultiselected = SidebarColors.tabMultiselected
     public static let rowSelectedShadow = SidebarColors.tabShadowSelected
     public static let rowPressed = SidebarColors.tabPressed
     /// Pinned/Today divider line: measured black 0.15 → `SidebarSeparator`.
@@ -185,11 +210,16 @@ extension SidebarRole {
     public static let miniPlayerFill = SidebarColors.itemBackground
     public static let miniPlayerHoverFill = SidebarColors.itemHoveredBackground
     public static let mediaControlGlyph = CommandBarColors.accessoryForeground
+    public static let mediaDrawerKnob = DesignColor(light: .white(1), dark: .white(1))
     /// Provisional: use the existing insecure-lock pair until S9 (§4.1).
     public static let recordingIndicator = CommandBarColors.lockInsecure
 }
 
 public enum PiPRole {
+    public static let controlsDim = DesignColor(light: .black(0.25), dark: .black(0.25)) // guess, design r1
+    public static let documentButtonHover = DesignColor(light: .white(0.12), dark: .white(0.12))
+    public static let documentButtonPressed = DesignColor(light: .white(0.18), dark: .white(0.18))
+    public static let centerGlyphShadow = DesignColor(light: .black(0.35), dark: .black(0.35)) // guess, N3
     public static let glyph = DesignColor(light: .white(1), dark: .white(1))
     public static let plate = DesignColor(light: .black(0.4), dark: .black(0.4))
     public static let plateHover = DesignColor(light: .black(0.55), dark: .black(0.55))
@@ -204,4 +234,9 @@ public enum PiPRole {
     public static let documentHairline = DesignColor(light: .white(0.2), dark: .white(0.2))
     public static let topScrim = DesignColor(light: .black(0.5), dark: .black(0.5))
     public static let bottomScrim = DesignColor(light: .black(0.6), dark: .black(0.6))
+}
+
+/// PreviewBackgroundColor, SC §7: measured catalog values, no copied assets.
+public enum PreviewColors {
+    public static let background = DesignColor(light: RGBA(hex: 0xFFFFFF), dark: RGBA(hex: 0x212222))
 }

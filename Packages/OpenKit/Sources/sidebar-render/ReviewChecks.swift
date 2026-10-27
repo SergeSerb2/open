@@ -156,10 +156,12 @@ enum ReviewChecks {
         check(!folder.isExpanded, "Return activates a focused folder")
 
         print("review: tooltip delay stays armed across pointer movement")
-        sidebar.reveal(nodeID: secondTab.id)
+        // Today rows keep title tooltips while pinned rows now own Hover Previews.
+        let tooltipTab = space.today.compactMap(\.tab).first!
+        sidebar.reveal(nodeID: tooltipTab.id)
         pump()
         let page = outline.enclosingScrollView!.superview!
-        let rect = outline.rect(ofRow: outline.row(forItem: secondTab))
+        let rect = outline.rect(ofRow: outline.row(forItem: tooltipTab))
         let point = outline.convert(NSPoint(x: 60, y: rect.midY), to: nil)
         let tooltip = TooltipController.shared
         let schedules = tooltip.scheduleCount, shows = tooltip.showCount
@@ -170,7 +172,8 @@ enum ReviewChecks {
             page.mouseMoved(with: event)
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         }
-        check(tooltip.scheduleCount - schedules == 1 && tooltip.showCount - shows == 1, "same row and tooltip schedule and show once during continuous movement")
+        _ = Checks.waitFor { tooltip.showCount - shows == 1 }
+        check(tooltip.scheduleCount - schedules == 1 && tooltip.showCount - shows == 1, "same Today row and tooltip schedule and show once during continuous movement")
 
         print("review: mixed Favorites reload batches")
         var seed: UInt64 = 0x332026
@@ -214,12 +217,13 @@ enum ReviewChecks {
         let drag = SidebarDragEvent(ids: [today1.id, sourcePinned.id, today2.id], window: host)
         check(switcher.registeredDraggedTypes.contains(.init("com.open.sidebar.node")), "Space icon registers the sidebar drag type")
         check(switcher.draggingEntered(drag) == .move, "Space icon accepts a legal multi-tab drag")
-        RunLoop.main.run(until: Date().addingTimeInterval(0.25))
-        check(context.focusedSpace === space, "spring loading waits before switching")
+        // Logic, not wall clock: entry schedules the switch at 0.5 s and the
+        // Space does not change until that work runs.
+        let springDelay = sidebar.springLoadDelay(spaceID: target.id)
+        check(context.focusedSpace === space && springDelay == 0.5, "spring loading waits before switching")
         _ = switcher.draggingUpdated(drag)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-        pump()
-        check(context.focusedSpace === target, "hover switches Space after 0.5 seconds despite drag updates")
+        let switched = Checks.waitFor(settle: scene) { context.focusedSpace === target }
+        check(switched && springDelay == 0.5, "hover switches Space after 0.5 seconds despite drag updates")
         check(switcher.performDragOperation(drag), "dropping on the Space icon succeeds")
         pump()
         check(Array(target.today.prefix(2).map(\.id)) == [today1.id, today2.id] && target.pinned.first?.id == sourcePinned.id, "multi-tab drop keeps order at Today top and preserves the pinned section")
@@ -232,8 +236,7 @@ enum ReviewChecks {
         let returnDrag = SidebarDragEvent(ids: [today1.id], window: host)
         _ = back.draggingEntered(returnDrag)
         back.draggingExited(returnDrag)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.55))
-        check(context.focusedSpace === target, "leaving a Space icon cancels spring loading")
+        check(context.focusedSpace === target && sidebar.springLoadDelay(spaceID: space.id) == nil, "leaving a Space icon cancels spring loading")
         delegate.refuses = true
         check(!back.performDragOperation(returnDrag), "Space drop propagates delegate refusal")
         delegate.refuses = false

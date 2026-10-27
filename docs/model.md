@@ -54,6 +54,78 @@ The snapshot DTOs stay at `schemaVersion` 1. The `littleArc` → `littleOpen` sn
 
 ### Commands
 
+Space editor inputs live in `SpaceTheme.style: SpaceStyle?`. A style stores
+only its key color, count, wheel, appearance, noise, texture, intensity, and
+`mathVersion` (currently 1). Derived palettes are not persisted. Count is
+clamped to 1–3, noise and intensity to 0–1, and key alpha to 1 on decode and
+on writes. Unknown wheel, appearance, and texture strings decode to
+analogous, automatic, and grain. The math version is preserved. Missing
+style and icon override keys decode as nil; schemaVersion remains 1.
+
+`Tab.iconOverride` and `Folder.iconOverride` are typed `SpaceIcon?` values.
+Rows resolve that value before legacy `customIcon`, then use the favicon or
+folder glyph. `setNodeIcon` writes the override and clears `customIcon` in
+one undo step; undo restores both. New Arc imports write typed overrides.
+Existing legacy strings keep their meaning (SF Symbol if available, else
+emoji). Import keeps the raw Arc theme and never writes editor inputs.
+Folders now draw a legacy `customIcon` through that precedence rule. Before
+this step the folder renderer ignored that field, and no current writer
+sets it. This is an intentional rendering change required by plan §3.3.
+Empty imported tab emoji strings are absent; named tab icons share the
+known/unknown counters used for Space icons.
+
+Style fields other than the required key color use their documented
+defaults when absent, null, or the wrong type. A style with no usable key
+color (or an invalid object shape) decodes as nil on `SpaceTheme`, preserving
+the rest of the snapshot and its legacy theme. Present valid key colors and
+math versions keep their stored values.
+
+`previewSpaceTheme` changes only the live theme, without undo or TreeChange.
+`commitSpaceTheme(id:from:)` commits the entire preview gesture as one undo
+step, or returns false for an equal value or missing Space. The caller owns
+the save after commit. `setSpaceIcon` and `renameSpace` are single property
+undo steps; whitespace-only Space titles become nil. Same-value commands
+register no undo.
+
+`createSpace(...at:moving:) -> Space?` validates the entire moving list
+(existing nodes, no split panes, duplicate IDs, or ancestor/descendant pairs,
+and valid placement) and an explicit index in `0...spaces.count` before any
+write. A refusal returns
+nil with no mutation, event, undo, or save. Success inserts the Space and
+moves the nodes into Pinned, in order, as one undo step. Folder children,
+object identities, source positions, and pinned URLs restore on undo. The
+model buffers TreeChange events until every relocation succeeds. A late
+failure reverses all earlier moves and removes the inserted Space, then
+discards the events and registers no undo. A DEBUG-only CLI seam exercises
+the rollback code; the seam does not exist in production builds.
+Successful moves emit one `.move` per node and no source-parent reload.
+An unknown Profile ID likewise refuses with no changes. The original
+nonoptional overload requires a live Profile ID and delegates with an append
+index and no moves; nil is a programmer error and its precondition names the
+bad ID. Data/import/automation/restored IDs must use the failable overload.
+Step 7's move-to-new-Space and folder conversion callers
+must likewise return false or nil on refusal without partial changes.
+
+Editor writes use `SpaceTheme(style:)`, clearing legacy theme fields. Older
+builds ignore the additive style key and lose that edited appearance. This
+is accepted because Open has no released users. Values written before the
+editor retain their original decoding and render path.
+
+`tools/verify-all.sh` runs the `space-legacy` gate. It copies the frozen
+pre-Step-1 synthetic fixture, runs `openkit roundtrip` (byte-comparing its
+encoded DTOs before and after save/load), compares all original semantic
+fields, and renders all three Spaces against committed pre-change PNGs
+byte for byte. The raw fixture can gain only `keepAliveSites: []`, an
+additive default from the later main-branch keep-alive change. The source
+fixture and its PNGs never change during verification. The window-buttons
+change (PR #104) re-rendered the PNGs: every changed pixel lies in the
+stand-in window buttons (x 13–73, y 17–31), which now draw the dimmed rest
+look; all other pixels equal the pre-Step-1 renders.
+The sidebar offscreen renderer supplies its Metal command queue to
+`CARenderer` and synchronizes readback on that same queue. This prevents a
+read-before-render race exposed by P1; 24 consecutive renders matched the
+unchanged baseline PNGs after the fix.
+
 State changes only through named commands on `BrowserModel`:
 `newTab`, `closeTab` (archives via the injected `ArchiveSink`), `pinTab` / `unpinTab`, `addFavorite(tabID:to:at:)` / `removeFavorite(tabID:into:)`, `moveNode(id:to:at:)`, `createFolder(in:title:withNodes:)`, `renameNode`, `setExpanded`, `setPinnedSectionCollapsed(spaceID:collapsed:)`, `setMuted(tabID:muted:)`, `createSpace` / `updateSpace` / `deleteSpace` / `moveSpace`, `makeSplit(tabIDs:)` / `unsplit` / `removePane`, `resetPinnedTab`, `replacePinnedURL`, `restoreArchivedTab(_:)`, `clearToday(space:)`, `archiveExpiredTabs(now:)`, `focusSpace`, `selectNode`, `createProfile`, `renameProfile`, `setProfileIcon`, `updateProfileSettings`, `deleteProfile`, `moveSpace(id:toProfile:)`. See Profiles below for validation, queries, and repair.
 Window commands: `createWindow(focusedSpaceID:)`, `closeWindow(windowID:)`,
@@ -708,3 +780,91 @@ FA7 checks the snapshot roundtrip only; the unrelated ArchiveStore before/after
 comparison was removed. Library folder counts decode once per page load, cache
 by row ID, and clear on reload. A failed archive-row deletion after folder restore
 says "Folder restored", with a real SQLite delete-failure CLI scenario.
+
+## Sidebar completion M3 (2026-10-26)
+
+`Tab.displayTitle` now uses `customTitle ?? TidyTitles.tidy(title:url:)`. The
+Open-written rule table follows sidebar-completion §3.7 for Gmail, Google Docs,
+Drive, Calendar, YouTube, GitHub, X/Twitter, LinkedIn, Wikipedia, Stack Overflow,
+Figma, Slack, Outlook, and Amazon. Host matching is exact after removing one
+leading www. The first matching rule wins. Empty results keep the raw title.
+No Arc JSON values were read or copied. Raw `Tab.title`, snapshot values, and
+suggestion-search inputs are unchanged.
+
+Regexes compile once. A main-actor cache holds at most 512 title/host/path/fragment
+keys. The real commands-demo flow passes 40 fixture pairs, custom-title precedence,
+no-match and empty-result cases, and snapshot roundtrip. T3 p95 was 0.334 µs for
+10,000 cache hits and 4.875 µs for 1,000 misses (limits 5/50 µs). All 170 demo
+checks pass. No suggestion code or suite checks changed.
+
+The 13 capture-state comparisons could not run: `.re/vf/run-states.sh` and its
+capture-time inputs are absent from this checkout and the current project/worktrees.
+The full `sidebar-render check` remains part of verify-all; lane S owns TT1/TT2.
+No claim of capture parity is made for this step.
+
+## Sidebar M1 Muse follow-up (2026-10-26)
+
+Bulk moves build one original-slot map per parent and use prefix removal counts to
+update positions without per-node list searches. The primitive validates a supplied
+slot before removal; the existing single-node path retains its normal lookup.
+Same-slot nodes emit no move. Move to Space marks unread only on descendants of
+actually relocated nodes and leaves every flag untouched with markUnread false.
+Bulk archive builds each parent position map once, sorts by those values, and
+removes known slots from highest to lowest (split collapse retains its existing path).
+
+The CLI now asserts exact B4 removal IDs/order, B7 fresh IDs at every depth plus
+split focus/fractions/orientation, and unread true/false through folders and splits
+from two source Spaces. It also checks a same-slot pin stays read and a middle drop
+with selected nodes on both sides. `commands-demo` passes 156/156 on the M1 base.
+
+`openkit bench` runs 20 real command/undo rounds at 50 and 500 nodes, with exact
+event counts, byte-equal undo snapshots, index checks, and the real SQLite sink.
+Release p95 (ms): 50-node move/reorder/archive = 0.269/0.216/0.452;
+500-node = 1.335/1.174/2.087. The 50-node 16 ms budget passes. No unit tests or
+new target, dependency, timer, App edit, or desktop input was added.
+
+## Sidebar completion M4 (2026-10-26)
+
+Open's two sounds are generated from fixed-seed PCM with the Python standard
+library and converted by afconvert. `tools/generate-sounds.py --check` regenerates
+both files and compares their pinned SHA-256 and committed bytes. `SoundEffects`
+loads AVAudioPlayer lazily, reads `open.advanced.playSoundEffects` at each use, and
+loads/plays nothing when it is absent or false. The default remains false; there
+is no production caller for the general event effect (lead Q6). The license
+inventory records these assets as Open's own work, with no recorded reference audio.
+
+The existing SettingsDefaults registry now owns the three sidebar hint/banner keys.
+The lead Q3 Previews sources use `open.general.previewsFolders` and
+`open.general.previewsPages` in the same UserDefaults store. ProfileSettings is
+unchanged. The Previews sheet replaces its former hovering-links switch with
+Folders and Pinned tabs and Favorites. The registry in settings-library.md records
+the exact keys; no second settings store is introduced.
+
+The release `features-render check` passes 150/150: SE1 loads the real bundled CAFs
+at 0.450 s / -6.000 dBFS and 1.100 s / -8.000 dBFS; SE2 proves absent and false
+preferences neither load nor play. The Settings CLI verifies defaults, disk writes,
+and reload through the existing store. `features-render` and sound regeneration now
+run in verify-all. No audio playback, unit tests, App edits, or desktop input.
+
+## Sidebar completion M5 (2026-10-26)
+
+LibrarySection.spaces is the first Library row. It hosts the native view supplied
+by `SettingsActions.makeSpaceManagerView() -> NSView?`, through a source-compatible
+optional SettingsActions injection in LibraryViewModel. The view is created only
+on first entry, retained across section switches, and constrained to fill the host.
+OpenSettings imports no OpenSidebar code and adds no library target. A nil factory
+result shows the Library empty state. Spaces has no unrelated archive/search toolbar.
+The selected section persists in the existing UserDefaults registry.
+
+`settings-preview check --only library-spaces` passes L1 through the actual Library
+view and the injected labeled native stand-in. It verifies lazy creation, render,
+reuse, section persistence, and a nil factory. The empty-state check uses the native
+headline AX label, as existing offscreen Library checks do; SwiftUI's combined
+message label is not exposed in a never-ordered window. The normal render command
+also includes Library Spaces at 1x and 2x. App presentation and the concrete sidebar
+SpaceManagerView remain their separate lane steps. No unit tests or desktop input.
+
+M5's first integrated full run passed all 35 Settings checks but retained a FAIL
+in the render inventory gate: the first-run merge fixed its count at 214, while
+Library Spaces adds two images. The verifier now requires exactly 216 and explicitly
+requires both Library Spaces scales. The prior FAIL receipt remains in the run logs.

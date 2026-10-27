@@ -4,6 +4,7 @@ import AppKit
 /// an optional second line, and keycaps (docs/re/interaction-states.md §5).
 public struct Tooltip: Equatable {
     public enum Placement: Equatable { case below, above, beside }
+    public var showDelay: TimeInterval
     public var title: String
     public var subtitle: String?
     public var keys: [String]
@@ -12,7 +13,8 @@ public struct Tooltip: Equatable {
     public var text: RGBA
     public var keycap: RGBA
 
-    public init(title: String, subtitle: String? = nil, keys: [String] = [], placement: Placement = .below, style: SpaceThemeStyle) {
+    public init(title: String, subtitle: String? = nil, keys: [String] = [], placement: Placement = .below, style: SpaceThemeStyle, showDelay: TimeInterval = TooltipMetrics.showDelay) {
+        self.showDelay = showDelay
         self.title = title; self.subtitle = subtitle; self.keys = keys; self.placement = placement
         fill = style.tooltipFill; text = style.tooltipText; keycap = style.tooltipKeycap
     }
@@ -53,15 +55,6 @@ public final class TooltipView: NSView {
         }
         let h = tooltip.subtitle == nil ? m.height : m.twoLineHeight
         return NSSize(width: w + 2 * m.horizontalPadding + (tooltip.subtitle == nil ? 2 : 6), height: h)
-    }
-
-    public override var wantsUpdateLayer: Bool { true }
-    public override func updateLayer() {
-        let scale = window?.backingScaleFactor ?? 2
-        guard bounds.width > 0,bounds.height > 0,let context = CGContext(data: nil,width: Int(ceil(bounds.width*scale)),height: Int(ceil(bounds.height*scale)),bitsPerComponent: 8,bytesPerRow: 0,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
-        context.scaleBy(x: scale,y: scale); context.translateBy(x: 0,y: bounds.height); context.scaleBy(x: 1,y: -1)
-        NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context,flipped: true); draw(bounds); NSGraphicsContext.restoreGraphicsState()
-        layer?.contents = context.makeImage(); layer?.contentsScale = scale
     }
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -107,8 +100,10 @@ public final class TooltipController {
     private var scheduledTooltip: Tooltip?
     public private(set) var scheduleCount = 0
     public private(set) var showCount = 0
+    public var visibleOrPendingTooltip: Tooltip? { scheduledTooltip }
     /// Read-back for the real tooltip harness flow.
-    public var visibleTooltip: Tooltip? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first?.tooltip : nil }
+    public var visibleTooltipView: TooltipView? { panel?.isVisible == true ? panel?.contentView?.subviews.compactMap { $0 as? TooltipView }.first : nil }
+    public var visibleTooltip: Tooltip? { visibleTooltipView?.tooltip }
 
     public func schedule(_ tooltip: Tooltip, for view: NSView, at point: NSPoint? = nil) {
         if owner === view, scheduledTooltip == tooltip, pending != nil || panel?.isVisible == true { return }
@@ -124,7 +119,7 @@ public final class TooltipController {
             }
         }
         pending = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + TooltipMetrics.showDelay, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + tooltip.showDelay, execute: work)
     }
 
     public func cancel(for view: NSView?) {
@@ -156,8 +151,7 @@ public final class TooltipController {
         }
         let panel = self.panel ?? makePanel()
         self.panel = panel
-        let outerSize = NSSize(width: size.width + 2 * margin,height: size.height + 2 * margin)
-        let host = NSView(frame: NSRect(origin: .zero,size: outerSize))
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 2 * margin, height: size.height + 2 * margin))
         host.wantsLayer = true
         content.frame = NSRect(x: margin, y: margin, width: size.width, height: size.height)
         content.shadow = {
@@ -169,10 +163,9 @@ public final class TooltipController {
         }()
         host.addSubview(content)
         panel.contentView = host
-        panel.setFrame(NSRect(x: origin.x - margin, y: origin.y - margin, width: outerSize.width, height: outerSize.height), display: true)
+        panel.setFrame(NSRect(x: origin.x - margin, y: origin.y - margin, width: host.frame.width, height: host.frame.height), display: true)
         if panel.parent !== window {
-            panel.parent?.removeChildWindow(panel)
-            window.addChildWindow(panel, ordered: .above)
+            panel.parent?.removeChildWindow(panel); window.addChildWindow(panel, ordered: .above)
         }
         panel.alphaValue = 0
         panel.orderFront(nil)

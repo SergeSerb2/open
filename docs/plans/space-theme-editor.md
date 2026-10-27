@@ -139,6 +139,14 @@ black at fixed alphas). Aliases: `runtime-observations.md` §3.3.
 Harmony colors for count `n` and wheel `w`: `analogous` → `[k, +40°, −40°]`
 (first `n`); `complementary` → `n = 2: [k, +180°]`, `n = 3: [k, +150°, +210°]`.
 
+Add transition (lead, 2026-10-26 11:57 America/Vancouver): when count is
+exactly 1, Add sets `wheel = .complementary` and count 2. A second Add keeps
+that mode and gives +150°/+210°. At count ≥2, Add preserves the stored
+wheel (including a page-2 analogous style reduced to two colors). Count and
+mode change in one undoable command; undo restores both. Do not change the
+harmony function or rewrite stored styles. Evidence: session 2 item 17,
+frames 0065/0067/0069, page-1 Brand 8, +180° then +150°/+210°.
+
 Background layout: `n = 1` → single color; `n = 2` → base `[c0, c1]`, no
 overlay; `n = 3` → base `[c0, c1]`, overlay `[clear, c2]`. Translucency is
 always `light` (all 4 stored themes, including the dark-content one).
@@ -150,6 +158,13 @@ the dark text that light content uses (both from the semantic palettes). Bias: A
 `ThemeTuning.automaticBias` (= 0.0, guess, §15 Q3), Light −21, Dark +21.
 
 ### 2.2 Pad mapping
+
+**Superseded by §17.1 (decoded 2026-10-26).** The range below is the empty-editor case only.
+
+**Provisional, not a parity gate:** capture session 2 contradicts this
+linear radius law. See the dated lead amendment and mandatory Step 9 gate
+below. Keep current stored styles and mathVersion semantics until that work
+is implemented with an explicit compatibility decision.
 
 Unit disc, y down, angle clockwise from 3 o'clock. Lightness range by mode:
 Automatic `0.01…0.97`, Light `0.575…0.97`, Dark `0.01…0.425`.
@@ -220,6 +235,12 @@ default case (write a custom `init(from:)` for the three enums; synthesized
 `Codable` would throw) and are written as that default on the next save (Open
 has no released users; `docs/model.md` precedent). Add `style: SpaceStyle? = nil`
 to `SpaceTheme.init`.
+
+Lead review amendment (2026-10-26, Step 1 round 1): fields inside `style`
+decode with `decodeIfPresent` and their documented defaults. Wrongly typed
+optional inputs also use those defaults. An unusable optional style (no
+valid key color or invalid object shape) is nil, so it cannot fail the
+whole snapshot. The legacy theme fields keep their original decode rules.
 
 ### 3.2 Rendering precedence and write rules
 
@@ -345,8 +366,8 @@ public enum ThemeTexture {
 ```
 
 All four are black tiles with darkness in alpha (the `Grain` scheme from
-`docs/design.md` §3.6), peak alpha `noiseFactor × 0.1`, and the same mean
-darkness as grain within 10 %. Our own patterns, seeded and deterministic:
+`docs/design.md` §3.6), pattern-mark peak alpha `noiseFactor × 0.1`, and the
+same mean darkness as grain within 10 %. Our own patterns, seeded and deterministic:
 
 | Texture | Pattern (Open design) |
 |---|---|
@@ -355,11 +376,45 @@ darkness as grain within 10 %. Our own patterns, seeded and deterministic:
 | denim | 45° twill: lines 3 pt apart, 1 pt wide, alpha modulated by 1D value noise along the line |
 | tweed | short orthogonal dashes (4–7 pt) on a 3 pt grid, random orientation, slight jitter |
 
+Lead amendment, user message **2026-10-25 23:58:10 America/Vancouver**, on
+§4.4: keep equal mean darkness so a texture switch does not change the
+Space's overall brightness. At tile-build time, at the same noise factor,
+compute `base = max(0, grainMean − patternMean)` for sand, denim, and tweed.
+Composite each pattern mark over the uniform base:
+`alpha = base + mark × (1 − base)`. The mark's own peak remains
+`noiseFactor × 0.1`; the composited pixel can exceed it. Grain never gains
+a base. The cache key remains (texture, noise bucket, scale), since the base
+is derived from those inputs. This is **Open design**, to calibrate against
+the editor capture in Step 9.
+
+The `space-editor-render` texture check (M5) asserts every texture's mean is
+within 10% of grain at noise factors 0.25, 0.5, and 1.0, at 1x and 2x. For
+sand at noise 1, the mean alpha of peak marks minus the base must be at
+least 0.03. Peak marks are the marks in the top 10% of the prescribed mark
+alpha range.
+
 Tiles are generated lazily on first use, cached per (texture, noise bucket of
 0.05, scale), shared by all windows. `ThemeLayer` uses `ThemeTexture` instead
 of `Grain`. Cross-fades already cover texture changes (two layers).
 
+Review R1: the tile cache caps at 32 entries and evicts its oldest half.
+Grain image/mean pairs cache per (bucket, scale), bounded at 64 entries;
+normalized denim patterns are reused across buckets, bounded at four scales.
+The harness gates cold 2x tile generation at a loose 500 ms and a 64×64
+field rebuild per preset style at 250 ms; strict B1 stays in Step 5.
+
+Lead design decision (2026-10-26): D-8 keeps grain strength and monochrome
+bytes unchanged. F0139's noise-0.45 strength gap and per-channel grain are
+Step 9 calibration items. No strength or chromatic adjustment lands here.
+New editor-style fill colors clamp to sRGB 0…1 at render time; legacy
+imports/stops keep their original extended-color and exact-noise grain
+render path to satisfy §3.4. Stored extended keys
+and primary/semantic palette derivation remain unchanged. F0139 is checked
+with `compare --spec theme-window` over six background-only regions.
+
 ### 4.5 Intensity
+
+**Superseded by §17.2 (decoded 2026-10-26):** `a = 0.2 + 0.55 × intensity` with a dark wash.
 
 `ThemeField.layerAlpha` becomes `ThemeField.layerAlpha(intensity:)`. Ship the
 provisional law `alpha = 0.8 × intensity` (0.64 at the default 0.8, so every
@@ -375,16 +430,23 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Property | Value | Evidence |
 |---|---|---|
 | Type | `ThemeEditorPanel: NSPanel`, borderless, `isFloatingPanel = false`, child of the browser window (`addChildWindow(_:ordered: .above)`), `canBecomeKey = true`, `hasShadow = true`, clear background | D-4 |
-| Material | `NSVisualEffectView`, `.popover` material, `.behindWindow`, `state = .active`, corner radius 16 (**guess**, visual ≈ 14–16) | F0137 crop; `#797979` over a white page in macOS Dark |
+| Material | `NSVisualEffectView`, `.popover`, `.behindWindow`, `.active`, only in body `(13,13,356,508)`, continuous corner radius 20; outer 13 pt band transparent | Opus R1 F0137 corner fit SSE 0.009; replaces the full-frame radius-16 guess |
 | Outer size | 382 × 534 pt | §14 AX |
 | Content inset | 13 pt each side → content 356 × 508 | §14 AX |
 | Position | left = sidebar trailing edge in window coordinates (anchored sidebar: `sidebarWidth`; floating card: card frame `maxX`); top = window top + 35 pt. Clamp inside the screen's `visibleFrame` with 8 pt margins; if clamped horizontally, keep it fully on screen. | §14 (x 500 = sidebar width, y 35) |
 | Opened from the creation form | top aligned with the Theme card's top, same left edge (**guess**) | §6 |
-| Appearance | follows the system appearance; tokens in §5.9 | §15 Q9 |
+| Appearance | forced Space Light/Dark overrides the system live; Automatic follows the system; tokens in §5.9 | Session 2 0158–0163, lead round 3 supersedes Q9 |
 | One per window | Opening an editor for any Space closes the open one first (commit is already done per gesture). | Open choice |
 | Close triggers | Esc; mouse down in any app window outside the panel (local event monitor); the app deactivates (`NSApplication.didResignActiveNotification`); the browser window closes or switches Space; the edited Space is deleted | Arc `didKeyDownEscape`; transient popover behavior |
 
 ### 5.2 Layout (content coordinates, origin top-left, pt)
+
+R1: screen clamping keeps the material **body** 8 pt inside `visibleFrame`,
+not the transparent outer band. Model-backed editor sessions use the model's
+single undo manager (defaulting to the owner's manager when unassigned).
+Remove/Add both use 16 pt Semibold and `glyph`; the cool `addGlyph` token is
+removed. Light `glyphSelected` is black 0.50 (session 2). Empty copy stays exactly
+"Tap to pick a color for this space"; AX percentages have no space.
 
 | Element | Frame | Notes |
 |---|---|---|
@@ -396,7 +458,7 @@ after in the PR. If its ΔE00 worsens past 2, keep 0.64 for imported themes
 | Swatch viewport | `(48, 364, 260, 32)`, clips; swatch `i` of page `p` at x = `48 + 265.5·(p − page) + 29.5·i`, y 368, 24 × 24 | constants 24, 5.5, 260, 265.5 |
 | Next page | `(315, 364, 32, 32)` | |
 | Intensity slider | hit `(18, 424, 224, 56)`; track capsule `(18, 444, 224, 16)` | |
-| Noise dial | hit `(258, 412, 84, 80)`; center `(300, 452)` (pixels give `(298, 452)`; use the AX center) | AX button + slider stacked |
+| Noise dial | hit `(258, 412, 84, 80)`; art center `(298, 452)` | F0137/F0138 calibration; unchanged AX hit frame |
 
 ### 5.3 Pad and knobs
 
@@ -406,11 +468,11 @@ Drawing (layers, no `draw(_:)` per frame):
 |---|---|
 | Plate | fill `ThemeEditorColors.padFill` |
 | Dot grid | our own tile: 1.0 pt dots, pitch 4.25 pt, `ThemeEditorColors.dot`; one cached `CGImage` pattern per scale |
-| Primary knob | 44 pt circle: 5 pt ring `ThemeEditorColors.knobRing` (white), 34 pt disc filled with the key color (P3 `CGColor`). No shadow (none measured). |
-| Harmony knobs | 30 pt circle: 3 pt ring white @ 0.8, 24 pt disc with the harmony color. Not draggable. **guess** (not captured, §15 Q10) |
-| Knob hover | scale 1.08 over 0.12 s ease-out (**guess**) |
-| Knob drag | scale 1.12 (**guess**); returns to 1.0 on mouse up over 0.2 s spring |
-| Empty state | text "Tap to pick a color for this space", 13 pt Medium, `ThemeEditorColors.secondaryText`, centered in the pad, max width 220, 2 lines |
+| Primary knob | 44 pt circle: 5 pt ring `ThemeEditorColors.knobRing` (white), 34 pt disc filled with the key color (P3 `CGColor`). Downward shadow y +2, radius 2, white 0.06 in dark / black 0.06 in light; no normal light outline (session 2, fit). |
+| Harmony knobs | 27 pt circle: 3 pt pure white ring, 21 pt disc. Scale to about 30 pt with hover/drag; not draggable. Draw secondary knobs first and the primary last, so coincident grey knobs stay underneath. Session 2 0050–0064 and 0067–0080 supersedes Q10. |
+| Knob hover | primary ×1.09, secondary about 30/27, over 0.12 s ease-out (session 2 0076) |
+| Knob drag | primary ×1.136, secondary about 30/27 (session 2 0077–0080); returns to 1.0 on mouse up over 0.2 s spring |
+| Empty state | text "Tap to pick a color for this space", 13 pt Semibold (weight fit), `secondaryText` white 0.90 / light black 0.74, one line at max width 220; center the actual label height on the pad, not a top-aligned 40 pt wrapping frame (session 2 0010) |
 
 Interaction:
 
@@ -437,26 +499,26 @@ around the pad plate.
 | Glyphs | SF Symbols `sparkles`, `sun.max.fill`, `moon.stars.fill`, 15 pt medium |
 | Glyph color | selected `ThemeEditorColors.glyphSelected`, unselected `glyph` (white ≈ 0.5 measured) |
 | Selected plate | 32 × 32, radius 8, `ThemeEditorColors.selectedPlate` (white ≈ 0.10 measured) |
-| Hover plate | `ThemeEditorColors.hoverPlate` |
+| Hover plate | alpha 0.11 in both modes; source-over selected plate when selected, combined alpha 0.199 |
 | Hover effect | `NSImageView.addSymbolEffect(.bounce)` once on hover enter (our replacement for Arc's looping Lottie) |
 | Tooltips | "Automatic Appearance", "Light Appearance", "Dark Appearance" |
 | Action | set `appearance`; remap lightness (§2.2); commit one step |
 
 ### 5.5 Remove and Add
 
-32 × 32 buttons, glyphs `minus` / `plus` 13 pt medium, `glyph` color, hover
+32 × 32 buttons, glyphs `minus` / `plus` 16 pt Semibold, `glyph` color, hover
 plate radius 8. Tooltips "Remove color" / "Add color". Add is enabled when
 count < 3. Remove is enabled when count ≥ 1. Remove at count 1 clears the
-theme (§3.2) and shows the empty state. Both buttons are hidden in the empty
-state (**guess**). Each click is one commit.
+theme (§3.2) and shows the empty state. Both buttons stay visible and disabled in the empty
+state (session 2 0010; supersedes the hidden-button guess). Each click is one commit.
 
 ### 5.6 Presets strip
 
 | Property | Value |
 |---|---|
-| Arrows | `chevron.left` / `chevron.right` 13 pt, `glyph` color; disabled at the first / last page at alpha 0.35 (constant 0.35 in the picker code, **guess** for its role) |
-| Swatch | 24 pt circle filled with the key color; 1 pt inner rim of the same color × 0.9 (measured) |
-| Page 2 swatch | a 24 pt circle with a linear gradient from `c0` (top-leading) to `c1` (bottom-trailing) and a 9 pt disc of `c2` at the bottom-trailing corner (Open design; Arc's pill art was not captured) |
+| Arrows | `chevron.left` / `chevron.right` 16 pt Semibold, 1 pt lower, `glyph` color; disabled factor 0.32 at the first / last page (review R3, 0010/0027). |
+| Swatch | 24 pt circle; 2 pt black 0.10 rim inset 1 pt, darkening the local fill; origins snapped to backing pixels (review R3). |
+| Page 2 swatch | own 3-stop diagonal sRGB gradient, no disc; stops re-sampled inside the rim at diagonal t = −9/0/+9 from session 2 0016; endpoints (0.235,0.235) and (0.765,0.765), locations 0/0.5/1; five-point t = −8/−4/0/4/8 gate at ΔE00 ≤2, using the same 2×2 pt mean on both images |
 | Hover | scale 1.1 over 0.12 s; press scale 0.9 (constants 0.9 / 0.85 in the picker code, **guess** for their role) |
 | Paging | horizontal slide of the strip by 265.5 pt, spring `Motion.spaceSwitch`; trackpad horizontal scroll pages too |
 | Selection | no visible selected state (none in F0137) |
@@ -468,48 +530,68 @@ state (**guess**). Each click is one commit.
 | Property | Value |
 |---|---|
 | Track | capsule 224 × 16, `ThemeEditorColors.trackFill` (white ≈ 0.08) |
-| Wave | sine, wavelength 37.5 pt, amplitude 13.75 pt, stroke 4.5 pt round caps, from x 30 to x 230; left of the thumb `waveActive` (white ≈ 0.53), right `waveInactive` (white ≈ 0.15) |
-| Thumb | white capsule 24 × 56 (radius 12), shadow black 0.2 / radius 2 / y 1 (**guess**) |
-| Value | 0…1; thumb center x = 30 + 200·value |
+| Wave | slider-local `y = 28 − 14.8·value·sin(2π(x − 7.8)/37.9)`, x 7.8…216.2. Flat at value 0. Stroke 4.5 pt round caps. Left of thumb `waveActive`, right `waveInactive`, with disjoint masks. Empty state: default value 0.8, all inactive. |
+| Thumb | white capsule, rest sizes interpolated through value 0: 12.2×44.4, 0.8: 24.4×56.0, 1: 27.05×59.15 pt. At 0 the measured hovered 13.25×48.4 is unscaled by 1.09 to get the rest fit. Hover/press ×1.09. Downward y +2 / radius 2 / alpha 0.06 shadow: white in dark, black in light. No normal outline or top halo. Empty: no thumb. |
+| Value | 0…1; thumb center panel x = `38.8 + 208.4·value`, content x = `25.8 + 208.4·value`, slider-local x = `7.8 + 208.4·value`; input uses the same mapping |
 | Interaction | mouse down on the track jumps the thumb, then drags; scroll wheel ± 0.02 per line; keys ←/→ ± 0.05 |
 | Label / tooltip | "Intensity" |
-| Live | preview per frame; commit on mouse up |
+| Live | preview per frame; commit on mouse up. Scroll phase plus momentum is one undo step, finished at momentum end; an 80 ms phase-end grace allows momentum to begin. Phase-free wheel mice finish after 150 ms idle. |
+
+Historical calibration decision, **superseded by round 3 below** (2026-10-26 01:43:21 and 01:43:54
+America/Vancouver): F0137 and F0138 place the 24 × 56 pt thumb at panel
+`(193,437)`, hence content center x = 192 at value 0.8. The earlier
+`30 + 200·value` mapping was a guess and drew it 2 pt too far left.
+That historical fit used `32 + 200·value` and 200 pt travel. Round 3
+replaces drawing and input together with the wave-span law in the table
+above; track capsule and AX hit frame remain fixed.
 
 ### 5.8 Noise dial
 
+F0137/F0138 calibration, per the same lead decision: draw the dial around
+content `(298,452)` inside the unchanged `(258,412,84,80)` AX hit frame.
+The earlier `(300,452)` art center was a guess based on the AX center;
+it drew the tick 2 pt too far right. Ring, tick, center preview, and angle
+input all use the calibrated art center.
+
 | Property | Value |
 |---|---|
-| Ring | 20 dot slots at an 18° pitch, radius 32.5, dot 4.5 pt. Unlit `dotUnlit` (white ≈ 0.15), lit `dotLit` (white ≈ 0.5). Slot `k` (0…19, clockwise from 12 o'clock) is lit when `k·18° ≤ noise·360°`. The slot under the tick is hidden. |
-| Tick | white capsule 7.5 × 15.5, centered on the ring at `noise × 360°` clockwise from 12 o'clock, rotated to point at the center |
-| Center | 40 pt disc. Noise 0: 1 pt ring `dotUnlit`, no fill. Noise > 0: `ThemeTexture.knobPreview` of the selected texture, opacity `0.4 + 0.6·noise` (**guess**), 1 pt ring |
-| Click center | cycle texture grain → sand → denim → tweed → grain (tooltip "Cycle noise texture"); one commit |
-| Drag on ring | noise = angle / 360°, clamped 0…1; a jump of more than 0.5 between ticks clamps to the nearer end (no wrap) |
-| Click a dot | noise snaps to `k × 0.05` |
-| Scroll wheel | ± 0.01 per line (**guess**) |
+| Ring | 20 dot slots at an 18° pitch, radius 32.0, dot 5.0 pt. Unlit `dotUnlit` (white ≈ 0.15), lit `dotLit` (white ≈ 0.5). Slot `k` (0…19, clockwise from 12 o'clock) is lit when `k·18° ≤ noise·360°`. Hide only the nearest slot using non-wrapping distance over 0…342° and a 9° tolerance. At noise 0.98 hide none; at exactly 1 hide coincident slot 0. Lead decision 2026-10-26 09:56:38 America/Vancouver. |
+| Tick | white capsule 8×16 pt, center snapped to the backing pixel grid; angle `noise×360°` clockwise from 12 o'clock. No normal light outline. Downward y +2 / radius 2 / alpha 0.06 shadow, on an unrotated layer with a rotated path. Empty: no tick, all 20 dots unlit. |
+| Center | 40 pt disc. Noise 0: 1 pt ring, no fill or composition. Grain preview: source gray about 91 at alpha 0.29, raw top/bottom shade ±19 (about ±5.5 after composition). Sand/denim/tweed: nearly opaque mean gray 139/147/127, own procedural art, target standard deviation about 7.7/5.0/4.9. Tweed preview is a soft mottle; Space tiles remain Step 9 work. |
+| Click center | none → grain → sand → denim → tweed → none. Each texture sets noise exactly 0.80; none sets 0 and retains the last texture internally. One undo restores both texture and noise. Tooltip "Cycle noise texture". |
+| Drag on ring | noise = angle / 360°, clamped 0…1; a jump of more than 0.5 between ticks clamps to the nearer end (no wrap); input within 1e−6 of zero snaps to exact none |
+| Click a dot | inside a 3 pt radius, noise snaps to `k × 0.05`; between dots, keep the pressed angle continuous |
+| Scroll wheel | ± 0.01 per line (**guess**); phase and momentum commit once per gesture, with the same wheel idle fallback as the slider |
 | Trackpad rotate | `rotation` degrees / 360 (Arc `NoiseFactorGesture.rotation`) |
 | Keys | ←/→ ± 0.05 |
 | Label | "Noise" |
 
+Session 2 supersedes the R1 alpha-0.35 guess: empty controls use normal
+track/dot intensity, with the thumb and tick absent and no input mutation.
+Light harness renders use FCFBFC. AX hit frames and the dial art center stay fixed.
+
 ### 5.9 Color tokens (`OpenDesign/ThemeEditorTokens.swift`, new)
 
-Dark values are measured on F0137 over the popover material. Light values are
-**guesses** (no light capture; §15 Q9).
+Dark values use F0137 and session 2. Light values are calibrated from
+session 2 item 20 frame 0027 and item 17 frames 0158–0159. Harness backdrops
+are `2E3237` (dark session 2) and `FCFBFC` (light); private captures stay local.
 
 | Token | Dark | Light |
 |---|---|---|
-| `padFill` | white 0.04 | black 0.03 |
+| `padFill` | white 0.04 | black 0.055 |
 | `dot` | white 0.20 | black 0.14 |
-| `knobRing` | white 1.0 | white 1.0 (+ black 0.12 1 pt outer stroke) |
-| `glyph` | white 0.50 | black 0.45 |
-| `glyphSelected` | white 0.90 | black 0.85 |
-| `selectedPlate` | white 0.10 | black 0.07 |
-| `hoverPlate` | white 0.06 | black 0.04 |
-| `secondaryText` | white 0.50 | black 0.45 |
-| `trackFill` | white 0.08 | black 0.06 |
-| `waveActive` | white 0.53 | black 0.45 |
-| `waveInactive` | white 0.15 | black 0.12 |
-| `thumb` | white 1.0 | white 1.0 (+ black 0.12 1 pt stroke) |
-| `dotUnlit` / `dotLit` | white 0.15 / 0.50 | black 0.12 / 0.45 |
+| `knobRing` | white 1.0 | white 1.0; no normal outline |
+| `glyph` | white 0.50 | black 0.50 |
+| `glyphSelected` | white 0.50 | black 0.50 |
+| `selectedPlate` | white 0.10 | black 0.10 |
+| `hoverPlate` | white 0.11 | black 0.11 |
+| `secondaryText` | white 0.90 | black 0.74 |
+| `trackFill` | white 0.08 | black 0.085 |
+| `waveActive` | white 0.53 | black 0.40 |
+| `waveInactive` | white 0.15 | black 0.15 |
+
+| `thumb` | white 1.0 | white 1.0; no normal outline |
+| `dotUnlit` / `dotLit` | white 0.15 / 0.50 | black 0.15 / 0.40 |
 
 ### 5.10 Motion (PROVISIONAL tokens in `Motion`)
 
@@ -592,9 +674,10 @@ buttons), each fading in and rising 6 pt over 0.2 s ease-out (constants
 - The name field has focus on appear. Return creates. Esc cancels.
 - An empty or all-space name creates an untitled Space ("Space N", existing
   `displayTitle`).
-- Draft defaults: no icon; theme per §15 Q2 (recommended: Brand preset at
-  index `spaces.count mod 9`, count 1, automatic); Profile = the focused
-  Space's Profile (`SpaceCreationProfilePickerModel` default).
+- Draft defaults: no icon; no theme (`SpaceTheme()`, `style == nil`) unless
+  the user picks a color in the New Space form (§15 Q2, capture session 2).
+  Profile = the focused Space's Profile (`SpaceCreationProfilePickerModel`
+  default).
 - "New Profile…" switches the Profile card into the existing inline
   create-Profile mode of `SpaceCreationProfilePickerModel` (name field +
   validation messages from `ProfileNameIssue.message`).
@@ -748,19 +831,50 @@ public func renameSpace(id: SpaceID, title: String)
 /// Extends createSpace: insertion index (nil = end) and nodes moved into the new Space's
 /// pinned section in order (folders keep their children). One undo step for all of it.
 @discardableResult public func createSpace(title: String, profileID: ProfileID, icon: SpaceIcon?,
-    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space
+    theme: SpaceTheme, at index: Int?, moving nodeIDs: [ItemID]) -> Space?
 ```
 
-The existing `createSpace(title:profileID:icon:theme:)` forwards with
-`at: nil, moving: []`. Model rules from `docs/model.md` apply (refused
-commands change nothing and register no undo).
+Lead amendment (2026-10-25): creation with moves is all or nothing. Before
+any mutation, validate that every moving node exists, is not a split pane,
+occurs only once, and satisfies the placement rules in `docs/model.md`
+(including no move into its own descendant). An explicit insertion index
+must be in `0...spaces.count`. On any refusal return nil: no Space, moves,
+undo, TreeChange, or snapshot dirty state. After validation, create and move
+the nodes as one undo step. An empty moving list with a valid index and a
+live Profile ID never fails.
+
+Lead review amendment (2026-10-26, Step 1 round 1): refuse a moving list
+that includes both an ancestor and its descendant. If any relocation fails
+after insertion, reverse the earlier moves and remove the inserted Space,
+then return nil. Buffer structural events until success, so a rollback emits
+none. The real CLI exercises a forced late failure and checks snapshot
+bytes, undo depth, and the index. Success emits one `.move` per node, no
+source-parent reload, and has byte-identical undo and redo snapshots.
+
+Lead review decision (2026-10-26 09:36 America/Vancouver): unknown Profile
+IDs refuse the failable overload before any mutation, undo, event, or save.
+The existing nonoptional `createSpace(title:profileID:icon:theme:)` requires
+a live Profile ID, delegates with `at: nil, moving: []`, and treats nil as
+a programmer error with a precondition naming the bad ID. Data/import/
+automation/restored-state callers use the failable overload. The caller
+audit changed the Settings selector, profiles CLI, and automation boundary;
+the remaining callers obtain IDs from live model objects or synthetic
+fixtures. Rollback fault injection is DEBUG-only, absent in production.
+Step 7's
+`moveToNewSpace` and `turnFolderIntoSpace` likewise return false or nil on
+refusal and change nothing.
+
+Step 1 acceptance adds refused create-with-moves rows to
+`openkit commands-demo`: both a split pane and a missing ID leave the
+snapshot byte-identical and the undo stack depth unchanged. Model rules
+from `docs/model.md` apply to every refusal.
 
 ### 10.2 `OpenSpaceEditor` (new library)
 
 ```swift
 @MainActor public final class ThemeEditorController {
     public init(model: BrowserModel, spaceID: SpaceID, window: NSWindow,
-                anchor: ThemeEditorAnchor, undoManager: UndoManager?)
+                anchor: ThemeEditorAnchor)
     public init(draft: SpaceStyle?, window: NSWindow, anchor: ThemeEditorAnchor,
                 onChange: @escaping @MainActor (SpaceStyle?) -> Void)   // creation form
     public func show()
@@ -874,12 +988,19 @@ executable `space-editor-render` → `OpenModel`, `OpenStore`, `OpenDesign`,
 `ThemeBackgroundView.swift`, `Motion.swift`, `OpenModel/NamedSpaceIcons.swift`
 (`order` array), `OpenSidebar/SidebarView.swift`,
 `SpacePagerView.swift`, `SidebarContext.swift`, `Controls.swift` (icon
-precedence), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
+precedence), `SidebarRows.swift` (Step 1: folder and tab icon resolution;
+lead-approved addition), `SpacePageView.swift`, `OpenCommands/CommandRegistry.swift`
 (`change-space-icon`), `SuggestAdapter.swift` (its symbol `face.smiling`),
 `OpenFeatures/BrowserWindowController.swift`,
 `App/Automation/AutomationController.swift`, `tools/e2e/engine_e2e.py`,
 `tools/verify-all.sh` (add `space-editor`), `docs/release/licenses.md` (emoji data row, Step 6), `docs/model.md`,
 `docs/design.md` (new §: editor), `docs/commands.md`.
+
+Step 1 review additions: `sidebar-render/OffscreenRenderer.swift` synchronizes
+render and readback on one Metal queue for P1. `Fixtures/space-schema1/`
+holds the frozen synthetic schema-1 snapshot and its three pre-change PNGs;
+the `space-legacy` entry in `tools/verify-all.sh` and
+`tools/verification/check.py` gate their round trip and byte equality.
 
 ## 12. Verification (no unit tests)
 
@@ -908,7 +1029,7 @@ space-editor-render bench    # B1
 | ID | Check |
 |---|---|
 | M1 | The committed fixture is the example theme in `runtime-observations.md` §3.3 (key `#FF8558`): our primary palette within 1/255 and both semantic palettes within 0.003 of the listed values. With `--arc-json FILE` (a local read-only copy of `StorableSidebar.json`, never committed) the same check runs over every stored theme and prints only counts and max errors. |
-| M2 | Harmony: analogous and complementary, n = 1…4, hue offsets within 0.1°, S and L unchanged. |
+| M2 | Harmony: analogous and complementary, n = 1…3, hue offsets within 0.1°, S and L unchanged. |
 | M3 | Pad round trip: 2,000 seeded random colors inside each mode's range: color → knob → color within 1/255. |
 | M4 | Appearance: forced Light / Dark always win for 500 random keys. Automatic with bias 0 gives light, light, light, dark for the key colors `#FF8558`, `#2F83E4`, `#F8D558`, `#926400` (extended sRGB; the 4 stored samples, colors only). |
 | E1 | Editor layout: every control frame equals §5.2 within 0.5 pt at 1x and 2x. |
@@ -919,6 +1040,10 @@ space-editor-render bench    # B1
 | E6 | Slider and dial: value ↔ geometry, texture cycle order, dot-click snap to 0.05 steps, no wrap past the ends, scroll steps. |
 | E7 | Live propagation: 2 window scenes on the same Space and 1 on another; a drag changes both same-Space backgrounds and sidebar title colors in the same frame; the third is unchanged; no cross-fade animation during the drag; one cross-fade on a preset click. |
 | E8 | Close triggers: Esc, outside click, Space switch, Space delete. Esc mid-drag commits. |
+
+**Step 5 hard gate:** do not ship `edit-theme` wiring until E8 verifies
+outside click, app deactivation, Space switch, and Space delete all close
+the panel. These triggers remain deferred here, not waived.
 | C1 | Form at widths 180 / 200 / 228 / 300 / 500: width class, card frames, submit placement. Return creates (title, icon, style, Profile, focus); Esc cancels with no model change and no undo step; undo of create removes the Space. "Move to ▸ New Space…" moves the tab; "Turn into Space" moves children and removes the folder in one step. |
 | I1 | Picker: pages, search filter, a pick stores `.emoji` / `.named`, "Remove icon" stores nil, folder default page Icons. |
 | P1 | Persistence: snapshot round trip with `style` and `iconOverride`; a fixture snapshot written before Step 1 decodes and renders byte-identical PNGs (`window` scene) before and after this plan. |
@@ -941,15 +1066,98 @@ from the capture at AX `[500, 35, 382, 534]`.
 | Element | Target | Note |
 |---|---|---|
 | Control frames (mode buttons, pad, knob, Remove / Add, arrows, 9 swatches, slider thumb, dial tick) | ≤ 1 pt | from AX and ink bounds |
-| Knob disc, knob ring, swatch fills, thumb | ΔE00 ≤ 2 | opaque elements |
-| Pad plate, mode plate, dots, wave, dial dots | ΔE00 ≤ 3 | translucent over material; the 3 is stated in the PR |
+| Knob disc, knob ring, swatch fills, thumb, dial tick, dial center fill, dial dots | ΔE00 ≤ 2 | controls; dial uses the stricter limit per the Step 4 lead decision |
+| Pad plate, mode plate, dot grid, wave | ΔE00 ≤ 3 | translucent over material; the 3 is stated in the PR |
 | Dial tick angle (F0138) | ± 2° | 162° expected |
 | Lit dot count (F0138) | exact (9) | |
 | Window background + sidebar after edit (F0139 / F0141) | `docs/design.md` §8 targets (≤ 1 pt, ΔE00 ≤ 2) | via `space-editor-render window` with the stored style |
 
+R1 follow-up (2026-10-26): compare the inset material body edges and
+continuous corner contours as well as the existing controls. The slider
+wave rises first and its dim layer starts at the thumb center. The dial
+uses non-wrapping dot suppression (no hidden dot at 0.98), per the lead's
+09:56:38 decision. F0138 still masks the animated Automatic glyph; F0137
+remains its calibration reference. No approved control geometry is reopened.
+
 The creation form, the icon picker, 2–3 knobs, forced modes, page 2, and the
 light appearance have no capture yet. Their checks are geometry-only until
 the capture session in §15 lands; the PR lists them as "no capture".
+
+Lead amendment, user message **2026-10-26 01:20:22 America/Vancouver**:
+replacement glyph shape is exempt from the shape and edge comparison.
+Mask glyph ink in those comparisons, as `docs/design.md` masks favicons and
+tile icons. Rule 1 forbids copying Arc's art; SF Symbols have different
+outlines. Glyph tokens still require calibration: tune point size and weight
+until each ink bounding-box center and height are within 1 pt of F0137.
+Compare core ink color at ΔE00 ≤ 2, changing the token when needed and citing
+the capture. Report old and new tokens and measured errors in the Step 3
+PR. Button frames, plates, and fills retain their normal limits.
+
+Lead Step 4 amendment, user messages **2026-10-26 01:43:21** and
+**01:43:54 America/Vancouver**: the thumb and dial are controls, so their
+frames and opaque fills retain ≤ 1 pt / ΔE00 ≤ 2 limits. Calibrate their
+geometry tokens to F0137 and F0138, using our own art, and report old and
+new tokens and measured errors. The approved mappings are in §5.7 and
+§5.8. Exclude the Automatic glyph from the F0138 comparison because that
+capture catches it mid-animation; F0137 remains its glyph calibration
+reference. All other F0138 controls remain compared.
+
+Step 4 calibration, measured by `space-editor-render compare --spec editor`
+against the local F0137/F0138 captures (own art only):
+
+| Token | Old | New | F0137 error old → new | F0138 error old → new |
+|---|---|---|---|---|
+| Thumb center x, content pt | `30 + 200·value` | `32 + 200·value`; matching input mapping | 2 → 0 pt | 2 → 0 pt |
+| Thumb start inset inside the hit frame | 12 pt | 14 pt | same thumb measurement | same thumb measurement |
+| Dial art center, content pt | `(300,452)` | `(298,452)`; AX hit frame unchanged | tick 2 → 1 pt | tick 2 → 1 pt |
+| Dial preview base, sRGB gray | 0.78 (guess) | 0.46 | no fill at noise 0 | core ΔE00 19.89 → 1.16 |
+
+Thumb size remains 24 × 56 pt and travel 200 pt; dial tick remains
+7.5 × 15.5 pt. Thumb and tick core ΔE00 are 0.00 in both frames. F0138's
+tick angle is 162.04° in the capture and 161.92° in Open, with exactly nine
+lit dots in each. Previous/Next glyphs use 16 pt Medium instead of 13 pt:
+height error 3 → 0 pt, center error ≤ 1 pt, F0137 core ΔE00 1.07 / 0.58.
+The procedural preview base changes only the dial art, not Space textures
+or their mean-darkness/cache rules. All remaining translucent colors use
+the stated ΔE00 ≤ 3 bound (largest: active wave 2.13).
+
+R1 design correction: the body is `(13,13,356,508)` with continuous radius
+20 and a transparent outer band. The editor comparison now includes body
+edges and four corner contours (normal distance, not horizontal distance
+near a tangent). F0137 body edges are exact; corner normal error is 0.4 pt.
+Remove/Add share 16 pt Semibold and `glyph`, with no Add-specific tint.
+Glyph core ΔE compensates the local captured material before comparison
+with the fixed gray harness backdrop, because the blue tint behind Add in
+F0137 belongs to the blur, not the glyph. Raw cores stay listed in the
+table. Add's raw ΔE is 2.02; material-compensated ΔE is 0.36.
+
+Initial F0137 calibration (Step 3, before the session-2 R3 review; sizes are SF point sizes):
+
+This table preserves the initial comparison. R3 supersedes its Remove/Add
+tokens with Semibold 16 pt in the shared `glyph` color, and sets the light
+glyph alpha to 0.50 with disabled factor 0.32. See the corrected R3 sampling
+entry below for the current tokens and result.
+
+| Glyph | Old token | Calibrated token | Center error x/y (pt) | Height error (pt) | Core ΔE00 old → new |
+|---|---|---|---|---|---|
+| Automatic | 15 pt; y offset 0; white 0.90 | 15 pt; y offset −1; white 0.50 | −0.5 / +0.5 | +1 | 9.49 → 0.61 |
+| Light | 15 pt; white 0.50 | unchanged | −0.5 / +0.5 | −1 | 0.62 → 0.62 |
+| Dark | 15 pt; white 0.50 | 16 pt; white 0.50 | 0 / +0.5 | −1 | 0.98 → 1.20 |
+| Remove | 13 pt; white 0.50 | unchanged | +0.5 / −0.5 | −1 | 0.30 → 0.30 |
+| Add | 13 pt; white 0.50 | 17 pt; sRGB (0.98, 0.98, 1), alpha 0.54 | +0.5 / −0.5 | +1 | 3.06 → 0.58 |
+
+Historical fit, superseded by the shared glyph token: the Add tint fitted F0137's core `#C1C1C4` over the fixed
+offscreen material. Light appearance remains uncalibrated. These calibrated
+values supersede the corresponding values in §5.4, §5.5, and §5.9.
+
+The `#926400` swatch above is a clipped display shorthand. The session's
+extended-sRGB key is `(0.570741951, 0.392751396, −0.130948484)`, not
+`(146/255, 100/255, 0)`. Retaining its negative blue component gives the
+documented P3 hue 44.1186° and lightness 0.272203. The harness's default
+editor scene uses those stored components. Evidence: `space-editor-render
+math --arc-json <local-session1-StorableSidebar.json>` palette round trip
+has zero error, and the F0137 ring box is identical at `(202,201,44,44)` in
+the panel crop. No capture pixels are committed.
 
 ### 12.4 App e2e (`tools/e2e/engine_e2e.py --only space-editor`)
 
@@ -983,7 +1191,7 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | 6 | Icon picker: panel, Emoji page (`gen-emoji-index.py`, index JSON), Icons page, Remove; `changeSpaceIcon`, `changeIcon`, `change-space-icon`. | picker files, `CommandRegistry`, `SuggestAdapter`, `BrowserWindowController` | I1 PASS; `commands-dump` exit 0 with the new id. |
 | 7 | New Space form: sidebar page, cards, Profile card (+ New Profile…), theme card → editor (draft mode), splash, `moveToNewSpace`, `turnFolderIntoSpace`, rename dialog, Change Profile menu. | creation files, `SidebarView`, `SpacePagerView`, `BrowserWindowController` | C1 PASS; `create` renders at all 5 widths in both appearances. |
 | 8 | App: automation commands (§10.5), e2e suite `space-editor`. Starts after app-shell Step B. | `AutomationController.swift`, `engine_e2e.py` | A1–A7 PASS. |
-| 9 | Calibration (needs the §15 capture session): intensity law, harmony knob art, page-2 swatch art, creation layout and timing, light appearance tokens, automatic bias. | tokens, `ThemeField`, views | §12.3 targets met on the new captures; each changed value cites its frame. |
+| 9 | Calibration: **§17 pad, intensity, and texture law (spec ready; lands before or with Step 5)**; then harmony knob art, page-2 swatch art, creation layout and timing, light appearance tokens, automatic bias. | `ThemeColorMath`, `ThemeEditorState`, `ThemeField`, `ThemeTuning`, `ThemeTexture`, views | §17.4 table PASS; §12.3 targets met on the new captures; each changed value cites its frame. |
 
 ## 14. Risks
 
@@ -1002,9 +1210,10 @@ each PR: merge `origin/main`, run `tools/verify-all.sh`, paste the summary
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | Emoji data source for the picker. | Generate `emoji-index.json` from Unicode `emoji-test.txt` (Unicode License V3, pinned version + SHA-256) with our script, and add a row for it to `docs/release/licenses.md` in the same PR. Not the macOS Character Viewer (not Arc's look) and never Arc's `emojis.json`. |
-| Q2 | Which theme a brand-new Space starts with (not decoded). | Brand preset `spaces.count mod 9`, 1 color, Automatic, noise 0, intensity 0.8. Deterministic, and neighbors differ. |
+| Q2 | Which theme a brand-new Space starts with. | **Answered by capture session 2 (2026-10-26):** no theme. A new Space keeps the default theme (no stored `windowTheme`) unless the user picks a color in the New Space form. Evidence: both test Spaces made in session 2 had no `windowTheme` until the theme editor gave one a color (`docs/re/interaction-states.md` §20.0, §20.8; `appsupport/s2-final/StorableSidebar.json`; `docs/re/capture-session-2-results.md` C10). Replaces the Brand preset `spaces.count mod 9` recommendation. |
 | Q3 | Automatic-mode bias (`sidebar-dark-mode-bias` is a remote flag). | 0.0. All 4 stored themes agree for any value in [−0.78, 1.60). |
-| Q4 | Intensity effect. | Provisional `alpha = 0.8 × intensity`; one capture of a Space at intensity 0, 0.5, and 1.0 calibrates it in Step 9. |
+| Q4 | Intensity effect. | **Answered (§17.2):** opacity `0.2 + 0.55 × intensity` (0.2 tint at 0), plus a dark wash of black 0.35 × `min(opacity, 0.5)` under it. |
+| Q4 review capture detail | Intensity zero. | Capture intensity **0** explicitly and determine whether Arc keeps a visible tint. Keep Open's current gray-at-zero result and provisional law until Step 9. |
 | Q5 | Page 2 of the presets. | Brand 1–9 with 3 analogous colors. Evidence: 2 of 3 stored gradients are Brand5 / Brand6 with exactly ±40°. |
 | Q6 | New Space form placement. | Sidebar page (code evidence: 190 / 227 pt width breakpoints). Ask the user for a 30 s capture of "New Space…" before Step 7 if certainty is needed. |
 | Q7 | Where a new Space is inserted. | At the end of the Space list for every entry point. Arc supports "after Space X"; we can switch to "after the focused Space" with one parameter. |
@@ -1023,21 +1232,180 @@ on both pages; the same editor in macOS Light.
 
 | Step | Date | Result |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
+| 1 | 2026-10-26 | PR #68, review round 1 fixes: commands-demo 163/163; roundtrip PASS; sidebar-render 125/125. Automated `space-legacy` gate: all original snapshot semantic fields unchanged (only main's additive `keepAliveSites: []` default is added), encoded DTO roundtrip byte-identical, all 3 committed pre-change PNGs byte-identical. Metal readback synchronization fixed; 24/24 repeated renders match the unchanged baselines. Full verify-all after merging `origin/main` at `bfef13c`: 17 PASS, no SKIP. |
+| 2 | 2026-10-26 | M1–M5 and P1: 36/36. Four private stored themes: primary and semantic max error 0.000000. F0069 final PNG/table and 13 sidebar scene PNGs byte-identical to Step 1 head `2eedbfc`; sidebar-render output unchanged at 125/125. Provisional imported opacity 0.80 worsened worst ΔE00 2.38 → 2.93, so §4.5's imported 0.64 fallback stays. Lead's §4.4 base-alpha rule recorded above. Merged main at `005e065`, retaining media targets/checks and Space editor targets/checks; full verify-all 19 PASS, no SKIP; commands-demo 199/199. Main's new duplication path now preserves typed tab/folder/pane icon overrides. |
+| 3 | 2026-10-26 | M1–M5, P1, E1 (shell), E2, E3, E5: 64/64. F0137: pad/mode plate/knob frames 0 pt error; glyph center/height ≤ 1 pt and core ΔE00 ≤ 1.20 under the lead's §12.3 amendment; disc 0.72, ring 0.00, translucent max 1.90. Main merged at `4ef33e9`; full verify-all 18 PASS plus opt-in `import-arc` PASS (19 checks, no SKIP). Five Open-only renders attached; designer review pending with the lead. |
+| 4 | 2026-10-26 | Harness 92/92 including all E1, E4, E6. Lead geometry decision recorded in §5.7/§5.8/§12.3. F0137 and F0138 compare PASS after the main/media merge: thumb 0 pt, dial tick 1 pt, controls ΔE00 ≤ 1.20, other translucent max 2.13; F0138 Automatic excluded as mid-animation, F0137 remains its reference. Merged main `eceb683`; full verify-all with read-only Arc import: 19 PASS, no SKIP, build zero warnings/errors, commands-demo 216/216, sidebar-render 147/147 (main adds media checks), frozen schema-1 PNGs unchanged. Kept main's archive-migration gate and added typed-icon preservation through its new folder archive path. Nine Open-only renders attached for review. Steps 5–8 deferred. |
+| 2 R3 | 2026-10-26 | Main `c768c38` included; release build and editor checks 48/48. Legacy field and exact-grain paths restored: all 13 sidebar capture tables byte-identical to main, zero metric drift. F0139 six-region max ΔE00 0.84. |
+| 3 R3 | 2026-10-26 | Editor checks 96/96, including one-color complementary Add/undo, grey knob overlap, and forced appearance. Historical peak-method fit 0.50850 was refused; review R3 below invalidates that measurement and sets 0.50 with dot-masked, hover-matched sampling. |
+| 4 R3 | 2026-10-26 | Full code head `cbac12b`: plain verify-all through heavy.sh, 20 PASS, import-arc not selected without per-run opt-in. Editor 151/151; sidebar 429/429; 13 capture tables byte-identical and CU5 2/2. F0137/F0138 and session-2 slider/page-two/preview compares PASS. Final fit check confirms zero changed pixels outside glyph host frames, but Light 0159 crosses ΔE00 1.75→4.36; candidate refused as required. Only Open render refreshes and this log follow the code gate; Steps 5–8 remain deferred. |
 | 5 | | |
 | 6 | | |
 | 7 | | |
 | 8 | | |
 | 9 | | |
 
+## 17. Step 9 calibration — decoded Arc pad, intensity, and texture law (2026-10-26)
+
+Evidence: `docs/re/features-core.md` §2.3 item 17 (addresses, constants,
+capture fit). This section is the implementation spec. It replaces the
+provisional §2.2 range rule, the §4.5 opacity law, and the §4.4 / D-8
+equal-darkness rule. Step 9 lands it as one PR. It must land before or
+together with Step 5 (`edit-theme` wiring), per the round-3 gate. Values
+are decoded facts unless marked **fit** (our fit to captures) or **guess**.
+
+### 17.1 Pad law (`ThemeColorMath`, `ThemeEditorState`)
+
+The lightness range and the saturation become editor state. They are not
+stored in `SpaceStyle`, and they are not a function of the mode alone. Arc
+does not store them either; it rebuilds them each time the editor opens.
+
+```text
+autoRange(l)   = max(0.01, l − 0.25) … min(0.97, l + 0.25)
+forcedRange    = Light 0.575…0.97, Dark 0.01…0.425
+widen(R, l)    = min(R.lo, l) … max(R.hi, l)
+sat(key)       = max(0.01, hsl(key).s)          (P3 HSL)
+```
+
+| Event | `range` | `saturation` |
+|---|---|---|
+| Editor opens, no style | 0.01…0.97 | 1.0 (was 0.8: a defect, 0.8 is the default intensity) |
+| Editor opens on a style, Automatic | `autoRange(l)` | `sat(key)` |
+| Editor opens on a style, forced Light / Dark | `widen(forcedRange, l)` | `sat(key)` |
+| `selectPreset`, Automatic | `autoRange(l of the preset key)` | `sat(preset key)` |
+| `selectPreset`, forced | unchanged | `sat(preset key)` |
+| `setAppearance(.light / .dark)` | `forcedRange`; key `l' = lo' + t·(hi' − lo')` with `t = clamp((l − lo)/(hi − lo))` from the **current** range; hue and saturation kept | unchanged |
+| `setAppearance(.automatic)` | unchanged, key unchanged (**guess**: Arc handles it outside the reducer; no re-centering code exists) | unchanged |
+| Drag, keyboard, add, remove, intensity, noise, texture | unchanged | unchanged |
+| `removeColor` at count 1 (empty) | 0.01…0.97 | 1.0 |
+
+Knob → color and color → knob keep today's formulas
+(`color(at:saturation:range:)`, `knob(for:range:)`), with the state's
+`range` and `saturation`. Keyboard hue keeps `l`.
+
+Code changes:
+
+1. `ThemeColorMath.swift`: add `autoRange(lightness:)`,
+   `forcedRange(_ mode:)`, `widen(_:_:)`, and
+   `editorRange(key: P3?, mode:) -> ClosedRange<Double>` for the open rule.
+   Keep `lightnessRange(_:)` only as `forcedRange` for `.light` / `.dark`.
+   Remove the `.automatic` constant from call sites.
+2. `ThemeEditorState.swift`: store `range` and `saturation` as `var`s. Set
+   them in `init(style:)` with the open rule. Update them in `.selectPreset`
+   and `.setAppearance` as in the table above. Reset them when the style
+   becomes `nil`. `setAppearance` computes `t` with the old stored range.
+   The empty-state default `saturation` becomes 1.0.
+3. `ColorPadView.swift` / `PresetStripView.swift`: read the range from the
+   state, not from the mode.
+4. No stored-value or `mathVersion` change: the key color is still the only
+   stored output, and rendering does not read the range.
+
+### 17.2 Sidebar opacity, wash, and compositing (`ThemeField`, `ThemeTuning`)
+
+```text
+a(i)        = 0.2 + 0.55 · clamp(i, 0, 1)                    theme layer opacity
+w(i)        = 0.35 · min(a(i), 0.5)                          dark wash, black
+underlay(i) = U0 · (1 − w(i)) / (1 − 0.35·0.5)               U0 = today's fitted gray
+pixel       = a · key + (1 − a) · underlay                   gamma-encoded Display P3
+```
+
+- `ThemeField.layerAlpha(intensity:)` returns `a(i)`. It equals 0.64 at
+  0.8, so every intensity-0.8 fit and compare is unchanged.
+- `U0` keeps `lightUnderlayActive` 0.694 and `lightUnderlayInactive` 0.83.
+  Dividing by 0.825 keeps both values exact at intensity ≥ 0.55. This is
+  equivalent to a material of 0.8412 (active) under Arc's wash (**fit**; this
+  capture's material is 0.8246; every §17.4 sidebar row passes with either value).
+  Inactive scaling by the same wash is a **guess**.
+- The black wash applies when the window's color scheme is Dark. The
+  capture is macOS Dark with `translucencyStyle: light`. In Light, Arc's
+  other branch is a white wash at `min(a, 0.5)`. It is not captured over a
+  theme, so in Light keep today's underlays without a wash (**guess**).
+- Composite editor styles in gamma-encoded Display P3: convert the key to P3
+  (it already is, from `ThemeColorMath`), mix with the gray underlay, then
+  convert the result to extended sRGB for the field image. The pad-center
+  frame fits at ΔE00 1.23 in P3 and 2.55 in sRGB (**fit**). For gradients,
+  convert the OKLab result to P3 before the final mix with the underlay.
+- Legacy imports and mapped stops (`usesLegacyIntensity`): keep 0.64 and the
+  sRGB path in this PR. Run F0069 (stored intensity 1.0) with `a = 0.75` and
+  the P3 mix. Switch legacy themes only if F0069's worst ΔE00 stays ≤ 2.38
+  (today's value). Record both numbers in the PR either way.
+
+Add to `ThemeTuning`:
+
+```swift
+public static let intensityAlphaFloor = 0.2       // 0x101532458
+public static let intensityAlphaSlope = 0.55      // 0x101532444
+public static let darkWashAlpha = 0.35            // 0x101532414
+public static let washOpacityCap = 0.5            // 0x101532464
+public static let textureNoiseScale: [SpaceStyleTexture: Double] =
+    [.grain: 0.80, .sand: 0.15, .denim: 0.60, .tweed: 0.40]   // 0x10153258c
+public static let textureTileDarkness: [SpaceStyleTexture: Double] =
+    [.grain: 0.060, .sand: 0.316, .denim: 0.122, .tweed: 0.262] // fit, §17.3
+```
+
+### 17.3 Textures (`ThemeTexture`)
+
+The §4.4 equal-mean-darkness rule and its base-alpha layer are removed. The
+lead's round-3 note already supersedes them. Each texture draws its own
+black tile (Open's own pattern) at layer opacity
+`noise × textureNoiseScale[t]`.
+
+- Tile mean alpha: `textureTileDarkness[t]`. Then the mean darkening is
+  `noise × k × D`: at noise 0.8, grain 0.0386, sand 0.0379, denim 0.0586,
+  tweed 0.0838 (multiplicative, encoded values).
+- Contrast: tune each pattern's alpha spread so the sidebar L* standard
+  deviation over x 30–200, y 820–1020 at noise 0.8, intensity 1 is grain
+  2.02, sand 1.53, denim 1.28, tweed 0.92 (±0.3). Tweed must be the
+  smoothest: a soft mottle, not sharp dashes.
+- Monochrome: no per-channel tint. Arc's darkening differs by ≤ 0.001
+  between channels. The F0139 per-channel grain note stays open, because
+  this session shows none.
+- Grain: rescale today's `Grain.tile` alpha so its mean is 0.060 at layer
+  opacity 1. Keep its pattern. Check F0139 (noise 0.45): it must stay
+  ≤ 0.84 ΔE00, or report the change.
+- Cache key unchanged (texture, noise bucket, scale). The tile no longer
+  depends on noise; only layer opacity does. One tile per (texture, scale)
+  is enough.
+
+### 17.4 Acceptance (`space-editor-render compare --spec session2-pad`, new)
+
+Inputs: the local session 2 item 17 frames (never committed). Colors: convert
+the capture's embedded display profile to Display P3. Sidebar sample: mean of
+x 30–200, y 820–1020 of the main-window image (`win-70352`). Render Open's
+window with the key from Open's own pad math at Arc's knob position and
+Arc's intensity and noise. Brand 8 state: P3 HSL h 200.5°, s 0.5176,
+l 0.6667, range 0.4167…0.9167.
+
+| Check | Arc input (unit knob position, intensity) | Target |
+|---|---|---|
+| Knob, Greyscale 1–9 (0027–0045) | preset tap, Automatic | ≤ 1.5 pt each (decoded ≤ 0.9) |
+| Knob, Brand 8 (0065) | preset tap, Automatic | ≤ 1.5 pt (decoded 0.7; today 30.6) |
+| Key, pad center (0092) | r 0.004, hue from Arc's knob 337.1°, 0.8 | ΔE00 ≤ 2 vs knob P3 (163, 53, 95) (decoded 0.39) |
+| Key, mid radius (0093) | (0.485, −0.003), 0.8 | ΔE00 ≤ 2 vs (213, 125, 126) (decoded 0.37) |
+| Key, edge at rest (0098) | (0.932, −0.004), 0 | ΔE00 ≤ 2 vs (242, 213, 213) (decoded 0.40) |
+| Sidebar, center (0092) | as above, 0.8 | ΔE00 ≤ 2 (decoded 0.94 with `U0`; today 29.8) |
+| Sidebar, mid (0093) | as above, 0.8 | ΔE00 ≤ 2 (0.35; today 13.7) |
+| Sidebar, edge (0095) | key of 0098, 0.8 | ΔE00 ≤ 2 (0.22; today 2.5) |
+| Sidebar, intensity 0 / 0.5 / 1 (0098 / 0100 / 0102) | key of 0098; 0, 0.495, 1 | ΔE00 ≤ 2 each (0.82 / 0.51 / 0.32; today 6.98 / 2.49 / 2.60) |
+| Sidebar, Brand 8 (0065) | preset, 0.8 | ΔE00 ≤ 2 (0.55) |
+| Textures (0112 / 0114 / 0116 / 0118) | key of 0098, 1, noise 0.8 | mean ΔE00 ≤ 2 vs Arc; L* sd within ±0.3 of §17.3 |
+| Mode remap | Brand 8, Dark then Light | Dark: `l' = 0.01 + 0.415·t`; Light: `0.575 + 0.395·t`, with `t` from 0.4167…0.9167 |
+| Empty open | no style | range 0.01…0.97, saturation 1.0; F0137 knob at 45.98 pt (Arc 45.26) |
+
+Also run `sidebar-render check`, the F0069 compare (§17.2), F0139, and the
+existing editor checks. Frame 0091 is not a gate frame: its second window
+image is mid-drag, and there the sidebar lags the knob. Use 0092, which has
+the same knob at rest.
+
+Remaining unknowns, not gates: the Metal renderer's own config fill (the
+capture fits the SwiftUI law), the light-mode wash, the inactive-window
+material, and Automatic-return behavior.
+
 ## Appendix — Lead decisions (2026-10-25)
 
 - Approved as the Space creation, editing, and theme editor plan. Implementation starts after the plan merges. It can run in parallel with the app-shell work, because Steps that touch only OpenKit come first.
 - Q1 Emoji data: generate it with our own script from Unicode `emoji-test.txt`, and keep the license row in `docs/release/licenses.md` (already added).
-- Q2 A new Space gets brand preset `spaces.count mod 9`, 1 color, Automatic mode. Replace this with Arc's rule if a capture shows a different one.
+- Q2 A new Space starts with no stored theme unless the user picks a color (capture session 2; supersedes the original Brand-preset guess).
 - Q3 The Automatic text-color bias is 0.0.
 - Q4 Intensity uses the provisional `alpha = 0.8 × intensity`. Calibrate it from the theme-editor capture when it arrives.
 - Q5 Presets page 2: Brand 1–9 with 3 colors 40° apart.
@@ -1048,3 +1416,151 @@ on both pages; the same editor in macOS Light.
 - Q10 The 2nd and 3rd color knobs are 30 pt, not draggable, and move with the main knob.
 - Q11 Spaces ▸ Rename Space edits the name in the sidebar header. A dialog appears only when the sidebar is hidden.
 - The capture request goes into the user's single combined Arc capture session.
+- 2026-10-26 (capture session 2): Q2 superseded. A new Space starts with **no** theme (the default theme) unless a color is picked in the New Space form (C10).
+
+
+### Lead round-3 overrides — 2026-10-26
+
+Evidence: `theme-design-r2.md`, capture session 2 item 17
+(`20261026-104045-17-theme-editor`) and item 20
+(`20261026-103516-20-light-mode`); private frames remain local under `.re/`.
+
+- **Harmony / N5:** the 11:57 lead clarification supersedes the earlier
+  suggestion to alter the harmony function. Add switches a one-color style
+  to complementary, in one undo step; Add at two colors preserves its mode.
+  No preset or persisted style is rewritten. Frames 0065/0067/0069 prove the
+  page-1 complementary offsets. The editor wiring lands in Step 3, where
+  `ThemeEditorState` exists; Step 2 keeps and gates both harmony modes.
+- **Step 9 is a hard written acceptance gate, not optional polish.** Decode
+  Arc's knob-radius ↔ color function before claiming pad parity. Frames
+  0027–0049 show shared radii for mid greys; 0091–0097 show a deep color at
+  the center (lightness about 0.45), not black. Do not decode it in this
+  review pass. Current M3 proves an internal round trip only.
+- **Q4 / intensity:** Step 9 must reproduce the tint at intensity zero.
+  Frames 0098/0100/0111: Arc keeps a tint at 0 (current Open ΔE00 7.30),
+  and the measured intensity-1 alpha is about 0.75. The provisional law is
+  not a verified Arc law. Preserve these capture values as the calibration
+  acceptance inputs; no stored-value meaning changes in this review pass.
+- **D-8 / equal mean darkness:** the earlier equal-darkness requirement is
+  superseded as an Arc parity target. Step 9 must calibrate per-texture
+  darkness and contrast from 0112/0114/0116/0118 at noise 0.8. Arc tweed is
+  darkest and smoothest, with mean (209.6,184.8,185.8) and L standard
+  deviation 2.53, versus no-texture (228.9,201.9,202.7). Grain, sand, denim,
+  and tweed do not share one mean. Keep existing procedural Space tiles and
+  current compatibility checks until Step 9 replaces this provisional fit;
+  they are regression checks, not a claim that Arc uses equal darkness.
+  Grain strength and per-channel calibration belong to this same gate.
+
+- **Q9 / appearance override:** session 2 frames 0158–0163 prove forced
+  Light/Dark changes the editor even under the opposite system mode.
+  Automatic inherits the system. This supersedes the original Q9 decision.
+  Light tokens and the FCFBFC harness backdrop are calibrated from item 20
+  0027 and item 17 0158–0159; no outline on the knob, thumb, or tick.
+- **Empty state / N4:** frame 0010 replaces the hidden-button and dimmed
+  controls guesses: bright centered label, visible disabled Remove/Add.
+  Step 4 hides the thumb and tick, leaves the wave inactive at its default
+  amplitude, and draws only unlit dial dots.
+- **Secondary knobs / N6:** frames 0067–0080 give 27 pt at rest, pure white
+  rings, about 30 pt on hover/drag, with the primary on top. Grey knobs in
+  0050–0064 coincide rather than forming a visible bullseye.
+- **Hover / N13:** 0016/0020 and 0066–0068 give alpha 0.11; selected plus
+  hover stacks to about 0.20. Minus glyph is pixel-aligned and shifted 1 pt
+  down, preserving the button frame (0081–0085).
+
+Session-2 glyph comparisons mask the pad-dot lattice and use the median stroke
+plateau (≥95% of the upper-half stroke median, excluding antialiased edges). They report normalized and raw core color separately. Half-peak
+boxes still report center/height; empty-label measurements remain separate.
+The light moon uses 17 pt (16 pt in dark) to retain the captured height in
+item 20 frame 0027.
+
+- **Thumb lock lifted / N1–N3:** round-3 lead decision supersedes the
+  01:43 `32 + 200·value` lock. Session 2 0098/0100/0063/0111 fixes panel
+  center x to `38.8 + 208.4·value`, with matching input. Amplitude is about
+  `14.8·value`, including a straight line at zero. Rest size interpolates
+  between the measured low/default/high points in §5.7; hover/press is
+  ×1.09. The former one-frame fixed size and amplitude were guesses.
+- **N8 / shadows:** session 2 0098–0111 and light 0159 supersede the R1
+  outline and symmetric halo advice: use a faint downward shadow only.
+- **Dial / N10–N11/N17:** 0112–0122 proves a five-state cycle with none and
+  exact noise 0.80 for every texture. 0137/0145/0148 fixes an 8×16 pt tick.
+  Preview brightness is calibrated now, separately from Step 9 Space-tile
+  calibration: translucent grain fits both dark/light backdrops; the other
+  previews are light and almost opaque. All art is Open's own procedure.
+- **Page 2 / N12:** 0016 shows three muted diagonal color stops and no disc.
+  The captured RGB stop numbers are facts, used in an original gradient.
+
+Round-3 comparison extends §12.3 with `--spec session2-editor` and states
+`empty`, `empty-light`, `slider --value V`, `preview`, and `page-two`.
+It reports real raster thumb geometry, fitted wave centroid amplitude,
+preview mean/contrast, and five diagonal colors per page-2 swatch. Session 2 private pixels
+are read only by this command; outputs stay under ignored `.re/`.
+The F0137/F0138 Automatic animation exemption and glyph-shape exemption
+remain. Raw new-capture color measurements are reported separately from
+formal native flow checks and from the unresolved Step 9 parity gate.
+
+### Review R3 — corrected glyph sampling (2026-10-26)
+
+Lead decision after `theme-design-r3.md` F1/F4: light `glyph` and
+`glyphSelected` are black **0.50**, with disabled glyph factor **0.32** in
+both modes. Remove and Add use SF Symbols **Semibold 16 pt**, matching
+Arc's approximately 2.0 px strokes (item 17 frames 0069/0158).
+
+The earlier refused alpha fit was a **measurement error**, not evidence
+for 0.55. The ≥99%-of-peak selector preferred pad dots under glyph strokes,
+and the 0158/0159 comparison used a rest Light plate where Arc was hovered.
+Those historical numbers and their refusal do not establish token parity.
+The corrected harness excludes the 4.25 pt pad-dot lattice, samples the
+median stroke plateau, and renders Light hovered in item 17 0158–0159.
+It reports raw core color and a separate token comparison. The latter uses
+Arc's local background and SF coverage measured with a unit-black reference
+render of the same glyph. Some thin SF diagonals have no fully covered pixel
+at 1x; this measures their paint alpha without changing product opacity or
+adding per-glyph alpha adjustments. All item 20 0027–0034 frames are included but are
+identified as repeated samples of the same static state, not eight distinct
+states. The corrected numeric result is recorded with the Step 4 harness.
+
+Corrected `fit-light-glyphs` result: **70 glyph instances / 1546 dot-free
+core pixels**, median capture alpha **0.49956**. Per-instance estimates are
+**0.49633–0.51952**, maximum offset from the corpus median **0.01996**
+(within ±0.05). The authored alpha is **0.50**; disabled factor is **0.32**.
+Maximum coverage/background-normalized token error is **ΔE00 1.06**.
+
+| Glyph | Core pixels | Median capture alpha | Token ΔE00 range | Raw core ΔE00 range |
+|---|---|---|---|---|
+| Automatic | 154 | 0.49971 | 0.06–0.37 | 0.71–1.46 |
+| Light | 356 | 0.49633 | 0.49–0.76 | 1.30–1.37 |
+| Dark | 500 | 0.49808 | 0.28–0.35 | 1.03–1.49 |
+| Remove | 160 | 0.50961 | 0.49–0.60 | 1.41–2.54 |
+| Add | 128 | 0.50904 | 0.36–0.63 | 1.68–1.75 |
+| Previous | 128 | 0.51937 | 0.44–0.52 | 0.69–1.41 |
+| Next | 120 | 0.51161 | 0.62–1.06 | 3.60–5.44 |
+
+The raw SF chevron pixel residual remains visible in this table; the token
+gate does not claim that different glyph shapes or coverage are identical.
+No text, track, dot, thumb, or dial fill token changed in the alpha fit.
+The earlier refusal and its apparent hovered-Light regression are invalid.
+
+Round-3 compatibility correction: main's new paired sidebar capture gate
+exposed two accidental legacy-path changes: the editor fill clamp reached
+imported extended colors, and the texture cache quantized imported noise
+to 0.05 buckets. Legacy (`style == nil`) themes now retain their original
+field inputs, 0.64 opacity, and exact `Grain.tile` path. Editor styles keep
+the F0139 clamp and bounded texture cache. This enforces §3.4's byte-identical
+legacy rendering requirement without changing any stored value or gate.
+
+
+Review R3 control corrections: the grown thumb's overhang is hit-testable
+inside the existing panel, and hover follows its grown frame. Empty Intensity,
+Noise, and Cycle-noise report AX enabled, while actions preserve the empty
+theme. Dots are 5 pt on radius 32; the tick uses that same orbit. Wave slope
+is 14.8. Sand preview uses Open's own short horizontal dashes; mean/contrast
+remain 139/7.7. Page-2 art is selected by page, not by color count. These
+changes do not implement Step 5 wiring or change stored style meaning.
+
+R3 page-2 result: **45/45** diagonal samples pass, maximum **ΔE00 1.34**.
+Stop facts use a single bilinear sample at t = −9/0/+9, away from the rim.
+The gate uses a uniform 2×2 pt mean at t = −8/−4/0/4/8 to suppress capture
+dithering; its support stays inside the rim. The ΔE00 ≤2 limit is unchanged.
+F0137/F0138 remain at maximum **1 pt / ΔE00 1.94**. Session-2 slider frames
+0098/0100/0111/0114 remain within **1 pt**. Preview mean-color error is at
+most **ΔE00 1.31** across 0112/0114/0116/0118/0159.

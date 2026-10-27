@@ -32,6 +32,7 @@ private struct FolderArchiveDTO: Encodable, Sendable {
     let title: String
     let isExpanded: Bool
     let customIcon: String?
+    let iconOverride: SpaceIconDTO?
     let children: [NodeDTO]
     let originalSection: String?
 }
@@ -92,6 +93,7 @@ public final class ArchiveStore: ArchiveSink {
                        originalLocation: entry.originalLocation, kind: .folder,
                        payload: .folder(FolderArchiveDTO(id: entry.folder.id.description, title: entry.folder.title,
                            isExpanded: entry.folder.isExpanded, customIcon: entry.folder.customIcon,
+                           iconOverride: SnapshotMapper.iconDTO(entry.folder.iconOverride),
                            children: entry.folder.children.map { SnapshotMapper.nodeDTO($0) }, originalSection: entry.originalSection)))
         }
         guard !rows.isEmpty else { return }
@@ -104,7 +106,7 @@ public final class ArchiveStore: ArchiveSink {
 
     private func rows(_ entries: [ArchiveEntry]) -> [ArchiveRow] {
         entries.map { entry in
-            ArchiveRow(id: entry.tab.id.rawValue.uuidString, url: entry.tab.url.absoluteString, title: entry.tab.displayTitle,
+            ArchiveRow(id: entry.tab.id.rawValue.uuidString, url: entry.tab.url.absoluteString, title: entry.tab.customTitle ?? entry.tab.title,
                        spaceID: entry.spaceID?.rawValue.uuidString, profileID: entry.profileID?.rawValue.uuidString,
                        archivedAt: entry.archivedAt.timeIntervalSince1970, reason: entry.reason.rawValue,
                        originalLocation: entry.originalLocation, kind: .tab, payload: .tab(SnapshotMapper.tabDTO(entry.tab)))

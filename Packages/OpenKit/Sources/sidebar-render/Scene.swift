@@ -14,6 +14,7 @@ final class RenderScene: NSView {
         var trafficLights = true
         /// Panel without a page: white 10 % (Arc's empty state). Otherwise opaque white.
         var emptyPanel = true
+        var previewFolderID: ItemID?
     }
 
     let background: ThemeBackgroundView
@@ -23,11 +24,13 @@ final class RenderScene: NSView {
     let lights = TrafficLightsView()
     let cardShadow = RevealCardShadowView()
     let options: Options
+    let folderPreview: FolderPreviewView?
 
     init(context: SidebarContext, options: Options, delegate: any SidebarDelegate) {
         self.options = options
         background = ThemeBackgroundView(frame: CGRect(origin: .zero, size: options.size))
         sidebar = SidebarView(context: context)
+        folderPreview = options.previewFolderID.flatMap { context.model.node(id: $0)?.folder }.map { FolderPreviewView(context: context, folder: $0) }
         super.init(frame: CGRect(origin: .zero, size: options.size))
         wantsLayer = true
         sidebar.delegate = delegate
@@ -39,6 +42,9 @@ final class RenderScene: NSView {
         addSubview(panelHost)
         if options.revealCard { sidebar.presentation = .floatingCard; addSubview(cardShadow) }
         if !options.sidebarHidden || options.revealCard { addSubview(sidebar) }
+        if let folderPreview {
+            addSubview(folderPreview)
+        }
         if options.trafficLights && !(options.sidebarHidden && !options.revealCard) {
             if options.revealCard { sidebar.addSubview(lights) } else { addSubview(lights) }
         }
@@ -50,6 +56,9 @@ final class RenderScene: NSView {
     override func layout() {
         super.layout()
         let w = sidebar.context.sidebarWidth
+        let context = sidebar.context
+        lights.tone = context.focusedSpace.map { context.appearance(for: $0) } ?? context.systemAppearance
+        lights.showsRing = context.isWindowActive
         background.frame = bounds
         panelHost.frame = bounds
         let hidden = options.sidebarHidden
@@ -64,28 +73,40 @@ final class RenderScene: NSView {
             sidebar.frame = CGRect(x: 0, y: 0, width: w, height: bounds.height)
             lights.frame = CGRect(x: 0, y: 0, width: 80, height: 40)
         }
+        if let folderPreview {
+            sidebar.layoutSubtreeIfNeeded()
+            let height = min(folderPreview.fittingSize.height, bounds.height - 20)
+            let anchor = sidebar.rowFrame(nodeID: folderPreview.folder.id)?.minY ?? 100
+            folderPreview.frame = CGRect(x: w + HoverPreviewMetrics.sidebarGap, y: min(max(10, anchor - 10), bounds.height - 10 - height), width: HoverPreviewMetrics.folderWidth, height: height)
+        }
+
     }
 }
 
-/// Stand-in for the system traffic lights in renders: three 12 pt circles at the
-/// measured centers. Inactive style only (black ≈ 0.11 over the theme, F0001).
+/// Stand-in for the window buttons in renders: the window's own dimmed look at rest
+/// (`DimmedTrafficLightsView`, Arc's grey circles), at the measured centers.
 @MainActor
 final class TrafficLightsView: NSView {
+    private let dimmed = DimmedTrafficLightsView()
+    /// The Space's content appearance (set by the scene), as in the window.
+    var tone: ContentAppearance = .light { didSet { needsLayout = true } }
+    /// Rings only in an active window (renders with `--inactive` draw none).
+    var showsRing = true { didSet { needsLayout = true } }
     override var isFlipped: Bool { true }
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        addSubview(dimmed)
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
-    override func draw(_ dirtyRect: NSRect) {
-        // Inactive lights: black 0.11 on light content (F0001), white 0.31 on dark (F0079).
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        (dark ? NSColor.white.withAlphaComponent(0.31) : NSColor.black.withAlphaComponent(0.11)).setFill()
-        for f in ChromeMetrics.trafficLightFrames {
-            let d = ChromeMetrics.trafficLightDiameter
-            NSBezierPath(ovalIn: NSRect(x: f.midX - d / 2, y: f.midY - d / 2, width: d, height: d)).fill()
-        }
+    override func layout() {
+        super.layout()
+        dimmed.frame = bounds
+        // The dimmed view is not flipped: measure its centers from the bottom.
+        dimmed.centers = ChromeMetrics.trafficLightCenters.map { CGPoint(x: $0.x, y: bounds.height - $0.y) }
+        dimmed.tone = tone
+        dimmed.showsRing = showsRing
     }
 }
 
