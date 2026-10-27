@@ -3,8 +3,17 @@
   "name": "Open tabs probe",
   "version": "1.0",
   "description": "End-to-end probe for chrome.tabs and chrome.windows (tools/e2e/engine_e2e.py --only tabstrip).",
-  "permissions": ["tabs", "storage"],
-  "background": {"service_worker": "background.js"},
-  "action": {"default_popup": "popup.html", "default_title": "Tabs probe"},
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Tabs probe"
+  },
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6Cig5QKovEMvWqoOufnbagXKuL/lX9A32xiyzZadav7iNe6StvALmeyFrrX3oGEpNGoS2gFJ5x7LmeK39SHJ6s0qnyf+qq8UUszdl3xqL485Y6QlYPPD/X+AT6gb/EoKH1lzUYepA0AHH48PBeIq/RD4uOG5uQSdXG8lnLE4chgzjCXoatpOO/tzxE+Q1YIOK4Mz4yQW3Wt8UyvRcmuD4OYLHsZLX6TywRzwgXn3Uj8diV0MFawdtBHVYgFoh+qNwW/Ib0Eyyf/lfqlCDJV8RNb1QyvnfWm7Gas0k29uI3bU1NFdgT2TER/P3ho2Ptm+ecT4BKURLSq/ZoqMJl9K4QIDAQAB"
 }
