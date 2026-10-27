@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import OpenDesign
 import OpenModel
 import OpenSidebar
@@ -12,6 +13,11 @@ import Darwin
 @MainActor
 enum LiveThemeChecks {
     static func check(_ value: Bool, _ name: String) { Checks.check(value, name) }
+    static func opacityAnimations(_ layer: CALayer?) -> Int {
+        guard let layer else { return 0 }
+        return (layer.animation(forKey: "opacity") == nil ? 0 : 1)
+            + (layer.sublayers ?? []).reduce(0) { $0 + opacityAnimations($1) }
+    }
     static func run() throws {
         try propagation(); try closing(); try persistence(); try bench()
     }
@@ -38,7 +44,7 @@ enum LiveThemeChecks {
         let renderer = OffscreenRenderer()
         let before = scenes.map { Bitmap(image: renderer.snapshot($0, scale: 1), colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!) }
         let rebuilds = scenes.map { $0.background.fieldRebuildCount }
-        let animations = scenes.map { $0.background.animatedThemeChangeCount }
+        let animations = scenes.map { opacityAnimations($0.background.layer) }
         editor.undo.removeAllActions()
         editor.controller.apply(.dragKnob(to: CGPoint(x: -0.5, y: -0.2), relative: false))
         editor.controller.flushPreviewFrame()
@@ -46,8 +52,8 @@ enum LiveThemeChecks {
         check(scenes[0].background.targetStyle == style && scenes[1].background.targetStyle == style
               && scenes[2].background.fieldRebuildCount == rebuilds[2],
               "E7 both same-Space backgrounds update synchronously in one editor frame; other Space stays unchanged")
-        check(scenes.prefix(2).allSatisfy { !$0.background.isCrossfading }
-              && zip(scenes, animations).allSatisfy { $0.background.animatedThemeChangeCount == $1 },
+        check(scenes.prefix(2).allSatisfy { opacityAnimations($0.background.layer) == 0 }
+              && zip(scenes, animations).allSatisfy { opacityAnimations($0.background.layer) == $1 },
               "E7 a live drag adds no cross-fade to any window")
         check(scenes.prefix(2).allSatisfy { $0.sidebar.context.livePreviewSpaces.contains(editor.space.id) },
               "E7 the shared live preview lease reaches both sidebar contexts")
@@ -66,10 +72,10 @@ enum LiveThemeChecks {
               "E7 a drag commits once and releases its live preview lease")
         SidebarDiagnostics.forceAnimations = true
         defer { SidebarDiagnostics.forceAnimations = false }
-        let counts = scenes.map { $0.background.animatedThemeChangeCount }
+        let counts = scenes.map { opacityAnimations($0.background.layer) }
         editor.controller.apply(.selectPreset(index: 4))
-        check((0..<2).allSatisfy { scenes[$0].background.animatedThemeChangeCount == counts[$0] + 1 }
-              && scenes[2].background.animatedThemeChangeCount == counts[2],
+        check((0..<2).allSatisfy { opacityAnimations(scenes[$0].background.layer) == counts[$0] + 1 }
+              && opacityAnimations(scenes[2].background.layer) == counts[2],
               "E7 one preset click adds exactly one discrete cross-fade per same-Space window")
     }
     static func closing() throws {

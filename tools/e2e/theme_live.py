@@ -64,8 +64,10 @@ def run(factory, results, scratch, root, wait_until):
         first = wait_until(saved_style, timeout=4, step=.03)
         assert first, 'first pad pick did not reach model'
         rest = capture('editor-rest', p['number'])
+        capture('window-editor-rest', owner['number'])
         app.call('mouse', window=p['number'], action='hover', x=151, y=61)
         hovered = capture('editor-hover', p['number'])
+        capture('window-editor-hover', owner['number'])
         pixels = globals()['read_image']
         rw, rh, rest_pixel = pixels(rest)
         hw, hh, hover_pixel = pixels(hovered)
@@ -104,6 +106,11 @@ def run(factory, results, scratch, root, wait_until):
                                              'before': near_end['intensityFactor'], 'after': at_end['intensityFactor'] if at_end else None}
         app.call('key', window=p['number'], key='escape', route='app')
         results['escape_closes_editor'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
+        app.call('key', window=owner['number'], key='z', modifiers=['cmd'], route='app')
+        closed_undo = saved_style()
+        app.call('key', window=owner['number'], key='z', modifiers=['cmd', 'shift'], route='app')
+        closed_redo = saved_style()
+        results['undo_after_panel_release'] = {'ok': abs(closed_undo['intensityFactor'] - .98) < .01 and closed_redo['intensityFactor'] == 1 and not panel()}
         p = opened()
         app.call('key', window=p['number'], key='return', route='app')
         results['return_keeps_editor'] = {'ok': panel() is not None}
@@ -118,6 +125,14 @@ def run(factory, results, scratch, root, wait_until):
         app.call('key', window=p['number'], key='w', modifiers=['cmd'], route='app')
         results['cmd_w_editor_context'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
         p = opened()
+        peer = app.foreground_peer()
+        try:
+            app.accept_owned_handoff(peer)
+            results['app_deactivation_closes_editor'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
+        finally:
+            peer.quit()
+        app.call('window-focus', id=owner['id'], activate=True)
+        p = opened()
         app.call('space', space=data['spaces'][1]['id'])
         results['space_switch_closes_editor'] = {'ok': wait_until(lambda: not panel(), timeout=3, step=.02)}
         app.call('space', space=data['spaces'][0]['id'])
@@ -127,3 +142,4 @@ def run(factory, results, scratch, root, wait_until):
         results['scope'] = {'status': 'PASS', 'note': 'Step 5 generic automation only; Step 8 theme/icon/create APIs are not added'}
     finally:
         app.quit()
+        dict.__setitem__(results, 'cleanup', {'ok': not app.quit_report.get('forced', False), 'forced': app.quit_report.get('forced', False)})

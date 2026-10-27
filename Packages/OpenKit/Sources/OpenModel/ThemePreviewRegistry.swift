@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import OpenModel
 
 /// Transient, process-wide preview ownership. Space IDs are globally unique;
 /// leases keep one editor from clearing another editor's live gesture.
