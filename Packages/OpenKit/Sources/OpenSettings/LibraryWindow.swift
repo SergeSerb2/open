@@ -114,8 +114,14 @@ private final class LibraryNativeWindow: NSWindow {
     @objc func undo(_ sender: Any?) { undoManager?.undo() }
     @objc func redo(_ sender: Any?) { undoManager?.redo() }
     override func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
-        if menuItem.action == #selector(undo(_:)) { return undoManager?.canUndo == true }
-        if menuItem.action == #selector(redo(_:)) { return undoManager?.canRedo == true }
+        if menuItem.action == #selector(undo(_:)) {
+            menuItem.title = undoManager?.undoMenuItemTitle ?? "Undo"
+            return undoManager?.canUndo == true
+        }
+        if menuItem.action == #selector(redo(_:)) {
+            menuItem.title = undoManager?.redoMenuItemTitle ?? "Redo"
+            return undoManager?.canRedo == true
+        }
         return super.validateMenuItem(menuItem)
     }
 }

@@ -11,6 +11,7 @@ import OpenStore
     public var section: LibrarySection { didSet {
         defaults.set(section.rawValue, forKey: "open.library.lastSection")
         if oldValue != section { statusText = ""; restoredSpaceID = nil; selections[oldValue] = selectedIDs; queries[oldValue] = query; selectedIDs = selections[section] ?? []; query = queries[section] ?? "" }
+        if section == .spaces { refreshSpaceManagerView() }
     } }
     private var selections: [LibrarySection: Set<String>] = [:]
     private var queries: [LibrarySection: String] = [:]
@@ -45,14 +46,8 @@ import OpenStore
     public let actions: any LibraryActions
     @ObservationIgnored private let settingsActions: (any SettingsActions)?
     private var cachedSpaceManagerView: NSView?
-    /// Retry a transient nil; retain the supplied view across section switches
-    /// until a presenter refresh supplies its replacement.
-    public var spaceManagerView: NSView? {
-        if let cachedSpaceManagerView { return cachedSpaceManagerView }
-        guard let view = settingsActions?.makeSpaceManagerView() else { return nil }
-        cachedSpaceManagerView = view
-        return view
-    }
+    /// Rendering reads the cache; section and presenter changes refresh it.
+    public var spaceManagerView: NSView? { cachedSpaceManagerView }
     /// The presenter refreshes this when its browser context changes. The
     /// supplier retains a stable view until it needs a different window ID.
     public func refreshSpaceManagerView() {

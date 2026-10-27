@@ -21,7 +21,7 @@
     private let blockCounter = BlockCounter()
     private var pointerRequestID = 0
     private var nativeInputStart: Double = 0
-    private var managerUndoObserver: NSObjectProtocol?
+    private var managerUndoObserver: (any NSObjectProtocol)?
     private var managerUndoCount = 0
 
     init(app: AppDelegate) { self.app = app }

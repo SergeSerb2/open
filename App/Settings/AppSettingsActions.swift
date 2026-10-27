@@ -47,13 +47,11 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func refreshDownloads() { downloadRevision += 1 }
   @ObservationIgnored private var spaceManager: SpaceManagerView?
   /// No persistent preference writes: this context never arms hover previews.
-  @ObservationIgnored private lazy var managerPreferences: UserDefaults = {
-    SpaceManagerPreferences(suiteName: "Open.SpaceManager.\(UUID().uuidString)")!
-  }()
+  @ObservationIgnored private let managerPreferences: UserDefaults = SpaceManagerPreferences()
   func makeSpaceManagerView() -> NSView? {
     // Closing the last browser retains its model window for normal reopen.
     // Prefer a live browser, then that existing state; never create a window here.
-    let id = app.frontWindowController?.windowID ?? app.model.windows.first?.id
+    let id = app.frontWindowController?.windowID ?? app.model.windows.first(where: { $0.style == .standard })?.id
     guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
     if let spaceManager, spaceManager.context.windowID == id { return spaceManager }
     let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
@@ -74,10 +72,22 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
       if accepted { self.app.scheduleSave(); self.app.scheduleMenuRebuild() }
       return accepted
     }
+    if let previous = spaceManager {
+      manager.frame.size = previous.frame.size
+      manager.layoutSubtreeIfNeeded()
+      let clip = manager.scrollView.contentView
+      var bounds = clip.bounds
+      bounds.origin = previous.scrollView.contentView.bounds.origin
+      clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+      manager.scrollView.reflectScrolledClipView(clip)
+    }
     spaceManager = manager
     return manager
   }
-  func refreshSpaceManagerContext() { library?.refreshSpaceManagerView() }
+  func refreshSpaceManagerContext() {
+    guard libraryPresenter?.window?.isVisible == true else { return }
+    library?.refreshSpaceManagerView()
+  }
   var downloads: [DownloadItemSnapshot] {
     _ = downloadRevision
     return OEEngine.shared.contexts.flatMap { context in
@@ -188,6 +198,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
 /// A read-only in-memory override. NSArgumentDomain is process-shared, so
 /// mutating it on a suite would also disable previews in browser sidebars.
 private final class SpaceManagerPreferences: UserDefaults, @unchecked Sendable {
+  override func set(_ value: Any?, forKey defaultName: String) {}
   override func object(forKey defaultName: String) -> Any? {
     if defaultName == "open.general.previewsEnabled" { return false }
     return super.object(forKey: defaultName)
