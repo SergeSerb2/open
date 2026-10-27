@@ -148,17 +148,19 @@ enum SpaceManagerChecks {
     }
 
     private static func checkLargeManager() {
-        let model = SM6Fixture.makeModel()
-        do {
-            let measured = SM6Fixture.measure(model: model)
-            let manager = measured.manager, host = measured.host
-            defer { host.contentView = nil; host.close() }
-            SM6Fixture.printDiagnostics(measured)
-            SM6Fixture.checkStructure(measured, rows: SM6Fixture.outlineRows(model: model, manager: manager))
-            checkLargeManagerUpdates(model: model, manager: manager)
-        }
+        checkLargeManagerStructure()
         do { try SM6CostGate.run() }
         catch { Checks.check(false, "SM6 isolated cost check: \(error)") }
+    }
+
+    private static func checkLargeManagerStructure() {
+        let model = SM6Fixture.makeModel()
+        let measured = SM6Fixture.measure(model: model)
+        let manager = measured.manager, host = measured.host
+        defer { host.contentView = nil; host.close() }
+        SM6Fixture.printDiagnostics(measured)
+        SM6Fixture.checkStructure(measured, rows: SM6Fixture.outlineRows(model: model, manager: manager))
+        checkLargeManagerUpdates(model: model, manager: manager)
     }
 
     static func checkLargeManagerUpdates(model: BrowserModel, manager: SpaceManagerView) {
