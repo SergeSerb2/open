@@ -17,7 +17,8 @@ public final class ThemeEditorController {
     private let model: BrowserModel?
     private let spaceID: SpaceID?
     private let draftChange: (@MainActor (SpaceStyle?) -> Void)?
-    private let draftUndo: DraftUndoRelay?
+    private let editorUndo: EditorUndoRelay
+    private var baselineState: ThemeEditorState
     private var baseline: SpaceTheme
     private var lastWritten: SpaceTheme
     private var pendingPreview = false
@@ -47,12 +48,13 @@ public final class ThemeEditorController {
                  window: NSWindow, anchor: ThemeEditorAnchor, undoManager: UndoManager?,
                  onChange: (@MainActor (SpaceStyle?) -> Void)?) {
         self.model = model; self.spaceID = spaceID; self.ownerWindow = window; self.anchor = anchor
-        self.baseline = baseline; lastWritten = baseline; state = ThemeEditorState(style: draft)
+        self.baseline = baseline; lastWritten = baseline
+        let initial = ThemeEditorState(style: draft); state = initial; baselineState = initial
         draftChange = onChange
-        draftUndo = onChange.map { DraftUndoRelay(onRestore: $0) }
+        editorUndo = EditorUndoRelay(onRestore: onChange)
         panel.editorUndoManager = undoManager
         if let model { panel.undoProvider = { [weak model] in model?.undoManager } }
-        draftUndo?.controller = self
+        editorUndo.controller = self
         panel.editorView.onAction = { [weak self] in self?.apply($0) }
         panel.onEscape = { [weak self] in self?.close() }
         panel.beforeUndo = { [weak self] in self?.finishBeforeExternalAction() }
@@ -119,7 +121,8 @@ public final class ThemeEditorController {
         guard !isClosed else { return }
         if pendingFinish && !state.isGestureInProgress { flushPreviewFrame() }
         switch action {
-        case .setAppearance, .addColor, .removeColor, .selectPreset, .cycleTexture: finishBeforeExternalAction()
+        case .setAppearance, .addColor, .removeColor, .selectPreset, .cycleTexture:
+            finishBeforeExternalAction(); captureBaseline()
         default: break
         }
         let wasGesture = state.isGestureInProgress
@@ -170,6 +173,7 @@ public final class ThemeEditorController {
     }
     private func captureBaseline() {
         baseline = model.flatMap { model in spaceID.flatMap { model.space(id: $0)?.theme } } ?? SpaceTheme(style: state.style)
+        baselineState = state
     }
     private func writePreview() {
         let theme = state.style.map { SpaceTheme(style: $0) } ?? SpaceTheme()
@@ -185,13 +189,21 @@ public final class ThemeEditorController {
         let group = manager.map { $0.groupingLevel == 0 && !$0.isUndoing && !$0.isRedoing } ?? false
         if group { manager?.beginUndoGrouping() }
         defer { if group { manager?.endUndoGrouping() } }
+        let old = EditorUndoSnapshot(state: baselineState, theme: baseline)
+        let new = EditorUndoSnapshot(state: state, theme: current)
         if let model, let spaceID {
-            if model.commitSpaceTheme(id: spaceID, from: baseline) { commitCount += 1 }
-        } else if let draftUndo, let manager = panel.undoManager {
-            draftUndo.record(manager: manager, from: baseline.style, to: current.style); commitCount += 1
+            if model.commitSpaceTheme(id: spaceID, from: baseline) {
+                // Same undo group as the model write. Undo restores this state
+                // first, then the model; redo reverses that order. Observation
+                // sees lastWritten and does not reconstruct the pad range.
+                if let manager { editorUndo.record(manager: manager, from: old, to: new) }
+                commitCount += 1
+            }
+        } else if let manager {
+            editorUndo.record(manager: manager, from: old, to: new); commitCount += 1
         }
         if manager?.groupingLevel ?? 0 > 0 { manager?.setActionName("Update Theme") }
-        baseline = current
+        baseline = current; baselineState = state
     }
     private func requestFrame() {
         guard displayLink == nil else { return }
@@ -220,11 +232,15 @@ public final class ThemeEditorController {
         pendingPreview = false; pendingFinish = false; lastWritten = theme; baseline = theme
         let page = state.presetPage
         state = ThemeEditorState(style: SpaceStyle.seed(from: theme)); state.presetPage = page
+        baselineState = state
         renderState()
     }
-    fileprivate func restoreDraft(_ style: SpaceStyle?) {
+    fileprivate func restoreEditor(_ snapshot: EditorUndoSnapshot) {
+        guard !isClosed else { return }
         pendingPreview = false; pendingFinish = false
-        state = ThemeEditorState(style: style); baseline = SpaceTheme(style: style); lastWritten = baseline
+        let page = state.presetPage
+        state = snapshot.state; state.presetPage = page; baselineState = state
+        baseline = snapshot.theme; lastWritten = snapshot.theme
         renderState()
     }
     private func announceCount() {
@@ -251,16 +267,26 @@ public final class ThemeEditorController {
     @objc func tick(_ link: CADisplayLink) { owner?.flushPreviewFrame() }
 }
 
-@MainActor private final class DraftUndoRelay: NSObject {
+fileprivate struct EditorUndoSnapshot {
+    var state: ThemeEditorState
+    var theme: SpaceTheme
+}
+
+@MainActor private final class EditorUndoRelay: NSObject {
     weak var controller: ThemeEditorController?
-    let onRestore: @MainActor (SpaceStyle?) -> Void
-    init(onRestore: @escaping @MainActor (SpaceStyle?) -> Void) { self.onRestore = onRestore }
-    func record(manager: UndoManager, from old: SpaceStyle?, to new: SpaceStyle?) {
+    let onRestore: (@MainActor (SpaceStyle?) -> Void)?
+    init(onRestore: (@MainActor (SpaceStyle?) -> Void)?) { self.onRestore = onRestore }
+    func record(manager: UndoManager, from old: EditorUndoSnapshot, to new: EditorUndoSnapshot) {
         let group = !manager.groupsByEvent && manager.groupingLevel == 0 && !manager.isUndoing && !manager.isRedoing
         if group { manager.beginUndoGrouping() }
-        manager.registerUndo(withTarget: self) { [weak manager] relay in
+        manager.registerUndo(withTarget: self) { [weak manager, self] relay in
+            // Foundation keeps the target unowned. Its closure must retain the
+            // relay after the controller closes; the controller stays weak.
+            _ = self
             MainActor.assumeIsolated {
-                relay.onRestore(old); relay.controller?.restoreDraft(old)
+                // The draft callback may close or release the editor. Resolve
+                // the weak controller only afterwards; closed editors ignore it.
+                relay.onRestore?(old.state.style); relay.controller?.restoreEditor(old)
                 if let manager { relay.record(manager: manager, from: new, to: old) }
             }
         }

@@ -12,7 +12,7 @@ QUICK=0
 ONLY=
 ARC=0
 KEEP=0
-NAMES='commands-demo roundtrip space-legacy space-editor suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render features-render sitecontrol-render boosts import-arc'
+NAMES='commands-demo roundtrip space-legacy space-editor space-pad-compare suggest-check commands-dump route favicons media-demo sleep-demo adblock-perf adblock-catalog profiles settings-preview sidebar-render sidebar-compare commandbar-render features-render sitecontrol-render boosts import-arc'
 
 usage() {
     cat <<EOF
@@ -117,6 +117,14 @@ has_command() {
     LC_ALL=C grep -Eq "(^|[<|[:space:]])$1([>|[:space:]]|$)" "$LOG_DIR/openkit-usage.log"
 }
 available() {
+    if [ "$1" = space-pad-compare ]; then
+        if python3 "$ROOT/tools/verification/space-pad-compare.py" --probe; then
+            return 0
+        else
+            [ "$?" -ne 77 ]
+            return $?
+        fi
+    fi
     if [ "$1" = sidebar-compare ]; then
         if "$ROOT/tools/verification/sidebar-compare-states.sh" ${SIDEBAR_CAPTURE_ROOT:+"$SIDEBAR_CAPTURE_ROOT"} --probe; then
             return 0

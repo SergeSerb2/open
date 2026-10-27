@@ -376,7 +376,7 @@ struct SpecLayout {
     }
 }
 
-/// An sRGB RGBA8 bitmap with the few operations the comparison needs.
+/// RGBA8 pixels: sRGB by default, or Display P3 for the §17 capture corpus.
 @MainActor
 struct Bitmap {
     let width: Int, height: Int
@@ -387,16 +387,20 @@ struct Bitmap {
         data = [UInt8](repeating: fill, count: width * height * 4)
     }
 
-    /// Loads a PNG and converts it to sRGB through its embedded color profile.
-    init(path: String) throws {
+    /// Loads a PNG through its embedded profile into the requested color space.
+    init(path: String, colorSpace: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
               let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { throw CLIError(description: "cannot read \(path)") }
+        self.init(image: img, colorSpace: colorSpace)
+    }
+
+    init(image img: CGImage, colorSpace: CGColorSpace) {
         width = img.width; height = img.height
         data = [UInt8](repeating: 0, count: width * height * 4)
         let w = width, h = height
         data.withUnsafeMutableBytes { buf in
             let ctx = CGContext(data: buf.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                                space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
             ctx.setFillColor(CGColor(gray: 1, alpha: 1))
             ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
             ctx.draw(img, in: CGRect(x: 0, y: 0, width: w, height: h))

@@ -1243,7 +1243,7 @@ on both pages; the same editor in macOS Light.
 | 6 | | |
 | 7 | | |
 | 8 | | |
-| 9 | | |
+| 9 | 2026-10-26 | §17: 29/29 session2-pad rows; color max ΔE00 1.034, preset raster max 1 pt, texture L* sd errors ≤0.042. Editor 172/172, including exact range/saturation/knob undo and redo. Break proofs: old laws fail 31 native and 26 capture rows; missing paired undo fails the existing redo-knob and new state-restoration rows; restored source passes. Merged focused build, space-legacy, space-editor, sidebar-render, and all 13 byte-identical sidebar tables PASS. F0069 legacy/diagnostic 2.38/2.29, legacy retained; F0139 editor-style diagnostic 0.84→1.89 reported below. Full verification and review-checklist receipts are in the PR body. Steps 5–8 remain deferred. |
 
 ## 17. Step 9 calibration — decoded Arc pad, intensity, and texture law (2026-10-26)
 
@@ -1288,13 +1288,19 @@ Code changes:
 1. `ThemeColorMath.swift`: add `autoRange(lightness:)`,
    `forcedRange(_ mode:)`, `widen(_:_:)`, and
    `editorRange(key: P3?, mode:) -> ClosedRange<Double>` for the open rule.
-   Keep `lightnessRange(_:)` only as `forcedRange` for `.light` / `.dark`.
-   Remove the `.automatic` constant from call sites.
+   `lightnessRange(_:)` keeps its public compatibility default 0.01…0.97
+   for `.automatic` without trapping; forced modes return their ranges.
+   Editor call sites always read the stored range for Automatic.
 2. `ThemeEditorState.swift`: store `range` and `saturation` as `var`s. Set
    them in `init(style:)` with the open rule. Update them in `.selectPreset`
    and `.setAppearance` as in the table above. Reset them when the style
    becomes `nil`. `setAppearance` computes `t` with the old stored range.
    The empty-state default `saturation` becomes 1.0.
+   Lead clarification (2026-10-26 17:14 America/Vancouver): in-session undo
+   snapshots include the style, range, and saturation. Undo/redo restore the
+   exact earlier knob and editor state, without reconstructing a range from
+   the restored key. Reopening the editor still uses the open rule above.
+   None of these transient range/saturation values are written to disk.
 3. `ColorPadView.swift` / `PresetStripView.swift`: read the range from the
    state, not from the mode.
 4. No stored-value or `mathVersion` change: the key color is still the only
@@ -1310,7 +1316,8 @@ pixel       = a · key + (1 − a) · underlay                   gamma-encoded D
 ```
 
 - `ThemeField.layerAlpha(intensity:)` returns `a(i)`. It equals 0.64 at
-  0.8, so every intensity-0.8 fit and compare is unchanged.
+  0.8, preserving that opacity. The composite-space change can still
+  change the rendered color (F0139 is tracked below).
 - `U0` keeps `lightUnderlayActive` 0.694 and `lightUnderlayInactive` 0.83.
   Dividing by 0.825 keeps both values exact at intensity ≥ 0.55. This is
   equivalent to a material of 0.8412 (active) under Arc's wash (**fit**; this
@@ -1356,7 +1363,11 @@ black tile (Open's own pattern) at layer opacity
 - Contrast: tune each pattern's alpha spread so the sidebar L* standard
   deviation over x 30–200, y 820–1020 at noise 0.8, intensity 1 is grain
   2.02, sand 1.53, denim 1.28, tweed 0.92 (±0.3). Tweed must be the
-  smoothest: a soft mottle, not sharp dashes.
+  lowest-contrast texture: fine per-pixel grain with a weak mottle, not
+  a cloudy 4–8 px pattern. Review r1 corrects the earlier “soft mottle”
+  wording. Spatial gates compare box-2/4/8 sd ratios within ±0.1 and
+  column/row/diagonal mean L* deviations within ±0.15 for grain and tweed;
+  denim and sand print INFO pending their separate own-art redraw.
 - Monochrome: no per-channel tint. Arc's darkening differs by ≤ 0.001
   between channels. The F0139 per-channel grain note stays open, because
   this session shows none.
@@ -1400,6 +1411,39 @@ the same knob at rest.
 Remaining unknowns, not gates: the Metal renderer's own config fill (the
 capture fits the SwiftUI law), the light-mode wash, the inactive-window
 material, and Automatic-return behavior.
+
+Implementation notes (Step 9):
+
+- `compare --spec session2-pad --capture-root SESSION17 --out .re/DIR`
+  measures the **main-window `win-70352`** images in Display P3. The extra
+  window image can lag a preset tap; F0039 and F0041 both show Greyscale 7
+  in the main image. Open's preset positions are measured from its rendered
+  white ring, not from the state formula. The Brand-8 mode expectation uses
+  the independent decoded range 0.4167…0.9167.
+- Neutral P3 presets canonicalize an undefined hue to zero when round-trip
+  channel spread is below 0.000001 (less than 0.001 of an 8-bit level).
+  This prevents numerical ColorSync noise rotating grey knobs off the axis.
+- Cached ColorSync linear-primary matrices and the shared transfer curve
+  implement the encoded-P3 mix without allocating a CGColor per field pixel.
+  The three-color field rebuild measured about 1 ms instead of 21 ms on
+  this machine; this is a harness measurement, not the Step 5 B1 acceptance.
+- Texture contrast is an Open fit: alpha spreads 0.167 / 0.0353 / 0.0371
+  for sand / denim / tweed; grain's existing hashed marks receive a 1.25
+  contrast stretch and mean normalization to 0.060. There is no separate
+  base-alpha layer or per-channel tint. Noise changes only the layer opacity.
+- The F0069 diagnostic measured worst ΔE00 **2.38 legacy / 2.29 decoded**.
+  This PR retains the legacy opacity, sRGB path, and exact grain bytes so
+  the 13 stored/imported capture tables can remain byte-identical. The
+  qualifying diagnostic is not an automatic migration of stored themes.
+- **F0139 editor-style diagnostic changes from 0.84 to 1.89 ΔE00** (worst
+  of six regions). The new encoded-P3 fill and calibrated grain replace the
+  prior sRGB-clamped fit. This is the §17.3 report-change branch; it is not
+  described as preserving the old 0.84 fit or as changing the legacy tables.
+- The private compare input is bounded to 512 root entries, 64 MiB per PNG,
+  4096×4096 pixels, 4096 chunks, and a 128 MiB decoded source. The synthetic
+  CLI boundary driver is `Fixtures/space-editor-step9/check-inputs.py` in
+  OpenKit. It includes the accepted limits, one-over refusals, and trailing
+  data/unknown-option refusals. Capture pixels remain local and uncommitted.
 
 ## Appendix — Lead decisions (2026-10-25)
 
@@ -1564,3 +1608,46 @@ dithering; its support stays inside the rim. The ΔE00 ≤2 limit is unchanged.
 F0137/F0138 remain at maximum **1 pt / ΔE00 1.94**. Session-2 slider frames
 0098/0100/0111/0114 remain within **1 pt**. Preview mean-color error is at
 most **ΔE00 1.31** across 0112/0114/0116/0118/0159.
+
+
+### Step 9 review r1 response (2026-10-26)
+
+The undo action closure retains its relay; Foundation's undo target itself
+is unowned. The relay retains the controller only weakly. The native
+`lifetime-check` command commits, closes, releases the controller, then
+undoes and redoes the full theme. The old code traps in the undo target
+thunk; the range compatibility probe also traps on the old code. Undo keeps
+the current preset page while restoring the exact earlier style, knob,
+range, and saturation.
+
+P3 primary transforms use `SIMD3<Double>` with no per-sample arrays. A solid
+field computes its final color once per evaluator. Texture cache keys now
+contain only texture and scale; noise is a layer opacity. PR-only raster
+fixtures moved to local `.re/step9/review-r1/own-renders/` and are not stored
+in the repo. `space-pad-compare` in `verify-all` runs the capture gate when
+local session-2 inputs exist and SKIPs only when required inputs are absent.
+Use `SPACE_EDITOR_CAPTURE_ROOT` to select another local session-17 root.
+
+F0139 reproduction (scale **1**, whole window **2216×1394**, sidebar **500**):
+
+```sh
+BIN=Packages/OpenKit/.build/release/space-editor-render
+STYLE='{"keyColor":{"red":0.570741951,"green":0.392751396,"blue":-0.130948484,"alpha":1},"intensityFactor":0.8,"noiseFactor":0.45}'
+$BIN window --synthetic --size 2216x1394 --scale 1 --width 500 --style "$STYLE" --out .re/step9/review-r1/F0139.png
+$BIN compare --spec theme-window --arc "$SESSION1/0139-213404/win-5245.png" --ours .re/step9/review-r1/F0139.png --out .re/step9/review-r1/F0139
+```
+
+`SESSION1` is the local `20261024-213009-session-full` capture directory.
+The fixed P3 blend stays: F0139 0.84 → 1.89 ΔE00 is accepted by the lead
+under the ≤2 gate and filed in `docs/followups.md`. Imported/stops migration,
+display-space composition on both Macs, and the denim/sand art follow-ups
+are not implemented in this review response.
+
+
+Review r1 focused receipt: `space-editor` **178/178**; `session2-pad`
+**33 gate rows PASS, 4 INFO rows**. Tweed box-2/4/8 sd ratios are
+**0.666/0.430/0.263** versus capture **0.661/0.413/0.267** (largest error
+0.017, limit 0.1). Column/row/diagonal mean L* sd maximum error is **0.042**
+(limit 0.15); diagonals include only runs at least 85 px long. Restoring the
+old cloudy tile fails the new scale gate with error **0.384**. Restoring
+old page restoration fails both page-navigation undo and redo checks.
