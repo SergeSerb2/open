@@ -46,7 +46,9 @@ public enum SiteControlColors {            // macOS Dark measured (IS §20.15); 
     public static let circleOn = DesignColor(light: RGBA(hex: 0x2B2A3C), dark: RGBA(hex: 0xECEDFF))  // disc; glyph is a knock-out
     public static let circleOff = DesignColor(light: .black(0.10), dark: .white(0.28))     // disc; glyph is a knock-out
     public static let tileFill = DesignColor(light: .black(0.05), dark: .white(0.08))
-    public static let separator = DesignColor(light: .black(0.12), dark: .white(0.22))
+    /// S2 09/0010 y335: +35 sRGB levels on sidebar and page material.
+    /// Dark uses plus-lighter compositing; Light remains an alpha guess.
+    public static let separator = DesignColor(light: .black(0.12), dark: RGBA(hex: 0x232323))
     public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
     public static let moreFill = DesignColor(light: .black(0.10), dark: .black(0.28))
 }
@@ -81,9 +83,11 @@ public enum BoostEditorColors {           // BO-22 values (facts); usage per §4
 public extension SiteControlMetrics {
     static let disabledAlpha: CGFloat = 0.3, focusWidth: CGFloat = 2, moreGlyph: CGFloat = 13
     // SF vector optical boxes are calibrated separately from their point size.
-    static let symbolRasterPhase: [String: CGPoint] = ["square.and.arrow.up": CGPoint(x: 0.25,y: 0.5),"paintbrush.pointed": CGPoint(x: 0.75,y: 0.75)]
-    static let symbolRasterCompensation: [String: CGSize] = ["square.and.arrow.up": CGSize(width: 1,height: 0),"paintbrush.pointed": CGSize(width: 1,height: 0),"camera": CGSize(width: 1,height: 0),"text.viewfinder": CGSize(width: 1,height: 1),"lock.fill": CGSize(width: 2,height: 0),"ellipsis": CGSize(width: 2,height: 1)]
+    static let symbolRasterPhase: [String: CGPoint] = ["square.and.arrow.up": CGPoint(x: 0.25,y: 0.5),"paintbrush.pointed": CGPoint(x: 0.75,y: 0.75),"gearshape.fill": CGPoint(x: 0.75,y: 0)]
+    static let symbolRasterCompensation: [String: CGSize] = ["square.and.arrow.up": CGSize(width: 1,height: 0),"paintbrush.pointed": CGSize(width: 1,height: 0),"camera": CGSize(width: 1,height: 0),"text.viewfinder": CGSize(width: 1,height: 1),"lock.fill": CGSize(width: 2,height: 0),"ellipsis": CGSize(width: 2,height: 1),"gearshape.fill": CGSize(width: 2,height: 2)]
     static let actionInk = [CGSize(width: 14,height: 17),CGSize(width: 16,height: 16),CGSize(width: 19,height: 15),CGSize(width: 15,height: 18)]
+    static let gearInk = CGSize(width: 13,height: 13) // S2 09/0010; 15 pt symbol optical box
+    static let rowTitleTrailing: CGFloat = 16 // includes the tail-ellipsis optical inset
     static let pillLockInk = CGSize(width: 10,height: 14), moreInk = CGSize(width: 13,height: 3)
     static let actionRingWidth: CGFloat = 1, actionHighlightHeight: CGFloat = 1
     static let actionShadowRadius: CGFloat = 1, actionShadowOffsetY: CGFloat = 1, actionPressedLevels: CGFloat = -6

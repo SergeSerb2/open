@@ -30,7 +30,7 @@ public struct SiteSettingTile: Sendable, Equatable, Identifiable {
     public var inUse: Bool
     public var help: String?
     public init(id: String, kind: SiteSettingKind, title: String, subtitle: String, state: SiteSettingState,
-                symbol: String, inUse: Bool = false, help: String? = nil) {
+                symbol: String = "gearshape.fill", inUse: Bool = false, help: String? = nil) {
         self.id = id; self.kind = kind; self.title = title; self.subtitle = subtitle
         self.state = state; self.symbol = symbol; self.inUse = inUse; self.help = help
     }
@@ -41,14 +41,13 @@ public struct SiteControlSnapshot: Sendable, Equatable {
     public var tiles: [SiteSettingTile]
     public var boosts: [Boost]
     public var boostsGloballyEnabled: Bool
-    public var extensions: [ExtensionActionInfo]
     public var capabilities: Set<SiteCapability>
     public var commandsEnabled: [String: Bool]
     public init(context: SiteControlContext, tiles: [SiteSettingTile] = [], boosts: [Boost] = [],
-                boostsGloballyEnabled: Bool = true, extensions: [ExtensionActionInfo] = [],
+                boostsGloballyEnabled: Bool = true,
                 capabilities: Set<SiteCapability> = [], commandsEnabled: [String: Bool] = [:]) {
         self.context = context; self.tiles = tiles; self.boosts = boosts
-        self.boostsGloballyEnabled = boostsGloballyEnabled; self.extensions = extensions
+        self.boostsGloballyEnabled = boostsGloballyEnabled
         self.capabilities = capabilities; self.commandsEnabled = commandsEnabled
     }
     public var canCreateBoost: Bool { context.isWebsite && !context.isIncognito && boostsGloballyEnabled }
@@ -65,7 +64,7 @@ public enum BoostCodeTab: Sendable, Equatable { case css, js }
 public enum BoostEditorMode: Sendable, Equatable { case simple, code(BoostCodeTab) }
 public enum SiteControlPresentationMode: Sendable, Equatable { case standard, extensionPicker }
 public enum SiteControlAnchor: Sendable, Equatable { case urlField, paneBar(ItemID), contentTopLeading }
-public enum SiteControlDismissReason: Sendable, Equatable { case escape, outside, anchor, action, command, sourceUnavailable }
+public enum SiteControlDismissReason: Sendable, Equatable { case escape, outside, anchor, action, command, sourceUnavailable, menuCancelled }
 
 /// Registration identity, scoped to the source that returned it.
 public struct SiteControlObservationToken: Hashable, Sendable {

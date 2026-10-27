@@ -12,7 +12,8 @@ MainActor.assumeIsolated {
 struct CLIError: Error, CustomStringConvertible { let description: String }
 @MainActor
 enum CLI {
-    static let names = ["scc-no-boosts","scc-hover-action","scc-pane-anchor","scc-clamped"]
+    static let foundationNames = ["scc-no-boosts","scc-hover-action","scc-pane-anchor","scc-clamped"]
+    static let names = ["scc-no-boosts","scc-boost","scc-adblock-on","scc-adblock-excluded","scc-adblock-unavailable","scc-insecure","scc-boosts-off","scc-incognito","scc-internal-page","scc-many","scc-pane-anchor","scc-clamped","scc-light","scc-hover-label","scc-hover-boost","scc-hover-action","scc-keyboard-focus","scc-reload","scc-menu","scc-picker","scc-tooltip","scc-tooltip-on","scc-tooltip-off","scc-tooltip-unavailable","scc-tooltip-private","scc-focus-boost"]
     static func value(_ args: [String], _ name: String) -> String? {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
@@ -37,7 +38,16 @@ enum CLI {
             _ = stage.render(scale: scale)
             print(Flows.accessibilityDump(stage.controller.view.panel), terminator: "")
         case "flows": report(Flows.run())
-        case "bench": report(Bench.run())
+        case "cold-measure":
+            guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
+            try Bench.measureThreadInstructions()
+        case "bench":
+            let fixture: Bench.Fixture?
+            if let raw = value(args,"--fixture") {
+                guard let selected = Bench.Fixture(rawValue: raw) else { throw CLIError(description: "bench fixture must be skeleton or cold") }
+                fixture = selected
+            } else { fixture = nil }
+            report(Bench.run(only: fixture))
         case "probes":
             var checks: [Flows.Check] = []
             for name in names { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
@@ -98,7 +108,7 @@ enum CLI {
     static func receipts() throws -> [Flows.Check] {
         var root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         while !FileManager.default.fileExists(atPath: root.appendingPathComponent("AGENTS.md").path) && root.path != "/" { root.deleteLastPathComponent() }
-        let directory = root.appendingPathComponent("docs/sitecontrol/step-1")
+        let directory = root.appendingPathComponent("docs/sitecontrol/step-2")
         let lines = try String(contentsOf: directory.appendingPathComponent("SHA256SUMS"), encoding: .utf8).split(separator: "\n")
         let required = Set(names.flatMap { name in ["light","dark"].flatMap { mode in [1,2].map { "\(name)-\(mode)@\($0)x.png" } } })
         var found = Set<String>(), checks: [Flows.Check] = []
@@ -118,9 +128,11 @@ enum CLI {
     }
     static func report(_ checks: [Flows.Check]) {
         print("| Result | Check |\n|---|---|")
-        for c in checks { print("| \(c.pass ? "PASS" : "FAIL") | \(c.name) |") }
-        let passed = checks.filter(\.pass).count
-        print("\n\(passed)/\(checks.count) passed")
-        if passed != checks.count { exit(1) }
+        for c in checks { print("| \(c.info ? "INFO" : c.pass ? "PASS" : "FAIL") | \(c.name) |") }
+        let acceptance = checks.filter { !$0.info },passed = acceptance.filter(\.pass).count
+        if !acceptance.isEmpty { print("\n\(passed)/\(acceptance.count) passed") }
+        let informational = checks.count-acceptance.count
+        if informational>0 { print("\(informational) INFO (no acceptance result for these entries)") }
+        if passed != acceptance.count { exit(1) }
     }
 }
