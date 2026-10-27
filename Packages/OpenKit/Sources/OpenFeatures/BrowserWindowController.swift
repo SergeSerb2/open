@@ -938,6 +938,7 @@ extension BrowserWindowController {
         let shown = SidebarConfirmations.present(alert, on: window) { [weak self] confirmed in
             guard let self else { return }
             self.pendingConfirmation = nil
+            guard confirmed else { return }
             var archived = 0
             self.keepingSelection { archived = self.model.archiveNodes(ids: ids) }
             guard archived > 0 else { return }
@@ -964,11 +965,15 @@ extension BrowserWindowController {
         let index = selected.flatMap { before.firstIndex(of: $0) }
         removal()
         guard let selected, model.node(id: selected) == nil, let index else { return }
-        let remaining = tabs()
+        let remaining = Set(tabs())
         guard !remaining.isEmpty else { return }
-        let survivors = before.prefix(index).filter(remaining.contains)
-        let next = before.suffix(from: index).first(where: remaining.contains) ?? survivors.last
-        if let next { _ = sidebar(sidebar, didRequest: .select(nodeID: next, space: space.id)) }
+        let next = before.suffix(from: index).first(where: remaining.contains) ?? before.prefix(index).last(where: remaining.contains)
+        guard let next else { return }
+        // The removal is the undo step; moving the selection is not. Detach the manager:
+        // disabled registration would still leave an empty per-command group on top.
+        let undo = model.undoManager
+        model.undoManager = nil; defer { model.undoManager = undo }
+        _ = sidebar(sidebar, didRequest: .select(nodeID: next, space: space.id))
     }
 
     /// Clicks the shown toast's Undo button (automation and checks use the real button).

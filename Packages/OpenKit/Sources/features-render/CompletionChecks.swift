@@ -73,6 +73,7 @@ enum CompletionFeatureChecks {
         _ = c.sidebar(c.sidebar, didRequest: .deleteFolder(folderID: untitled.id)); pump(c)
         check(c.pendingConfirmation?.messageText == "Are you sure?", "DA4 an untitled folder's alert reads \"Are you sure?\"")
         press("Cancel")
+        check(model.node(id: untitled.id)?.folder != nil, "DA4 Cancel on a folder alert keeps the folder")
         undo.undo(); pump(c)
         check(model.node(id: folder.id)?.folder != nil && model.tab(id: tabs[0].id) != nil, "DA4 toast Undo path (one undo step) restores the folder and its tab")
         // DA5: two folders, one alert, plural toast.
