@@ -104,7 +104,15 @@ enum SM6CostGate {
         let files = FileManager.default
         let root = files.temporaryDirectory.appendingPathComponent("open-sm6-child-\(UUID().uuidString)")
         try files.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? files.removeItem(at: root) }
+        let result = Result { try sampleChild(index: index, failAfterHost: failAfterHost, root: root) }
+        // The child's defer has reaped it before its files are removed, even on failure.
+        do { try files.removeItem(at: root) }
+        catch { throw CLIError(description: "SM6 child temporary-root cleanup failed: \(error)") }
+        return try result.get()
+    }
+
+    private static func sampleChild(index: Int, failAfterHost: Bool, root: URL) throws -> Report {
+        let files = FileManager.default
         let home = root.appendingPathComponent("home"), temporary = root.appendingPathComponent("tmp")
         try files.createDirectory(at: home, withIntermediateDirectories: true)
         try files.createDirectory(at: temporary, withIntermediateDirectories: true)
