@@ -842,8 +842,12 @@ build when a column first enters the horizontal viewport and stay cached. The
 real 10-Space × 100-row harness gates page builds equal to the 1–4 built visible
 columns, one full outline load per page, model-matching outline row counts, lazy
 scroll-in, and no full reloads of existing pages. Wall time versus the historical
-120 ms reference, CPU, and instructions are diagnostic. These structural checks
-do not bound cost inside an unchanged count, draw/GPU work, or deferred work.
+120 ms reference, CPU, and process instructions are diagnostic. A separate harness
+child sampler uses one discarded fresh-process warm-up plus five fresh processes
+to gate median main-thread instructions against lead-approved CPU/OS fixtures
+(ceil accepted × 1.10). Unknown machines report INFO without cost PASS. This
+bounds synchronous main-thread computation on known keys; helper-thread,
+draw/GPU and deferred work remain outside the cost gate.
 Initial page setup fills the
 root cache and installs its delegate before the native data source, whose setter
 performs the initial reload; the old redundant empty/explicit pair is gone.

@@ -157,6 +157,8 @@ enum SpaceManagerChecks {
             SM6Fixture.checkStructure(measured, rows: SM6Fixture.outlineRows(model: model, manager: manager))
             checkLargeManagerUpdates(model: model, manager: manager)
         }
+        do { try SM6CostGate.run() }
+        catch { Checks.check(false, "SM6 isolated cost check: \(error)") }
     }
 
     static func checkLargeManagerUpdates(model: BrowserModel, manager: SpaceManagerView) {

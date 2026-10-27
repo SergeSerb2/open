@@ -252,7 +252,7 @@ enum SM6Measure {
     }
 
     /// One fresh process, one fixed construction, no run-loop turn until clocks stop.
-    /// Structure gates acceptance; all costs remain diagnostic pending M5 evidence.
+    /// Structural checks run here; sm6-cost applies accepted fixtures across fresh processes.
     static func run(_ args: [String]) throws {
         guard args.count <= 2, Set(args).count == args.count,
               args.allSatisfy({ ["--fail-after-host", "--thread-instructions"].contains($0) }) else {

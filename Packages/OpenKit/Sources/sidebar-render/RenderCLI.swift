@@ -21,6 +21,7 @@ enum RenderCLI {
         case "bench": try Bench.run(rest)
         case "check": try Checks.run(rest)
         case "sm6-measure": try SM6Measure.run(rest)
+        case "sm6-cost": try SM6CostGate.run(rest)
         case "divider-check": try DividerChecks.run(rest)
         default: throw CLIError(description: usage)
         }
@@ -48,6 +49,7 @@ enum RenderCLI {
       sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
       sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
+      sidebar-render sm6-cost [--fail-child-after-host]
     """
 
     static func value(_ args: [String], _ name: String) -> String? {

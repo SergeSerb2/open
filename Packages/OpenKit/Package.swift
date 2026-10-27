@@ -57,7 +57,7 @@ let package = Package(
         .target(name: "OpenDesign", dependencies: ["OpenModel"]),
         .target(name: "OpenSpaceEditor", dependencies: ["OpenModel", "OpenDesign"]),
         .target(name: "OpenSidebar", dependencies: ["OpenMedia", "OpenModel", "OpenDesign"]),
-        .executableTarget(name: "sidebar-render", dependencies: ["OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"]),
+        .executableTarget(name: "sidebar-render", dependencies: ["OpenWeb", "OpenMedia", "OpenModel", "OpenStore", "OpenDesign", "OpenSidebar"], resources: [.copy("Resources/sm6-cost-baselines.json")]),
         .executableTarget(name: "space-editor-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSidebar", "OpenSpaceEditor"], resources: [.copy("Resources")]),
         .target(name: "OpenCommandBar", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest"]),
         .executableTarget(name: "commandbar-render", dependencies: ["OpenModel", "OpenStore", "OpenDesign", "OpenSuggest", "OpenCommandBar"]),

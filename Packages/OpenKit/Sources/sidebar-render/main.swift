@@ -7,7 +7,7 @@ MainActor.assumeIsolated {
     let args = Array(CommandLine.arguments.dropFirst())
     do {
         // SM6 owns initialization so its disposable preferences precede AppKit.
-        if args.first != "sm6-measure" {
+        if !["sm6-measure", "sm6-cost"].contains(args.first ?? "") {
             _ = NSApplication.shared
             NSApp.setActivationPolicy(.prohibited)
         }

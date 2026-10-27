@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "span": "fresh-process-10x100-900x700-scale1-settle3-v1",
+  "updatePolicy": "Lead-approved PR only. One declared discarded fresh process, then median of five fresh processes. No outlier removal.",
+  "machines": [
+    {
+      "cpuBrand": "Apple M5 Pro",
+      "osBuild": "26B5112a",
+      "acceptedMedian": 677429195,
+      "discardedWarmup": 682990080,
+      "samples": [
+        694796165,
+        674645279,
+        672852510,
+        677429195,
+        683766007
+      ],
+      "sourceHead": "4a5b9d3ac8a6b11c9b3be95253822bade48262b4",
+      "binarySHA256": "239634b7028dbbadd988b7b136a0d7c18b639d6f948c2f63eb10b8df5914ee31",
+      "approval": "M5 lead, relayed 2026-10-26 21:47:19 PDT; 3.24% full spread expressly accepted"
+    },
+    {
+      "cpuBrand": "Apple M1 Pro",
+      "osBuild": "26A434",
+      "acceptedMedian": 657154236,
+      "discardedWarmup": 663641860,
+      "samples": [
+        657636745,
+        657154236,
+        657462453,
+        657058841,
+        656898616
+      ],
+      "sourceHead": "4a5b9d3ac8a6b11c9b3be95253822bade48262b4",
+      "binarySHA256": "777284c2416419257340410449ea36e3dab955678918e7d1b9af91dd338e0fce",
+      "approval": "Fixed calibration authorized by M5 lead, relayed 2026-10-26 21:47:19 PDT; fixture submitted for lead PR approval"
+    }
+  ]
+}
