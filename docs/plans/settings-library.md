@@ -122,7 +122,7 @@ except where a section says Save.
 | `open.general.previewsEnabled` | Bool | `true` | General; hover Previews |
 | `open.general.previewsFolders` | Bool | `true` | Previews sheet; folders (sidebar completion lead Q3); seeded once from stored previewsOnHover when absent |
 | `open.general.previewsPages` | Bool | `true` | Previews sheet; pinned tabs and Favorites (lead Q3); seeded once from stored previewsOnHover when absent |
-| `open.general.previewsDelaySeconds` | Double | `0.5` | Previews sheet; 0.3 / 0.5 / 1 s |
+| ~~`open.general.previewsDelaySeconds`~~ | — | — | **Removed (lead ruling 2026-10-26)** to match Arc, which has no delay setting. The hover delay is fixed at 0.5 s (Open choice; one Arc sample ≈ 0.42 s) (`HoverPreviewMetrics.armDelay`, sidebar-completion §3.6). A stored value is ignored, not migrated. Removal: sidebar-completion Step S5b. |
 | `open.sidebar.hideHintShown` | Bool | `false` | First-hide hint (sidebar completion §2.4) |
 | `open.sidebar.autoArchiveBannerDismissed` | Bool | `false` | Auto-archive education dismissal |
 | `open.sidebar.autoArchiveBannerEligible` | Bool | `true` | Auto-archive education eligibility |
@@ -429,12 +429,28 @@ Quit, Previews, Profile Settings hint, Default Browser, Import.
 #### 5.1.1 Previews sheet (from G-3)
 
 Sheet size 480x320. Title "Previews". Rows: "Show Open Previews:" master
-switch, "Folders" and "Pinned tabs and Favorites" source switches (sidebar
-completion lead Q3 overrides the former hovering-links switch), then delay
-0.3 s / 0.5 s / 1 s. Keys are registered in §2.1 through SettingsDefaults.
+switch, then "Folders" and "Pinned tabs and Favorites" source switches (sidebar
+completion lead Q3 overrides the former hovering-links switch). No delay
+pop-up: lead ruling 2026-10-26 removes Open's delay setting to match Arc, and
+the hover delay is fixed at 0.5 s (sidebar-completion §3.6, Step S5b; the
+pop-up built in `GeneralPane.swift` goes away there). Keys are registered in §2.1 through SettingsDefaults.
 The former previewsOnHover key is no longer read. Close button "Done".
 App values use UserDefaults; no ProfileSettings fields or second store are added.
 Hover Preview reads these keys when it arms.
+
+Lead decision (2026-10-26, capture session 2): Open v1 keeps the **two**
+source switches, "Folders" and "Pinned tabs and Favorites", as an Open product
+choice. Arc's sheet (422 × 370, "Show Arc Previews:", a "Learn more" link,
+"Done") has **seven** source checkboxes, all on in a fresh Profile: Arc
+Folders · Google Calendar · Google Mail · Outlook Calendar · Outlook Mail ·
+Recent pages on Linear, Notion, and Figma · Notion Calendar
+(`docs/re/interaction-states.md` §20.13, S2 02/0050). "Folders" is Arc
+Folders. The other six read the user's accounts and site APIs (Arc's live-data
+integrations); v1 has no such integrations, so they are **post-v1** and the
+sheet does not list them. Arc's sheet has no delay pop-up, so Open removes
+its delay setting (lead ruling 2026-10-26; the delay is fixed at 0.5 s). One
+difference stays open (open question 7): Arc's General row has no switch,
+only "Previews Settings…".
 
 ### 5.2 Profiles
 
@@ -1227,6 +1243,19 @@ Run on the built app. Each line must pass. Note the result in the PR.
 6. Search privacy notice exact text and whether suggestions start ON
    need a fresh-profile check (`docs/re/features-core.md` Appendix
    C items 2 and 10). This plan ships ON with a one-time notice.
+   Capture session 2 (2026-10-26): a fresh Arc Profile has suggestions
+   ON (S2 02/0012), and the notice text is "We talk to your search engine
+   to help us suggest results." with "Learn more about your data on Arc
+   here." ("Open" in Open), shown by the command bar's (i) button as a
+   footer with "Search Settings…" and "Dismiss"
+   (`docs/plans/commandbar-completion.md` §4.8, which reuses
+   `open.general.searchSuggestNoticeDismissed`).
+7. Previews row switch (2026-10-26): Arc has no switch on the General ▸
+   Previews row, only "Previews Settings…" (S2 02/0050). This plan keeps
+   Open's master switch (built) until the lead decides; following Arc means
+   removing the row switch (previews are off when both sources are off).
+   The delay part of this question is decided: no delay setting, fixed
+   0.5 s (lead ruling 2026-10-26).
 
 
 
@@ -1237,3 +1266,8 @@ Run on the built app. Each line must pass. Note the result in the PR.
 
 - Approved with the stated defaults for every open question (fresh-profile defaults, pinned-tab discard policy, Capture, Save-to-Library, icon art, search notice wording).
 - Sequencing: implementation starts after the Profiles model, OpenSleep S0, and ad-block lists PRs merge (it binds to their models). Visual styling follows OpenDesign tokens; an Opus design pass reviews the rendered panes before the PR merges.
+
+## Appendix — Lead decisions (2026-10-26, capture session 2)
+
+- Previews: Open v1 keeps two source switches, "Folders" and "Pinned tabs and Favorites", as an Open product choice. Arc's seven sources are mostly its live-data integrations (Google and Outlook Calendar and Mail, Notion, Linear, Figma), which v1 does not include; they are post-v1 (§5.1.1). This confirms the sidebar plan's Q3 decision with the captured source list.
+- Previews delay (lead ruling): Open's delay setting (`open.general.previewsDelaySeconds` and its pop-up) is removed to match Arc. The hover delay stays fixed at 0.5 s. Sidebar-completion Step S5b does the removal.

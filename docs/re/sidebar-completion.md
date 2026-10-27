@@ -103,7 +103,7 @@ Marks: **fact** (string, symbol, field, or pixel proves it), **derived** (follow
 | Views | `PreviewView{backgroundView: PreviewBackgroundView, folderPreviewHostView, dataProvider, previewPresenter, previewContent: NSView}`, `FolderPreviewView{contentViewHeight, selectedItemID, searchQuery, previewPresenter}`, `StandardPreviewViewHost` | fact: reflection |
 | Color | `PreviewBackgroundColor`: light `#FFFFFF`, dark `#212222` (main `Assets.car`) | fact: `.re/design/all-colors.txt` |
 | Settings sheet (runtime) | General ▸ "Previews Settings…" (the row has no switch) opens a 422 x 370 sheet: "Show Arc Previews:", the copy above with a "Learn more" link, and 7 checkboxes, all on by default: Arc Folders · Google Calendar · Google Mail · Outlook Calendar · Outlook Mail · Recent pages on Linear, Notion, and Figma · Notion Calendar; then "Done". | measured: capture session 2, S2 02/0050 AX (`interaction-states.md` §20.13) |
-| Look, size, delay | Not captured. In capture session 2 the folder preview did not appear for synthetic pointer events (5 s on a collapsed folder with Arc Folders on). | guess; notes 10:23:34 (`interaction-states.md` §20.4) |
+| Look, size, delay | Item 8's 5 s synthetic hover did not open it. The session-2 video caught the folder card once (positions only): ≈ 240 pt wide, 4 pt right of the sidebar, centered on the row, a "Search \<folder\>…" field, rows ≈ 45 pt with "N minutes ago", hover-to-card ≈ 0.42 s. Colors, radius, and type not captured. | measured once: V 45.69, 46.11–46.46 s (`interaction-states.md` §20.4); notes 10:23:34 |
 
 Note: Arc's pinned and favorite previews are site-specific glance views (mail, calendar, recent pages). Peek (`features-advanced.md` §2) is a different feature.
 
@@ -159,5 +159,5 @@ Measured in `interaction-states.md` §20 (frames in `.re/runtime/sessions/202610
 | Folder row hover | White 0.10 fill and a "—" glyph at the right (no AX element). | S2 08/0090 |
 | Favorites empty state | Dashed card "Drag to add Favorites" with a dismiss button. | S2 07/0001 (§20.3) |
 | Auto-archive banner (C6, Q12) | Not captured: the Profile's "Archive tabs after" offers 12 hours, 24 hours, 7 days, and 30 days only, so it could not trigger within the session. | S2 02/0034; notes 10:07:27 |
-| Previews (C4, Q3) | The 7-source sheet above. The folder preview card was not captured. | S2 02/0050 |
+| Previews (C4, Q3) | The 7-source sheet above. The folder card was seen once in the video (positions only, `interaction-states.md` §20.4); its colors were not captured. | S2 02/0050 |
 
