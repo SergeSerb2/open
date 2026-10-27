@@ -1,0 +1,14 @@
+Editor full drag frame (native event + display): p95 0.052 ms, max 0.069 ms (100 frames; diagnostic, no separate plan budget)
+Editor idle: 0.082 ms main-thread CPU in 2 s, no host work=true; ten-page refresh max 0.113 ms
+Editor: pad event main-thread CPU p95 0.024 ms (500 native events); previews 59 in 1 s / 120 Hz; simple open main-thread CPU p95 11.713 ms; hue sample 6.776 ms off-main=true
+Editor diagnostics: load1 5.40; pad CPU p95 lateness vs 2 ms -1.976 ms; open CPU p95 lateness vs 12 ms -0.287 ms
+| Result | Check |
+|---|---|
+| PASS | idle editor has no host work and less than 0.5 percent main-thread CPU |
+| PASS | commit refreshes ten real page plans within 100 ms |
+| PASS | pad event to preview queue p95 < 2 ms |
+| PASS | 1 s 120 Hz drag coalesces to at most 61 real planner previews |
+| PASS | simple editor build/layout/first draw p95 < 12 ms |
+| PASS | 2216x1394 PNG dominant hue under 15 ms off the main thread |
+
+6/6 passed

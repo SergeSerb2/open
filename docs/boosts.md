@@ -12,6 +12,7 @@ Settings storage, sharing, imports, and per-frame engine injection remain future
 - `Boost`, `SiteMatch`, `ColorAdjustment`, `ZappedElement`, `BoostID`: value types.
   Components are independent. JS is stored verbatim; `containsJS` trims whitespace.
   Text zoom clamps to 0.5–2; transforms are none/uppercase/lowercase/capitalize.
+- `BoostColorWheel`: optional editor inputs; store normalization derives `colorAdjustment` with the fixed wheel math. Legacy filters remain unchanged until a color edit.
 - `BoostStore(root:profileID:)`: load once before mutation. Stores per-profile JSON
   at `Boosts/<UUID>.json`. Mutations normalize and save with a one-second debounce.
   `saveNow()` writes atomically; use it on quit. `flush()` drains in-flight writes

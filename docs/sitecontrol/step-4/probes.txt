@@ -1,0 +1,88 @@
+knob gradient @1.0x top=[106, 106, 106, 255] mid=[113, 114, 113, 255] bottom=[120, 119, 119, 255]
+knob gradient @2.0x top=[105, 106, 106, 255] mid=[113, 114, 113, 255] bottom=[119, 120, 120, 255]
+| Result | Check |
+|---|---|
+| PASS | render editor-first-run 1x light editor and opaque canvas |
+| PASS | render editor-first-run control frames match captured AX |
+| PASS | render editor-first-run native AX hierarchy |
+| PASS | render editor-first-run 2x light editor and opaque canvas |
+| PASS | render editor-first-run control frames match captured AX |
+| PASS | render editor-first-run native AX hierarchy |
+| PASS | render editor-no-color 1x light editor and opaque canvas |
+| PASS | render editor-no-color control frames match captured AX |
+| PASS | knob-gradient probe 1x top darker / bottom lighter |
+| PASS | render editor-no-color native AX hierarchy |
+| PASS | render editor-no-color 2x light editor and opaque canvas |
+| PASS | render editor-no-color control frames match captured AX |
+| PASS | knob-gradient probe 2x top darker / bottom lighter |
+| PASS | render editor-no-color native AX hierarchy |
+| PASS | render editor-color 1x light editor and opaque canvas |
+| PASS | render editor-color control frames match captured AX |
+| PASS | render editor-color native AX hierarchy |
+| PASS | render editor-color 2x light editor and opaque canvas |
+| PASS | render editor-color control frames match captured AX |
+| PASS | render editor-color native AX hierarchy |
+| PASS | render editor-dragging 1x light editor and opaque canvas |
+| PASS | render editor-dragging control frames match captured AX |
+| PASS | render editor-dragging native AX hierarchy |
+| PASS | render editor-dragging 2x light editor and opaque canvas |
+| PASS | render editor-dragging control frames match captured AX |
+| PASS | render editor-dragging native AX hierarchy |
+| PASS | render editor-advanced 1x light editor and opaque canvas |
+| PASS | render editor-advanced control frames match captured AX |
+| PASS | render editor-advanced native AX hierarchy |
+| PASS | render editor-advanced 2x light editor and opaque canvas |
+| PASS | render editor-advanced control frames match captured AX |
+| PASS | render editor-advanced native AX hierarchy |
+| PASS | render editor-font-selected 1x light editor and opaque canvas |
+| PASS | render editor-font-selected control frames match captured AX |
+| PASS | render editor-font-selected native AX hierarchy |
+| PASS | render editor-font-selected 2x light editor and opaque canvas |
+| PASS | render editor-font-selected control frames match captured AX |
+| PASS | render editor-font-selected native AX hierarchy |
+| PASS | render editor-zap-count 1x light editor and opaque canvas |
+| PASS | render editor-zap-count control frames match captured AX |
+| PASS | render editor-zap-count native AX hierarchy |
+| PASS | render editor-zap-count 2x light editor and opaque canvas |
+| PASS | render editor-zap-count control frames match captured AX |
+| PASS | render editor-zap-count native AX hierarchy |
+| PASS | render editor-name-menu 1x light editor and opaque canvas |
+| PASS | render editor-name-menu control frames match captured AX |
+| PASS | render editor-name-menu native AX hierarchy |
+| PASS | render editor-name-menu 2x light editor and opaque canvas |
+| PASS | render editor-name-menu control frames match captured AX |
+| PASS | render editor-name-menu native AX hierarchy |
+| PASS | render editor-scope-menu 1x light editor and opaque canvas |
+| PASS | render editor-scope-menu control frames match captured AX |
+| PASS | render editor-scope-menu native AX hierarchy |
+| PASS | render editor-scope-menu 2x light editor and opaque canvas |
+| PASS | render editor-scope-menu control frames match captured AX |
+| PASS | render editor-scope-menu native AX hierarchy |
+| PASS | render editor-delete-alert 1x light editor and opaque canvas |
+| PASS | render editor-delete-alert control frames match captured AX |
+| PASS | render editor-delete-alert native AX hierarchy |
+| PASS | render editor-delete-alert 2x light editor and opaque canvas |
+| PASS | render editor-delete-alert control frames match captured AX |
+| PASS | render editor-delete-alert native AX hierarchy |
+| PASS | render editor-not-active 1x light editor and opaque canvas |
+| PASS | render editor-not-active native AX hierarchy |
+| PASS | render editor-not-active 2x light editor and opaque canvas |
+| PASS | render editor-not-active native AX hierarchy |
+| PASS | render editor-global-off 1x light editor and opaque canvas |
+| PASS | render editor-global-off native AX hierarchy |
+| PASS | render editor-global-off 2x light editor and opaque canvas |
+| PASS | render editor-global-off native AX hierarchy |
+| PASS | render editor-legacy 1x light editor and opaque canvas |
+| PASS | render editor-legacy control frames match captured AX |
+| PASS | render editor-legacy native AX hierarchy |
+| PASS | render editor-legacy 2x light editor and opaque canvas |
+| PASS | render editor-legacy control frames match captured AX |
+| PASS | render editor-legacy native AX hierarchy |
+| PASS | render editor-neutral-page 1x light editor and opaque canvas |
+| PASS | render editor-neutral-page control frames match captured AX |
+| PASS | render editor-neutral-page native AX hierarchy |
+| PASS | render editor-neutral-page 2x light editor and opaque canvas |
+| PASS | render editor-neutral-page control frames match captured AX |
+| PASS | render editor-neutral-page native AX hierarchy |
+
+82/82 passed
