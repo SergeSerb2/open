@@ -73,3 +73,5 @@ an empty machine list, then restored in a `finally` block. The real CLI reported
 94,888,857 instructions, the missing-machine reason, and **INFO** with no PASS.
 See `gate-unknown-machine.txt`. The source fixture was unchanged. The initial
 accepted run passed at 95,372,047; see `gate-accepted.txt`.
+
+Final full-gate result after the main/theme Step 9 merge: 102,283,082 median instructions, below104,539,565. CPU p95 13.891 ms, wall15.428 ms, load1 37.60. See `../checks.txt` and `../verify-all.txt`. These loaded timings do not establish quiet-machine <8 ms acceptance.

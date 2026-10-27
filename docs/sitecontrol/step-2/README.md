@@ -13,3 +13,5 @@ The dark separator uses the captured additive +35 RGB rule, not the earlier whit
 `performance/README.md` contains five-pair main-thread instruction measurements and numeric profiler attribution. The lead-approved instruction gate uses the machine/build fixture and a 10% ceiling over the accepted median. CPU/wall/load remain diagnostics; the absolute 8 ms product target awaits the lead’s quiet-machine check.
 
 S11–S13 and the real-app snapshot comparison are deferred to Step 3 per plan §12/§11. This PR adds no app hook. The latest full-gate result is recorded separately in `verify-all.txt`.
+
+Final full gate on the merged theme Step 9 main: **22/22 PASS**. `sitecontrol-render`: **1244/1244 PASS +1 INFO** (the skeleton diagnostic). Cold median **102,283,082 ≤104,539,565** instructions; CPU p95 **13.891 ms**, wall p95 **15.428 ms**, load1 **37.60**, all timing values diagnostic. The quiet-M5 <8 ms product check remains pending with the lead.
