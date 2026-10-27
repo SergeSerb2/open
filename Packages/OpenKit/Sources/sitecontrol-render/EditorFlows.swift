@@ -13,13 +13,13 @@ enum EditorFlows {
         let id = stage.session.boost.id
         let initial = stage.session.boost
         let refreshBefore = stage.host.refreshes
-        let wheel = stage.view.wheel
-        stage.mouse(.leftMouseDown,point: CGPoint(x: 64,y: 30),in: wheel)
-        for i in 0..<40 { stage.mouse(.leftMouseDragged,point: CGPoint(x: 64+Double(i),y: 40),in: wheel) }
+        let wheel = stage.view.pad
+        stage.mouse(.leftMouseDown,point: CGPoint(x: 110,y: 73.5),in: wheel)
+        for i in 0..<40 { stage.mouse(.leftMouseDragged,point: CGPoint(x: 73.5+Double(i),y: 45),in: wheel) }
         check("F10 drag leaves the real store unchanged before mouse-up", store.boost(id: id) == initial && stage.host.refreshes == refreshBefore)
         stage.settle(0.02)
         check("F10 live preview uses real planner and strips JavaScript", !stage.host.previews.isEmpty && stage.host.previews.count <= 2 && stage.host.previews.allSatisfy { !$0.containsJS && $0.combinedJS.isEmpty && $0.boosts.allSatisfy { $0.js.isEmpty } })
-        stage.mouse(.leftMouseUp,point: CGPoint(x: 100,y: 40),in: wheel)
+        stage.mouse(.leftMouseUp,point: CGPoint(x: 110,y: 45),in: wheel)
         let afterDrag = store.boost(id: id)!
         check("F10 mouse-up commits once and derives the wheel adjustment", stage.host.refreshes == refreshBefore+1 && afterDrag.colorWheel != nil && afterDrag.colorAdjustment == afterDrag.colorWheel?.adjustment)
         stage.key(6,"z",modifiers: .command)
@@ -41,8 +41,8 @@ enum EditorFlows {
             let plan = BoostInjectionPlanner.plan(url: stage.host.url,profileID: stage.host.profileID,matcher: BoostMatcher(boosts: store.allBoosts()),boostsGloballyEnabled: true)
             check("F11 wheel input \(i+1) through store and injection planner", pass && plan.colorAdjustment == c)
         }
-        stage.tap("editor.font.1")
-        check("F12 System font chip persists the safe CSS family", store.boost(id: id)?.fontFamily == "system-ui, -apple-system, sans-serif")
+        stage.tap("editor.font.0")
+        check("F12 System font cell persists the safe CSS family", store.boost(id: id)?.fontFamily == "system-ui, -apple-system, sans-serif")
         stage.key(6,"z",modifiers: .command)
         check("F14 font undo restores Original", store.boost(id: id)?.fontFamily == nil)
         stage.key(6,"z",modifiers: [.command,.shift])
@@ -90,16 +90,16 @@ enum EditorFlows {
             if changed { s.tap("editor.tool.case") }; s.key(53,"\u{1b}")
             check("F16 close new Boost changed=\(changed)", (s.host.boostStore.boost(id: newID) != nil) == changed && s.host.exits == 1)
         }
-        let welcome = EditorStage(state: "editor-interstitial"); welcome.tap("editor.make")
+        let welcome = EditorStage(state: "editor-first-run"); welcome.tap("editor.make")
         check("F19 Make your own persists only the dismissed flag", welcome.defaults.bool(forKey: "open.boosts.hasDismissedInterstitial") && !welcome.session.showsInterstitial)
-        let untouched = EditorStage(state: "editor-interstitial"); untouched.tap("editor.close")
+        let untouched = EditorStage(state: "editor-first-run"); untouched.tap("editor.later")
         check("F19 close leaves interstitial flag false", !untouched.defaults.bool(forKey: "open.boosts.hasDismissedInterstitial") && untouched.controller.panel == nil)
         let legacy = EditorStage(state: "editor-legacy"), encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let legacyID = legacy.session.boost.id
         legacy.host.boostStore.saveNow(); let reloaded = legacy.host.boostStore.load().first!
         let bytes = try! encoder.encode(reloaded.colorAdjustment)
         let dumpBefore = Flows.accessibilityDump(legacy.view)
-        check("legacy filter is exact and the wheel is editable with a note", legacy.session.boost.colorWheel == nil && legacy.session.boost.colorAdjustment?.brightness == 2 && legacy.session.boost.colorAdjustment?.invert == 0.5 && legacy.view.wheel.acceptsFirstResponder && dumpBefore.contains("Custom colors — editing replaces them."))
+        check("legacy filter is exact and the wheel is editable with a note", legacy.session.boost.colorWheel == nil && legacy.session.boost.colorAdjustment?.brightness == 2 && legacy.session.boost.colorAdjustment?.invert == 0.5 && legacy.view.pad.acceptsFirstResponder && dumpBefore.contains("Custom colors — editing replaces them."))
         legacy.tap("editor.tool.case")
         check("non-color edit retains exact legacy filter", (try! encoder.encode(legacy.host.boostStore.boost(id: legacyID)!.colorAdjustment)) == bytes)
         legacy.tap("editor.color.invert")
@@ -113,20 +113,12 @@ enum EditorFlows {
         check("F15 Reset also clears stored CSS, JS and Zaps", rich.session.boost.isEmpty)
         rich.key(6,"z",modifiers: .command)
         check("F14 Reset restores CSS, JS and Zaps together", rich.session.boost.css == richBefore.css && rich.session.boost.js == richBefore.js && rich.session.boost.zaps == richBefore.zaps)
-        let inline = EditorStage(); let field = inline.view.nameField
-        let center = CGPoint(x: field.bounds.midX,y: field.bounds.midY)
-        inline.mouse(.leftMouseDown,point: center,in: field,clicks: 2); inline.mouse(.leftMouseUp,point: center,in: field,clicks: 2)
-        inline.key(0,"R"); inline.key(36,"\r")
-        check("F15 header double-click and Return commit inline rename", inline.session.boost.name == "R" && inline.controller.panel != nil)
-        inline.controller.beginInlineRename(); inline.key(0,"X"); inline.key(53,"\u{1b}")
-        check("F15 first Esc cancels inline rename and keeps panel", inline.session.boost.name == "R" && inline.controller.panel != nil)
-        inline.key(53,"\u{1b}")
-        check("F15 second Esc closes the editor", inline.controller.panel == nil)
         checks += scopeFlows()
         checks += reviewFlows()
+        checks += padAndWindowFlows()
         let axStage = EditorStage(); let ax = Flows.accessibilityDump(axStage.view)
-        let labels = ["Boost scope","More","Close","Colors","Invert lightness","Advanced color controls","Reset to original colors","Original","System","Zap","Code","Change text size","Change text case"]
-        check("F21 real editor AX hierarchy labels all controls", labels.allSatisfy { ax.contains("label="+$0+"\n") } && ax.contains("AXSlider label=Colors\n"))
+        let labels = ["Done","My Boost","Undo","Color","Hue","Intensity","Invert lightness","Advanced color controls","Reset to original colors","System","Zap","Code","Change text size","Change text case"]
+        check("F21 real editor AX hierarchy labels all controls", labels.allSatisfy { ax.contains("label="+$0+"\n") } && ax.contains("AXGroup label=Color\n"))
         let notActive = EditorStage(); notActive.controller.pageDidNavigate(tabID: notActive.host.tabID,url: URL(string: "https://elsewhere.test/")!); notActive.settle()
         check("navigation keeps the editor and shows Not active", notActive.controller.panel != nil && Flows.accessibilityDump(notActive.view).contains("This Boost doesn't apply to elsewhere.test."))
         notActive.controller.boundContextDidChange(tabID: ItemID(),profileID: notActive.host.profileID)
@@ -149,10 +141,11 @@ enum EditorFlows {
         let afterDelete = BoostStore(root: deleted.host.root,profileID: deleted.host.profileID)
         check("103-1 native Delete is durable immediately",afterDelete.load().allSatisfy { $0.id != deletedID })
         let sliderStage = EditorStage(); sliderStage.tap("editor.color.advanced")
-        let slider = sliderStage.view.subviews.first { $0.identifier?.rawValue == "editor.slider.0" } as! NSControl
-        for _ in 0..<30 { sliderStage.key(48,"\t"); if sliderStage.panel.firstResponder === slider { break } }
+        let slider = sliderStage.slider(0)!
+        let sliderWindow = slider.window!
+        sliderWindow.makeKey();sliderWindow.makeFirstResponder(slider)
         let original = sliderStage.session.boost, refreshes = sliderStage.host.refreshes
-        for _ in 0..<4 { sliderStage.key(124,"\u{f703}") }
+        for _ in 0..<4 { sliderStage.key(124,"\u{f703}",window: sliderWindow) }
         check("103-2 slider repeats keep live state out of store before the group ends",sliderStage.host.refreshes == refreshes && sliderStage.session.boost != original)
         sliderStage.settle(1.1)
         check("103-2 one second slider repeats commit once",sliderStage.host.refreshes == refreshes+1)
@@ -164,13 +157,12 @@ enum EditorFlows {
         check("103-2 AX slider repeats commit once on AX focus loss",sliderStage.host.refreshes == beforeAX+1)
         sliderStage.key(6,"z",modifiers: .command)
         check("103-2 one undo restores all AX increments",sliderStage.session.boost.colorAdjustment == original.colorAdjustment)
-        for _ in 0..<2 { sliderStage.key(124,"\u{f703}") }
-        sliderStage.key(48,"\t")
+        for _ in 0..<2 { sliderStage.key(124,"\u{f703}",window: sliderWindow) }
+        sliderStage.key(48,"\t",window: sliderWindow)
         check("103-2 keyboard focus loss commits the slider group",!sliderStage.session.isInteracting)
-        let owners = EditorStage(); owners.tap("editor.color.advanced")
-        for _ in 0..<20 { owners.key(48,"\t"); if owners.panel.firstResponder === owners.view.wheel { break } }
+        let owners = EditorStage();owners.panel.makeKey();owners.view.focus(owners.view.pad)
         owners.key(126,"\u{f700}"); let wheelState = owners.session.boost
-        let brightness = owners.view.subviews.first { $0.identifier?.rawValue == "editor.slider.0" }!
+        owners.tap("editor.color.advanced");let brightness = owners.slider(0)!
         owners.mouse(.leftMouseDown,point: CGPoint(x: 80,y: 14),in: brightness)
         owners.mouse(.leftMouseUp,point: CGPoint(x: 90,y: 14),in: brightness)
         owners.key(6,"z",modifiers: .command)
@@ -187,14 +179,14 @@ enum EditorFlows {
         let loaded = BoostStore(root: tempStage.host.root,profileID: tempStage.host.profileID); _ = loaded.load()
         check("103-7 load removes only stale atomic-write files",!FileManager.default.fileExists(atPath: stale.path) && FileManager.default.fileExists(atPath: unrelated.path) && FileManager.default.fileExists(atPath: tempDirectory.path))
         let loading = EditorStage(waitForColors: false)
-        check("103-8 pending page sampling disables Shuffle and wheel edits",!loading.session.colorsReady && loading.controller.makeMenu().items.first { $0.title == "Shuffle" }?.isEnabled == false && loading.view.control(id: "editor.color.invert")?.isEnabled == false && !loading.view.wheel.acceptsFirstResponder)
+        check("103-8 pending page sampling disables Shuffle and wheel edits",!loading.session.colorsReady && loading.controller.makeMenu().items.first { $0.title == "Shuffle" }?.isEnabled == false && loading.view.control(id: "editor.color.invert")?.isEnabled == false && !loading.view.pad.acceptsFirstResponder)
         loading.settle(0.4)
         check("103-8 sampling enables Shuffle and wheel edits",loading.session.colorsReady && loading.controller.makeMenu().items.first { $0.title == "Shuffle" }?.isEnabled == true && loading.view.control(id: "editor.color.invert")?.isEnabled == true)
         let fonts = EditorStage(); let fourth = fonts.view.control(id: "editor.font.3")!
         for _ in 0..<40 { fonts.key(48,"\t"); if fonts.panel.firstResponder === fourth { break } }
         let visible = fourth.visibleRect
-        check("design 10 keyboard focus fully reveals a 56 pt font chip",fonts.panel.firstResponder === fourth && fourth.bounds.width == 56 && visible.width >= 55.9 && fourth.showsKeyboardFocus)
-        check("design 12 disabled tile copy is user-facing",fonts.view.control(id: "editor.tool.zap")?.toolTip == "Zap isn’t available yet." && fonts.view.control(id: "editor.tool.code")?.toolTip == "Code editing isn’t available yet.")
+        check("F12 font grid keeps 26 pt cells and keyboard focus",fonts.panel.firstResponder === fourth && fourth.bounds.width == 26 && visible.width >= 25.9 && fourth.showsKeyboardFocus)
+        check("design 12 disabled tile copy is user-facing",fonts.view.control(id: "editor.tool.zap")?.tooltipTitle == "Zap isn’t available yet." && fonts.view.control(id: "editor.tool.code")?.tooltipTitle == "Code editing isn’t available yet.")
         return checks
     }
     private static func scopeFlows() -> [Flows.Check] {
@@ -209,58 +201,75 @@ enum EditorFlows {
         checks.append(.init(name: "news.example.com scope does not apply to example.com",pass: parentPlan.isEmpty))
         let ip = EditorStage(url: URL(string: "http://127.0.0.1/news/story")!,boost: Boost(name: "Local",siteMatch: SiteMatch(domain: "127.0.0.1",pathPrefix: "/news")))
         let ipMenu = ip.view.scopeMenu()
-        checks.append(.init(name: "saved IP path scope has one host choice and a checked path item", pass: ipMenu.items.map(\.title) == ["127.0.0.1","Only pages under /news"] && ipMenu.items.map(\.state) == [.off,.on] && ip.view.control(id: "editor.scope")?.title == "127.0.0.1/news ▾"))
+        checks.append(.init(name: "saved IP path scope has one host choice and a checked path item", pass: ipMenu.items.map(\.title) == ["127.0.0.1","Only pages under /news"] && ipMenu.items.map(\.state) == [.off,.on]))
         for path in ["/other/page","/"] {
             let savedIP = EditorStage(url: URL(string: "http://127.0.0.1"+path)!,boost: Boost(name: "Local",siteMatch: SiteMatch(domain: "127.0.0.1",pathPrefix: "/news")))
             let menu = savedIP.view.scopeMenu()
-            checks.append(.init(name: "103-4 saved IP /news is checked while page is "+path,pass: menu.items.filter { $0.state == .on }.map(\.title) == ["Only pages under /news"] && menu.items.first?.title == "127.0.0.1" && savedIP.view.control(id: "editor.scope")?.title == "127.0.0.1/news ▾"))
+            checks.append(.init(name: "103-4 saved IP /news is checked while page is "+path,pass: menu.items.filter { $0.state == .on }.map(\.title) == ["Only pages under /news"] && menu.items.first?.title == "127.0.0.1"))
         }
         let ipRoot = EditorStage(url: URL(string: "http://127.0.0.1/")!)
         checks.append(.init(name: "root IP scope hides path and registrable-domain items",pass: ipRoot.view.scopeMenu().items.map(\.title) == ["127.0.0.1"]))
         return checks
     }
-    private static func inkContrast(_ image: CGImage,rect: CGRect,scale: CGFloat,background: [UInt8]) -> Double {
-        func luminance(_ rgb: [UInt8]) -> Double {
-            let linear = rgb.prefix(3).map { value -> Double in let s = Double(value)/255; return s <= 0.04045 ? s/12.92 : pow((s+0.055)/1.055,2.4) }
-            return linear[0]*0.2126+linear[1]*0.7152+linear[2]*0.0722
+    private static func padAndWindowFlows() -> [Flows.Check] {
+        var checks: [Flows.Check] = []
+        func check(_ name: String,_ pass: Bool) { checks.append(.init(name: name,pass: pass)) }
+        let s = EditorStage(),pad = s.view.pad
+        for i in 0..<12 {
+            let angle = Double(i)*30,rad = angle * .pi/180,t = 0.4+Double(i%3)*0.2
+            let p = CGPoint(x: 73.5+cos(rad)*66.5*0.99*t,y: 73.5+sin(rad)*66.5*0.99*t)
+            // Click away from the primary knob to exercise the absolute pad law.
+            s.session.resetColors();
+            let deadline = Date().addingTimeInterval(3)
+            while !s.session.colorsReady && Date()<deadline { s.settle(0.001) }
+            s.settle()
+            s.mouse(.leftMouseDown,point: p,in: pad);s.mouse(.leftMouseUp,point: p,in: pad);s.settle()
+            guard let w = s.session.boost.colorWheel,let a = pad.primaryKnobCenter,let secondary = pad.secondaryKnobFrames.first else { check("F11 screen point \(i+1) produced an editable color",false);continue }
+            let e = CGPoint(x: 73.5+cos(rad+(.pi/4))*66.5*0.99*t,y: 73.5+sin(rad+(.pi/4))*66.5*0.99*t)
+            check("F11 screen point \(i+1) and both knob centers",abs(w.hue-angle)<1e-9 && abs(w.intensity-t)<1e-9 && hypot(a.x-p.x,a.y-p.y)<0.01 && hypot(secondary.midX-e.x,secondary.midY-e.y)<0.01)
         }
-        let base = luminance(background)
-        guard let data = image.dataProvider?.data,let bytes = CFDataGetBytePtr(data) else { return 0 }
-        var best = 1.0
-        for y in Int(rect.minY*scale)..<Int(rect.maxY*scale) { for x in Int(rect.minX*scale)..<Int(rect.maxX*scale) {
-            let i = y*image.bytesPerRow+x*4, ink = luminance([bytes[i],bytes[i+1],bytes[i+2]])
-            best = max(best,(max(base,ink)+0.05)/(min(base,ink)+0.05))
-        } }
-        return best
+        let relative = EditorStage(state: "editor-color"),start = relative.view.pad.primaryKnobCenter!
+        let offset = CGPoint(x: start.x+4,y: start.y+3),end = CGPoint(x: offset.x+6,y: offset.y+8)
+        relative.mouse(.leftMouseDown,point: offset,in: relative.view.pad);relative.mouse(.leftMouseDragged,point: end,in: relative.view.pad);relative.mouse(.leftMouseUp,point: end,in: relative.view.pad)
+        let center = relative.view.pad.primaryKnobCenter!
+        check("F10 knob drag retains its pointer offset",hypot(center.x-start.x-6,center.y-start.y-8)<0.01)
+        let previousPolicy = NSApp.activationPolicy();NSApp.setActivationPolicy(.accessory);NSApp.activate()
+        defer { NSApp.setActivationPolicy(previousPolicy) }
+        let p = EditorStage(onScreen: true);p.parent.makeKeyAndOrderFront(nil)
+        let activeDeadline = Date().addingTimeInterval(3)
+        while !NSApp.isActive && Date()<activeDeadline { p.settle(0.01) }
+        p.parent.makeKey();p.settle();let browserWasKey = p.parent.isKeyWindow && !p.panel.isKeyWindow
+        p.drag();p.tap("editor.font.0");p.tap("editor.tool.case")
+        print("F25 native keys: browserBefore=\(browserWasKey), browserAfter=\(p.parent.isKeyWindow), editorAfter=\(p.panel.isKeyWindow)")
+        check("F25 pointer pad/buttons/font cells keep the browser key",browserWasKey && p.parent.isKeyWindow && !p.panel.isKeyWindow)
+        p.panel.makeKey();p.settle()
+        check("F25 native floating-window key entry focuses Done",p.panel.isKeyWindow && p.panel.firstResponder === p.view.control(id: "editor.done"))
+        p.key(48,"\t");check("F25 Tab follows Done with the name menu",p.panel.firstResponder === p.view.control(id: "editor.name"))
+        p.tap("editor.color.advanced");let popup = p.view.advancedPopover!,r = p.panel.convertFromScreen(popup.panel.frame)
+        check("F24 advanced window frame is (-34,258,250,232)",abs(r.minX+34)<0.01 && abs(588-r.maxY-258)<0.01 && r.size == CGSize(width: 250,height: 232))
+        p.key(53,"\u{1b}",window: popup.panel);p.settle(0.25)
+        check("F24 Esc closes only the advanced popover",!p.view.advanced && p.controller.panel != nil)
+        p.tap("editor.color.advanced");p.mouse(.leftMouseDown,point: CGPoint(x: 400,y: 300),in: p.backdrop);p.mouse(.leftMouseUp,point: CGPoint(x: 400,y: 300),in: p.backdrop);p.settle(0.25)
+        check("F24 native outside click closes the advanced popover",!p.view.advanced)
+        p.tap("editor.done");p.settle(0.2);check("F25 Done returns key to the browser",p.controller.panel == nil && p.parent.isKeyWindow)
+        return checks
     }
     static func renders() -> [Flows.Check] {
         var checks: [Flows.Check] = []
-        for state in CLI.editorNames { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
-            autoreleasepool {
-                let stage = EditorStage(state: state,scale: scale,appearance: appearance), image = stage.render()
-                let frame = stage.parent.convertFromScreen(stage.panel.frame)
-                let fill = CLI.pixel(image,x: Int((frame.minX+BoostEditorMetrics.shadowSide+10)*scale),y: Int((760-frame.maxY+BoostEditorMetrics.shadowTop+50)*scale)), backdrop = CLI.pixel(image,x: Int(5*scale),y: Int(5*scale))
-                checks.append(.init(name: "render \(state) \(appearance.rawValue) \(Int(scale))x body and opaque backdrop",pass: image.width == Int(1000*scale) && image.height == Int(760*scale) && fill != backdrop && CLI.fullyOpaque(image)))
-                let color = Core.popoverBackground.resolved(appearance).nsColor.usingColorSpace(.sRGB)!
-                let expected = [color.redComponent,color.greenComponent,color.blueComponent].map { Int(($0*255).rounded()) }
-                let stableFill = zip(fill.prefix(3),expected).allSatisfy { abs(Int($0)-$1) <= 2 }
-                checks.append(.init(name: "render \(state) exact opaque editor surface after resize",pass: stableFill))
-                if state == "editor-simple" {
-                    let x = frame.minX+BoostEditorMetrics.shadowSide+134, y = 760-frame.maxY+BoostEditorMetrics.shadowTop+148
-                    let center = CLI.pixel(image,x: Int(x*scale),y: Int(y*scale)), pad = CLI.pixel(image,x: Int(x*scale),y: Int((y-23)*scale))
-                    checks.append(.init(name: "empty marker center shows the pad within 3/255",pass: zip(center.prefix(3),pad.prefix(3)).allSatisfy { abs(Int($0)-Int($1)) <= 3 }))
-                }
-                if state == "editor-interstitial" {
-                    let origin = CGPoint(x: frame.minX+BoostEditorMetrics.shadowSide,y: 760-frame.maxY+BoostEditorMetrics.shadowTop)
-                    let title = inkContrast(image,rect: CGRect(x: origin.x+22,y: origin.y+140,width: 224,height: 18),scale: scale,background: fill)
-                    let body = inkContrast(image,rect: CGRect(x: origin.x+26,y: origin.y+178,width: 216,height: 64),scale: scale,background: fill)
-                    let footer = CLI.pixel(image,x: Int((origin.x+20)*scale),y: Int((origin.y+280)*scale))
-                    let button = inkContrast(image,rect: CGRect(x: origin.x+14,y: origin.y+282,width: 240,height: 30),scale: scale,background: footer)
-                    checks.append(.init(name: String(format: "interstitial %@ %dx rendered contrast title %.2f body %.2f button %.2f",appearance.rawValue,Int(scale),title,body,button),pass: title >= 4.5 && body >= 4.5 && button >= 3))
-                }
-                let dump = Flows.accessibilityDump(stage.view)
-                checks.append(.init(name: "render \(state) real controls present",pass: dump.contains("AXButton label=Close\n") && (state == "editor-interstitial" ? dump.contains("Make your own!") : dump.contains("AXSlider label=Colors"))))
+        for state in CLI.editorNames { for scale: CGFloat in [1,2] { autoreleasepool {
+            let stage = EditorStage(state: state,scale: scale),image = stage.render(),body = stage.editorImage()
+            checks.append(.init(name: "render \(state) \(Int(scale))x light editor and opaque canvas",pass: image.width == Int(1200*scale) && image.height == Int(900*scale) && body.width == Int(183*scale) && CLI.fullyOpaque(image) && stage.panel.appearance?.name == .aqua))
+            let m = BoostEditorMetrics.self
+            if !["editor-not-active","editor-global-off"].contains(state) {
+                checks.append(.init(name: "render \(state) control frames match captured AX",pass: stage.view.pad.frame == m.ringFrame && stage.view.control(id: "editor.done")?.frame == m.done && stage.view.control(id: "editor.tool.size")?.frame == m.size && stage.view.control(id: "editor.tool.code")?.frame == m.code))
             }
+            if state == "editor-no-color" {
+                let pad = stage.view.pad,center = pad.primaryKnobCenter!,x = center.x+pad.frame.minX,y = center.y+pad.frame.minY
+                let top = CLI.pixel(body,x: Int(x*scale),y: Int((y-8)*scale)),mid = CLI.pixel(body,x: Int(x*scale),y: Int(y*scale)),bottom = CLI.pixel(body,x: Int(x*scale),y: Int((y+8)*scale))
+                checks.append(.init(name: "knob-gradient probe \(Int(scale))x top darker / bottom lighter",pass: Int(top[0])+5<Int(mid[0]) && Int(mid[0])+5<Int(bottom[0])))
+            }
+            let dump = Flows.accessibilityDump(stage.view)
+            checks.append(.init(name: "render \(state) native AX hierarchy",pass: state == "editor-first-run" ? dump.contains("Make a Boost") && dump.contains("Maybe Later") : dump.contains("AXGroup label=Color") && dump.contains("AXSlider label=Hue") && dump.contains("AXSlider label=Intensity")))
         } } }
         return checks
     }

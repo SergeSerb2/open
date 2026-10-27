@@ -121,10 +121,11 @@ public final class BoostEditorView: NSView {
     public var screenVisibleFrame: (() -> CGRect)?
     public private(set) var advancedPopover: BoostAdvancedPopover?
     public var advanced: Bool { advancedPopover?.isPresented == true }
-    private let fontCard = NSView(),firstRun: EditorInterstitial
+    private let fontCard = EditorFontCard(),firstRun: EditorInterstitial
     private var fontButtons: [EditorButton] = []
     private var banners: [String] = []
     private var bannerSizes: [CGFloat] = []
+    private var bannerLabels: [NSTextField] = []
     private var lastInterstitial: Bool?
     public override var isFlipped: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
@@ -189,11 +190,19 @@ public final class BoostEditorView: NSView {
         control(id: "editor.tool.size")?.setAccessibilityValue(BoostEditorSession.textSizeNames[session.textSizeIndex]); control(id: "editor.tool.case")?.setAccessibilityValue(BoostEditorSession.textCaseNames[session.textCaseIndex])
         (control(id: "editor.tool.zap") as? EditorButton)?.caption = "Zap"; (control(id: "editor.tool.code") as? EditorButton)?.caption = "Code"
         control(id: "editor.tool.zap")?.setAccessibilityValue(session.boost.zaps.count)
-        let next = [session.isActiveOnPage ? "" : "This Boost doesn't apply to \(session.pageURL.host ?? "this page").",session.globallyEnabled ? "" : "Boosts are off. Changes show when you turn Boosts on in Settings."].filter { !$0.isEmpty }
-        if next != banners { banners = next; bannerSizes = next.map { EditorRaster.lines($0,width: 155,font: .systemFont(ofSize: 11,weight: .medium)).count>1 ? 42 : 28 }; needsLayout = true; needsDisplay = true }
+        let next = [session.isActiveOnPage ? "" : "This Boost doesn't apply to \(session.pageURL.host ?? "this page").",session.globallyEnabled ? "" : "Boosts are off. Turn them on in Settings to see changes."].filter { !$0.isEmpty }
+        let bannersChanged = next != banners
+        if bannersChanged {
+            bannerLabels.forEach { $0.removeFromSuperview() };bannerLabels = next.map { text in let label = NSTextField(labelWithString: text);label.textColor = .clear;label.isHidden = false;label.setAccessibilityLabel(text);addSubview(label,positioned: .below,relativeTo: firstRun);return label }
+            banners = next; bannerSizes = next.map { EditorRaster.lines($0,width: 155,font: .systemFont(ofSize: 11,weight: .medium)).count>1 ? 42 : 28 }; needsLayout = true; needsDisplay = true }
         let first = session.showsInterstitial
-        if lastInterstitial != first {
-            firstRun.isHidden = !first; setAccessibilityChildren(first ? [firstRun] : controls.prefix(3).map { $0 }+[pad]+Array(controls.dropFirst(3).prefix(3))+[fontCard]+Array(controls.suffix(4)))
+        if lastInterstitial != first || bannersChanged {
+            firstRun.isHidden = !first
+            var children: [Any] = Array(controls.prefix(3))
+            children.append(contentsOf: bannerLabels);children.append(pad)
+            children.append(contentsOf: Array(controls.dropFirst(3).prefix(3)));children.append(fontCard)
+            children.append(contentsOf: Array(controls.suffix(4)))
+            setAccessibilityChildren(first ? [firstRun] : children)
             if lastInterstitial == true && !first { let fade = CATransition(); fade.type = .fade; fade.duration = 0.2; layer?.add(fade,forKey: "interstitial") }
             lastInterstitial = first; needsLayout = true
         }
@@ -203,6 +212,8 @@ public final class BoostEditorView: NSView {
     public override func layout() {
         super.layout();let m = BoostEditorMetrics.self,shift = bannerSizes.reduce(0,+)
         control(id: "editor.done")?.frame = m.done; control(id: "editor.name")?.frame = m.name; control(id: "editor.undo")?.frame = m.undo
+        var bannerY: CGFloat = 40
+        for (label,height) in zip(bannerLabels,bannerSizes) { label.frame = CGRect(x: 14,y: bannerY+7,width: 155,height: height-14);bannerY += height }
         pad.frame = m.ringFrame.offsetBy(dx: 0,dy: shift)
         for (i,id) in ["invert","advanced","reset"].enumerated() { control(id: "editor.color."+id)?.frame = m.colorButtons[i].offsetBy(dx: 0,dy: shift) }
         fontCard.frame = m.fontCard.offsetBy(dx: 0,dy: shift); fontCard.layer?.shadowPath = CGPath(roundedRect: fontCard.bounds,cornerWidth: 11,cornerHeight: 11,transform: nil)
@@ -283,7 +294,11 @@ private final class EditorInterstitial: NSView {
         for (line,y) in zip(["Edit the","Internet with","Boosts"],m.titleBaselines) { SiteControlDrawing.text(line,x: 10,baseline: y,width: 163,font: Typography.firstRunTitle.font,color: BoostEditorColors.firstRunTitle.nsColor,alignment: .center) }
         var displayHost = host
         while ("Make "+displayHost as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13,weight: .semibold)]).width>153 && displayHost.count>6 { let count = displayHost.count;displayHost = String(displayHost.prefix(count/2-1))+"…"+String(displayHost.suffix(count/2-1)) }
-        SiteControlDrawing.text("Make "+displayHost,x: 14,baseline: 421,width: 155,font: .systemFont(ofSize: 13,weight: .semibold),color: BoostEditorColors.firstRunBody.nsColor,alignment: .center)
+        let body = NSMutableAttributedString(string: "Make ",attributes: [.font: NSFont.systemFont(ofSize: 13),.foregroundColor: BoostEditorColors.firstRunBody.nsColor])
+        body.append(NSAttributedString(string: displayHost,attributes: [.font: NSFont.systemFont(ofSize: 13,weight: .semibold),.foregroundColor: BoostEditorColors.firstRunBody.nsColor]))
+        body.draw(at: CGPoint(x: (183-body.size().width)/2,y: 421-NSFont.systemFont(ofSize: 13).ascender))
         SiteControlDrawing.text("your own!",x: 14,baseline: 437,width: 155,font: .systemFont(ofSize: 13),color: BoostEditorColors.firstRunBody.nsColor,alignment: .center)
     }
 }
+
+@MainActor private final class EditorFontCard: NSView { override var isFlipped: Bool { true } }

@@ -587,7 +587,7 @@ vertical padding, 11 pt Medium #252526 text on `BoostEditorColors.warning` (`#FF
 28 pt for one line, 42 pt for two; the 183 pt width wraps most texts to two lines.
 
 - Not active: "This Boost doesn't apply to <host>."
-- Global off: "Boosts are off. Changes show when you turn Boosts on in Settings."
+- Global off: "Boosts are off. Turn them on in Settings to see changes." (lead ruling 2026-10-26; measured at 11 pt Medium / 155 pt: two lines).
 
 ### 4.4 Color pad
 

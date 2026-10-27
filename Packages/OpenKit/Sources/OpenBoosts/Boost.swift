@@ -90,6 +90,7 @@ public struct ColorAdjustment: Codable, Hashable, Sendable {
 
 /// Editor inputs. Runtime filters are derived by BoostStore's normalization.
 public struct BoostColorWheel: Codable, Hashable, Sendable {
+    /// Zero at 3 o’clock, increasing clockwise on screen; runtime math is unchanged.
     public var hue: Double
     public var intensity: Double
     public var baseHue: Double?

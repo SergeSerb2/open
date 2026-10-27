@@ -29,7 +29,7 @@ public final class BoostAdvancedPopover {
     isolated deinit { if let monitor { NSEvent.removeMonitor(monitor) } }
     public func present() {
         let a = parent.convertToScreen(anchor.convert(anchor.bounds,to: nil)),screen = visibleFrame.insetBy(dx: 8,dy: 8)
-        var frame = CGRect(x: a.midX-125.5,y: a.minY-2-232,width: 250,height: 232)
+        var frame = CGRect(x: a.midX-125.5,y: a.minY-232,width: 250,height: 232)
         frame.origin.x = min(max(frame.minX,screen.minX),screen.maxX-frame.width);frame.origin.y = min(max(frame.minY,screen.minY),screen.maxY-frame.height)
         surface.arrowX = min(max(a.midX-frame.minX,35),215);panel.setFrame(frame,display: true);surface.frame = CGRect(origin: .zero,size: frame.size)
         wasKey = parent.isKeyWindow;isPresented = true;parent.addChildWindow(panel,ordered: .above);panel.orderFront(nil);surface.layoutSubtreeIfNeeded();surface.animate(open: true)
@@ -60,6 +60,7 @@ private final class AdvancedSurface: NSView {
     let sliders: [EditorSlider]
     let session: BoostEditorSession
     var arrowX: CGFloat = 125.5 { didSet { needsLayout = true } }
+    private let labels = AdvancedLabels(frame: .zero)
     private let effect = NSVisualEffectView(),surfaceShadow = CALayer(),rim = CAShapeLayer(),mask = CAShapeLayer(),fallback = CALayer()
     var offscreenMaterial: CGImage? { didSet { effect.isHidden = offscreenMaterial != nil;fallback.contents = offscreenMaterial } }
     override var isFlipped: Bool { true }
@@ -68,7 +69,7 @@ private final class AdvancedSurface: NSView {
         self.session = session;sliders = [1,0,2].map { EditorSlider(session: session,component: $0) };super.init(frame: .zero);wantsLayer = true
         effect.material = PopoverMaterial.material;effect.blendingMode = PopoverMaterial.blending;effect.state = .active;effect.appearance = .init(named: .aqua);effect.wantsLayer = true;effect.layer?.mask = mask
         layer?.addSublayer(surfaceShadow);addSubview(effect);layer?.addSublayer(fallback);layer?.addSublayer(rim)
-        sliders.forEach(addSubview);setAccessibilityElement(false);refresh()
+        addSubview(labels);sliders.forEach(addSubview);setAccessibilityElement(false);refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override func layout() {
@@ -79,16 +80,12 @@ private final class AdvancedSurface: NSView {
         rim.path = path;rim.fillColor = nil;rim.strokeColor = SiteControlColors.rim.cgColor(.light);rim.lineWidth = 1/(window?.backingScaleFactor ?? 1)
         surfaceShadow.frame = bounds;surfaceShadow.shadowPath = path;surfaceShadow.shadowColor = NSColor.black.cgColor;surfaceShadow.shadowOpacity = PopoverMaterial.shadowOpacity;surfaceShadow.shadowRadius = PopoverMaterial.shadowRadius;surfaceShadow.shadowOffset = CGSize(width: 0,height: PopoverMaterial.shadowOffsetY)
         CATransaction.commit()
+        labels.frame = bounds
         for (i,slider) in sliders.enumerated() { slider.frame = CGRect(x: 32,y: 60+CGFloat(i)*62,width: 186,height: 16) }
     }
     func refresh() {
         let w = session.displayWheel
         for slider in sliders { let value = slider.component == 2 ? w.originalSaturation*50 : ((slider.component == 0 ? w.brightness : w.contrast)-0.5)*100;slider.doubleValue = value;if slider.isEnabled != session.colorsReady { slider.isEnabled = session.colorsReady } }
-    }
-    override func updateLayer() {
-        EditorRaster.display(self) {
-            for (i,title) in ["Contrast","Brightness","Original Saturation"].enumerated() { SiteControlDrawing.text(title,x: 32,baseline: 53+CGFloat(i)*62,width: 186,font: Typography.editorSlider.font,color: BoostEditorColors.label.nsColor) }
-        }
     }
     func animate(open: Bool) {
         guard let layer else { return };let frame = layer.frame,point = CGPoint(x: arrowX,y: 2)
@@ -97,6 +94,20 @@ private final class AdvancedSurface: NSView {
         if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             let a: CABasicAnimation = open ? Motion.popoverOpen.animation(keyPath: "transform.scale") : CABasicAnimation(keyPath: "transform.scale")
             a.fromValue = open ? 0.15 : (layer.presentation()?.transform.m11 ?? 1);a.toValue = open ? 1 : 0.9;a.duration = open ? 0.3 : Motion.popoverClose;layer.add(a,forKey: "popover.scale")
+        }
+    }
+}
+
+@MainActor
+private final class AdvancedLabels: NSView {
+    override var isFlipped: Bool { true }
+    override var wantsUpdateLayer: Bool { true }
+    override init(frame: NSRect) { super.init(frame: frame);wantsLayer = true;setAccessibilityElement(false) }
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func updateLayer() {
+        EditorRaster.display(self) {
+            for (i,title) in ["Contrast","Brightness","Original Saturation"].enumerated() { SiteControlDrawing.text(title,x: 32,baseline: 53+CGFloat(i)*62,width: 186,font: Typography.editorSlider.font,color: BoostEditorColors.label.nsColor) }
         }
     }
 }

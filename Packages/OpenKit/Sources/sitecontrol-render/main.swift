@@ -14,14 +14,15 @@ struct CLIError: Error, CustomStringConvertible { let description: String }
 enum CLI {
     static let foundationNames = ["scc-no-boosts","scc-hover-action","scc-pane-anchor","scc-clamped"]
     static let sccNames = ["scc-no-boosts","scc-boost","scc-adblock-on","scc-adblock-excluded","scc-adblock-unavailable","scc-insecure","scc-boosts-off","scc-incognito","scc-internal-page","scc-many","scc-pane-anchor","scc-clamped","scc-light","scc-hover-label","scc-hover-boost","scc-hover-action","scc-keyboard-focus","scc-reload","scc-menu","scc-picker","scc-tooltip","scc-tooltip-on","scc-tooltip-off","scc-tooltip-unavailable","scc-tooltip-private","scc-focus-boost"]
-    static let editorNames = ["editor-interstitial", "editor-simple", "editor-advanced-color", "editor-neutral-page", "editor-not-active", "editor-global-off", "editor-legacy", "editor-menu", "editor-scope-host", "editor-scope-ip", "editor-rename", "editor-reset", "editor-delete", "editor-double-banner", "editor-hover-side", "editor-pressed-side", "editor-focus-side", "editor-hover-chip", "editor-pressed-chip", "editor-focus-chip", "editor-hover-tile", "editor-pressed-tile", "editor-focus-tile"]
+    // Zap mode and code mode are deferred to P7/Steps 6–7; stored Zap counts render here.
+    static let editorNames = ["editor-first-run","editor-no-color","editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-count","editor-name-menu","editor-scope-menu","editor-delete-alert","editor-not-active","editor-global-off","editor-legacy","editor-neutral-page"]
     static let names = sccNames + editorNames
     static func value(_ args: [String], _ name: String) -> String? {
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }; return args[i + 1]
     }
     static func run(_ args: [String]) throws {
         guard let command = args.first else { throw CLIError(description: "usage: sitecontrol-render render|ax|flows|check|bench|screens|motion|compare [--state scc-no-boosts] [--out FILE.png] [--scale 1|2] [--appearance light|dark]") }
-        if command == "compare" { try MaterialFallback.configure(args) }
+        if command == "compare",!(value(args,"--state") ?? "").hasPrefix("editor-") { try MaterialFallback.configure(args) }
         let state = value(args, "--state") ?? "scc-no-boosts"
         guard names.contains(state) else { throw CLIError(description: "unknown state \(state)") }
         let scale = CGFloat(Double(value(args, "--scale") ?? "1") ?? 0)
@@ -37,7 +38,7 @@ enum CLI {
         case "ax":
             if state.hasPrefix("editor-") { let stage = EditorStage(state: state,scale: scale,appearance: .light); print(Flows.accessibilityDump(stage.view),terminator: "") }
             else { let stage = Stage(state: state,scale: scale,appearance: appearance); _ = stage.render(scale: scale); print(Flows.accessibilityDump(stage.controller.view.panel),terminator: "") }
-        case "flows": report(Flows.run()+EditorFlows.run())
+        case "flows": report(value(args,"--group") == "editor" ? EditorFlows.run() : Flows.run()+EditorFlows.run())
         case "cold-measure":
             guard args == ["cold-measure","--thread-instructions"] else { throw CLIError(description: "usage: sitecontrol-render cold-measure --thread-instructions") }
             try Bench.measureThreadInstructions()
@@ -49,6 +50,7 @@ enum CLI {
             } else { fixture = nil }
             report(Bench.run(only: fixture)+(fixture == nil ? EditorBench.run() : []))
         case "probes":
+            if value(args,"--group") == "editor" { report(EditorFlows.renders());return }
             var checks: [Flows.Check] = []
             for name in sccNames { for appearance in [ContentAppearance.light,.dark] { for scale: CGFloat in [1,2] {
                 autoreleasepool { checks += ChromeProbes.run(Stage(state: name,scale: scale,appearance: appearance),appearance: appearance) }
@@ -71,7 +73,7 @@ enum CLI {
             } } }
         case "motion":
             guard let out = value(args,"--out") else { throw CLIError(description: "motion requires --out") }; try MotionChecks.frames(out: URL(fileURLWithPath: out))
-        case "compare": try SiteControlCompare.run(args)
+        case "compare": if state.hasPrefix("editor-") { try EditorCompare.run(args) } else { try SiteControlCompare.run(args) }
         default: throw CLIError(description: "unknown command \(command)")
         }
     }

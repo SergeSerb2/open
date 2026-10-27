@@ -61,6 +61,10 @@ public final class BoostColorPadView: OpenDesign.ColorPadView {
     }
     @available(*, unavailable) public required init?(coder: NSCoder) { fatalError() }
     public override var needsPanelToBecomeKey: Bool { false }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow();let scale = window?.backingScaleFactor ?? 1
+        if renderScale != scale { previous = nil;renderScale = scale;refresh() }
+    }
     public override func layout() {
         super.layout()
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -81,9 +85,11 @@ public final class BoostColorPadView: OpenDesign.ColorPadView {
         let snapshot = (wheel,hasValues,session.colorsReady,isDragging,session.showsLegacyColors,session.boost.colorWheel != nil)
         if let old = previous,old.0 == wheel,old.1 == hasValues,old.2 == session.colorsReady,old.3 == isDragging,old.4 == session.showsLegacyColors,old.5 == (session.boost.colorWheel != nil) { return }
         let positions = [primaryKnobCenter].compactMap { $0 }+secondaryKnobFrames.map { CGPoint(x: $0.midX,y: $0.midY) }
+        let ringChanged = previous?.5 != snapshot.5
         previous = snapshot; renderScale = window?.backingScaleFactor ?? renderScale
         super.apply(BoostPadLaw.State(wheel: wheel,showsValues: hasValues),law: BoostPadLaw(),gestureInProgress: isDragging) { [weak self] value in self?.edit(value.point,relative: value.relative) }
         let coloredRing = session.boost.colorWheel != nil
+        if ringChanged {
         let colors = BoostEditorColors.ringStops.map { stop -> CGColor in
             let c = RGBA(hex: stop.color)
             return coloredRing ? c.cgColor : RGBA(0.2126*c.red+0.7152*c.green+0.0722*c.blue,0.2126*c.red+0.7152*c.green+0.0722*c.blue,0.2126*c.red+0.7152*c.green+0.0722*c.blue).cgColor
@@ -94,8 +100,10 @@ public final class BoostColorPadView: OpenDesign.ColorPadView {
         tint.isHidden = !coloredRing
         if coloredRing { tint.contents = Self.tintImage(scale: renderScale); tint.contentsScale = renderScale }
         CATransaction.commit()
+        }
         let message = session.showsLegacyColors ? "Custom colors — editing replaces them." : session.colorsReady && wheel.baseHue == nil ? "Few colors here. Try Invert lightness." : ""
         if note.stringValue != message { note.stringValue = message }; note.isHidden = isDragging || message.isEmpty
+        setAccessibilityChildren(note.isHidden ? [hueAX!,intensityAX!] : [hueAX!,intensityAX!,note])
         updateGuide(); if animatedReset { animateKnobs(from: positions,duration: 0.22) }
     }
     private func input(_ input: ColorPadInput) {
@@ -143,16 +151,19 @@ public final class BoostColorPadView: OpenDesign.ColorPadView {
 }
 
 @MainActor private final class PadAxis: NSAccessibilityElement {
-    weak var pad: BoostColorPadView?
-    let hue: Bool
+    // AppKit invokes AX callbacks on its main-thread accessibility route. Keep
+    // immutable Sendable callbacks outside the SDK's nonisolated overrides.
+    nonisolated let frameValue: @MainActor @Sendable () -> CGRect
+    nonisolated let axisValue: @MainActor @Sendable () -> Double?
+    nonisolated let changeValue: @MainActor @Sendable (Bool) -> Bool
     init(pad: BoostColorPadView,hue: Bool) {
-        self.pad = pad; self.hue = hue; super.init()
-        setAccessibilityRole(.slider); setAccessibilityLabel(hue ? "Hue" : "Intensity"); setAccessibilityParent(pad)
+        frameValue = { [weak pad] in pad.map { $0.window?.convertToScreen($0.convert($0.bounds,to: nil)) ?? .zero } ?? .zero }
+        axisValue = { [weak pad] in pad.map { hue ? $0.session.displayWheel.hue : $0.session.displayWheel.intensity*100 } }
+        changeValue = { [weak pad] up in pad?.accessibilityStep(hue: hue ? (up ? 5 : -5) : nil,radius: hue ? nil : (up ? 0.03 : -0.03)) ?? false }
+        super.init();setAccessibilityRole(.slider);setAccessibilityLabel(hue ? "Hue" : "Intensity");setAccessibilityParent(pad)
     }
-    nonisolated override func accessibilityFrame() -> NSRect { MainActor.assumeIsolated { pad.map { $0.window?.convertToScreen($0.convert($0.bounds,to: nil)) ?? .zero } ?? .zero } }
-    nonisolated override func accessibilityValue() -> Any? {
-        let value: Double? = MainActor.assumeIsolated { pad.map { hue ? $0.session.displayWheel.hue : $0.session.displayWheel.intensity*100 } }; return value
-    }
-    nonisolated override func accessibilityPerformIncrement() -> Bool { MainActor.assumeIsolated { pad?.accessibilityStep(hue: hue ? 5 : nil,radius: hue ? nil : 0.03) ?? false } }
-    nonisolated override func accessibilityPerformDecrement() -> Bool { MainActor.assumeIsolated { pad?.accessibilityStep(hue: hue ? -5 : nil,radius: hue ? nil : -0.03) ?? false } }
+    nonisolated override func accessibilityFrame() -> NSRect { let read = frameValue;return MainActor.assumeIsolated { read() } }
+    nonisolated override func accessibilityValue() -> Any? { let read = axisValue;let value = MainActor.assumeIsolated { read() };return value }
+    nonisolated override func accessibilityPerformIncrement() -> Bool { let step = changeValue;return MainActor.assumeIsolated { step(true) } }
+    nonisolated override func accessibilityPerformDecrement() -> Bool { let step = changeValue;return MainActor.assumeIsolated { step(false) } }
 }

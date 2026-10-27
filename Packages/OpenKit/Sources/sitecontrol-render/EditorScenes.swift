@@ -70,163 +70,117 @@ final class EditorHost: BoostEditorHost {
 
 @MainActor
 final class EditorStage {
-    let host: EditorHost
-    let controller: BoostEditorController
-    let defaults: UserDefaults
-    let suite: String
-    let parent: ScaledWindow
+    let host: EditorHost,controller: BoostEditorController,defaults: UserDefaults,suite: String
+    let parent: EditorParentWindow
     let backdrop = Backdrop(frame: CGRect(x: 0,y: 0,width: 1000,height: 760))
-    let initialID: BoostID
-    let scale: CGFloat
-    let state: String
-    var menuLayer: CALayer?
-    var menuFrame = CGRect.zero
-    weak var activeMenu: NSMenu?
+    let initialID: BoostID,scale: CGFloat,state: String
+    let overlay = NativeOverlayCapture()
     var session: BoostEditorSession { controller.session! }
     var view: BoostEditorView { controller.view! }
     var panel: NSPanel { controller.panel! }
-    init(state: String = "editor-simple",scale: CGFloat = 1,appearance: ContentAppearance = .light,isNew: Bool = false,url: URL? = nil,boost: Boost? = nil,waitForColors: Bool = true) {
-        self.scale = scale; self.state = state
-        host = EditorHost(neutral: state == "editor-neutral-page"); if let url { host.url = url }; if !waitForColors { host.snapshotDelay = 0.2 }
-        if state == "editor-scope-ip" { host.url = URL(string: "http://127.0.0.1/other/page")! }
-        suite = "open.harness.editor."+UUID().uuidString; defaults = UserDefaults(suiteName: suite)!
-        defaults.set(state != "editor-interstitial",forKey: "open.boosts.hasDismissedInterstitial")
-        defaults.set(!["editor-global-off","editor-double-banner"].contains(state),forKey: "open.advanced.enableBoosts"); host.globallyEnabled = !["editor-global-off","editor-double-banner"].contains(state)
+    var editorOrigin: CGPoint { let f = parent.convertFromScreen(panel.frame);return CGPoint(x: f.minX,y: 760-f.maxY) }
+    init(state: String = "editor-no-color",scale: CGFloat = 1,appearance: ContentAppearance = .light,isNew: Bool = false,url: URL? = nil,boost: Boost? = nil,waitForColors: Bool = true,onScreen: Bool = false) {
+        self.scale = scale;self.state = state
+        host = EditorHost(neutral: state == "editor-neutral-page");if let url { host.url = url };if !waitForColors { host.snapshotDelay = 0.2 }
+        suite = "open.harness.editor."+UUID().uuidString;defaults = UserDefaults(suiteName: suite)!
+        defaults.set(state != "editor-first-run",forKey: "open.boosts.hasDismissedInterstitial")
+        defaults.set(!["editor-global-off","editor-double-banner"].contains(state),forKey: "open.advanced.enableBoosts");host.globallyEnabled = defaults.bool(forKey: "open.advanced.enableBoosts")
         var seed = boost ?? Boost(id: BoostID(uuidString: "00000000-0000-0000-0000-000000000004"),name: "My Boost",siteMatch: SiteMatch(domain: host.url.host!))
         if ["editor-not-active","editor-double-banner"].contains(state) { seed.siteMatch = SiteMatch(domain: "other.example.com") }
-        if state == "editor-scope-ip" { seed.siteMatch = SiteMatch(domain: "127.0.0.1",pathPrefix: "/news") }
         if state == "editor-legacy" { seed.colorAdjustment = ColorAdjustment(brightness: 2,invert: 0.5) }
-        initialID = seed.id; if !isNew { _ = host.boostStore.upsert(seed) }
-        backdrop.appearance = appearance.nsAppearance
-        parent = OffscreenRenderer.host(backdrop,scale: scale); parent.orderFront(nil)
-        controller = BoostEditorController(host: host,defaults: defaults,makePanel: { let p = EditorScaledPanel(contentRect: CGRect(x: 0,y: 0,width: 316,height: 452),styleMask: [.borderless,.nonactivatingPanel],backing: .buffered,defer: false); p.scale = scale; return p })
-        let context = SiteControlContext(tabID: host.tabID,profileID: host.profileID,url: host.url,displayHost: host.url.host!,security: .secure)
-        precondition(controller.present(parent: parent,contentRect: CGRect(x: 228,y: 10,width: 762,height: 740),context: context,boostID: isNew ? nil : seed.id))
-        // Resolve only the real asynchronous snapshot path, never patch the session.
-        let deadline = Date().addingTimeInterval(3)
-        while waitForColors && !session.colorsReady && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
-        settle()
-        if state == "editor-advanced-color" { tap("editor.color.advanced"); tap("editor.color.invert"); settle(0.3) }
-        if state.hasPrefix("editor-hover-") || state.hasPrefix("editor-pressed-") || state.hasPrefix("editor-focus-") {
-            let id = state.hasSuffix("side") ? "editor.color.invert" : state.hasSuffix("chip") ? "editor.font.3" : "editor.tool.case"
-            if let control = view.control(id: id) {
-                control.scrollToVisible(control.bounds); settle()
-                if state.contains("-hover-") {
-                    let event = NSEvent.enterExitEvent(with: .mouseEntered,location: .zero,modifierFlags: [],timestamp: CACurrentMediaTime(),windowNumber: panel.windowNumber,context: nil,eventNumber: 0,trackingNumber: 0,userData: nil)!
-                    control.mouseEntered(with: event)
-                } else if state.contains("-pressed-") { mouse(.leftMouseDown,point: CGPoint(x: control.bounds.midX,y: control.bounds.midY),in: control) }
-                else { for _ in 0..<40 { key(48,"\t"); if panel.firstResponder === control { break } } }
-            }
+        if ["editor-color","editor-dragging","editor-advanced","editor-font-selected","editor-zap-on","editor-zap-count"].contains(state) {
+            seed.colorWheel = BoostColorWheel(hue: 252.3,intensity: 46.2/(66.5*0.99),baseHue: 125);seed.colorAdjustment = seed.colorWheel?.adjustment
         }
-        if state == "editor-rename" { menu("Rename this Boost…") }
-        if state == "editor-reset" { tap("editor.tool.case"); menu("Reset all Edits") }
-        if state == "editor-delete" { menu("Delete this Boost") }
-        settle()
+        if state == "editor-font-selected" { seed.fontFamily = BoostEditorFonts.available[7].css }
+        if state == "editor-zap-count" { seed.zaps = [ZappedElement(selector: ".ad")] }
+        initialID = seed.id;if !isNew { _ = host.boostStore.upsert(seed) }
+        backdrop.appearance = appearance.nsAppearance
+        parent = EditorParentWindow(contentRect: CGRect(x: -20000,y: -20000,width: 1000,height: 760),styleMask: [.borderless],backing: .buffered,defer: false)
+        if onScreen,let screen = NSScreen.screens.first { parent.setFrameOrigin(CGPoint(x: screen.visibleFrame.minX+40,y: screen.visibleFrame.minY+20)) }
+        parent.scale = scale;parent.isReleasedWhenClosed = false;parent.colorSpace = .sRGB;parent.contentView = backdrop;parent.makeKeyAndOrderFront(nil)
+        controller = BoostEditorController(host: host,defaults: defaults,makePanel: { let p = EditorScaledPanel(contentRect: CGRect(origin: .zero,size: BoostEditorMetrics.window),styleMask: [.borderless,.nonactivatingPanel],backing: .buffered,defer: false);p.scale = scale;return p })
+        let screen = CGRect(x: -20100,y: -20200,width: 1600,height: 1200)
+        controller.screens = onScreen ? { NSScreen.screens.map { BoostEditorScreen(frame: $0.frame,visibleFrame: $0.visibleFrame) } } : { [BoostEditorScreen(frame: screen,visibleFrame: screen)] }
+        let context = SiteControlContext(tabID: host.tabID,profileID: host.profileID,url: host.url,displayHost: host.url.host!,security: .secure)
+        precondition(controller.present(parent: parent,contentRect: backdrop.bounds,context: context,boostID: isNew ? nil : seed.id))
+        let deadline = Date().addingTimeInterval(3)
+        while waitForColors && !session.colorsReady && Date()<deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.001)) }
+        settle(waitForColors ? 0.2 : 0)
+        if state == "editor-advanced" { tap("editor.color.advanced");configureAdvancedFallback();settle(0.35) }
+        if state == "editor-dragging" { mouse(.leftMouseDown,point: view.pad.primaryKnobCenter ?? CGPoint(x: 90,y: 74),in: view.pad);mouse(.leftMouseDragged,point: CGPoint(x: 55,y: 26),in: view.pad);settle(0.3) }
+        if state == "editor-delete-alert" { menu("Delete this Boost");settle(0.3) }
     }
-    isolated deinit { controller.close(); parent.contentView = nil; parent.close(); defaults.removePersistentDomain(forName: suite); CATransaction.flush() }
+    isolated deinit { controller.close();parent.contentView = nil;parent.close();defaults.removePersistentDomain(forName: suite);CATransaction.flush() }
     func settle(_ seconds: TimeInterval = 0) {
-        if seconds > 0 { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
-        if let content = controller.panel?.contentView { OffscreenRenderer.settle(content) }
+        if seconds>0 { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+        if let v = controller.panel?.contentView { OffscreenRenderer.settle(v) }
+        if let v = controller.view?.advancedPopover?.panel.contentView { OffscreenRenderer.settle(v) }
     }
     func key(_ code: UInt16,_ chars: String,modifiers: NSEvent.ModifierFlags = [],window: NSWindow? = nil) {
         guard let window = window ?? controller.panel else { return }
+        if !window.isKeyWindow { window.makeKey() }
         let e = NSEvent.keyEvent(with: .keyDown,location: .zero,modifierFlags: modifiers,timestamp: CACurrentMediaTime(),windowNumber: window.windowNumber,context: nil,characters: chars,charactersIgnoringModifiers: chars,isARepeat: false,keyCode: code)!
-        window.sendEvent(e); settle()
+        NSApp.sendEvent(e);settle()
     }
     func mouse(_ type: NSEvent.EventType,point: CGPoint,in target: NSView,modifiers: NSEvent.ModifierFlags = [],clicks: Int = 1) {
-        guard let window = target.window else { return }; let p = target.convert(point,to: nil)
+        guard let window = target.window else { return };let p = target.convert(point,to: nil)
         let e = NSEvent.mouseEvent(with: type,location: p,modifierFlags: modifiers,timestamp: CACurrentMediaTime(),windowNumber: window.windowNumber,context: nil,eventNumber: 1,clickCount: clicks,pressure: type == .leftMouseUp ? 0 : 1)!
-        window.sendEvent(e)
+        NSApp.sendEvent(e)
     }
     func tap(_ id: String,modifiers: NSEvent.ModifierFlags = []) {
-        guard let target = controller.view?.control(id: id) else { return }
-        target.scrollToVisible(target.bounds); settle()
+        guard let target = controller.view?.control(id: id) else { return };settle()
         let p = CGPoint(x: target.bounds.midX,y: target.bounds.midY)
-        mouse(.leftMouseDown,point: p,in: target,modifiers: modifiers); mouse(.leftMouseUp,point: p,in: target,modifiers: modifiers); settle()
+        mouse(.leftMouseDown,point: p,in: target,modifiers: modifiers);mouse(.leftMouseUp,point: p,in: target,modifiers: modifiers);settle()
     }
-    func menu(_ title: String) { let menu = controller.makeMenu(); if let i = menu.items.firstIndex(where: { $0.title == title && $0.isEnabled }) { menu.performActionForItem(at: i); settle(0.3) } }
+    func menu(_ title: String) { let menu = controller.makeMenu();if let i = menu.items.firstIndex(where: { $0.title == title && $0.isEnabled }) { menu.performActionForItem(at: i);settle(0.3) } }
     func alert(_ title: String) {
-        guard let alert = controller.activeAlert, let button = alert.buttons.first(where: { $0.title == title }) else { return }
-        let focused = alert.window.makeFirstResponder(button)
-        key(49," ",window: alert.window)
-        settle(0.35)
-        precondition(focused, "native sheet action must accept keyboard focus")
+        guard let alert = controller.activeAlert,let button = alert.buttons.first(where: { $0.title == title }) else { return }
+        let focused = alert.window.makeFirstResponder(button);key(49," ",window: alert.window);settle(0.35);precondition(focused)
     }
     func drag(events: Int = 40,delay: TimeInterval = 0) {
-        let wheel = view.wheel
-        mouse(.leftMouseDown,point: CGPoint(x: 64,y: 34),in: wheel)
-        for i in 0..<events { let t = Double(i)*0.09; mouse(.leftMouseDragged,point: CGPoint(x: 64+sin(t)*40,y: 64-cos(t)*40),in: wheel); if delay > 0 { RunLoop.main.run(until: Date().addingTimeInterval(delay)) } }
-        mouse(.leftMouseUp,point: CGPoint(x: 104,y: 64),in: wheel); settle()
+        let pad = view.pad
+        mouse(.leftMouseDown,point: CGPoint(x: 110,y: 73.5),in: pad)
+        for i in 0..<events { let t = Double(i)*0.09;mouse(.leftMouseDragged,point: CGPoint(x: 73.5+sin(t)*40,y: 73.5-cos(t)*40),in: pad);if delay>0 { RunLoop.main.run(until: Date().addingTimeInterval(delay)) } }
+        mouse(.leftMouseUp,point: CGPoint(x: 113.5,y: 73.5),in: pad);settle()
     }
-    private func captureNative(_ view: NSView) -> CGImage {
-        func mark(_ v: NSView) { v.wantsLayer = true; v.needsDisplay = true; v.subviews.forEach(mark) }
-        mark(view); OffscreenRenderer.settle(view)
-        let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,pixelsWide: Int(ceil(view.bounds.width*scale)),pixelsHigh: Int(ceil(view.bounds.height*scale)),bitsPerSample: 8,samplesPerPixel: 4,hasAlpha: true,isPlanar: false,colorSpaceName: .deviceRGB,bytesPerRow: 0,bitsPerPixel: 0)!
-        bitmap.size = view.bounds.size; view.cacheDisplay(in: view.bounds,to: bitmap)
-        return bitmap.cgImage!
+    func slider(_ component: Int) -> NSControl? { view.advancedPopover?.panel.contentView?.subviews.first { $0.identifier?.rawValue == "editor.slider.\(component)" } as? NSControl }
+    func configureAdvancedFallback() {
+        guard let popup = view.advancedPopover else { return }
+        let c = CGContext(data: nil,width: Int(250*scale),height: Int(232*scale),bitsPerComponent: 8,bytesPerRow: 0,space: CGColorSpace(name: CGColorSpace.sRGB)!,bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        c.setFillColor(NSColor(srgbRed: 237/255,green: 237/255,blue: 237/255,alpha: 1).cgColor);c.fill(CGRect(x: 0,y: 0,width: c.width,height: c.height));popup.offscreenMaterial = c.makeImage()
     }
+    func editorImage() -> CGImage { settle();return OffscreenRenderer().snapshot(view,scale: scale) }
     func render() -> CGImage {
-        func mark(_ view: NSView) { view.needsDisplay = true; view.subviews.forEach(mark) }
-        mark(panel.contentView!); settle()
-        if ["editor-menu","editor-scope-host","editor-scope-ip"].contains(state) && menuLayer == nil {
-            var timer: Timer?
-            controller.onMenu = { [weak self] menu in
-                self?.activeMenu = menu
-                timer = Timer(timeInterval: 0.12,repeats: false) { [weak self] _ in
-                    MainActor.assumeIsolated {
-                        guard let self, let menu = self.activeMenu else { return }
-                        let windows = NSApp.windows.filter { $0 !== self.parent && $0 !== self.controller.panel && $0.isVisible }
-                        for window in windows {
-                            if let content = window.contentView {
-                                content.wantsLayer = true; OffscreenRenderer.settle(content)
-                                if content.layer != nil {
-                                    let captured = self.captureNative(content)
-                                    let layer = CALayer(); layer.contents = captured; layer.contentsScale = self.scale
-                                    // CARenderer has no WindowServer backdrop for NSVisualEffectView.
-                                    layer.backgroundColor = Core.popoverBackground.cgColor(self.backdrop.contentAppearance)
-                                    layer.cornerRadius = 6; layer.masksToBounds = true
-                                    self.menuLayer = layer; self.menuFrame = window.frame; break
-                                }
-                            }
-                        }
-                        menu.cancelTracking()
-                    }
-                }
-                RunLoop.main.add(timer!,forMode: .eventTracking)
-            }
-            tap(state == "editor-menu" ? "editor.more" : "editor.scope"); timer?.invalidate(); controller.onMenu = nil
+        if ["editor-name-menu","editor-scope-menu"].contains(state),!overlay.hasImage {
+            controller.onMenu = { [weak self] menu in guard let self else { return };self.overlay.captureMenu(menu,excluding: self.parent,scale: self.scale) }
+            tap("editor.name");controller.onMenu = nil
         }
-        settle(); let surface = panel.contentView!
-        let panelImage = OffscreenRenderer().snapshot(surface,scale: scale)
-        let panelLayer = CALayer(); panelLayer.contents = panelImage; panelLayer.contentsScale = scale
-        let frame = parent.convertFromScreen(panel.frame)
-        panelLayer.frame = CGRect(x: frame.minX,y: backdrop.bounds.height-frame.maxY,width: frame.width,height: frame.height)
-        backdrop.layer?.addSublayer(panelLayer)
-        if let menuLayer {
-            // AppKit constrains its menu window to the real display, even when
-            // the owning fixture is offscreen. Place its actual captured layers
-            // beside the fixture anchor for this contact sheet only.
-            menuLayer.frame = CGRect(x: frame.minX-menuFrame.width-12,y: backdrop.bounds.height-frame.maxY+90,width: menuFrame.width,height: menuFrame.height)
-            backdrop.layer?.addSublayer(menuLayer)
+        let canvas = EditorCanvas(frame: CGRect(x: 0,y: 0,width: 1200,height: 900));canvas.wantsLayer = true
+        let host = OffscreenRenderer.host(canvas,scale: scale);defer { host.contentView = nil;host.close() }
+        func add(_ image: CGImage,_ frame: CGRect) { let l = CALayer();l.contents = image;l.contentsScale = scale;l.frame = frame;canvas.layer?.addSublayer(l) }
+        add(OffscreenRenderer().snapshot(backdrop,scale: scale),backdrop.bounds)
+        let origin = editorOrigin;add(editorImage(),CGRect(origin: origin,size: panel.frame.size))
+        if let popup = view.advancedPopover,let content = popup.panel.contentView {
+            configureAdvancedFallback();settle();let f = parent.convertFromScreen(popup.panel.frame)
+            add(OffscreenRenderer().snapshot(content,scale: scale),CGRect(x: f.minX,y: 760-f.maxY,width: f.width,height: f.height))
         }
-        var sheetLayer: CALayer?
-        if let alert = controller.activeAlert, let content = alert.window.contentView {
-            mark(content); OffscreenRenderer.settle(content)
-            let image = captureNative(content), layer = CALayer()
-            layer.contents = image; layer.contentsScale = scale
-            layer.frame = CGRect(x: max(245,frame.minX-CGFloat(image.width)/scale-12),y: 150,width: CGFloat(image.width)/scale,height: CGFloat(image.height)/scale)
-            layer.backgroundColor = Core.popoverBackground.cgColor(backdrop.contentAppearance); layer.cornerRadius = 12; layer.masksToBounds = true
-            backdrop.layer?.addSublayer(layer); sheetLayer = layer
-        }
-        defer { panelLayer.removeFromSuperlayer(); menuLayer?.removeFromSuperlayer(); sheetLayer?.removeFromSuperlayer() }
-        return OffscreenRenderer().snapshot(backdrop,scale: scale)
+        if let alert = controller.activeAlert,let content = alert.window.contentView { content.wantsLayer = true;OffscreenRenderer.settle(content);add(OffscreenRenderer().snapshot(content,scale: scale),CGRect(x: 450,y: 220,width: content.bounds.width,height: content.bounds.height)) }
+        if let image = overlay.image { add(image,CGRect(x: origin.x-CGFloat(image.width)/scale-12,y: origin.y+40,width: CGFloat(image.width)/scale,height: CGFloat(image.height)/scale)) }
+        OffscreenRenderer.settle(canvas);return OffscreenRenderer().snapshot(canvas,scale: scale)
     }
-
 }
 
-@MainActor
-private final class EditorScaledPanel: BoostEditorPanel {
+@MainActor private final class EditorCanvas: NSView {
+    override var isFlipped: Bool { true }
+    override func updateLayer() { layer?.backgroundColor = NSColor(srgbRed: 244/255,green: 244/255,blue: 246/255,alpha: 1).cgColor }
+    override var wantsUpdateLayer: Bool { true }
+}
+@MainActor final class EditorParentWindow: NSWindow {
     var scale: CGFloat = 1
     override var backingScaleFactor: CGFloat { scale }
-    override var isKeyWindow: Bool { true }
+    override var canBecomeKey: Bool { true }
+}
+@MainActor private final class EditorScaledPanel: BoostEditorPanel {
+    var scale: CGFloat = 1
+    override var backingScaleFactor: CGFloat { scale }
 }
