@@ -112,7 +112,20 @@ The import fixture contains two Spaces, three tabs, one skipped easel, and two c
 
 `tools/verify-all.sh` now includes `settings-preview` checks, all renders, dimension validation, and `dump-keys`. The PR contains the final full-gate summary after merging `origin/main`.
 
-No unit tests, desktop automation, engine build/sync, real import, or Keychain access ran. Real-app Cmd+,, menu delivery, browser effects, and engine download/capture operations remain the app-shell acceptance gate. These package/preview results do not claim that gate.
+No unit tests, desktop automation, engine build/sync, real import, or Keychain access ran for these package checks. Real-app Cmd+,, browser effects, and engine download/capture operations remain separate app-shell acceptance gates.
+
+### S5b Previews delay removal (2026-10-26)
+
+Previews uses the fixed `HoverPreviewMetrics.armDelay` of 0.5 seconds. The
+480×320 sheet keeps the master, Folders, and Pinned tabs and Favorites
+switches, followed by Done. It has no Delay row or registered delay default;
+an older stored value stays untouched. Both check receipts were regenerated
+from the same actual 37-flow acceptance command. The two Previews gallery
+renders and their SHA-256 entries were refreshed from that run too.
+
+The real App flow, native 2× rest/hover snapshots, supplied-capture comparison,
+and forced-failure cleanup proof are recorded in
+[the S5b evidence](sidebar-completion/s5b/README.md).
 
 ## Visual evidence
 

@@ -499,9 +499,13 @@ def main():
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
         all_passed(run(preview, "check"))
         output = Path("settings-panes").resolve()
-        run(preview, "render", "--out", str(output))
+        rendered = run(preview, "render", "--out", str(output))
+        require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
+                "missing rendered Previews control evidence")
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
+        require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
+                "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
         require(len(pngs) == 216, "missing settings/library/appearance/detail/sheet/state renders")
         require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")

@@ -1,0 +1,14 @@
+Existing App warnings: provenance at S5b b9105ab
+App build: exit 0; warning-free App build is NOT claimed.
+All warning-bearing App source/config files are byte-identical to main at 7e689d560c8cc7d08e85d079eb245158c6839c33.
+
+App/Automation/ActivationTrace.swift SHA-256 0baf3d1b742975b69b48cb8c602da0db0e6139bac0da200cb1600e21f231c7e8 (main == branch)
+App/AppDelegate.swift SHA-256 750c663de62319eea802e20c521a1dedeacb0bed3a9b2d2d8b549db93b188c97 (main == branch)
+App/WebContent/EngineWebContentHostFactory.swift SHA-256 ebd58c2a752b6f4c9f09eec0e6597904a16a12275e9c414836c4e4cee9549bb6 (main == branch)
+App/Automation/AutomationController.swift SHA-256 1c1e620aac0e42c623e15b494c8855a64bb6bf4c85e11d42b375b0d2b0651722 (main == branch)
+project.yml SHA-256 55ba9bab09190a9962b1cb14d834c6c85e85c8a9603069df3bf15be6321a74aa (main == branch)
+
+Source diagnostics (6): NSObjectProtocol at ActivationTrace:9,10; AppDelegate:41; EngineWebContentHostFactory:19; NSMenuItemValidation/NSUserInterfaceValidations at AutomationController:981,982.
+Existing configuration also emits traditional-headermap, signed-binary strip, and skipped App Intents metadata diagnostics.
+Raw local evidence: .re/s5b/app-existing-warnings.txt and build/xcodebuild-Debug.log.
+S5b does not edit these files or suppress diagnostics. The package verification build has zero warning/error lines.

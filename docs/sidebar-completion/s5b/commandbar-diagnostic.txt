@@ -1,0 +1,6 @@
+First full run: three command-bar 2x renders sampled black; not classified as an M1 baseline.
+FAIL  render empty at 2x  —  2200×1520, panel fill [0, 0, 0], page [0, 0, 0], rows 12
+FAIL  render typing-git at 2x  —  2200×1520, panel fill [0, 0, 0], page [0, 0, 0], rows 7
+FAIL  render actions at 2x  —  2200×1520, panel fill [0, 0, 0], page [0, 0, 0], rows 4
+main: 78/78 passed
+branch: 78/78 passed

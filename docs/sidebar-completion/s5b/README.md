@@ -64,3 +64,67 @@ and verification gate are warning-free; the App build does not satisfy a
 literal zero-warning requirement. The parent must resolve that separate
 baseline. Full local warning evidence is in `.re/s5b/app-existing-warnings.txt`
 and `build/xcodebuild-Debug.log`.
+
+## Real App acceptance
+
+[Normal flow](app-flow.json): PASS. General → Previews opens the specific
+480×320 `SheetPresentationWindow`; its master and two source switches write
+to the run's isolated preferences. A disabled source refuses the click;
+Done closes the sheet. The previously stored delay remains exactly 7.0.
+Both [rest](previews-rest@2x.png) and [hover](previews-hover@2x.png) snapshots
+are real native 2× window-server captures. The [comparison](comparison.md)
+uses the supplied S2 02/0050 read-only and records the accepted Open differences.
+
+[Forced-failure flow](app-forced-failure.json): expected exit 1 at the
+explicit `FORCED: early failure while the real Previews sheet is open`.
+The `finally` path clicks Done, cancels unexpected native dialogs, and quits
+the exact suite-owned App. Normal and failure runs both report cleanup PASS,
+zero remaining windows, zero remaining processes, removed roots, and no
+forced App termination. No App automation or desktop input was added.
+
+## Review coverage
+
+The parent ran Muse code review 1 on `b9105ab`: production code was correct;
+the Settings half needed an automated guard against a restored dead control
+or default. The parent added that guard in `settings-preview/main.swift`
+and `tools/verification/check.py`. The native rendered sheet must contain
+the expected master/source/Done AX labels, no Delay label/value, and no
+popup. The real `dump-keys` output must omit the removed default. Missing AX
+content fails closed. The renderer now closes its window in `defer` too.
+
+On this M1, SwiftUI returned an empty AX tree until the renderer enabled
+its own `AXEnhancedUserInterface` state. That state is scoped to the Previews
+render and restored in `defer`. It changes no system accessibility setting
+and adds no timing check. The unsuccessful navigation/legacy-tree probes
+were removed. No S5b production or App-driver code changed after `b9105ab`; the branch also merged `origin/main`.
+
+The parent ran local Opus design review 1: PASS, no new material visual
+defect and no weekly-limit error. The two comparison wording corrections
+are included: rest and Done-hover snapshots are identical (the existing
+button style changes on press), and the different appearances support no
+color-fidelity claim. Existing Settings-wide visual differences remain
+baseline backlog. The supplied capture dependency is resolved.
+
+Local parent reports: `/Users/m1-dev/.t3/projects/open/.re/m1-s5b-review-r1.md`
+and `/Users/m1-dev/.t3/projects/open/.re/m1-s5b-opus-design-r1.md`.
+
+The initial [pre-review full run](pre-review-full-summary.txt) found three
+black command-bar 2× renders in addition to the known M1 baselines. This
+was not relabeled as a baseline. A real diagnostic run of unmodified main
+and this branch passed 78/78 on each ([receipt](commandbar-diagnostic.txt)).
+The final full gate must also pass commandbar-render. No command-bar code
+or tolerance changed.
+
+## Settings guard break-and-revert proofs
+
+The [UI-only proof](ui-negative-proof.txt) restores the old General view model
+and Delay popup while leaving the fixed tracker and removed default intact.
+The actual renderer exits 1: `FAIL Previews sheet restored the removed Delay control`.
+
+The [default-only proof](default-negative-proof.txt) restores only the registry
+entry. The actual Settings gate exits 1: `FAIL: removed preview delay default was registered`.
+It first renders the real three-switch sheet successfully, so this failure
+is independent of the UI guard. Both proofs restore their source in `finally`
+and rebuild the real renderer without warnings. The positive
+[guard-focused run](guard-focused-summary.txt) passed at both scales; its
+[control receipts](previews-controls.txt) come from the real AX walk.
