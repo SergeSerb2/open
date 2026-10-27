@@ -1,0 +1,52 @@
+MC15 motion regression: anchored starts, interruption continuity and clipped rows
+  OK   MC15 motion host is offscreen and non-key
+  OK   MC15 F7 Reduce Motion OFF uses the shipping native pause image
+  OK   MC15 F7 live native pause path draws ink without the layer cloner
+  OK   MC15 F7 native events replace pause with play with Reduce Motion OFF
+  OK   MC15 F1 1 cards: height animation starts at on-screen positions, including non-centered anchors
+  OK   MC15 F1 1 cards: pager stays at its on-screen x/y 16 ms after hover
+  OK   MC15 F3 1 cards expand +16ms, card 0: title never overlaps controls (5.596198931336403, 5.596198931336403)
+  OK   MC15 F3 1 cards expand +50ms, card 0: title never overlaps controls (20.45815122127533, 20.45815122127533)
+  OK   MC15 F2 1 cards: real delayed collapse starts
+  OK   MC15 F3 1 cards collapse +50ms, card 0: title never overlaps controls (16.638866901397705, 16.638866901397705)
+  OK   MC15 F2 1 cards: pager/container retarget from their presentation values
+  OK   MC15 F2 1 cards: card/content retarget from their presentation values
+  OK   MC15 F2 title opacity retargets from visible opacity (0.7450155)
+  OK   MC15 F2 shadow retargets from the visible path
+  OK   MC15 F2 1 cards: interrupted collapse has no backward jump at +16ms (container 57.638866901397705 → 60.333289557046754)
+  OK   MC15 F3 1 cards interrupted +16ms, card 0: title never overlaps controls (19.333289557046754, 19.333289557046754)
+  OK   MC15 F1 drawer starts at its on-screen container position
+  OK   MC15 F3 1 cards drawer +16ms, card 0: title never overlaps controls (33.0, 33.91050568409264)
+  OK   MC15 F3 drawer +16ms, card 0: drawer never overlaps controls
+  OK   MC15 F4 mini-player plate radius is 5 continuous
+  OK   MC15 motion ends without idle animation keys or collapse work
+  OK   MC15 motion host is offscreen and non-key
+  OK   MC15 F1 3 cards: height animation starts at on-screen positions, including non-centered anchors
+  OK   MC15 F1 3 cards: pager stays at its on-screen x/y 16 ms after hover
+  OK   MC15 F3 3 cards expand +16ms, card 0: title never overlaps controls (5.307377904653549, 5.307377904653549)
+  OK   MC15 F3 3 cards expand +16ms, card 1: title never overlaps controls (5.307377904653549, 5.307377904653549)
+  OK   MC15 F3 3 cards expand +16ms, card 2: title never overlaps controls (5.307377904653549, 5.307377904653549)
+  OK   MC15 F3 3 cards expand +50ms, card 0: title never overlaps controls (20.427401840686798, 20.427401840686798)
+  OK   MC15 F3 3 cards expand +50ms, card 1: title never overlaps controls (20.427401840686798, 20.427401840686798)
+  OK   MC15 F3 3 cards expand +50ms, card 2: title never overlaps controls (20.427401840686798, 20.427401840686798)
+  OK   MC15 F2 3 cards: real delayed collapse starts
+  OK   MC15 F3 3 cards collapse +50ms, card 0: title never overlaps controls (14.329301834106445, 14.329301834106445)
+  OK   MC15 F3 3 cards collapse +50ms, card 1: title never overlaps controls (14.329301834106445, 14.329301834106445)
+  OK   MC15 F3 3 cards collapse +50ms, card 2: title never overlaps controls (14.329301834106445, 14.329301834106445)
+  OK   MC15 F2 3 cards: pager/container retarget from their presentation values
+  OK   MC15 F2 3 cards: card/content retarget from their presentation values
+  OK   MC15 F2 title opacity retargets from visible opacity (0.68082225)
+  OK   MC15 F2 shadow retargets from the visible path
+  OK   MC15 F2 3 cards: interrupted collapse has no backward jump at +16ms (container 124.90962409973145 → 140.58740372356348)
+  OK   MC15 F3 3 cards interrupted +16ms, card 0: title never overlaps controls (17.542759769426056, 17.542759769426056)
+  OK   MC15 F3 3 cards interrupted +16ms, card 1: title never overlaps controls (17.542759769426056, 17.542759769426056)
+  OK   MC15 F3 3 cards interrupted +16ms, card 2: title never overlaps controls (17.542759769426056, 17.542759769426056)
+  OK   MC15 F1 drawer starts at its on-screen container position
+  OK   MC15 F3 3 cards drawer +16ms, card 0: title never overlaps controls (33.0, 33.93099672719836)
+  OK   MC15 F3 drawer +16ms, card 0: drawer never overlaps controls
+  OK   MC15 F3 3 cards drawer +16ms, card 1: title never overlaps controls (33.0, 33.0)
+  OK   MC15 F3 3 cards drawer +16ms, card 2: title never overlaps controls (33.0, 33.0)
+  OK   MC15 F4 mini-player plate radius is 5 continuous
+  OK   MC15 motion ends without idle animation keys or collapse work
+
+checks: 49 passed, 0 failed

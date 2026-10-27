@@ -11,15 +11,20 @@ import OpenModel
     private var tracking: NSTrackingArea?
     private var collapseWork: DispatchWorkItem?
     private var collapseDelay: TimeInterval?
+    private var windowCloseObservation: NSObjectProtocol?
     private var byID: [ItemID: MiniPlayerCardView] = [:]
     private var retiring: [ObjectIdentifier: MiniPlayerCardView] = [:]
     private var ordered: [ItemID] = []
     private var holdingLastHeight: CGFloat = 0
+    private var pendingTransition = false
+    private var reducedCrossFadeAdded = false
+    private var lastLayoutWidth: CGFloat = 0
+    var hasPendingTransition: Bool { pendingTransition }
     private(set) var heightTransition = HeightTransition.structure
     public private(set) var isExpanded = false
     public private(set) var stackHeight: CGFloat = 0
     public var onUpdateHeight: (() -> Void)?
-    public var requiredHeight: CGFloat { stackHeight == 0 ? 0 : 2 * MiniPlayerMetrics.verticalInset + stackHeight }
+    public var requiredHeight: CGFloat { stackHeight == 0 ? 0 : MiniPlayerMetrics.gapAbove + stackHeight }
     public var cards: [MiniPlayerCardView] { ordered.compactMap { byID[$0] } }
     public var pendingCollapseCount: Int { collapseWork == nil ? 0 : 1 }
     /// Delay the pending collapse was scheduled with, nil when none is pending.
@@ -37,7 +42,7 @@ import OpenModel
         sync()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
-    isolated deinit { observation?.cancel(); collapseWork?.cancel() }
+    isolated deinit { observation?.cancel(); collapseWork?.cancel(); if let windowCloseObservation { NotificationCenter.default.removeObserver(windowCloseObservation) } }
     public override var isFlipped: Bool { true }
 
     private func sync() {
@@ -46,9 +51,10 @@ import OpenModel
         context.mediaDrawers.formIntersection(ids)
         let changed = ids != ordered || sources.contains { s in s.tabID.map { byID[$0]?.source !== s } ?? false }
         if changed {
+            pendingTransition = true
             let previous = byID
             if !ids.isEmpty { holdingLastHeight = 0 }
-            if ids.isEmpty && !ordered.isEmpty && animatesMediaChanges { holdingLastHeight = stackHeight }
+            if ids.isEmpty && !ordered.isEmpty && animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion { holdingLastHeight = stackHeight }
             for (id, card) in previous where !sources.contains(where: { $0.tabID == id && $0 === card.source }) {
                 context.mediaDrawers.remove(id)
                 byID.removeValue(forKey: id); retire(card)
@@ -58,9 +64,9 @@ import OpenModel
                 let card = MiniPlayerCardView(source: source, context: context)
                 card.onHeightChange = { [weak self] in self?.measure(.drawer) }
                 byID[id] = card; addSubview(card)
-                if animatesMediaChanges {
+                if animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion {
                     let a = CABasicAnimation(keyPath: "opacity"); a.fromValue = 0; a.toValue = 1
-                    a.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : Motion.miniPlayerReveal
+                    a.duration = Motion.miniPlayerReveal
                     a.beginTime = CACurrentMediaTime() + (wasEmpty ? Motion.miniPlayerAppearDelay : 0); a.fillMode = .backwards
                     card.layer?.add(a, forKey: "media.appear")
                 }
@@ -68,15 +74,16 @@ import OpenModel
             ordered = ids
             for id in ids.reversed() { if let card = byID[id] { addSubview(card, positioned: .above, relativeTo: nil) } }
         }
-        if context.forcedMediaHover != nil { collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil; isExpanded = ids.count > 1 }
-        else if ids.count < 2 { isExpanded = false; collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil }
+        if context.forcedMediaHover != nil { cancelCollapse(); isExpanded = !ids.isEmpty }
+        else if ids.isEmpty { isExpanded = false; cancelCollapse() }
         measure(changed && (wasEmpty || ids.isEmpty) ? .structure : .stack)
     }
     private func retire(_ card: MiniPlayerCardView) {
         card.isRetiring = true
         let identity = ObjectIdentifier(card)
-        guard animatesMediaChanges else { card.removeFromSuperview(); return }
+        guard animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion else { card.removeFromSuperview(); return }
         retiring[identity] = card
+        let start = MediaAnimationStart(layer: card.layer, frame: card.frame)
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self, weak card] in
             Task { @MainActor in
@@ -86,61 +93,80 @@ import OpenModel
                 if self.ordered.isEmpty && self.retiring.isEmpty { self.holdingLastHeight = 0; self.measure(.structure) }
             }
         }
-        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = card.layer?.presentation()?.opacity ?? 1; fade.toValue = 0
-        fade.duration = SidebarDiagnostics.mediaReducesMotion ? Motion.reducedMedia : Motion.miniPlayerDisappear
+        let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = start.opacity; fade.toValue = 0
+        fade.duration = Motion.miniPlayerDisappear
         card.layer?.opacity = 0; card.layer?.add(fade, forKey: "media.disappear")
         CATransaction.commit()
     }
     private func measure(_ transition: HeightTransition) {
         let current = cards
+        for (i, card) in current.enumerated() {
+            if card.configure(expanded: isExpanded, level: i) { pendingTransition = true }
+        }
         let height: CGFloat
         if current.isEmpty { height = holdingLastHeight }
         else if isExpanded { height = current.reduce(0) { $0 + $1.cardHeight } + CGFloat(current.count - 1) * MiniPlayerMetrics.expandedGap }
         else { height = (current.first?.cardHeight ?? 0) + CGFloat(current.count - 1) * MiniPlayerMetrics.stackOffset }
-        if height != stackHeight { heightTransition = transition; stackHeight = height; onUpdateHeight?() }
+        if height != stackHeight { pendingTransition = true; heightTransition = transition; stackHeight = height; onUpdateHeight?() }
         needsLayout = true
+    }
+    /// One cross-fade owns the whole subtree, including source changes at the same height.
+    func crossFadeReducedTransition() {
+        guard pendingTransition, !reducedCrossFadeAdded else { return }
+        let fade = CATransition(); fade.type = .fade; fade.duration = Motion.reducedMedia
+        layer?.add(fade, forKey: "media.reducedHeight")
+        reducedCrossFadeAdded = true
     }
     public override func layout() {
         super.layout()
+        let widthChanged = lastLayoutWidth > 0 && lastLayoutWidth != bounds.width
+        lastLayoutWidth = bounds.width
+        if widthChanged { removeMediaAnimations(layer) }
+        let animate = pendingTransition && animatesMediaChanges && !widthChanged
+        if animate && SidebarDiagnostics.mediaReducesMotion { crossFadeReducedTransition() }
+        pendingTransition = false; reducedCrossFadeAdded = false
         let current = cards, m = MiniPlayerMetrics.self
-        var expandedY = m.verticalInset
-        for (i, card) in current.enumerated().reversed() {
-            let inset = m.inset + (isExpanded ? 0 : CGFloat(i) * m.stackWidthOffset)
-            let y = isExpanded ? expandedY : m.verticalInset + CGFloat(current.count - 1 - i) * m.stackOffset
+        var accumulated: CGFloat = 0
+        for (i, card) in current.enumerated() {
+            accumulated += card.cardHeight
+            let inset = m.inset + (isExpanded ? 0 : CGFloat(i) * m.stackInset)
+            let y = isExpanded ? requiredHeight - accumulated - CGFloat(i) * m.expandedGap
+                               : requiredHeight - m.rowHeight - CGFloat(i) * m.stackOffset
             let target = CGRect(x: inset, y: y, width: max(0, bounds.width - 2 * inset), height: card.cardHeight)
-            let previous = card.frame, opacity = isExpanded ? Float(1) : 1 - Float(i) * m.stackOpacity
+            let previous = card.frame, oldOpacity = card.alphaValue
+            let start = MediaAnimationStart(layer: card.layer, frame: previous)
+            let opacity = isExpanded ? CGFloat(1) : 1 - CGFloat(i) * m.stackOpacityStep
+            card.animatesNextLayout = animate
             CATransaction.begin(); CATransaction.setDisableActions(true)
-            card.frame = target; card.alphaValue = CGFloat(opacity)
-            if !isExpanded && i > 0 {
-                let mask = card.layer?.mask as? CAShapeLayer ?? CAShapeLayer()
-                mask.frame = card.bounds
-                mask.path = CGPath(rect: CGRect(x: 0, y: 0, width: target.width, height: m.stackOffset), transform: nil)
-                card.layer?.mask = mask
-            } else { card.layer?.mask = nil }
-            card.showsStackEdge = !isExpanded && i > 0
-            card.marquee.isExposed = isExpanded || i == 0
+            card.frame = target; card.alphaValue = opacity
             CATransaction.commit()
-            if previous != .zero && previous != target && animatesMediaChanges && !SidebarDiagnostics.mediaReducesMotion {
-                let position = Motion.miniPlayerStack.animation(keyPath: "position")
-                position.fromValue = CGPoint(x: previous.midX, y: previous.midY); position.toValue = CGPoint(x: target.midX, y: target.midY)
-                let size = Motion.miniPlayerStack.animation(keyPath: "bounds.size")
-                size.fromValue = previous.size; size.toValue = target.size
-                card.layer?.add(position, forKey: "media.stackPosition"); card.layer?.add(size, forKey: "media.stackSize")
+            if previous != .zero && previous != target {
+                animateMediaFrame(card.layer, from: start, to: target, enabled: animate, drawer: heightTransition == .drawer)
             }
-            expandedY += card.cardHeight + m.expandedGap
+            if oldOpacity != opacity && animate && !SidebarDiagnostics.mediaReducesMotion {
+                let fade = Motion.miniPlayerStack.animation(keyPath: "opacity")
+                fade.fromValue = start.opacity; fade.toValue = opacity
+                card.layer?.add(fade, forKey: "media.stackOpacity")
+            }
         }
+        updateTrackingAreas()
+    }
+    public var hoverRect: CGRect {
+        CGRect(x: MiniPlayerMetrics.inset, y: MiniPlayerMetrics.gapAbove,
+               width: max(0, bounds.width - 2 * MiniPlayerMetrics.inset), height: stackHeight)
     }
     public override func updateTrackingAreas() {
         super.updateTrackingAreas(); if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
+        let area = NSTrackingArea(rect: hoverRect, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: self)
         addTrackingArea(area); tracking = area
     }
+    private func cancelCollapse() { collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil }
     public override func mouseEntered(with event: NSEvent) {
-        collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil
-        if ordered.count > 1 { isExpanded = true; measure(.stack) }
+        cancelCollapse()
+        if !ordered.isEmpty { isExpanded = true; measure(.stack) }
     }
     public override func mouseExited(with event: NSEvent) {
-        collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil
+        cancelCollapse()
         guard isExpanded, context.forcedMediaHover == nil else { return }
         let delay = MiniPlayerMetrics.collapseDelay
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
@@ -150,10 +176,21 @@ import OpenModel
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
     public override func viewDidHide() {
-        super.viewDidHide(); collapseWork?.cancel(); collapseWork = nil; collapseDelay = nil
-        for card in cards { card.marquee.refreshAnimation() }
+        super.viewDidHide(); cancelCollapse()
+        if isExpanded && context.forcedMediaHover == nil { isExpanded = false; measure(.stack) }
+        pendingTransition = false; reducedCrossFadeAdded = false
+        for card in cards { card.animatesNextLayout = false }
+        removeMediaAnimations(layer)
     }
-    public override func viewDidUnhide() { super.viewDidUnhide(); for card in cards { card.marquee.refreshAnimation() } }
+    public override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if let windowCloseObservation { NotificationCenter.default.removeObserver(windowCloseObservation); self.windowCloseObservation = nil }
+        if newWindow == nil { cancelCollapse() }
+        else { windowCloseObservation = NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: newWindow, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.cancelCollapse() }
+        } }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
 }
 
 extension NSView {

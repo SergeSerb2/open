@@ -66,7 +66,7 @@ public enum Typography {
 
 extension Typography {
     /// Media plan §4: provisional until captures; system SF Pro, no copied fonts.
-    public static let miniPlayerTitle = FontToken(13, .medium)
+    public static let miniPlayerTitle = FontToken(13, .regular)
     public static let pipPill = FontToken(12, .semibold)
     public static let pipPrecision = FontToken(11, .medium)
     public static let documentPiPHost = FontToken(12, .medium)

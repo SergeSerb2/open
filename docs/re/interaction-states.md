@@ -544,7 +544,7 @@ The section is 63 pt for one row and 118 pt for two. Counts 6 and 7 were not rea
 | Today tab menu | Visible items: Copy Link · Share ▸ · — · Change Icon… · Rename… · Mute (disabled) · Customize Page… · — · Open in Split View · Duplicate · Move to ▸ (each Space · — · New Space…) · — · Archive Tab · Archive Tabs Below. The menu ends with these two normal items (the lane S design reviewer saw the same). AX also lists **Archive Other Tabs** and **Archive Tabs Above**, each on the frame of the item before it, so they are the hidden ⌥ alternates of Archive Tab and Archive Tabs Below. ⌥ was not held in this capture, so the swap is derived from AX, not seen. The menu draws as a dark translucent menu. | S2 07/0255 (image and AX), 0260 |
 | Today tab menu, other variant | "Add Split View" instead of "Open in Split View", and "Archive Tabs Above" disabled. guess: right-click on the selected tab, at the top of Today. | S2 07/0242 |
 | Split row in Today, not selected | The same two cells as the selected split row (§7): icons x 17 / 121, titles x 45 / 149, 64 wide. | S2 08/0100 AX |
-| Folder hover preview | Did not appear for the synthetic pointer (5 s on the row, with Previews ▸ Arc Folders on). Not captured. | notes 10:23:34; V 56–61 s (no change) |
+| Folder hover preview | Item 8: did not appear for the synthetic pointer (5 s on the row, with Previews ▸ Arc Folders on). The video caught it once (added 2026-10-26, PR #108 review r1; positions only, colors are not read from the video): on the **peeked** (collapsed) folder the row gets its hover state (fill and "—") at V 45.69 s; the card fades in from V 46.11 to 46.19 s and fades out from V 46.36 to 46.46 s, when the click arrives. Card ≈ `[232, 163, 240, 191]` (4 pt right of the 228 sidebar; its center y 258.5 matches the row center 259). It has a "Search \<folder title\>…" field with a magnifier and a caret (≈ 48 pt band and a separator), then rows ≈ 45 pt apart, each with a favicon, a title, and "N minutes ago"; the first row has a highlight plate. Hover-to-card ≈ 0.42 s (one sample, synthetic pointer). During a 3 s hover on the **expanded** folder (V 56–61 s) no card appeared (guess: expanded folders get none). | notes 10:23:34; V 45.69, 46.11–46.46 s; V 56–61 s (no card) |
 
 ### 20.5 Site Control Center (items 9 and 11)
 
@@ -668,8 +668,9 @@ All times are from `21-motion.mov` (§20.0). A duration runs from the last frame
 | Folder collapse | 2 (V 46.49 peeking child, 52.19 s) | Rows move up 123 pt (41 pt for the peeking child) in ≈ 0.24 s. | CA default curve 0.245–0.25 s; spring R 0.27 s, ζ 0.9 |
 | Copy URL toast | 1 (V 69.99 s) | Grows from a small pill at the top center of its final place, moving down while it grows, in ≈ 0.20 s, then settles until ≈ 0.46 s; visible ≈ 4.95 s; shrinks back up in ≈ 0.16 s (V 74.95–75.11 s). | — |
 | Theme editor popover | 1 (V 79.06 s open, 80.74 s close) | Scales up from the sidebar side with a fade in ≈ 0.20 s, a 1–2 % overshoot at the top edge, settled by ≈ 0.25 s; closes the same way in ≈ 0.19 s. | — |
+| Folder hover card | 1 (V 46.11 s in, 46.36 s out; added 2026-10-26, review r1) | The peeked folder row shows its hover state at V 45.69 s; the card fades in over ≈ 0.08 s (V 46.11–46.19 s) and fades out over ≈ 0.10 s (V 46.36–46.46 s, when the click arrives). Hover-to-card ≈ 0.42 s, one sample, synthetic pointer. No scale is visible at the video rate. Layout in §20.4. | — |
 | URL field buttons | 1 (V 65.48 s) | The copy and Site Control buttons fade out over ≈ 0.07–0.09 s when the pointer leaves the sidebar. | — |
-| Not captured | | Peek (the Shift-click hid and showed the sidebar instead, V 82.85, 83.38 s), the tooltip delay (the pointer missed Reload, V 65.5 s), the folder hover preview (no preview, V 57–60 s), the dwell and exit delays (unknown click lag). | |
+| Not captured | | Peek (the Shift-click hid and showed the sidebar instead, V 82.85, 83.38 s), the tooltip delay (the pointer missed Reload, V 65.5 s), the folder hover card's colors (its positions and timing are in §20.4: V 45.69–46.46 s; no card for the expanded folder at V 57–60 s), the dwell and exit delays (unknown click lag). | |
 
 Cross-check: PR #104's agent measured the same video independently: Cmd+S hide and show ≈ 0.1 s, the show starting ≈ 0.29 s after the key; the card in over ≈ 0.14 s with a 3 pt overshoot (spring response 0.164 s, damping 0.86); no Cmd+T animation; folder expand and collapse 0.20–0.24 s (≈ 0.22 s). The values in the table above agree within one video frame.
 
@@ -689,7 +690,7 @@ Single clicks (Space switch, folder) start 0.71–0.78 s after their notes, so c
 
 - Item 15 (back-to-PiP) and what closing a mini player does to playback.
 - Item 22, the auto-archive banner: Arc's "Archive tabs after" options are 12 hours, 24 hours, 7 days, and 30 days, so it could not be triggered within the session.
-- The folder hover-preview card: it did not appear for synthetic pointer events.
+- The folder hover-preview card's colors, radius, and type: the card appeared once in the video (V 46.11–46.46 s, positions only, §20.4), not in any still frame.
 - PiP hover controls and the PiP menu: they did not respond to synthetic events.
 - The microphone and recording states (skipped: no live microphone).
 - The Boost code editor body (it showed "Internal debugging pages are currently disabled").
