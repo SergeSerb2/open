@@ -6,6 +6,7 @@ import OpenModel
 import OpenStore
 import OpenEngine
 import OpenAdBlock
+import OpenSidebar
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -36,7 +37,7 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     if library == nil {
       let vm = LibraryViewModel(model: app.model, defaults: .standard, actions: self,
         downloads: self, captures: captures, archives: archives, histories: histories,
-        snapshot: app.snapshotStore, faviconStore: app.stores.favicons)
+        snapshot: app.snapshotStore, faviconStore: app.stores.favicons, settingsActions: self)
       library = vm; libraryPresenter = LibraryPresenter(viewModel: vm)
     }
     library?.registerStores(archives: archives, histories: histories)
@@ -44,6 +45,39 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   }
   func prepareForRemoteSuggestions(profileID: ProfileID) -> Bool { settingsPresenter.prepareForRemoteSuggestions(profileID: profileID) }
   func refreshDownloads() { downloadRevision += 1 }
+  @ObservationIgnored private var spaceManager: SpaceManagerView?
+  /// No persistent preference writes: this context never arms hover previews.
+  @ObservationIgnored private lazy var managerPreferences: UserDefaults = {
+    SpaceManagerPreferences(suiteName: "Open.SpaceManager.\(UUID().uuidString)")!
+  }()
+  func makeSpaceManagerView() -> NSView? {
+    // Closing the last browser retains its model window for normal reopen.
+    // Prefer a live browser, then that existing state; never create a window here.
+    let id = app.frontWindowController?.windowID ?? app.model.windows.first?.id
+    guard let id, app.model.windows.contains(where: { $0.id == id }) else { spaceManager = nil; return nil }
+    if let spaceManager, spaceManager.context.windowID == id { return spaceManager }
+    let context = SidebarContext(model: app.model, windowID: id, previewPreferences: managerPreferences)
+    context.systemAppearance = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .dark : .light
+    let manager = SpaceManagerView(context: context)
+    manager.onIntent = { [weak self, weak context] intent in
+      guard let self, let context, self.app.model.windows.contains(where: { $0.id == context.windowID }) else { return false }
+      if case .hoverPreview = intent { return true }
+      switch intent {
+      case .select, .selectFavorite, .switchSpace:
+        // Model selection alone leaves a restored/sleeping tab's placeholder.
+        // Use the existing App path to wake/show it in this live browser.
+        guard let factory = self.app.hostFactories[context.windowID] else { return false }
+        return factory.performSidebar(intent) ?? false
+      default: break
+      }
+      let accepted = ModelSidebarActions(context: context).perform(intent)
+      if accepted { self.app.scheduleSave(); self.app.scheduleMenuRebuild() }
+      return accepted
+    }
+    spaceManager = manager
+    return manager
+  }
+  func refreshSpaceManagerContext() { library?.refreshSpaceManagerView() }
   var downloads: [DownloadItemSnapshot] {
     _ = downloadRevision
     return OEEngine.shared.contexts.flatMap { context in
@@ -148,5 +182,18 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
   func viewSpace(id: SpaceID) {
     guard let controller = app.frontWindowController ?? app.makeWindow(focusedSpaceID: id), let space = app.model.space(id: id), let factory = app.hostFactories[controller.windowID] else { return }
     app.focusWindow(controller.windowID, activate: true); factory.focus(space: space)
+  }
+}
+
+/// A read-only in-memory override. NSArgumentDomain is process-shared, so
+/// mutating it on a suite would also disable previews in browser sidebars.
+private final class SpaceManagerPreferences: UserDefaults, @unchecked Sendable {
+  override func object(forKey defaultName: String) -> Any? {
+    if defaultName == "open.general.previewsEnabled" { return false }
+    return super.object(forKey: defaultName)
+  }
+  override func bool(forKey defaultName: String) -> Bool {
+    if defaultName == "open.general.previewsEnabled" { return false }
+    return super.bool(forKey: defaultName)
   }
 }

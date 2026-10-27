@@ -338,3 +338,49 @@ ordering check queues actual Save/background work with the automation-only
 `OPEN_AUTOMATION_ASYNC_TASK_DELAY_MS` scheduling delay, then quits. Cancellation
 must clear work and close hosts before the actual engine shutdown boundary. The
 flag delays scheduling; it does not replace engine responses.
+
+## Library Space Manager (App lane 1b)
+
+The `sidebar-completion` suite currently covers E5/E6 (menu, App command,
+Space-header menu, and command bar search plus Return), plus the manager's
+undo, archive/restore, window replacement, and no-browser reopen flows. It uses the
+real built App, real model/stores, native menus, and native mouse/key events.
+It creates a temporary copy of **Open's own** bundle with a unique bundle ID
+and re-signs that copy locally. This gives every run a separate preferences
+domain, data root, engine cache, and socket. It uses synthetic data URLs and
+no remote debugging port. It never opens or copies Arc.
+
+| Command | Arguments and result |
+|---|---|
+| `library-open` | `entry=command` (default) dispatches App `manage-spaces`; `entry=space-menu` performs the existing Space-header menu's “Manage Spaces…” item. Both use the shared Library presenter on `.spaces`. For the app menu, use existing `menu-perform id=manage-spaces`. Returns manager state. |
+| `space-manager-state` | Reads the **attached** native manager, its class/identity/context ID, model and undo identity, isolated/global preview flags, columns, grabber points, up to 200 visible-outline rows per column, browser switcher order from real view positions, real model UndoManager notification count, and this App's window records. Points use the existing `mouse` command's window coordinates. Available after the last browser closes. |
+| `space-manager-drag` | `space=<ID> to=<zero-based index>` drags the real visible grabber through `OEApplication.sendEvent`; the native tracking loop dequeues the drag/up events. Rejects invalid IDs/indices and offscreen grabbers. Returns manager state. |
+| `space-manager-menu` | `space=<ID> item=<title>` performs the existing manager column menu. Add `node=<ID>` to perform that real outline row's context-menu item instead. No new confirmation policy or model implementation. |
+| `library-close` | Closes the shared Library window, cancelling any attached sheet first. Reports `closed` and the sheet window numbers it cancelled. Available with no browser window. |
+
+Use existing `key route=app window=<Library number>` for Cmd+Z and other
+Library keys. Undo uses AppKit's nil-target Edit menu action and the Library
+window's real model UndoManager. It has no second key handler.
+Use existing `library-restore` for archive restore and `snapshot window=<number>`
+for full-resolution real-window captures.
+
+On M1, hold the outer validation lock once per job, plus the on-screen lock
+for one suite invocation:
+
+```sh
+/usr/bin/lockf /tmp/open-m1-validation.lock /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only sidebar-completion
+```
+
+The suite saves rest/hover PNGs, its App log, and `cleanup.json` in
+`.re/space-manager/run-<unique ID>/`. C2/session2 manager references are not
+available on M1. Supplied Settings/folder session2 frames do not contain this
+manager page. These are capture-ready artifacts, without a claimed pixel
+comparison. The M5 lead owns capture comparison and design review.
+
+Every exit cancels opened sheets, closes Library/browser windows, terminates
+only processes whose executable is inside this suite's copied bundle, and
+checks the system's on-screen window metadata for those PIDs. A dialog left
+at cleanup makes the suite fail, even if it was cancelled during cleanup.
+`OPEN_SPACE_MANAGER_EARLY_FAILURE=1` forces an assertion immediately after the
+real Library opens; the suite must fail and still write a passing cleanup
+receipt. Remove that environment variable for the passing flow.

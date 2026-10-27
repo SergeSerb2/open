@@ -216,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     activeWindowID = id
     for (otherID, factory) in hostFactories where otherID != id { factory.commandBarSession?.dismiss() }
     MainMenu.targetWindowCommands(hostFactories[id])
+    settingsPresenter.refreshSpaceManagerContext()
   }
 
   func windowDidClose(_ id: WindowID) {
@@ -226,6 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     if activeWindowID == id { activeWindowID = windowControllers.last?.windowID }
     MainMenu.targetWindowCommands(frontWindowController.flatMap { hostFactories[$0.windowID] })
     scheduleSave()
+    settingsPresenter.refreshSpaceManagerContext()
   }
 
   static func makeDefaultModel() -> BrowserModel {
@@ -430,6 +432,7 @@ extension AppDelegate: CommandDispatcher {
     scheduleMenuRebuild()
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+    if id == "manage-spaces" { return true }
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
     return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
@@ -455,6 +458,7 @@ extension AppDelegate: CommandDispatcher {
     case "view-boosts": settingsPresenter.show(); settingsPresenter.settings.statusText = "Boost editing is not available in this build."
     case "keyboard-shortcuts-edu": settingsPresenter.show(pane: .shortcuts)
     case "archive-tab": NSApp.keyWindow?.performClose(nil)
+    case "manage-spaces": settingsPresenter.showLibrary(section: .spaces)
     case "new-little-open-window", "little-open-global": showLittleOpenStub()
     case "help-center", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team":
       let controller = frontWindowController ?? makeWindow()

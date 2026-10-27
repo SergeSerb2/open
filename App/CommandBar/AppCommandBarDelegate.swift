@@ -90,7 +90,8 @@ final class AppCommandBarSession: CommandBarDelegate {
       factory.navigateFromCommandBar(url, current: destination == .currentTab, background: modifiers.contains(.command))
     case .switchToTab(let id, let space): factory.selectTabForCommand(id, spaceID: space)
     case .runAction(let id, let space):
-      factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description)
+      if AppCommand.canonicalID(id) == "manage-spaces" { factory.app.settingsPresenter.showLibrary(section: .spaces) }
+      else { factory.controller?.performCommand(AppCommand.canonicalID(id), payload: space?.description) }
     case .copy(let value):
       NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
       factory.controller?.showToast("Copied", undo: nil)

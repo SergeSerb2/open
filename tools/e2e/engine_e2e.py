@@ -173,6 +173,7 @@ class Open:
 
     def call(self, cmd, timeout=120, **args):
         foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
+        if cmd == "space-manager-drag": foreground_input = True
         if foreground_input and self.pid and not self.call("window-state").get("appActive", False):
             # `NSApp.activate()` is a request, not a grant. Renew the explicit
             # foreground request if another app took focus. Address the exact
@@ -3757,6 +3758,281 @@ def sweep_stale_runs():
             shutil.rmtree(folder, ignore_errors=True)
 
 
+def space_manager_owned_processes(bundle):
+    """Read executable identity, never match or terminate another Open build."""
+    libproc = ctypes.CDLL('/usr/lib/libproc.dylib')
+    rows = subprocess.check_output(['ps', '-axo', 'pid='], text=True).split()
+    owned = []
+    for raw in rows:
+        path = ctypes.create_string_buffer(4096)
+        pid = int(raw)
+        if libproc.proc_pidpath(pid, path, len(path)) > 0:
+            executable = os.path.realpath(os.fsdecode(path.value))
+            if executable.startswith(os.path.realpath(bundle) + os.sep):
+                owned.append(pid)
+    return owned
+
+
+def space_manager_owned_windows(pids):
+    """Read on-screen metadata and retain only this suite's window records."""
+    import plistlib
+    cg = ctypes.CDLL('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+    cf = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+    cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
+    cg.CGWindowListCopyWindowInfo.restype = ctypes.c_void_p
+    cf.CFPropertyListCreateData.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, ctypes.c_ulong, ctypes.c_void_p]
+    cf.CFPropertyListCreateData.restype = ctypes.c_void_p
+    cf.CFDataGetLength.argtypes = [ctypes.c_void_p]
+    cf.CFDataGetLength.restype = ctypes.c_long
+    cf.CFDataGetBytePtr.argtypes = [ctypes.c_void_p]
+    cf.CFDataGetBytePtr.restype = ctypes.c_void_p
+    cf.CFRelease.argtypes = [ctypes.c_void_p]
+    info = cg.CGWindowListCopyWindowInfo(1 | 16, 0)
+    if not info:
+        raise RuntimeError('on-screen window metadata unavailable')
+    data = None
+    try:
+        data = cf.CFPropertyListCreateData(None, info, 100, 0, None)
+        if not data:
+            raise RuntimeError('on-screen window metadata could not be decoded')
+        rows = plistlib.loads(ctypes.string_at(cf.CFDataGetBytePtr(data), cf.CFDataGetLength(data)))
+        return [{'pid': row['kCGWindowOwnerPID'], 'number': row['kCGWindowNumber']}
+                for row in rows if row.get('kCGWindowOwnerPID') in pids]
+    finally:
+        if data: cf.CFRelease(data)
+        cf.CFRelease(info)
+
+
+def space_manager_checks(results, tmp, config, style):
+    """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
+    import plistlib
+    token = '%d-%s' % (os.getpid(), os.urandom(4).hex())
+    suite_config = 'SpaceManager-' + token
+    bundle_dir = os.path.join(ROOT, 'build', suite_config)
+    bundle = os.path.join(bundle_dir, 'Open.app')
+    bundle_id = 'io.github.sergeserb2.open.e2e.spacemanager.' + token
+    run_name = 'Open-E2E-spacemanager-%s-%s' % (style, token)
+    root = os.path.expanduser('~/Library/Application Support/' + run_name)
+    cache = os.path.expanduser('~/Library/Caches/' + run_name)
+    evidence = os.path.join(ROOT, '.re', 'space-manager', 'run-' + token)
+    os.makedirs(evidence, exist_ok=True)
+    apps, owned_pids = [], set()
+    tracker = results.tracker
+
+    def launch(urls=()):
+        app = Open(suite_config, style, root, ['--use-mock-keychain'], os.path.join(evidence, 'app.log'), urls=urls)
+        app.focus_tracker = tracker
+        tracker.apps.append(app); apps.append(app); owned_pids.add(app.pid)
+        return app
+
+    def require(name, condition, **detail):
+        results[name] = dict(detail, ok=bool(condition))
+        if not condition: raise AssertionError(name)
+
+    def state(app):
+        return app.call('space-manager-state')
+
+    def order(app):
+        return [row['id'] for row in app.call('spaces')]
+
+    def manager_ready(app):
+        return wait_until(lambda: (lambda s: s if s['visible'] and s['hostedManagers'] == 1 else None)(state(app)), timeout=5)
+
+    def library_key(app, key, modifiers=()):
+        return app.call('key', key=key, modifiers=list(modifiers), route='app', window=state(app)['window'])
+
+    def capture(app, name):
+        path = os.path.join(evidence, name + '.png')
+        app.call('snapshot', path=path, window=state(app)['window'])
+        return path
+
+    try:
+        # A clone of our own built app gives CFPreferences a unique, disposable
+        # domain. Frameworks and engine are the recorded distribution, unchanged.
+        os.makedirs(bundle_dir)
+        subprocess.run(['cp', '-cR', os.path.join(ROOT, 'build', config, 'Open.app'), bundle], check=True)
+        info_path = os.path.join(bundle, 'Contents', 'Info.plist')
+        with open(info_path, 'rb') as stream: info = plistlib.load(stream)
+        info['CFBundleIdentifier'] = bundle_id
+        with open(info_path, 'wb') as stream: plistlib.dump(info, stream)
+        subprocess.run(['codesign', '--force', '--sign', '-', bundle], check=True, capture_output=True)
+        app = launch((fixture('Manager One'),))
+        first_window = app.call('shell-windows')[0]['id']
+        s1 = order(app)[0]
+        s2 = app.call('space-create', title='Manager Two')
+        s3 = app.call('space-create', title='Manager Three')
+        app.call('space', space=s1)
+        original = [s1, s2, s3]
+        app.call('menu-perform', id='manage-spaces')
+        ready = manager_ready(app)
+        rest = capture(app, 'manager-rest')
+        require('E5_menu_real_manager', ready and ready['section'] == 'spaces' and ready['managerClass'] == 'OpenSidebar.SpaceManagerView'
+                and ready['sameModel'] and ready['sameUndoManager'] and not ready['previewsEnabled'] and ready['globalPreviewsEnabled'],
+                state=state(app), png=rest, preferenceDomain=bundle_id)
+        if os.environ.get('OPEN_SPACE_MANAGER_EARLY_FAILURE') == '1':
+            raise AssertionError('deliberate early failure with Library open')
+        library = ready['window']
+        app.call('library-close')
+        command = app.call('library-open', entry='command')
+        app.call('library-close')
+        app.call('window-focus', id=first_window, activate=True)
+        header = app.call('library-open', entry='space-menu')
+        require('E5_all_entries_one_library', command['window'] == library == header['window'] and header['hostedManagers'] == 1
+                and header['section'] == 'spaces' and header['identity'] == command['identity'], command=command, header=header)
+        app.call('library-close')
+        app.call('window-focus', id=first_window, activate=True)
+        app.call('suggest-remote', enabled=False)
+        app.call('key', key='t', modifiers=['cmd'], route='app')
+        bar_open = wait_until(lambda: app.call('commandbar-state').get('presented'), timeout=5)
+        require('commandbar_opens_for_manager', bar_open, state=app.call('commandbar-state'))
+        app.call('key', text='Manage Spaces')
+        bar_results = wait_until(lambda: (lambda s: s if s.get('text') == 'Manage Spaces' and s.get('final') else None)(app.call('commandbar-state')), timeout=5)
+        require('commandbar_finds_manager', bar_results and any(r.get('action') == 'manage-spaces' for r in bar_results.get('rows', [])), state=bar_results)
+        app.call('key', key='return', route='app')
+        from_bar = manager_ready(app)
+        require('E5_commandbar_return_library', from_bar and from_bar['window'] == library and from_bar['section'] == 'spaces'
+                and not app.call('commandbar-state').get('presented'), state=from_bar)
+        point = header['columns'][0]['rows'][0]['point']
+        app.call('mouse', action='hover', window=library, x=point[0], y=point[1])
+        hovered = capture(app, 'manager-hovered')
+        results['manager_captures'] = {'rest': rest, 'hovered': hovered,
+            'comparison': 'C2/session2 manager references absent on M1; no pixel comparison claimed'}
+        refused = []
+        for invalid in (-1, len(original)):
+            try: app.call('space-manager-drag', space=s1, to=invalid)
+            except RuntimeError as error:
+                if 'invalid Space reorder' not in str(error): raise
+                refused.append(invalid)
+        require('manager_refuses_invalid_reorder', refused == [-1, len(original)] and order(app) == original, refused=refused)
+        app.call('space-manager-drag', space=s1, to=2)
+        reordered = [s2, s3, s1]
+        drag = state(app)
+        require('E6_native_drag_and_switcher', order(app) == reordered and [c['id'] for c in drag['columns']] == reordered
+                and all(w['order'] == reordered for w in drag['switchers']), state=drag, expected=reordered,
+                eventPath='OEApplication.sendEvent -> native SpaceGrabber.mouseDown -> tracking loop')
+        # Count real UndoManager notifications as well as the resulting order.
+        undo_before = state(app)['modelUndoCount']
+        undo = library_key(app, 'z', ['cmd'])
+        require('library_cmd_z_exactly_once', order(app) == original and state(app)['sameUndoManager'] and state(app)['modelUndoCount'] == undo_before + 1, order=order(app), key=undo, undoBefore=undo_before, undoAfter=state(app)['modelUndoCount'])
+        app.call('space-manager-drag', space=s1, to=2)
+        app.call('window-focus', id=first_window, activate=True)
+        app.call('menu-perform', id='reveal-tab-in-sidebar')
+        undo_before = state(app)['modelUndoCount']
+        browser_undo = app.call('key', key='z', modifiers=['cmd'], route='app')
+        require('browser_cmd_z_exactly_once', order(app) == original and state(app)['modelUndoCount'] == undo_before + 1, order=order(app), key=browser_undo, undoBefore=undo_before, undoAfter=state(app)['modelUndoCount'])
+        app.call('library-open')
+        app.call('space-manager-drag', space=s1, to=2)
+        snapshot_path = app.call('save')
+        with open(snapshot_path) as stream: saved = json.load(stream)
+        app.call('library-close'); app.quit()
+        app = launch()
+        app.call('library-open'); reopened = manager_ready(app)
+        require('E6_relaunch_preserves_ids', order(app) == reordered and [row['id'] for row in saved['spaces']] == reordered
+                and reopened and [c['id'] for c in reopened['columns']] == reordered, expected=reordered, state=state(app))
+        # The manager's real tab menu archives into the App's existing store.
+        app.call('space', space=s2)
+        archived_tab = app.call('open', url=fixture('Manager Archive Original ID'))
+        tab, archive_url = archived_tab['id'], archived_tab['url']
+        app.call('wait', tab=tab)
+        app.call('library-open')
+        app.call('space-manager-menu', space=s2, node=tab, item='Archive Tab')
+        app.call('menu-perform', id='view-archive')
+        archived = wait_until(lambda: any(row['id'] == tab for row in app.call('settings-state')['archive']), timeout=5)
+        require('manager_archive_real_store', archived and all(row['id'] != tab for row in app.call('tabs')), tab=tab)
+        app.call('library-restore', id=tab)
+        require('manager_archive_restore_original_id', app.tab(tab)['id'] == tab and app.tab(tab)['url'] == archive_url, tab=tab)
+        app.call('library-open')
+        # Delete/undo the Space through its real manager controls, preserving
+        # both the Space and its archived tab's original identity.
+        app.call('space-manager-menu', space=s2, item='Delete')
+        require('manager_delete_space', s2 not in order(app), order=order(app))
+        library_key(app, 'z', ['cmd'])
+        require('manager_delete_space_undo_ids', order(app) == reordered and app.tab(tab)['id'] == tab, order=order(app), tab=tab)
+        # One presenter follows B, then A, then B after A closes.
+        original_window = app.call('shell-windows')[0]['id']
+        app.call('window-focus', id=original_window, activate=True)
+        app.call('menu-perform', id='new-window')
+        second = next(row['id'] for row in app.call('shell-windows') if row['id'] != original_window)
+        app.call('window-focus', id=second, activate=True)
+        app.call('library-open'); second_manager = manager_ready(app)
+        app.call('window-focus', id=original_window, activate=True)
+        app.call('library-open'); first_manager = manager_ready(app)
+        require('manager_rebind_second_and_first', second_manager['contextWindow'] == second and first_manager['contextWindow'] == original_window
+                and second_manager['identity'] != first_manager['identity'] and second_manager['window'] == first_manager['window'],
+                first=first_manager, second=second_manager)
+        app.call('window-focus', id=original_window, activate=True)
+        app.call('window-close')
+        app.call('library-open'); surviving = manager_ready(app)
+        require('closed_presenter_rebinds_live_window', surviving['contextWindow'] == second and surviving['contextValid']
+                and len(app.call('shell-windows')) == 1, state=surviving)
+        # A real manager row click must select in B, not A's removed state.
+        app.call('window-focus', id=second, activate=True)
+        app.call('space', space=s2)
+        other = app.call('open', url=fixture('Surviving Browser Selection'))['id']
+        app.call('wait', tab=other)
+        app.call('library-open'); rebound = manager_ready(app)
+        row = next(row for col in rebound['columns'] if col['id'] == s2 for row in col['rows'] if row['id'] == tab)
+        app.call('mouse', action='click', window=rebound['window'], x=row['point'][0], y=row['point'][1])
+        selected = state_when(app, lambda s: s['id'] == second and s['selected'] == tab and s['shownPages'] == [tab])
+        require('rebound_manager_intents', selected and state(app)['contextWindow'] == second, browser=selected, actualBrowser=app.call('window-state', id=second), manager=state(app), point=row['point'], tab=tab, png=capture(app, 'manager-rebound-click'))
+        app.call('library-close')
+        app.call('window-focus', id=second, activate=True); app.call('window-close')
+        require('no_browser_window', app.call('shell-windows') == [])
+        no_browser = app.call('library-open')
+        no_browser = manager_ready(app)
+        require('no_browser_reuses_retained_model_window', no_browser and no_browser['contextValid'] and no_browser['sameModel']
+                and no_browser['contextWindow'] == second and app.call('shell-windows') == [], state=state(app))
+        app.call('window-reopen'); app.call('library-open'); recovered = manager_ready(app)
+        require('last_window_reopen_recovers', len(app.call('shell-windows')) == 1 and recovered['contextWindow'] == app.call('shell-windows')[0]['id']
+                and recovered['contextValid'], state=recovered)
+        # Native nil-target undo stays menu-owned. Other context keys exercise
+        # the same OEApplication path and leave no panels or command bar open.
+        library_key(app, 'l', ['cmd']); library_key(app, 'escape'); library_key(app, 'return')
+        library_key(app, 't', ['cmd'])
+        app.call('key', key='escape', route='app')
+        app.call('library-open'); library_key(app, 'w', ['cmd'])
+        require('library_focus_keys', not state(app)['visible'] and len(app.call('shell-windows')) == 1,
+                keys=['Cmd+L', 'Escape', 'Return', 'Cmd+T', 'Escape', 'Cmd+W'], state=state(app))
+    finally:
+        dialogs, cleanup_errors = [], []
+        owned_pids.update(space_manager_owned_processes(bundle))
+        for instance in apps:
+            if instance.closed: continue
+            try:
+                before = instance.call('space-manager-state')
+                dialogs += [w for w in before['windows'] if w['visible'] and (w['sheet'] or w['attachedSheet'] or 'Alert' in w['class'])]
+                # Cancel existing dialogs before closing their owner, even when
+                # a failure or timeout interrupted a menu/manager operation.
+                if instance.call('shell-windows'): instance.call('dismiss')
+                instance.call('library-close')
+                for row in instance.call('shell-windows'):
+                    instance.call('window-focus', id=row['id']); instance.call('window-close')
+            except Exception as error: cleanup_errors.append(str(error))
+            finally: instance.quit()
+        remaining = space_manager_owned_processes(bundle)
+        for pid in remaining:
+            try: os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError: pass
+        deadline = time.monotonic() + 3
+        while space_manager_owned_processes(bundle) and time.monotonic() < deadline: time.sleep(.05)
+        remaining = space_manager_owned_processes(bundle)
+        for pid in remaining:
+            try: os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError: pass
+        windows = space_manager_owned_windows(owned_pids)
+        receipt = {'ok': not dialogs and not cleanup_errors and not remaining and not windows
+                   and all(not getattr(instance, 'quit_report', {}).get('forced') for instance in apps),
+            'dialogsAtCleanup': dialogs, 'errors': cleanup_errors, 'remainingProcesses': remaining,
+            'remainingWindows': windows, 'ownedPIDs': sorted(owned_pids), 'preferenceDomain': bundle_id,
+            'quit': [getattr(instance, 'quit_report', {}) for instance in apps]}
+        # Write even if another assertion is propagating.
+        with open(os.path.join(evidence, 'cleanup.json'), 'w') as stream: json.dump(receipt, stream, indent=2)
+        dict.__setitem__(results, 'cleanup_no_owned_windows', receipt)
+        subprocess.run(['defaults', 'delete', bundle_id], capture_output=True)
+        for folder in (root, cache, bundle_dir): shutil.rmtree(folder, ignore_errors=True)
+        if not receipt['ok']: raise AssertionError('Space Manager cleanup failed: ' + json.dumps(receipt))
+
+
 def main():
     global _ACTIVE_FOCUS_TRACKER
     ap = argparse.ArgumentParser()
@@ -3764,7 +4040,7 @@ def main():
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "actions", "profiles"],
+                                       "commandbar", "actions", "profiles", "sidebar-completion"],
                     required=True)
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -3846,6 +4122,9 @@ def main():
         elif opts.only in ("commandbar", "actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "sidebar-completion":
+            results[opts.only] = CheckedResults(tracker)
+            space_manager_checks(results[opts.only], tmp, opts.config, opts.style)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
             window_checks(factory, results["window"], tmp, opts.config)
@@ -3909,14 +4188,14 @@ def main():
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "sidebar-completion"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "sidebar-completion")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)

@@ -44,13 +44,21 @@ import OpenStore
     public let model: BrowserModel
     public let actions: any LibraryActions
     @ObservationIgnored private let settingsActions: (any SettingsActions)?
-    @ObservationIgnored private var cachedSpaceManagerView: NSView?
-    /// Retry a transient nil; retain the first supplied view across section switches.
+    private var cachedSpaceManagerView: NSView?
+    /// Retry a transient nil; retain the supplied view across section switches
+    /// until a presenter refresh supplies its replacement.
     public var spaceManagerView: NSView? {
         if let cachedSpaceManagerView { return cachedSpaceManagerView }
-        let view = settingsActions?.makeSpaceManagerView()
+        guard let view = settingsActions?.makeSpaceManagerView() else { return nil }
         cachedSpaceManagerView = view
         return view
+    }
+    /// The presenter refreshes this when its browser context changes. The
+    /// supplier retains a stable view until it needs a different window ID.
+    public func refreshSpaceManagerView() {
+        guard section == .spaces || cachedSpaceManagerView != nil else { return }
+        let view = settingsActions?.makeSpaceManagerView()
+        if cachedSpaceManagerView !== view { cachedSpaceManagerView = view }
     }
     public let downloads: any DownloadsProvider
     public let captures: any CapturesProvider
