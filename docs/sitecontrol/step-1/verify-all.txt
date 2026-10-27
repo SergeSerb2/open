@@ -1,6 +1,25 @@
 
 NAME                   RESULT SECONDS
-build                  PASS   32
-sitecontrol-render     FAIL   3
+build                  PASS   2
+commands-demo          PASS   2
+roundtrip              PASS   1
+space-legacy           PASS   1
+space-editor           PASS   3
+suggest-check          PASS   13
+commands-dump          PASS   0
+route                  PASS   3
+favicons               PASS   1
+media-demo             PASS   1
+sleep-demo             PASS   0
+adblock-perf           PASS   1
+adblock-catalog        PASS   0
+profiles               PASS   3
+settings-preview       PASS   83
+sidebar-render         PASS   56
+sidebar-compare        PASS   114
+commandbar-render      PASS   17
+features-render        PASS   25
+sitecontrol-render     PASS   4
+boosts                 PASS   3
 
-Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-102453.KxMH5c/
+Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-170405.o0fmQX/
