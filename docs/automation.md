@@ -386,3 +386,9 @@ signature-storage `__LINKEDIT.vmsize` and `filesize` fields. It refuses to launc
 fingerprints differ. Receipts record raw and code fingerprints, the required
 Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
 engine revision. Real app/Vendor bundles are never modified by the comparison.
+
+Focused context-menu guard proofs call `context_menu_commands(..., run_all_commands=False)`.
+They still capture all six real menu models and run the disabled-child and hidden-native
+command selections. The regular tabstrip suite keeps the complete command smoke loop.
+The probe popup storage check waits for the extension API, since `isLive` precedes
+its document/API injection. Foreground-interruption checks stay enabled in both flows.

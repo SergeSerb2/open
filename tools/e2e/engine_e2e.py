@@ -1535,11 +1535,12 @@ def menu_key(title):
     return "".join(ch for ch in title.lower() if ch.isalnum())
 
 
-def context_menu_commands(app, results):
+def context_menu_commands(app, results, *, run_all_commands=True):
     """Runs every Chrome context-menu command in a hosted tab, for each kind
     of target (page, link, image, video, selection, editable). None may
     crash the app (PR #53 review: toast and QR code paths). Dialogs and
-    windows a command opens are dismissed through automation."""
+    windows a command opens are dismissed through automation. A focused guard
+    proof can capture the real menus/refusals without the general smoke loop."""
     import http.server
     import tempfile
     import threading
@@ -1653,6 +1654,8 @@ def context_menu_commands(app, results):
             menu_commands[target] = commands
             ran = []
             for command in commands:
+                if not run_all_commands:
+                    break  # Focused guard proof still checks all six real models.
                 label = (command["submenu"] + " > " if command["submenu"] else "") + command["title"]
                 if (not command["enabled"] or menu_key(command["title"]) in {menu_key(x) for x in CONTEXT_MENU_SKIP_TITLES}
                         or menu_key(command["submenu"]) in {menu_key(x) for x in CONTEXT_MENU_SKIP_SUBMENUS}):
@@ -1705,6 +1708,10 @@ def context_menu_commands(app, results):
                     time.sleep(.3)
                     app.call("policy", contextMenu="record")
                     pop = app.call("popup", extension=PROBE)["identifier"]
+                    # isLive precedes the extension document/API injection.
+                    # Read storage only after the actual popup API is ready.
+                    if not wait_until(lambda: app.eval(pop, "typeof chrome !== 'undefined' && !!(chrome.storage && chrome.storage.session)"), timeout=20):
+                        raise RuntimeError("tabs-probe popup storage API not ready")
                     disabled["clicks"] = app.eval(pop, "chrome.storage.session.get('events').then(r => (r.events || []).filter(e => e.type === 'menu' && e.id === 'probe-disabled-child').length)")
                     disabled["id"] = child_id
                 finally:
@@ -1744,7 +1751,8 @@ def context_menu_commands(app, results):
             app.call("policy", contextMenu="record")
     report["crashed"] = crashed
     report["video"] = video
-    report["ok"] = not crashed and not report["failures"] and report["ran"] >= 20 and len(report["targets"]) == len(setups)
+    report["scope"] = "all_commands" if run_all_commands else "models_and_refusals"
+    report["ok"] = not crashed and not report["failures"] and (not run_all_commands or report["ran"] >= 20) and len(report["targets"]) == len(setups)
     results["context_menu_commands"] = report
 
     # The allowlist: no dropped Chrome item, the kept ones, extension items,
