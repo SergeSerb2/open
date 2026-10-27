@@ -171,8 +171,19 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func context(for profileID: ProfileID) -> OEBrowserContext? {
     guard app.engineReady, let profile = model.profile(id: profileID) else { return nil }
     if profile.id == model.defaultProfile?.id { return OEEngine.shared.defaultContext }
+    guard app.engine.result.layout == .engine else {
+      // The old layout has no disk folder for other profiles (CEF refused
+      // Profiles/<dir>/Engine). Their pages wait for the next launch, whose
+      // migration retries; they never run in a memory-only profile.
+      if Self.legacyRefusals.insert(profile.dataDirectoryName).inserted {
+        FileHandle.standardError.write(Data(
+          "Open: profile \(profile.dataDirectoryName) unavailable this launch (engine data still in the old layout)\n".utf8))
+      }
+      return nil
+    }
     return OEEngine.shared.context(identifier: profile.dataDirectoryName, directory: app.directories.engineDirectory(dataDirectoryName: profile.dataDirectoryName))
   }
+  private static var legacyRefusals: Set<String> = []
   var focusedBrowser: OEBrowser? {
     guard app.engineReady, let profile = focusedProfile else { return nil }; return mirror.browser(for: profile.id)
   }

@@ -11,6 +11,7 @@ usage: openkit profiles DIR list [--show-titles] [--json]
        openkit profiles DIR create-space --title TITLE --profile PROFILE
        openkit profiles DIR delete PROFILE
        openkit profiles DIR show PROFILE [--show-titles]
+       openkit profiles DIR engine-layout [--json]
 """
 
 func profileCLIError(_ message: String, code: Int32 = 1) -> Never {
@@ -83,6 +84,7 @@ func runProfiles(args: [String]) throws {
     case "create-space": allowed = ["--title", "--profile"]; flags = []; positionalCount = 0
     case "delete": allowed = []; flags = []; positionalCount = 1
     case "show": allowed = []; flags = ["--show-titles"]; positionalCount = 1
+    case "engine-layout": allowed = []; flags = ["--json"]; positionalCount = 0
     default: usage()
     }
     var options: [String: String] = [:], enabled: Set<String> = [], positional: [String] = []
@@ -106,6 +108,23 @@ func runProfiles(args: [String]) throws {
         else if raw.hasPrefix("emoji:"), raw.count > 6 { icon = .emoji(String(raw.dropFirst(6))) }
         else if raw.hasPrefix("symbol:"), raw.count > 7 { icon = .symbol(String(raw.dropFirst(7))) }
         else { usage() }
+    }
+    if command == "engine-layout" {
+        // The App's launch step that moves Chromium's data to <root>/Engine.
+        let engine = try OpenDataRoot.prepareEngineLayout(root: root)
+        let result = engine.result
+        if enabled.contains("--json") {
+            let object: [String: Any] = [
+                "layout": result.layout == .engine ? "engine" : "legacy", "problem": result.problem ?? NSNull(),
+                "milliseconds": result.milliseconds, "engineRoot": engine.engineRoot.path,
+                "moved": result.report.moved, "skipped": result.report.skipped, "missing": result.report.missing,
+            ]
+            print(String(decoding: try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]), as: UTF8.self))
+        } else {
+            print("layout \(result.layout) in \(String(format: "%.2f", result.milliseconds)) ms; engine root \(engine.engineRoot.path)")
+            if let problem = result.problem { print("problem: \(problem)") }
+        }
+        return
     }
     let snapshot = SnapshotStore(root: root)
     let model: BrowserModel
