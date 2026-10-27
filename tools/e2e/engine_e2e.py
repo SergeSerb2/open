@@ -297,6 +297,13 @@ class Open:
                                 capture_output=True, text=True, timeout=10, check=True)
         return json.loads(result.stdout)
 
+    def log_text(self):
+        self.log.flush()
+        # LaunchServices writes the live app's stderr to this separate file;
+        # quit later appends it to the aggregate log. Read it before quit too.
+        paths = [self.log.name, self.launch_log_path]
+        return "\n".join(Path(path).read_text(errors="replace") for path in paths if os.path.exists(path))
+
     def cleanup_surfaces(self):
         for cmd in ("dismiss", "popup-close"):
             try:
@@ -1495,7 +1502,7 @@ def new_window_outlives_opener(app, results):
 # (Character Viewer, speech, other apps through Services, the spelling
 # panel). Everything else Chromium puts in the menu runs.
 CONTEXT_MENU_SKIP_TITLES = ("Emoji & Symbols", "Show Spelling and Grammar")
-CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services")
+CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services", "Disabled tabs probe submenu")
 # Open's context-menu allowlist (docs/engine-api.md, "Context menu items"):
 # Chrome items that must be gone, as letter-only fragments of their titles,
 # and items each target must still show.
@@ -1601,6 +1608,7 @@ def context_menu_commands(app, results):
     tab = new_tab(app, index)
     report = {"targets": {}, "ran": 0, "skipped": [], "dismissed": [], "failures": []}
     menus = {}
+    menu_commands = {}
     home_windows = [x["id"] for x in app.call("shell-windows")]
 
     def close_new_windows():
@@ -1642,6 +1650,7 @@ def context_menu_commands(app, results):
             menu = wait_until(lambda: [e for e in app.call("events") if e["type"] == "contextMenu"], timeout=5)
             commands = menu[0].get("commands", []) if menu else []
             menus[target] = menu[0].get("items", []) if menu else []
+            menu_commands[target] = commands
             ran = []
             for command in commands:
                 label = (command["submenu"] + " > " if command["submenu"] else "") + command["title"]
@@ -1670,6 +1679,26 @@ def context_menu_commands(app, results):
             if crashed:
                 break
         if not crashed:
+            # Run an enabled child of a disabled parent by its real delivered
+            # command id. The execution allowlist must reject it too.
+            children = [c for c in menu_commands.get("page", []) if c["title"] == "Disabled child probe item"]
+            disabled = {"found": len(children) == 1}
+            if children:
+                child_id = children[0]["id"]
+                app.call("events")
+                point = prepare("page")
+                app.call("policy", contextMenu="run:%d" % child_id)
+                try:
+                    right_click(point)
+                    time.sleep(.3)
+                    app.call("policy", contextMenu="record")
+                    pop = app.call("popup", extension=PROBE)["identifier"]
+                    disabled["clicks"] = app.eval(pop, "chrome.storage.session.get('events').then(r => (r.events || []).filter(e => e.type === 'menu' && e.id === 'probe-disabled-child').length)")
+                    disabled["id"] = child_id
+                finally:
+                    app.cleanup_surfaces()
+                    app.call("policy", contextMenu="record")
+            report["disabled_submenu"] = disabled
             hidden_id = _command_id("IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD")
             # A hidden item cannot run either: the engine runs only ids of
             # the delivered items, so selecting "Open Link in Incognito
@@ -1709,8 +1738,11 @@ def context_menu_commands(app, results):
     # and no empty, leading, trailing or doubled separators.
     allow = {"menus": menus, "dropped_seen": {}, "kept_missing": {}, "separators": {}}
     for target, items in menus.items():
-        titles = [x for x in items if x]
+        # Several extension items may be grouped under its name. Check
+        # delivered leaf titles too, while separators still use each root menu.
+        titles = [x for x in items if x] + [c["title"] for c in menu_commands.get(target, [])]
         seen = [x for x in titles if any(d in menu_key(x) for d in CONTEXT_MENU_DROPPED)]
+        seen += [x for x in titles if x == "Invisible tabs probe item"]
         missing = [k for k in CONTEXT_MENU_KEPT.get(target, ())
                    if not any(menu_key(x).startswith(menu_key(k)) for x in titles)]
         bad = (items[:1] == [""] or items[-1:] == [""]
@@ -1725,8 +1757,12 @@ def context_menu_commands(app, results):
                    and not allow["dropped_seen"] and not allow["kept_missing"] and not allow["separators"])
     results["context_menu_allowlist"] = allow
     hidden = report.get("hidden_command") or {}
-    with open(app.log.name, errors="replace") as f:
-        log_text = f.read()
+    log_text = app.log_text()
+    disabled = report.get("disabled_submenu") or {}
+    results["context_menu_disabled_submenu_refused"] = {
+        "ok": disabled.get("found") is True and disabled.get("clicks") == 0
+              and ("refused command %d" % disabled.get("id", -1)) in log_text,
+        **disabled}
     results["context_menu_hidden_command_refused"] = {
         "ok": bool(hidden) and not hidden["new_windows"] and not hidden["window_requests"]
               and not hidden["foreign_windows"] and ("refused command %d" % hidden.get("id")) in log_text,

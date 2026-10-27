@@ -201,12 +201,12 @@ static NSString* OEMenuTitle(NSString* label) {
 static void OECollectCommands(NSArray<OEContextMenuItem*>* items,
                               std::set<int>* commands) {
   for (OEContextMenuItem* item in items) {
-    if (item.isSeparator) {
+    if (item.isSeparator || !item.isEnabled) {
       continue;
     }
     if (item.submenu.count) {
       OECollectCommands(item.submenu, commands);
-    } else if (item.isEnabled) {
+    } else {
       commands->insert((int)item.commandIdentifier);
     }
   }

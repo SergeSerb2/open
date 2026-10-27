@@ -131,6 +131,10 @@ void TrimSeparators(CefRefPtr<CefMenuModel> model) {
 
 void OEFilterChromeContextMenu(CefRefPtr<CefMenuModel> model) {
   for (size_t i = model->GetCount(); i-- > 0;) {
+    if (!model->IsVisibleAt(i)) {
+      model->RemoveAt(i);
+      continue;
+    }
     const cef_menu_item_type_t type = model->GetTypeAt(i);
     if (type == MENUITEMTYPE_SEPARATOR) {
       continue;

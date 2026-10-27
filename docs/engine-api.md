@@ -233,3 +233,8 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 ## Debugging crashes
 
 The CEF framework is stripped. CEF publishes the matching symbols: `https://cef-builds.spotifycdn.com/cef_binary_<version>_macosarm64_release_symbols.tar.bz2` (2.1 GB for 156.0.14). Check the UUID with `dwarfdump --uuid` against the crash report's image UUID, then `atos -o "<dSYM>/Contents/Resources/DWARF/Chromium Embedded Framework" -arch arm64 -l 0x0 <imageOffset>...` with the offsets from the `.ips` report. Chromium's zombie detector (`CrZombie` in a stack) means a message to a freed Objective-C object.
+
+Chrome page-menu filtering removes invisible items before delivery. The execution
+allowlist contains only delivered, enabled leaf commands and does not descend
+through a disabled submenu. An invisible item or an enabled child under a
+disabled parent therefore cannot be selected through OpenEngine.

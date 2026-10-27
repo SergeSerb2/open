@@ -369,3 +369,11 @@ runs the action/menu in the same socket turn. `ext-menu snapshot=true` returns
 the action snapshot before yielding. `window-close releaseBrowsers=true` drops
 the mirror's browsers without calling `OEBrowser.close` and reports whether they
 were released; this covers the destructor path with an open popup.
+
+The tabstrip fixture includes `visible: false` and a disabled extension submenu
+with an enabled child. `context_menu_allowlist` checks delivered top-level and
+leaf titles on each target; `context_menu_disabled_submenu_refused` sends the
+child's raw command id and requires both the engine refusal log and no extension
+click event. These use the same real context-menu policy/selection path as the
+existing hidden-native-command check. Live refusal logs are read from the
+LaunchServices stderr file before app quit.

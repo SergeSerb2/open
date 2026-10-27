@@ -31,8 +31,14 @@ chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
 
 // One page context-menu item: Open's context-menu allowlist keeps
 // extension items (engine_e2e.py context_menu_allowlist).
-chrome.runtime.onInstalled.addListener(() =>
-  chrome.contextMenus.create({ id: "probe", title: "Tabs probe item", contexts: ["all"] }));
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({ id: "probe", title: "Tabs probe item", contexts: ["all"] });
+  chrome.contextMenus.create({ id: "probe-hidden", title: "Invisible tabs probe item", contexts: ["all"], visible: false });
+  chrome.contextMenus.create({ id: "probe-disabled", title: "Disabled tabs probe submenu", contexts: ["all"], enabled: false }, () => {
+    chrome.contextMenus.create({ id: "probe-disabled-child", parentId: "probe-disabled",
+      title: "Disabled child probe item", contexts: ["all"], enabled: true });
+  });
+});
 chrome.contextMenus.onClicked.addListener((info) => record("menu", { id: info.menuItemId }));
 
 // Calls that switch tabs run here, not in the popup: a tab switch closes the
