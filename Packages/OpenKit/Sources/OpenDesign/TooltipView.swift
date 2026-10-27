@@ -1,5 +1,4 @@
 import AppKit
-import OpenDesign
 
 /// Arc-style tooltip content: a capsule in the Space's title color with a label,
 /// an optional second line, and keycaps (docs/re/interaction-states.md §5).
@@ -89,6 +88,7 @@ public final class TooltipView: NSView {
         }
     }
 }
+
 
 /// Shows one tooltip at a time in a borderless child panel after a hover delay.
 @MainActor

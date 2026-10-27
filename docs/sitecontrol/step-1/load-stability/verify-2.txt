@@ -1,0 +1,10 @@
+Running build...
+  PASS (2s)
+Running sitecontrol-render...
+  PASS (5s)
+
+NAME                   RESULT SECONDS
+build                  PASS   2
+sitecontrol-render     PASS   5
+
+Logs: /var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-201019.YDhF3S/
