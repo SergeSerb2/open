@@ -32,3 +32,19 @@ The top three non-wrapper inclusive stacks are below. Button construction is nes
 | `SiteControlButton.init` (native control construction, nested) | 465 | 101 |
 
 The older profile's load1 was 14.57. The final profiling invocation uses a time-limited `Time Profiler` recording and exits successfully; its counter output is not part of the five A/B pairs. The intermediate row-lazy trace failed to finalize and export; it is not evidence for this comparison.
+
+
+## Current acceptance method (lead ruling at 21:21)
+
+The A/B CPU-gate statement above records the state when that experiment ran.
+The lead then replaced the hard CPU-ms regression gate with main-thread
+instructions: M5 Pro / 26B5112a accepted 95,035,968; ceiling 104,539,565
+(`ceil(accepted × 1.10)`). Unknown machines report INFO. The absolute 8 ms product
+target remains for the lead's quiet-machine check. The lighter skeleton run is
+informational. See `docs/verification.md` and the negative-proof log below.
+
+Quiet-machine command from the repo root, after a release build:
+
+```sh
+~/Library/Caches/OpenRE/scripts/heavy.sh Packages/OpenKit/.build/release/sitecontrol-render bench --fixture cold
+```

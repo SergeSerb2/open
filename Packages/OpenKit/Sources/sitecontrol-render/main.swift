@@ -128,9 +128,11 @@ enum CLI {
     }
     static func report(_ checks: [Flows.Check]) {
         print("| Result | Check |\n|---|---|")
-        for c in checks { print("| \(c.pass ? "PASS" : "FAIL") | \(c.name) |") }
-        let passed = checks.filter(\.pass).count
-        print("\n\(passed)/\(checks.count) passed")
-        if passed != checks.count { exit(1) }
+        for c in checks { print("| \(c.info ? "INFO" : c.pass ? "PASS" : "FAIL") | \(c.name) |") }
+        let acceptance = checks.filter { !$0.info },passed = acceptance.filter(\.pass).count
+        if !acceptance.isEmpty { print("\n\(passed)/\(acceptance.count) passed") }
+        let informational = checks.count-acceptance.count
+        if informational>0 { print("\(informational) INFO (no acceptance result for these entries)") }
+        if passed != acceptance.count { exit(1) }
     }
 }

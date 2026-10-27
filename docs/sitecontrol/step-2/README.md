@@ -10,6 +10,6 @@ Flows send clicks and keys through the native window. They cover tracked NSMenu 
 
 The dark separator uses the captured additive +35 RGB rule, not the earlier white 0.22 guess. The global-off note uses the lead-approved 28 pt guessed band, baselines +11/+26; Reload remains +20. Outside/anchor dismissal stays immediate because the available captures do not resolve a fade. The qualified Share comparison remains “hover or press, unconfirmed”.
 
-`performance/README.md` contains five-pair main-thread instruction measurements and numeric profiler attribution. The 8 ms CPU gate remains unchanged; wall time is diagnostic. Instruction counts do not replace that gate.
+`performance/README.md` contains five-pair main-thread instruction measurements and numeric profiler attribution. The lead-approved instruction gate uses the machine/build fixture and a 10% ceiling over the accepted median. CPU/wall/load remain diagnostics; the absolute 8 ms product target awaits the lead’s quiet-machine check.
 
 S11–S13 and the real-app snapshot comparison are deferred to Step 3 per plan §12/§11. This PR adds no app hook. The latest full-gate result is recorded separately in `verify-all.txt`.

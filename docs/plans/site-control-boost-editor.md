@@ -1200,16 +1200,22 @@ three heavy pages, which the engine plan names, within the budget it sets.
 ### 8.1 Offscreen renders and flows: `sitecontrol-render`
 
 Commands: `render`, `ax`, `flows`, `check`, `bench`, `screens`, `motion`, `compare`.
-`bench --fixture skeleton|cold` selects the no-Boosts or 20-Boost/12-row native open
-path for profiling; `check` always runs both. Each benchmark uses at most three
-attempts (30 samples and 5 warmups each), prints CPU p95, diagnostic wall p95,
-load1, and CPU lateness, and retains the 8 ms main-thread CPU limit (lead ruling,
-2026-10-26). Wall time is diagnostic, per the user ruling at 20:25.
-`cold-measure --thread-instructions` is an optional harness-only diagnostic of the
-same cold-open span (5 warmups, 30 samples). It reads the current main thread
-through dynamically resolved `thread_selfcounts(THSC_CPI=1)` with an ABI check.
-It does not change or replace the CPU gate. The lead requested five A/B runs per
-variant on 2026-10-26; no counter code is linked into App or library targets.
+`bench --fixture cold` gates the median main-thread retired instructions for the
+20-Boost/12-row native open span at 2x, after 5 discarded warmups and 30 measured
+opens. The machine/build fixture records the accepted count; the limit is
+`ceil(accepted × 1.10)`. M5 Pro / 26B5112a: accepted 95,035,968, limit 104,539,565
+(lead ruling, 2026-10-26 21:21). Unknown machine/build entries print the count and
+reason as INFO, never PASS. Missing/invalid counters fail. The lighter
+`bench --fixture skeleton` is retained as a diagnostic; the full cold workload
+owns the acceptance gate. `check` runs both. CPU p95, wall p95, load1, and CPU
+lateness remain diagnostics. The absolute product target is still p95 <8 ms;
+the lead will measure it on a quiet M5 before merge and require more optimization
+if it misses. See `docs/verification.md` for the offscreen perf-gate method.
+
+`cold-measure --thread-instructions` prints all 30 instruction samples for A/B
+profiling of the same span. The dynamically resolved `thread_selfcounts`
+THSC_CPI=1 helper validates the ABI and exists only in this harness executable.
+No counter code is linked into App or library targets.
 
 States: `scc-no-boosts` (S2 09/0010 content: "+", Developer Mode hidden, one allowed setting),
 `scc-boost` (S2 11/0005 content plus one Boost), `scc-adblock-on`, `scc-adblock-excluded`,

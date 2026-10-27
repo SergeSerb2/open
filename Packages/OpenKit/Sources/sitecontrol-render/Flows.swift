@@ -4,7 +4,12 @@ import OpenDesign
 
 @MainActor
 enum Flows {
-    struct Check { let name: String; let pass: Bool }
+    struct Check {
+        let name: String
+        let pass: Bool
+        let info: Bool
+        init(name: String,pass: Bool,info: Bool = false) { self.name = name; self.pass = pass; self.info = info }
+    }
     static func run() -> [Check] {
         var checks: [Check] = []
         let stage = Stage()
