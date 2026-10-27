@@ -5,6 +5,9 @@ import OpenModel
 /// The preference is read at use, so a Settings change applies to an active drag.
 @MainActor
 public final class SidebarHaptics {
+    /// Preference source. The App keeps `.standard`; the offscreen harness swaps in a
+    /// per-run suite so concurrent runs never share the process preferences domain.
+    public static var defaults = UserDefaults.standard
     private var insertion: Insertion?
     private struct Insertion: Equatable { let parent: NodeParent; let index: Int }
 
@@ -20,7 +23,8 @@ public final class SidebarHaptics {
 
     func perform(_ pattern: NSHapticFeedbackManager.FeedbackPattern) {
         let key = "open.advanced.hapticOnTabReorder"
-        guard UserDefaults.standard.object(forKey: key) == nil || UserDefaults.standard.bool(forKey: key) else { return }
+        let defaults = Self.defaults
+        guard defaults.object(forKey: key) == nil || defaults.bool(forKey: key) else { return }
         let name: String
         switch pattern {
         case .alignment: name = "alignment"
