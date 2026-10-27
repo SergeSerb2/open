@@ -10,6 +10,9 @@ enum MotionChecks {
             let tip = stage.controller.view.visibleArrowTip
             if close { stage.controller.dismiss(reason: .escape,animated: true) }
             else { stage.controller.dismiss(reason: .action,animated: false); stage.controller.present(anchor: .urlField,tabID: stage.source.tabID,animated: true) }
+            // Read configured animation metadata before sampling can outlive it.
+            let closeDuration = close ? stage.controller.view.panel.layer?.animation(forKey: "close.opacity")?.duration : nil
+            let openAnimation = close ? nil : stage.controller.view.panel.layer?.animation(forKey: "open.scale") as? CASpringAnimation
             for _ in 0..<3 {
                 OffscreenRenderer.settle(stage.root); RunLoop.main.run(until: Date().addingTimeInterval(0.025))
                 let fixed = stage.controller.view.presentationLayers.allSatisfy { layer in
@@ -20,11 +23,11 @@ enum MotionChecks {
                 checks.append(.init(name: "motion \(close ? "close" : "open") keeps visible arrow tip fixed (\(tip.x),\(tip.y); \(positions))",pass: fixed))
             }
             if !close {
-                let animation = stage.controller.view.panel.layer?.animation(forKey: "open.scale") as? CASpringAnimation
+                let animation = openAnimation
                 let peak = (0...300).map { SiteControlMetrics.openScale+(1-SiteControlMetrics.openScale)*Motion.springProgress(Motion.popoverOpen,at: Double($0)/1000) }.max()!
                 checks.append(.init(name: String(format: "open spring peak %.4f, settles by 0.30 s",peak),pass: animation != nil && (1.010...1.020).contains(peak) && animation!.duration <= 0.30 && abs(Motion.springProgress(Motion.popoverOpen,at: 0.30)-1)<0.001))
             } else {
-                checks.append(.init(name: "close ends by 0.20 s",pass: (stage.controller.view.panel.layer?.animation(forKey: "close.opacity")?.duration ?? 1) <= 0.20))
+                checks.append(.init(name: "close ends by 0.20 s",pass: closeDuration.map { $0 > 0 && $0 <= 0.20 } ?? false))
             }
         }
         let height = Stage()
