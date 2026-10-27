@@ -10,7 +10,7 @@ snapshot files under /tmp, deleted on exit. Concurrent runs never share a lock,
 and the private inputs in .re are never written.
 """
 import argparse
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 import hashlib
 import json
 import os
@@ -26,16 +26,50 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # Lead gate (2026-10-26), docs/design.md §15.1. SHA is informational.
 COLOR_DRIFT = Decimal("0.15")
-# Expected compared elements, worst position, worst ΔE00 against Arc.
-LIMITS = {
-    "static-active": (31, "1.0", "1.59"), "static-inactive": (31, "1.0", "1.17"),
-    "row-hover": (33, "1.0", "1.59"), "selected-pinned": (33, "1.0", "1.73"),
-    "selected-favorite": (28, "1.0", "1.59"), "toggle-hover": (29, "1.0", "1.59"),
-    "home-hover": (29, "2.0", "1.59"), "newtab-hover": (29, "1.0", "1.59"),
-    "newtab-open": (35, "1.0", "2.00"), "selected-today": (36, "1.0", "2.03"),
-    "default-dark": (31, "1.0", "1.77"), "yellow": (23, "1.0", "1.95"),
-    "blue-grain": (19, "1.0", "2.38"),
+# Shared expected compared elements and worst position against Arc, in points.
+STATE_META = {
+    "static-active": (31, "1.0"), "static-inactive": (31, "1.0"),
+    "row-hover": (33, "1.0"), "selected-pinned": (33, "1.0"),
+    "selected-favorite": (28, "1.0"), "toggle-hover": (29, "1.0"),
+    "home-hover": (29, "2.0"), "newtab-hover": (29, "1.0"),
+    "newtab-open": (35, "1.0"), "selected-today": (36, "1.0"),
+    "default-dark": (31, "1.0"), "yellow": (23, "1.0"),
+    "blue-grain": (19, "1.0"),
 }
+RENDER_SCALE = 1  # run_state forces --scale 1, independent of NSScreen.
+M5_ENV_KEY = "macos-26B5112a-1x"
+MAX_COLOR_LIMIT_OVER_M5 = Decimal("1.00")
+COLOR_LIMITS = {
+    # Existing M5 values, bound to its lead-confirmed build as a proposed fixture.
+    # This change does not claim a new M5 measurement.
+    M5_ENV_KEY: {
+        "static-active": "1.59", "static-inactive": "1.17",
+        "row-hover": "1.59", "selected-pinned": "1.73",
+        "selected-favorite": "1.59", "toggle-hover": "1.59",
+        "home-hover": "1.59", "newtab-hover": "1.59",
+        "newtab-open": "2.00", "selected-today": "2.03",
+        "default-dark": "1.77", "yellow": "1.95", "blue-grain": "2.38",
+    },
+    # Actual --record-limits output at 49b566097423213d1bc9aca1426c7e2bb3f5f65b.
+    "macos-26A434-1x": {
+        "static-active": "1.56", "static-inactive": "1.31",
+        "row-hover": "1.56", "selected-pinned": "2.71",
+        "selected-favorite": "1.56", "toggle-hover": "1.56",
+        "home-hover": "1.56", "newtab-hover": "1.55",
+        "newtab-open": "2.00", "selected-today": "2.03",
+        "default-dark": "1.77", "yellow": "2.25",
+        "blue-grain": "2.34",
+    },
+}
+
+
+def env_key():
+    result = subprocess.run(["/usr/bin/sw_vers", "-buildVersion"], text=True,
+                            capture_output=True, check=True, timeout=10)
+    build = result.stdout.removesuffix("\n")
+    if not re.fullmatch(r"[A-Za-z0-9]{1,32}", build, flags=re.ASCII):
+        raise ValueError("malformed macOS build: expected 1..32 ASCII alphanumeric characters")
+    return f"macos-{build}-{RENDER_SCALE}x", build
 
 # name, capture, snapshot, render arguments, comparison arguments.
 # Capture-time snapshots: static has no Today tabs, real has six Today tabs.
@@ -178,10 +212,11 @@ def table_metrics(table):
     return rows, (Decimal(summary[1]), Decimal(summary[2]), int(summary[3]))
 
 
-def gate_tables(name, tables):
+def gate_tables(name, tables, color_limits):
     parsed = {kind: table_metrics(table) for kind, table in tables.items()}
     errors = []
-    count, position_limit, color_limit = LIMITS[name]
+    count, position_limit = STATE_META[name]
+    color_limit = color_limits[name]
     for kind, (rows, worst) in parsed.items():
         if len(rows) != count or worst[2] != count:
             errors.append(f"{kind}: compared element count {len(rows)}/{worst[2]} != {count}")
@@ -215,16 +250,61 @@ def gate_tables(name, tables):
             "byteIdentical": tables["main"] == tables["branch"]}
 
 
+def record_limits(baseline, data, captures, out, attempts, receipt):
+    """Propose caps from every measured main attempt; never edit a fixture."""
+    proposed = {}
+    errors = []
+    for state in STATES:
+        name, frame, _, _, _ = state
+        count, position = STATE_META[name]
+        measurements = []
+        for attempt in range(1, attempts + 1):
+            table = run_state(baseline, data, captures[frame], state,
+                              out / "main" / name / f"attempt-{attempt}")
+            rows, worst = table_metrics(table)
+            measurements.append({"attempt": attempt, "count": len(rows),
+                                 "summaryCount": worst[2], "position": str(worst[0]),
+                                 "worstDeltaE00": str(worst[1])})
+            if len(rows) != count or worst[2] != count or worst[0] != Decimal(position):
+                errors.append(f"{name} attempt {attempt}: count/position disagrees with shared STATE_META")
+            # Check all metrics, including the background sampled maximum,
+            # before proposing a cap from the unchanged worst-value summary.
+            if any(color > Decimal(COLOR_LIMITS[M5_ENV_KEY][name]) + MAX_COLOR_LIMIT_OVER_M5
+                   for row in rows for color in row["colors"] if color is not None):
+                errors.append(f"{name} attempt {attempt}: element exceeds M5 cap + {MAX_COLOR_LIMIT_OVER_M5} ΔE00")
+        measured = max(Decimal(row["worstDeltaE00"]) for row in measurements)
+        cap = (measured * 100).to_integral_value(rounding=ROUND_CEILING) / 100
+        proposed[name] = f"{cap:.2f}"
+        old = Decimal(COLOR_LIMITS[M5_ENV_KEY][name])
+        if cap > old + MAX_COLOR_LIMIT_OVER_M5:
+            errors.append(f"{name}: proposed cap {cap} exceeds M5 cap {old} + {MAX_COLOR_LIMIT_OVER_M5}")
+        print(f"{name}: measured main worst {measured} ΔE00; proposed {proposed[name]}; "
+              f"M5 {old}; diff {cap - old:+.2f}; attempts {attempts}", flush=True)
+        receipt["states"].append({"name": name, "measurements": measurements})
+    receipt.update({"proposedColorLimits": proposed, "errors": errors, "passed": not errors})
+    if hashlib.sha256(baseline.read_bytes()).hexdigest() != receipt["baselineBinarySHA256"]:
+        raise ValueError("baseline renderer changed during recording; rerun after its build completes")
+    (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+    if errors:
+        raise ValueError("record-limits refused: " + "; ".join(errors))
+    print("Color limit proposal (read-only; add only by reviewed PR):")
+    print(repr({receipt["envKey"]: proposed}))
+    print(f"recorded states: {len(proposed)}/13; output: {out}")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("capture_root", type=Path, nargs="?", help="absolute .re/design-compare directory")
     parser.add_argument("--renderer", type=Path, default=ROOT / "Packages/OpenKit/.build/release/sidebar-render")
     parser.add_argument("--baseline-renderer", type=Path, help="release binary already built from --baseline-ref")
     parser.add_argument("--baseline-ref", default="origin/main")
-    parser.add_argument("--out", type=Path, help="new output directory outside the checkout (default: /tmp)")
+    parser.add_argument("--out", type=Path, help="new private output directory (default: shared .re/sidebar-compare-runs)")
     parser.add_argument("--probe", action="store_true", help="check private input presence only; exit 77 when absent")
+    parser.add_argument("--record-limits", action="store_true",
+                        help="print a read-only color-cap proposal from a fresh, unmodified origin/main build")
     parser.add_argument("--attempts", type=int, choices=range(1, 4), default=3,
-                        help="bounded paired repeats for known offscreen nondeterminism (§15.1); retains every attempt")
+                        help="bounded paired repeats (§15.1), or measured main samples when recording; retains every attempt")
     args = parser.parse_args()
     root = (args.capture_root or default_inputs()).resolve()
     try:
@@ -235,35 +315,55 @@ def main():
     if args.probe:
         print("13 sidebar capture states available")
         return 0
+    key, build = env_key()
+    if args.record_limits:
+        if args.baseline_renderer or args.baseline_ref != "origin/main":
+            raise ValueError("--record-limits requires a fresh origin/main build; baseline overrides are refused")
+    elif key not in COLOR_LIMITS:
+        raise ValueError(f"no sidebar color limits for {key}; record them with --record-limits "
+                         "from an unmodified origin/main build and add them by PR")
+    color_limits = COLOR_LIMITS.get(key)
     # verify-all gives each check a disposable TMPDIR. Private comparison evidence
-    # must survive that cleanup and must stay outside the repository/artifact logs.
-    out = args.out.resolve() if args.out else Path(tempfile.mkdtemp(prefix="open-sidebar-compare-", dir="/tmp"))
+    # must survive cleanup and stay in ignored .re, outside artifact-upload logs.
+    if args.out:
+        out = args.out.resolve()
+    else:
+        private_output = default_inputs().parent / "sidebar-compare-runs"
+        private_output.mkdir(mode=0o700, parents=True, exist_ok=True)
+        out = Path(tempfile.mkdtemp(prefix="run-", dir=private_output))
     if out.is_relative_to(ROOT) and not out.is_relative_to(default_inputs().parent):
         raise ValueError("outputs must be outside the checkout")
     if args.out:
         out.mkdir(mode=0o700, parents=True, exist_ok=False)
     renderer = args.renderer.resolve()
-    ref_sha = subprocess.check_output(["git", "rev-parse", args.baseline_ref], cwd=ROOT, text=True).strip()
+    ref_sha = subprocess.check_output(["git", "rev-parse", "--verify", args.baseline_ref + "^{commit}"], cwd=ROOT, text=True).strip()
     baseline = args.baseline_renderer.resolve() if args.baseline_renderer else build_main(out, ref_sha)
     receipt = {"gate": {"positionAndInk": "identical", "colorMetricDrift": str(COLOR_DRIFT),
-                        "arcLimits": LIMITS, "sha": "informational"},
+                        "stateMeta": STATE_META, "colorLimits": color_limits, "sha": "informational"},
+               "envKey": key, "osBuild": build, "renderScale": RENDER_SCALE,
+               "mode": "record-limits" if args.record_limits else "compare",
                "baselineRef": args.baseline_ref, "baselineCommit": ref_sha,
                "baselineBinarySHA256": hashlib.sha256(baseline.read_bytes()).hexdigest(),
-               "branchBinarySHA256": hashlib.sha256(renderer.read_bytes()).hexdigest(),
                "snapshotSHA256": {name: hashlib.sha256((root / name / "State/browser.json").read_bytes()).hexdigest()
                                   for name in ("snap-static", "snap-real")},
                "captureSHA256": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in captures.items()}, "states": []}
+    if not args.record_limits:
+        receipt["branchBinarySHA256"] = hashlib.sha256(renderer.read_bytes()).hexdigest()
     combined = {"main": {}, "branch": {}}
     failed = []
     data = private_roots(root)
     try:
+        if args.record_limits:
+            print(f"trusted base commit: {ref_sha}; baseline binary SHA-256: {receipt['baselineBinarySHA256']}; "
+                  f"environment: {key}; render scale: {RENDER_SCALE}", flush=True)
+            return record_limits(baseline, data, captures, out, args.attempts, receipt)
         for state in STATES:
             name, frame, _, _, _ = state
             attempt_results = []
             for attempt in range(1, args.attempts + 1):
                 tables = {kind: run_state(binary, data, captures[frame], state, out / kind / name / f"attempt-{attempt}")
                           for kind, binary in (("main", baseline), ("branch", renderer))}
-                result = gate_tables(name, tables)
+                result = gate_tables(name, tables, color_limits)
                 attempt_results.append({"attempt": attempt, **result})
                 if result["passed"] or attempt == args.attempts:
                     for kind, table in tables.items():

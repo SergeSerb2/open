@@ -444,7 +444,9 @@ Split-row menu: see §5.6.
 The historical M4 cohort used release builds of `origin/main` (`33aade1`) and
 its branch, one state per process. Its 13 PNGs and tables were byte-identical.
 The table below records the Arc worst-value limits and element counts for the
-current gate. The lost ignored runner is now committed as
+current gate. Color limits use `macos-<build>-1x`; element counts and position
+limits stay shared. Render scale is forced to 1, independent of the display.
+The lost ignored runner is now committed as
 `tools/verification/sidebar-compare-states.sh` (details in §17.1).
 
 **Lead gate, 2026-10-26 (supersedes table-byte and SHA identity):**
@@ -454,8 +456,9 @@ current gate. The lost ignored runner is now committed as
 2. Each element's color metric may differ from main by at most **0.15 ΔE00**.
    This includes the background mean and sampled maximum. RGB strings and table
    bytes can differ because text anti-aliasing differs between builds.
-3. Both main and branch must stay within each state's recorded worst position
-   and ΔE00 limits below, with the same compared elements and sampling counts.
+3. Both main and branch must stay within each state's shared worst position
+   and environment-specific ΔE00 limits below, with the same compared elements
+   and sampling counts.
 4. Combined table SHA-256 values are reported for information only. They do not
    gate acceptance.
 
@@ -463,23 +466,44 @@ The runner retains at most three paired attempts per state, as before; every
 failed attempt and its reason stays in the receipt and private output folder.
 It never changes masks, inputs, or limits to make a state pass.
 
-| State | Frame | Elements | Worst position (pt) | Worst ΔE00 | Main vs branch |
-|---|---|---|---|---|---|
-| Static, active window | F0001 | 31 | 1.0 | 1.59 | identical |
-| Static, inactive window | `arc-window-5245.png` | 31 | 1.0 | 1.17 | identical |
-| Row hover | F0013 | 33 | 1.0 | 1.59 | identical |
-| Selected pinned row, page loaded | F0015 | 33 | 1.0 | 1.73 | identical |
-| Selected favorite tile | F0016 | 28 | 1.0 | 1.59 | identical |
-| Sidebar toggle hover | F0024 | 29 | 1.0 | 1.59 | identical |
-| Home hover | F0027 | 29 | 2.0 | 1.59 | identical |
-| "New Tab" hover | F0031 | 29 | 1.0 | 1.59 | identical |
-| Cmd+T open | F0063 | 35 | 1.0 | 2.00 | identical |
-| Today tab selected | F0066 | 36 | 1.0 | 2.03 | identical |
-| Default dark Space, folder, split, child hover | F0079 | 31 | 1.0 | 1.77 | identical |
-| Yellow theme | F0070 | 23 | 1.0 | 1.95 | identical |
-| Blue theme with grain | F0069 | 19 | 1.0 | 2.38 | identical |
+The M5 column preserves the existing limits exactly, assigned to the
+lead-confirmed `macos-26B5112a-1x` as a proposed fixture pending lead review.
+It is not a new M5 measurement. The M1 column comes only from
+`--record-limits` at trusted `origin/main`
+`49b566097423213d1bc9aca1426c7e2bb3f5f65b` (three main-only samples per state).
+Its release binary SHA-256 is
+`f5eda2cb786fe1f069981304b9d981c500d9c4239aff6bfb9a9b30b17e8393cc`.
 
-Worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because the re-derived script skips the URL copy and Site Control buttons there. Element counts differ in six states (F0016, F0024, F0027, F0031, F0063, F0066): the re-derived script skips URL-host, button, and row-title elements whose text or state differs between the snapshot and the capture. The known differences in §9 remain (Home hover 2 pt, F0063/F0066 selected fill ≈ 2.0, blue grain 2.38).
+In comparison mode, an unknown or malformed OS build fails before any build or
+render. There is no fallback, automatic recording, or unknown-environment SKIP.
+An explicit
+`tools/verification/sidebar-compare-states.sh --record-limits` builds an
+unmodified, pinned `origin/main` export; baseline overrides are refused. It
+prints the commit, binary SHA, key, measurements and a read-only proposal.
+Each cap is `ceil(measured main worst ΔE00 * 100) / 100`, using the worst of
+the bounded samples with no added headroom. Every sample must match the shared
+count and worst position, and no element or proposed cap may exceed its old
+M5 cap by more than 1.00 ΔE00. Evidence stays in ignored `.re/`; the command
+does not edit the limits. See [verification.md](verification.md) for the locked
+record command. M5 same-head proof and lead approval remain required.
+
+| State | Frame | Elements | Worst position (pt) | M5 worst ΔE00 | M1 worst ΔE00 | Main vs branch |
+|---|---|---|---|---|---|---|
+| Static, active window | F0001 | 31 | 1.0 | 1.59 | 1.56 | identical |
+| Static, inactive window | `arc-window-5245.png` | 31 | 1.0 | 1.17 | 1.31 | identical |
+| Row hover | F0013 | 33 | 1.0 | 1.59 | 1.56 | identical |
+| Selected pinned row, page loaded | F0015 | 33 | 1.0 | 1.73 | 2.71 | identical |
+| Selected favorite tile | F0016 | 28 | 1.0 | 1.59 | 1.56 | identical |
+| Sidebar toggle hover | F0024 | 29 | 1.0 | 1.59 | 1.56 | identical |
+| Home hover | F0027 | 29 | 2.0 | 1.59 | 1.56 | identical |
+| "New Tab" hover | F0031 | 29 | 1.0 | 1.59 | 1.55 | identical |
+| Cmd+T open | F0063 | 35 | 1.0 | 2.00 | 2.00 | identical |
+| Today tab selected | F0066 | 36 | 1.0 | 2.03 | 2.03 | identical |
+| Default dark Space, folder, split, child hover | F0079 | 31 | 1.0 | 1.77 | 1.77 | identical |
+| Yellow theme | F0070 | 23 | 1.0 | 1.95 | 2.25 | identical |
+| Blue theme with grain | F0069 | 19 | 1.0 | 2.38 | 2.34 | identical |
+
+The M5 worst values equal §8.1 in 12 states. F0016 reads 1.59 instead of 1.73 because the re-derived script skips the URL copy and Site Control buttons there. Element counts differ in six states (F0016, F0024, F0027, F0031, F0063, F0066): the re-derived script skips URL-host, button, and row-title elements whose text or state differs between the snapshot and the capture. The known differences in §9 remain (Home hover 2 pt, F0063/F0066 selected fill ≈ 2.0, blue grain 2.38).
 
 Offscreen renders are not fully deterministic. A run can return an empty image, a few 64 px tiles at the bottom edge can differ, or row text can differ by 1–4 levels. This happens with the main build too (F0063: one of three main runs differed). Each such state was run again alone, up to three times; then the outputs matched. The bottom-band glitch got more frequent under machine load.
 

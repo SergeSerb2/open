@@ -75,6 +75,53 @@ takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads ca
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
 
+### Sidebar color environments
+
+`sidebar-compare` runs all 13 states through the release render/compare CLI.
+Only its absolute Arc color caps use `macos-<build>-1x`. The build comes from
+`sw_vers -buildVersion` and must contain 1..32 ASCII alphanumeric characters.
+The renderer forces scale 1; the physical display scale is not part of the key.
+Count and position limits stay shared. Main and branch still need exactly equal
+element identities, sampling counts, position errors and ink boxes, with color
+metric drift at most 0.15 ΔE00. The separate divider check stays unchanged.
+
+`macos-26B5112a-1x` carries the original M5 caps unchanged as a proposed fixture,
+pending lead review and same-head M5 proof. `macos-26A434-1x` comes from an actual
+unmodified `origin/main` build at `49b566097423213d1bc9aca1426c7e2bb3f5f65b`.
+The three former failing state caps are 1.31 (static-inactive), 2.71
+(selected-pinned), and 2.25 (yellow). All 13 caps and the baseline binary SHA are
+in [design.md §15.1](design.md#151-no-regression-on-the-matched-states).
+The AGENTS.md M1 exception stays until M5 same-head proof and lead approval.
+
+An unknown key fails before building or rendering, names the key, and prints
+the record instruction. A malformed build also fails. Neither case falls back,
+auto-records, or SKIPs. Exit 77 remains reserved for missing private inputs on
+`--probe`. Record a proposal explicitly, with the whole job in one heavy slot:
+
+```sh
+/usr/bin/lockf /tmp/open-m1-validation.lock \
+  ~/Library/Caches/OpenRE/scripts/heavy.sh \
+  tools/verification/sidebar-compare-states.sh --record-limits
+```
+
+Recording pins the exact `origin/main` commit and builds its clean `git archive`
+export through `build_main`. It refuses `--baseline-renderer` and any alternate
+`--baseline-ref`. It prints that commit, the baseline binary SHA-256, environment
+key, per-state measurements and a Python dictionary proposal. With the default
+three main-only samples, each cap is the ceiling of the worst measured value to
+0.01 ΔE00, with no added headroom. Any count or worst-position disagreement with
+the shared metadata, or any element/proposed cap more than 1.00 ΔE00 above the
+old M5 cap, refuses the proposal. No tracked repository file is written. Add a
+new entry only through a reviewed PR. Ordinary comparisons with an override
+binary need its trusted-main build receipt and verified commit/binary digest.
+
+Private tables, renders and receipts default to a new 0700 directory under the
+shared ignored `.re/sidebar-compare-runs/`, outside verify-all artifact logs.
+An explicit `--out` must name a new private directory. Receipts include `envKey`,
+`osBuild`, `renderScale`, shared metadata and the selected color caps, plus the
+existing input/binary digests and per-attempt results. Recording receipts keep
+all measurements and the proposed caps. Never commit private outputs.
+
 ## Logs and privacy
 
 The default directory is `$TMPDIR/open-verify-<local timestamp>.<unique suffix>/`
