@@ -345,9 +345,14 @@ class Open:
         if self.closed:return
         self.quit_report={}
         try:known=process_tree(self.pid) if self.pid else {}
-        except Exception:known={self.pid:os.path.realpath(self.executable)} if self.pid else {}
+        except Exception:known={}
+        # The private socket proves the exact launch PID/root. proc_pidpath can
+        # be temporarily unavailable during shutdown; do not skip Quit for that.
+        if self.pid:known[self.pid]=os.path.realpath(self.executable)
+        self.quit_report['rootPathProbe']=owned_executable(self.pid) if self.pid else ''
         try:
-            if self.pid and owned_executable(self.pid)==os.path.realpath(self.executable):
+            ping=self.call('ping',timeout=1)
+            if self.pid and ping['pid']==self.pid and os.path.realpath(ping['root'])==os.path.realpath(self.user_data):
                 self.cleanup_dialogs('suite quit')
                 self.activation_trace=self.call('activation-events',timeout=1)
                 self.quit_report['reply']=self.call('quit',timeout=1)
@@ -361,6 +366,11 @@ class Open:
         # All descendants belong to the PID verified from this run's socket.
         # Kill leftovers even when the root exited and a helper was orphaned.
         self.quit_report['killed']=kill_known(known)
+        # Recheck the exact root after child teardown; keep its PID in the
+        # inventory even if a libproc query failed when the tree was collected.
+        if self.pid and owned_executable(self.pid)==os.path.realpath(self.executable):
+            known.update(process_tree(self.pid));known[self.pid]=os.path.realpath(self.executable)
+            self.quit_report['killed']+=kill_known(known)
         try:self.quit_report['remainingWindows']=wait_no_windows(known)
         except Exception as error:self.quit_report['remainingWindows']=[{'windowQueryError':str(error)}]
         if getattr(self,'widevine_row',None) is not None:
@@ -408,9 +418,12 @@ def shot(app, name, window=None, max_px=1100):
         return any(max(c[i] for c in samples)-min(c[i] for c in samples)>8 for i in range(3))
     if not wait_until(drawn,timeout=5,step=.05):
         raise RuntimeError("Owned window capture remained blank: " + name)
-    subprocess.run(["sips", "-Z", str(max_px), raw, "--out", path],check=True,
-                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    os.remove(raw)
+    width,height,_=read_image(raw)
+    if max(width,height)>max_px:
+        subprocess.run(["sips", "-Z", str(max_px), raw, "--out", path],check=True,
+                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        os.remove(raw)
+    else:os.replace(raw,path) # retain native pixels for small sheets/popovers
     return name
 
 
@@ -871,18 +884,24 @@ def page_chrome_checks(factory, results, tmp):
         # Caller boundaries use real page dialogs. Oversize data is refused
         # before it becomes App-owned alert text or enters the pending queue.
         app.call('policy',dialogs='hold')
-        for kind,limit,expression in [('message',16384,'alert("x".repeat(N))'),('prompt',4096,'prompt("bounded prompt","x".repeat(N))')]:
+        for kind,limit,expression in [('message',8192,'alert("x".repeat(N))'),('prompt',4096,'prompt("bounded prompt","x".repeat(N))')]:
             with dialog_case(app,'dialog size boundary'):
                 app.call('policy',dialogs='hold')
                 app.call('events')
                 app.eval(tab,'setTimeout(()=>{'+expression.replace('N',str(limit))+';window.boundaryDone=true},0);true')
                 accepted=wait_until(lambda:app.call('page-dialog-state')['pending']==1,timeout=5,step=.02)
-                assert accepted,app.call('page-dialog-state');app.call('dialog',accept=False)
+                assert accepted,app.call('page-dialog-state')
+                at_state=app.call('page-dialog-state')
+                at_bytes=at_state['sourceMessageBytes' if kind=='message' else 'sourcePromptBytes']
+                assert at_bytes==limit,at_state
+                app.call('dialog',accept=False)
                 assert wait_until(lambda:app.call('page-dialog-state')['pending']==0,timeout=3,step=.02)
                 app.eval(tab,'window.boundaryDone=false;setTimeout(()=>{'+expression.replace('N',str(limit+1))+';window.boundaryDone=true},0);true')
-                done=wait_until(lambda:app.eval(tab,'window.boundaryDone') is True,timeout=3,step=.02)
-                ev=app.call('events')
-                results['dialog_'+kind+'_limit']={'ok':bool(accepted) and bool(done) and app.call('page-dialog-state')['pending']==0 and any(e['type']=='pageChromeRefused' for e in ev),'atBytes':limit,'overBytes':limit+1}
+                refusal=wait_until(lambda:next((e for e in app.call('events') if e['type']=='pageChromeRefused'),None),timeout=3,step=.02)
+                # Read a renderer only after refusal; a broken guard leaves its
+                # alert held. The finally block cancels it without human input.
+                done=bool(refusal) and app.eval(tab,'window.boundaryDone',timeout=1) is True
+                results['dialog_'+kind+'_limit']={'ok':at_bytes==limit and bool(done) and app.call('page-dialog-state')['pending']==0,'atBytes':at_bytes,'overBytes':limit+1}
         with dialog_case(app,'dialog queue boundary'):
             app.call('policy',dialogs='hold')
             queued=[]

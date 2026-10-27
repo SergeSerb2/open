@@ -118,6 +118,7 @@ final class PageDialogPresenter {
     return ["pending": entries.count, "kind": entry.dialog.kind.rawValue,
       "visible": entry.alert?.window.isVisible == true, "held": entry.held,
       "message": entry.dialog.message, "text": entry.field?.stringValue ?? "",
+      "sourceMessageBytes": entry.dialog.message.utf8.count, "sourcePromptBytes": entry.dialog.defaultPromptText.utf8.count,
       "buttons": entry.alert?.buttons.map(\.title) ?? [], "window": entry.alert?.window.windowNumber ?? 0]
   }
   isolated deinit { if let sheetObserver { NotificationCenter.default.removeObserver(sheetObserver) } }

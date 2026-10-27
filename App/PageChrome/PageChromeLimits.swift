@@ -7,7 +7,9 @@ import OpenEngine
 /// upstream OE request decoding remains the engine's responsibility.
 @MainActor
 enum PageChromeLimits {
-  static let messageBytes = 16 * 1024
+  // Chromium truncates a page alert to 10 KiB before this callback. Keep
+  // our limit below that boundary so a real page can prove refusal.
+  static let messageBytes = 8 * 1024
   static let promptBytes = 4096
   static let urlBytes = 64 * 1024
   static let selectionBytes = 16 * 1024
@@ -15,7 +17,7 @@ enum PageChromeLimits {
   static let menuNodes = 128
   static let menuDepth = 8
   static func dialogFailure(_ dialog: OEJavaScriptDialog) -> String? {
-    if dialog.message.utf8.count > messageBytes { return "Page dialog exceeds 16384 UTF-8 bytes." }
+    if dialog.message.utf8.count > messageBytes { return "Page dialog exceeds 8192 UTF-8 bytes." }
     if dialog.defaultPromptText.utf8.count > promptBytes { return "Page prompt exceeds 4096 UTF-8 bytes." }
     return nil
   }
