@@ -38,34 +38,61 @@ import OpenWeb
     func seekTo(_ time: Double) { calls.append(.seek(time)); currentTime = time; positionUpdatedAt = Date() }
     func scrubTo(_ time: Double) { calls.append(.scrub(time)); currentTime = time; positionUpdatedAt = Date() }
     func setMuted(_ value: Bool) { calls.append(.muted(value)); mediaMuted = value }
-    func closePausingVideo(_ pause: Bool) { calls.append(.close(pause)); if pause { mediaState.playback = .paused }; windowVisible = false }
+    func closePausingVideo(_ pause: Bool) { calls.append(.close(pause)); if pause { mediaState.playback = .paused }; windowVisible = false; (videoView as? FakePiPVideoView)?.closed = true }
 }
 
+/// Under load, a fresh attributes dictionary per `updateLayer()` aborted inside CoreText
+/// during the "close during presentation" fixture (docs/followups.md). So the label font
+/// and attributes exist once, the label line is built once per size, the bitmap is drawn
+/// only when the pixel size changes, and nothing draws without a window or once the PiP
+/// is closing.
 @MainActor private final class FakePiPVideoView: NSView {
+    private struct PixelSize: Equatable { let width: Int, height: Int, scale: CGFloat }
+    private static let labelAttributes = NSDictionary(
+        objects: [NSFont.monospacedSystemFont(ofSize: 18, weight: .medium), CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.8)],
+        forKeys: [kCTFontAttributeName as NSString, kCTForegroundColorAttributeName as NSString])
+    private var label: (text: String, line: CTLine, width: CGFloat, ascent: CGFloat, descent: CGFloat)?
+    private var drawn: PixelSize?
+    /// Set by the host when its PiP closes; moving to another window clears it.
+    var closed = false
     override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true; layerContentsRedrawPolicy = .onSetNeedsDisplay }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
     override func layout() { super.layout(); needsDisplay = true }
     override func viewDidChangeBackingProperties() { super.viewDidChangeBackingProperties(); needsDisplay = true }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); closed = false; drawn = nil }
     override func updateLayer() {
+        guard let window, !closed, (window.windowController as? PictureInPictureWindowController)?.isClosing != true else { return }
         // Supply a plain bitmap layer: AppKit's large-view tiling cannot be cloned
         // reliably by the offscreen renderer. This is only the synthetic video.
-        let scale = window?.backingScaleFactor ?? 2
-        let width = Int(ceil(bounds.width * scale)), height = Int(ceil(bounds.height * scale))
-        guard width > 0, height > 0, let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+        let scale = window.backingScaleFactor
+        let size = PixelSize(width: Int(ceil(bounds.width * scale)), height: Int(ceil(bounds.height * scale)), scale: scale)
+        guard size != drawn || layer?.contents == nil, size.width > 0, size.height > 0,
+              let context = CGContext(data: nil, width: size.width, height: size.height, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return }
         context.scaleBy(x: scale, y: scale); context.translateBy(x: 0, y: bounds.height); context.scaleBy(x: 1, y: -1)
         NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
         NSGradient(starting: NSColor(srgbRed: 0.09, green: 0.18, blue: 0.31, alpha: 1), ending: NSColor(srgbRed: 0.19, green: 0.44, blue: 0.39, alpha: 1))?.draw(in: bounds, angle: 35)
-        let text = "\(Int(bounds.width))×\(Int(bounds.height))"
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 18, weight: .medium), .foregroundColor: NSColor.white.withAlphaComponent(0.8)]
-        let size = (text as NSString).size(withAttributes: attrs)
-        (text as NSString).draw(at: CGPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2), withAttributes: attrs)
         NSGraphicsContext.restoreGraphicsState()
+        let text = "\(Int(bounds.width))×\(Int(bounds.height))"
+        if label?.text != text, let string = CFAttributedStringCreate(nil, text as CFString, Self.labelAttributes as CFDictionary) {
+            let line = CTLineCreateWithAttributedString(string)
+            var ascent: CGFloat = 0, descent: CGFloat = 0
+            let width = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, nil))
+            label = (text, line, width, ascent, descent)
+        }
+        if let label {
+            // CoreText draws y-up: undo the flip for the line only.
+            context.saveGState(); context.translateBy(x: 0, y: bounds.height); context.scaleBy(x: 1, y: -1)
+            context.textMatrix = .identity
+            context.textPosition = CGPoint(x: (bounds.width - label.width) / 2, y: (bounds.height - label.ascent - label.descent) / 2 + label.descent)
+            CTLineDraw(label.line, context); context.restoreGState()
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         layer?.contents = context.makeImage(); layer?.contentsScale = scale
         CATransaction.commit()
+        drawn = size
     }
 }
 
