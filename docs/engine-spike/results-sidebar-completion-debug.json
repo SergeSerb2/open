@@ -6,13 +6,13 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          63236,
-          63281,
-          63282,
-          63283,
-          63284,
-          63285,
-          63286
+          23506,
+          23606,
+          23607,
+          23608,
+          23609,
+          23614,
+          23616
         ],
         "remaining_processes": [],
         "reply": true,
@@ -20,31 +20,31 @@
           "count": 0,
           "windows": []
         },
-        "windows_before_quit": 3
+        "windows_before_quit": 2
       },
       {
         "forced": false,
         "ok": true,
         "owned_pids": [
-          63324,
-          63327,
-          63328,
-          63329,
-          63330,
-          63332,
-          63346,
-          63347,
-          63350,
-          63352,
-          63356,
-          63361,
-          63362,
-          63373,
-          63374,
-          63377,
-          63378,
-          63380,
-          63381
+          23689,
+          23693,
+          23694,
+          23695,
+          23697,
+          23698,
+          23714,
+          23715,
+          23718,
+          23722,
+          23725,
+          23731,
+          23732,
+          23736,
+          23737,
+          23744,
+          23745,
+          23762,
+          23764
         ],
         "remaining_processes": [],
         "reply": true,
@@ -110,14 +110,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   319,
                   182.5
@@ -162,7 +162,7 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
@@ -206,7 +206,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -215,10 +215,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010413195400)",
+        "identity": "ObjectIdentifier(0x0000010c01dd6000)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -228,17 +228,17 @@
         "switchers": [
           {
             "order": [
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103a1a55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1038c30bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190237,
+        "window": 190607,
         "windows": [
           {
             "attachedSheet": 0,
@@ -247,7 +247,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190236,
+            "number": 190606,
             "parent": 0,
             "sheet": false,
             "title": "Manager One",
@@ -260,7 +260,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190237,
+            "number": 190607,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -307,14 +307,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   319,
                   182.5
@@ -359,7 +359,7 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
@@ -403,7 +403,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -412,10 +412,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010413195400)",
+        "identity": "ObjectIdentifier(0x0000010c01dd6000)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -425,17 +425,17 @@
         "switchers": [
           {
             "order": [
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103a1a55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1038c30bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190237,
+        "window": 190607,
         "windows": [
           {
             "attachedSheet": 0,
@@ -444,7 +444,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190236,
+            "number": 190606,
             "parent": 0,
             "sheet": false,
             "title": "Manager One",
@@ -457,7 +457,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190237,
+            "number": 190607,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -508,14 +508,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   319,
                   182.5
@@ -560,7 +560,7 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
@@ -604,7 +604,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -613,10 +613,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010413195400)",
+        "identity": "ObjectIdentifier(0x0000010c01dd6000)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -626,17 +626,17 @@
         "switchers": [
           {
             "order": [
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103a1a55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1038c30bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190237,
+        "window": 190607,
         "windows": [
           {
             "attachedSheet": 0,
@@ -645,7 +645,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190236,
+            "number": 190606,
             "parent": 0,
             "sheet": false,
             "title": "Manager One",
@@ -658,7 +658,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190237,
+            "number": 190607,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -671,7 +671,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 190238,
+            "number": 190608,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -699,7 +699,7 @@
             567
           ],
           "part": "column",
-          "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+          "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
         },
         {
           "actual": [
@@ -716,7 +716,7 @@
             26
           ],
           "part": "icon",
-          "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+          "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
         },
         {
           "actual": [
@@ -733,7 +733,7 @@
             24
           ],
           "part": "grabber",
-          "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+          "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
         },
         {
           "actual": [
@@ -750,7 +750,7 @@
             24
           ],
           "part": "more",
-          "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+          "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
         },
         {
           "actual": [
@@ -761,7 +761,7 @@
             41
           ],
           "part": "title.x",
-          "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+          "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
         },
         {
           "actual": [
@@ -778,7 +778,7 @@
             567
           ],
           "part": "column",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80"
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503"
         },
         {
           "actual": [
@@ -795,7 +795,7 @@
             26
           ],
           "part": "icon",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80"
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503"
         },
         {
           "actual": [
@@ -812,7 +812,7 @@
             24
           ],
           "part": "grabber",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80"
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503"
         },
         {
           "actual": [
@@ -829,7 +829,7 @@
             24
           ],
           "part": "more",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80"
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503"
         },
         {
           "actual": [
@@ -840,7 +840,7 @@
             41
           ],
           "part": "title.x",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80"
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503"
         },
         {
           "actual": [
@@ -857,7 +857,7 @@
             567
           ],
           "part": "column",
-          "space": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+          "space": "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
         },
         {
           "actual": [
@@ -874,7 +874,7 @@
             26
           ],
           "part": "icon",
-          "space": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+          "space": "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
         },
         {
           "actual": [
@@ -891,7 +891,7 @@
             24
           ],
           "part": "grabber",
-          "space": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+          "space": "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
         },
         {
           "actual": [
@@ -908,7 +908,7 @@
             24
           ],
           "part": "more",
-          "space": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+          "space": "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
         },
         {
           "actual": [
@@ -919,15 +919,15 @@
             41
           ],
           "part": "title.x",
-          "space": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+          "space": "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
         }
       ],
       "worst": 0
     },
     "E5_menu_real_manager": {
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-63135-60bdd468/manager-rest.png",
-      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.63135-60bdd468",
+      "png": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-23424-6291571d/manager-rest.png",
+      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.23424-6291571d",
       "state": {
         "columns": [
           {
@@ -967,14 +967,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   319,
                   182.5
@@ -1019,7 +1019,7 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
@@ -1063,7 +1063,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -1072,10 +1072,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010413195400)",
+        "identity": "ObjectIdentifier(0x0000010c01dd6000)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1085,17 +1085,17 @@
         "switchers": [
           {
             "order": [
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103a1a55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1038c30bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190237,
+        "window": 190607,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1104,7 +1104,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190236,
+            "number": 190606,
             "parent": 0,
             "sheet": false,
             "title": "Manager One",
@@ -1117,7 +1117,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190237,
+            "number": 190607,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1129,9 +1129,9 @@
     "E6_native_drag_and_switcher": {
       "eventPath": "OEApplication.sendEvent -> native SpaceGrabber.mouseDown -> tracking loop",
       "expected": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
       "ok": true,
       "state": {
@@ -1173,7 +1173,7 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
@@ -1217,7 +1217,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -1261,14 +1261,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   831,
                   182.5
@@ -1278,10 +1278,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000010413195400)",
+        "identity": "ObjectIdentifier(0x0000010c01dd6000)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1291,17 +1291,17 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $103a1a55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $1038c30bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190237,
+        "window": 190607,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1310,7 +1310,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190236,
+            "number": 190606,
             "parent": 0,
             "sheet": false,
             "title": "Manager One",
@@ -1323,7 +1323,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190237,
+            "number": 190607,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1336,46 +1336,20 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 190238,
+            "number": 190608,
             "parent": 0,
             "sheet": false,
             "title": "",
             "visible": false
-          },
-          {
-            "attachedSheet": 0,
-            "class": "SPRoundedWindow",
-            "firstResponder": "SPRoundedWindow",
-            "frame": "{{396, 406}, {312, 237}}",
-            "key": false,
-            "level": 101,
-            "number": 190241,
-            "parent": 0,
-            "sheet": false,
-            "title": "",
-            "visible": false
-          },
-          {
-            "attachedSheet": 0,
-            "class": "NSPanel",
-            "firstResponder": "NSPanel",
-            "frame": "{{1010, 568}, {0, 0}}",
-            "key": false,
-            "level": 0,
-            "number": 190243,
-            "parent": 190237,
-            "sheet": false,
-            "title": "",
-            "visible": true
           }
         ]
       }
     },
     "E6_relaunch_preserves_ids": {
       "expected": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
       "ok": true,
       "state": {
@@ -1417,7 +1391,7 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
@@ -1461,7 +1435,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -1505,14 +1479,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   831,
                   182.5
@@ -1522,10 +1496,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 0,
         "previewsEnabled": false,
@@ -1535,17 +1509,17 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           }
         ],
         "undoEnabled": false,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1554,7 +1528,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Manager One",
@@ -1567,7 +1541,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1587,14 +1561,14 @@
       "key": {
         "barPresented": false,
         "firstResponder": "SidebarOutlineView",
-        "keyWindow": 190236,
+        "keyWindow": 190606,
         "sidebarMode": "anchored"
       },
       "ok": true,
       "order": [
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
       ],
       "undoAfter": 2,
       "undoBefore": 1
@@ -1604,29 +1578,29 @@
       "errors": [],
       "ok": true,
       "ownedPIDs": [
-        63236,
-        63324,
-        63327,
-        63328,
-        63329,
-        63377,
-        63378,
-        63380,
-        63381
+        23506,
+        23689,
+        23693,
+        23694,
+        23695,
+        23744,
+        23745,
+        23762,
+        23764
       ],
-      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.63135-60bdd468",
+      "preferenceDomain": "io.github.sergeserb2.open.e2e.spacemanager.23424-6291571d",
       "quit": [
         {
           "forced": false,
           "ok": true,
           "owned_pids": [
-            63236,
-            63281,
-            63282,
-            63283,
-            63284,
-            63285,
-            63286
+            23506,
+            23606,
+            23607,
+            23608,
+            23609,
+            23614,
+            23616
           ],
           "remaining_processes": [],
           "reply": true,
@@ -1634,31 +1608,31 @@
             "count": 0,
             "windows": []
           },
-          "windows_before_quit": 3
+          "windows_before_quit": 2
         },
         {
           "forced": false,
           "ok": true,
           "owned_pids": [
-            63324,
-            63327,
-            63328,
-            63329,
-            63330,
-            63332,
-            63346,
-            63347,
-            63350,
-            63352,
-            63356,
-            63361,
-            63362,
-            63373,
-            63374,
-            63377,
-            63378,
-            63380,
-            63381
+            23689,
+            23693,
+            23694,
+            23695,
+            23697,
+            23698,
+            23714,
+            23715,
+            23718,
+            23722,
+            23725,
+            23731,
+            23732,
+            23736,
+            23737,
+            23744,
+            23745,
+            23762,
+            23764
           ],
           "remaining_processes": [],
           "reply": true,
@@ -1713,21 +1687,21 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   319,
                   182.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   319,
                   223.5
@@ -1772,14 +1746,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   575,
                   182.5
@@ -1824,7 +1798,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -1833,10 +1807,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000011408d99f00)",
+        "identity": "ObjectIdentifier(0x0000012401e6d200)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 2,
         "previewsEnabled": false,
@@ -1846,17 +1820,17 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "5E6B477D-D36F-4216-92ED-24CCA67786E9"
+            "window": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -1865,7 +1839,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -1878,7 +1852,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -1891,7 +1865,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190252,
+            "number": 190621,
             "parent": 0,
             "sheet": false,
             "title": "Open",
@@ -1907,12 +1881,12 @@
         "editorCanUndo": true,
         "editorText": "Manage Spaces",
         "final": true,
-        "firstResultsMs": 6.950291666666999,
+        "firstResultsMs": 3.2837916666667297,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 32.50466666666671,
+        "openFirstResultsMs": 25.873916666667355,
         "presented": true,
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "range": [
           13,
           0
@@ -1938,7 +1912,7 @@
           }
         ],
         "selected": 0,
-        "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+        "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
         "text": "Manage Spaces",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -1950,19 +1924,19 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 27.725000000000364,
+        "firstResultsMs": 22.889041666666344,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 32.50466666666671,
+        "openFirstResultsMs": 25.873916666667355,
         "presented": true,
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "range": [
           0,
           0
         ],
         "rows": [],
         "selected": -1,
-        "space": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+        "space": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -1981,8 +1955,8 @@
       "after": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "key": false,
         "origin": [
           0,
@@ -2040,8 +2014,8 @@
       "before": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "key": true,
         "origin": [
           0,
@@ -2139,49 +2113,49 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+                "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
                 "point": [
                   319,
                   124.5
                 ]
               },
               {
-                "id": "363F0686-EB8A-43F5-903C-EB531EF862B1",
+                "id": "8810A2E2-D27C-4698-B1DE-F14B2EB95B7E",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+                "id": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
                 "point": [
                   319,
                   264.5
                 ]
               },
               {
-                "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+                "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
                 "point": [
                   319,
                   305.5
                 ]
               },
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   319,
                   346.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   319,
                   387.5
@@ -2226,7 +2200,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -2270,14 +2244,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   831,
                   182.5
@@ -2287,12 +2261,12 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000011408d99f00)",
+        "identity": "ObjectIdentifier(0x0000012401e6d200)",
         "managerClass": "OpenSidebar.SpaceManagerView",
-        "modelUndoCount": 3,
+        "modelUndoCount": 4,
         "previewsEnabled": false,
         "sameModel": true,
         "sameUndoManager": true,
@@ -2300,17 +2274,17 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "5E6B477D-D36F-4216-92ED-24CCA67786E9"
+            "window": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -2319,7 +2293,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -2332,7 +2306,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -2345,7 +2319,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 190253,
+            "number": 190622,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -2358,7 +2332,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190257,
+            "number": 190626,
             "parent": 0,
             "sheet": false,
             "title": "Manager Split Source",
@@ -2371,14 +2345,14 @@
       "key": {
         "barPresented": false,
         "firstResponder": "SpaceManagerView",
-        "keyWindow": 190237,
+        "keyWindow": 190607,
         "sidebarMode": "anchored"
       },
       "ok": true,
       "order": [
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
       ],
       "undoAfter": 1,
       "undoBefore": 0
@@ -2389,12 +2363,12 @@
         "editorCanUndo": false,
         "editorText": "",
         "final": true,
-        "firstResultsMs": 46.644750000000386,
+        "firstResultsMs": 26.605708333332586,
         "mode": "newTab",
         "newTabHighlighted": false,
-        "openFirstResultsMs": 61.50695833333339,
+        "openFirstResultsMs": 35.80466666666689,
         "presented": false,
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "range": [
           -1,
           0
@@ -2402,34 +2376,34 @@
         "rows": [
           {
             "action": "",
-            "id": "tab:62DF7186-5A27-4AFC-934F-57BC82F5626C",
+            "id": "tab:961B16C0-1DE3-4130-8D7B-966730B0AA41",
             "kind": "switchToTab",
-            "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-            "tab": "62DF7186-5A27-4AFC-934F-57BC82F5626C",
+            "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+            "tab": "961B16C0-1DE3-4130-8D7B-966730B0AA41",
             "title": "Manager Drop Target",
-            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-drop-target.html"
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-drop-target.html"
           },
           {
             "action": "",
-            "id": "tab:7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
+            "id": "tab:8AFBADF8-B925-4650-8462-10EE6A6A3B76",
             "kind": "switchToTab",
-            "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-            "tab": "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
+            "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+            "tab": "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
             "title": "Manager Split Source",
             "url": "data:text/html,%3Ctitle%3EManager%20Split%20Source%3C/title%3E%3Ch1%3EManager%20Split%20Source%3C/h1%3E"
           },
           {
             "action": "",
-            "id": "tab:10B40708-52BE-4A16-806C-CC10FE1D61DF",
+            "id": "tab:8C212786-454E-4838-BE2A-C45EFE0C0E6A",
             "kind": "switchToTab",
-            "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-            "tab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+            "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+            "tab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
             "title": "Manager Pinned Route",
-            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html"
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html"
           }
         ],
         "selected": 0,
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "text": "",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       },
@@ -2440,7 +2414,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+        "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
         "loaded": true,
         "loading": true,
         "page": {
@@ -2449,15 +2423,15 @@
           "browserIndex": 2,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 2029733853,
-          "chromeWindowId": 2029733850,
+          "chromeTabId": 674298124,
+          "chromeWindowId": 674298121,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+          "hostTab": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
           "identifier": 15,
           "kind": "tab",
           "live": true,
@@ -2470,12 +2444,12 @@
           "url": "",
           "zoom": 0
         },
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "progress": 0.1,
         "section": "today",
         "selected": true,
         "sleepPhase": "live",
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "title": "Surviving Browser Selection",
         "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E",
         "visible": true
@@ -2490,8 +2464,8 @@
           "library": {
             "appAppearance": "",
             "builtColumns": 3,
-            "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
-            "identity": "ObjectIdentifier(0x0000011408d99f00)",
+            "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
+            "identity": "ObjectIdentifier(0x0000012401e6d200)",
             "key": true,
             "origin": [
               0,
@@ -2556,8 +2530,8 @@
           "library": {
             "appAppearance": "",
             "builtColumns": 3,
-            "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
-            "identity": "ObjectIdentifier(0x0000011408d99f00)",
+            "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
+            "identity": "ObjectIdentifier(0x0000012401e6d200)",
             "key": true,
             "origin": [
               0,
@@ -2622,8 +2596,8 @@
           "library": {
             "appAppearance": "",
             "builtColumns": 3,
-            "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
-            "identity": "ObjectIdentifier(0x0000011408d99f00)",
+            "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
+            "identity": "ObjectIdentifier(0x0000012401e6d200)",
             "key": true,
             "origin": [
               0,
@@ -2681,7 +2655,7 @@
         }
       ],
       "ok": true,
-      "selectedBeforeClose": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+      "selectedBeforeClose": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
       "state": {
         "columns": [
           {
@@ -2721,49 +2695,49 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+                "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
                 "point": [
                   319,
                   124.5
                 ]
               },
               {
-                "id": "363F0686-EB8A-43F5-903C-EB531EF862B1",
+                "id": "8810A2E2-D27C-4698-B1DE-F14B2EB95B7E",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+                "id": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
                 "point": [
                   319,
                   264.5
                 ]
               },
               {
-                "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+                "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
                 "point": [
                   319,
                   305.5
                 ]
               },
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   319,
                   346.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   319,
                   387.5
@@ -2808,7 +2782,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -2852,14 +2826,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   831,
                   182.5
@@ -2869,12 +2843,12 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000011408d99f00)",
+        "identity": "ObjectIdentifier(0x0000012401e6d200)",
         "managerClass": "OpenSidebar.SpaceManagerView",
-        "modelUndoCount": 3,
+        "modelUndoCount": 4,
         "previewsEnabled": false,
         "sameModel": true,
         "sameUndoManager": true,
@@ -2882,17 +2856,17 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "5E6B477D-D36F-4216-92ED-24CCA67786E9"
+            "window": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD"
           }
         ],
         "undoEnabled": true,
         "undoTarget": "RenderWidgetHostViewCocoa",
         "visible": false,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -2901,7 +2875,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -2914,7 +2888,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": false,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -2927,7 +2901,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 190253,
+            "number": 190622,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -2940,7 +2914,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": true,
             "level": 0,
-            "number": 190257,
+            "number": 190626,
             "parent": 0,
             "sheet": false,
             "title": "Surviving Browser Selection",
@@ -2949,30 +2923,30 @@
         ]
       },
       "tabsAfterClose": [
-        "0938DA89-2464-418A-A7D0-E7C5756D97D7",
-        "10B40708-52BE-4A16-806C-CC10FE1D61DF",
-        "50E0D9B6-4004-4B31-9740-104187FFC231",
-        "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
-        "62DF7186-5A27-4AFC-934F-57BC82F5626C",
-        "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
-        "C65A173A-24CE-47FA-8B9C-D639652C3F47"
+        "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
+        "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
+        "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
+        "961B16C0-1DE3-4130-8D7B-966730B0AA41",
+        "A05149FF-5A96-4065-BBBE-681285303759",
+        "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
+        "F8E3497F-A125-4739-8C32-2C7981E61A0F"
       ],
       "tabsBeforeClose": [
-        "0938DA89-2464-418A-A7D0-E7C5756D97D7",
-        "10B40708-52BE-4A16-806C-CC10FE1D61DF",
-        "50E0D9B6-4004-4B31-9740-104187FFC231",
-        "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
-        "62DF7186-5A27-4AFC-934F-57BC82F5626C",
-        "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
-        "C65A173A-24CE-47FA-8B9C-D639652C3F47"
+        "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
+        "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
+        "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
+        "961B16C0-1DE3-4130-8D7B-966730B0AA41",
+        "A05149FF-5A96-4065-BBBE-681285303759",
+        "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
+        "F8E3497F-A125-4739-8C32-2C7981E61A0F"
       ]
     },
     "library_section_click_fills_cache": {
       "after": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "key": true,
         "origin": [
           0,
@@ -3090,30 +3064,30 @@
     },
     "library_undo_after_window_close": {
       "expectedOrder": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
       "ok": true,
       "order": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
       "shellWindows": [
         {
-          "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
-          "number": 190252
+          "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
+          "number": 190621
         }
       ],
       "snapshotWindows": [
         {
-          "focusedSpaceID": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "focusedSpaceID": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "frameHeight": 800,
           "frameWidth": 1280,
           "frameX": 124,
           "frameY": 76,
-          "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+          "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
           "selectedNodeBySpace": {},
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
@@ -3126,37 +3100,37 @@
     },
     "library_undo_after_window_create": {
       "expectedOrder": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
       "ok": true,
       "order": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
       "shellWindows": [
         {
-          "id": "521270F5-B25A-4A55-A69B-591A8083162D",
-          "number": 190250
+          "id": "A3329748-C805-43E4-8B85-D1D4793A4074",
+          "number": 190619
         },
         {
-          "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
-          "number": 190252
+          "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
+          "number": 190621
         }
       ],
       "snapshotWindows": [
         {
-          "focusedSpaceID": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "focusedSpaceID": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "frameHeight": 800,
           "frameWidth": 1280,
           "frameX": 100,
           "frameY": 100,
-          "id": "521270F5-B25A-4A55-A69B-591A8083162D",
+          "id": "A3329748-C805-43E4-8B85-D1D4793A4074",
           "selectedNodeBySpace": {
-            "3B7C88A8-3207-433F-AB28-5FBDDE034E80": "50E0D9B6-4004-4B31-9740-104187FFC231",
-            "406322AF-D6C0-4BED-A730-A36119CAA4AB": "D667B3F7-5578-4EA6-854F-0D2D953885C7"
+            "A0E4E2E5-F347-48A1-8A68-45A9D39648BC": "E07C7425-89FC-4264-8170-E74677DDA142",
+            "B1F1BBAA-238A-46CE-8091-61AEB98D9503": "A05149FF-5A96-4065-BBBE-681285303759"
           },
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
@@ -3164,12 +3138,12 @@
           "style": "standard"
         },
         {
-          "focusedSpaceID": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "focusedSpaceID": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "frameHeight": 800,
           "frameWidth": 1280,
           "frameX": 124,
           "frameY": 76,
-          "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+          "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
           "selectedNodeBySpace": {},
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
@@ -3185,8 +3159,8 @@
       "state": {
         "appAppearance": "NSAppearanceNameDarkAqua",
         "builtColumns": 3,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "key": true,
         "origin": [
           0,
@@ -3247,8 +3221,8 @@
       "state": {
         "appAppearance": "NSAppearanceNameAqua",
         "builtColumns": 3,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "key": true,
         "origin": [
           0,
@@ -3309,8 +3283,8 @@
       "state": {
         "appAppearance": "",
         "builtColumns": 3,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
-        "identity": "ObjectIdentifier(0x000001140a8d9300)",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
+        "identity": "ObjectIdentifier(0x00000124003dc300)",
         "key": true,
         "origin": [
           0,
@@ -3368,37 +3342,37 @@
     },
     "manager_archive_real_store": {
       "ok": true,
-      "tab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+      "tab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
     },
     "manager_archive_restore_original_id": {
       "ok": true,
-      "tab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+      "tab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
     },
     "manager_captures": {
       "comparison": "no Arc Manager capture exists (C2 pending); geometry compared with the plan spec in E5_manager_spec_geometry",
-      "hovered": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-63135-60bdd468/manager-hovered.png",
-      "rest": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-63135-60bdd468/manager-rest.png"
+      "hovered": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-23424-6291571d/manager-hovered.png",
+      "rest": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-23424-6291571d/manager-rest.png"
     },
     "manager_copy_link_pasteboard": {
-      "actual": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
-      "expected": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+      "actual": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
+      "expected": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
       "ok": true
     },
     "manager_delete_space": {
       "ok": true,
       "order": [
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ]
     },
     "manager_delete_space_undo_ids": {
       "ok": true,
       "order": [
-        "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-        "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-        "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
       ],
-      "tab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+      "tab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
     },
     "manager_loaded_pin_unloads_host": {
       "ok": true,
@@ -3409,17 +3383,17 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": false,
-        "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "loaded": false,
         "loading": false,
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "progress": 0,
         "section": "pinned",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
         "visible": false
       }
     },
@@ -3430,12 +3404,12 @@
         "editorCanUndo": true,
         "editorText": "Mute All Tabs",
         "final": true,
-        "firstResultsMs": 7.079291666666904,
+        "firstResultsMs": 0.9935416666667152,
         "mode": "newTab",
         "newTabHighlighted": true,
-        "openFirstResultsMs": 29.774083333332783,
+        "openFirstResultsMs": 18.144541666666555,
         "presented": true,
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "range": [
           13,
           0
@@ -3470,7 +3444,7 @@
           }
         ],
         "selected": 0,
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "text": "Mute All Tabs",
         "timingScope": "showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation"
       }
@@ -3483,15 +3457,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": false,
-        "chromeTabId": 2029733840,
-        "chromeWindowId": 2029733832,
+        "chromeTabId": 674298111,
+        "chromeWindowId": 674298103,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "hostTab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -3506,13 +3480,13 @@
         "popup": false,
         "style": "chrome",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
         "zoom": 0
       }
     },
     "manager_pinned_delete_retains_pin": {
       "archive": [],
-      "expectedNeighbor": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+      "expectedNeighbor": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
       "ok": true,
       "pin": {
         "audible": false,
@@ -3521,20 +3495,20 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": false,
-        "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "loaded": false,
         "loading": false,
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "progress": 0,
         "section": "pinned",
         "selected": false,
         "sleepPhase": "placeholder",
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
         "visible": false
       },
-      "selected": "0938DA89-2464-418A-A7D0-E7C5756D97D7"
+      "selected": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0"
     },
     "manager_rebind_second_and_first": {
       "first": {
@@ -3576,21 +3550,21 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   310,
                   182.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   310,
                   223.5
@@ -3635,7 +3609,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -3679,14 +3653,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   822,
                   182.5
@@ -3696,10 +3670,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "contextWindow": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x000001140a8db400)",
+        "identity": "ObjectIdentifier(0x0000012401e6c300)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 2,
         "previewsEnabled": false,
@@ -3709,25 +3683,25 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           },
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "5E6B477D-D36F-4216-92ED-24CCA67786E9"
+            "window": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -3736,7 +3710,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -3749,7 +3723,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -3762,7 +3736,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190252,
+            "number": 190621,
             "parent": 0,
             "sheet": false,
             "title": "Open",
@@ -3810,21 +3784,21 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   319,
                   182.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   319,
                   223.5
@@ -3869,14 +3843,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   575,
                   182.5
@@ -3921,7 +3895,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -3930,10 +3904,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x000001140b973600)",
+        "identity": "ObjectIdentifier(0x0000012402e93c00)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 1,
         "previewsEnabled": false,
@@ -3943,25 +3917,25 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "521270F5-B25A-4A55-A69B-591A8083162D"
+            "window": "A3329748-C805-43E4-8B85-D1D4793A4074"
           },
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
             ],
-            "window": "5E6B477D-D36F-4216-92ED-24CCA67786E9"
+            "window": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -3970,7 +3944,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -3983,7 +3957,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -3996,7 +3970,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190252,
+            "number": 190621,
             "parent": 0,
             "sheet": false,
             "title": "Open",
@@ -4013,15 +3987,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": true,
-        "chromeTabId": 2029733840,
-        "chromeWindowId": 2029733832,
+        "chromeTabId": 674298111,
+        "chromeWindowId": 674298103,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "hostTab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -4036,7 +4010,7 @@
         "popup": false,
         "style": "chrome",
         "title": "Pinned Route Navigated",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-navigated.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-navigated.html",
         "zoom": 0
       }
     },
@@ -4048,15 +4022,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": true,
-        "chromeTabId": 2029733840,
-        "chromeWindowId": 2029733832,
+        "chromeTabId": 674298111,
+        "chromeWindowId": 674298103,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "hostTab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -4071,7 +4045,7 @@
         "popup": false,
         "style": "chrome",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
         "zoom": 0
       },
       "tab": {
@@ -4081,7 +4055,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "loaded": true,
         "loading": false,
         "page": {
@@ -4090,15 +4064,15 @@
           "browserIndex": 0,
           "browserPinned": true,
           "canGoBack": true,
-          "chromeTabId": 2029733840,
-          "chromeWindowId": 2029733832,
+          "chromeTabId": 674298111,
+          "chromeWindowId": 674298103,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": false,
-          "hostTab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+          "hostTab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
           "identifier": 10,
           "kind": "tab",
           "live": true,
@@ -4113,22 +4087,22 @@
           "popup": false,
           "style": "chrome",
           "title": "Manager Pinned Route",
-          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
           "zoom": 0
         },
-        "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+        "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
         "progress": 1,
         "section": "pinned",
         "selected": true,
         "sleepPhase": "live",
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
         "visible": true
       }
     },
     "manager_split_through_browser": {
-      "focused": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+      "focused": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
       "ok": true,
       "state": {
         "activationPolicy": 0,
@@ -4202,13 +4176,13 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 190251,
-        "layoutPasses": 857,
+        "keyWindow": 190620,
+        "layoutPasses": 846,
         "miniaturized": false,
-        "number": 190252,
+        "number": 190621,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
@@ -4218,7 +4192,7 @@
               255,
               255
             ],
-            "tab": "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B"
+            "tab": "8AFBADF8-B925-4650-8462-10EE6A6A3B76"
           },
           {
             "color": [
@@ -4227,7 +4201,7 @@
               255,
               255
             ],
-            "tab": "62DF7186-5A27-4AFC-934F-57BC82F5626C"
+            "tab": "961B16C0-1DE3-4130-8D7B-966730B0AA41"
           }
         ],
         "panel": [
@@ -4259,10 +4233,10 @@
           1728,
           1117
         ],
-        "selected": "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
+        "selected": "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
         "shownPages": [
-          "62DF7186-5A27-4AFC-934F-57BC82F5626C",
-          "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B"
+          "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
+          "961B16C0-1DE3-4130-8D7B-966730B0AA41"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -4279,7 +4253,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "titlebar": [
           0,
           0,
@@ -4376,7 +4350,7 @@
       }
     },
     "manager_today_archive_selects_neighbor": {
-      "expected": "50E0D9B6-4004-4B31-9740-104187FFC231",
+      "expected": "A05149FF-5A96-4065-BBBE-681285303759",
       "ok": true,
       "state": {
         "activationPolicy": 0,
@@ -4450,18 +4424,18 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "521270F5-B25A-4A55-A69B-591A8083162D",
+        "id": "A3329748-C805-43E4-8B85-D1D4793A4074",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 190251,
-        "layoutPasses": 205,
+        "keyWindow": 190620,
+        "layoutPasses": 206,
         "miniaturized": false,
-        "number": 190250,
+        "number": 190619,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "50E0D9B6-4004-4B31-9740-104187FFC231"
+            "tab": "A05149FF-5A96-4065-BBBE-681285303759"
           }
         ],
         "panel": [
@@ -4493,9 +4467,9 @@
           1728,
           1117
         ],
-        "selected": "50E0D9B6-4004-4B31-9740-104187FFC231",
+        "selected": "A05149FF-5A96-4065-BBBE-681285303759",
         "shownPages": [
-          "50E0D9B6-4004-4B31-9740-104187FFC231"
+          "A05149FF-5A96-4065-BBBE-681285303759"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -4512,7 +4486,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "titlebar": [
           0,
           0,
@@ -4608,6 +4582,52 @@
         "zoomed": false
       }
     },
+    "manager_turn_into_folder": {
+      "firstPinned": {
+        "folder": {
+          "_0": {
+            "children": [
+              {
+                "tab": {
+                  "_0": {
+                    "createdAt": 1793134944.884932,
+                    "id": "E07C7425-89FC-4264-8170-E74677DDA142",
+                    "isMuted": false,
+                    "isUnread": false,
+                    "lastActiveAt": 1793134944.885075,
+                    "pinnedURL": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E",
+                    "title": "Manager One",
+                    "url": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E"
+                  }
+                }
+              }
+            ],
+            "id": "832F6BF2-5D72-456D-993E-DC7AD9C83D32",
+            "isExpanded": true,
+            "title": "Space"
+          }
+        }
+      },
+      "ok": true,
+      "order": [
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315"
+      ],
+      "title": "Space"
+    },
+    "manager_turn_into_folder_undo": {
+      "expected": [
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
+      ],
+      "ok": true,
+      "order": [
+        "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+        "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+        "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
+      ]
+    },
     "manager_unmute_updates_real_host": {
       "ok": true,
       "page": {
@@ -4616,15 +4636,15 @@
         "browserIndex": 0,
         "browserPinned": true,
         "canGoBack": false,
-        "chromeTabId": 2029733840,
-        "chromeWindowId": 2029733832,
+        "chromeTabId": 674298111,
+        "chromeWindowId": 674298103,
         "context": "Default",
         "crash": 0,
         "extension": "",
         "favicon": false,
         "fullscreen": false,
         "hidden": false,
-        "hostTab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+        "hostTab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
         "identifier": 10,
         "kind": "tab",
         "live": true,
@@ -4639,13 +4659,13 @@
         "popup": false,
         "style": "chrome",
         "title": "Manager Pinned Route",
-        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
         "zoom": 0
       }
     },
     "manager_url_drop_other_space": {
-      "expected": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-      "focused": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+      "expected": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+      "focused": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
       "ok": true,
       "tabs": [
         {
@@ -4655,7 +4675,7 @@
           "crashed": false,
           "favicon": false,
           "hasWebContent": true,
-          "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+          "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
           "loaded": true,
           "loading": false,
           "page": {
@@ -4664,15 +4684,15 @@
             "browserIndex": 0,
             "browserPinned": true,
             "canGoBack": true,
-            "chromeTabId": 2029733840,
-            "chromeWindowId": 2029733832,
+            "chromeTabId": 674298111,
+            "chromeWindowId": 674298103,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+            "hostTab": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
             "identifier": 10,
             "kind": "tab",
             "live": true,
@@ -4687,17 +4707,17 @@
             "popup": false,
             "style": "chrome",
             "title": "Manager Pinned Route",
-            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+            "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
             "zoom": 0
           },
-          "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+          "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
           "progress": 1,
           "section": "pinned",
           "selected": false,
           "sleepPhase": "live",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "title": "Manager Pinned Route",
-          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
           "visible": false
         },
         {
@@ -4707,7 +4727,7 @@
           "crashed": false,
           "favicon": false,
           "hasWebContent": true,
-          "id": "62DF7186-5A27-4AFC-934F-57BC82F5626C",
+          "id": "961B16C0-1DE3-4130-8D7B-966730B0AA41",
           "loaded": true,
           "loading": true,
           "page": {
@@ -4716,15 +4736,15 @@
             "browserIndex": 1,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 2029733841,
-            "chromeWindowId": 2029733832,
+            "chromeTabId": 674298112,
+            "chromeWindowId": 674298103,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": false,
-            "hostTab": "62DF7186-5A27-4AFC-934F-57BC82F5626C",
+            "hostTab": "961B16C0-1DE3-4130-8D7B-966730B0AA41",
             "identifier": 11,
             "kind": "tab",
             "live": true,
@@ -4737,14 +4757,14 @@
             "url": "",
             "zoom": 0
           },
-          "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+          "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
           "progress": 0.1,
           "section": "today",
           "selected": true,
           "sleepPhase": "live",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-          "title": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-drop-target.html",
-          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-drop-target.html",
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+          "title": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-drop-target.html",
+          "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-drop-target.html",
           "visible": true
         },
         {
@@ -4754,7 +4774,7 @@
           "crashed": false,
           "favicon": false,
           "hasWebContent": true,
-          "id": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+          "id": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
           "loaded": true,
           "loading": false,
           "page": {
@@ -4763,15 +4783,15 @@
             "browserIndex": 2,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 2029733836,
-            "chromeWindowId": 2029733832,
+            "chromeTabId": 674298107,
+            "chromeWindowId": 674298103,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+            "hostTab": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
             "identifier": 8,
             "kind": "tab",
             "live": true,
@@ -4789,12 +4809,12 @@
             "url": "data:text/html,%3Ctitle%3EPinned%20Close%20Neighbor%3C/title%3E%3Ch1%3EPinned%20Close%20Neighbor%3C/h1%3E",
             "zoom": 0
           },
-          "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+          "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
           "progress": 1,
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "title": "Pinned Close Neighbor",
           "url": "data:text/html,%3Ctitle%3EPinned%20Close%20Neighbor%3C/title%3E%3Ch1%3EPinned%20Close%20Neighbor%3C/h1%3E",
           "visible": false
@@ -4806,7 +4826,7 @@
           "crashed": false,
           "favicon": false,
           "hasWebContent": true,
-          "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+          "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
           "loaded": true,
           "loading": false,
           "page": {
@@ -4815,15 +4835,15 @@
             "browserIndex": 3,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 2029733833,
-            "chromeWindowId": 2029733832,
+            "chromeTabId": 674298104,
+            "chromeWindowId": 674298103,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+            "hostTab": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
             "identifier": 5,
             "kind": "tab",
             "live": true,
@@ -4841,12 +4861,12 @@
             "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E",
             "zoom": 0
           },
-          "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+          "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
           "progress": 1,
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "title": "Surviving Browser Selection",
           "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E",
           "visible": false
@@ -4858,7 +4878,7 @@
           "crashed": false,
           "favicon": false,
           "hasWebContent": true,
-          "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+          "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
           "loaded": true,
           "loading": false,
           "page": {
@@ -4867,15 +4887,15 @@
             "browserIndex": 4,
             "browserPinned": false,
             "canGoBack": false,
-            "chromeTabId": 2029733834,
-            "chromeWindowId": 2029733832,
+            "chromeTabId": 674298105,
+            "chromeWindowId": 674298103,
             "context": "Default",
             "crash": 0,
             "extension": "",
             "favicon": false,
             "fullscreen": false,
             "hidden": true,
-            "hostTab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+            "hostTab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
             "identifier": 6,
             "kind": "tab",
             "live": true,
@@ -4893,12 +4913,12 @@
             "url": "data:text/html,%3Ctitle%3EManager%20Archive%20Original%20ID%3C/title%3E%3Ch1%3EManager%20Archive%20Original%20ID%3C/h1%3E",
             "zoom": 0
           },
-          "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+          "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
           "progress": 1,
           "section": "today",
           "selected": false,
           "sleepPhase": "live",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "title": "Manager Archive Original ID",
           "url": "data:text/html,%3Ctitle%3EManager%20Archive%20Original%20ID%3C/title%3E%3Ch1%3EManager%20Archive%20Original%20ID%3C/h1%3E",
           "visible": false
@@ -4910,15 +4930,15 @@
           "crashed": false,
           "favicon": false,
           "hasWebContent": false,
-          "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+          "id": "A05149FF-5A96-4065-BBBE-681285303759",
           "loaded": false,
           "loading": false,
-          "profile": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+          "profile": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
           "progress": 0,
           "section": "today",
           "selected": false,
           "sleepPhase": "placeholder",
-          "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+          "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
           "title": "Archive Neighbor",
           "url": "data:text/html,%3Ctitle%3EArchive%20Neighbor%3C/title%3E%3Ch1%3EArchive%20Neighbor%3C/h1%3E",
           "visible": false
@@ -4927,7 +4947,7 @@
     },
     "no_browser_copy_link_retains_model_ids": {
       "ok": true,
-      "pasteboard": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+      "pasteboard": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
       "snapshot": {
         "defaultDestination": {
           "littleOpen": {}
@@ -4936,7 +4956,7 @@
           {
             "dataDirectoryName": "Default",
             "favorites": [],
-            "id": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+            "id": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
             "name": "Default",
             "settings": {
               "askWhereToSaveEachFile": false,
@@ -4955,25 +4975,25 @@
         "schemaVersion": 1,
         "spaces": [
           {
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "isPinnedCollapsed": false,
             "pinned": [
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793134372.213255,
-                    "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+                    "createdAt": 1793134949.655806,
+                    "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
                     "isMuted": false,
                     "isUnread": false,
-                    "lastActiveAt": 1793134373.5545192,
-                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html",
+                    "lastActiveAt": 1793134951.398541,
+                    "pinnedURL": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html",
                     "title": "Manager Pinned Route",
-                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-pinned.html"
+                    "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-pinned.html"
                   }
                 }
               }
             ],
-            "profileID": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+            "profileID": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
             "theme": {
               "gradientStopsDark": [],
               "gradientStopsLight": []
@@ -4983,28 +5003,28 @@
               {
                 "split": {
                   "_0": {
-                    "focusedPaneID": "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
+                    "focusedPaneID": "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
                     "fractions": [],
-                    "id": "363F0686-EB8A-43F5-903C-EB531EF862B1",
+                    "id": "8810A2E2-D27C-4698-B1DE-F14B2EB95B7E",
                     "orientation": "horizontal",
                     "panes": [
                       {
-                        "createdAt": 1793134374.18161,
-                        "id": "7871DF5E-EDE0-49EB-83E6-6F1FA086F32B",
+                        "createdAt": 1793134951.9892201,
+                        "id": "8AFBADF8-B925-4650-8462-10EE6A6A3B76",
                         "isMuted": false,
                         "isUnread": false,
-                        "lastActiveAt": 1793134374.390993,
+                        "lastActiveAt": 1793134952.189713,
                         "title": "Manager Split Source",
                         "url": "data:text/html,%3Ctitle%3EManager%20Split%20Source%3C/title%3E%3Ch1%3EManager%20Split%20Source%3C/h1%3E"
                       },
                       {
-                        "createdAt": 1793134374.143433,
-                        "id": "62DF7186-5A27-4AFC-934F-57BC82F5626C",
+                        "createdAt": 1793134951.956532,
+                        "id": "961B16C0-1DE3-4130-8D7B-966730B0AA41",
                         "isMuted": false,
                         "isUnread": false,
-                        "lastActiveAt": 1793134374.390993,
+                        "lastActiveAt": 1793134952.189713,
                         "title": "Manager Drop Target",
-                        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-63135-45222c0a-scratch-fxmidqnj/manager-drop-target.html"
+                        "url": "file:///var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/Open-E2E-sidebar-completion-chrome-23424-353d5dce-scratch-7ayu0l0q/manager-drop-target.html"
                       }
                     ]
                   }
@@ -5013,11 +5033,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793134372.406733,
-                    "id": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+                    "createdAt": 1793134949.841821,
+                    "id": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793134373.005752,
+                    "lastActiveAt": 1793134950.383019,
                     "title": "Pinned Close Neighbor",
                     "url": "data:text/html,%3Ctitle%3EPinned%20Close%20Neighbor%3C/title%3E%3Ch1%3EPinned%20Close%20Neighbor%3C/h1%3E"
                   }
@@ -5026,11 +5046,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793134371.644109,
-                    "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+                    "createdAt": 1793134949.1544352,
+                    "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793134371.646137,
+                    "lastActiveAt": 1793134949.1557899,
                     "title": "Surviving Browser Selection",
                     "url": "data:text/html,%3Ctitle%3ESurviving%20Browser%20Selection%3C/title%3E%3Ch1%3ESurviving%20Browser%20Selection%3C/h1%3E"
                   }
@@ -5039,11 +5059,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793134370.108911,
-                    "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                    "createdAt": 1793134947.839571,
+                    "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793134371.838323,
+                    "lastActiveAt": 1793134949.3485188,
                     "title": "Manager Archive Original ID",
                     "url": "data:text/html,%3Ctitle%3EManager%20Archive%20Original%20ID%3C/title%3E%3Ch1%3EManager%20Archive%20Original%20ID%3C/h1%3E"
                   }
@@ -5052,11 +5072,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793134369.92479,
-                    "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                    "createdAt": 1793134947.654739,
+                    "id": "A05149FF-5A96-4065-BBBE-681285303759",
                     "isMuted": true,
                     "isUnread": false,
-                    "lastActiveAt": 1793134370.29676,
+                    "lastActiveAt": 1793134948.022645,
                     "title": "Archive Neighbor",
                     "url": "data:text/html,%3Ctitle%3EArchive%20Neighbor%3C/title%3E%3Ch1%3EArchive%20Neighbor%3C/h1%3E"
                   }
@@ -5065,10 +5085,10 @@
             ]
           },
           {
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "isPinnedCollapsed": false,
             "pinned": [],
-            "profileID": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+            "profileID": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
             "theme": {
               "gradientStopsDark": [],
               "gradientStopsLight": []
@@ -5077,10 +5097,10 @@
             "today": []
           },
           {
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "isPinnedCollapsed": false,
             "pinned": [],
-            "profileID": "2FC60C91-2410-407B-AEFC-E012AD5C0238",
+            "profileID": "55416A90-FA02-482C-BF4D-B1953FFCFC1E",
             "theme": {
               "gradientStopsDark": [],
               "gradientStopsLight": []
@@ -5090,11 +5110,11 @@
               {
                 "tab": {
                   "_0": {
-                    "createdAt": 1793134366.229758,
-                    "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                    "createdAt": 1793134944.884932,
+                    "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                     "isMuted": false,
                     "isUnread": false,
-                    "lastActiveAt": 1793134366.229957,
+                    "lastActiveAt": 1793134944.885075,
                     "title": "Manager One",
                     "url": "data:text/html,%3Ctitle%3EManager%20One%3C/title%3E%3Ch1%3EManager%20One%3C/h1%3E"
                   }
@@ -5105,14 +5125,14 @@
         ],
         "windows": [
           {
-            "focusedSpaceID": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "focusedSpaceID": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "frameHeight": 800,
             "frameWidth": 1280,
             "frameX": 124,
             "frameY": 76,
-            "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+            "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
             "selectedNodeBySpace": {
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80": "363F0686-EB8A-43F5-903C-EB531EF862B1"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503": "8810A2E2-D27C-4698-B1DE-F14B2EB95B7E"
             },
             "sidebarMode": "anchored",
             "sidebarWidth": 228,
@@ -5163,49 +5183,49 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "10B40708-52BE-4A16-806C-CC10FE1D61DF",
+                "id": "8C212786-454E-4838-BE2A-C45EFE0C0E6A",
                 "point": [
                   319,
                   124.5
                 ]
               },
               {
-                "id": "363F0686-EB8A-43F5-903C-EB531EF862B1",
+                "id": "8810A2E2-D27C-4698-B1DE-F14B2EB95B7E",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "0938DA89-2464-418A-A7D0-E7C5756D97D7",
+                "id": "4E07F3D5-876E-4FEB-B851-FA9B6F8D8EF0",
                 "point": [
                   319,
                   264.5
                 ]
               },
               {
-                "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+                "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
                 "point": [
                   319,
                   305.5
                 ]
               },
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   319,
                   346.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   319,
                   387.5
@@ -5250,7 +5270,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -5294,14 +5314,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   831,
                   182.5
@@ -5311,21 +5331,21 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000011408d99f00)",
+        "identity": "ObjectIdentifier(0x0000012401e6d200)",
         "managerClass": "OpenSidebar.SpaceManagerView",
-        "modelUndoCount": 3,
+        "modelUndoCount": 4,
         "previewsEnabled": false,
         "sameModel": true,
         "sameUndoManager": true,
         "section": "spaces",
         "switchers": [],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -5334,7 +5354,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -5347,7 +5367,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -5360,7 +5380,7 @@
             "frame": "{{0, 0}, {500, 500}}",
             "key": false,
             "level": 0,
-            "number": 190253,
+            "number": 190622,
             "parent": 0,
             "sheet": false,
             "title": "",
@@ -5445,18 +5465,18 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 190251,
-        "layoutPasses": 204,
+        "keyWindow": 190620,
+        "layoutPasses": 215,
         "miniaturized": false,
-        "number": 190252,
+        "number": 190621,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+            "tab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
           }
         ],
         "panel": [
@@ -5488,9 +5508,9 @@
           1728,
           1117
         ],
-        "selected": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+        "selected": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
         "shownPages": [
-          "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+          "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -5507,7 +5527,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "titlebar": [
           0,
           0,
@@ -5674,18 +5694,18 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "id": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "isKeyWindow": false,
         "key": false,
-        "keyWindow": 190251,
-        "layoutPasses": 202,
+        "keyWindow": 190620,
+        "layoutPasses": 201,
         "miniaturized": false,
-        "number": 190252,
+        "number": 190621,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+            "tab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
           }
         ],
         "panel": [
@@ -5717,9 +5737,9 @@
           1728,
           1117
         ],
-        "selected": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+        "selected": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
         "shownPages": [
-          "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+          "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarFrame": [
@@ -5736,7 +5756,7 @@
         "sidebarVisible": true,
         "sidebarWidth": 228,
         "sidebarWidthCommits": 0,
-        "space": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+        "space": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
         "titlebar": [
           0,
           0,
@@ -5870,28 +5890,28 @@
                 26
               ]
             },
-            "id": "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
+            "id": "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "C65A173A-24CE-47FA-8B9C-D639652C3F47",
+                "id": "F8E3497F-A125-4739-8C32-2C7981E61A0F",
                 "point": [
                   319,
                   182.5
                 ]
               },
               {
-                "id": "5232547D-57B7-4E2A-A49B-4FA62885A1B7",
+                "id": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E",
                 "point": [
                   319,
                   223.5
                 ]
               },
               {
-                "id": "50E0D9B6-4004-4B31-9740-104187FFC231",
+                "id": "A05149FF-5A96-4065-BBBE-681285303759",
                 "point": [
                   319,
                   264.5
@@ -5936,7 +5956,7 @@
                 26
               ]
             },
-            "id": "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
+            "id": "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
             "managerSize": [
               779,
               599
@@ -5980,14 +6000,14 @@
                 26
               ]
             },
-            "id": "406322AF-D6C0-4BED-A730-A36119CAA4AB",
+            "id": "A0E4E2E5-F347-48A1-8A68-45A9D39648BC",
             "managerSize": [
               779,
               599
             ],
             "rows": [
               {
-                "id": "D667B3F7-5578-4EA6-854F-0D2D953885C7",
+                "id": "E07C7425-89FC-4264-8170-E74677DDA142",
                 "point": [
                   831,
                   182.5
@@ -5997,10 +6017,10 @@
           }
         ],
         "contextValid": true,
-        "contextWindow": "5E6B477D-D36F-4216-92ED-24CCA67786E9",
+        "contextWindow": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD",
         "globalPreviewsEnabled": true,
         "hostedManagers": 1,
-        "identity": "ObjectIdentifier(0x0000011408d99f00)",
+        "identity": "ObjectIdentifier(0x0000012401e6d200)",
         "managerClass": "OpenSidebar.SpaceManagerView",
         "modelUndoCount": 3,
         "previewsEnabled": false,
@@ -6010,17 +6030,17 @@
         "switchers": [
           {
             "order": [
-              "3B7C88A8-3207-433F-AB28-5FBDDE034E80",
-              "EBDC6736-8BB5-4785-9C5A-7F41514DBB8A",
-              "406322AF-D6C0-4BED-A730-A36119CAA4AB"
+              "B1F1BBAA-238A-46CE-8091-61AEB98D9503",
+              "BB03ECB8-2C62-41A6-A834-57E6A78FD315",
+              "A0E4E2E5-F347-48A1-8A68-45A9D39648BC"
             ],
-            "window": "5E6B477D-D36F-4216-92ED-24CCA67786E9"
+            "window": "ABA5C7F2-A3B5-45A2-903C-3B5CCA9988DD"
           }
         ],
         "undoEnabled": true,
-        "undoTarget": "OpenSettings.(unknown context at $101a2e55c).LibraryNativeWindow",
+        "undoTarget": "OpenSettings.(unknown context at $101b830bc).LibraryNativeWindow",
         "visible": true,
-        "window": 190251,
+        "window": 190620,
         "windows": [
           {
             "attachedSheet": 0,
@@ -6029,7 +6049,7 @@
             "frame": "{{100, 100}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190250,
+            "number": 190619,
             "parent": 0,
             "sheet": false,
             "title": "Archive Neighbor",
@@ -6042,7 +6062,7 @@
             "frame": "{{200, 200}, {960, 640}}",
             "key": true,
             "level": 0,
-            "number": 190251,
+            "number": 190620,
             "parent": 0,
             "sheet": false,
             "title": "Spaces",
@@ -6055,7 +6075,7 @@
             "frame": "{{124, 76}, {1280, 800}}",
             "key": false,
             "level": 0,
-            "number": 190252,
+            "number": 190621,
             "parent": 0,
             "sheet": false,
             "title": "Manager Archive Original ID",
@@ -6064,12 +6084,12 @@
         ]
       },
       "ok": true,
-      "png": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-63135-60bdd468/manager-rebound-click.png",
+      "png": "/Users/serge/.t3/projects/open/.re/section1/sm-evidence/run-23424-6291571d/manager-rebound-click.png",
       "point": [
         319,
         223.5
       ],
-      "tab": "5232547D-57B7-4E2A-A49B-4FA62885A1B7"
+      "tab": "EABF6DC5-DC06-430F-9AAA-DDF76DDBB73E"
     },
     "visible_manager_rebind_keeps_horizontal_origin": {
       "after": [
@@ -6083,6 +6103,6 @@
       "ok": true
     }
   },
-  "started": "2026-10-27 13:52:37",
+  "started": "2026-10-27 14:02:17",
   "style": "chrome"
 }

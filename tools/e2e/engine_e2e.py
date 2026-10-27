@@ -5377,6 +5377,20 @@ def space_manager_checks(results, tmp, config, style):
         focused = next((sp['id'] for sp in app.call('spaces') if sp['focused']), None)
         require('manager_split_through_browser', split_state and focused == s2 and set(split_state['shownPages']) == {split_source, split_partner},
                 state=split_state or app.call('window-state'), focused=focused)
+        # #124 review: Turn into Folder from a Manager column with a live browser
+        # (E10 path): the Space becomes a Pinned folder of the destination; Cmd+Z restores it.
+        app.call('library-open'); manager_ready(app)
+        export_order = order(app)
+        export_title = next(sp['title'] for sp in app.call('spaces') if sp['id'] == s1) or 'Space'
+        export_dest = next(sp for sp in app.call('spaces') if sp['id'] == s3)
+        app.call('space-manager-menu', space=s1, item='Turn into Folder/' + (export_dest['title'] or 'Space'))
+        exported = wait_until(lambda: s1 not in order(app), timeout=5)
+        with open(app.call('save')) as stream: exported_snapshot = json.load(stream)
+        dest_pinned = next(sp for sp in exported_snapshot['spaces'] if sp['id'] == s3)['pinned']
+        first = dest_pinned[0] if dest_pinned else {}
+        require('manager_turn_into_folder', exported and 'folder' in first, order=order(app), firstPinned=first, title=export_title)
+        library_key(app, 'z', ['cmd'])
+        require('manager_turn_into_folder_undo', wait_until(lambda: order(app) == export_order, timeout=5), order=order(app), expected=export_order)
         app.call('library-open'); manager_ready(app)
         pin_url_before_close = app.tab(pin)['url']
         app.call('library-close')

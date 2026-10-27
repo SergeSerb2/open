@@ -371,7 +371,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     case .manageSpaces:
       app.settingsPresenter.showLibrary(section: .spaces); return true
     case .showSiteControls, .changeSpaceIcon, .editSpaceTheme, .newProfile, .shareSpace,
-         .exportSpaceIntoFolder, .editPinnedURL, .share, .changeIcon, .customizePage,
+         .editPinnedURL, .share, .changeIcon, .customizePage,
          .copyAllLinks, .turnFolderIntoSpace, .moveToNewSpace:
       return false // Explicitly deferred UI entries; see docs/app-shell.md Step B.
     default: return nil

@@ -1511,9 +1511,14 @@
         else { throw Failure(message: "could not create row menu event") }
         menu = outline.menu(for: event)
       } else { menu = manager.controls(spaceID: id)?.makeMenu() }
-      guard let menu, let index = menu.items.firstIndex(where: { $0.title == title && $0.isEnabled })
-      else { throw Failure(message: "manager menu item is unavailable") }
-      menu.performActionForItem(at: index)
+      // "Turn into Folder/<Space>" walks one submenu level per path component.
+      var level = menu
+      let path = title.split(separator: "/").map(String.init)
+      for (depth, component) in path.enumerated() {
+        guard let current = level, let index = current.items.firstIndex(where: { $0.title == component && $0.isEnabled })
+        else { throw Failure(message: "manager menu item is unavailable") }
+        if depth == path.count - 1 { current.performActionForItem(at: index) } else { level = current.items[index].submenu }
+      }
       return true
     }
     /// Passive cache read: do not layout/build the hidden manager while checking focus work.

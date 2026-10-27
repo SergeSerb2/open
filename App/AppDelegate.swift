@@ -398,7 +398,16 @@ extension AppDelegate: CommandDispatcher {
     commandServicesPrepared = true
     _ = settingsPresenter.settings
     commandWindowObserver = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { [weak self] _ in
-      MainActor.assumeIsolated { self?.scheduleMenuRebuild() }
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        // A window no browser owns (Library, Settings) must stop routing menu keys to the
+        // browser at once: a key pressed before a deferred rebuild (or while another one is
+        // pending) would otherwise run in the browser behind it (Cmd+L, Cmd+W).
+        if let window = NSApp.keyWindow, window.sheetParent == nil, self.factory(forKeyWindow: window) == nil, !self.shutdownPrepared {
+          self.menuRebuildTask?.cancel(); self.menuRebuildTask = nil
+          NSApp.mainMenu = MainMenu.build()
+        } else { self.scheduleMenuRebuild() }
+      }
     }
     reloadKeyBindings()
   }
