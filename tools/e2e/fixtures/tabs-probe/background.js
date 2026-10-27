@@ -29,8 +29,8 @@ chrome.windows.onFocusChanged.addListener((windowId) => record("focus", { window
 chrome.action.setBadgeText({ text: "P1" });
 chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
 
-// One page context-menu item: Open's context-menu allowlist keeps
-// extension items (engine_e2e.py context_menu_allowlist).
+// Context-menu fixtures: a normal item, an invisible item, and an enabled
+// child of a disabled submenu exercise delivery and execution filtering.
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: "probe", title: "Tabs probe item", contexts: ["all"] });
   chrome.contextMenus.create({ id: "probe-hidden", title: "Invisible tabs probe item", contexts: ["all"], visible: false });

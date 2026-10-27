@@ -1661,20 +1661,32 @@ def context_menu_commands(app, results):
                 current = "%s: %s" % (target, label)
                 point = prepare(target)
                 app.call("policy", contextMenu="run:%d" % command["id"])
-                right_click(point)
-                time.sleep(1.5)
-                if app.proc.poll() is not None:
-                    crashed = "%s: %s" % (target, label)
-                    break
-                dismissed = app.call("dismiss") + close_new_windows()
-                if dismissed:
-                    report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
-                app.call("ping")
-                r = row()
-                if r and r["crashed"]:
-                    report["failures"].append("%s: %s (renderer crashed)" % (target, label))
-                ran.append(label)
-                report["ran"] += 1
+                try:
+                    right_click(point)
+                    time.sleep(1.5)
+                    if app.proc.poll() is not None:
+                        crashed = "%s: %s" % (target, label)
+                        break
+                    dismissed = app.call("dismiss") + close_new_windows()
+                    if dismissed:
+                        report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
+                    app.call("ping")
+                    r = row()
+                    if r and r["crashed"]:
+                        report["failures"].append("%s: %s (renderer crashed)" % (target, label))
+                    ran.append(label)
+                    report["ran"] += 1
+                finally:
+                    app.cleanup_surfaces()
+                    # Close Open windows even if the command or its check
+                    # throws before the normal dismissal step.
+                    if app.pid and app.process_path(app.pid) == app.executable:
+                        try:
+                            extra = close_new_windows()
+                            if extra:
+                                report["dismissed"].append({"command": current, "closed": extra})
+                        except Exception as error:
+                            report["failures"].append("cleanup: %s" % error)
             report["targets"][target] = ran
             if crashed:
                 break
@@ -1724,6 +1736,7 @@ def context_menu_commands(app, results):
         else:
             report["failures"].append("harness: %s" % e)
     finally:
+        app.cleanup_surfaces()
         server.shutdown()
         subprocess.run(["pbcopy"], input=clipboard)
         shutil.rmtree(root, ignore_errors=True)
