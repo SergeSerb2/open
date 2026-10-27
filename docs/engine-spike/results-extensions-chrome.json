@@ -6,24 +6,50 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          10507,
-          10901,
-          10902,
-          10907,
-          11073,
-          11074,
-          11087,
-          11088,
-          11089,
-          11090,
-          11094,
-          11399,
-          12852,
-          13138,
-          13517,
-          13895,
-          13899,
-          14961
+          42935,
+          43474,
+          43475,
+          43476,
+          43650,
+          43651,
+          43653,
+          43670,
+          43671,
+          43672,
+          43691,
+          44241
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          45194,
+          45328,
+          45333,
+          45340,
+          45611,
+          45612,
+          45630,
+          45631,
+          45642,
+          45645,
+          45672,
+          46270,
+          52600,
+          53217,
+          54057,
+          56355,
+          56464,
+          56545,
+          57808
         ],
         "remaining_processes": [],
         "reply": true,
@@ -37,10 +63,15 @@
   },
   "config": "Release",
   "engine": {
-    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
-    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
     "source": "fork",
-    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
   "extensions": {
     "chrome_extensions_page": {
@@ -52,7 +83,7 @@
     "content_scripts": {
       "darkreader": {
         "mode": "dynamic",
-        "styles": 30
+        "styles": 26
       },
       "isolated_worlds": [
         "1Password \u2013 Password Manager",
@@ -185,7 +216,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 806005317,
+            "current": 654630047,
             "windows": 1
           }
         },
@@ -209,7 +240,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 806005317,
+            "current": 654630047,
             "windows": 1
           }
         },
@@ -233,7 +264,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 806005317,
+            "current": 654630047,
             "windows": 1
           }
         }
@@ -261,10 +292,10 @@
       ],
       "console": [
         "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
+        "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
+        "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
         "%c%s color: red; background: yellow; font-size: 24px; WARNING!",
-        "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand.",
-        "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
-        "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received"
+        "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand."
       ],
       "dialog_click": true,
       "installed": true,
@@ -276,7 +307,7 @@
           "frame": "{{1056, 910}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 158522,
+          "number": 168243,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -304,7 +335,125 @@
       "https://darkreader.org/help/en/"
     ]
   },
-  "interrupted_attempts": [],
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "enumerate": {
+          "assertion": {
+            "actions": [
+              {
+                "badge": null,
+                "enabled": true,
+                "icon": 1444,
+                "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
+                "popup": false,
+                "title": "1Password"
+              },
+              {
+                "badge": "4",
+                "enabled": true,
+                "icon": 1132,
+                "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+                "popup": true,
+                "title": "uBlock Origin Lite"
+              },
+              {
+                "badge": null,
+                "enabled": true,
+                "icon": 2894,
+                "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+                "popup": true,
+                "title": "Dark Reader"
+              },
+              {
+                "badge": null,
+                "enabled": true,
+                "icon": 1412,
+                "id": "nngceckbapebfimnlniiiahkandclblb",
+                "popup": true,
+                "title": "Bitwarden"
+              }
+            ],
+            "extensions": [
+              {
+                "enabled": true,
+                "icon": "128x128",
+                "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
+                "name": "1Password \u2013 Password Manager",
+                "options": "",
+                "version": "8.12.42.36"
+              },
+              {
+                "enabled": true,
+                "icon": "128x128",
+                "id": "nngceckbapebfimnlniiiahkandclblb",
+                "name": "Bitwarden Password Manager",
+                "options": "",
+                "version": "2026.10.0"
+              },
+              {
+                "enabled": true,
+                "icon": "128x128",
+                "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+                "name": "Dark Reader",
+                "options": "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/ui/popup/index.html",
+                "version": "4.9.133"
+              },
+              {
+                "enabled": true,
+                "icon": "96x96",
+                "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+                "name": "uBlock Origin Lite",
+                "options": "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/dashboard.html",
+                "version": "2026.1021.1354"
+              }
+            ],
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "Screen Sharing",
+              "frontmostPID": 79344,
+              "openPID": 42935,
+              "uptime": 165378.85773041667
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "Screen Sharing",
+              "frontmostPID": 79344,
+              "keyWindow": 0,
+              "openPID": 42935,
+              "uptime": 165378.86413895834
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "Screen Sharing",
+          "frontmostPID": 79344,
+          "openPID": 42935,
+          "uptime": 165378.85773041667
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "Screen Sharing",
+          "frontmostPID": 79344,
+          "keyWindow": 0,
+          "openPID": 42935,
+          "uptime": 165378.86413895834
+        }
+      ],
+      "reason": "foreground lost during enumerate",
+      "status": "INTERRUPTED"
+    }
+  ],
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
@@ -318,17 +467,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 10507,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-10361-bc733df5",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-10361-bc733df5/Engine"
+    "pid": 45194,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-42689-3bd8966e",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-42689-3bd8966e/Engine"
   },
-  "runtime_validation": {
-    "accepted": false,
-    "reason": "Engine lead confirmed the recorded distribution is stale: missing PR 93 r1 popup-key forwarding, main tab-strip code and main ad-block code. Runtime results on it do not prove this branch. Rebuild at Engine/fork state 338c920 is pending.",
-    "reported_at": "2026-10-26 21:18 America/Vancouver",
-    "required_engine_ref": "338c920"
-  },
-  "started": "2026-10-26 20:46:22",
-  "status": "INVALID_STALE_ENGINE",
+  "started": "2026-10-26 21:53:24",
   "style": "chrome"
 }

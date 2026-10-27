@@ -3433,25 +3433,7 @@ def _actions_checks(app, results):
     # window's CEF delegate) and, when the page does not consume them, after
     # it (the engine forwards them). Ctrl+D: both stages. Cmd+W: this shell
     # closes the popup before the page (plan F2), and the tab stays.
-    tabs_before = len(app.call("tabs"))
-    state = open_popup(ACTION_PROBE)
-    keys = {"opened": bool(state)}
-    if state:
-        app.call("focus", tab=state["page"]["identifier"])
-        app.call("events")
-        app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
-        stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
-            [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
-        keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
-        keys["still_open"] = bool(app.call("ext-popup").get("open"))
-        app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
-        keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
-        keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
-        if not keys["closed"]:
-            close_popup()
-    results["popup_keys"] = {
-        "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
-              and keys.get("closed") and keys.get("tabs_kept"), **keys}
+    popup_key_checks(app, results, open_popup, close_popup)
 
     # A delegate closes (twice), or toggles the action, from each engine
     # callback. The popup must remain alive INSIDE that callback and close
@@ -3553,8 +3535,41 @@ def _actions_checks(app, results):
     # and View Web Permissions open Chrome's pages as Open tabs; Remove shows
     # Chrome's uninstall dialog (Open's own prompts are P3), which is
     # dismissed, so the extension stays.
+    action_menu_command_checks(app, results, action)
+    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, first)
+
+
+def popup_key_checks(app, results, open_popup, close_popup):
+    """Real app-level Cmd+W; shared with the focused break/revert flow."""
+    try:
+        tabs_before = len(app.call("tabs"))
+        state = open_popup(ACTION_PROBE)
+        keys = {"opened": bool(state)}
+        if state:
+            app.call("focus", tab=state["page"]["identifier"])
+            app.call("events")
+            app.call("key", key="d", modifiers=["ctrl"], window="popup", route="window")
+            stages = wait_until(lambda: (lambda e: e if {"beforePage", "unconsumed"} <= {x.get("phase") for x in e} else None)(
+                [x for x in app.call("events") if x["type"] == "popupKey"]), timeout=5)
+            keys["ctrl_d_stages"] = sorted({x.get("phase") for x in stages or []})
+            keys["still_open"] = bool(app.call("ext-popup").get("open"))
+            app.call("key", key="w", modifiers=["cmd"], window="popup", route="app")
+            keys["closed"] = bool(wait_until(lambda: not app.call("ext-popup").get("open"), timeout=5))
+            keys["tabs_kept"] = len(app.call("tabs")) == tabs_before
+            if not keys["closed"]:
+                close_popup()
+        results["popup_keys"] = {
+            "ok": keys["opened"] and keys.get("ctrl_d_stages") == ["beforePage", "unconsumed"] and keys.get("still_open")
+                  and keys.get("closed") and keys.get("tabs_kept"), **keys}
+    finally:
+        app.cleanup_surfaces()
+
+
+def action_menu_command_checks(app, results, action,
+                              prefixes=("Pin", "Manage Extension", "View Web Permissions", "Remove from")):
+    """Real Chrome menu commands; each opened surface closes on failure too."""
     ran = {}
-    for prefix in ("Pin", "Manage Extension", "View Web Permissions", "Remove from"):
+    for prefix in prefixes:
         try:
             items = [x for x in app.call("ext-menu", extension=ACTION_PROBE)
                      if not x["separator"] and x["title"].startswith(prefix) and not x["title"].startswith("Pinned")]
@@ -3576,7 +3591,7 @@ def _actions_checks(app, results):
                     and "Open action probe" in " ".join([w["title"]] + w.get("text", []))
                     and {"Cancel", "Remove"} <= set(w.get("text", []))], timeout=10)
                 if os.environ.get("OPEN_E2E_FAIL_UNINSTALL") == "1" and r["dialog"]:
-                    results["forced_uninstall_failure"] = {"ok": False, "dialog_seen": True}
+                    results["forced_uninstall_failure"] = {"ok": False, "dialog_seen": True, "dialog": r["dialog"]}
                     raise RuntimeError("forced early failure in uninstall confirmation case")
                 r["dismissed"] = app.call("dismiss")
                 time.sleep(1)
@@ -3594,7 +3609,6 @@ def _actions_checks(app, results):
         finally:
             app.cleanup_surfaces()
     results["action_menu_commands"] = {"ok": all(v["ok"] for v in ran.values()), "commands": ran}
-    popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, first)
 
 
 def popup_teardown_checks(app, results, actions, action, popup_eval, open_popup, close_popup, tab):
