@@ -695,6 +695,8 @@ Sources: the arm64 slice `.re/bin/Arc-arm64`, read with `llvm-objdump -d` at the
 
 sD = `shadedDark`, tL = `tintedLight`. The other 6 roles are aliases of the primary palette (see `runtime-observations.md` §3.3).
 
+Update 2026-10-26 (runtime): the default theme stores no palette, but its tooltip fill gives its `light.title`: `#0A0D4F`, exact after display-profile → sRGB conversion, in capture session 2 frames 14b/0024, 03/0010, 03/0014, and 19/0025 (default dark theme). Tooltips paint `light.title`: themed Space 1 reads `#320E00`, its stored value (session 1 F0021–F0033). The table above then puts the default theme's `dark.backgroundExtra` at half of `#0A0D4F`; the mini player card fill in 14b/0024 reads `#050627`, which matches within one level per channel (derived). Detail: `interaction-states.md` §5.
+
 **Harmony colors** (`0x100d807dc`, inputs: key color, count n, wheel). Pure HSL hue rotations; saturation and lightness stay the same.
 
 | n | `analogous` | `complimentary` |
@@ -711,6 +713,8 @@ Check: the 3 stored gradient Spaces all use `analogous`. In P3 HSL their colors 
 **Content appearance** (`0x100d722c0` → `0x10094f040`). Inputs: a background color from the palette, the two text colors (one per appearance), and a bias `b`. Result: dark content when `contrast(bg, darkAppearanceText) + b ≥ contrast(bg, lightAppearanceText)`; light otherwise; "unknown" when there is no color. The editor passes `b = +21` when Dark is forced and `b = −21` when Light is forced (WCAG contrast spans 1…21, so a forced mode always wins). Automatic passes the remote flag `sidebar-dark-mode-bias` (`0x1017a8844`; constants ±21.0). With `bg` = the key color (or `shaded`) and the `title` roles as text, the 4 stored themes agree for any bias in [−0.78, 1.60). With `bg` = `midTone` no bias fits, so `midTone` is not the reference. guess: `bg` = the key color, `b` = 0.
 
 **Pad mapping** (`0x1017a6f28` color → knob, `0x1017a7248` knob → color). The pad is a disc in unit coordinates, y down. Angle (clockwise from 3 o'clock) = HSL hue. Radius `r = 0.99 · clamp((L − Lmin)/(Lmax − Lmin), 0, 1)`, so the center is the darkest color and the rim the lightest. Saturation comes from the editor state (default 0.8; when a color is loaded, its own HSL saturation, floor 0.01). Lightness range per appearance mode (`0x1017a80f0`): Automatic 0.01…0.97, Light 0.575…0.97, Dark 0.01…0.425. Forcing a mode keeps the knob's relative radius and remaps its lightness into the new range (`0x1017aa86c`; spans 0.395 and 0.415). Capture check: F0137 knob offset (32, 31) pt from the pad center at 44.1°, and the stored color's P3 hue is 44.1°.
+
+Correction (2026-10-26, `features-core.md` §2.3 item 17): the lightness range is editor state, not a fixed per-mode constant. Automatic uses 0.01…0.97 only when the editor opens with no color. Opening on a color, or tapping a preset, in Automatic sets the range to the key's lightness ± 0.25, clamped to 0.01…0.97 (`0x1017a9414`). The no-color default saturation is 1.0, not 0.8 (0.8 is the default intensity). The knob → color function starts at `0x1017a724c`. Item 17 also decodes the intensity opacity `0.2 + 0.55 × intensity` and the per-texture noise multipliers.
 
 **Other ranges.** A helper builds a lightness range of ±0.25 around a color's lightness, clamped to 0.01…0.97 (`0x1017a9414`; guess: used when a preset is chosen).
 
@@ -743,7 +747,7 @@ Measure each item in Arc with the user signed in. Record light and dark, and hov
 - Tab row height (rest, hover, current). Include the row gap and the section gap.
 - Favorites tile size, gap, and grid count at the default sidebar width.
 - Folder row height and indent step. Pinned tab row height if it differs.
-- Corner radii: tab row, favorites tile, command bar, popover, web view clip.
+- Corner radii: tab row, favorites tile, command bar, popover, web view clip. Tab row resolved 2026-10-26: 12 continuous in capture sessions 1 and 2 (`interaction-states.md` §3 corner note). The other radii stay open here.
 - Web view inset on each side and the gap between sidebar and web view (the rounded web content look).
 - Traffic light position: x and y from the window corner, and button gap. Note the custom `WindowControlButton` type. Measured 2026-10-26: 16 pt buttons at x 12 / 35 / 58, y 16 (gap 23), circles centered at x 20 / 43 / 66, y 24 (`interaction-states.md` §0, §13).
 - Top bar height. Space switcher size and gap. Plus button size.

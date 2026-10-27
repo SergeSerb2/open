@@ -717,7 +717,7 @@ Rules:
 
 | Fact | Store | Writer | Reader |
 |---|---|---|---|
-| Pinned set and order | Chromium pref `extensions.pinned_extensions` in the profile's engine folder (`Profiles/Default/Preferences` or `Profiles/<dir>/Engine/Preferences`) | `ToolbarActionsModel` (`SetActionVisibility`, `MovePinnedAction`) through §7 E4 | `OEExtensionAction.pinned`, `.pinnedIndex` |
+| Pinned set and order | Chromium pref `extensions.pinned_extensions` in the profile's engine folder (`Engine/Default/Preferences` or `Engine/<dir>/Preferences`, docs/plans/profiles.md §6.2) | `ToolbarActionsModel` (`SetActionVisibility`, `MovePinnedAction`) through §7 E4 | `OEExtensionAction.pinned`, `.pinnedIndex` |
 | Installed set, enabled state, permissions, site access | Chromium (`Secure Preferences`, `Extensions/`, `extension_prefs`) | Chromium | §7 E2, E8 |
 | Extension shortcuts | Chromium (`extensions.commands` pref via `CommandService`) | `chrome://extensions/shortcuts` | §7 E9 |
 | Extension popup window frame | AppKit frame autosave `ExtensionPopupWindow` (UserDefaults) | AppKit | AppKit |

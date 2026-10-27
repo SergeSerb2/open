@@ -1,0 +1,27 @@
+{
+  "sourceHead": "342800cffee3225beee1963576731cf71b7f0f0d",
+  "steps": [
+    {
+      "name": "build-debug",
+      "onScreenLock": false,
+      "exit": 0,
+      "seconds": 25.09,
+      "sourceHead": "342800cffee3225beee1963576731cf71b7f0f0d"
+    },
+    {
+      "name": "build-release",
+      "onScreenLock": false,
+      "exit": 0,
+      "seconds": 76.32,
+      "sourceHead": "342800cffee3225beee1963576731cf71b7f0f0d"
+    },
+    {
+      "name": "verify-all",
+      "onScreenLock": false,
+      "exit": 130,
+      "seconds": 22.86,
+      "sourceHead": "342800cffee3225beee1963576731cf71b7f0f0d"
+    }
+  ],
+  "note": "Restart cancelled the first verifier before any locked on-screen invocation. Successful same-source app builds were reused; the full verifier was rerun to completion. Cancellation is not a product failure or a passing verifier."
+}

@@ -52,6 +52,24 @@ also makes the optional Boosts check SKIP. Checks excluded by flags have no row.
 | `boosts` | Headless system Chrome loads the actual Boosts harness and production scripts. A7 asserts banner highlight geometry/color, selector commit, hidden banner, and active picker. A11 asserts the precise pick, two aligned related previews, three-match replacement, and hidden posts. Saves both PNGs and rejects runtime errors. See [boosts.md](boosts.md). | 5–20 s; npm install dependent |
 | `import-arc` | Opt-in only. Read-only copies of Arc's top-level JSON files pass sidebar/archive accounting, `archive-list --limit 0`, and roundtrip. Also inspects default-profile output when profiles exists (P-9). | <2 s |
 
+### Focused checks for intermediate pushes
+
+`AGENTS.md` rule 10 asks for the full gate before a PR opens and when it is reported ready. For pushes in between, run the build plus the checks for what you changed. Shared targets (`OpenDesign`, `OpenModel`, `OpenStore`) reach many checks, so use the full gate when you change them.
+
+| You changed | Run at least |
+|---|---|
+| `OpenSidebar`, `OpenMedia` sidebar views | `sidebar-render,sidebar-compare,media-demo` |
+| `OpenCommandBar`, `OpenSuggest`, `OpenCommands` | `commandbar-render,suggest-check,commands-dump` |
+| `OpenFeatures` (Split, Peek, Little Open, PiP, Site Control) | `features-render` |
+| `OpenSpaceEditor`, theme tokens | `space-editor,space-legacy` |
+| `OpenSettings` | `settings-preview,profiles` |
+| `OpenRouting` | `route` |
+| `OpenSleep` | `sleep-demo` |
+| `OpenAdBlock` | `adblock-perf,adblock-catalog` |
+| `OpenBoosts` | `boosts` |
+| `OpenWeb` favicons | `favicons` |
+| `App/` or `Engine/` | the e2e suites for the flow (`tools/e2e/engine_e2e.py --only …`) plus `build` |
+
 An initial release build usually takes 20–90 seconds. An incremental build usually
 takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads can
 increase these estimates. The final table and each log give actual times/results.

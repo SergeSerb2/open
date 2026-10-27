@@ -39,7 +39,7 @@ Replace the plain M1 shell in `App/` (`App/BrowserWindowController.swift`: `NSTa
 | D4 | Sidebar width is per-window state: `BrowserWindowState.sidebarWidth` (default 228) and `sidebarMode` (`.anchored` / `.hidden`). Clamp drag to 228–500 pt for resize; 180 pt is the hide threshold on drag past the minimum (see §3.3). Persist on drag end, not per tick. | Task scope fixes 228–500 pt. `WindowMetrics` in `OpenDesign` holds `defaultSidebarWidth 228`, `maxSidebarWidth 500`, `minSidebarWidth 180` (the last two marked guess in `docs/design.md` §2.2). `SidebarContext.sidebarWidth` already reads the model value. |
 | D5 | Command bar comes from branch `m3/commandbar-ui` (`OpenCommandBar` target: `CommandBarController`, `CommandBarDelegate`, `CommandBarIntent`, `CommandBarRequest`, `CommandBarMode`). Integrate against that delegate API exactly as documented in §4.2. If the branch has not merged when Step C starts, cherry-pick nothing; wait and report. | The Opus agent building `OpenCommandBar` owns that API. A guessed parallel API would need a rewrite. |
 | D6 | Menus, keys, and the command bar share one registry: `OpenCommands.CommandRegistry`. The App implements `CommandDispatcher` once (in `OpenFeatures.BrowserWindowController`, which already conforms) and extends it in the App for engine commands. | `docs/commands.md`: one source of truth. |
-| D7 | Engine contexts are lazy per profile. `OEEngine.shared.defaultContext` serves the default profile; other profiles use `context(identifier:directory:)` at `Profiles/<dir>/Engine`, created when a Space of that profile is first shown. | `docs/engine-api.md`; `docs/plans/profiles.md` D-P7. The default profile's engine data lives at `Profiles/Default/` itself because CEF fixes the global context path there. Do not fight this. |
+| D7 | Engine contexts are lazy per profile. `OEEngine.shared.defaultContext` serves the default profile; other profiles use `context(identifier:directory:)` at `Engine/<dir>` (`ProfileDirectories.engineDirectory`), created when a Space of that profile is first shown. | `docs/engine-api.md`; `docs/plans/profiles.md` D-P7 and §6.2. `root_cache_path` is `<root>/Engine`; the default profile's engine data is `Engine/Default` (CEF's fixed global context). CEF loads a disk profile only for a direct child of `root_cache_path`. |
 | D8 | Boosts: the managed applier and the Zap picker run in an isolated world. User-authored Boost JS runs in the main world. Stock CEF user scripts are main-world only (patch P7), so until P7 lands the App installs plans through `WebProfile.addUserScript` in the main world and marks the isolation gap in code with `// Blocked on P7: isolated world`. Never claim isolation before P7. | `docs/boosts.md` engine contract; `docs/engine-api.md` gap table. |
 | D9 | Ad blocking: until the fork engine lands, the App builds a `RequestFilter` from `AdBlockStore` state and installs it with `WebProfile.setRequestFilter`. The filter runs on the network thread. It must be `@Sendable`, fast, and read only an immutable snapshot swapped atomically on list changes. | `docs/adblock-lists.md` (generation contract); `OpenWeb.RequestFilter` contract. |
 | D10 | Sleep: implement the S6 adapter (`docs/plans/memory-fork.md` §12 S6, `docs/sleep.md`) on today's `OEWebContent` API (§4.7 table): freeze = hide + throttle, discard = `close()` + recreate on wake. Capabilities with no today equivalent (`captureHistory`, `hasUnloadHandlers`, real history restore) return `nil` / `false`. List every such stub in the PR. | S0 policy is done. The fork patches are not. A stub that returns `false` keeps the policy safe; a fake success corrupts state. |
@@ -501,3 +501,32 @@ These do not block Step A. Each names its owner and deadline. Implementers: buil
 - Approved with the stated defaults for every open question in §9 (180 pt hide threshold, Peek split semantics per the M4 lead decisions, ad-block via the request-filter hook until the fork engine lands, sleep history capture via today's API until P-MEM patches land).
 - Ownership: the app-shell implementer owns App/ UI composition and wiring. The engine lead (fork bring-up + extension P1) owns Engine/, Engine/fork/, project.yml engine settings, and adds only small, clearly separated hooks in App/ (new OpenEngine delegate callbacks). Coordinate by merging origin/main often; on conflicts in App/, keep both sides' intent.
 - Phasing: Steps A + B first (one PR each). Step C after the command bar PR (#43) merges. Steps D–I follow in order.
+
+### Step C integration update (lead direction, 2026-10-25)
+
+PR #43 supplies the merged command-bar delegate API. PR #51 (`dc62e65`) supplies
+`OpenSettings`; Step C uses its real `SettingsPresenter` and `LibraryPresenter`
+and their action protocols. The §4.11 placeholder is superseded.
+`App/Settings/AppSettingsActions.swift` replaces the planned
+`SettingsPlaceholder.swift`. Both view models receive the app's existing
+`SnapshotStore`. Library uses the existing Archive/History stores, the engine
+Downloads feed, and `FileCapturesProvider`. `view-downloads`, `view-archive`, and
+`view-history` select the matching section in the shared Library window.
+`SearchEngines.resolve(id:profile:)` resolves built-in and custom search engines.
+The query gate uses `SettingsPresenter.prepareForRemoteSuggestions(profileID:)`
+without opening a Settings window or changing its selected profile.
+
+The App command extension lives with the registry menu bridge in `MainMenu.swift`.
+Duplicate copies a tab, all split panes, or a complete folder subtree immediately
+after its source, with fresh IDs and no hosts, as directed by the lead. A single
+model undo removes the whole copy. CEF's AppKit pump uses explicit model command
+undo groups, because its runloop does not supply AppKit event-group boundaries.
+
+Engine adapter limits at this step remain explicit: the current public engine
+has no initiate-download/save-page API. Save Page uses a native Save panel and
+`Page.captureSnapshot` MHTML through OpenEngine. Data clearing supports only the
+engine's all-time combined cookies/cache operation; other selections return a
+plain error before mutation. Durable import, ad-block engine binding, and sleep
+lifecycle binding stay in their planned later steps. Their Settings action
+adapters do not claim those operations completed. Little Open remains the Step C
+stub until Step E. No engine implementation or engine project setting changed.

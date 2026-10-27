@@ -275,6 +275,7 @@ The app now builds against the fork by default (`tools/fetch-cef.sh`,
 | chromium | `0301-open-headless-browser-window.patch` | +14/−8 | `chrome/browser/ui/browser_window/internal/browser_window_features.cc` |
 | chromium | `0302-open-hidden-browser-ui.patch` | +12/−3 | `read_anything_side_panel_controller.cc`, `tabs/tab_features.cc`, `toasts/toast_controller.cc` |
 | chromium | `0303-open-hosted-tab-lifecycle.patch` | +43/−0 | `extensions/api/tabs/tabs_api.cc`, `resource_coordinator/tab_lifecycle_unit.cc` |
+| chromium | `0304-open-hidden-browser-no-tab-groups.patch` | +10/−2 | `chrome/browser/ui/browser.cc` (includes the overlay's `tab_groups.h` only) |
 | cef | `0302-open-hosted-tabs.patch` | +79/−6 | `BUILD.gn`, `browser_host_base.h`, `browser_info_manager.cc`, `browser_platform_delegate_create.cc`, `chrome/chrome_browser_delegate.cc`, `chrome/chrome_browser_host_impl.cc` |
 | cef | `0303-open-context-menu-submenu-commands.patch` | +15/−1 | `chrome/chrome_context_menu_handler.cc` |
 | cef | `0304-open-extension-popups.patch` (P2, 2026-10-26) | +6/−0 | `chrome/chrome_browser_delegate.h` (`OpenExtensionPopup` may call `CreateBrowserHostForPopup`) |

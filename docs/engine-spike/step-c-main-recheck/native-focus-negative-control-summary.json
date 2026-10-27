@@ -1,0 +1,11 @@
+{
+  "expectedExit": 2,
+  "actualExit": 2,
+  "forcedOwnedPeerHandoffs": 3,
+  "interruptedAttempts": 3,
+  "suiteStatus": "INTERRUPTED",
+  "method": "Real shell workflow. After native key input, foreground a second owned Open instance with private data and cooperative activation. Both instances close; no other app receives input.",
+  "ok": true,
+  "sourceHead": "6e9d1a4e5e0e31dc35803adacf65d5c35cbda794",
+  "receiptSHA256": "8d094e7503e9b27fddc2ac4679a3e88fdd6cb431ed6f5e3c0e4805bc812f0e24"
+}

@@ -344,10 +344,15 @@ OEPermissionKind OEPermissionKindsFromMedia(uint32_t m) {
     } else {
       CefRequestContextSettings settings;
       if (directory) {
+        // Private, as Chromium makes its profile folders.
+        NSDictionary* privateFolder = @{NSFilePosixPermissions : @0700};
         [NSFileManager.defaultManager createDirectoryAtURL:directory
                                withIntermediateDirectories:YES
-                                                attributes:nil
+                                                attributes:privateFolder
                                                      error:nil];
+        [NSFileManager.defaultManager setAttributes:privateFolder
+                                       ofItemAtPath:directory.path
+                                              error:nil];
         CefString(&settings.cache_path) = directory.path.UTF8String;
         settings.persist_session_cookies = true;
       }

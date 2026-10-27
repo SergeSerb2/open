@@ -393,9 +393,8 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome && _oe_tabStrip &&
       _oe_tabStrip.context == self.context && !_oe_tabStrip.oe_canHostTabs) {
-    // A tab whose context gets no hidden Chrome window (CefTabStrip::Create:
-    // a non-default profile without a disk profile) stays Alloy rather than
-    // opening its own Chrome window.
+    // A tab whose context gets no hidden Chrome window (CefTabStrip::Create
+    // refused it) stays Alloy rather than opening its own Chrome window.
     _configuration.runtimeStyle = OERuntimeStyleAlloy;
   }
   if (_configuration.runtimeStyle == OERuntimeStyleChrome) {

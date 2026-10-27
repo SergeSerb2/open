@@ -1,0 +1,155 @@
+{
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [],
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "317D958E-9E30-4516-878D-E68F00366C90",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "keyboard": {
+      "ok": true,
+      "restored_same_id": true,
+      "routes": {
+        "cmd_l_window": "CommandBarFieldEditor",
+        "cmd_t_app": "CommandBarFieldEditor"
+      },
+      "tabs": [
+        3,
+        4,
+        3
+      ]
+    },
+    "persistence": {
+      "loaded_after_launch": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "snapshot": "State/browser.json",
+      "tabs": 4
+    },
+    "quit_order_owned_work": {
+      "ok": true,
+      "pendingBeforeQuit": {
+        "background": 1,
+        "captures": 1
+      },
+      "quit": {
+        "expectedExecutable": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+        "forced": false,
+        "observedExecutable": "/Users/serge/.t3/worktrees/open/t3-d8b5b30a/build/Debug/Open.app/Contents/MacOS/Open",
+        "reply": true
+      },
+      "trace": [
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 1,
+          "captureTasks": 1,
+          "closedFactories": 0,
+          "factories": 1,
+          "hosts": 1,
+          "lateAsyncEngineCalls": 0,
+          "phase": "prepare",
+          "selectionTasks": 0,
+          "uptime": 144217.26740358333
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "hostsClosed",
+          "selectionTasks": 0,
+          "uptime": 144217.27184429168
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownBegin",
+          "selectionTasks": 0,
+          "uptime": 144217.310344375
+        },
+        {
+          "asyncEngineCalls": {},
+          "backgroundTasks": 0,
+          "captureTasks": 0,
+          "closedFactories": 1,
+          "factories": 1,
+          "hosts": 0,
+          "lateAsyncEngineCalls": 0,
+          "phase": "engineShutdownEnd",
+          "selectionTasks": 0,
+          "uptime": 144217.35434320834
+        }
+      ]
+    },
+    "split_view": {
+      "ok": true,
+      "panes": [
+        "https://example.org/",
+        "https://example.net/"
+      ],
+      "screenshot": "shell-split-view.png"
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "2B8C2BF2-F1C2-4C11-A16E-C6251115FC06"
+        ],
+        [
+          1,
+          "D9B4C1E0-C14A-4ADE-9B0A-410F789754C2"
+        ],
+        [
+          2,
+          "C3E4667D-F0B6-462D-A660-2A9D1B25E7A2"
+        ]
+      ]
+    },
+    "window_png": {
+      "file": "shell-window.png",
+      "method": "windowserver+devtools",
+      "ok": true
+    }
+  },
+  "started": "2026-10-26 16:00:43",
+  "style": "chrome"
+}
