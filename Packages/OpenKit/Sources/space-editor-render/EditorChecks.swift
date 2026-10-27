@@ -25,7 +25,93 @@ enum EditorChecks {
             check(image.width == Int(382 * scale) && image.height == Int(534 * scale), "E1 real panel raster size at \(Int(scale))x")
             scene.controller.close()
         }
-        try drag(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows(); try controls(); try reviewedControls(); try roundThreeControls()
+        try drag(); try padCalibration(); try addRemove(); try modes(); try keyboardAndAccessibility(); try reviewedFlows(); try sessionTwoFlows(); try controls(); try reviewedControls(); try roundThreeControls(); try releasedControllerUndo(); compatibilityRange(); try undoKeepsPresetPage()
+    }
+    static func releasedControllerUndo() throws {
+        let model = try RenderCLI.fixtureModel(), undo = UndoManager()
+        undo.groupsByEvent = false; model.undoManager = undo
+        let owner = NSWindow(contentRect: CGRect(x: -20000, y: -20000, width: 900, height: 700),
+                             styleMask: .borderless, backing: .buffered, defer: false)
+        owner.isReleasedWhenClosed = false
+        defer { owner.close() }
+        let original = model.spaces[0].theme
+        var controller: ThemeEditorController? = ThemeEditorController(model: model, spaceID: model.spaces[0].id,
+            window: owner, anchor: .sidebarTrailingEdge(sidebarFrameInWindow: CGRect(x: 0, y: 0, width: 228, height: 700)))
+        controller?.apply(.selectPreset(index: 4))
+        let edited = model.spaces[0].theme
+        weak let released = controller
+        controller?.close(); controller = nil
+        check(released == nil && original != edited, "S9 lifetime: commit, close, and release the editor controller")
+        // Normal allocation churn makes an unowned, freed undo target observable.
+        let churn = (0..<128).map { NSMutableSet(object: $0) }
+        withExtendedLifetime(churn) { undo.undo() }
+        check(model.spaces[0].theme == original && !undo.canUndo,
+              "S9 lifetime: undo after controller release restores the full theme without a crash")
+        undo.redo()
+        check(model.spaces[0].theme == edited, "S9 lifetime: redo after controller release restores the edited theme")
+    }
+    static func undoKeepsPresetPage() throws {
+        let scene = try EditorScene()
+        scene.controller.apply(.selectPreset(index: 4))
+        scene.controller.apply(.setPresetPage(3))
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(scene.controller.state.presetPage == 3, "S9 undo keeps preset navigation on the current page")
+        scene.undo.redo(); scene.controller.prepareForSnapshot()
+        check(scene.controller.state.presetPage == 3, "S9 redo keeps preset navigation on the current page")
+        scene.controller.close()
+    }
+    static func compatibilityRange() {
+        check(ThemeColorMath.lightnessRange(.automatic) == 0.01...0.97,
+              "S9 compatibility: public Automatic range remains the empty-editor default without trapping")
+    }
+    static func padCalibration() throws {
+        let scene = try EditorScene(style: SpaceStylePresets.all[7].style)
+        func same(_ a: ThemeEditorState, _ b: ThemeEditorState) -> Bool {
+            a.style == b.style && a.range == b.range && a.saturation == b.saturation && a.knob == b.knob
+        }
+        let start = scene.controller.state
+        scene.click(scene.view.presets.swatches[4])
+        let preset = scene.controller.state
+        check(start.range != preset.range && start.saturation != preset.saturation,
+              "S9 preset tap changes the stored editor range and saturation")
+        let point = CGPoint(x: 245, y: 210)
+        scene.mouse(.leftMouseDown, at: point, in: scene.view.pad)
+        scene.mouse(.leftMouseDragged, at: CGPoint(x: 260, y: 220), in: scene.view.pad)
+        scene.mouse(.leftMouseUp, at: CGPoint(x: 260, y: 220), in: scene.view.pad)
+        scene.controller.flushPreviewFrame()
+        let dragged = scene.controller.state
+        check(dragged.range == preset.range && dragged.saturation == preset.saturation,
+              "S9 drag keeps the current range and saturation")
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(same(scene.controller.state, preset), "S9 first undo restores exact preset style, knob, range, and saturation")
+        scene.undo.undo(); scene.controller.prepareForSnapshot()
+        check(same(scene.controller.state, start) && !scene.undo.canUndo,
+              "S9 second undo restores exact pre-preset editor state")
+        scene.undo.redo(); scene.controller.prepareForSnapshot()
+        check(same(scene.controller.state, preset), "S9 first redo restores exact preset editor state")
+        scene.undo.redo(); scene.controller.prepareForSnapshot()
+        check(same(scene.controller.state, dragged), "S9 second redo restores exact dragged editor state without recentering")
+        let reopened = ThemeEditorState(style: scene.space.theme.style)
+        check(reopened.range == ThemeColorMath.editorRange(key: ThemeColorMath.toP3(dragged.style!.keyColor), mode: .automatic)
+              && reopened.range != dragged.range, "S9 reopening reconstructs the range from the key; undo state is not persisted")
+        scene.click(scene.view.modes.buttons[1])
+        let forced = scene.controller.state.range
+        for _ in 0..<4 { scene.click(scene.view.presets.next) }
+        scene.click(scene.view.presets.swatches[44])
+        check(scene.controller.state.range == forced && scene.controller.state.saturation == 0.01,
+              "S9 forced preset keeps the current range and updates saturation")
+        let forcedKey = scene.space.theme.style!.keyColor
+        scene.click(scene.view.modes.buttons[0])
+        check(scene.controller.state.range == forced && scene.space.theme.style!.keyColor == forcedKey,
+              "S9 Automatic return keeps the key and range")
+        scene.click(scene.view.remove)
+        check(scene.controller.state.range == 0.01...0.97 && scene.controller.state.saturation == 1,
+              "S9 removing the final color resets the empty range and saturation")
+        scene.controller.close(); scene.controller.close()
+        let closed = scene.controller.state
+        scene.undo.undo(); OffscreenRenderer.settle(scene.view, runLoop: 0.002)
+        check(scene.controller.isClosed && scene.controller.state == closed && scene.space.theme.style != nil,
+              "S9 undo after repeated close restores the model without repainting a closed editor")
     }
     static func drag() throws {
         let scene = try EditorScene()
@@ -96,7 +182,7 @@ enum EditorChecks {
     static func modes() throws {
         let scene = try EditorScene()
         let knob = scene.controller.state.knob
-        for (index, mode, range) in [(2, SpaceStyleAppearance.dark, 0.01...0.425), (1, .light, 0.575...0.97), (0, .automatic, 0.01...0.97)] {
+        for (index, mode, range) in [(2, SpaceStyleAppearance.dark, 0.01...0.425), (1, .light, 0.575...0.97), (0, .automatic, 0.575...0.97)] {
             scene.click(scene.view.modes.buttons[index])
             let state = scene.controller.state
             let content = SpaceThemeStyle(theme: scene.space.theme, system: .light).contentAppearance

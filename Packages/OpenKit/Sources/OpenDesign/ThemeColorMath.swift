@@ -20,6 +20,14 @@ public struct PrimaryPalette: Hashable, Sendable {
 public enum ThemeTuning {
     public static let automaticBias: Double = 0
     public static let forcedBias: Double = 21
+    // Decoded constants: docs/re/features-core.md §2.3 item 17c–d.
+    public static let intensityAlphaFloor = 0.2
+    public static let intensityAlphaSlope = 0.55
+    public static let darkWashAlpha = 0.35
+    public static let washOpacityCap = 0.5
+    public static let textureNoiseScale: [SpaceStyleTexture: Double] = [.grain: 0.80, .sand: 0.15, .denim: 0.60, .tweed: 0.40]
+    /// Capture fits, not decoded tile constants (§17.3).
+    public static let textureTileDarkness: [SpaceStyleTexture: Double] = [.grain: 0.060, .sand: 0.316, .denim: 0.122, .tweed: 0.262]
 }
 
 public enum ThemeColorMath {
@@ -42,7 +50,9 @@ public enum ThemeColorMath {
     public static func hsl(_ c: P3) -> (h: Double, s: Double, l: Double) {
         let high = max(c.r, c.g, c.b), low = min(c.r, c.g, c.b)
         let delta = high - low, l = (high + low) / 2
-        guard delta > 1e-12 else { return (0, 0, l) }
+        // ColorSync's P3 → extended sRGB → P3 round trip can leave sub-level
+        // channel noise in a neutral preset. Its undefined hue is canonically 0.
+        guard delta > 1e-6 else { return (0, 0, l) }
         let s = delta / (1 - abs(2 * l - 1))
         let h: Double
         if high == c.r { h = (c.g - c.b) / delta }
@@ -138,8 +148,30 @@ public enum ThemeColorMath {
         contrast(key, toP3(dark.title.modelColor)) + bias >= contrast(key, toP3(light.title.modelColor)) ? .dark : .light
     }
 
-    public static func lightnessRange(_ mode: SpaceStyleAppearance) -> ClosedRange<Double> {
-        switch mode { case .automatic: 0.01...0.97; case .light: 0.575...0.97; case .dark: 0.01...0.425 }
+    public static func autoRange(lightness: Double) -> ClosedRange<Double> {
+        max(0.01, lightness - 0.25)...min(0.97, lightness + 0.25)
+    }
+
+    public static func forcedRange(_ mode: SpaceStyleAppearance) -> ClosedRange<Double> {
+        switch mode {
+        case .light: 0.575...0.97
+        case .dark: 0.01...0.425
+        case .automatic: 0.01...0.97  // Compatibility default; the editor uses its stored range.
+        }
+    }
+
+    /// Compatibility defaults. Automatic returns the empty-editor range; an
+    /// open editor uses its stored range instead of this mode-only API.
+    public static func lightnessRange(_ mode: SpaceStyleAppearance) -> ClosedRange<Double> { forcedRange(mode) }
+
+    public static func widen(_ range: ClosedRange<Double>, _ lightness: Double) -> ClosedRange<Double> {
+        min(range.lowerBound, lightness)...max(range.upperBound, lightness)
+    }
+
+    public static func editorRange(key: P3?, mode: SpaceStyleAppearance) -> ClosedRange<Double> {
+        guard let key else { return 0.01...0.97 }
+        let l = hsl(key).l
+        return mode == .automatic ? autoRange(lightness: l) : widen(forcedRange(mode), l)
     }
 
     public static func knob(for color: P3, range: ClosedRange<Double>) -> CGPoint {
