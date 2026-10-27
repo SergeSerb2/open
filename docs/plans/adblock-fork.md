@@ -579,7 +579,7 @@ mod ffi {
 
     struct OpenBuildReport {
         lossless: bool,           // false when a list line contains "removeparam" (§9.2.1)
-        lossy_kinds: Vec<String>, // v1: at most ["removeparam"]
+        lossy_kinds: Vec<String>, // any of "removeparam", "remove", "remove-attr", "remove-class" (as built, 98-4)
         resources_loaded: u32,
         resources_error: String,  // "" or a short kind ("json", "too-large")
         list_count: u32,
@@ -767,7 +767,7 @@ assignment. §5.2 is the resulting surface.
 | `redirect_data_url` for **every** type: the crate's `data:<mime>;base64,…` verbatim (F-32) | Step 4 | — | C++ decides whether to serve it (§7.4 rule 3) |
 | `open_adblock_deserialize` returns false when `dat.len() <= 4` | Step 4 | 98-3 | A 4-byte DAT panics the crate today |
 | `open_adblock_deserialize` takes `resources_json` and calls `use_resources` after a successful deserialize | Step 7 | 98-4 | F-31: the DAT carries no resources; N-19 proves it |
-| `open_adblock_build_report`: `lossless`, `lossy_kinds`, `resources_loaded`, `resources_error`, `list_count` | Step 4 | 98-4, 98-5, 100-1(b) | `lossless` comes from a conservative scan of the list texts: a non-comment line that contains `removeparam` makes the set lossy. False positives only cost a text build. v1 ignores the `:remove*()` actions (lead ruling 6), so their loss in a DAT (F-31) does not matter in v1; the post-v1 design adds them as lossy kinds with a shim version bump (§8.5) |
+| `open_adblock_build_report`: `lossless`, `lossy_kinds`, `resources_loaded`, `resources_error`, `list_count` | Step 4 | 98-4, 98-5, 100-1(b) | `lossless` comes from a conservative scan of the list texts: a non-comment line that contains `removeparam` makes the set lossy. False positives only cost a text build. As built (98-4), the scan also reports `remove`, `remove-attr`, and `remove-class` (`:remove*()` lines), and any reported kind makes the set lossy, so such lists take a text build. v1 still ignores what the `:remove*()` actions do (lead ruling 6); counting them only costs a text build (F-31) |
 | `open_adblock_engine_format()`: `adblock=0.8.11;shim=<N>;features=<sorted crate features>;regex=<sorted regex features>;dat=v0`. `N` is a constant in `lib.rs`, bumped on any change to `ParseOptions`, permissions, features or bridge semantics | Step 4 | 100-1(a) | The receipt binds it (§9.2.1) |
 | Sanitized cosmetic vectors (`OpenCosmeticResources` of §5.2), the 256 KiB payload cap with `dropped_over_cap`, and sanitized `open_adblock_hidden_selectors` output. The crate's style, remove and scriptlet output is discarded and counted (lead ruling 6). No CSS text is built in Rust | Step 5 | 98-1, 98-2, r1-14 | Sanitizer rules: §8.3. Post-v1 fields: §8.5 |
 

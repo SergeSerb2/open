@@ -28,7 +28,7 @@ public final class ThemeEditorPanel: NSPanel {
         editorView.wantsLayer = true
         editorView.content.layer?.cornerRadius = 20; editorView.content.layer?.cornerCurve = .continuous
         editorView.content.layer?.masksToBounds = true
-        material.material = .popover; material.blendingMode = .behindWindow; material.state = .active
+        material.material = PopoverMaterial.material; material.blendingMode = .behindWindow; material.state = .active
         material.frame = CGRect(origin: .zero, size: ThemeEditorMetrics.contentSize); material.autoresizingMask = [.width, .height]
         editorView.content.addSubview(material, positioned: .below, relativeTo: editorView.pad)
         setAccessibilityRole(.popover); setAccessibilityLabel("Edit Theme")
