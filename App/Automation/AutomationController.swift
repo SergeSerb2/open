@@ -220,7 +220,7 @@
         if let ask = a["ask"] as? Bool { settings.askWhereToSaveEachFile = ask }
         return app.model.updateProfileSettings(id: profile.id, settings: settings)
       case "site-controls-state": return w.siteControls.state
-      case "site-controls": return w.siteControls.present()
+      case "site-controls": return w.controller.map { $0.sidebar($0.sidebar, didRequest: .showSiteControls) } ?? false
       case "extension-popup-state": return w.extensionPopup.state
       case "extension-toolbar-press": return (a["extension"] as? String).map { w.pressExtensionButton(id: $0) } ?? false
       case "commandbar-state": return w.commandBarSession?.stateForAutomation() ?? ["created": false, "presented": false]

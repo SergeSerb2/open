@@ -80,6 +80,7 @@ extension EngineWebContentHostFactory {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.perform(id) }
     if AppCommand.featureIDs.contains(id) || id.hasPrefix("focus-split-pane-") { return false }
     guard isAppCommandEnabled(id, payload: payload) else { return false }
+    dismissSiteControls()
     if id.hasPrefix("go-to-space-"), let n = Int(id.split(separator: "-").last ?? ""), n <= model.spaces.count {
       if let uuid = payload.flatMap(UUID.init(uuidString:)), let space = model.space(id: SpaceID(rawValue: uuid)) { focus(space: space) }
       else { focus(space: model.spaces[n - 1]) }; return true

@@ -55,7 +55,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
-    extensionPopup.dismiss()
+    siteControlsHost?.dismiss(); extensionPopup.dismiss()
     commandBarSession?.show(mode, requestedAt: requestedAt)
   }
   private var enteredWindowFullscreenForPage = false
@@ -113,6 +113,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     return presenter
   }
   func showDownloads() { if pageDownloads.button.superview == nil { extensionBar.addArrangedSubview(pageDownloads.button) }; layoutViews(); pageDownloads.show() }
+  func dismissSiteControls() { siteControlsHost?.dismiss() }
   func refreshDownloads() { downloadsPresenter?.refresh() }
   var dialogState: [String: Any] { dialogPresenter?.state ?? ["pending": 0, "visible": false] }
   var permissionState: [String: Any] { permissionPresenter?.state ?? ["pending": 0, "visible": false, "decisions": 0] }
@@ -131,6 +132,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     self.controller = controller
     extensionPopup.onWillDismiss = { [weak self] page in self?.pageWillClose(page) }
     controller.shouldDeferKeyToFirstResponder = { [weak self] event in
+      if self?.siteControlsHost?.ownsEditingKey(event) == true { return true }
       guard let self, self.findFieldCreated, self.findBar?.isHidden == false,
             event.window === self.window,
             event.window?.firstResponder === self.findField.currentEditor(),
@@ -156,7 +158,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onStateChange = { [weak self] in
       guard let self else { return }
       if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
-      self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleSave(); self.app.scheduleMenuRebuild()
+      self.siteControlsHost?.refresh(); self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleSave(); self.app.scheduleMenuRebuild()
     }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }
@@ -468,7 +470,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     guard !isClosing else { return }
     isClosing = true
     for task in closeRequests.values { task.cancel() }; closeRequests.removeAll()
-    dialogPresenter?.close(); permissionPresenter?.close(); downloadsPresenter?.close(); extensionPopup.dismiss()
+    siteControlsHost?.close(); dialogPresenter?.close(); permissionPresenter?.close(); downloadsPresenter?.close(); extensionPopup.dismiss()
     contextMenuSession?.cancel(); contextMenuSession = nil
     for choice in downloadSavePanels.values { choice.cancel() }; downloadSavePanels.removeAll()
     for task in saveCaptureTasks.values { task.cancel() }
@@ -500,12 +502,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     events.append(event); if events.count > 2000 { events.removeFirst(events.count - 2000) }
   }
   func pageWillClose(_ page: OEWebContent) {
+    if selectedContent === page { siteControlsHost?.dismiss() }
     if findPage === page { hideFind(restoreFocus: false) }
     if contextMenuSession?.belongs(to: page) == true { contextMenuSession?.cancel() }
     dialogPresenter?.cancel(page: page); permissionPresenter?.cancel(page: page)
   }
   func pageURLChanged(_ page: OEWebContent) {
-    permissionPresenter?.cancel(page: page)
+    permissionPresenter?.cancel(page: page); siteControlsHost?.dismiss()
     if findPage === page { findBar?.update(count: 0, active: 0); activatedFindMatch = false }
   }
   func drainEvents() -> [[String: Any]] { defer { events.removeAll() }; return events }
@@ -745,6 +748,7 @@ extension EngineWebContentHostFactory {
 
   @objc func showFind(_ sender: Any?) {
     guard app.engineReady, !isClosing, selectedContent != nil else { return }
+    siteControlsHost?.dismiss()
     _ = findField
     if let findBar { controller?.contentView.addSubview(findBar, positioned: .above, relativeTo: nil) }
     findBar?.isHidden = false; findField.isHidden = false; layoutViews()

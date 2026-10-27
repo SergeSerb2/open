@@ -1213,3 +1213,11 @@ verify owned windows, and kill owned process trees on timeout. A forced early
 prompt assertion was recorded as FAIL, with zero remaining CGWindowList windows,
 zero forced kills and zero foreground interruptions. The harness was restored.
 No human interaction was needed for that control or the protected old-code run.
+
+Per the lead ruling of 2026-10-26, the inherited Widevine playback check is
+replaced by **Widevine out of v1 (expected absent)**. It requires the fork's
+release `enable_widevine=false`, no CDM library in the app/data/cache roots, a
+normal EME `NotSupportedError` rejection, and a live page/app with no dialog.
+Socket timeouts and crashes fail. CDM presence before/after the request or at
+app exit fails; an intentionally unsupported feature no longer remains a FAIL
+by design. This changes the v1 acceptance contract, not the engine.

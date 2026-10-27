@@ -57,6 +57,19 @@ EXT = {
 CWS_TEST_ID = "aapbdbdomjkkjkaonfhkkikfgjllcleb"  # Google Translate (MV3)
 
 
+def widevine_modules(app):
+    roots=[('app',Path(app.bundle)),('data',Path(app.user_data)),
+           ('cache',Path.home()/'Library/Caches'/Path(app.user_data).name)]
+    modules=[]
+    for label,root in roots:
+        if not root.exists():continue
+        for count,path in enumerate(root.rglob('*')):
+            if count>100000:raise RuntimeError('CDM inventory exceeds 100000 entries')
+            if 'widevine' in path.name.lower() and path.suffix.lower() in ('.dylib','.so','.dll') and path.is_file():
+                modules.append(label+'/'+str(path.relative_to(root)))
+    return sorted(modules)
+
+
 class FocusInterruption(RuntimeError):
     def __init__(self, message, evidence):
         super().__init__(message)
@@ -350,6 +363,9 @@ class Open:
         self.quit_report['killed']=kill_known(known)
         try:self.quit_report['remainingWindows']=wait_no_windows(known)
         except Exception as error:self.quit_report['remainingWindows']=[{'windowQueryError':str(error)}]
+        if getattr(self,'widevine_row',None) is not None:
+            at_exit=widevine_modules(self);self.widevine_row['cdmAtExit']=at_exit
+            if at_exit:self.widevine_row['ok']=False
         self.quit_report['ok']=not self.quit_report.get('forced') and not self.quit_report['remainingWindows'] and all(r['ok'] for r in self.dialog_cleanup_reports)
         try:self.proc.wait(2)
         except subprocess.TimeoutExpired:self.proc.kill();self.proc.wait()
@@ -860,7 +876,7 @@ def page_chrome_checks(factory, results, tmp):
             results['dialog_queue_limit']={'ok':bool(refused) and app.call('page-dialog-state')['pending']==8 and any(e['type']=='pageChromeRefused' for e in app.call('events')),'at':8,'over':9}
             for q in queued:app.call('close',tab=q)
             assert wait_until(lambda:app.call('page-dialog-state')['pending']==0 and not {t['id'] for t in app.call('tabs')}.intersection(queued),timeout=8,step=.02)
-        app.call('select',tab=tab);app.call('focus',tab=tab);app.call('policy',dialogs='')
+        app.call('select',tab=tab);app.call('wait',tab=tab);app.call('focus',tab=tab);app.call('policy',dialogs='')
         # Actual engine context menu events; selections use the same NSMenu items.
         def context(selector, selection=False):
             if selection:app.eval(tab,'(()=>{const r=document.createRange();r.selectNodeContents(document.querySelector('+json.dumps(selector)+'));const s=getSelection();s.removeAllRanges();s.addRange(r);return true})()')
@@ -898,9 +914,15 @@ def page_chrome_checks(factory, results, tmp):
                 refused=wait_until(lambda:next((e for e in app.call('events') if e['type']=='pageChromeRefused'),None),timeout=3,step=.02)
                 results['context_url_limit_over']={'ok':bool(refused) and app.call('context-menu-state')['completed'] and app.call('context-menu-state')['items']==[],'bytes':length}
         app.eval(tab,'document.querySelector("#link-target").href="/link";true')
-        app.call('site-controls');site=app.call('site-controls-state')
-        results['site_control_host_pending']={'status':'BLOCKED','reason':'pending #69','hostRequest':site}
-        assert not site['available'] and site['requests']>0 and site['request']['profile']==app.tab(tab)['profile'] and site['request']['anchor'][2:]==[30,30],site
+        anchor=app.call('site-controls-state')['anchor'];assert anchor[2:]==[30,30],anchor
+        app.call('mouse',action='move',x=anchor[0]+anchor[2]/2,y=anchor[1]+anchor[3]/2)
+        app.call('focus',tab=tab);shown=app.call('site-controls');site=app.call('site-controls-state')
+        results['site_control_shell']={'ok':shown and site['available'] and site['visible'] and site['request']['profile']==app.tab(tab)['profile'] and site['request']['anchor']==anchor,'state':site}
+        assert site['visible'],site
+        shot(app,'page-chrome-site-control.png')
+        key('escape');hidden=wait_until(lambda:not app.call('site-controls-state')['visible'],timeout=2,step=.02)
+        results['site_control_escape']={'ok':bool(hidden)}
+        results['site_control_sections_pending']={'status':'BLOCKED','reason':'pending #96 sections / #103 editor; merged #69 shell is presented'}
         # Relauch proves the remembered default-context values are durable.
         app.call('save');app.quit();app=factory(urls=());app.call('wait');app.call('select',tab=tab);app.call('wait',tab=tab)
         values=[app.call('permission-setting',tab=tab,origin=o,kind=8) for o,_,_ in remembered]
@@ -1225,31 +1247,31 @@ def feature_checks(app, style, results, tmp):
             ' mp3: document.createElement("audio").canPlayType("audio/mpeg")})')}
 
     def widevine():
-        # Chromium's component updater downloads the CDM (fast-update switch).
-        cdm = os.path.join(app.user_data, "Engine", "WidevineCdm")
-        got = wait_until(lambda: os.path.isdir(cdm) and os.listdir(cdm), timeout=120, step=2)
-        w = new_tab(app, "https://example.com/")
-        r = app.eval(w, '(async () => { try { const a = await navigator.requestMediaKeySystemAccess("com.widevine.alpha",'
-                        ' [{initDataTypes: ["cenc"], videoCapabilities: [{contentType: \'video/webm; codecs="vp9"\','
-                        ' robustness: "SW_SECURE_DECODE"}]}]); await a.createMediaKeys(); return "available: " + a.keySystem;'
-                        ' } catch (e) { return "unavailable: " + e.name + " " + e.message; } })()')
-        play = None
-        if r.startswith("available"):
-            play = app.eval(w, '(async () => { const s = document.createElement("script");'
-                ' s.src = "https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.11.7/shaka-player.compiled.js";'
-                ' document.head.appendChild(s); await new Promise((r, j) => { s.onload = r; s.onerror = j; });'
-                ' shaka.polyfill.installAll(); const v = document.createElement("video"); v.muted = true;'
-                ' document.body.appendChild(v); const p = new shaka.Player(); await p.attach(v);'
-                ' p.configure({drm: {servers: {"com.widevine.alpha": "https://cwip-shaka-proxy.appspot.com/no_auth"}}});'
-                ' try { await p.load("https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd"); }'
-                ' catch (e) { return {error: e.code}; } await v.play(); await new Promise(r => setTimeout(r, 5000));'
-                ' return {currentTime: v.currentTime, frames: v.getVideoPlaybackQuality().totalVideoFrames,'
-                ' keySystem: p.keySystem(), track: p.getVariantTracks().filter(t => t.active).map(t => t.videoCodec)[0]}; })()',
-                timeout=90)
-        app.call("close", tab=w)
-        app.call("select", tab=t)
-        return {"ok": r.startswith("available") and bool(play) and play.get("frames", 0) > 30, "eme": r,
-                "playback": play, "cdm_versions": sorted(os.listdir(cdm)) if got else None}
+        # Lead's v1 contract: no licensed CDM, normal EME rejection, no hang.
+        before=widevine_modules(app)
+        args=Path(ROOT,'Engine/fork/gn/release.args.gn').read_text()
+        disabled=bool(re.search(r'^enable_widevine\s*=\s*false\s*$',args,re.M))
+        w=new_tab(app,'https://example.com/')
+        try:
+            with dialog_case(app,'Widevine out of v1'):
+                response=app.eval(w,'''(async()=>{
+                  try { await navigator.requestMediaKeySystemAccess("com.widevine.alpha",
+                    [{initDataTypes:["cenc"],videoCapabilities:[{contentType:'video/webm; codecs="vp9"',robustness:"SW_SECURE_DECODE"}]}]);
+                    return {rejected:false};
+                  } catch(e) { return {rejected:true,name:e.name}; }
+                })()''',timeout=5)
+                after=widevine_modules(app)
+                page_alive=app.eval(w,'document.title === "Example Domain"',timeout=2)
+                page=app.page(w)
+                no_dialogs=app.call('page-dialog-state')['pending']==0 and not any(x['visible'] and (x['sheet'] or 'Alert' in x['class']) for x in app.call('windows'))
+                row={'ok':disabled and not before and not after and response.get('rejected') is True and response.get('name')=='NotSupportedError'
+                    and page_alive and page['crash']==0 and app.call('ping')['pid']==app.pid and no_dialogs,
+                    'releaseArgsWidevineDisabled':disabled,'cdmBefore':before,'cdmAfter':after,'eme':response,
+                    'pageAlive':bool(page_alive),'appAlive':app.call('ping')['pid']==app.pid,'noDialog':no_dialogs}
+                app.widevine_row=row
+                return row
+        finally:
+            app.call('close',tab=w);app.call('select',tab=t)
 
     def crash_recovery():
         c = new_tab(app, "https://example.com/", background=True)
@@ -1273,7 +1295,7 @@ def feature_checks(app, style, results, tmp):
                      ("context_menu", context_menu), ("audio_state", audio), ("fullscreen", fullscreen),
                      ("picture_in_picture", pip), ("pdf_viewer", pdf), ("print_to_pdf", print_to_pdf),
                      ("downloads", download), ("user_scripts", user_scripts), ("request_filter", request_filter),
-                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("widevine", widevine), ("crash_recovery", crash_recovery)]:
+                     ("profiles", profiles), ("adblock_control", adblock_control), ("codecs", codecs), ("Widevine out of v1 (expected absent)", widevine), ("crash_recovery", crash_recovery)]:
         run(name, fn)
 
 
