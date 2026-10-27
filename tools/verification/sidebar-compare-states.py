@@ -4,7 +4,10 @@
 One render per process, sequentially. Compare.swift owns sRGB conversion and the
 favicon, tile-icon, web-panel, traffic-light, and window-corner masks. Only the
 explicit text mismatches documented in §15.1 are excluded below. No private text
-or screenshot bytes are part of this script. Never copies its private inputs.
+or screenshot bytes are part of this script. The renderer locks (and may migrate)
+the data root it reads, so each run renders from its own 0700 copy of the two
+snapshot files under /tmp, deleted on exit. Concurrent runs never share a lock,
+and the private inputs in .re are never written.
 """
 import argparse
 from decimal import Decimal
@@ -13,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -85,6 +89,16 @@ def inputs(root):
         if not (root / name / "State/browser.json").is_file():
             raise FileNotFoundError("missing " + name + "/State/browser.json")
     return captures
+
+
+def private_roots(root):
+    """Per-run data roots holding only State/browser.json, outside verify-all's
+    scratch dir (--keep-logs moves that into a possibly uploaded log directory)."""
+    data = Path(tempfile.mkdtemp(prefix="open-sidebar-compare-data-", dir="/tmp"))
+    for name in ("snap-static", "snap-real"):
+        (data / name / "State").mkdir(mode=0o700, parents=True)
+        shutil.copyfile(root / name / "State/browser.json", data / name / "State/browser.json")
+    return data
 
 
 def command(args, log):
@@ -241,26 +255,30 @@ def main():
                "captureSHA256": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in captures.items()}, "states": []}
     combined = {"main": {}, "branch": {}}
     failed = []
-    for state in STATES:
-        name, frame, _, _, _ = state
-        attempt_results = []
-        for attempt in range(1, args.attempts + 1):
-            tables = {kind: run_state(binary, root, captures[frame], state, out / kind / name / f"attempt-{attempt}")
-                      for kind, binary in (("main", baseline), ("branch", renderer))}
-            result = gate_tables(name, tables)
-            attempt_results.append({"attempt": attempt, **result})
-            if result["passed"] or attempt == args.attempts:
-                for kind, table in tables.items():
-                    combined[kind][name] = table
-                    (out / kind / name / "table.md").write_bytes(table)
-                break
-            print(f"{name}: gate failed on paired attempt {attempt}; preserving outputs and repeating both processes: " + "; ".join(result["errors"]), flush=True)
-        worst = re.search(rb"Worst position error .*", tables["main"])
-        print(f"{name}: {'PASS' if result['passed'] else 'FAIL'} (paired attempts {attempt}; position/ink {'identical' if result['positionAndInkIdentical'] else 'differ'}; max color drift {result['maxColorMetricDrift']} ΔE00) " + (worst[0].decode() if worst else "missing summary"), flush=True)
-        receipt["states"].append({"name": name, "attempts": attempt, "attemptResults": attempt_results, **result})
-        if not result["passed"]:
-            failed.append(name)
-            print("  " + "; ".join(result["errors"]), flush=True)
+    data = private_roots(root)
+    try:
+        for state in STATES:
+            name, frame, _, _, _ = state
+            attempt_results = []
+            for attempt in range(1, args.attempts + 1):
+                tables = {kind: run_state(binary, data, captures[frame], state, out / kind / name / f"attempt-{attempt}")
+                          for kind, binary in (("main", baseline), ("branch", renderer))}
+                result = gate_tables(name, tables)
+                attempt_results.append({"attempt": attempt, **result})
+                if result["passed"] or attempt == args.attempts:
+                    for kind, table in tables.items():
+                        combined[kind][name] = table
+                        (out / kind / name / "table.md").write_bytes(table)
+                    break
+                print(f"{name}: gate failed on paired attempt {attempt}; preserving outputs and repeating both processes: " + "; ".join(result["errors"]), flush=True)
+            worst = re.search(rb"Worst position error .*", tables["main"])
+            print(f"{name}: {'PASS' if result['passed'] else 'FAIL'} (paired attempts {attempt}; position/ink {'identical' if result['positionAndInkIdentical'] else 'differ'}; max color drift {result['maxColorMetricDrift']} ΔE00) " + (worst[0].decode() if worst else "missing summary"), flush=True)
+            receipt["states"].append({"name": name, "attempts": attempt, "attemptResults": attempt_results, **result})
+            if not result["passed"]:
+                failed.append(name)
+                print("  " + "; ".join(result["errors"]), flush=True)
+    finally:
+        shutil.rmtree(data, ignore_errors=True)
     for kind in combined:
         payload = b"".join(combined[kind][name] for name in sorted(combined[kind]))
         digest = hashlib.sha256(payload).hexdigest()
