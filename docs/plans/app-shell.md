@@ -179,6 +179,8 @@ Layout runs in `layoutContent()` on resize, sidebar width change, sidebar mode c
 
 Owner of the window parts below (lead, 2026-10-26): the window-chrome follow-up of PR #104 builds the width limits, drag-to-hide, double-click reset, Cmd+S motion, card motion and material, and the Space-switch spring, and edits the matching `docs/design.md` §2.4 rows. The sidebar plan's lane A1 adds only the first-hide hint trigger and the compact toolbar (`docs/plans/sidebar-completion.md` §3.12, §3.16).
 
+Part A implementation (window-chrome follow-up): width/drag/reset, motion tokens, and dark minimize/zoom rings are implemented. The `window` suite includes the real-event flows; `--window-chrome-only` runs just those flows and the session-2 pixel comparisons. Part B (card material and inactive-window darkening) stays deferred until the lead releases it after theme Step 9. No theme-file change is part of Part A.
+
 Width (S2 06; AX width of the sidebar scroll area, `docs/re/interaction-states.md` §20.1):
 
 | Event | Result | Mark, evidence |

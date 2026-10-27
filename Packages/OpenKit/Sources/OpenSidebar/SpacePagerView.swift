@@ -18,6 +18,7 @@ final class SpacePagerView: NSView {
     private var offset: CGFloat = 0
     private var shownSpaceID: SpaceID?
     private var animating = false
+    private(set) var lastSlideAnimation: CAAnimation?
     private var swipe: SwipeState?
     private var loop: ObservationLoop?
 
@@ -111,6 +112,9 @@ final class SpacePagerView: NSView {
         placeStrip()
         let style = context.style(for: focused)
         guard animated, previous != nil, animatesSidebarChanges else {
+            strip.layer?.removeAnimation(forKey: "slide")
+            lastSlideAnimation = nil
+            animating = false
             themeBackground?.crossfade(to: style, animated: false)
             finishSlide()
             return
@@ -126,7 +130,11 @@ final class SpacePagerView: NSView {
         spring.toValue = -offset
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self] in MainActor.assumeIsolated { self?.animating = false; self?.finishSlide() } }
+        let scheduledAt = strip.layer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
+        spring.beginTime = scheduledAt
+        spring.setValue(scheduledAt, forKey: "openScheduledAt")
         strip.layer?.add(spring, forKey: "slide")
+        lastSlideAnimation = strip.layer?.animation(forKey: "slide")
         CATransaction.commit()
     }
 

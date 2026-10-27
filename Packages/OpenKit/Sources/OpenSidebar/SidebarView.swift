@@ -28,6 +28,8 @@ public final class SidebarView: NSView {
     let urlField: URLFieldView
     let favorites: FavoritesView
     let pager: SpacePagerView
+    /// Last Space slide, read back from the real pager layer when scheduled.
+    public var spaceSlideAnimation: CAAnimation? { pager.lastSlideAnimation }
     let bottomBar: BottomBarView
     public let mediaControls: MediaControlsView
     private var cardBackground: ThemeBackgroundView?
@@ -337,7 +339,7 @@ public enum SidebarDiagnostics {
 extension NSView {
     /// Structural and Space-switch animations run only in visible windows: an
     /// offscreen window never completes them, and nobody would see them.
-    var animatesSidebarChanges: Bool { (window?.isVisible ?? false) || SidebarDiagnostics.forceAnimations }
+    var animatesSidebarChanges: Bool { !Motion.reducesMotion && ((window?.isVisible ?? false) || SidebarDiagnostics.forceAnimations) }
 }
 
 extension SidebarView {

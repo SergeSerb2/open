@@ -1648,7 +1648,9 @@ def shutdown_order_checks(factory, results, tmp):
         and not os.path.exists(destination), 'pendingBeforeQuit': pending, 'quit': app.quit_report, 'trace': trace}
 
 
-def window_checks(app_factory, results, tmp, config):
+def window_checks(app_factory, results, tmp, config, chrome_only=False):
+    window_chrome_followup_checks(app_factory, results, tmp)
+    if chrome_only: return
     # Local deterministic text paints without DNS, TLS, or external requests.
     fixture = "data:text/html,<title>Open launch fixture</title><h1>Open launch fixture</h1>"
     runs = {"cold_fresh_profile": [], "warm_existing_profile": []}
@@ -1825,8 +1827,8 @@ def window_flow_checks(factory, results, tmp):
         wide = app.call("window-state")
         app.call("mouse", **{"from": [500, 300], "to": [190, 300]})
         narrow = app.call("window-state")
-        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 228 and narrow["sidebarMode"] == "anchored"}
-        app.call("mouse", **{"from": [228, 300], "to": [170, 300]})
+        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 190 and narrow["sidebarMode"] == "anchored"}
+        app.call("mouse", **{"from": [190, 300], "to": [60, 300]})
         hidden = sidebar_hidden(app) or app.call("window-state")
         # The first reveal right after the hide: every wait below is a condition (the
         # card settled or gone), never a fixed sleep.
@@ -2234,7 +2236,7 @@ def window_activity(app):
 # Arc's dimmed window buttons at rest (docs/design.md section 2.2, interaction-states section 0):
 # DimmedWindowControls over the background, with a faint ring in each button's color.
 DIMMED_LOOK = {"light": ((0.0, 0.0, 0.0), 0.10, 0.06), "dark": ((243.0, 243.0, 234.1), 0.33, 0.34)}
-RING_COLORS = {"light": [(219, 59, 60), (212, 162, 1), (47, 181, 19)], "dark": [(254, 129, 121), (254, 206, 63), (112, 210, 73)]}
+RING_COLORS = {"light": [(219, 59, 60), (212, 162, 1), (47, 181, 19)], "dark": [(254, 129, 121), (255, 218, 9), (77, 221, 49)]}
 
 
 def dimmed_look(png, scale, centers, mode, ring=True):
@@ -2495,6 +2497,239 @@ def traffic_light_look_checks(app, results, private, scale, wid):
                              "dimmed_after_leaving": bool(left)}
     app.call("appearance", name="system")
     results["traffic_light_stale_hover"] = {"ok": all(v["ok"] for v in stale.values()), "cases": stale}
+
+
+def chrome_delta_e(c1, c2):
+    """CIEDE2000 on sRGB -> Lab D65; same math as sidebar-render ColorMath."""
+    def lab(c):
+        r, g, b = [v / 255 / 12.92 if v / 255 <= .04045 else ((v / 255 + .055) / 1.055) ** 2.4 for v in c]
+        x = (.4124564*r + .3575761*g + .1804375*b) / .95047
+        y = .2126729*r + .7151522*g + .072175*b
+        z = (.0193339*r + .119192*g + .9503041*b) / 1.08883
+        def f(t): return t ** (1/3) if t > (6/29)**3 else t / (3*(6/29)**2) + 4/29
+        return 116*f(y)-16, 500*(f(x)-f(y)), 200*(f(y)-f(z))
+    L1,a1,b1=lab(c1); L2,a2,b2=lab(c2)
+    C=(math.hypot(a1,b1)+math.hypot(a2,b2))/2
+    G=.5*(1-math.sqrt(C**7/(C**7+25**7)))
+    a1*=1+G; a2*=1+G
+    C1=math.hypot(a1,b1); C2=math.hypot(a2,b2)
+    h1=math.degrees(math.atan2(b1,a1))%360; h2=math.degrees(math.atan2(b2,a2))%360
+    dh=h2-h1
+    if C1*C2==0: dh=0
+    elif dh>180: dh-=360
+    elif dh< -180: dh+=360
+    dH=2*math.sqrt(C1*C2)*math.sin(math.radians(dh/2))
+    L=(L1+L2)/2; C=(C1+C2)/2
+    h=h1+h2
+    if C1*C2!=0: h=(h+(360 if h<360 else -360))/2 if abs(h1-h2)>180 else h/2
+    cos=lambda x:math.cos(math.radians(x))
+    T=1-.17*cos(h-30)+.24*cos(2*h)+.32*cos(3*h+6)-.20*cos(4*h-63)
+    Sl=1+.015*(L-50)**2/math.sqrt(20+(L-50)**2); Sc=1+.045*C; Sh=1+.015*C*T
+    Rt=-math.sin(math.radians(60*math.exp(-((h-275)/25)**2)))*2*math.sqrt(C**7/(C**7+25**7))
+    dl=(L2-L1)/Sl; dc=(C2-C1)/Sc; dh=dH/Sh
+    return math.sqrt(dl*dl+dc*dc+dh*dh+Rt*dc*dh)
+
+
+def chrome_ring(png, center):
+    w, _, px = read_image(png, srgb=True)
+    scale = w / 1728
+    cx, cy = center
+    colors = [px(x,y) for y in range(int((cy-8)*scale), int((cy+8)*scale))
+              for x in range(int((cx-8)*scale), int((cx+8)*scale))
+              if 6.5 <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < 7.5]
+    return [statistics.mean(c[k] for c in colors) for k in range(3)]
+
+
+def chrome_capture_comparison(snapshots):
+    common = subprocess.check_output(["git", "rev-parse", "--git-common-dir"], cwd=ROOT, text=True).strip()
+    capture_root = os.environ.get("OPEN_ARC_CAPTURE_ROOT", os.path.join(os.path.dirname(os.path.realpath(os.path.join(ROOT, common))), ".re"))
+    sessions = os.path.join(capture_root, "runtime", "sessions")
+    rows=[]; rings=[]
+    for name, session, frame, edge, sample in [
+            ("rest-364", "20261026-100848-03-active-window", 3, 364, (8,600)),
+            ("mid-drag-164", "20261026-101147-06-sidebar-width", 29, 164, (8,600)),
+            ("hidden-held", "20261026-101147-06-sidebar-width", 53, 10, (4,600)),
+            ("cmd-s-restored", "20261026-101147-06-sidebar-width", 66, 228, (8,600)),
+            ("card-revealed", "20261026-101324-05-reveal-card", 9, 233, (100,600))]:
+        captures=glob.glob(os.path.join(sessions,session,"%04d-*"%frame,"win-70352.png"))
+        if not captures: return {"status":"SKIP", "reason":"capture session 2 frames absent"}, {}
+        arc=captures[0]; ours=os.path.join(snapshots,name+".png")
+        aw,ah,A=read_image(arc,srgb=True); ow,oh,O=read_image(ours,srgb=True); scale=ow/aw
+        def mean(P, x,y,s):
+            return [statistics.mean(P((x+dx)*s,(y+dy)*s)[k] for dx in range(-1,2) for dy in range(-1,2)) for k in range(3)]
+        ca=mean(A,*sample,1); co=mean(O,*sample,scale)
+        def white_edge(P,s):
+            return next(x for x in range(1,600) if min(P(x*s,600*s)) >= 230)
+        ae=white_edge(A,1); oe=white_edge(O,scale)
+        rows.append({"state":name,"capture":"S2 %s/%04d"%(session.split('-')[2],frame),
+            "position_error_pt":abs(ae-oe),"arc_edge":ae,"open_edge":oe,
+            "arc_rgb":ca,"open_rgb":co,"delta_e00":chrome_delta_e(ca,co)})
+        if name in ("rest-364","card-revealed"):
+            inset=5 if name=="card-revealed" else 0
+            for label,x in (("minimize",43),("zoom",66)):
+                c=(x+inset,24+inset); ca=chrome_ring(arc,c); co=chrome_ring(ours,c)
+                rings.append({"state":name,"button":label,"arc_rgb":ca,"open_rgb":co,"delta_e00":chrome_delta_e(ca,co)})
+    return ({"ok":all(r["position_error_pt"]<=1 and (r["state"] == "card-revealed" or r["delta_e00"]<=2) for r in rows),
+             "color_scope":"Anchored/hidden background samples; card material is deferred to Part B, retained below without acceptance.", "rows":rows},
+            {"ok":all(r["delta_e00"]<=1 for r in rings),"band":"6.5 <= r < 7.5 pt", "rows":rings})
+
+
+def window_chrome_followup_checks(factory, results, tmp):
+    """App-shell §3.3. All input enters OEApplication.sendEvent, including held drags."""
+    private = tempfile.mkdtemp(prefix="window-chrome-104-", dir=tmp)
+    app = factory(urls=(white_fixture("Window chrome"),), fresh=True)
+    down = False
+    def state():
+        return app.call("window-state")
+    def pointer(action, x, count=1):
+        nonlocal down
+        if action == "down": down = True
+        app.call("mouse", action=action, x=x, y=400, clickCount=count)
+        if action == "up": down = False
+        return state()
+    def drag(start, end):
+        pointer("down", start)
+        pointer("drag", end)
+        return pointer("up", end)
+    def key():
+        app.call("key", key="s", modifiers=["cmd"], route="app")
+        return state()
+    def settled():
+        return wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
+    def spring(a, response, damping, path=None):
+        return (a.get("type") == "CASpringAnimation" and abs(a.get("response", 0) - response) < 1e-6
+                and abs(a.get("damping", 0) - damping) < 1e-6 and a.get("scheduledDelay", a.get("beginTime")) == 0
+                and (path is None or a.get("keyPath") == path))
+    def snap(name):
+        path = os.path.join(private, name + ".png")
+        app.call("snapshot", path=path)
+        return path
+    try:
+        app.call("window-focus", id=state()["id"], activate=True)
+        app.call("window-frame", frame=[40, 40, 1728, 1084], unconstrained=True)
+        app.call("wait", tab=app.call("tabs")[0]["id"])
+        app.call("appearance", name="dark")
+        app.call("mouse", action="hover", x=700, y=400)
+        app.call("window-motion", reduced=False, sampleCard=True)
+        drag(228, 364)
+        rest_png = snap("rest-364")
+        before = state(); saves = app.call("frame-save-counters")["scheduled"]
+        pointer("down", 364)
+        high = pointer("drag", 700)
+        low = pointer("drag", 150)
+        mid_png = snap("mid-drag-164")
+        edge = pointer("drag", 82)
+        results["width_live_limits"] = {"ok": high["sidebarLiveWidth"] == 500 and high["panel"][0] == 500
+            and low["sidebarLiveWidth"] == edge["sidebarLiveWidth"] == 164 and edge["sidebarMode"] == "anchored"
+            and all(s["sidebarWidth"] == 364 and s["sidebarWidthCommits"] == before["sidebarWidthCommits"] for s in (high, low, edge))
+            and app.call("frame-save-counters")["scheduled"] == saves,
+            "high": high["sidebarLiveWidth"], "low": low["sidebarLiveWidth"], "model": edge["sidebarWidth"]}
+        gone = pointer("drag", 81)
+        hide_motion = app.call("window-motion")
+        results["width_hide_while_pressed"] = {"ok": gone["sidebarResizeActive"] and gone["sidebarMode"] == "hidden"
+            and gone["panel"][0] == 10 and gone["sidebarWidth"] == 364
+            and spring(hide_motion["sidebar"].get("sidebar", {}), .1, .95), "state": gone}
+        back = pointer("drag", 82)
+        results["width_show_before_release"] = {"ok": back["sidebarResizeActive"] and back["sidebarMode"] == "anchored"
+            and back["sidebarLiveWidth"] == 164 and back["panel"][0] == 164 and back["sidebarWidth"] == 364}
+        visible = pointer("up", 82)
+        after_save = app.call("frame-save-counters")["scheduled"]
+        results["width_visible_commit_once"] = {"ok": visible["sidebarWidth"] == 164
+            and visible["sidebarWidthCommits"] == before["sidebarWidthCommits"] + 1 and after_save == saves + 1,
+            "scheduled_delta": after_save - saves}
+        settled()
+        drag(164, 364)
+        before = state(); saves = app.call("frame-save-counters")["scheduled"]
+        pointer("down", 364); pointer("drag", 60)
+        settled(); hidden_png = snap("hidden-held")
+        hidden = pointer("up", 60)
+        results["width_hidden_commit"] = {"ok": hidden["sidebarMode"] == "hidden" and hidden["sidebarWidth"] == 364
+            and hidden["sidebarWidthCommits"] == before["sidebarWidthCommits"]
+            and hidden["sidebarGestureHides"] == before["sidebarGestureHides"] + 1
+            and app.call("frame-save-counters")["scheduled"] == saves + 1,
+            "width": hidden["sidebarWidth"], "gestures": hidden["sidebarGestureHides"] - before["sidebarGestureHides"]}
+        shown = key(); show_motion = app.call("window-motion")
+        settled()
+        results["width_cmd_s_restores_start"] = {"ok": shown["sidebarMode"] == "anchored" and shown["sidebarWidth"] == 364 and shown["panel"][0] == 364}
+        drag(364, 228)
+        key(); settled(); key(); settled(); show_png = snap("cmd-s-restored")
+        reset_rows = []
+        for width in (364, 500):
+            drag(state()["sidebarWidth"], width)
+            before = state(); saves = app.call("frame-save-counters")["scheduled"]
+            pointer("down", width); pointer("up", width)
+            pointer("down", width, count=2); reset = pointer("up", width, count=2)
+            reset_rows.append({"from": width, "width": reset["sidebarWidth"],
+                "commits": reset["sidebarWidthCommits"] - before["sidebarWidthCommits"],
+                "geometry": reset["sidebarGeometryChanges"] - before["sidebarGeometryChanges"],
+                "saves": app.call("frame-save-counters")["scheduled"] - saves,
+                "animations": app.call("window-motion")["active"]})
+        results["width_double_click_reset"] = {"ok": all(r["width"] == 228 and r["commits"] == r["geometry"] == r["saves"] == 1
+            and r["animations"] == {"panel": [], "sidebar": []} for r in reset_rows), "rows": reset_rows}
+        key(); toggle_hide = app.call("window-motion")
+        settled(); key(); toggle_show = app.call("window-motion")
+        motions = [hide_motion, show_motion, toggle_hide, toggle_show]
+        results["motion_sidebar_toggle"] = {"ok": all(spring(m["sidebar"].get("sidebar", {}), .1, .95, "transform.translation.x")
+            and all(spring(a, .1, .95) for a in m["sidebar"].get("panel", {}).get("children", []))
+            and len(m["sidebar"].get("panel", {}).get("children", [])) == 2
+            and m["tokens"]["sidebarToggle"] == {"response": .1, "damping": .95} for m in motions),
+            "scheduled": [m["sidebar"] for m in motions]}
+        settled(); key(); settled()
+        reveal_card_and_wait(app)
+        card_in = app.call("window-motion")
+        curve = card_in["cardCurve"]
+        results["motion_card_in_token"] = {"ok": spring(card_in["card"].get("card", {}), .164, .81, "transform.translation.x")
+            and spring(card_in["card"].get("shadow", {}), .164, .81)
+            and card_in["tokens"]["revealCardIn"] == {"response": .164, "damping": .81}
+            and abs(curve[0]["pastRest"]) < .15 and 2.7 <= curve[1]["pastRest"] <= 3.1 and abs(curve[2]["pastRest"]) <= .5,
+            "curve": curve, "scheduled": card_in["card"]}
+        samples = wait_until(lambda: (lambda m: m["cardSamples"] if m["cardSamples"] and m["cardSamples"][-1]["time"] >= .3 else None)(app.call("window-motion")), timeout=3, step=.01) or []
+        peak = max((s["offset"] for s in samples), default=0)
+        peak_time = max(samples, key=lambda s: s["offset"])["time"] if samples else None
+        lateness = peak_time - .140 if peak_time is not None else None
+        load = list(os.getloadavg())
+        print("card peak: %.3f pt; peak lateness: %s s; load average: %s" % (peak, lateness, load), flush=True)
+        results["motion_card_real_peak"] = {"ok": peak >= 2, "past_rest_pt": peak, "peak_lateness_s": lateness, "samples": samples, "load_average": load}
+        app.call("mouse", action="hover", x=120, y=400)
+        card_png = snap("card-revealed")
+        app.call("mouse", action="move", x=700, y=400); wait_card(app, False)
+        card_out = app.call("window-motion")
+        out = card_out["card"].get("card", {})
+        app.call("mouse", action="move", x=3, y=400)
+        interrupt = state_when(app, lambda st: st["revealed"] and st["reveal"]["offset"] is not None and -222 < st["reveal"]["offset"] < -5, timeout=3, step=.004)
+        app.call("select", tab=app.call("tabs")[0]["id"])
+        interrupted_out = app.call("window-motion")["card"].get("card", {})
+        wait_card(app, False)
+        results["motion_card_out_token"] = {"ok": bool(interrupt) and -223 < interrupted_out.get("from", 0) < -1 and out.get("type") == "CABasicAnimation" and out.get("duration") == .105
+            and out.get("timing") == [[0, 0], [0.41999998688697815, 0], [0.5799999833106995, 1], [1, 1]]
+            and card_out["tokens"]["revealCardOut"] == .105, "scheduled": out, "interrupted_from": interrupted_out.get("from")}
+        key(); settled()
+        app.call("space-create", title="Motion Space")
+        switched = wait_until(lambda: app.call("window-motion")["space"], timeout=3, step=.01) or {}
+        results["motion_space_switch"] = {"ok": spring(switched, .2, 1, "position.x"), "scheduled": switched}
+        # Reduce Motion uses the same real input and frame paths, with no animated slide/fade.
+        app.call("window-motion", reduced=True)
+        key(); reduced_hide = app.call("window-motion")
+        reveal_card_and_wait(app); reduced_card = app.call("window-motion")
+        app.call("mouse", action="move", x=700, y=400); wait_card(app, False)
+        key(); reduced_show = app.call("window-motion")
+        app.call("space-create", title="Reduced Motion Space")
+        reduced_space = app.call("window-motion")
+        results["motion_reduce_motion"] = {"ok": reduced_hide["sidebar"] == reduced_show["sidebar"] == reduced_card["card"] == {}
+            and reduced_space["space"] == {} and all(m["active"] == {"panel": [], "sidebar": []} for m in (reduced_hide, reduced_card, reduced_show)),
+            "hide": reduced_hide["active"], "card": reduced_card["active"], "show": reduced_show["active"], "space": reduced_space["space"]}
+        results["chrome_snapshot_files"] = {"files": [rest_png, mid_png, hidden_png, show_png, card_png]}
+        # Retain only our synthetic real-window snapshots outside the transient data root.
+        saved = os.path.join(ROOT, ".re", "window-chrome-104", "snapshots")
+        shutil.copytree(private, saved, dirs_exist_ok=True)
+        results["chrome_capture_compare"], results["chrome_dark_rings"] = chrome_capture_comparison(saved)
+        card_row = next((r for r in results["chrome_capture_compare"].get("rows", []) if r["state"] == "card-revealed"), None)
+        results["chrome_card_material"] = {"status":"DEFERRED", "reason":"Part B: card material and inactive theme are explicitly excluded from Part A", "measurement":card_row}
+    finally:
+        if down:
+            try: pointer("up", 600)
+            except Exception: pass
+        app.quit()
 
 
 def window_chrome_checks(factory, results, tmp):
@@ -3736,6 +3971,7 @@ def main():
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
                                        "commandbar", "actions", "profiles"],
                     required=True)
+    ap.add_argument("--window-chrome-only", action="store_true", help="run only the window-chrome follow-up flows in the window suite")
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
     opts = ap.parse_args()
@@ -3818,7 +4054,7 @@ def main():
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
         elif opts.only == "window":
             results["window"] = CheckedResults(tracker)
-            window_checks(factory, results["window"], tmp, opts.config)
+            window_checks(factory, results["window"], tmp, opts.config, chrome_only=opts.window_chrome_only)
         elif opts.only == "sidebar":
             results["sidebar"] = CheckedResults(tracker)
             sidebar_checks(factory, results["sidebar"], tmp)
@@ -3883,7 +4119,7 @@ def main():
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
-            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
+            elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED", "DEFERRED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
     failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions")

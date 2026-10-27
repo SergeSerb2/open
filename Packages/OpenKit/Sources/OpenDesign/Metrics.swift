@@ -238,10 +238,11 @@ public enum PanelMetrics {
 /// Window-level values.
 public enum WindowMetrics {
     public static let defaultSidebarWidth: CGFloat = 228
-    /// guess: 500 is the widest stop (the user dragged to it, F0127).
+    /// Measured stops: S2 06/0029 and 0072 (interaction-states §20.1).
     public static let maxSidebarWidth: CGFloat = 500
-    /// guess: Arc's minimum was not captured; below it a drag hides the sidebar.
-    public static let minSidebarWidth: CGFloat = 180
+    public static let minSidebarWidth: CGFloat = 164
+    /// Guess inside the captured 65–85 pt band, S2 06/0035; app-shell §3.3.
+    public static let sidebarDragHidePoint: CGFloat = 82
     /// System window corner: continuous, about 16 pt.
     public static let cornerRadius: CGFloat = 16
     /// Hover-reveal card when the sidebar is hidden: `[5, 5, S, H − 10]` (F0129, F0130). The
