@@ -57,6 +57,8 @@ def visible_windows(pids):
     cg.CGWindowListCopyWindowInfo.argtypes = [ctypes.c_uint32, ctypes.c_uint32]
     cg.CGWindowListCopyWindowInfo.restype = pointer
     windows = cg.CGWindowListCopyWindowInfo(17, 0)  # on-screen, exclude desktop
+    if not windows:
+        raise RuntimeError("window-server ownership is unavailable")
     result = []
     try:
         for index in range(cf.CFArrayGetCount(windows)):
@@ -98,7 +100,8 @@ def run(config, output, force_failure):
         info.write_bytes(plistlib.dumps(values))
         subprocess.run(["codesign", "--force", "--sign", "-", str(bundle)], check=True, capture_output=True)
         subprocess.run(["defaults", "write", domain, "open.general.previewsDelaySeconds", "-float", "7"], check=True)
-        app = Open(str(scratch), "chrome", str(data), ["--use-mock-keychain"], str(output / "app.log"))
+        app = Open(str(scratch), "chrome", str(data), ["--use-mock-keychain"], str(output / "app.log"),
+                   extra_env={"OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE": "1"})
         print("App ready; opening General Settings", flush=True)
         report["pid"] = app.pid
         report["ping"] = app.call("ping")
