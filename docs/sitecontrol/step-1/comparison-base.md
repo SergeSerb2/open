@@ -35,8 +35,8 @@
 | Capture full page gradient top | — | — | — | 0.32 | PASS |
 | Capture full page gradient bottom | — | — | — | 0.75 | PASS |
 | Secure pill | 93,346 82x32 | 92,346 83x32 | 1.00 | 0.95 | PASS |
-| Secure lock | 103,356 10x14 | 103,356 11x13 | 1.00 | 0.76 | PASS |
-| Secure text | 119,357 45x11 | 120,358 44x10 | 1.00 | 0.41 | PASS |
+| Secure lock | 103,356 10x14 | 103,356 11x13 | 1.00 | 0.97 | PASS |
+| Secure text | 119,357 45x11 | 120,358 44x10 | 1.00 | 0.70 | PASS |
 | More circle | 277,346 32x32 | 277,346 32x32 | 0.00 | 1.04 | PASS |
 | More glyph | 287,361 13x3 | 287,361 13x3 | 0.00 | 0.55 | PASS |
 | top rim | — | — | — | 1.19 | PASS |

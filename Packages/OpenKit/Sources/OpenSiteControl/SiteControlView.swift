@@ -148,6 +148,13 @@ public enum SiteControlSparkles { case none, outline, boost }
 @MainActor
 public class SiteControlButton: NSButton {
     public let controlID: String
+    private var captionText = ""
+    // NSButtonCell must stay untitled: its native text would duplicate the
+    // caption layer. Keep native target/action and AX, and own the caption.
+    public override var title: String {
+        get { captionText }
+        set { captionText = newValue; needsDisplay = true; invalidateIntrinsicContentSize() }
+    }
     public var symbolPhase = CGPoint.zero { didSet { needsDisplay = true } }
     public var symbolInk: CGSize? { didSet { needsDisplay = true } }
     public var symbol: String { didSet { needsDisplay = true } }
@@ -168,7 +175,7 @@ public class SiteControlButton: NSButton {
     public override var acceptsFirstResponder: Bool { isEnabled }
     public init(id: String,label: String,symbol: String,pointSize: CGFloat,weight: NSFont.Weight = .regular) {
         controlID = id; self.symbol = symbol; self.pointSize = pointSize; self.weight = weight
-        super.init(frame: .zero); symbolPhase = SiteControlMetrics.symbolRasterPhase[symbol] ?? .zero; wantsLayer = true; title = ""; isBordered = false; focusRingType = .none
+        super.init(frame: .zero); super.title = ""; symbolPhase = SiteControlMetrics.symbolRasterPhase[symbol] ?? .zero; wantsLayer = true; title = ""; isBordered = false; focusRingType = .none
         setButtonType(.momentaryPushIn); target = self; action = #selector(pressed)
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label); identifier = .init(id)
         for l in [wellShadow,gradient,ring,highlight,glyph,text,focus] { layer?.addSublayer(l) }

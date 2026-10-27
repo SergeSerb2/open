@@ -1,9 +1,9 @@
-SiteControl: snapshot or geometry unavailable for tab 10EDBB17-E4A6-4027-9F13-F75D2CDB397C
-SiteControl: snapshot or geometry unavailable for tab CBA05710-DD28-4BAE-933D-172EFB6D547A
-SiteControl: snapshot or geometry unavailable for tab 2DFD55A7-4577-410A-A1D8-2C4D3EFED088
-SiteControl: snapshot or geometry unavailable for tab 023EE97F-BF79-479F-AC1F-C5FA39B281DA
-SiteControl: snapshot or geometry unavailable for tab 023EE97F-BF79-479F-AC1F-C5FA39B281DA
-Step 1 skeleton open: build + native click + layout + first display; 30 samples, 5 warmups; p95 main thread 5.629 ms, wall 11.431 ms
+SiteControl: snapshot or geometry unavailable for tab EBF4E315-BB1E-46E0-BDAA-A9AE54254FF2
+SiteControl: snapshot or geometry unavailable for tab 6A245A8E-9FA6-4BF2-8C38-03CD24807B55
+SiteControl: snapshot or geometry unavailable for tab 5AA29A1F-FFAA-4031-86AD-48D19C102DAF
+SiteControl: snapshot or geometry unavailable for tab 57537EFA-79BB-4480-BAE9-477B23086A71
+SiteControl: snapshot or geometry unavailable for tab 57537EFA-79BB-4480-BAE9-477B23086A71
+Step 1 skeleton open: build + native click + layout + first display; 30 samples, 5 warmups; p95 main thread 4.519 ms, wall 19.899 ms
 | Result | Check |
 |---|---|
 | PASS | F1 anchor presents |
@@ -210,6 +210,6 @@ Step 1 skeleton open: build + native click + layout + first display; 30 samples,
 | PASS | committed SHA256 scc-pane-anchor-light@1x.png |
 | PASS | committed SHA256 scc-pane-anchor-light@2x.png |
 | PASS | complete committed render receipts |
-| PASS | bench skeleton open p95 5.629 ms <= 8 ms main thread |
+| PASS | bench skeleton open p95 4.519 ms <= 8 ms main thread |
 
 205/205 passed

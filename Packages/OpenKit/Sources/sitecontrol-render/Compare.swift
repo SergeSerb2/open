@@ -32,7 +32,7 @@ enum SiteControlCompare {
         let footer = body.maxY-42
         elements += [Element(name: "Secure pill",region: CGRect(x: body.minX+9,y: footer-1,width: 84,height: 34),kind: .fill(CGRect(x: body.minX+16,y: footer+26,width: 25,height: 2))),
                      Element(name: "Secure lock",region: CGRect(x: body.minX+18,y: footer+6,width: 14,height: 20),kind: .ink),
-                     Element(name: "Secure text",region: CGRect(x: body.minX+34,y: footer+6,width: 50,height: 20),kind: .text),
+                     Element(name: "Secure text",region: CGRect(x: body.minX+31,y: footer+6,width: 54,height: 20),kind: .text),
                      Element(name: "More circle",region: CGRect(x: body.minX+192,y: footer-2,width: 36,height: 36),kind: .fill(CGRect(x: body.minX+206,y: footer+24,width: 8,height: 2))),
                      Element(name: "More glyph",region: CGRect(x: body.minX+202,y: footer+9,width: 16,height: 14),kind: .ink),
                      Element(name: "top rim",region: body,kind: .fill(CGRect(x: body.minX+37,y: body.minY,width: 1,height: 1))),
