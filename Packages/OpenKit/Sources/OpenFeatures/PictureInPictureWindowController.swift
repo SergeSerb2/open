@@ -14,6 +14,8 @@ import OpenWeb
     private let presentationRect: CGRect?
     private var geometry: PiPWindowGeometry
     private var closing = false, animating = false
+    /// Read-back for harnesses: true from the start of a dismissal or close.
+    public var isClosing: Bool { closing }
     private var preferredFrame = CGRect.zero
     public var presentWindows = true
     public var onBackToTab: (() -> Void)?

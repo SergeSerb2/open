@@ -1,0 +1,1867 @@
+{
+  "actions": {
+    "action_pin-tab": {
+      "ok": true
+    },
+    "action_unpin-tab": {
+      "ok": true
+    },
+    "calculator_copy": {
+      "clipboard": "84",
+      "ok": true
+    },
+    "cmd_l_selection": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "http://127.0.0.1:65465/new",
+        "final": true,
+        "firstResultsMs": 14.19741666666664,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 14.662791666666635,
+        "presented": true,
+        "profile": "56B2F9F1-46BF-45B1-8EFF-3B08D9C38C8C",
+        "range": [
+          0,
+          26
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:65465/new",
+            "url": "http://127.0.0.1:65465/new"
+          }
+        ],
+        "selected": 0,
+        "space": "95D24905-E2C8-467F-BC28-445549EEF361",
+        "text": "http://127.0.0.1:65465/new"
+      }
+    },
+    "cmd_s_page_swallowing_keys": {
+      "ok": true
+    },
+    "cmd_t_mode": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 21.40220833333342,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 25.629999999999995,
+        "presented": true,
+        "profile": "56B2F9F1-46BF-45B1-8EFF-3B08D9C38C8C",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "95D24905-E2C8-467F-BC28-445549EEF361",
+        "text": ""
+      }
+    },
+    "command_return_background": {
+      "ok": true
+    },
+    "custom_search_engine_navigation": {
+      "expectedURL": "http://127.0.0.1:65465/search?q=local%20custom%20query",
+      "ok": true
+    },
+    "double_press_shared_router": {
+      "first": false,
+      "ok": true,
+      "second": true
+    },
+    "duplicate_folder_lazy": {
+      "folders": [
+        {
+          "children": [
+            {
+              "id": "E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+              "kind": "tab",
+              "loaded": true,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:65465/cross"
+            }
+          ],
+          "id": "D5579156-0745-41BC-8922-862E7A038C68",
+          "kind": "folder",
+          "title": "Copy subtree"
+        },
+        {
+          "children": [
+            {
+              "id": "12042A30-340A-42C2-9684-6C398462A87F",
+              "kind": "tab",
+              "loaded": false,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:65465/cross"
+            }
+          ],
+          "id": "B0C1145C-3899-40ED-95CE-21A95FC5E88A",
+          "kind": "folder",
+          "title": "Copy subtree"
+        }
+      ],
+      "ok": true
+    },
+    "duplicate_single_undo": {
+      "ok": true
+    },
+    "duplicate_split_lazy": {
+      "copy": {
+        "children": [
+          {
+            "id": "5D7468F0-8F49-4EFE-93E4-15E11D2979EB",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /split",
+            "url": "http://127.0.0.1:65465/split"
+          },
+          {
+            "id": "70A85A3A-D834-4CE6-A463-20495103AE34",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:65465/cross"
+          }
+        ],
+        "id": "DB05150A-3EC8-48E0-BA12-7DB3251836DC",
+        "kind": "split"
+      },
+      "ok": true
+    },
+    "duplicate_tab_lazy": {
+      "copies": [
+        {
+          "id": "A9E55929-A2B6-4118-BC3D-BBFB3A3B3630",
+          "kind": "tab",
+          "loaded": false,
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:65465/cross"
+        }
+      ],
+      "ok": true
+    },
+    "dynamic_menus": {
+      "entries": 169,
+      "ok": true
+    },
+    "edit_current_tab": {
+      "ok": true,
+      "title": "Shell C /edited"
+    },
+    "escape_then_page": {
+      "keys": [
+        "Escape"
+      ],
+      "ok": true
+    },
+    "first_open_results_budget": {
+      "milliseconds": 25.629999999999995,
+      "ok": true
+    },
+    "first_results_budget": {
+      "milliseconds": 16.06783333333351,
+      "ok": true
+    },
+    "global_hotkey_toggle": {
+      "off": {
+        "attempts": 5,
+        "enabled": false,
+        "error": "",
+        "prepared": true,
+        "registered": false
+      },
+      "ok": true,
+      "on": {
+        "attempts": 6,
+        "enabled": true,
+        "error": "",
+        "prepared": true,
+        "registered": true
+      }
+    },
+    "invalid_overrides_fallback": {
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "library_archive_restore": {
+      "ok": true
+    },
+    "library_history_profile_open": {
+      "ok": true
+    },
+    "library_shared_window": {
+      "ok": true
+    },
+    "native_field_undo_preserves_model": {
+      "after": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 4.562833333333174,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 16.462125000000015,
+        "presented": true,
+        "profile": "56B2F9F1-46BF-45B1-8EFF-3B08D9C38C8C",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:2F325D85-F6D6-4C8C-BAA6-59F698D84C8F",
+            "kind": "switchToTab",
+            "space": "95D24905-E2C8-467F-BC28-445549EEF361",
+            "tab": "2F325D85-F6D6-4C8C-BAA6-59F698D84C8F",
+            "title": "Shell C /start",
+            "url": "http://127.0.0.1:65465/start"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:65465/edited",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:65465/edited"
+          },
+          {
+            "action": "",
+            "id": "history:127.0.0.1:65465/new",
+            "kind": "history",
+            "space": "",
+            "tab": "",
+            "title": "127.0.0.1",
+            "url": "http://127.0.0.1:65465/new"
+          }
+        ],
+        "selected": 0,
+        "space": "95D24905-E2C8-467F-BC28-445549EEF361",
+        "text": ""
+      },
+      "before": {
+        "created": true,
+        "editorCanUndo": true,
+        "editorText": "word",
+        "final": true,
+        "firstResultsMs": 4.67512499999998,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 16.462125000000015,
+        "presented": true,
+        "profile": "56B2F9F1-46BF-45B1-8EFF-3B08D9C38C8C",
+        "range": [
+          4,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "word",
+            "url": "https://www.google.com/search?q=word"
+          },
+          {
+            "action": "import-from-browser",
+            "id": "action:import-from-browser",
+            "kind": "action",
+            "space": "",
+            "tab": "",
+            "title": "Import from Another Browser",
+            "url": ""
+          }
+        ],
+        "selected": 0,
+        "space": "95D24905-E2C8-467F-BC28-445549EEF361",
+        "text": "word"
+      },
+      "ok": true,
+      "route": {
+        "barPresented": true,
+        "firstResponder": "CommandBarFieldEditor",
+        "keyWindow": 91360,
+        "sidebarMode": "anchored"
+      }
+    },
+    "native_font_traits": {
+      "ok": true
+    },
+    "native_menu_registration": {
+      "menus": {
+        "font": true,
+        "services": true,
+        "window": true
+      },
+      "ok": true
+    },
+    "override_menu_and_router": {
+      "ok": true
+    },
+    "page_copy_native_responder": {
+      "clipboard": "PAGE COPY",
+      "ok": true
+    },
+    "page_cut_native_responder": {
+      "ok": true
+    },
+    "page_paste_native_responder": {
+      "ok": true
+    },
+    "page_select_all_native_responder": {
+      "ok": true
+    },
+    "page_undo_native_responder": {
+      "ok": true
+    },
+    "save_page_sheet": {
+      "last": {
+        "number": 91449,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      },
+      "ok": true,
+      "state": {
+        "number": 91449,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      }
+    },
+    "settings_persist_relaunch": {
+      "ok": true
+    },
+    "settings_shared_window": {
+      "ok": true
+    },
+    "suggest_profile_isolation": {
+      "ok": true
+    },
+    "switch_tab_across_spaces": {
+      "barAfterReturn": {
+        "created": true,
+        "editorCanUndo": false,
+        "editorText": "",
+        "final": true,
+        "firstResultsMs": 12.718541666666624,
+        "mode": "newTab",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 26.93741666666665,
+        "presented": false,
+        "profile": "56B2F9F1-46BF-45B1-8EFF-3B08D9C38C8C",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+            "kind": "switchToTab",
+            "space": "CBFF44C1-1B86-4649-A699-875818D5A88B",
+            "tab": "E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:65465/cross"
+          },
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "Shell C /cross",
+            "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+          }
+        ],
+        "selected": 0,
+        "space": "95D24905-E2C8-467F-BC28-445549EEF361",
+        "text": "Shell C /cross"
+      },
+      "expectedSpace": "CBFF44C1-1B86-4649-A699-875818D5A88B",
+      "expectedTab": "E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+      "ok": true,
+      "returnRouting": {
+        "barPresented": false,
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "keyWindow": 91360,
+        "sidebarMode": "anchored"
+      },
+      "rows": [
+        {
+          "action": "",
+          "id": "tab:E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+          "kind": "switchToTab",
+          "space": "CBFF44C1-1B86-4649-A699-875818D5A88B",
+          "tab": "E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:65465/cross"
+        },
+        {
+          "action": "",
+          "id": "typed:search",
+          "kind": "search",
+          "space": "",
+          "tab": "",
+          "title": "Shell C /cross",
+          "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+        }
+      ],
+      "state": {
+        "activationPolicy": 0,
+        "appActive": true,
+        "chrome": {
+          "favorites": [
+            0,
+            82,
+            228,
+            8
+          ],
+          "header": [
+            0,
+            90,
+            228,
+            36
+          ],
+          "headerHovered": false,
+          "headerTitle": [
+            41,
+            99,
+            170,
+            18
+          ],
+          "headerTitleBaseline": 113,
+          "urlField": [
+            8,
+            46,
+            212,
+            36
+          ],
+          "urlFieldHovered": false
+        },
+        "cursor": [
+          398,
+          576
+        ],
+        "engineSelected": 4,
+        "engineURL": "http://127.0.0.1:65465/cross",
+        "firstResponder": "RenderWidgetHostViewCocoa",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "CE192239-35D5-4ED3-AC14-B814797CE178",
+        "isKeyWindow": true,
+        "keyWindow": 91360,
+        "layoutPasses": 1150,
+        "number": 91360,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "E23E1A94-21C4-4663-B77A-B12C5B9704E5"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "reveal": {
+          "card": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "dwell": 0,
+          "hides": 0,
+          "offset": null,
+          "phase": "idle",
+          "pointerEvents": 0,
+          "shows": 0,
+          "zone": ""
+        },
+        "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "E23E1A94-21C4-4663-B77A-B12C5B9704E5",
+        "shownPages": [
+          "E23E1A94-21C4-4663-B77A-B12C5B9704E5"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "CBFF44C1-1B86-4649-A699-875818D5A88B",
+        "titlebar": [
+          0,
+          0,
+          1280,
+          32
+        ],
+        "titled": true,
+        "trafficLightFrames": [
+          [
+            13,
+            17,
+            14,
+            14
+          ],
+          [
+            36,
+            17,
+            14,
+            14
+          ],
+          [
+            59,
+            17,
+            14,
+            14
+          ]
+        ],
+        "trafficLights": [
+          [
+            20,
+            24
+          ],
+          [
+            43,
+            24
+          ],
+          [
+            66,
+            24
+          ]
+        ],
+        "trafficLightsHidden": [
+          false,
+          false,
+          false
+        ],
+        "visible": true
+      }
+    },
+    "system_menu_nil_targets": {
+      "ok": true,
+      "rows": [
+        {
+          "action": "hide:",
+          "enabled": true,
+          "id": "hide-open",
+          "key": "h",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Open"
+        },
+        {
+          "action": "hideOtherApplications:",
+          "enabled": true,
+          "id": "hide-others",
+          "key": "h",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Hide Others"
+        },
+        {
+          "action": "unhideAllApplications:",
+          "enabled": false,
+          "id": "show-all",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show All"
+        },
+        {
+          "action": "terminate:",
+          "enabled": true,
+          "id": "quit-open",
+          "key": "q",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Quit Open"
+        },
+        {
+          "action": "performClose:",
+          "enabled": true,
+          "id": "close-window",
+          "key": "w",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Close Window"
+        },
+        {
+          "action": "undo:",
+          "enabled": true,
+          "id": "undo",
+          "key": "z",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Undo"
+        },
+        {
+          "action": "redo:",
+          "enabled": true,
+          "id": "redo",
+          "key": "z",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Redo"
+        },
+        {
+          "action": "cut:",
+          "enabled": true,
+          "id": "cut",
+          "key": "x",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Cut"
+        },
+        {
+          "action": "copy:",
+          "enabled": true,
+          "id": "copy",
+          "key": "c",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Copy"
+        },
+        {
+          "action": "paste:",
+          "enabled": true,
+          "id": "paste",
+          "key": "v",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste"
+        },
+        {
+          "action": "pasteAsPlainText:",
+          "enabled": false,
+          "id": "paste-and-match-style",
+          "key": "v",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Paste and Match Style"
+        },
+        {
+          "action": "selectAll:",
+          "enabled": true,
+          "id": "select-all",
+          "key": "a",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Select All"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find",
+          "key": "f",
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Find\u2026"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find-next",
+          "key": "g",
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Find Next"
+        },
+        {
+          "action": "performFindPanelAction:",
+          "enabled": true,
+          "id": "find-previous",
+          "key": "g",
+          "payload": "",
+          "tag": 3,
+          "targetNil": true,
+          "title": "Find Previous"
+        },
+        {
+          "action": "startSpeaking:",
+          "enabled": true,
+          "id": "start-speaking",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Start Speaking"
+        },
+        {
+          "action": "stopSpeaking:",
+          "enabled": true,
+          "id": "stop-speaking",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Stop Speaking"
+        },
+        {
+          "action": "orderFrontFontPanel:",
+          "enabled": true,
+          "id": "show-fonts",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Show Fonts"
+        },
+        {
+          "action": "addFontTrait:",
+          "enabled": false,
+          "id": "font-bold",
+          "key": "b",
+          "payload": "",
+          "tag": 2,
+          "targetNil": true,
+          "title": "Bold"
+        },
+        {
+          "action": "addFontTrait:",
+          "enabled": false,
+          "id": "font-italic",
+          "key": "i",
+          "payload": "",
+          "tag": 1,
+          "targetNil": true,
+          "title": "Italic"
+        },
+        {
+          "action": "underline:",
+          "enabled": true,
+          "id": "font-underline",
+          "key": "u",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Underline"
+        },
+        {
+          "action": "orderFrontCharacterPalette:",
+          "enabled": true,
+          "id": "emoji-and-symbols",
+          "key": " ",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Emoji & Symbols"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "enabled": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "toggleFullScreen:",
+          "enabled": true,
+          "id": "toggle-full-screen",
+          "key": "f",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Enter Full Screen"
+        },
+        {
+          "action": "performMiniaturize:",
+          "enabled": true,
+          "id": "minimize-window",
+          "key": "m",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Minimize"
+        },
+        {
+          "action": "performZoom:",
+          "enabled": true,
+          "id": "zoom-window",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Zoom"
+        },
+        {
+          "action": "arrangeInFront:",
+          "enabled": true,
+          "id": "bring-all-to-front",
+          "key": "",
+          "payload": "",
+          "tag": 0,
+          "targetNil": true,
+          "title": "Bring All to Front"
+        }
+      ]
+    },
+    "tabs_reveal_registered": {
+      "ok": true
+    },
+    "typed_top_today": {
+      "ok": true,
+      "tab": "7BF907B2-C699-4028-A4E0-1EB377B65CC8"
+    },
+    "unsupported_disabled": {
+      "ok": true
+    },
+    "view-archive_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": false,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 91424,
+        "librarySection": "archive",
+        "sameSnapshot": true,
+        "settings": 91423,
+        "sharedArchives": true
+      }
+    },
+    "view-downloads_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": false,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 91424,
+        "librarySection": "downloads",
+        "sameSnapshot": true,
+        "settings": 91423,
+        "sharedArchives": true
+      }
+    },
+    "view-history_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": false,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 91424,
+        "librarySection": "history",
+        "sameSnapshot": true,
+        "settings": 91423,
+        "sharedArchives": true
+      }
+    }
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "action_pin-tab": {
+          "ok": true
+        },
+        "action_unpin-tab": {
+          "ok": true
+        },
+        "calculator_copy": {
+          "clipboard": "84",
+          "ok": true
+        },
+        "cmd_l_selection": {
+          "ok": true,
+          "state": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "http://127.0.0.1:65282/new",
+            "final": true,
+            "firstResultsMs": 14.26508333333345,
+            "mode": "editCurrentURL",
+            "newTabHighlighted": false,
+            "openFirstResultsMs": 14.88366666666684,
+            "presented": true,
+            "profile": "2217D043-FAA4-4B55-8981-ACDBE3747DD2",
+            "range": [
+              0,
+              26
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "typed:url",
+                "kind": "navigate",
+                "space": "",
+                "tab": "",
+                "title": "http://127.0.0.1:65282/new",
+                "url": "http://127.0.0.1:65282/new"
+              }
+            ],
+            "selected": 0,
+            "space": "E699CE80-F8E4-45C5-B9F5-777A57DB94B8",
+            "text": "http://127.0.0.1:65282/new"
+          }
+        },
+        "cmd_s_page_swallowing_keys": {
+          "ok": true
+        },
+        "cmd_t_mode": {
+          "ok": true,
+          "state": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 14.560416666666697,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 18.310749999999985,
+            "presented": true,
+            "profile": "2217D043-FAA4-4B55-8981-ACDBE3747DD2",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [],
+            "selected": -1,
+            "space": "E699CE80-F8E4-45C5-B9F5-777A57DB94B8",
+            "text": ""
+          }
+        },
+        "command_return_background": {
+          "ok": true
+        },
+        "custom_search_engine_navigation": {
+          "expectedURL": "http://127.0.0.1:65282/search?q=local%20custom%20query",
+          "ok": true
+        },
+        "double_press_shared_router": {
+          "first": false,
+          "ok": true,
+          "second": true
+        },
+        "duplicate_folder_lazy": {
+          "folders": [
+            {
+              "children": [
+                {
+                  "id": "91EDEF1D-90EE-46B0-9B02-1207617238C9",
+                  "kind": "tab",
+                  "loaded": true,
+                  "title": "Shell C /cross",
+                  "url": "http://127.0.0.1:65282/cross"
+                }
+              ],
+              "id": "C7919F9D-43B1-43F6-8470-FA17FE19ABF1",
+              "kind": "folder",
+              "title": "Copy subtree"
+            },
+            {
+              "children": [
+                {
+                  "id": "5A47AE1E-B794-4A98-99D5-06EC868420BE",
+                  "kind": "tab",
+                  "loaded": false,
+                  "title": "Shell C /cross",
+                  "url": "http://127.0.0.1:65282/cross"
+                }
+              ],
+              "id": "6860C395-855F-44A9-943A-29EB2FC41B4C",
+              "kind": "folder",
+              "title": "Copy subtree"
+            }
+          ],
+          "ok": true
+        },
+        "duplicate_single_undo": {
+          "ok": true
+        },
+        "duplicate_split_lazy": {
+          "copy": {
+            "children": [
+              {
+                "id": "AB301A59-F2FB-4C0F-A06A-79040B223780",
+                "kind": "tab",
+                "loaded": false,
+                "title": "",
+                "url": "http://127.0.0.1:65282/split"
+              },
+              {
+                "id": "F26EA778-B112-4B23-8B41-34D24B29F551",
+                "kind": "tab",
+                "loaded": false,
+                "title": "Shell C /cross",
+                "url": "http://127.0.0.1:65282/cross"
+              }
+            ],
+            "id": "4126C7D8-5570-4E41-B303-38F935A1BFCD",
+            "kind": "split"
+          },
+          "ok": true
+        },
+        "duplicate_tab_lazy": {
+          "copies": [
+            {
+              "id": "BDBC94BC-8D57-4C8C-8A17-11A80CD70621",
+              "kind": "tab",
+              "loaded": false,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:65282/cross"
+            }
+          ],
+          "ok": true
+        },
+        "dynamic_menus": {
+          "entries": 169,
+          "ok": true
+        },
+        "edit_current_tab": {
+          "ok": true,
+          "title": "Shell C /edited"
+        },
+        "escape_then_page": {
+          "keys": [
+            "Escape"
+          ],
+          "ok": true
+        },
+        "first_open_results_budget": {
+          "milliseconds": 18.310749999999985,
+          "ok": true
+        },
+        "first_results_budget": {
+          "milliseconds": 10.029458333333423,
+          "ok": true
+        },
+        "global_hotkey_toggle": {
+          "off": {
+            "attempts": 5,
+            "enabled": false,
+            "error": "",
+            "prepared": true,
+            "registered": false
+          },
+          "ok": true,
+          "on": {
+            "attempts": 6,
+            "enabled": true,
+            "error": "",
+            "prepared": true,
+            "registered": true
+          }
+        },
+        "invalid_overrides_fallback": {
+          "ok": true
+        },
+        "lazy_commandbar": {
+          "ok": true
+        },
+        "library_archive_restore": {
+          "ok": true
+        },
+        "library_history_profile_open": {
+          "ok": true
+        },
+        "library_shared_window": {
+          "ok": true
+        },
+        "native_field_undo_preserves_model": {
+          "after": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 6.342208333333247,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 4.923083333333352,
+            "presented": true,
+            "profile": "2217D043-FAA4-4B55-8981-ACDBE3747DD2",
+            "range": [
+              0,
+              0
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "tab:C97DBB8B-180A-4AF5-A988-0F84E864173D",
+                "kind": "switchToTab",
+                "space": "E699CE80-F8E4-45C5-B9F5-777A57DB94B8",
+                "tab": "C97DBB8B-180A-4AF5-A988-0F84E864173D",
+                "title": "Shell C /start",
+                "url": "http://127.0.0.1:65282/start"
+              },
+              {
+                "action": "",
+                "id": "history:127.0.0.1:65282/edited",
+                "kind": "history",
+                "space": "",
+                "tab": "",
+                "title": "127.0.0.1",
+                "url": "http://127.0.0.1:65282/edited"
+              },
+              {
+                "action": "",
+                "id": "history:127.0.0.1:65282/new",
+                "kind": "history",
+                "space": "",
+                "tab": "",
+                "title": "127.0.0.1",
+                "url": "http://127.0.0.1:65282/new"
+              }
+            ],
+            "selected": 0,
+            "space": "E699CE80-F8E4-45C5-B9F5-777A57DB94B8",
+            "text": ""
+          },
+          "before": {
+            "created": true,
+            "editorCanUndo": true,
+            "editorText": "word",
+            "final": true,
+            "firstResultsMs": 1.6035833333332903,
+            "mode": "newTab",
+            "newTabHighlighted": true,
+            "openFirstResultsMs": 4.923083333333352,
+            "presented": true,
+            "profile": "2217D043-FAA4-4B55-8981-ACDBE3747DD2",
+            "range": [
+              4,
+              0
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "typed:search",
+                "kind": "search",
+                "space": "",
+                "tab": "",
+                "title": "word",
+                "url": "https://www.google.com/search?q=word"
+              },
+              {
+                "action": "import-from-browser",
+                "id": "action:import-from-browser",
+                "kind": "action",
+                "space": "",
+                "tab": "",
+                "title": "Import from Another Browser",
+                "url": ""
+              }
+            ],
+            "selected": 0,
+            "space": "E699CE80-F8E4-45C5-B9F5-777A57DB94B8",
+            "text": "word"
+          },
+          "ok": true,
+          "route": {
+            "barPresented": true,
+            "firstResponder": "CommandBarFieldEditor",
+            "keyWindow": 91279,
+            "sidebarMode": "anchored"
+          }
+        },
+        "native_font_traits": {
+          "ok": true
+        },
+        "native_menu_registration": {
+          "menus": {
+            "font": true,
+            "services": true,
+            "window": true
+          },
+          "ok": true
+        },
+        "override_menu_and_router": {
+          "ok": true
+        },
+        "page_copy_native_responder": {
+          "clipboard": "PAGE COPY",
+          "ok": true
+        },
+        "page_cut_native_responder": {
+          "ok": true
+        },
+        "page_paste_native_responder": {
+          "ok": true
+        },
+        "page_select_all_native_responder": {
+          "ok": true
+        },
+        "page_undo_native_responder": {
+          "ok": true
+        },
+        "save_page_sheet": {
+          "last": {
+            "number": 91335,
+            "pending": true,
+            "requests": 1,
+            "visible": true
+          },
+          "ok": true,
+          "state": {
+            "number": 91335,
+            "pending": true,
+            "requests": 1,
+            "visible": true
+          }
+        },
+        "settings_persist_relaunch": {
+          "assertion": {
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "cmux",
+              "frontmostPID": 761,
+              "openPID": 54969,
+              "uptime": 130549.45081625001
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "cmux",
+              "frontmostPID": 761,
+              "keyWindow": 0,
+              "openPID": 54969,
+              "uptime": 130549.45807708334
+            }
+          ],
+          "status": "INTERRUPTED"
+        },
+        "settings_shared_window": {
+          "ok": true
+        },
+        "suggest_profile_isolation": {
+          "ok": true
+        },
+        "switch_tab_across_spaces": {
+          "barAfterReturn": {
+            "created": true,
+            "editorCanUndo": false,
+            "editorText": "",
+            "final": true,
+            "firstResultsMs": 5.023666666666486,
+            "mode": "newTab",
+            "newTabHighlighted": false,
+            "openFirstResultsMs": 13.173458333333656,
+            "presented": false,
+            "profile": "2217D043-FAA4-4B55-8981-ACDBE3747DD2",
+            "range": [
+              -1,
+              0
+            ],
+            "rows": [
+              {
+                "action": "",
+                "id": "tab:91EDEF1D-90EE-46B0-9B02-1207617238C9",
+                "kind": "switchToTab",
+                "space": "F1F7FA90-811C-49B5-8925-F3EB8F3A0192",
+                "tab": "91EDEF1D-90EE-46B0-9B02-1207617238C9",
+                "title": "Shell C /cross",
+                "url": "http://127.0.0.1:65282/cross"
+              },
+              {
+                "action": "",
+                "id": "typed:search",
+                "kind": "search",
+                "space": "",
+                "tab": "",
+                "title": "Shell C /cross",
+                "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+              }
+            ],
+            "selected": 0,
+            "space": "E699CE80-F8E4-45C5-B9F5-777A57DB94B8",
+            "text": "Shell C /cross"
+          },
+          "expectedSpace": "F1F7FA90-811C-49B5-8925-F3EB8F3A0192",
+          "expectedTab": "91EDEF1D-90EE-46B0-9B02-1207617238C9",
+          "ok": true,
+          "returnRouting": {
+            "barPresented": false,
+            "firstResponder": "RenderWidgetHostViewCocoa",
+            "keyWindow": 91279,
+            "sidebarMode": "anchored"
+          },
+          "rows": [
+            {
+              "action": "",
+              "id": "tab:91EDEF1D-90EE-46B0-9B02-1207617238C9",
+              "kind": "switchToTab",
+              "space": "F1F7FA90-811C-49B5-8925-F3EB8F3A0192",
+              "tab": "91EDEF1D-90EE-46B0-9B02-1207617238C9",
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:65282/cross"
+            },
+            {
+              "action": "",
+              "id": "typed:search",
+              "kind": "search",
+              "space": "",
+              "tab": "",
+              "title": "Shell C /cross",
+              "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+            }
+          ],
+          "state": {
+            "activationPolicy": 0,
+            "appActive": true,
+            "chrome": {
+              "favorites": [
+                0,
+                82,
+                228,
+                8
+              ],
+              "header": [
+                0,
+                90,
+                228,
+                36
+              ],
+              "headerHovered": false,
+              "headerTitle": [
+                41,
+                99,
+                170,
+                18
+              ],
+              "headerTitleBaseline": 113,
+              "urlField": [
+                8,
+                46,
+                212,
+                36
+              ],
+              "urlFieldHovered": false
+            },
+            "cursor": [
+              1705,
+              528
+            ],
+            "engineSelected": 4,
+            "engineURL": "http://127.0.0.1:65282/cross",
+            "firstResponder": "RenderWidgetHostViewCocoa",
+            "frame": [
+              100,
+              100,
+              1280,
+              800
+            ],
+            "fullscreen": false,
+            "fullscreenChanges": 0,
+            "fullscreenTransition": false,
+            "hiddenTitle": true,
+            "id": "C36CA169-4006-4AB8-9756-C689B923258E",
+            "isKeyWindow": true,
+            "keyWindow": 91279,
+            "layoutPasses": 1108,
+            "number": 91279,
+            "pageFullscreen": false,
+            "paneBackgrounds": [
+              {
+                "color": [],
+                "tab": "91EDEF1D-90EE-46B0-9B02-1207617238C9"
+              }
+            ],
+            "panel": [
+              228,
+              10,
+              1042,
+              780
+            ],
+            "peekCreated": false,
+            "reveal": {
+              "card": [
+                0,
+                0,
+                0,
+                0
+              ],
+              "dwell": 0,
+              "hides": 0,
+              "offset": null,
+              "phase": "idle",
+              "pointerEvents": 27,
+              "shows": 0,
+              "zone": ""
+            },
+            "revealed": false,
+            "screenFrame": [
+              0,
+              0,
+              2560,
+              1440
+            ],
+            "selected": "91EDEF1D-90EE-46B0-9B02-1207617238C9",
+            "shownPages": [
+              "91EDEF1D-90EE-46B0-9B02-1207617238C9"
+            ],
+            "sidebarClass": "OpenSidebar.SidebarView",
+            "sidebarMode": "anchored",
+            "sidebarVisible": true,
+            "sidebarWidth": 228,
+            "space": "F1F7FA90-811C-49B5-8925-F3EB8F3A0192",
+            "titlebar": [
+              0,
+              0,
+              1280,
+              32
+            ],
+            "titled": true,
+            "trafficLightFrames": [
+              [
+                13,
+                17,
+                14,
+                14
+              ],
+              [
+                36,
+                17,
+                14,
+                14
+              ],
+              [
+                59,
+                17,
+                14,
+                14
+              ]
+            ],
+            "trafficLights": [
+              [
+                20,
+                24
+              ],
+              [
+                43,
+                24
+              ],
+              [
+                66,
+                24
+              ]
+            ],
+            "trafficLightsHidden": [
+              false,
+              false,
+              false
+            ],
+            "visible": true
+          }
+        },
+        "system_menu_nil_targets": {
+          "ok": true,
+          "rows": [
+            {
+              "action": "hide:",
+              "enabled": true,
+              "id": "hide-open",
+              "key": "h",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Hide Open"
+            },
+            {
+              "action": "hideOtherApplications:",
+              "enabled": true,
+              "id": "hide-others",
+              "key": "h",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Hide Others"
+            },
+            {
+              "action": "unhideAllApplications:",
+              "enabled": false,
+              "id": "show-all",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Show All"
+            },
+            {
+              "action": "terminate:",
+              "enabled": true,
+              "id": "quit-open",
+              "key": "q",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Quit Open"
+            },
+            {
+              "action": "performClose:",
+              "enabled": true,
+              "id": "close-window",
+              "key": "w",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Close Window"
+            },
+            {
+              "action": "undo:",
+              "enabled": true,
+              "id": "undo",
+              "key": "z",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Undo"
+            },
+            {
+              "action": "redo:",
+              "enabled": true,
+              "id": "redo",
+              "key": "z",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Redo"
+            },
+            {
+              "action": "cut:",
+              "enabled": true,
+              "id": "cut",
+              "key": "x",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Cut"
+            },
+            {
+              "action": "copy:",
+              "enabled": true,
+              "id": "copy",
+              "key": "c",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Copy"
+            },
+            {
+              "action": "paste:",
+              "enabled": true,
+              "id": "paste",
+              "key": "v",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Paste"
+            },
+            {
+              "action": "pasteAsPlainText:",
+              "enabled": false,
+              "id": "paste-and-match-style",
+              "key": "v",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Paste and Match Style"
+            },
+            {
+              "action": "selectAll:",
+              "enabled": true,
+              "id": "select-all",
+              "key": "a",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Select All"
+            },
+            {
+              "action": "performFindPanelAction:",
+              "enabled": true,
+              "id": "find",
+              "key": "f",
+              "payload": "",
+              "tag": 1,
+              "targetNil": true,
+              "title": "Find\u2026"
+            },
+            {
+              "action": "performFindPanelAction:",
+              "enabled": true,
+              "id": "find-next",
+              "key": "g",
+              "payload": "",
+              "tag": 2,
+              "targetNil": true,
+              "title": "Find Next"
+            },
+            {
+              "action": "performFindPanelAction:",
+              "enabled": true,
+              "id": "find-previous",
+              "key": "g",
+              "payload": "",
+              "tag": 3,
+              "targetNil": true,
+              "title": "Find Previous"
+            },
+            {
+              "action": "startSpeaking:",
+              "enabled": true,
+              "id": "start-speaking",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Start Speaking"
+            },
+            {
+              "action": "stopSpeaking:",
+              "enabled": true,
+              "id": "stop-speaking",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Stop Speaking"
+            },
+            {
+              "action": "orderFrontFontPanel:",
+              "enabled": true,
+              "id": "show-fonts",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Show Fonts"
+            },
+            {
+              "action": "addFontTrait:",
+              "enabled": false,
+              "id": "font-bold",
+              "key": "b",
+              "payload": "",
+              "tag": 2,
+              "targetNil": true,
+              "title": "Bold"
+            },
+            {
+              "action": "addFontTrait:",
+              "enabled": false,
+              "id": "font-italic",
+              "key": "i",
+              "payload": "",
+              "tag": 1,
+              "targetNil": true,
+              "title": "Italic"
+            },
+            {
+              "action": "underline:",
+              "enabled": true,
+              "id": "font-underline",
+              "key": "u",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Underline"
+            },
+            {
+              "action": "orderFrontCharacterPalette:",
+              "enabled": true,
+              "id": "emoji-and-symbols",
+              "key": " ",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Emoji & Symbols"
+            },
+            {
+              "action": "toggleFullScreen:",
+              "enabled": true,
+              "id": "toggle-full-screen",
+              "key": "f",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Enter Full Screen"
+            },
+            {
+              "action": "toggleFullScreen:",
+              "enabled": true,
+              "id": "toggle-full-screen",
+              "key": "f",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Enter Full Screen"
+            },
+            {
+              "action": "performMiniaturize:",
+              "enabled": true,
+              "id": "minimize-window",
+              "key": "m",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Minimize"
+            },
+            {
+              "action": "performZoom:",
+              "enabled": true,
+              "id": "zoom-window",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Zoom"
+            },
+            {
+              "action": "arrangeInFront:",
+              "enabled": true,
+              "id": "bring-all-to-front",
+              "key": "",
+              "payload": "",
+              "tag": 0,
+              "targetNil": true,
+              "title": "Bring All to Front"
+            }
+          ]
+        },
+        "tabs_reveal_registered": {
+          "ok": true
+        },
+        "typed_top_today": {
+          "ok": true,
+          "tab": "D6DD4167-D6E9-423C-A614-B9435CDFFFDA"
+        },
+        "unsupported_disabled": {
+          "ok": true
+        },
+        "view-archive_real_library": {
+          "ok": true,
+          "state": {
+            "archive": [],
+            "archiveRows": 0,
+            "external": true,
+            "historyRows": 3,
+            "hotkey": true,
+            "library": 91329,
+            "librarySection": "archive",
+            "sameSnapshot": true,
+            "settings": 91327,
+            "sharedArchives": true
+          }
+        },
+        "view-downloads_real_library": {
+          "ok": true,
+          "state": {
+            "archive": [],
+            "archiveRows": 0,
+            "external": true,
+            "historyRows": 3,
+            "hotkey": true,
+            "library": 91329,
+            "librarySection": "downloads",
+            "sameSnapshot": true,
+            "settings": 91327,
+            "sharedArchives": true
+          }
+        },
+        "view-history_real_library": {
+          "ok": true,
+          "state": {
+            "archive": [],
+            "archiveRows": 0,
+            "external": true,
+            "historyRows": 3,
+            "hotkey": true,
+            "library": 91329,
+            "librarySection": "history",
+            "sameSnapshot": true,
+            "settings": 91327,
+            "sharedArchives": true
+          }
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "cmux",
+          "frontmostPID": 761,
+          "openPID": 54969,
+          "uptime": 130549.45081625001
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "cmux",
+          "frontmostPID": 761,
+          "keyWindow": 0,
+          "openPID": 54969,
+          "uptime": 130549.45807708334
+        }
+      ],
+      "reason": "foreground lost during settings_persist_relaunch",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "started": "2026-10-26 12:13:01",
+  "style": "chrome"
+}

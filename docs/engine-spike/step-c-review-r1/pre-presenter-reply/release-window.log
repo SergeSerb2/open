@@ -1,0 +1,96 @@
+cold_fresh_profile {'main': 166, 'modelLoaded': 169, 'sidebarDrawn': 311, 'engineStart': 312, 'engineStarted': 416, 'firstContentfulPaint': 561}
+warm_existing_profile {'main': 170, 'modelLoaded': 172, 'sidebarDrawn': 322, 'engineStart': 323, 'engineStarted': 399, 'firstContentfulPaint': 541}
+### comparison
+
+| Element | Position error (pt) | ΔE00 | Arc color | Open color | Arc ink box (px) | Open ink box (px) |
+|---|---|---|---|---|---|---|
+| background (sidebar column) (101 points, max ΔE 1.11) | — | 0.57 | #F18E88 | #F08C88 | — | — |
+| panel fill (empty state) (11 points, max ΔE 1.13) | — | 0.40 | #EEA58F | #EEA48F | — | — |
+| toolbar: sidebar toggle | 1.0 | 0.76 | #664335 | #694537 | 84,16 18×15 | 84,16 18×14 |
+| toolbar: back | 0.0 | 0.33 | #B4795F | #B3785E | 131,18 14×12 | 131,18 14×12 |
+| toolbar: forward | 1.0 | 0.24 | #B4795F | #B4795E | 165,18 15×12 | 165,18 14×12 |
+| toolbar: reload | 0.0 | 0.18 | #B4795E | #B47A5E | 199,15 14×17 | 199,15 14×17 |
+| URL field fill | 0.0 | 0.09 | #DA9173 | #DA9173 | 8,46 212×36 | 8,46 212×36 |
+| URL field magnifier | 0.0 | 0.54 | #885949 | #875847 | 20,58 12×12 | 20,58 12×12 |
+| URL field placeholder | 0.0 | 0.20 | #9A6752 | #996651 | 43,59 134×10 | 43,59 134×10 |
+| favorite tile 1 | 0.0 | 0.11 | #DA8F75 | #DA8E74 | 8,90 65×47 | 8,90 65×47 |
+| favorite tile 2 | 0.0 | 0.07 | #DA9174 | #DA9174 | 81,90 65×47 | 81,90 65×47 |
+| favorite tile 3 | 0.0 | 0.28 | #DA9374 | #D99373 | 155,90 65×47 | 155,90 65×47 |
+| favorite tile 4 | 0.0 | 0.18 | #DB8F75 | #DB8E75 | 8,145 65×47 | 8,145 65×47 |
+| favorite tile 5 | 0.0 | 0.09 | #DA9175 | #DA9175 | 81,145 65×47 | 81,145 65×47 |
+| favorite tile 6 | 0.0 | 0.18 | #DA9375 | #DA9375 | 155,145 65×47 | 155,145 65×47 |
+| Space icon (centroid Δ 0.1, 0.2 px) | 0.2 | — | — | — | — | — |
+| Space title | 0.0 | 0.15 | #815445 | #805345 | 45,213 31×10 | 45,213 31×10 |
+| row 1 title | 0.0 | 0.24 | #371102 | #361102 | 45,254 34×10 | 45,254 34×10 |
+| row 2 title | 0.0 | 0.20 | #381202 | #381302 | 45,294 53×11 | 45,294 53×11 |
+| row 3 title | 0.0 | 0.05 | #3A1303 | #391303 | 45,336 69×13 | 45,336 69×13 |
+| row 4 title | 0.0 | 0.14 | #3A1403 | #391303 | 45,377 68×13 | 45,377 68×13 |
+| row 5 title | 0.0 | 0.26 | #3A1303 | #3A1303 | 45,418 21×10 | 45,418 21×10 |
+| row 6 title | 0.0 | 0.10 | #3A1403 | #3A1303 | 45,459 145×12 | 45,459 145×12 |
+| row 7 title | 0.0 | 0.12 | #3A1303 | #3A1403 | 45,499 68×14 | 45,499 68×14 |
+| row 8 title | 0.0 | 0.16 | #3A1403 | #3A1403 | 45,541 97×13 | 45,541 97×13 |
+| row 9 title | 0.0 | 0.11 | #391303 | #391302 | 45,582 86×13 | 45,582 86×13 |
+| row 10 title | 0.0 | 0.04 | #3A1403 | #3A1403 | 45,623 162×12 | 45,623 162×12 |
+| New Tab plus | 1.0 | 1.34 | #784A43 | #7C4C46 | 20,665 11×10 | 20,664 10×11 |
+| New Tab label | 0.0 | 0.35 | #A8685D | #A7675E | 45,664 54×10 | 45,664 54×10 |
+| bottom: Home | 0.0 | 0.50 | #783F45 | #773E45 | 17,1361 14×16 | 17,1361 14×16 |
+| bottom: plus | 0.0 | 1.55 | #6F3C3F | #753F43 | 197,1362 14×14 | 197,1362 14×14 |
+
+Worst position error 1.0 pt, worst ΔE00 1.55, 31 elements.
+
+window_before_engine_0   PASS
+window_png               PASS
+selected_only_0          PASS
+window_before_engine_1   PASS
+selected_only_1          PASS
+window_before_engine_2   PASS
+selected_only_2          PASS
+window_before_engine_3   PASS
+selected_only_3          PASS
+window_before_engine_4   PASS
+selected_only_4          PASS
+kernel_process_start     PASS
+cold_fresh_profile       FAIL
+warm_existing_profile    FAIL
+close_unloaded_pinned    PASS
+first_frame_timeout_continues PASS
+launch_waiter_early_exit PASS
+quit_before_engine       PASS
+navigation_before_engine PASS
+engine_failure_alert     PASS
+native_window            PASS
+keys_keep_peek_lazy      PASS
+frame_save_debounced     PASS
+background_lazy          PASS
+resize_300               PASS
+resize_limits            PASS
+hide_reveal              PASS
+background_tagged_pointer PASS
+toggle_sidebar           PASS
+multiple_windows         PASS
+all_spaces_strip_order   PASS
+html_fullscreen_in_native PASS
+fullscreen               PASS
+fullscreen_hover_reveal  PASS
+html_fullscreen_from_window PASS
+multiple_window_png      PASS
+window_persistence       PASS
+window_close_preserves_other_host PASS
+close_window_keeps_tabs  PASS
+last_window_reopen       PASS
+last_window_relaunch     PASS
+focus_preserves_sidebar  PASS
+focus_preserves_find     PASS
+focus_preserves_inactive_load PASS
+focus_preserves_inactive_dismiss PASS
+traffic_lights           PASS
+traffic_light_look       PASS
+traffic_light_actions    PASS
+traffic_light_stale_hover PASS
+space_header_url_field   PASS
+reveal_timing            PASS
+card_edges_1x            PASS
+card_edges_appearance    PASS
+card_edges_themed        PASS
+comparison               PASS
+wrote /Users/serge/.t3/worktrees/open/t3-d8b5b30a/docs/engine-spike/results-window-release.json

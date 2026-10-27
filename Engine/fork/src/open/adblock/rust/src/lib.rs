@@ -41,14 +41,34 @@ const MAX_SELECTOR: usize = 2048;
 /// §8.3: selector text per frame payload.
 const PAYLOAD_CAP: usize = 256 * 1024;
 
+/// Review R3-2: the most list lines one build parses (all lists together;
+/// today's EasyList + EasyPrivacy have 132,043). At 2^21 lines the largest
+/// `Vec<NetworkFilter>` stays at or under 2^22 × 208 B = 872 MB after
+/// doubling, under PartitionAlloc's ceiling. A 16 MiB list (the Swift
+/// per-source cap) of 5,592,405 two-character rules aborted the browser.
+const MAX_LIST_LINES: usize = 1 << 21;
+/// Review R3-2: the most bytes of selector copies one build may cost. The
+/// crate stores a cosmetic rule's selector once per hostname it names, so a
+/// line costs (hostnames × selector bytes); today's EasyList + EasyPrivacy
+/// cost 596,174 bytes in all. One 149 KB line with 10,000 hostnames cost
+/// 478 MiB.
+const MAX_COSMETIC_COPY_BYTES: u64 = 64 << 20;
+
 /// The crate's DAT header: magic, then format version 0
 /// (`data_format/mod.rs`). One MessagePack value follows.
 const DAT_MAGIC: [u8; 4] = [0xd1, 0xd9, 0x3a, 0xaf];
-/// Review R2-1: the most MessagePack values a DAT may hold. Today's
-/// EasyList + EasyPrivacy DAT has 2,017,148 values in 6,791,246 bytes (0.30
-/// per byte); a DAT at the service's 256 MiB read limit would hold about 80
-/// million. 2^27 leaves room above that and stops a value bomb.
-const MAX_DAT_VALUES: u64 = 1 << 27;
+/// Reviews R2-1 and R3-1: the most MessagePack values a DAT may hold.
+/// Today's EasyList + EasyPrivacy DAT has about 2.0 million (2,017,148 in
+/// 6,791,246 bytes), so 2^24 is 8.3 times that. This cap is what bounds the
+/// decoded collections: one DAT byte can become a 24-byte `String` in a
+/// `Vec`, or a 49-byte hash bucket (a `String` key and a `Vec` value), and
+/// serde grows a collection by doubling after a 1 MiB preallocation. At 2^24
+/// values the largest single requests measured are 536,862,720 B
+/// (`Vec<String>`) and 822,083,592 B (`HashMap<String, Vec<String>>`), under
+/// PartitionAlloc's ceiling of 2^31 − 2 MiB (2,145,386,496 B; one request
+/// over it aborts the browser). At 2^27 a 42.7 MiB DAT made one
+/// `Vec<String>` request 2,147,450,880 B and aborted (review R3-1).
+const MAX_DAT_VALUES: u64 = 1 << 24;
 /// The deepest container nesting a DAT may have (today's is 7).
 const MAX_DAT_DEPTH: usize = 32;
 
@@ -135,6 +155,20 @@ mod ffi {
         /// Lists consumed by the text build; 0 after a DAT load (a DAT does
         /// not record it; the service counts the manifest's lists).
         list_count: u32,
+        /// Why the build was refused before parsing (review R3-2: too many
+        /// list lines, or too many selector copies), or empty. A refused
+        /// build has no rules; C++ treats it as a failed load.
+        refused: String,
+    }
+
+    /// Generic hide selectors for a page's class and ID tokens, sanitized
+    /// like the page's own (§8.3), and what the sanitizer dropped (review
+    /// R3-4).
+    struct OpenHiddenSelectors {
+        selectors: Vec<String>,
+        dropped_procedural: u32,
+        dropped_unsafe: u32,
+        dropped_over_cap: u32,
     }
 
     /// Facts about an engine.
@@ -161,6 +195,9 @@ mod ffi {
             dat: &[u8],
             resources_json: &str,
         ) -> bool;
+        /// The DAT walk's verdict: empty when the crate may read `dat`, else
+        /// the first problem. For logs and the self-test.
+        fn open_adblock_dat_check(dat: &[u8]) -> String;
         fn open_adblock_check(
             engine: &OpenAdblockEngine,
             url: &str,
@@ -174,13 +211,14 @@ mod ffi {
             classes: &[String],
             ids: &[String],
             exceptions: &[String],
-        ) -> Vec<String>;
+        ) -> OpenHiddenSelectors;
         fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo;
     }
 }
 
 use ffi::{
-    OpenBlockerResult, OpenBuildReport, OpenCosmeticResources, OpenEngineInfo, OpenRequestType,
+    OpenBlockerResult, OpenBuildReport, OpenCosmeticResources, OpenEngineInfo,
+    OpenHiddenSelectors, OpenRequestType,
 };
 
 /// One Profile's engine. Shared by every check of the Profile under a read
@@ -197,6 +235,7 @@ struct BuildReport {
     lossy_kinds: BTreeSet<&'static str>,
     resources_loaded: u32,
     resources_error: &'static str,
+    refused: String,
 }
 
 impl OpenAdblockEngine {
@@ -260,10 +299,60 @@ fn lossy_kinds(list_texts: &[String]) -> BTreeSet<&'static str> {
     kinds
 }
 
+/// The bytes of selector copies one list line costs the crate: a cosmetic
+/// rule (`##`, `#@#`, `#?#`, `#$#`, `#%#` and their `#@` forms) stores its
+/// selector once per hostname before the separator, or once when it names
+/// none. Other lines cost nothing here.
+fn cosmetic_copy_bytes(line: &str) -> u64 {
+    const SEPARATORS: [&str; 8] = ["#@?#", "#@$#", "#@%#", "#@#", "#?#", "#$#", "#%#", "##"];
+    let bytes = line.as_bytes();
+    let Some(at) = bytes.iter().position(|byte| *byte == b'#') else { return 0 };
+    let rest = bytes.get(at..).unwrap_or(&[]);
+    let Some(separator) = SEPARATORS.iter().find(|sep| rest.starts_with(sep.as_bytes())) else {
+        return 0;
+    };
+    let hosts = bytes.get(..at).unwrap_or(&[]);
+    let hostnames = 1 + hosts.iter().filter(|byte| **byte == b',').count() as u64;
+    let selector = rest.len().saturating_sub(separator.len()) as u64;
+    hostnames.saturating_mul(selector)
+}
+
+/// Review R3-2: refuses a build the crate could not parse within the
+/// allocator's ceiling, before it parses anything. Err is the reason.
+fn check_build_limits(list_texts: &[String]) -> Result<(), String> {
+    let mut lines = 0usize;
+    let mut copies = 0u64;
+    for text in list_texts {
+        for line in text.lines() {
+            lines += 1;
+            if lines > MAX_LIST_LINES {
+                return Err(format!("more than {MAX_LIST_LINES} list lines"));
+            }
+            let line = line.trim_start();
+            if line.starts_with('!') || line.starts_with('[') {
+                continue;
+            }
+            copies = copies.saturating_add(cosmetic_copy_bytes(line));
+        }
+    }
+    if copies > MAX_COSMETIC_COPY_BYTES {
+        return Err(format!(
+            "cosmetic rules need {copies} bytes of selector copies, more than \
+             {MAX_COSMETIC_COPY_BYTES}"
+        ));
+    }
+    Ok(())
+}
+
 /// Builds an engine from the enabled lists (in the caller's order) and the
 /// scriptlet and redirect resources. CPU-heavy: C++ calls it on a background
-/// task runner only.
+/// task runner only. Lists over the R3-2 limits are not parsed: the engine
+/// is empty and the build report says why (`refused`).
 pub fn open_adblock_build(list_texts: &[String], resources_json: &str) -> Box<OpenAdblockEngine> {
+    if let Err(refused) = check_build_limits(list_texts) {
+        let report = BuildReport { refused, ..Default::default() };
+        return OpenAdblockEngine::new(Engine::new(true), 0, report);
+    }
     let mut set = FilterSet::new(false);
     for text in list_texts {
         set.add_filter_list(text, ParseOptions::default());
@@ -281,6 +370,7 @@ pub fn open_adblock_build_report(engine: &OpenAdblockEngine) -> OpenBuildReport 
         resources_loaded: engine.report.resources_loaded,
         resources_error: engine.report.resources_error.to_string(),
         list_count: engine.list_count,
+        refused: engine.report.refused.clone(),
     }
 }
 
@@ -301,17 +391,19 @@ fn take_length(rest: &mut &[u8], size: usize) -> Option<u64> {
     Some(head.iter().fold(0u64, |value, byte| (value << 8) | u64::from(*byte)))
 }
 
-/// Review R2-1: walks the DAT before the crate reads it. `rmp-serde`
-/// allocates a string or binary buffer of the length the stream declares
-/// before it reads the bytes (`decode.rs:870`), so a 15-byte DAT that claims
-/// a 512 MiB string allocated 512 MiB, and an allocation failure aborts the
-/// browser. Here every str, bin and ext length must fit in the bytes left,
-/// every array and map count too (each value takes at least one byte), the
-/// whole value has at most `MAX_DAT_VALUES` values and `MAX_DAT_DEPTH`
-/// levels, and the header must be the crate's (which also covers the 4-byte
-/// DAT of review 98-3). Then the crate cannot allocate more than the DAT's
-/// size for one buffer. No allocation and no recursion here: one pass with
-/// a fixed-size stack of pending counts. Err names the first problem.
+/// Reviews R2-1 and R3-1: walks the DAT before the crate reads it.
+/// `rmp-serde` allocates a string or binary buffer of the length the stream
+/// declares before it reads the bytes (`decode.rs:870`), so a 14-byte DAT
+/// that claims a 512 MiB string allocated 512 MiB, and an allocation failure
+/// aborts the browser. Here every str, bin and ext length must fit in the
+/// bytes left, every array and map count too (each value takes at least one
+/// byte), the whole value has at most `MAX_DAT_VALUES` values and
+/// `MAX_DAT_DEPTH` levels, nothing may follow it (review R3-5), and the
+/// header must be the crate's (which also covers the 4-byte DAT of review
+/// 98-3). Then a str or bin buffer is no larger than the DAT; a decoded
+/// collection is bounded by the value cap (see `MAX_DAT_VALUES`), not by the
+/// DAT's size. No allocation and no recursion here: one pass with a
+/// fixed-size stack of pending counts. Err names the first problem.
 fn check_dat(dat: &[u8]) -> Result<(), &'static str> {
     let body = dat.strip_prefix(&DAT_MAGIC).ok_or("magic")?;
     let (&version, mut rest) = body.split_first().ok_or("short")?;
@@ -327,7 +419,7 @@ fn check_dat(dat: &[u8]) -> Result<(), &'static str> {
         let Some(top) = pending.get_mut(depth) else { return Err("depth") };
         if *top == 0 {
             if depth == 0 {
-                return Ok(());
+                return if rest.is_empty() { Ok(()) } else { Err("trailing") };
             }
             depth -= 1;
             continue;
@@ -373,6 +465,10 @@ fn check_dat(dat: &[u8]) -> Result<(), &'static str> {
             *pending.get_mut(depth).ok_or("depth")? = children;
         }
     }
+}
+
+pub fn open_adblock_dat_check(dat: &[u8]) -> String {
+    check_dat(dat).err().unwrap_or("").to_string()
 }
 
 /// Loads a serialized engine into an empty one, then applies the resources
@@ -673,10 +769,8 @@ pub fn open_adblock_cosmetic(engine: &OpenAdblockEngine, url: &str) -> OpenCosme
         generichide,
     } = engine.inner.url_cosmetic_resources(url);
 
-    // v1 applies none of these (lead ruling 6): count and drop them. The
-    // crate also lists each `:remove()` selector among the style selectors.
-    let dropped_style =
-        style_selectors.keys().filter(|selector| !remove_selectors.contains(*selector)).count();
+    // v1 applies none of these (lead ruling 6): count each rule and drop it.
+    let dropped_style: usize = style_selectors.values().map(Vec::len).sum();
     let dropped_remove = remove_selectors.len() + remove_attrs.len() + remove_classes.len();
     // The crate wraps each resolved scriptlet in this trailer
     // (cosmetic_filter_cache.rs, adblock 0.8.11).
@@ -706,19 +800,24 @@ pub fn open_adblock_cosmetic(engine: &OpenAdblockEngine, url: &str) -> OpenCosme
 }
 
 /// Generic hide selectors for the class and ID tokens a page reported,
-/// sanitized like the page's own (§8.3).
+/// sanitized like the page's own (§8.3), with the drop counts (R3-4).
 pub fn open_adblock_hidden_selectors(
     engine: &OpenAdblockEngine,
     classes: &[String],
     ids: &[String],
     exceptions: &[String],
-) -> Vec<String> {
+) -> OpenHiddenSelectors {
     let exceptions: HashSet<String> = exceptions.iter().cloned().collect();
     let mut selectors = engine.inner.hidden_class_id_selectors(classes, ids, &exceptions);
     selectors.sort_unstable();
     let mut sanitizer = Sanitizer::default();
     selectors.retain(|s| sanitizer.keep(s));
-    selectors
+    OpenHiddenSelectors {
+        selectors,
+        dropped_procedural: sanitizer.procedural,
+        dropped_unsafe: sanitizer.unsafe_,
+        dropped_over_cap: sanitizer.over_cap,
+    }
 }
 
 pub fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo {

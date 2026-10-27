@@ -1,0 +1,32 @@
+{
+  "sourceHead": "342800cffee3225beee1963576731cf71b7f0f0d",
+  "failedAcceptanceReceipt": "release-actions-1.json",
+  "failedStep": "native Copy after command-bar edit-current navigation",
+  "originalError": "key: key focus not ready: active=true target=104345 key=104345",
+  "classification": "FAIL; not INTERRUPTED",
+  "foregroundLossObserved": false,
+  "rootCause": "Unconfirmed native key-readiness timeout. The error omitted target.isKeyWindow, so matching native window numbers and appActive do not establish which readiness condition timed out. No assumption about external focus theft is made.",
+  "additionalRealAppDiagnostics": [
+    {
+      "kind": "native-focus-loop",
+      "cycles": 40,
+      "passed": 40,
+      "error": null,
+      "nativeInputStepsWithBeforeAfterState": 0,
+      "allRecordedNativeBoundariesActiveAndKey": null,
+      "rawPrivatePath": ".re/native-focus-loop/results.json",
+      "rawSHA256": "a483b0a5418442859b7e1c953dd1aa3c5f1d43c4d73cbd09aa76e6e5168d8dae"
+    },
+    {
+      "kind": "native-focus-loop-two-tabs",
+      "cycles": 40,
+      "passed": 40,
+      "error": null,
+      "nativeInputStepsWithBeforeAfterState": 400,
+      "allRecordedNativeBoundariesActiveAndKey": true,
+      "rawPrivatePath": ".re/native-focus-loop-two-tabs/results.json",
+      "rawSHA256": "94cd08232d5dc0b9a0f4be0d3ca7f3646914d735e3e7dde8388da5998f5dd8fa"
+    }
+  ],
+  "acceptance": "The original failure remains. The extra diagnostics are not replacement acceptance runs. Lead exclusive focus-dependent verification remains required."
+}
