@@ -135,8 +135,8 @@ public enum WindowStyle: String, Codable, Sendable {
 @MainActor
 @Observable
 public final class BrowserWindowState {
-    /// Temporary full-toolbar floor. Lane A1's compact toolbar unlocks the measured 164 pt target.
-    public nonisolated static let minimumSidebarWidth = 218.0
+    /// Measured minimum sidebar width (S2 06/0029); below 219 pt the toolbar is compact.
+    public nonisolated static let minimumSidebarWidth = 164.0
     public let id: WindowID
     public var focusedSpaceID: SpaceID
     /// Selected node per Space.

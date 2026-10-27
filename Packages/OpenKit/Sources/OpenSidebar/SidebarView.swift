@@ -327,6 +327,8 @@ public protocol SidebarDelegate: AnyObject {
 public enum SidebarDiagnostics {
     /// `reloadData` calls on any tab list. One per page build; model changes add none.
     public internal(set) static var fullReloads = 0
+    /// Full ↔ compact toolbar swaps (one per crossing of 219 pt).
+    public internal(set) static var compactToolbarSwaps = 0
     /// Native incremental outline update calls. One plain main-actor increment per call.
     public internal(set) static var outlineItemUpdates = 0
     /// One plain main-actor integer increment per page build or layout callback.
@@ -488,8 +490,16 @@ extension SidebarView {
     /// Back, forward, and reload show in the sidebar toolbar.
     public var toolbarNavigationVisible: Bool { !toolbar.back.isHidden && !toolbar.forward.isHidden && !toolbar.reload.isHidden }
     public var toolbarGeometry: [String: CGRect] {
-        ["toggle": toolbar.toggle.frame, "back": toolbar.back.frame, "forward": toolbar.forward.frame, "reload": toolbar.reload.frame]
+        ["toggle": toolbar.toggle.frame, "back": toolbar.back.frame, "forward": toolbar.forward.frame, "reload": toolbar.reload.frame,
+         "more": toolbar.more.frame]
     }
+    /// Visible toolbar buttons by name, in display order.
+    public var toolbarVisibleButtons: [String] {
+        [("toggle", toolbar.toggle), ("back", toolbar.back), ("forward", toolbar.forward), ("reload", toolbar.reload), ("more", toolbar.more)]
+            .filter { !$0.1.isHidden }.map(\.0)
+    }
+    /// The compact toolbar's "More options" menu, built as a click would build it.
+    public func toolbarMoreMenu() -> NSMenu { toolbar.makeMoreMenu() }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }

@@ -2089,10 +2089,10 @@ def window_flow_checks(factory, results, tmp):
         results["resize_300"] = {"ok": state["sidebarWidth"] == 300 and state["panel"][0] == 300, "state": state}
         app.call("mouse", **{"from": [300, 300], "to": [700, 300]})
         wide = app.call("window-state")
-        app.call("mouse", **{"from": [500, 300], "to": [190, 300]})
+        app.call("mouse", **{"from": [500, 300], "to": [150, 300]})
         narrow = app.call("window-state")
-        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 218 and narrow["sidebarMode"] == "anchored"}
-        app.call("mouse", **{"from": [218, 300], "to": [60, 300]})
+        results["resize_limits"] = {"ok": wide["sidebarWidth"] == 500 and narrow["sidebarWidth"] == 164 and narrow["sidebarMode"] == "anchored"}
+        app.call("mouse", **{"from": [164, 300], "to": [60, 300]})
         hidden = sidebar_hidden(app) or app.call("window-state")
         # The first reveal right after the hide: every wait below is a condition (the
         # card settled or gone), never a fixed sleep.
@@ -2846,7 +2846,7 @@ def chrome_capture_comparison(snapshots):
     rows=[]; rings=[]; profiles=[]
     for name, session, frame, edge, sample in [
             ("rest-364", "20261026-100848-03-active-window", 3, 364, (8,600)),
-            ("mid-drag-218", "20261026-101147-06-sidebar-width", 29, 218, (8,600)),
+            ("mid-drag-164", "20261026-101147-06-sidebar-width", 29, 164, (8,600)),
             ("hidden-held", "20261026-101147-06-sidebar-width", 53, 10, (4,600)),
             ("cmd-s-restored", "20261026-101147-06-sidebar-width", 66, 228, (8,600)),
             ("card-revealed", "20261026-101324-05-reveal-card", 9, 233, (100,600))]:
@@ -2861,7 +2861,7 @@ def chrome_capture_comparison(snapshots):
             return next(x for x in range(1,600) if min(P(x*s,600*s)) >= 230)
         ae=white_edge(A,1); oe=white_edge(O,scale)
         rows.append({"state":name,"capture":"S2 %s/%04d"%(session.split('-')[2],frame),
-            "position_error_pt":abs(ae-oe),"implementation_error_pt":abs(edge-oe),"interim_floor":name=="mid-drag-218","arc_edge":ae,"open_edge":oe,
+            "position_error_pt":abs(ae-oe),"implementation_error_pt":abs(edge-oe),"interim_floor":False,"arc_edge":ae,"open_edge":oe,
             "arc_rgb":ca,"open_rgb":co,"delta_e00":chrome_delta_e(ca,co)})
         if name in ("rest-364","card-revealed"):
             inset=5 if name=="card-revealed" else 0
@@ -2922,16 +2922,18 @@ def window_chrome_followup_checks(factory, results, tmp):
         pointer("down", 364)
         high = pointer("drag", 700)
         low = pointer("drag", 150)
-        mid_png = snap("mid-drag-218")
+        mid_png = snap("mid-drag-164")
         toolbar = low["toolbarFrames"]
         lights_right = max(r[0]+r[2] for r in low["trafficLightFrames"])
-        results["width_toolbar_floor"] = {"ok":low["sidebarLiveWidth"]==218 and toolbar["toggle"][0]-lights_right>=3
-            and toolbar["back"][0]-(toolbar["toggle"][0]+toolbar["toggle"][2])>=3
-            and all(toolbar[b][0]>=toolbar[a][0]+toolbar[a][2] for a,b in (("back","forward"),("forward","reload"))),
-            "floor":low["sidebarLiveWidth"],"toolbar":toolbar,"traffic_lights_right":lights_right}
+        # Measured floor 164 with the compact toolbar (S2 06/0029): Back, Forward, More options
+        # at [W − 90 / W − 62 / W − 34, 9, 28, 28]; Back starts where the zoom button ends.
+        results["width_toolbar_floor"] = {"ok":low["sidebarLiveWidth"]==164 and low["toolbarButtons"]==["back","forward","more"]
+            and toolbar["back"]==[74,9,28,28] and toolbar["forward"]==[102,9,28,28] and toolbar["more"]==[130,9,28,28]
+            and toolbar["back"][0]>=lights_right,
+            "floor":low["sidebarLiveWidth"],"toolbar":toolbar,"buttons":low["toolbarButtons"],"traffic_lights_right":lights_right}
         edge = pointer("drag", 82)
         results["width_live_limits"] = {"ok": high["sidebarLiveWidth"] == 500 and high["panel"][0] == 500
-            and low["sidebarLiveWidth"] == edge["sidebarLiveWidth"] == 218 and edge["sidebarMode"] == "anchored"
+            and low["sidebarLiveWidth"] == edge["sidebarLiveWidth"] == 164 and edge["sidebarMode"] == "anchored"
             and all(s["sidebarWidth"] == 364 and s["sidebarWidthCommits"] == before["sidebarWidthCommits"] for s in (high, low, edge))
             and app.call("frame-save-counters")["scheduled"] == saves,
             "high": high["sidebarLiveWidth"], "low": low["sidebarLiveWidth"], "model": edge["sidebarWidth"]}
@@ -2942,14 +2944,14 @@ def window_chrome_followup_checks(factory, results, tmp):
             and spring(hide_motion["sidebar"].get("sidebar", {}), .1, .95), "state": gone}
         back = pointer("drag", 82)
         results["width_show_before_release"] = {"ok": back["sidebarResizeActive"] and back["sidebarMode"] == "anchored"
-            and back["sidebarLiveWidth"] == 218 and back["panel"][0] == 218 and back["sidebarWidth"] == 364}
+            and back["sidebarLiveWidth"] == 164 and back["panel"][0] == 164 and back["sidebarWidth"] == 364}
         visible = pointer("up", 82)
         after_save = app.call("frame-save-counters")["scheduled"]
-        results["width_visible_commit_once"] = {"ok": visible["sidebarWidth"] == 218
+        results["width_visible_commit_once"] = {"ok": visible["sidebarWidth"] == 164
             and visible["sidebarWidthCommits"] == before["sidebarWidthCommits"] + 1 and after_save == saves + 1,
             "scheduled_delta": after_save - saves}
         settled()
-        drag(218, 364)
+        drag(164, 364)
         before = state(); saves = app.call("frame-save-counters")["scheduled"]
         pointer("down", 364); pointer("drag", 60)
         settled(); hidden_png = snap("hidden-held")
@@ -5095,6 +5097,91 @@ def space_manager_route_checks(app, results, space, library_key, tmp):
     return pin
 
 
+def sidebar_a1_checks(app, results, require, evidence):
+    """Sidebar completion A1 in the real App (plan §5.4 E7, E8, E17, E19; §3.13 sound gate).
+    Runs on a fresh preferences domain, so the first hide is the first ever."""
+    def state(): return app.call('window-state')
+    def key(name, mods=()): app.call('key', key=name, modifiers=list(mods), route='app')
+    def settled(): wait_until(lambda: not app.call('window-motion')['active']['sidebar'], timeout=3, step=.01)
+    def snap(name):
+        path = os.path.join(evidence, name + '.png'); app.call('snapshot', path=path); return path
+    browser = state()['id']
+    app.call('window-focus', id=browser, activate=True)
+    app.call('window-frame', frame=[40, 40, 1728, 1084], unconstrained=True)
+    # E17: the first hide, by the toolbar button (a real click on its 32 pt frame).
+    require('E17_hint_key_starts_false', app.call('defaults', key='open.sidebar.hideHintShown') in (None, False))
+    toggle = state()['toolbarFrames']['toggle']
+    app.call('mouse', action='click', x=toggle[0] + 16, y=toggle[1] + 16)
+    hidden = wait_until(lambda: (lambda st: st if st['sidebarMode'] == 'hidden' and st['hint']['visible'] else None)(state()), timeout=3)
+    width = state()['frame'][2]
+    hint = (hidden or state())['hint']
+    hint_png = snap('a1-hint')
+    require('E17_first_hide_shows_hint', hidden and hint['shows'] == 1 and hint['keys'] == '⌘S'
+            and abs(hint['frame'][0] + hint['frame'][2] - (width - 5)) < 0.5 and hint['frame'][1] == 4 and hint['frame'][3] == 47
+            and app.call('defaults', key='open.sidebar.hideHintShown') is True, hint=hint, png=hint_png)
+    settled(); key('s', ['cmd']); settled(); key('s', ['cmd']); settled()
+    second = state()
+    require('E17_second_hide_shows_nothing', second['sidebarMode'] == 'hidden' and second['hint']['shows'] == 1, hint=second['hint'])
+    key('s', ['cmd']); settled()
+    # E19: the resize gesture (real down/drag/up through OEApplication.sendEvent).
+    def pointer(action, x): app.call('mouse', action=action, x=x, y=400); return state()
+    before = state()
+    pointer('down', before['sidebarWidth'])
+    at150 = pointer('drag', 150)
+    compact_png = snap('a1-compact-164')
+    at60 = pointer('drag', 60)
+    released = pointer('up', 60)
+    require('E19_drag_stops_at_164_then_hides_while_pressed', at150['sidebarLiveWidth'] == 164 and at150['toolbarButtons'] == ['back', 'forward', 'more']
+            and at60['sidebarMode'] == 'hidden' and at60['sidebarResizeActive'] and released['sidebarMode'] == 'hidden'
+            and released['sidebarWidth'] == before['sidebarWidth'] and released['sidebarGestureHides'] == before['sidebarGestureHides'] + 1
+            and released['hint']['shows'] == 1, at150=at150['toolbarButtons'], width=at150['sidebarLiveWidth'], png=compact_png)
+    settled(); key('s', ['cmd']); settled()
+    restored = state()
+    require('E19_cmd_s_restores_pre_drag_width', restored['sidebarMode'] == 'anchored' and restored['sidebarLiveWidth'] == before['sidebarWidth'])
+    pointer('down', restored['sidebarWidth']); pointer('drag', 200); at200 = pointer('up', 200)
+    compact200 = snap('a1-compact-200')
+    require('E19_compact_toolbar_at_200', at200['sidebarWidth'] == 200 and at200['toolbarButtons'] == ['back', 'forward', 'more']
+            and at200['toolbarFrames']['more'] == [166, 9, 28, 28], toolbar=at200['toolbarFrames'], png=compact200)
+    app.call('mouse', action='click', x=200, y=400, clickCount=1); app.call('mouse', action='click', x=200, y=400, clickCount=2)
+    require('E19_double_click_resets_228', wait_until(lambda: state()['sidebarWidth'] == 228, timeout=3), width=state()['sidebarWidth'])
+    # E7: Delete Space confirms first (Cancel changes nothing; Delete archives).
+    doomed = app.call('space-create', title='Delete Me')
+    app.call('space', space=doomed)
+    doomed_tab = app.call('open', url=fixture('Doomed Space Tab'))['id']; app.call('wait', tab=doomed_tab)
+    spaces_before = [sp['id'] for sp in app.call('spaces')]
+    app.call('sidebar-menu', item='Delete Space')
+    sheet = wait_until(lambda: state()['confirmation'], timeout=3)
+    texts = app.call('alert')
+    app.call('alert', button='Cancel')
+    cancelled = [sp['id'] for sp in app.call('spaces')] == spaces_before and state()['confirmation'] is None
+    require('E7_delete_space_cancel', sheet and sheet['title'] == 'Delete your Delete Me Space?' and sheet['buttons'] == ['Delete', 'Cancel']
+            and 'This will archive all the tabs and folders inside it.' in texts['texts'] and cancelled, sheet=sheet, texts=texts)
+    app.call('sidebar-menu', item='Delete Space'); wait_until(lambda: state()['confirmation'], timeout=3)
+    app.call('alert', button='Delete')
+    deleted = wait_until(lambda: doomed not in [sp['id'] for sp in app.call('spaces')], timeout=3)
+    require('E7_delete_space_confirmed', deleted and state()['confirmation'] is None, spaces=app.call('spaces'))
+    # E8: Delete folder confirms first; the toast reads "Folder deleted"; Cmd+Z restores it.
+    first_space = spaces_before[0]
+    app.call('space', space=first_space)
+    inner = app.call('open', url=fixture('Folder Child'))['id']; app.call('wait', tab=inner)
+    folder = app.call('folder', tabs=[inner], title='Reading')
+    app.call('sidebar-menu', node=folder, item='Delete')
+    folder_sheet = wait_until(lambda: state()['confirmation'], timeout=3)
+    app.call('alert', button='Delete Folder')
+    gone = wait_until(lambda: all(t['id'] != inner for t in app.call('tabs')), timeout=3)
+    toast = state()['toast']
+    neighbor = state()['selected']
+    pressed = app.call('toast-undo')
+    back = wait_until(lambda: any(t['id'] == inner for t in app.call('tabs')), timeout=3)
+    require('E8_delete_folder_alert_toast_undo', folder_sheet and folder_sheet['title'] == 'Delete your Reading folder?'
+            and folder_sheet['buttons'] == ['Delete Folder', 'Cancel'] and gone and toast == 'Folder deleted' and back
+            and neighbor not in (None, '', inner) and pressed, sheet=folder_sheet, toast=toast, selectedAfterDelete=neighbor)
+    # Sound wiring (§3.13): the App resolves its own resources; the setting stays off by default.
+    sound = app.call('sound-effect', effect='capture')
+    require('A1_sound_effect_gated_off', sound['resource'] == 'open-capture.caf' and not sound['played'] and sound['plays'] == 0
+            and app.call('defaults', key='open.advanced.playSoundEffects') in (None, False), sound=sound)
+
+
 def space_manager_checks(results, tmp, config, style):
     """E5/E6: real Library injection, native reorder/undo, stores and lifetimes."""
     import plistlib
@@ -5158,6 +5245,7 @@ def space_manager_checks(results, tmp, config, style):
         s1 = order(app)[0]
         s2 = app.call('space-create', title='Manager Two')
         s3 = app.call('space-create', title='Manager Three')
+        sidebar_a1_checks(app, results, require, evidence)
         app.call('space', space=s1)
         original = [s1, s2, s3]
         # The rest capture shows the loaded page title, not a title still in flight.
@@ -5275,7 +5363,12 @@ def space_manager_checks(results, tmp, config, style):
         # Delete/undo the Space through its real manager controls, preserving
         # both the Space and its archived tab's original identity.
         app.call('space-manager-menu', space=s2, item='Delete')
-        require('manager_delete_space', s2 not in order(app), order=order(app))
+        # A1: the Manager's Delete confirms first, with a sheet on the Library window.
+        manager_alert = app.call('alert', window='library')
+        app.call('alert', window='library', button='Delete')
+        require('manager_delete_space', s2 not in order(app) and 'Delete' in manager_alert['buttons']
+                and any(t.endswith(' Space?') and t.startswith('Delete your ') for t in manager_alert['texts']),
+                order=order(app), alert=manager_alert)
         library_key(app, 'z', ['cmd'])
         require('manager_delete_space_undo_ids', order(app) == reordered and app.tab(tab)['id'] == tab, order=order(app), tab=tab)
         # App-only appearance changes; always restore the original App override.

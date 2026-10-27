@@ -162,6 +162,54 @@
         await Task.yield()
         return spaceManagerState()
       case "space-manager-state": return spaceManagerState()
+      case "defaults":
+        // Reads (and with `value`, writes) one Open preference in this app's own domain.
+        guard let key = a["key"] as? String, key.hasPrefix("open.") else { throw Failure(message: "defaults key must start with open.") }
+        if let value = a["value"] { UserDefaults.standard.set(value is NSNull ? nil : value, forKey: key) }
+        return UserDefaults.standard.object(forKey: key) ?? NSNull()
+      case "sound-effect":
+        // The App's SoundEffects path: plays only with open.advanced.playSoundEffects on.
+        guard let raw = a["effect"] as? String, let effect = SoundEffects.Effect(rawValue: raw) else { throw Failure(message: "unknown sound effect") }
+        let played = SoundEffects.shared.play(effect)
+        return ["played": played, "resource": SoundEffects.resourceURL(for: effect)?.lastPathComponent ?? "",
+          "loaded": SoundEffects.shared.loadedSoundCount, "plays": SoundEffects.shared.playCount] as [String: Any]
+      case "alert":
+        // Presses a button of the alert sheet attached to a browser or the Library window.
+        let library = app.settingsPresenter.libraryPresenter?.window
+        let candidates = (a["window"] as? String == "library" ? [library].compactMap { $0 } : app.windowControllers.compactMap(\.window) + [library].compactMap { $0 })
+        guard let sheet = candidates.compactMap(\.attachedSheet).first else { throw Failure(message: "no attached alert sheet") }
+        var buttons: [NSButton] = [], texts: [String] = []
+        func walk(_ view: NSView, _ depth: Int) {
+          guard depth < 16 else { return }
+          if let button = view as? NSButton, !button.title.isEmpty { buttons.append(button) }
+          else if let field = view as? NSTextField, !field.stringValue.isEmpty { texts.append(field.stringValue) }
+          for child in view.subviews { walk(child, depth + 1) }
+        }
+        if let content = sheet.contentView { walk(content, 0) }
+        let result: [String: Any] = ["texts": texts, "buttons": buttons.map(\.title), "window": sheet.sheetParent?.windowNumber ?? 0]
+        guard let title = a["button"] as? String else { return result }
+        guard let button = buttons.first(where: { $0.title == title }) else { throw Failure(message: "alert has no button \(title)") }
+        button.performClick(nil)
+        await Task.yield()
+        return result
+      case "toast-undo":
+        guard let controller = app.frontWindowController else { throw Failure(message: "no browser window") }
+        return controller.pressToastUndo()
+      case "sidebar-menu":
+        // Builds the same NSMenu a right-click shows (a row, or the Space with no node)
+        // and performs the item at a "/" path; `alternate` picks the ⌥ alternate title.
+        guard let controller = app.frontWindowController, let path = a["item"] as? String else { throw Failure(message: "missing sidebar menu item") }
+        let node = (a["node"] as? String).flatMap(UUID.init(uuidString:)).map { ItemID(rawValue: $0) }
+        guard var level = controller.sidebar.contextMenu(nodeID: node) else { throw Failure(message: "no sidebar menu") }
+        let parts = path.split(separator: "/").map(String.init)
+        for (depth, part) in parts.enumerated() {
+          guard let index = level.items.firstIndex(where: { $0.title == part && $0.isEnabled && ($0.isAlternate == (a["alternate"] as? Bool ?? false) || depth < parts.count - 1) })
+          else { throw Failure(message: "sidebar menu has no enabled item \(part)") }
+          if depth == parts.count - 1 { level.performActionForItem(at: index) }
+          else if let sub = level.items[index].submenu { level = sub } else { throw Failure(message: "\(part) has no submenu") }
+        }
+        await Task.yield()
+        return true
       case "space-manager-drag": return try await dragSpaceManager(a)
       case "space-manager-menu": return try performSpaceManagerMenu(a)
       case "space-manager-intent":
@@ -708,6 +756,13 @@
           "sidebarWidth": w.windowState.sidebarWidth, "sidebarMode": w.windowState.sidebarMode.rawValue,
           "sidebarFrame": rect(controller.sidebar.frame), "sidebarLiveWidth": controller.context.sidebarWidth,
           "toolbarFrames": controller.sidebar.toolbarGeometry.mapValues(rect),
+          "toolbarButtons": controller.sidebar.toolbarVisibleButtons,
+          "hint": ["shows": controller.hintShows, "visible": controller.hintToast != nil,
+            "frame": controller.hintToast.map { rect($0.frame) } ?? [], "keys": controller.hintToast?.keys ?? "",
+            "plate": controller.hintToast.map { rect($0.plateFrame) } ?? []] as [String: Any],
+          "toast": controller.lastToastTitle,
+          "confirmation": controller.pendingConfirmation.map { ["title": $0.messageText, "text": $0.informativeText,
+            "buttons": $0.buttons.map(\.title)] as [String: Any] } ?? NSNull(),
           "sidebarResizeActive": controller.sidebarResizeActive,
           "sidebarWidthCommits": controller.sidebarWidthCommits, "sidebarGestureHides": controller.sidebarGestureHides,
           "sidebarGeometryChanges": controller.sidebarGeometryChanges,

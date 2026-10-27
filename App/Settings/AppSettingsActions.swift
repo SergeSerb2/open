@@ -7,6 +7,7 @@ import OpenStore
 import OpenEngine
 import OpenAdBlock
 import OpenSidebar
+import OpenFeatures
 
 /// App-owned adapters for the two shared OpenSettings presenters. Neither
 /// presenter owns a second snapshot writer or an engine context.
@@ -77,6 +78,10 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
         guard let factory, let controller = factory.controller, let space = self.spaceID(containing: id) else { return false }
         if controller.context.focusedSpace?.id != space, factory.performSidebar(.switchSpace(space)) != true { return false }
         return controller.sidebar(controller.sidebar, didRequest: intent)
+      case .deleteSpace, .deleteFolder, .deleteFolders:
+        // The Manager's "…" ▸ Delete, folder Delete, and selection Delete confirm first,
+        // with a sheet on the Library window (completion §3.3).
+        return self.confirmManagerDelete(intent, context: context, factory: factory)
       default: break
       }
       if let factory, let handled = factory.performSidebar(intent) { return handled }
@@ -106,6 +111,35 @@ final class AppSettingsActions: SettingsActions, LibraryActions, DownloadsProvid
     }
     spaceManager = manager
     return manager
+  }
+  private func confirmManagerDelete(_ intent: SidebarIntent, context: SidebarContext, factory: EngineWebContentHostFactory?) -> Bool {
+    guard let model = app.model, let window = libraryPresenter?.window else { return false }
+    let alert: NSAlert?, ids: [ItemID]
+    switch intent {
+    case .deleteSpace(let id): alert = SidebarConfirmations.deleteSpaceAlert(model: model, spaceID: id); ids = []
+    case .deleteFolder(let id): ids = [id]; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
+    case .deleteFolders(let selection): ids = selection; alert = SidebarConfirmations.deleteFoldersAlert(model: model, ids: ids)
+    default: return false
+    }
+    guard let alert else { return false }
+    let folders = ids.filter { model.node(id: $0)?.folder != nil }.count
+    return SidebarConfirmations.present(alert, on: window) { [weak self, weak context] confirmed in
+      guard let self, let context, confirmed else { return }
+      let accepted: Bool
+      if case .deleteSpace(let id) = intent { accepted = ModelSidebarActions(context: context).perform(.deleteSpace(id)) }
+      else {
+        var archived = 0
+        let removal = { archived = model.archiveNodes(ids: ids) }
+        if let controller = self.app.hostFactories[context.windowID]?.controller { controller.keepingSelection(removal) } else { removal() }
+        accepted = archived > 0
+      }
+      guard accepted else { return }
+      self.app.scheduleSave(); self.app.scheduleMenuRebuild()
+      if folders > 0 {
+        self.app.hostFactories[context.windowID]?.controller?.showToast(SidebarConfirmations.folderToast(count: folders),
+          undo: { [weak model] in model?.undoManager?.undo() })
+      }
+    }
   }
   /// The Space whose Pinned or Today list holds `id`, through folders and splits.
   private func spaceID(containing id: ItemID) -> SpaceID? {

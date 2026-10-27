@@ -297,7 +297,7 @@ public enum SidebarHoverTarget: Hashable, Sendable {
     case switcher(SpaceID)
 }
 
-public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, forward, reload }
+public enum ToolbarButtonKind: Hashable, Sendable { case sidebarToggle, back, forward, reload, more }
 
 /// Parsing a theme costs a JSON decode; cache by value.
 @MainActor

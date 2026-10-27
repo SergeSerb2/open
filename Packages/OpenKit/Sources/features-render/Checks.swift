@@ -338,6 +338,7 @@ enum FeatureChecks {
         try await reviewRound1 { check($0, $1) }
         try await PiPChecks.run { condition, label in check(condition, label) }
         try SoundChecks.run { check($0, $1) }
+        try await CompletionFeatureChecks.run { check($0, $1) }
         print("features-render check: \(passed) passed, \(failed) failed")
         if failed > 0 { throw CLIError(description: "\(failed) feature scenarios failed") }
     }
