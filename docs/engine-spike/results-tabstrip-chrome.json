@@ -1,4 +1,11 @@
 {
+  "acceptance": {
+    "at": "2026-10-26 22:35 America/Vancouver",
+    "by": "Lead thread 1f66d914-cc01-4ec3-83ff-b1ddd1acb0c4",
+    "carried_to_main": "49b56609",
+    "reason": "Fresh 25/25 on the correct new engine stands. Main 4c40ebd..49b56609 (#120) changed no App/, Engine/, tools/e2e/, or project.yml file. The later main merge cannot affect tab-strip code. Current-main attempts were interrupted by foreground loss and remain excluded.",
+    "source_receipt": "pr93-new-engine-tabstrip.json"
+  },
   "cleanup": {
     "ok": true,
     "processes": [

@@ -1,6 +1,5 @@
 {
   "callback_close": {
-    "crash_report": "Open-2026-10-26-201707.ips",
     "fixed": {
       "ok": true,
       "rows": {
@@ -12,7 +11,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793070686.3946738,
+              "time": 1793078282.2459579,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -28,7 +27,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793070686.470052,
+              "time": 1793078282.3199692,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -44,7 +43,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793070687.713439,
+              "time": 1793078283.569711,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -60,7 +59,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793070688.2680821,
+              "time": 1793078284.153744,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -76,7 +75,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793070686.590304,
+              "time": 1793078282.444972,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -92,7 +91,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793070687.133768,
+              "time": 1793078283.00733,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -102,15 +101,29 @@
         }
       }
     },
-    "mutation": "Build with OEBrowser.mm from bb4eec2 (before callback deferral and pending-sync flush).",
-    "old_cleanup": {
-      "ok": true,
-      "on_screen_windows": 0,
-      "remaining_processes": 0
-    },
-    "old_flow": "Real Chrome extension action, closeExtensionPopup called inside didOpenExtensionPopup.",
-    "old_result": "FAIL: EXC_BAD_ACCESS in extensions::ExtensionHost::CreateRendererSoon() -> open_engine::OpenExtensionPopup::Start()",
-    "old_source_sha256": "0dc457f284458d0635cfeae22bb596244430530abc2568df2833be4ad654ce54"
+    "mutation": "Remove callback-close deferral in OpenEngine only",
+    "old": {
+      "cleanup": {
+        "error": "[Errno 61] Connection refused",
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          77254,
+          77760,
+          77761,
+          77762,
+          77764
+        ],
+        "remaining_processes": [],
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 0
+      },
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "regression_observed": true
+    }
   },
   "cmd_w": {
     "fixed": {
@@ -125,20 +138,28 @@
       "tabs_kept": true
     },
     "fixed_cleanup": {
-      "attempts": 3,
+      "forced": false,
       "ok": true,
-      "on_screen_windows": [
-        0,
-        0,
-        0
+      "owned_pids": [
+        46352,
+        46364,
+        46365,
+        46367,
+        46369,
+        46370,
+        46372,
+        46408,
+        46411
       ],
-      "remaining_processes": [
-        0,
-        0,
-        0
-      ]
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 1
     },
-    "mutation": "Remove the focused-popup guard from closeTab; keep real route=app in popup_keys.",
+    "mutation": "Remove only focused-popup guard in closeTab; same popup_keys helper with route=app.",
     "old": {
       "closed": true,
       "ctrl_d_stages": [
@@ -151,171 +172,173 @@
       "tabs_kept": false
     },
     "old_cleanup": {
-      "attempts": 1,
+      "forced": false,
       "ok": true,
-      "on_screen_windows": [
-        0
+      "owned_pids": [
+        33066,
+        33140,
+        33141,
+        33144,
+        33145,
+        33148,
+        33154,
+        33156
       ],
-      "remaining_processes": [
-        0
-      ]
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 2
     }
   },
+  "code_head": "5bdc0e8ef11c7990cb513fc17245ab9deb143562",
   "date": "2026-10-26 America/Vancouver",
-  "engine_uuid": "4C4C4432-5555-3144-A144-B678285BC5F4",
-  "final_engine_sha256": "698076ef8f79e7052db3d9f3a5ea668fa6c4ebfc4b96bfb24b6be6e9e9a289fd",
-  "final_verification": {
-    "code_head": "6f06197",
-    "main": "7e689d5",
-    "suites": {
-      "actions": {
-        "cleanup_ok": true,
-        "owned_window_counts": [
-          0,
-          0
-        ],
-        "pass": 26,
-        "remaining_process_counts": [
-          0,
-          0
-        ],
-        "total": 26
-      },
-      "extensions": {
-        "cleanup_ok": true,
-        "owned_window_counts": [
-          0
-        ],
-        "pass": 8,
-        "remaining_process_counts": [
-          0
-        ],
-        "total": 8
-      },
-      "tabstrip": {
-        "cleanup_ok": true,
-        "owned_window_counts": [
-          0
-        ],
-        "pass": 25,
-        "remaining_process_counts": [
-          0
-        ],
-        "total": 25
-      }
-    },
-    "verify_all": {
-      "fail": 0,
-      "pass": 21,
-      "skip": 0
-    }
+  "engine": {
+    "distributionCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "distributionUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "embeddedCodeSHA256": "35b37ba3a72d079ed4e76fc7932bfe76e49b57c3456eda06f7fea9d928b901ae",
+    "embeddedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+    "embeddedUUID": "4C4C44C8-5555-3144-A168-35B709BBDA3A",
+    "requiredSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
-  "runtime_validation": {
-    "accepted": false,
-    "reason": "Engine lead confirmed the recorded distribution is stale: missing PR 93 r1 popup-key forwarding, main tab-strip code and main ad-block code. Runtime results on it do not prove this branch. Rebuild at Engine/fork state 338c920 is pending.",
-    "reported_at": "2026-10-26 21:18 America/Vancouver",
-    "required_engine_ref": "338c920"
-  },
+  "main": "49b566097423213d1bc9aca1426c7e2bb3f5f65b",
   "split_pane_sync": {
     "fixed": {
-      "expected_tab": 1372129401,
+      "expected_tab": 1391089824,
       "menu_action_title": "Split right",
       "ok": true,
       "popup_stayed_open": true,
-      "popup_tab": 1372129401
+      "popup_tab": 1391089824
     },
-    "later_tagged_attempts": "INTERRUPTED by foreground loss; not counted as a logical FAIL proof.",
-    "mutation": "Same old OEBrowser.mm; focus the other Split View pane and execute within one socket turn.",
-    "old_cleanup": {
-      "attempts": 1,
-      "ok": true,
-      "on_screen_windows": [
+    "mutation": "Remove pending-sync flush from executeExtensionAction/contextMenuForExtensionAction",
+    "old": {
+      "expected_tab": 1372880409,
+      "menu_action_title": "Split left",
+      "ok": false,
+      "popup_stayed_open": false,
+      "popup_tab": null
+    }
+  },
+  "status": "VALIDATED_NEW_ENGINE",
+  "suites": {
+    "actions": {
+      "cleanup_ok": true,
+      "interrupted_attempts": 0,
+      "owned_process_counts": [
         0
       ],
-      "remaining_processes": [
+      "owned_windows": [
         0
-      ]
+      ],
+      "pass": 26,
+      "total": 26
     },
-    "old_result": {
-      "error": "eval: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
-      "ok": false
+    "extensions": {
+      "cleanup_ok": true,
+      "interrupted_attempts": 1,
+      "owned_process_counts": [
+        0,
+        0
+      ],
+      "owned_windows": [
+        0,
+        0
+      ],
+      "pass": 8,
+      "total": 8
     },
-    "tagged_attempt_count": 3
+    "tabstrip": {
+      "cleanup_ok": true,
+      "interrupted_attempts": 1,
+      "owned_process_counts": [
+        0,
+        0
+      ],
+      "owned_windows": [
+        0,
+        0
+      ],
+      "pass": 25,
+      "total": 25
+    }
   },
-  "status": "INVALID_STALE_ENGINE",
+  "supersedes": "All earlier stale-engine runtime receipts and proofs are invalid; none are used as acceptance.",
   "uninstall_failure_cleanup": {
     "cleanup": {
-      "attempts": 3,
+      "forced": false,
       "ok": true,
-      "on_screen_windows": [
-        0,
-        0,
-        0
+      "owned_pids": [
+        33066,
+        33140,
+        33141,
+        33144,
+        33145,
+        33148,
+        33154,
+        33156
       ],
-      "remaining_processes": [
-        0,
-        0,
-        0
-      ]
+      "remaining_processes": [],
+      "reply": true,
+      "windows_after_quit": {
+        "count": 0,
+        "windows": []
+      },
+      "windows_before_quit": 2
     },
-    "injection": "OPEN_E2E_FAIL_UNINSTALL=1; raises after the specific confirmation class/name/Cancel/Remove match.",
+    "error": "forced early failure in uninstall confirmation case",
+    "injection": "OPEN_E2E_FAIL_UNINSTALL=1 in the shared real action-menu case",
     "result": {
+      "dialog": [
+        {
+          "class": "NativeWidgetMacNSWindow",
+          "text": [
+            "Cancel",
+            "Remove",
+            "Remove \"Open action probe\"?"
+          ],
+          "title": "Remove \"Open action probe\"?"
+        }
+      ],
       "dialog_seen": true,
       "ok": false
-    },
-    "suite_error": "forced early failure in uninstall confirmation case"
+    }
+  },
+  "verify": {
+    "fail": 0,
+    "logs": "/var/folders/s6/_07cr4w13vsg_myjkv9ldpqc0000gn/T/open-verify-20261026-222110.9mIbeY",
+    "pass": 22,
+    "skip": 0
   },
   "window_release": {
-    "fix": "OEBrowser close/dealloc detach the host with SetHostView(nullptr) before popup/strip close; no Engine/fork change.",
-    "fixed": {
-      "ok": true,
-      "rows": {
-        "close": {
-          "alive": true,
-          "new_window_popup": false,
-          "ok": true,
-          "opened": true,
-          "popup_page_gone": true,
-          "released_without_close": null,
-          "windows_after_close": true
+    "ok": true,
+    "rows": {
+      "close": {
+        "alive": true,
+        "new_window_popup": false,
+        "ok": true,
+        "opened": true,
+        "popup_page_gone": true,
+        "released_without_close": null,
+        "windows_after_close": true
+      },
+      "dealloc": {
+        "alive": true,
+        "new_window_popup": false,
+        "ok": true,
+        "opened": true,
+        "popup_page_gone": true,
+        "released_without_close": {
+          "hadPopup": true,
+          "released": 1,
+          "remaining": 0
         },
-        "dealloc": {
-          "alive": true,
-          "new_window_popup": false,
-          "ok": true,
-          "opened": true,
-          "popup_page_gone": true,
-          "released_without_close": {
-            "hadPopup": true,
-            "released": 1,
-            "remaining": 0
-          },
-          "windows_after_close": true
-        }
+        "windows_after_close": true
       }
-    },
-    "fixed_cleanup": {
-      "ok": true,
-      "on_screen_windows": [
-        0
-      ],
-      "remaining_processes": [
-        0
-      ]
-    },
-    "flow": "Close the window with an open popup, then repeat after releasing mirror browsers without OEBrowser.close.",
-    "old_result": "FAIL twice: GlobalBrowserCollection CHECK at global_browser_collection.cc:70 (it != browsers_activation_order_.end()).",
-    "rerun_cleanup": {
-      "attempts": 2,
-      "ok": true,
-      "on_screen_windows": [
-        0,
-        0
-      ],
-      "remaining_processes": [
-        0,
-        0
-      ]
     }
   }
 }

@@ -1,5 +1,81 @@
 {
   "actions": {
+    "action_image_cache": {
+      "first": {
+        "bytes": 5120,
+        "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+        "object": 609122544288107094,
+        "pixels": [
+          [
+            16,
+            16
+          ],
+          [
+            32,
+            32
+          ]
+        ],
+        "width": 16
+      },
+      "ok": true,
+      "tab_b": {
+        "bytes": 5120,
+        "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+        "object": 609122544288107094,
+        "pixels": [
+          [
+            16,
+            16
+          ],
+          [
+            32,
+            32
+          ]
+        ],
+        "width": 16
+      }
+    },
+    "action_menu_commands": {
+      "commands": {
+        "Manage Extension": {
+          "ok": true,
+          "opened": [
+            "chrome://extensions/?id=jihnllejimhgcmfmcnchbekapeajboik"
+          ],
+          "title": "Manage Extension"
+        },
+        "Pin": {
+          "ok": true,
+          "title": "Pin"
+        },
+        "Remove from": {
+          "dialog": [
+            {
+              "class": "NativeWidgetMacNSWindow",
+              "text": [
+                "Cancel",
+                "Remove",
+                "Remove \"Open action probe\"?"
+              ],
+              "title": "Remove \"Open action probe\"?"
+            }
+          ],
+          "dismissed": [
+            "window:NativeWidgetMacNSWindow"
+          ],
+          "ok": true,
+          "title": "Remove from Chromium"
+        },
+        "View Web Permissions": {
+          "ok": true,
+          "opened": [
+            "chrome://settings/content/siteDetails?site=chrome-extension%3A%2F%2Fjihnllejimhgcmfmcnchbekapeajboik"
+          ],
+          "title": "View Web Permissions"
+        }
+      },
+      "ok": true
+    },
     "actions_list": {
       "ids": [
         "jihnllejimhgcmfmcnchbekapeajboik",
@@ -16,7 +92,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-          "object": -2688426846790450083,
+          "object": 1015951338876875090,
           "pixels": [
             [
               16,
@@ -40,7 +116,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-          "object": -4022637297494838505,
+          "object": -3840494411454011860,
           "pixels": [
             [
               28,
@@ -55,6 +131,280 @@
         },
         "tooltip": "Action probe",
         "wantsToRun": false
+      }
+    },
+    "bitwarden_popup_width": {
+      "ok": true,
+      "popup_views": 1,
+      "widths": [
+        34,
+        480
+      ]
+    },
+    "context_menu": {
+      "items": [
+        "Open action probe",
+        "Remove from Chromium",
+        "Unpin",
+        "Manage Extension",
+        "View Web Permissions"
+      ],
+      "ok": true
+    },
+    "developer_mode_on": {
+      "ok": true
+    },
+    "disabled_action_requests_menu": {
+      "ok": true,
+      "ran": true,
+      "requests": [
+        {
+          "content": 0,
+          "extension": "jihnllejimhgcmfmcnchbekapeajboik",
+          "tab": "",
+          "time": 1793078275.615746,
+          "type": "extensionMenuRequest"
+        }
+      ]
+    },
+    "extension_reload_with_popup": {
+      "back": true,
+      "closed": true,
+      "ok": true,
+      "opened": true,
+      "pinned": true,
+      "popup_after": true,
+      "version": "1.1"
+    },
+    "extension_update_with_popup": {
+      "back": true,
+      "closed": true,
+      "ok": true,
+      "opened": true,
+      "pinned": true,
+      "popup_after": true,
+      "version": "1.1"
+    },
+    "menu_keeps_model": {
+      "item": [
+        "Pin"
+      ],
+      "ok": true,
+      "ran": true
+    },
+    "no_live_tab_actions": {
+      "listed": {
+        "accessibleName": "Bitwarden",
+        "badge": "",
+        "badgeColor": null,
+        "badgeTextColor": null,
+        "enabled": true,
+        "hasPopup": true,
+        "icon": {
+          "bytes": 5120,
+          "hash": "7d646905a308a8e5b9980dfc80bd46121f3e499467c0e735cb5d1356aff5b950",
+          "object": 3852934191552206580,
+          "pixels": [
+            [
+              16,
+              16
+            ],
+            [
+              32,
+              32
+            ]
+          ],
+          "width": 16
+        },
+        "id": "nngceckbapebfimnlniiiahkandclblb",
+        "live": false,
+        "name": "Bitwarden Password Manager",
+        "pinned": true,
+        "pinnedIndex": 0,
+        "showingPopup": false,
+        "siteAccess": 0,
+        "title": "Bitwarden",
+        "toolbarImage": {
+          "bytes": 15680,
+          "hash": "20aa85807abe2fed5aa5a6379ef514a083f80c9b9f7a0a43120ac5b8ab4a6e5c",
+          "object": 3463182269738938123,
+          "pixels": [
+            [
+              28,
+              28
+            ],
+            [
+              56,
+              56
+            ]
+          ],
+          "width": 28
+        },
+        "tooltip": "Bitwarden",
+        "wantsToRun": false
+      },
+      "live_again": true,
+      "not_ready": true,
+      "notified_back": true,
+      "notified_gone": true,
+      "ok": true,
+      "popup": false,
+      "ran": false
+    },
+    "on_clicked": {
+      "ok": true,
+      "popup_less_on_tab": true,
+      "popup_opened": false,
+      "storage": {
+        "clicks": 1,
+        "lastClickTab": 1391089822
+      }
+    },
+    "open_popup_api": {
+      "key": true,
+      "ok": true,
+      "result": "ok",
+      "source": "api"
+    },
+    "open_popup_refused_while_open": {
+      "key": true,
+      "ok": true,
+      "result": "Failed to open popup.",
+      "same_popup": true
+    },
+    "page_close_closes_popup": {
+      "ok": true
+    },
+    "per_tab_state": {
+      "ok": true,
+      "tab_a": {
+        "badge": "7",
+        "badgeColor": "#ff0000ff",
+        "enabled": true,
+        "title": "Probe A"
+      },
+      "tab_b": {
+        "badge": "",
+        "enabled": false,
+        "title": "Action probe"
+      }
+    },
+    "pin_and_move": {
+      "after_move": [
+        [
+          "nngceckbapebfimnlniiiahkandclblb",
+          0
+        ],
+        [
+          "jihnllejimhgcmfmcnchbekapeajboik",
+          1
+        ]
+      ],
+      "after_pin": [
+        "jihnllejimhgcmfmcnchbekapeajboik",
+        "nngceckbapebfimnlniiiahkandclblb"
+      ],
+      "ok": true
+    },
+    "popup_callback_close": {
+      "ok": true,
+      "rows": {
+        "open close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 18,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078282.2459579,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "open toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 19,
+              "phase": "open",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078282.3199692,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 22,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078283.569711,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "ready toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 23,
+              "phase": "ready",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078284.153744,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize close": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 20,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078282.444972,
+              "toggle": false,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        },
+        "resize toggle": {
+          "alive": true,
+          "callbacks": [
+            {
+              "content": 21,
+              "phase": "resize",
+              "stillOpenInsideCallback": true,
+              "tab": "",
+              "time": 1793078283.00733,
+              "toggle": true,
+              "type": "popupCallbackClose"
+            }
+          ],
+          "closed": true,
+          "ok": true
+        }
       }
     },
     "popup_is_chrome_popup": {
@@ -74,56 +424,80 @@
       "showing_popup": true,
       "source": "user"
     },
-    "split_pane_action_and_menu": {
-      "assertion": {
-        "expected_tab": 1475636367,
-        "menu_action_title": "Split left",
-        "ok": false,
-        "popup_stayed_open": false,
-        "popup_tab": null
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "openPID": 52599,
-          "uptime": 166098.34445154166
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "keyWindow": 0,
-          "openPID": 52599,
-          "uptime": 166098.35231533335
-        }
+    "popup_keys": {
+      "closed": true,
+      "ctrl_d_stages": [
+        "beforePage",
+        "unconsumed"
       ],
-      "status": "INTERRUPTED"
+      "ok": true,
+      "opened": true,
+      "still_open": true,
+      "tabs_kept": true
     },
-    "suite": {
-      "attempts": 3,
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "openPID": 52599,
-          "uptime": 166098.34445154166
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "keyWindow": 0,
-          "openPID": 52599,
-          "uptime": 166098.35231533335
-        }
+    "popup_renderer_crash": {
+      "action_gone": true,
+      "alive": true,
+      "closed": true,
+      "crash_call": "devtools: The operation couldn\u2019t be completed. (app.open.engine error 4.)",
+      "ok": true,
+      "opened": true
+    },
+    "popup_stays_open_on_blur": {
+      "after_alert": true,
+      "after_devtools": true,
+      "after_webauthn": true,
+      "alert": true,
+      "devtools": true,
+      "devtools_dismissed": [
+        "window:NativeWidgetMacNSWindow"
       ],
-      "reason": "foreground lost during split_pane_action_and_menu",
-      "status": "INTERRUPTED"
+      "idle": false,
+      "ok": true,
+      "webauthn": true,
+      "webauthn_aborted": "AbortError: signal is aborted without reason",
+      "webauthn_popup_still_open": true,
+      "webauthn_request": "pending"
+    },
+    "run_again_closes_popup": {
+      "ok": true
+    },
+    "split_pane_action_and_menu": {
+      "expected_tab": 1391089824,
+      "menu_action_title": "Split right",
+      "ok": true,
+      "popup_stayed_open": true,
+      "popup_tab": 1391089824
+    },
+    "tab_switch_closes_popup": {
+      "ok": true
+    },
+    "window_close_with_popup": {
+      "ok": true,
+      "rows": {
+        "close": {
+          "alive": true,
+          "new_window_popup": false,
+          "ok": true,
+          "opened": true,
+          "popup_page_gone": true,
+          "released_without_close": null,
+          "windows_after_close": true
+        },
+        "dealloc": {
+          "alive": true,
+          "new_window_popup": false,
+          "ok": true,
+          "opened": true,
+          "popup_page_gone": true,
+          "released_without_close": {
+            "hadPopup": true,
+            "released": 1,
+            "remaining": 0
+          },
+          "windows_after_close": true
+        }
+      }
     }
   },
   "cleanup": {
@@ -133,85 +507,47 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          48117,
-          49037,
-          49038,
-          49047,
-          49250,
-          49251,
-          49276,
-          49277,
-          49458,
-          49648,
-          49747,
-          49846,
-          50022,
-          50058,
-          50080,
-          50149,
-          50709,
-          50717,
-          50940,
-          50958,
-          51080
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          51359,
-          51418,
-          51419,
-          51422,
-          51520,
-          51521,
-          51529,
-          51535,
-          51639,
-          51750,
-          51819,
-          51896,
-          51999,
-          52047,
-          52071,
-          52124
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 1
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          52599,
-          52608,
-          52609,
-          52610,
-          52622,
-          52623,
-          52625,
-          52626,
-          52634,
-          52649,
-          52656,
-          52685,
-          52700,
-          52720,
-          52733,
-          52747
+          46735,
+          46740,
+          46741,
+          46745,
+          46792,
+          46793,
+          46802,
+          46810,
+          46843,
+          46932,
+          46933,
+          46934,
+          46937,
+          46941,
+          46957,
+          46967,
+          46971,
+          46986,
+          47110,
+          47112,
+          47132,
+          47144,
+          47146,
+          47148,
+          47171,
+          47217,
+          47219,
+          47278,
+          47282,
+          47284,
+          47379,
+          47502,
+          47733,
+          48274,
+          48424,
+          48639,
+          49279,
+          49445,
+          49454,
+          49487,
+          49798
         ],
         "remaining_processes": [],
         "reply": true,
@@ -235,478 +571,7 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034"
   },
-  "interrupted_attempts": [
-    {
-      "attempt": 1,
-      "checks": {
-        "action_image_cache": {
-          "first": {
-            "bytes": 5120,
-            "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-            "object": -7758029855540225331,
-            "pixels": [
-              [
-                16,
-                16
-              ],
-              [
-                32,
-                32
-              ]
-            ],
-            "width": 16
-          },
-          "ok": true,
-          "tab_b": {
-            "bytes": 5120,
-            "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-            "object": -7758029855540225331,
-            "pixels": [
-              [
-                16,
-                16
-              ],
-              [
-                32,
-                32
-              ]
-            ],
-            "width": 16
-          }
-        },
-        "actions_list": {
-          "ids": [
-            "jihnllejimhgcmfmcnchbekapeajboik",
-            "nngceckbapebfimnlniiiahkandclblb"
-          ],
-          "ok": true,
-          "probe": {
-            "accessibleName": "Action probe",
-            "badge": "",
-            "badgeColor": null,
-            "badgeTextColor": null,
-            "enabled": true,
-            "hasPopup": true,
-            "icon": {
-              "bytes": 5120,
-              "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-              "object": -8716011479369286178,
-              "pixels": [
-                [
-                  16,
-                  16
-                ],
-                [
-                  32,
-                  32
-                ]
-              ],
-              "width": 16
-            },
-            "id": "jihnllejimhgcmfmcnchbekapeajboik",
-            "live": true,
-            "name": "Open action probe",
-            "pinned": false,
-            "pinnedIndex": -1,
-            "showingPopup": false,
-            "siteAccess": 0,
-            "title": "Action probe",
-            "toolbarImage": {
-              "bytes": 15680,
-              "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-              "object": 6506446936261390267,
-              "pixels": [
-                [
-                  28,
-                  28
-                ],
-                [
-                  56,
-                  56
-                ]
-              ],
-              "width": 28
-            },
-            "tooltip": "Action probe",
-            "wantsToRun": false
-          }
-        },
-        "disabled_action_requests_menu": {
-          "ok": true,
-          "ran": true,
-          "requests": [
-            {
-              "content": 0,
-              "extension": "jihnllejimhgcmfmcnchbekapeajboik",
-              "tab": "",
-              "time": 1793077508.104614,
-              "type": "extensionMenuRequest"
-            }
-          ]
-        },
-        "on_clicked": {
-          "ok": true,
-          "popup_less_on_tab": true,
-          "popup_opened": false,
-          "storage": {
-            "clicks": 1,
-            "lastClickTab": 1372880407
-          }
-        },
-        "open_popup_api": {
-          "key": true,
-          "ok": true,
-          "result": "ok",
-          "source": "api"
-        },
-        "open_popup_refused_while_open": {
-          "key": true,
-          "ok": true,
-          "result": "Failed to open popup.",
-          "same_popup": true
-        },
-        "page_close_closes_popup": {
-          "assertion": {
-            "ok": true
-          },
-          "focus": [
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 23318,
-              "openPID": 48117,
-              "uptime": 166070.77225154167
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 23318,
-              "keyWindow": 0,
-              "openPID": 48117,
-              "uptime": 166070.77630470836
-            }
-          ],
-          "status": "INTERRUPTED"
-        },
-        "per_tab_state": {
-          "ok": true,
-          "tab_a": {
-            "badge": "7",
-            "badgeColor": "#ff0000ff",
-            "enabled": true,
-            "title": "Probe A"
-          },
-          "tab_b": {
-            "badge": "",
-            "enabled": false,
-            "title": "Action probe"
-          }
-        },
-        "popup_is_chrome_popup": {
-          "current_tab": "https://example.com/?a",
-          "document_size": [
-            320,
-            253
-          ],
-          "last_size": [
-            320,
-            253
-          ],
-          "ok": true,
-          "opened": true,
-          "popup_views": 1,
-          "ready": true,
-          "showing_popup": true,
-          "source": "user"
-        },
-        "run_again_closes_popup": {
-          "ok": true
-        },
-        "split_pane_action_and_menu": {
-          "expected_tab": 1372880409,
-          "menu_action_title": "Split left",
-          "ok": false,
-          "popup_stayed_open": false,
-          "popup_tab": null
-        }
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "openPID": 48117,
-          "uptime": 166070.77225154167
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "keyWindow": 0,
-          "openPID": 48117,
-          "uptime": 166070.77630470836
-        }
-      ],
-      "reason": "foreground lost during page_close_closes_popup",
-      "status": "INTERRUPTED"
-    },
-    {
-      "attempt": 2,
-      "checks": {
-        "actions_list": {
-          "ids": [
-            "jihnllejimhgcmfmcnchbekapeajboik",
-            "nngceckbapebfimnlniiiahkandclblb"
-          ],
-          "ok": true,
-          "probe": {
-            "accessibleName": "Action probe",
-            "badge": "",
-            "badgeColor": null,
-            "badgeTextColor": null,
-            "enabled": true,
-            "hasPopup": true,
-            "icon": {
-              "bytes": 5120,
-              "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-              "object": -1424166325562462883,
-              "pixels": [
-                [
-                  16,
-                  16
-                ],
-                [
-                  32,
-                  32
-                ]
-              ],
-              "width": 16
-            },
-            "id": "jihnllejimhgcmfmcnchbekapeajboik",
-            "live": true,
-            "name": "Open action probe",
-            "pinned": false,
-            "pinnedIndex": -1,
-            "showingPopup": false,
-            "siteAccess": 0,
-            "title": "Action probe",
-            "toolbarImage": {
-              "bytes": 15680,
-              "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-              "object": -1730714027912714854,
-              "pixels": [
-                [
-                  28,
-                  28
-                ],
-                [
-                  56,
-                  56
-                ]
-              ],
-              "width": 28
-            },
-            "tooltip": "Action probe",
-            "wantsToRun": false
-          }
-        },
-        "popup_is_chrome_popup": {
-          "current_tab": "https://example.com/?a",
-          "document_size": [
-            320,
-            253
-          ],
-          "last_size": [
-            320,
-            253
-          ],
-          "ok": true,
-          "opened": true,
-          "popup_views": 1,
-          "ready": true,
-          "showing_popup": true,
-          "source": "user"
-        },
-        "split_pane_action_and_menu": {
-          "assertion": {
-            "expected_tab": 125540777,
-            "menu_action_title": "Split left",
-            "ok": false,
-            "popup_stayed_open": false,
-            "popup_tab": null
-          },
-          "focus": [
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 23318,
-              "openPID": 51359,
-              "uptime": 166081.34093958334
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 23318,
-              "keyWindow": 0,
-              "openPID": 51359,
-              "uptime": 166081.34437304168
-            }
-          ],
-          "status": "INTERRUPTED"
-        }
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "openPID": 51359,
-          "uptime": 166081.34093958334
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "keyWindow": 0,
-          "openPID": 51359,
-          "uptime": 166081.34437304168
-        }
-      ],
-      "reason": "foreground lost during split_pane_action_and_menu",
-      "status": "INTERRUPTED"
-    },
-    {
-      "attempt": 3,
-      "checks": {
-        "actions_list": {
-          "ids": [
-            "jihnllejimhgcmfmcnchbekapeajboik",
-            "nngceckbapebfimnlniiiahkandclblb"
-          ],
-          "ok": true,
-          "probe": {
-            "accessibleName": "Action probe",
-            "badge": "",
-            "badgeColor": null,
-            "badgeTextColor": null,
-            "enabled": true,
-            "hasPopup": true,
-            "icon": {
-              "bytes": 5120,
-              "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-              "object": -2688426846790450083,
-              "pixels": [
-                [
-                  16,
-                  16
-                ],
-                [
-                  32,
-                  32
-                ]
-              ],
-              "width": 16
-            },
-            "id": "jihnllejimhgcmfmcnchbekapeajboik",
-            "live": true,
-            "name": "Open action probe",
-            "pinned": false,
-            "pinnedIndex": -1,
-            "showingPopup": false,
-            "siteAccess": 0,
-            "title": "Action probe",
-            "toolbarImage": {
-              "bytes": 15680,
-              "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-              "object": -4022637297494838505,
-              "pixels": [
-                [
-                  28,
-                  28
-                ],
-                [
-                  56,
-                  56
-                ]
-              ],
-              "width": 28
-            },
-            "tooltip": "Action probe",
-            "wantsToRun": false
-          }
-        },
-        "popup_is_chrome_popup": {
-          "current_tab": "https://example.com/?a",
-          "document_size": [
-            320,
-            253
-          ],
-          "last_size": [
-            320,
-            253
-          ],
-          "ok": true,
-          "opened": true,
-          "popup_views": 1,
-          "ready": true,
-          "showing_popup": true,
-          "source": "user"
-        },
-        "split_pane_action_and_menu": {
-          "assertion": {
-            "expected_tab": 1475636367,
-            "menu_action_title": "Split left",
-            "ok": false,
-            "popup_stayed_open": false,
-            "popup_tab": null
-          },
-          "focus": [
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 23318,
-              "openPID": 52599,
-              "uptime": 166098.34445154166
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 23318,
-              "keyWindow": 0,
-              "openPID": 52599,
-              "uptime": 166098.35231533335
-            }
-          ],
-          "status": "INTERRUPTED"
-        }
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "openPID": 52599,
-          "uptime": 166098.34445154166
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 23318,
-          "keyWindow": 0,
-          "openPID": 52599,
-          "uptime": 166098.35231533335
-        }
-      ],
-      "reason": "foreground lost during split_pane_action_and_menu",
-      "status": "INTERRUPTED"
-    }
-  ],
+  "interrupted_attempts": [],
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
@@ -720,10 +585,10 @@
       "AttributeGraph",
       "AttributeGraph graph data"
     ],
-    "pid": 52599,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-47587-9b59d6e8",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-47587-9b59d6e8/Engine"
+    "pid": 46735,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-46514-b6be8d44",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-46514-b6be8d44/Engine"
   },
-  "started": "2026-10-26 22:04:45",
+  "started": "2026-10-26 22:17:46",
   "style": "chrome"
 }
