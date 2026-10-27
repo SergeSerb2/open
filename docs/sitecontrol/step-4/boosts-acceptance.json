@@ -1,0 +1,818 @@
+{
+  "failures": 0,
+  "results": [
+    {
+      "id": "H0",
+      "pass": true,
+      "evidence": {
+        "a": 1,
+        "p": 1,
+        "text": "applier: v1, picker: v1",
+        "errors": []
+      }
+    },
+    {
+      "id": "H1",
+      "pass": true,
+      "evidence": {
+        "status": 200,
+        "state": {
+          "appliedPlanID": null,
+          "boostIDs": [],
+          "zapCount": 0
+        }
+      }
+    },
+    {
+      "id": "A1",
+      "pass": true,
+      "evidence": {
+        "outline": "solid",
+        "state": {
+          "appliedPlanID": "harness-F1",
+          "boostIDs": [
+            "harness-boost"
+          ],
+          "zapCount": 1
+        }
+      }
+    },
+    {
+      "id": "A2",
+      "pass": true,
+      "evidence": "none"
+    },
+    {
+      "id": "A3",
+      "pass": true,
+      "evidence": {
+        "before": "block",
+        "after": "none"
+      }
+    },
+    {
+      "id": "A4",
+      "pass": true,
+      "evidence": {
+        "filter": "hue-rotate(90deg) saturate(0.5) brightness(1) contrast(1) invert(0)",
+        "font": "Georgia, serif",
+        "code": "monospace"
+      }
+    },
+    {
+      "id": "A5",
+      "pass": true,
+      "evidence": {
+        "boostJsCount": "1",
+        "boostJs": "ran"
+      }
+    },
+    {
+      "id": "A6",
+      "pass": true,
+      "evidence": {
+        "display": "block",
+        "outline": "none",
+        "state": {
+          "appliedPlanID": null,
+          "boostIDs": [],
+          "zapCount": 0
+        }
+      }
+    },
+    {
+      "id": "A7",
+      "pass": true,
+      "evidence": {
+        "commits": [
+          {
+            "v": 1,
+            "type": "zap:committed",
+            "payload": {
+              "boostID": "harness-boost",
+              "selector": "#promo-banner",
+              "label": "div#promo-banner",
+              "matches": 1,
+              "inShadowRoot": false,
+              "sessionNonce": "1ce792b9-61e6-4088-9150-c0bde2aff420"
+            }
+          }
+        ],
+        "display": "none",
+        "active": true
+      }
+    },
+    {
+      "id": "A8",
+      "pass": true,
+      "evidence": {
+        "active": false,
+        "preview": false,
+        "display": "none",
+        "exit": {
+          "v": 1,
+          "type": "picker:exited",
+          "payload": {
+            "boostID": "harness-boost",
+            "reason": "esc",
+            "sessionNonce": "1ce792b9-61e6-4088-9150-c0bde2aff420"
+          }
+        }
+      }
+    },
+    {
+      "id": "A9",
+      "pass": true,
+      "evidence": {
+        "keyboard": "block",
+        "display": "block",
+        "empty": false,
+        "removed": [
+          {
+            "v": 1,
+            "type": "zap:removed",
+            "payload": {
+              "boostID": "harness-boost",
+              "selector": "#sidebar-ad",
+              "via": "undo",
+              "sessionNonce": "aedde5e4-2e0c-4944-b093-01ef9b4ba64e"
+            }
+          },
+          {
+            "v": 1,
+            "type": "zap:removed",
+            "payload": {
+              "boostID": "harness-boost",
+              "selector": "#sidebar-ad",
+              "via": "undo",
+              "sessionNonce": "aedde5e4-2e0c-4944-b093-01ef9b4ba64e"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "A10",
+      "pass": true,
+      "evidence": {
+        "list": [
+          {
+            "selector": "#promo-banner",
+            "matches": 1
+          },
+          {
+            "selector": "body > .card",
+            "matches": 1
+          },
+          {
+            "selector": ":last-child > .card",
+            "matches": 1
+          },
+          {
+            "selector": ":nth-child(2) > .card",
+            "matches": 1
+          },
+          {
+            "selector": "[class^=\"promo \"]",
+            "matches": 1
+          },
+          {
+            "selector": "[class=\"promo card\"]",
+            "matches": 1
+          },
+          {
+            "selector": ".card",
+            "matches": 4
+          },
+          {
+            "selector": "body .card",
+            "matches": 4
+          },
+          {
+            "selector": ":last-child .card",
+            "matches": 4
+          },
+          {
+            "selector": ":nth-child(2) .card",
+            "matches": 4
+          },
+          {
+            "selector": "[class$=\" card\"]",
+            "matches": 4
+          },
+          {
+            "selector": ":nth-child(3)",
+            "matches": 5
+          },
+          {
+            "selector": "[class]",
+            "matches": 6
+          },
+          {
+            "selector": "body [class]",
+            "matches": 6
+          },
+          {
+            "selector": ":last-child [class]",
+            "matches": 6
+          }
+        ],
+        "rects": [
+          {
+            "x": 24,
+            "y": 194,
+            "width": 1232,
+            "height": 58
+          }
+        ],
+        "hover": {
+          "rect": {
+            "x": 24,
+            "y": 194,
+            "width": 1232,
+            "height": 58
+          },
+          "hash": "DIV#promo-banner.promo.card@2"
+        }
+      }
+    },
+    {
+      "id": "NEW-related-live",
+      "pass": true,
+      "evidence": {
+        "articles": [
+          {
+            "text": "First post",
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0,
+            "display": "none"
+          },
+          {
+            "text": "Second post",
+            "x": 24,
+            "y": 268,
+            "width": 920,
+            "height": 84,
+            "display": "block"
+          },
+          {
+            "text": "Third post",
+            "x": 24,
+            "y": 364,
+            "width": 920,
+            "height": 84,
+            "display": "block"
+          }
+        ],
+        "boxes": [
+          [
+            24,
+            268,
+            944,
+            268,
+            944,
+            352,
+            24,
+            352
+          ],
+          [
+            24,
+            364,
+            944,
+            364,
+            944,
+            448,
+            24,
+            448
+          ]
+        ]
+      }
+    },
+    {
+      "id": "NEW-pill-ignore",
+      "pass": true,
+      "evidence": {
+        "highlightHidden": true,
+        "tagHidden": true,
+        "hovered": null
+      }
+    },
+    {
+      "id": "A11",
+      "pass": true,
+      "evidence": {
+        "display": [
+          "none",
+          "none",
+          "none"
+        ],
+        "replaced": [
+          {
+            "v": 1,
+            "type": "zap:replaced",
+            "payload": {
+              "boostID": "harness-boost",
+              "oldSelector": "[data-testid=\"post-1\"]",
+              "newSelector": "#content .post:has(p):has(h2)",
+              "label": "article",
+              "matches": 3,
+              "sessionNonce": "36a12de5-9672-4c71-8115-8156006eba66"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "S-A1",
+      "pass": true,
+      "evidence": {
+        "marker": true,
+        "display": "none"
+      }
+    },
+    {
+      "id": "S-A2",
+      "pass": true,
+      "evidence": "none"
+    },
+    {
+      "id": "S-A3",
+      "pass": true,
+      "evidence": {
+        "url": "/Harness/blog/post",
+        "display": "block",
+        "plan": null,
+        "reloaded": {
+          "a": 1,
+          "p": 1
+        }
+      }
+    },
+    {
+      "id": "S1",
+      "pass": true,
+      "evidence": "none"
+    },
+    {
+      "id": "S2",
+      "pass": true,
+      "evidence": "none"
+    },
+    {
+      "id": "S3",
+      "pass": true,
+      "evidence": {
+        "early": "block",
+        "late": "none",
+        "flag": "Late closed created after apply: true"
+      }
+    },
+    {
+      "id": "S4",
+      "pass": true,
+      "evidence": {
+        "commit": {
+          "v": 1,
+          "type": "zap:committed",
+          "payload": {
+            "boostID": "harness-boost",
+            "selector": "#shadow-promo",
+            "label": "div#shadow-promo",
+            "matches": 1,
+            "inShadowRoot": true,
+            "sessionNonce": "ee107794-1775-4e00-9da2-1b1da1a5cb6d"
+          }
+        },
+        "display": "none"
+      }
+    },
+    {
+      "id": "O1",
+      "pass": true,
+      "evidence": {
+        "list": [
+          {
+            "selector": "[data-testid=\"card-2\"] p",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid$=\"-2\"] p",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid=\"card-2\"] p",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid$=\"-2\"] > p",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid=\"card-2\"] > p",
+            "matches": 1
+          },
+          {
+            "selector": "body #content [data-testid$=\"-2\"] p",
+            "matches": 1
+          },
+          {
+            "selector": "#content .card-k8x2 p",
+            "matches": 6
+          },
+          {
+            "selector": "#content [data-testid^=\"card-\"] p",
+            "matches": 6
+          },
+          {
+            "selector": "#content .card-k8x2 > p",
+            "matches": 6
+          },
+          {
+            "selector": "body #content .card-k8x2 p",
+            "matches": 6
+          },
+          {
+            "selector": "#content [data-testid^=\"card-\"] > p",
+            "matches": 6
+          },
+          {
+            "selector": ":nth-child(2) #content .card-k8x2 p",
+            "matches": 6
+          },
+          {
+            "selector": "body #content [data-testid^=\"card-\"] p",
+            "matches": 6
+          },
+          {
+            "selector": ":nth-child(2) #content [data-testid^=\"card-\"] p",
+            "matches": 6
+          },
+          {
+            "selector": ":nth-child(2)",
+            "matches": 13
+          }
+        ],
+        "commit": {
+          "v": 1,
+          "type": "zap:committed",
+          "payload": {
+            "boostID": "harness-boost",
+            "selector": "[data-testid=\"card-2\"] p",
+            "label": "p",
+            "matches": 1,
+            "inShadowRoot": false,
+            "sessionNonce": "ce8155fa-3ea9-4792-abd2-f19b5f6d2aa2"
+          }
+        }
+      }
+    },
+    {
+      "id": "O2",
+      "pass": true,
+      "evidence": {
+        "commit": {
+          "v": 1,
+          "type": "zap:committed",
+          "payload": {
+            "boostID": "harness-boost",
+            "selector": "#content :nth-child(7)",
+            "label": "div#",
+            "matches": 1,
+            "inShadowRoot": false,
+            "sessionNonce": "ce8155fa-3ea9-4792-abd2-f19b5f6d2aa2"
+          }
+        },
+        "display": "none"
+      }
+    },
+    {
+      "id": "O3",
+      "pass": true,
+      "evidence": {
+        "list": [
+          {
+            "selector": "[data-testid=\"card-1\"]",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid$=\"-1\"]:has(.post-title):has(p):has(h2)",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid$=\"-1\"]:has(.post-title):has(h2):has(p)",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid=\"card-1\"]:has(.post-title):has(p):has(h2)",
+            "matches": 1
+          },
+          {
+            "selector": "#content [data-testid=\"card-1\"]:has(.post-title):has(h2):has(p)",
+            "matches": 1
+          },
+          {
+            "selector": "#content .card-k8x2:has(.post-title):has(p):has(h2)",
+            "matches": 6
+          },
+          {
+            "selector": "#content .card-k8x2:has(.post-title):has(h2):has(p)",
+            "matches": 6
+          },
+          {
+            "selector": "#content [data-testid^=\"card-\"]:has(.post-title):has(p):has(h2)",
+            "matches": 6
+          },
+          {
+            "selector": "#content [data-testid^=\"card-\"]:has(.post-title):has(h2):has(p)",
+            "matches": 6
+          },
+          {
+            "selector": "#content .card-k8x2:has(.post-title):has(p):has(> h2)",
+            "matches": 6
+          },
+          {
+            "selector": "body #content > [class]",
+            "matches": 7
+          },
+          {
+            "selector": ":nth-child(2) #content > [class]",
+            "matches": 7
+          },
+          {
+            "selector": "body main > [class]",
+            "matches": 7
+          },
+          {
+            "selector": ":nth-child(2) main > [class]",
+            "matches": 7
+          },
+          {
+            "selector": ".x7qz9",
+            "matches": 7
+          }
+        ],
+        "rects": [
+          {
+            "x": 43,
+            "y": 209,
+            "width": 882,
+            "height": 28
+          },
+          {
+            "x": 43,
+            "y": 313,
+            "width": 882,
+            "height": 28
+          },
+          {
+            "x": 43,
+            "y": 399,
+            "width": 882,
+            "height": 28
+          },
+          {
+            "x": 43,
+            "y": 503,
+            "width": 882,
+            "height": 28
+          },
+          {
+            "x": 43,
+            "y": 607,
+            "width": 882,
+            "height": 28
+          },
+          {
+            "x": 43,
+            "y": 711,
+            "width": 882,
+            "height": 28
+          }
+        ]
+      }
+    },
+    {
+      "id": "E1",
+      "pass": true,
+      "evidence": {
+        "list": [],
+        "active": true,
+        "errors": [],
+        "messages": [
+          {
+            "v": 1,
+            "type": "picker:ready",
+            "payload": {
+              "boostID": "harness-boost",
+              "sessionNonce": "f8174e17-acae-4993-ae1f-0ad1698d5e04"
+            }
+          },
+          {
+            "v": 1,
+            "type": "zap:committed",
+            "payload": {
+              "boostID": "harness-boost",
+              "selector": "[lang=\"en\"] body:has(.card):has(#content):has(main .post)",
+              "label": "body",
+              "matches": 1,
+              "inShadowRoot": false,
+              "sessionNonce": "f8174e17-acae-4993-ae1f-0ad1698d5e04"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "E2",
+      "pass": true,
+      "evidence": {
+        "display": "none",
+        "outline": "solid",
+        "errors": [
+          {
+            "v": 1,
+            "type": "boost:error",
+            "payload": {
+              "kind": "invalid-zap-selector",
+              "selector": "!!!invalid"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "NEW-bad-selector-reset",
+      "pass": true,
+      "evidence": 2
+    },
+    {
+      "id": "E3",
+      "pass": true,
+      "evidence": {
+        "active": true,
+        "commit": {
+          "v": 1,
+          "type": "zap:committed",
+          "payload": {
+            "boostID": "harness-boost",
+            "selector": "#promo-banner",
+            "label": "div#promo-banner",
+            "matches": 1,
+            "inShadowRoot": false,
+            "sessionNonce": "66c56903-4f80-4f2f-ac3a-85b085d85d45"
+          }
+        },
+        "error": {
+          "v": 1,
+          "type": "picker:error",
+          "payload": {
+            "kind": "already-active",
+            "boostID": "harness-boost",
+            "sessionNonce": "66c56903-4f80-4f2f-ac3a-85b085d85d45"
+          }
+        }
+      }
+    },
+    {
+      "id": "Appendix C",
+      "pass": true,
+      "evidence": {
+        "zoom": "1.25",
+        "text": "uppercase",
+        "controls": [
+          "none",
+          "none",
+          "none"
+        ]
+      }
+    },
+    {
+      "id": "Text clear",
+      "pass": true,
+      "evidence": {
+        "zoom": "1",
+        "transform": "none"
+      }
+    },
+    {
+      "id": "NEW-picture-and-manifest",
+      "pass": true,
+      "evidence": {
+        "picture": "none",
+        "img": "invert(1) hue-rotate(180deg)",
+        "plain": "invert(1) hue-rotate(180deg)",
+        "styleAttrs": [
+          [
+            "id",
+            "open-boosts-style"
+          ]
+        ],
+        "css": "html { filter: hue-rotate(0deg) saturate(1) brightness(1) contrast(1) invert(1); }\nimg, video, canvas { filter: invert(1) hue-rotate(180deg); }\n#site-header {outline:3px solid red}\n"
+      }
+    },
+    {
+      "id": "NEW-unarmed-enter",
+      "pass": true,
+      "evidence": {
+        "active": false,
+        "commits": 0
+      }
+    },
+    {
+      "id": "NEW-native-list",
+      "pass": true,
+      "evidence": {
+        "v": 1,
+        "type": "zap:list-result",
+        "payload": {
+          "boostID": "harness-boost",
+          "entries": [
+            {
+              "selector": "#promo-banner",
+              "label": "",
+              "matchCount": 1,
+              "truncated": false
+            }
+          ],
+          "sessionNonce": "76dc1fce-1eb1-4175-9219-1a99a6522c30"
+        }
+      }
+    },
+    {
+      "id": "NEW-expando-poison",
+      "pass": true,
+      "evidence": {
+        "v": 1,
+        "type": "zap:committed",
+        "payload": {
+          "boostID": "harness-boost",
+          "selector": "#promo-banner",
+          "label": "div#promo-banner",
+          "matches": 1,
+          "inShadowRoot": false,
+          "sessionNonce": "c1c8e282-f718-4106-9b7e-3558f5497d97"
+        }
+      }
+    },
+    {
+      "id": "P1",
+      "pass": true,
+      "evidence": {
+        "values": [
+          0,
+          0,
+          0.10000000894069672,
+          0,
+          0.09999999403953552
+        ],
+        "median": 0
+      }
+    },
+    {
+      "id": "P2",
+      "pass": true,
+      "evidence": {
+        "median": 0,
+        "max": 0.10000000894069672,
+        "values": [
+          0.09999999403953552,
+          0,
+          0,
+          0.10000000894069672,
+          0,
+          0,
+          0,
+          0.09999999403953552,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "P3",
+      "pass": true,
+      "evidence": {
+        "values": [
+          1.5,
+          0.699999988079071,
+          0.7000000029802322,
+          0.6000000089406967,
+          0.5999999940395355
+        ],
+        "median": 0.699999988079071
+      }
+    }
+  ]
+}

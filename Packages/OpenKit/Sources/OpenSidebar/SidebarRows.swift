@@ -973,7 +973,7 @@ final class DividerCellView: SidebarCellView {
 
 extension SidebarDiagnostics {
     public static var mediaReduceMotionOverride: Bool?
-    public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? RowMediaAccessibility.shared.reduceMotion }
+    public static var mediaReducesMotion: Bool { mediaReduceMotionOverride ?? Motion.reduceMotionOverride ?? RowMediaAccessibility.shared.reduceMotion }
 }
 
 /// One settings read per accessibility change, not per visible row layout. No timer.

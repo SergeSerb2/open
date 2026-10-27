@@ -1,0 +1,151 @@
+{
+  "main_sampled_cpu_ms": 582.0,
+  "open_sampled_cpu_ms": 304.0,
+  "open_samples": 304,
+  "groups_ms": [
+    [
+      "section / row construction and attachment",
+      130.0
+    ],
+    [
+      "first native layer display",
+      108.0
+    ],
+    [
+      "controller / chrome construction",
+      23.0
+    ],
+    [
+      "layout and geometry",
+      22.0
+    ],
+    [
+      "other open work",
+      21.0
+    ]
+  ],
+  "inclusive_symbols_ms": [
+    [
+      "@objc SiteControlView.mouseDown(with:)",
+      266.0
+    ],
+    [
+      "SiteControlButton.mouseUp(with:)",
+      266.0
+    ],
+    [
+      "@objc SiteControlButton.pressed()",
+      265.0
+    ],
+    [
+      "SiteControlButton.pressed()",
+      265.0
+    ],
+    [
+      "SiteControlController.present(anchor:tabID:mode:animated:)",
+      265.0
+    ],
+    [
+      "SiteControlPanelView.rebuildSections(_:animated:)",
+      130.0
+    ],
+    [
+      "SiteControlPanelView.apply(_:)",
+      130.0
+    ],
+    [
+      "SiteControlView.prepareAnimationAnchor()",
+      108.0
+    ],
+    [
+      "SiteControlController.animateOpen(_:)",
+      108.0
+    ],
+    [
+      "SiteControlButton.init(id:label:symbol:pointSize:weight:)",
+      101.0
+    ],
+    [
+      "SiteControlBoostRow.init(_:enabled:globallyEnabled:incognito:)",
+      71.0
+    ],
+    [
+      "SiteControlBoostRow.__allocating_init(_:enabled:globallyEnabled:incognito:)",
+      71.0
+    ],
+    [
+      "SiteControlRow.init(_:)",
+      53.0
+    ],
+    [
+      "specialized SiteControlRow.init(_:)",
+      34.0
+    ],
+    [
+      "@objc SiteControlView.init(frame:)",
+      32.0
+    ],
+    [
+      "SiteControlController.init(source:actions:)",
+      32.0
+    ],
+    [
+      "SiteControlController.__allocating_init(source:actions:)",
+      32.0
+    ],
+    [
+      "SiteControlView.__allocating_init(frame:)",
+      32.0
+    ]
+  ],
+  "leaf_symbols_ms": [
+    [
+      "objc_msgSend",
+      37.0
+    ],
+    [
+      "mach_msg2_trap",
+      7.0
+    ],
+    [
+      "__kdebug_trace64",
+      7.0
+    ],
+    [
+      "<deduplicated_symbol>",
+      5.0
+    ],
+    [
+      "pow",
+      5.0
+    ],
+    [
+      "__CF_IS_OBJC",
+      5.0
+    ],
+    [
+      "_xzm_xzone_malloc_tiny",
+      5.0
+    ],
+    [
+      "CA::AttrList::get(unsigned int, _CAValueType, void*) const",
+      4.0
+    ],
+    [
+      "CFEqual",
+      3.0
+    ],
+    [
+      "objc_opt_class",
+      3.0
+    ],
+    [
+      "objc_claimAutoreleasedReturnValue",
+      3.0
+    ],
+    [
+      "objc_retainAutoreleaseReturnValue",
+      3.0
+    ]
+  ]
+}

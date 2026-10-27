@@ -1,0 +1,118 @@
+{
+  "domain": "com.open.previews-e2e.bd0644a6f1224a969d9e3140753e05e6",
+  "data": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-71b7710a56a04571",
+  "cache": "/Users/m1-dev/Library/Caches/Open-E2E-previews-71b7710a56a04571",
+  "forcedFailure": true,
+  "pid": 74655,
+  "ping": {
+    "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
+    "chromium": "156.0.8078.48",
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 74655,
+    "root": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-71b7710a56a04571",
+    "userData": "/Users/m1-dev/Library/Application Support/Open-E2E-previews-71b7710a56a04571/Engine"
+  },
+  "sheet": {
+    "attachedSheet": 0,
+    "class": "SheetPresentationWindow",
+    "firstResponder": "SheetPresentationWindow",
+    "frame": "{{302, 365}, {480, 320}}",
+    "key": true,
+    "level": 0,
+    "number": 2073,
+    "parent": 0,
+    "sheet": true,
+    "title": "",
+    "visible": true
+  },
+  "error": "FORCED: early failure while the real Previews sheet is open",
+  "cleanupBefore": [
+    {
+      "attachedSheet": 0,
+      "class": "BrowserWindow",
+      "firstResponder": "FavoritesCollectionView",
+      "frame": "{{100, 100}, {1280, 800}}",
+      "key": false,
+      "level": 0,
+      "number": 2071,
+      "parent": 0,
+      "sheet": false,
+      "title": "about:blank",
+      "visible": true
+    },
+    {
+      "attachedSheet": 2073,
+      "class": "NSWindow",
+      "firstResponder": "NSWindow",
+      "frame": "{{200, 200}, {684, 650}}",
+      "key": false,
+      "level": 0,
+      "number": 2072,
+      "parent": 0,
+      "sheet": false,
+      "title": "General",
+      "visible": true
+    },
+    {
+      "attachedSheet": 0,
+      "class": "SheetPresentationWindow",
+      "firstResponder": "SheetPresentationWindow",
+      "frame": "{{302, 365}, {480, 320}}",
+      "key": true,
+      "level": 0,
+      "number": 2073,
+      "parent": 0,
+      "sheet": true,
+      "title": "",
+      "visible": true
+    }
+  ],
+  "cleanupAfter": [
+    {
+      "attachedSheet": 0,
+      "class": "BrowserWindow",
+      "firstResponder": "FavoritesCollectionView",
+      "frame": "{{100, 100}, {1280, 800}}",
+      "key": false,
+      "level": 0,
+      "number": 2071,
+      "parent": 0,
+      "sheet": false,
+      "title": "about:blank",
+      "visible": true
+    },
+    {
+      "attachedSheet": 0,
+      "class": "NSWindow",
+      "firstResponder": "NSWindow",
+      "frame": "{{200, 200}, {684, 650}}",
+      "key": true,
+      "level": 0,
+      "number": 2072,
+      "parent": 0,
+      "sheet": false,
+      "title": "General",
+      "visible": true
+    }
+  ],
+  "quit": {
+    "reply": true,
+    "observedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-5yrjlrx9/Open.app/Contents/MacOS/Open",
+    "expectedExecutable": "/private/var/folders/ny/fccd3t_51nz0lp5vqc0mt6n00000gn/T/open-previews-5yrjlrx9/Open.app/Contents/MacOS/Open",
+    "forced": false
+  },
+  "remainingWindows": [],
+  "remainingProcesses": [],
+  "rootsRemoved": true,
+  "cleanupErrors": [],
+  "cleanup": "PASS"
+}

@@ -80,8 +80,7 @@ public final class HoverPreviewTracker {
         TooltipController.shared.cancel(for: nil)
         let now = ProcessInfo.processInfo.systemUptime
         if request != nil || lastHidden.map({ now - $0 <= 1 }) == true { show(next); return true }
-        let configured = preferences.object(forKey: "open.general.previewsDelaySeconds") == nil ? 0.5 : preferences.double(forKey: "open.general.previewsDelaySeconds")
-        let delay = configured.isFinite ? max(0, configured) : 0.5
+        let delay = HoverPreviewMetrics.armDelay
         let work = DispatchWorkItem { [weak self] in MainActor.assumeIsolated {
             guard let self, self.candidate?.kind == kind, self.suppressed.isEmpty, self.enabled("open.general.previewsEnabled") else { return }
             self.showTask = nil; self.scheduledShowDelay = nil; self.scheduledShowDeadline = nil

@@ -502,9 +502,13 @@ def main():
         preview = str(root / "Packages/OpenKit/.build/release/settings-preview")
         all_passed(run(preview, "check"))
         output = Path("settings-panes").resolve()
-        run(preview, "render", "--out", str(output))
+        rendered = run(preview, "render", "--out", str(output))
+        require("PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present" in rendered,
+                "missing rendered Previews control evidence")
         dump = run(preview, "dump-keys", "--root", str(output / "fixture"))
         require("snapshot profile Personal searchEngineID = google" in dump, "missing settings store receipt")
+        require(not any(line.startswith("default open.general.previewsDelaySeconds =") for line in dump.splitlines()),
+                "removed preview delay default was registered")
         pngs = sorted(output.glob("*.png"))
         require(len(pngs) == 216, "missing settings/library/appearance/detail/sheet/state renders")
         require({"library-spaces@1x.png", "library-spaces@2x.png"} <= {p.name for p in pngs}, "missing Library Spaces renders")
@@ -532,7 +536,12 @@ def main():
         matches(r"features-render check: [1-9]\d* passed, 0 failed", text)
         require("SE1 capture" in text and "SE1 event" in text and "SE2 disabled" in text and "SE3 enabled" in text, "missing sound flow receipts")
     elif name in ("sidebar-render", "commandbar-render", "sitecontrol-render"):
-        all_passed(run(str(root / "Packages/OpenKit/.build/release" / name), "check"))
+        command = [str(root / "Packages/OpenKit/.build/release" / name), "check"]
+        if name == "sitecontrol-render":
+            # This CLI opens real native menus. Serialize that suite, while the
+            # release build and wholly offscreen checks need no on-screen lock.
+            command = ["/usr/bin/lockf", "/tmp/open-onscreen-e2e.lock", *command]
+        all_passed(run(*command))
     elif name == "sidebar-compare":
         args = [str(root / "tools/verification/sidebar-compare-states.sh")]
         if os.environ.get("SIDEBAR_CAPTURE_ROOT"):

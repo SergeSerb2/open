@@ -55,7 +55,7 @@ import CryptoKit
     }
 }
 
-@discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, active:Bool=true, to url: URL) async throws -> [String] {
+@discardableResult @MainActor func render<V: View>(_ view: V, size: CGSize, scale: Int, dark: Bool, active:Bool=true, to url: URL, validatePreviewControls: Bool = false) async throws -> [String] {
     let previousAppearance=NSApp.appearance
     let appearance=NSAppearance(named:dark ? .darkAqua:.aqua)!
     NSApp.appearance=appearance
@@ -65,6 +65,15 @@ import CryptoKit
     host.frame = CGRect(origin: .zero, size: size)
     let window = RenderWindow(contentRect: CGRect(x: -20000, y: -20000, width: size.width, height: size.height), styleMask: .borderless, backing: .buffered, defer: false)
     window.scale = CGFloat(scale); window.isReleasedWhenClosed = false; window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua); window.contentView = host
+    defer { window.contentView = nil; window.close() }
+    // SwiftUI lazily vends AX nodes after this process enables its AX interface.
+    // Scope that state to the real sheet render; never change system AX settings.
+    let axRead = NSSelectorFromString("accessibilityAttributeValue:")
+    let axWrite = NSSelectorFromString("accessibilitySetValue:forAttribute:")
+    let enhancedAX = "AXEnhancedUserInterface"
+    let previousAX = validatePreviewControls && NSApp.responds(to: axRead) ? NSApp.perform(axRead, with: enhancedAX)?.takeUnretainedValue() : nil
+    if validatePreviewControls, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: NSNumber(value: true), with: enhancedAX) }
+    defer { if validatePreviewControls, NSApp.responds(to: axWrite) { NSApp.perform(axWrite, with: previousAX ?? NSNumber(value: false), with: enhancedAX) } }
     for _ in 0..<3 {
         host.layoutSubtreeIfNeeded(); window.displayIfNeeded()
         try await Task.sleep(for:.milliseconds(50))
@@ -83,9 +92,9 @@ import CryptoKit
     } }
     guard opaque && colors.count > 1 else { throw CheckFailure(description: "transparent or blank PNG") }
     let labels = accessibilityLabels(host)
+    if validatePreviewControls { try checkPreviewsControls(host) }
     let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     try data.write(to: url); print("PNG \(url.lastPathComponent) \(rep.pixelsWide)x\(rep.pixelsHigh) \(data.count) bytes sha256=\(hash)")
-    window.contentView = nil; window.close()
     return labels
 }
 @MainActor func run() async throws {
@@ -145,7 +154,7 @@ import CryptoKit
         settings.shortcuts.revert();settings.shortcuts.reset("new-tab");settings.shortcuts.query=""
         try originalBindings.write(to:settings.shortcuts.fileURL,options:.atomic)
         for scale in scales {
-            try await render(PreviewsSheet(model:settings.general).buttonStyle(SettingsButtonStyle()),size:CGSize(width:480,height:320),scale:scale,dark:false,to:output.appendingPathComponent("sheet-previews@\(scale)x.png"))
+            try await render(PreviewsSheet(model:settings.general).buttonStyle(SettingsButtonStyle()),size:CGSize(width:480,height:320),scale:scale,dark:false,to:output.appendingPathComponent("sheet-previews@\(scale)x.png"),validatePreviewControls:true)
             settings.profiles.select(settings.model.profiles[1].id)
             try await render(SearchEnginesSheet(model:settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:520,height:420),scale:scale,dark:false,to:output.appendingPathComponent("sheet-search-engines@\(scale)x.png"))
             try await render(ClearBrowsingDataSheet(model:settings.profiles).buttonStyle(SettingsButtonStyle()),size:CGSize(width:460,height:360),scale:scale,dark:false,to:output.appendingPathComponent("sheet-clear-data@\(scale)x.png"))
@@ -227,6 +236,34 @@ app.run()
         if let view = node as? NSView { view.subviews.forEach(visit) }
     }
     visit(root); return labels
+}
+
+/// Inspect the real rendered sheet, including static-text values and native popup roles.
+@MainActor private func checkPreviewsControls(_ root: NSObject) throws {
+    var visited = Set<ObjectIdentifier>(), text = Set<String>(), popups = 0
+    func visit(_ node: NSObject) throws {
+        guard visited.insert(ObjectIdentifier(node)).inserted else { return }
+        try require(visited.count <= 4096, "Previews accessibility tree exceeds 4096 nodes")
+        for name in ["accessibilityLabel", "accessibilityValue"] {
+            let selector = NSSelectorFromString(name)
+            if node.responds(to: selector), let value = node.perform(selector)?.takeUnretainedValue() as? String {
+                text.insert(value)
+            }
+        }
+        let role = NSSelectorFromString("accessibilityRole")
+        if node.responds(to: role), let value = node.perform(role)?.takeUnretainedValue() as? String,
+           value == NSAccessibility.Role.popUpButton.rawValue { popups += 1 }
+        let children = NSSelectorFromString("accessibilityChildren")
+        if node.responds(to: children), let values = node.perform(children)?.takeUnretainedValue() as? [NSObject] {
+            for child in values { try visit(child) }
+        }
+        if let view = node as? NSView { for child in view.subviews { try visit(child) } }
+    }
+    try visit(root)
+    let expected = ["Show Open Previews:", "Folders", "Pinned tabs and Favorites", "Done"]
+    try require(expected.allSatisfy(text.contains), "Previews sheet is missing controls (\(visited.count) AX/view nodes): \(text.sorted())")
+    try require(!text.contains("Delay") && popups == 0, "Previews sheet has unexpected controls: popups=\(popups), labels=\(text.sorted())")
+    print("PREVIEWS-CONTROLS delay=absent popups=\(popups) expected-labels=present")
 }
 
 @MainActor final class RenderWindow: NSWindow {

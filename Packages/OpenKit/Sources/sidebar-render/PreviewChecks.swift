@@ -22,7 +22,6 @@ enum PreviewChecks {
         let preferences = UserDefaults(suiteName: suite)!
         defer { preferences.removePersistentDomain(forName: suite) }
         preferences.set(false, forKey: "open.general.previewsEnabled")
-        preferences.set(0.5, forKey: "open.general.previewsDelaySeconds")
         let model = Synthetic.model(), state = model.windows[0], space = model.spaces[0]
         let context = SidebarContext(model: model, windowID: state.id, previewPreferences: preferences)
         let recorder = PreviewIntentRecorder()
@@ -58,13 +57,19 @@ enum PreviewChecks {
         hover(pinned.id)
         check(!context.hoverPreviews.hasInstalledWork && context.hoverPreviews.scheduledShowCount == 0,
               "HP2 disabled hover schedules no timer and installs no monitor/observer work")
+        preferences.set(7.0, forKey: "open.general.previewsDelaySeconds")
         preferences.set(true, forKey: "open.general.previewsEnabled"); pump()
         let schedules = TooltipController.shared.scheduleCount
         // Logic, not wall clock: read the scheduled delay and deadline back.
         // A second hover on the same row must keep the first deadline.
+        let pinnedArmStart = ProcessInfo.processInfo.systemUptime
         hover(pinned.id)
+        let pinnedArmEnd = ProcessInfo.processInfo.systemUptime
         let pinnedDelay = context.hoverPreviews.scheduledShowDelay
         let pinnedDeadline = context.hoverPreviews.scheduledShowDeadline
+        check(pinnedDelay == HoverPreviewMetrics.armDelay && pinnedDeadline.map {
+            (pinnedArmStart + HoverPreviewMetrics.armDelay...pinnedArmEnd + HoverPreviewMetrics.armDelay).contains($0)
+        } == true, "HP1 stored delay 7.0 is ignored: scheduled delay equals armDelay and deadline equals arm time + armDelay")
         hover(pinned.id)
         check(context.hoverPreviews.isArmed && context.hoverPreviews.request == nil && context.hoverPreviews.scheduledShowCount == 1 &&
               pinnedDelay == 0.5 && pinnedDeadline != nil && context.hoverPreviews.scheduledShowDeadline == pinnedDeadline,
@@ -104,9 +109,15 @@ enum PreviewChecks {
         NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: host)
         check(context.hoverPreviews.request == nil, "HP5 captured source window resignation dismisses a preview held by the card")
         escape(); pump(1.01)
+        preferences.set(0.0, forKey: "open.general.previewsDelaySeconds"); pump()
         recorder.events = []
+        let folderArmStart = ProcessInfo.processInfo.systemUptime
         hover(folder.id)
+        let folderArmEnd = ProcessInfo.processInfo.systemUptime
         let folderDelay = context.hoverPreviews.scheduledShowDelay
+        check(folderDelay == HoverPreviewMetrics.armDelay && context.hoverPreviews.scheduledShowDeadline.map {
+            (folderArmStart + HoverPreviewMetrics.armDelay...folderArmEnd + HoverPreviewMetrics.armDelay).contains($0)
+        } == true, "HP1 stored delay 0 is ignored: scheduled delay equals armDelay and deadline equals arm time + armDelay")
         let folderDelivered = Checks.waitFor(settle: scene) { context.hoverPreviews.request?.kind == .folder(folder.id) }
         check(folderDelay == 0.5 && folderDelivered && recorder.events.contains { if case .hoverPreview(.some) = $0.0 { true } else { false } },
               "HP1 folder row emits its request at the configured deadline")

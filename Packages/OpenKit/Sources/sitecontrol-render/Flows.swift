@@ -4,7 +4,12 @@ import OpenDesign
 
 @MainActor
 enum Flows {
-    struct Check { let name: String; let pass: Bool }
+    struct Check {
+        let name: String
+        let pass: Bool
+        let info: Bool
+        init(name: String,pass: Bool,info: Bool = false) { self.name = name; self.pass = pass; self.info = info }
+    }
     static func run() -> [Check] {
         var checks: [Check] = []
         let stage = Stage()
@@ -42,7 +47,7 @@ enum Flows {
         checks.append(Check(name: "F21 native AX role and label pairs, host description, favicon hidden", pass:
             pairs.allSatisfy { dump.contains($0.0 + " label=" + $0.1 + "\n") } &&
             c.view.panel.accessibilityLabel() == "news.example.com" && c.view.panel.accessibilityHelp() == nil && !dump.contains("AXImage")))
-        checks.append(Check(name: "Step 1 More is disabled", pass: c.view.panel.controls.last?.isEnabled == false))
+        checks.append(Check(name: "Step 2 More is enabled", pass: c.view.panel.controls.last?.isEnabled == true))
         s.value?.commandsEnabled = [:]; s.changed()
         checks.append(Check(name: "missing capture capability disables both actions", pass:
             c.view.panel.controls.filter { $0.controlID.hasPrefix("action.capture") }.allSatisfy { !$0.isEnabled }))
@@ -104,6 +109,7 @@ enum Flows {
         checks.append(Check(name: "F23 narrow/short window clamps height inside margins",pass: clamped.controller.view.panelFrame.maxY == 292 && clamped.controller.view.panelFrame.minX >= 8 && clamped.controller.view.panelFrame.maxX <= 392))
         let noArrow = Stage(); noArrow.controller.present(anchor: .contentTopLeading,tabID: noArrow.source.tabID,animated: false)
         checks.append(Check(name: "content anchor has no arrow",pass: noArrow.controller.view.panel.arrowX == nil && noArrow.controller.view.panelFrame.origin == CGPoint(x: 240,y: 22)))
+        checks += SectionFlows.run()
         checks += MotionChecks.run()
         return checks
     }

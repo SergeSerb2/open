@@ -1,0 +1,6 @@
+build	PASS	79
+media-demo	PASS	0
+profiles	PASS	0
+settings-preview	PASS	79
+sidebar-render	PASS	105
+sidebar-compare	FAIL	135

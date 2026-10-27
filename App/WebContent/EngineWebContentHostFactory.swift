@@ -110,7 +110,8 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     controller.onStateChange = { [weak self] in
       guard let self else { return }
       if self.app.engineReady { for tab in self.visibleTabs { tab.live.sleepPhase = .live }; self.controller?.container.refreshPlaceholders() }
-      self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleSave(); self.app.scheduleMenuRebuild()
+      // BrowserWindowController schedules its SnapshotStore once per committed change.
+      self.mirror.sync(); self.commandBarSession?.contextDidChange(); self.app.scheduleMenuRebuild()
     }
     controller.onOpenCommandBar = { [weak self] source, _ in
       if source == .urlField { self?.focusAddressBar(nil) } else { self?.newTab(nil) }

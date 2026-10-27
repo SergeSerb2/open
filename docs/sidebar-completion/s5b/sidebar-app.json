@@ -1,0 +1,45 @@
+{
+  "command": "engine_e2e.main --only sidebar --style chrome; output redirected to private run directory",
+  "config": "S5b-809a135b280b48c88a529d78f7a3279f",
+  "domain": "com.open.sidebar-e2e.9ee78f74fdb64fc396490cb0f3f724b4",
+  "distributionSHA256": "61c9ab17b6b08525af836cca93bba67819bfa1544f04abe5eae3baf4b57b98a8",
+  "replayedSignedSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+  "stamp": "fork /Users/m1-dev/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793075034",
+  "runningBundleSHA256": "3e246c99539902496c44c4c6ed2533f3f4fd4a85f03b4f5e6dcaaf49f75f28d2",
+  "exit": 0,
+  "passed": [
+    "background_space_window_open",
+    "clear_today",
+    "close_pinned_unloads",
+    "close_today_archives",
+    "drag_reorder_intent",
+    "empty",
+    "evicted_live_state_stays_unloaded",
+    "folder_toggle",
+    "hidden_cache_lru",
+    "new_tab_lazy",
+    "pin_unpin",
+    "profile_change_tears_down",
+    "refused_move",
+    "select",
+    "space_switch_wrapper",
+    "wake_pinned",
+    "window_png"
+  ],
+  "skipped": {
+    "comparison": {
+      "reason": "F0001 capture and capture-time snapshot absent in OPEN_ARC_CAPTURE_ROOT",
+      "status": "SKIP"
+    },
+    "durable_profile_storage": {
+      "reason": "covered by --only profiles (durable_second_profile: a cookie survives a relaunch)",
+      "status": "SKIP"
+    }
+  },
+  "flow": "PASS",
+  "processesSurvivingSuite": [],
+  "remainingWindows": [],
+  "remainingProcesses": [],
+  "remainingRoots": [],
+  "cleanup": "PASS"
+}

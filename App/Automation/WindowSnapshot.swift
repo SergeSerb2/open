@@ -17,7 +17,8 @@
   enum WindowSnapshot {
     private typealias CreateFromArray = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
 
-    static func capture(_ window: NSWindow, to url: URL) async throws -> String {
+    static func capture(_ window: NSWindow, to url: URL, afterPreparation action: (() -> Void)? = nil,
+                        delay: Double = 0.025, atCapture: (() -> Void)? = nil) async throws -> String {
       var overlays: [(NSRect, NSImage)] = []
       var underlays: [NSView] = []
       for content in OEEngine.shared.allWebContents
@@ -26,8 +27,10 @@
         // Alloy page) never answers; skip it after a short wait.
         guard let png = await pagePNG(content, timeout: 3), let page = NSImage(data: png) else { continue }
         // Window base coordinates cover the whole frame, origin bottom-left.
-        overlays.append((content.view.convert(content.view.bounds, to: nil), page))
-        guard let parent = content.view.superview, let image = page.cgImage(forProposedRect: nil, context: nil, hints: nil) else { continue }
+        guard let parent = content.view.superview, let image = page.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+          overlays.append((content.view.convert(content.view.bounds, to: nil), page))
+          continue
+        }
         let underlay = NSView(frame: content.view.frame)
         underlay.wantsLayer = true
         underlay.layer?.contents = image
@@ -42,14 +45,22 @@
       window.displayIfNeeded()
       CATransaction.flush()
       try? await Task.sleep(for: .milliseconds(underlays.isEmpty ? 50 : 120))
+      // Install page pixels before the input; otherwise the normal snapshot's
+      // preparation wait would miss a 0.1 s window animation entirely.
+      if let action {
+        action()
+        CATransaction.flush()
+        try? await Task.sleep(for: .seconds(delay))
+      }
       var base: NSImage
       var method: String
+      atCapture?()
       if let image = windowServerImage(window), !isBlank(image) {
         base = NSImage(cgImage: image, size: window.frame.size)
         method = "windowserver+devtools"
-        // The window server composited the pages in their layers; paste only pages
-        // that could not get one.
-        overlays.removeAll { overlay in underlays.contains { $0.convert($0.bounds, to: nil) == overlay.0 } }
+        // Underlays follow their page's actual layer tree, including a slide.
+        // Paste only pages that could not get one; old model rectangles would
+        // paint over a mid-slide gap and hide a real rendering defect.
       } else if let view = window.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
         view.cacheDisplay(in: view.bounds, to: rep)
         base = NSImage(size: view.bounds.size)

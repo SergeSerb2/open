@@ -13,7 +13,6 @@ import OpenDesign
     public func refresh() { isDefault = root.actions.isDefaultBrowser() }
     public func setDefault() { errorText = root.actions.setAsDefaultBrowser() ?? ""; isDefault = root.actions.isDefaultBrowser() }
     public func openPreviews() { root.showsPreviews = true; root.actions.openPreviewsSettings() }
-    public var previewDelay: Double { get { _ = root.preferenceRevision; return root.defaults.double(forKey: "open.general.previewsDelaySeconds") } set { root.set(newValue, for: "open.general.previewsDelaySeconds") } }
 }
 public struct GeneralPane: View {
     @Bindable var model: GeneralViewModel
@@ -49,7 +48,6 @@ public struct PreviewsSheet: View {
             PreferenceToggle(title: "Show Open Previews:", key: "open.general.previewsEnabled", root: model.root)
             PreferenceToggle(title: "Folders", key: "open.general.previewsFolders", root: model.root).disabled(!model.root.bool("open.general.previewsEnabled"))
             PreferenceToggle(title: "Pinned tabs and Favorites", key: "open.general.previewsPages", root: model.root).disabled(!model.root.bool("open.general.previewsEnabled"))
-            HStack {Text("Delay");Spacer();SettingsPopUp("Delay",selection:$model.previewDelay,width:137,entries:[.option("0.3 s",0.3),.option("0.5 s",0.5),.option("1 s",1)])}.disabled(!model.root.bool("open.general.previewsEnabled"))
             Spacer(); HStack { Spacer(); Button("Done") { model.root.showsPreviews = false }.keyboardShortcut(.defaultAction).buttonStyle(SettingsButtonStyle(prominent:true)) }
         }.padding(24).frame(width: 480, height: 320).buttonStyle(SettingsButtonStyle())
     }

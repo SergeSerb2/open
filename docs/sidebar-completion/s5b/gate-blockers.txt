@@ -1,0 +1,20 @@
+Post-Step-9 full gate; branch f3a5e1fce37c16d8ecc54dbbcee4e44c8fc9e36d
+Merged main: 49b566097423213d1bc9aca1426c7e2bb3f5f65b
+Result: 17 PASS, 4 FAIL, 1 SKIP. Not an allowed-exceptions-only gate.
+Package build: zero warning/error lines. suggest-check: PASS.
+Known M1 baseline targets (only these three failed in this run):
+space-legacy: FAIL: legacy Space 0 PNG differs from the committed pre-Step-1 baseline
+space-editor: FAIL P1 legacy window 0 PNG byte-identical
+space-editor: FAIL P1 legacy window 1 PNG byte-identical
+space-editor: FAIL P1 legacy window 2 PNG byte-identical
+space-editor: FAIL: command space-editor-render exited 1; expected 0
+sidebar-compare: static-inactive, selected-pinned, yellow absolute color gates.
+Fresh main and branch: position/ink identical, zero color drift, all 13 tables byte-identical.
+New main baseline built from 49b5660; no older renderer reused.
+UNAPPROVED EXTRA FAILURE: commandbar-render (76/78).
+FAIL  render empty at 2x  —  2200×1520, panel fill [0, 0, 0], page [0, 0, 0], rows 12
+FAIL  render typing-git at 2x  —  2200×1520, panel fill [0, 0, 0], page [0, 0, 0], rows 7
+NEW MAIN OPTIONAL INPUT SKIP: space-pad-compare; private capture root absent.
+This is not labeled an M1 baseline or a PASS. The merged gate documents this private-input SKIP.
+PR held under explicit user instruction. Parent reports Opus review 2 MERGE, no P0–P2. M5 counted gate remains pending; checkpoint is paused.
+Full logs: .re/s5b/post-step9-full/

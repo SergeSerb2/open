@@ -1,6 +1,7 @@
 #import "OEClient.h"
 
 #include "include/cef_parser.h"
+#include "OEContextMenuAllowlist.h"
 
 namespace {
 
@@ -408,6 +409,17 @@ bool OEClient::OnShowPermissionPrompt(
 }
 
 #pragma mark Context menu
+
+void OEClient::OnBeforeContextMenu(CefRefPtr<CefBrowser> browser,
+                                   CefRefPtr<CefFrame> frame,
+                                   CefRefPtr<CefContextMenuParams> params,
+                                   CefRefPtr<CefMenuModel> model) {
+  // Chrome style pages get Chrome's full menu: keep only the items Open
+  // supports. Alloy style menus are CEF's short list with other ids.
+  if (browser->GetHost()->GetRuntimeStyle() == CEF_RUNTIME_STYLE_CHROME) {
+    OEFilterChromeContextMenu(model);
+  }
+}
 
 bool OEClient::RunContextMenu(CefRefPtr<CefBrowser> browser,
                               CefRefPtr<CefFrame> frame,

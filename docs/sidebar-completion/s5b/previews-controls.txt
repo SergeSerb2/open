@@ -1,0 +1,2 @@
+PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present
+PREVIEWS-CONTROLS delay=absent popups=0 expected-labels=present

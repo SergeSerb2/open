@@ -2,6 +2,7 @@ import AppKit
 import QuartzCore
 import CoreText
 import OpenDesign
+import OpenBoosts
 
 @MainActor
 public final class SiteControlView: NSView {
@@ -10,7 +11,7 @@ public final class SiteControlView: NSView {
     public var onAnchor: (() -> Void)?
     public var onKey: ((NSEvent) -> Bool)?
     public var anchorFrame: CGRect = .zero
-    private let panelShadow = CALayer()
+    let panelShadow = CALayer()
     public var isActive = false
     public var presentationLayers: [CALayer] { [panel.layer,panelShadow].compactMap { $0 } }
     public var panelFrame: CGRect { panel.convert(panel.bodyRect,to: self) }
@@ -36,6 +37,13 @@ public final class SiteControlView: NSView {
     func prepareAnimationAnchor() {
         layoutSubtreeIfNeeded(); window?.displayIfNeeded(); CATransaction.flush()
         positionLayers()
+    }
+    func clearStructureAnimations() {
+        func clear(_ layer: CALayer) {
+            for key in layer.animationKeys() ?? [] where key.hasPrefix("rows.") { layer.removeAnimation(forKey: key) }
+            if let mask = layer.mask { clear(mask) }; layer.sublayers?.forEach(clear)
+        }
+        if let layer { clear(layer) }
     }
     public override func layout() { super.layout(); positionLayers() }
     private func positionLayers() {
@@ -69,18 +77,49 @@ public final class SiteControlPanelView: NSView {
     public var onAction: ((String,NSRect) -> Void)?
     public var onMore: ((SiteControlButton) -> Void)?
     public var onSecurity: (() -> Void)?
+    public var onToggle: ((SiteSettingTile) -> Void)?
+    public var onBoostEnabled: ((BoostID,Bool) -> Void)?
+    public var onEdit: ((BoostID) -> Void)?
+    public var onSection: ((String) -> Void)?
+    public var onAddExtension: (() -> Void)?
+    public var onReload: (() -> Void)?
+    public var showsReload = false
+    private var renderedReload = false
+    public let scroll = NSScrollView()
+    private let body = SiteControlBodyView()
+    private var bodyHeight: CGFloat = 202
+    private var rowButtons: [String: SiteControlRow] = [:]
+    private var boostRows: [BoostID: SiteControlBoostRow] = [:]
+    private var headers: [String: SiteControlSectionButton] = [:]
+    private let addExtension = SiteControlButton(id: "extension.add",label: "Add Extension",symbol: "plus",pointSize: 14)
+    private var actions: [SiteControlButton] = []
+    public var extensionsSectionVisible: Bool { true }
+    /// No extension data is duplicated before OpenExtensionsUI supplies its body.
+    public var hasExtensionItems: Bool { false }
+    public var boostsSectionVisible: Bool { snapshot?.boosts.isEmpty == false }
+    public private(set) var extensionPickerFocusResolved = false
     public var arrowX: CGFloat? { didSet { needsLayout = true } }
     public var bodyRect: CGRect { CGRect(x: 0,y: arrowX == nil ? 0 : SiteControlMetrics.arrowHeight,width: bounds.width,height: max(0,bounds.height-(arrowX == nil ? 0 : SiteControlMetrics.arrowHeight))) }
     public var animationAnchor: CGPoint { CGPoint(x: arrowX ?? bounds.midX,y: 0) }
-    public var shape: CGPath { PopoverShape.path(body: bodyRect,arrowTip: arrowX.map { CGPoint(x: $0,y: 0) },radius: SiteControlMetrics.cornerRadius) }
-    public var preferredHeight: CGFloat { SiteControlMetrics.chromeHeight }
+    private var cachedShapeBounds: CGRect?
+    private var cachedShapeArrow: CGFloat?
+    private var cachedShape: CGPath?
+    public var shape: CGPath {
+        if cachedShapeBounds == bounds,cachedShapeArrow == arrowX,let cachedShape { return cachedShape }
+        let path = PopoverShape.path(body: bodyRect,arrowTip: arrowX.map { CGPoint(x: $0,y: 0) },radius: SiteControlMetrics.cornerRadius)
+        cachedShapeBounds = bounds; cachedShapeArrow = arrowX; cachedShape = path; return path
+    }
+    public var preferredHeight: CGFloat {
+        let m = SiteControlMetrics.self
+        return m.padding+m.actionButton.height+bodyHeight+m.separatorHeight+m.gapAfterSeparator+m.footerHeight+m.padding
+    }
     /// Harness supplies a fitted bitmap only where WindowServer blur is unavailable.
     public var offscreenMaterial: CGImage? { didSet { material.isHidden = offscreenMaterial != nil; fallback.contents = offscreenMaterial } }
     public var offscreenMaterialFrame: CGRect? { didSet { needsLayout = true } }
     private let material = NSVisualEffectView()
     private let fallback = CALayer(), surfaceMask = CAShapeLayer(), rim = CAShapeLayer(), separator = CAShapeLayer()
     private let security = SiteControlButton(id: "security",label: "Connection",symbol: "lock.fill",pointSize: SiteControlMetrics.pillLockGlyph)
-    private let more = SiteControlButton(id: "more",label: "More",symbol: "ellipsis",pointSize: SiteControlMetrics.moreGlyph,weight: .bold)
+    public let more = SiteControlButton(id: "more",label: "More",symbol: "ellipsis",pointSize: SiteControlMetrics.moreGlyph,weight: .bold)
     public override var isFlipped: Bool { true }
     public override init(frame: NSRect) {
         super.init(frame: frame); wantsLayer = true; layer?.mask = surfaceMask
@@ -88,23 +127,33 @@ public final class SiteControlPanelView: NSView {
         material.material = PopoverMaterial.material; material.blendingMode = PopoverMaterial.blending; material.state = .active
         material.setAccessibilityElement(false); addSubview(material)
         layer?.addSublayer(fallback); layer?.addSublayer(rim); layer?.addSublayer(separator)
-        let actions = [("share","Share","square.and.arrow.up"),("newBoost","New Boost",BoostGlyph.outline),("capture","Capture a portion of this page","camera"),("captureFull","Capture the full page","text.viewfinder")]
-        for (id,label,symbol) in actions {
+        let actionSpecs = [("share","Share","square.and.arrow.up"),("newBoost","New Boost",BoostGlyph.outline),("capture","Capture a portion of this page","camera"),("captureFull","Capture the full page","text.viewfinder")]
+        for (id,label,symbol) in actionSpecs {
             let b = SiteControlButton(id: "action."+id,label: label,symbol: symbol,pointSize: SiteControlMetrics.actionGlyph)
             b.symbolInk = SiteControlMetrics.actionInk[controls.count]; b.style = .action; b.tooltipTitle = label; b.tooltipKeys = id == "capture" ? ["⇧","⌘","2"] : []
             b.sparkles = id == "newBoost" ? .outline : .none
             b.invoke = { [weak self,weak b] in guard let self,let b else { return }; self.onAction?(id,b.convert(b.bounds,to: nil)) }
-            controls.append(b); addSubview(b)
+            controls.append(b); actions.append(b); addSubview(b)
         }
         security.symbolInk = SiteControlMetrics.pillLockInk; security.style = .pill; security.invoke = { [weak self] in self?.onSecurity?() }
-        more.symbolInk = SiteControlMetrics.moreInk; more.style = .more; more.statusOnly = true; more.isEnabled = false
+        more.symbolInk = SiteControlMetrics.moreInk; more.style = .more; more.isEnabled = true
         more.invoke = { [weak self] in guard let self else { return }; self.onMore?(self.more) }
-        more.setAccessibilityRole(.menuButton); addSubview(security); addSubview(more); controls += [security,more]
+        more.setAccessibilityRole(.menuButton)
+        scroll.drawsBackground = false; scroll.borderType = .noBorder
+        scroll.hasVerticalScroller = true; scroll.scrollerStyle = .overlay; scroll.autohidesScrollers = true
+        scroll.wantsLayer = true; scroll.layer?.masksToBounds = true
+        scroll.setAccessibilityLabel("Site settings and Boosts"); scroll.documentView = body
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self,selector: #selector(refreshVisibleContent),name: NSView.boundsDidChangeNotification,object: scroll.contentView)
+        addSubview(scroll); addSubview(security); addSubview(more); controls += [security,more]
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     public func apply(_ snapshot: SiteControlSnapshot) {
+        guard self.snapshot != snapshot || renderedReload != showsReload else { return }
+        let animated = self.snapshot != nil
+        renderedReload = showsReload
         self.snapshot = snapshot; setAccessibilityLabel(snapshot.context.displayHost)
-        for b in controls.prefix(4) {
+        for b in actions {
             b.isHidden = false
             if b.controlID == "action.newBoost" { b.isEnabled = snapshot.canCreateBoost }
             else if !snapshot.context.isWebsite { b.isEnabled = b.controlID == "action.share" }
@@ -120,24 +169,182 @@ public final class SiteControlPanelView: NSView {
         security.setAccessibilityLabel("Connection: "+security.title)
         security.isEnabled = snapshot.capabilities.contains(.certificateViewer); security.statusOnly = !security.isEnabled
         security.setAccessibilityRole(security.isEnabled ? .button : .staticText)
-        setAccessibilityChildren(controls.filter { !$0.isHidden }); needsLayout = true
+        rebuildSections(snapshot,animated: animated)
+        setAccessibilityChildren(actions + [scroll] + [security,more].filter { !$0.isHidden }); needsLayout = true
     }
     public override func layout() {
         super.layout(); let m = SiteControlMetrics.self, body = bodyRect, scale = window?.backingScaleFactor ?? 1, path = shape
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        material.frame = bounds; fallback.frame = offscreenMaterialFrame ?? bounds
+        material.frame = bounds; fallback.frame = bounds
         surfaceMask.frame = bounds; surfaceMask.path = path
         // The effect view supplies only the material. Probe/calibration is Step 3;
         // the explicit inner rim is the one rim, shared with the fitted fallback.
         rim.frame = bounds; rim.path = path; rim.fillColor = nil; rim.strokeColor = SiteControlColors.rim.cgColor(contentAppearance); rim.lineWidth = 2/scale
-        for (i,b) in controls.prefix(4).enumerated() { b.frame = CGRect(x: m.padding+CGFloat(i)*(m.actionButton.width+m.actionGap),y: body.minY+m.padding,width: m.actionButton.width,height: m.actionButton.height) }
+        for (i,b) in actions.enumerated() { b.frame = CGRect(x: m.padding+CGFloat(i)*(m.actionButton.width+m.actionGap),y: body.minY+m.padding,width: m.actionButton.width,height: m.actionButton.height) }
         let footerY = body.maxY-m.padding-m.footerHeight
+        scroll.frame = CGRect(x: 0,y: body.minY+m.padding+m.actionButton.height,width: body.width,height: max(0,footerY-m.gapAfterSeparator-m.separatorHeight-(body.minY+m.padding+m.actionButton.height)))
         security.frame = CGRect(x: m.padding,y: footerY,width: security.intrinsicContentSize.width,height: m.footerHeight)
         more.frame = CGRect(x: body.maxX-m.padding-m.moreButton,y: footerY,width: m.moreButton,height: m.moreButton)
         let line = CGMutablePath(), y = footerY-m.gapAfterSeparator-1/scale/2
         line.move(to: CGPoint(x: m.padding,y: y)); line.addLine(to: CGPoint(x: body.maxX-m.padding,y: y))
+        separator.compositingFilter = contentAppearance == .dark ? "plusL" : nil
         separator.path = line; separator.strokeColor = SiteControlColors.separator.cgColor(contentAppearance); separator.lineWidth = 1/scale
         CATransaction.commit()
+    }
+}
+
+extension SiteControlPanelView {
+    private func rebuildSections(_ snapshot: SiteControlSnapshot,animated: Bool) {
+        let m = SiteControlMetrics.self, oldOrigin = scroll.contentView.bounds.origin
+        body.subviews.forEach { $0.removeFromSuperview() }
+        controls = actions
+        // Document begins immediately after actions. Its leading gap is the
+        // measured 37 pt. Header baseline is exactly item top minus 14 pt.
+        var y = m.gapAfterActions
+        func header(_ id: String,_ title: String,_ accessory: String) {
+            let button = headers[id] ?? SiteControlSectionButton(id: "section."+id,caption: title,accessory: accessory)
+            headers[id] = button
+            button.frame = CGRect(x: 0,y: y-m.labelBaselineAboveContent-21,width: m.width,height: m.labelRowHeight)
+            button.invoke = { [weak self] in self?.onSection?(id) }
+            body.addSubview(button); controls.append(button)
+        }
+        header("extensions","Extensions","Manage")
+        // OpenExtensionsUI owns its item data and pin order. Its host replaces
+        // this fallback without adding another extension store or snapshot shape.
+        let add = addExtension
+        add.style = .extensionTile; add.tooltipTitle = "Add Extension"
+        add.frame = CGRect(x: m.padding,y: y,width: m.extensionTile.width,height: m.extensionTile.height)
+        add.invoke = { [weak self] in self?.onAddExtension?() }; body.addSubview(add); controls.append(add)
+        y += m.extensionTile.height
+        var nextBoosts: [BoostID: SiteControlBoostRow] = [:]
+        if snapshot.context.isWebsite,!snapshot.boosts.isEmpty {
+            y += m.sectionGap; header("boosts","Boosts","Manage")
+            if !snapshot.boostsGloballyEnabled {
+                let note = SiteControlBaselineLabel("Boosts are off. Turn them on in Settings.",multiline: true)
+                note.frame = CGRect(x: m.padding,y: y,width: m.width-2*m.padding,height: m.globalOffHeight)
+                body.addSubview(note); y += m.globalOffHeight
+            }
+            for (i,boost) in snapshot.boosts.enumerated() {
+                if i>0 { y += m.rowPitch-m.rowIcon }
+                let row: SiteControlBoostRow
+                if let existing = boostRows[boost.id] {
+                    row = existing; row.apply(boost,enabled: snapshot.boostsGloballyEnabled && !snapshot.context.isIncognito,globallyEnabled: snapshot.boostsGloballyEnabled,incognito: snapshot.context.isIncognito)
+                } else { row = SiteControlBoostRow(boost,enabled: snapshot.boostsGloballyEnabled && !snapshot.context.isIncognito,globallyEnabled: snapshot.boostsGloballyEnabled,incognito: snapshot.context.isIncognito) }
+                row.frame = CGRect(x: 0,y: y,width: m.width,height: m.rowIcon)
+                row.toggle.invoke = { [weak self] in self?.onBoostEnabled?(boost.id,!boost.isEnabled) }
+                row.invoke = { [weak self] in self?.onEdit?(boost.id) }
+                body.addSubview(row); controls += [row.toggle,row]; nextBoosts[boost.id] = row; y += m.rowIcon
+            }
+        }
+        boostRows = nextBoosts
+        var nextRows: [String: SiteControlRow] = [:]
+        if snapshot.context.isWebsite {
+            y += m.sectionGap; header("settings","Settings","More")
+            for (i,tile) in snapshot.tiles.enumerated() {
+                if i>0 { y += m.rowPitch-m.rowIcon }
+                let row: SiteControlRow
+                if let existing = rowButtons[tile.id] { row = existing; row.apply(tile,animated: animated) }
+                else { row = SiteControlRow(tile) }
+                row.frame = CGRect(x: 0,y: y,width: m.width,height: m.rowIcon)
+                row.invoke = { [weak self,weak row] in guard let row else { return }; self?.onToggle?(row.tile) }
+                body.addSubview(row); controls.append(row); nextRows[tile.id] = row; y += m.rowIcon
+            }
+            if showsReload {
+                y += m.reloadGap
+                let label = SiteControlBaselineLabel("Reload to apply changes.")
+                label.frame = CGRect(x: m.padding,y: y,width: 162,height: m.reloadRowHeight)
+                let reload = SiteControlReloadButton(); reload.frame = CGRect(x: m.width-m.padding-44,y: y,width: 44,height: m.reloadRowHeight)
+                reload.invoke = { [weak self] in self?.onReload?() }
+                body.addSubview(label); body.addSubview(reload); controls.append(reload); y += m.reloadRowHeight
+            }
+        }
+        rowButtons = nextRows
+        bodyHeight = y+m.gapBeforeSeparator
+        body.frame = CGRect(x: 0,y: 0,width: m.width,height: bodyHeight)
+        controls += [security,more]
+        scroll.contentView.scroll(to: CGPoint(x: 0,y: min(oldOrigin.y,max(0,bodyHeight-scroll.contentSize.height))))
+        scroll.reflectScrolledClipView(scroll.contentView)
+    }
+    @objc private func refreshVisibleContent() {
+        // Keep every row visible to AX and keyboard navigation. Defer only its
+        // drawing work until its native clip view exposes it.
+        let visible = scroll.documentVisibleRect
+        for child in body.subviews where child.frame.intersects(visible) {
+            child.needsDisplay = true
+            child.subviews.forEach { $0.needsDisplay = true }
+        }
+    }
+    public var focusableControls: [SiteControlButton] {
+        controls.filter { control in
+            guard control.isEnabled else { return false }
+            var ancestor: NSView? = control
+            while let view = ancestor { if view.isHidden { return false }; ancestor = view.superview }
+            return true
+        }
+    }
+    public var focusOrder: [String] { focusableControls.map(\.controlID) }
+    public func control(id: String) -> SiteControlButton? { controls.first { $0.controlID == id } }
+    func configureKeys(_ handler: @escaping (NSEvent) -> Bool) { controls.forEach { $0.onKey = handler } }
+    public func focus(_ control: SiteControlButton,keyboard: Bool = true) {
+        controls.forEach { $0.showsKeyboardFocus = $0 === control && keyboard }
+        control.scrollToVisible(control.bounds.insetBy(dx: -2,dy: -4)); window?.makeFirstResponder(control); control.needsDisplay = true
+    }
+    func focusExtensionPickerItem() {
+        extensionPickerFocusResolved = false
+        // Blocked on OpenExtensionsUI: use its first pinned item here when the
+        // host lands. The real harness fails if items exist without this wiring.
+        guard !hasExtensionItems,let add = control(id: "extension.add") else { return }
+        focus(add); extensionPickerFocusResolved = true
+    }
+    var structureRows: [CALayer] { body.subviews.compactMap { $0.layer } }
+    func captureStructure(extra: [CALayer]) -> SiteControlStructure {
+        let layers = [layer,material.layer,fallback,surfaceMask,rim,separator,scroll.layer,security.layer,more.layer].compactMap { $0 }
+        return SiteControlStructure(layers: layers+extra,rows: body.subviews)
+    }
+}
+
+@MainActor
+struct SiteControlStructure {
+    struct State {
+        let layer: CALayer
+        let values: [String: Any]
+        init(_ layer: CALayer) {
+            self.layer = layer
+            let shown = layer.presentation() ?? layer
+            var keys = ["bounds","position"]
+            if layer is CAShapeLayer { keys.append("path") }
+            if layer.shadowPath != nil { keys.append("shadowPath") }
+            values = keys.reduce(into: [:]) { $0[$1] = shown.value(forKeyPath: $1) }
+        }
+    }
+    let states: [State]
+    let rows: [NSView]
+    init(layers: [CALayer],rows: [NSView]) { states = layers.map(State.init); self.rows = rows }
+    func animate(growing: Bool,newRows: [CALayer]) {
+        let duration = growing ? Motion.heightGrow : Motion.heightShrink
+        let timing = CAMediaTimingFunction(name: growing ? .easeOut : .default)
+        for state in states {
+            for (key,old) in state.values {
+                let next = state.layer.value(forKeyPath: key)
+                if let oldObject = old as? NSObject,let nextObject = next as? NSObject,oldObject.isEqual(nextObject) { continue }
+                let animation = CABasicAnimation(keyPath: key); animation.fromValue = old; animation.toValue = next
+                animation.duration = duration; animation.timingFunction = timing; state.layer.add(animation,forKey: "rows."+key)
+            }
+        }
+        let newIDs = Set(newRows.map(ObjectIdentifier.init)), oldIDs = Set(rows.compactMap { $0.layer }.map(ObjectIdentifier.init))
+        for row in newRows where !oldIDs.contains(ObjectIdentifier(row)) {
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = 0; fade.toValue = 1
+            fade.beginTime = CACurrentMediaTime()+max(0,duration-0.12); fade.duration = 0.12; fade.fillMode = .backwards; row.add(fade,forKey: "rows.add")
+        }
+        for view in rows {
+            guard let row = view.layer,!newIDs.contains(ObjectIdentifier(row)) else { continue }
+            // Keep removed presentation layers until their first 80 ms fade has
+            // completed. They carry no view or hit target after the data change.
+            guard let parent = newRows.first?.superlayer else { continue }
+            parent.addSublayer(row)
+            let fade = CABasicAnimation(keyPath: "opacity"); fade.fromValue = (row.presentation() ?? row).opacity; fade.toValue = 0; fade.duration = 0.08
+            CATransaction.begin(); CATransaction.setCompletionBlock { [view] in MainActor.assumeIsolated { view.layer?.removeFromSuperlayer() } }; row.opacity = 0; row.add(fade,forKey: "rows.remove"); CATransaction.commit()
+        }
     }
 }
 
@@ -153,7 +360,7 @@ public class SiteControlButton: NSButton {
     // caption layer. Keep native target/action and AX, and own the caption.
     public override var title: String {
         get { captionText }
-        set { captionText = newValue; needsDisplay = true; invalidateIntrinsicContentSize() }
+        set { guard captionText != newValue else { return }; captionText = newValue; needsDisplay = true; invalidateIntrinsicContentSize() }
     }
     public var symbolPhase = CGPoint.zero { didSet { needsDisplay = true } }
     public var symbolInk: CGSize? { didSet { needsDisplay = true } }
@@ -161,25 +368,40 @@ public class SiteControlButton: NSButton {
     public var tint = SiteControlColors.glyph { didSet { needsDisplay = true } }
     public var style = SiteControlButtonStyle.plain { didSet { needsDisplay = true } }
     public var sparkles = SiteControlSparkles.none { didSet { needsDisplay = true } }
-    public var circleOn = true { didSet { needsDisplay = true } }
+    public var circleOn = true { didSet { if oldValue != circleOn { animateCircleChange = true }; needsDisplay = true } }
+    private var animateCircleChange = false
     public var invoke: (() -> Void)?
+    public var onKey: ((NSEvent) -> Bool)?
+    public private(set) var activationPoint: CGPoint?
+    public var disabledOpacity: CGFloat = SiteControlMetrics.disabledAlpha
     public var statusOnly = false
     public var tooltipTitle: String?
     public var tooltipKeys: [String] = []
     public var showsKeyboardFocus = false { didSet { needsDisplay = true } }
     private let pointSize: CGFloat, weight: NSFont.Weight
     private var trackingPress = false, hovered = false
-    private let wellShadow = CALayer(), gradient = CAGradientLayer(), gradientMask = CAShapeLayer(), ring = CAShapeLayer(), highlight = CAShapeLayer(), glyph = CALayer(), text = CALayer(), focus = CAShapeLayer()
+    // Custom row/section subclasses draw their own layers. Keep default-button
+    // decoration lazy so constructing a long panel does not allocate hundreds
+    // of unused gradient, shadow, text, and focus layers for those controls.
+    private var layersAttached = false
+    private var circleLayersAttached = false
+    private lazy var wellShadow = CALayer()
+    private lazy var gradient = CAGradientLayer()
+    private lazy var gradientMask = CAShapeLayer()
+    private lazy var ring = CAShapeLayer()
+    private lazy var highlight = CAShapeLayer()
+    private lazy var glyph = CALayer()
+    private lazy var text = CALayer()
+    private lazy var focus = CAShapeLayer()
     public override var isFlipped: Bool { true }
     public override var wantsUpdateLayer: Bool { true }
     public override var acceptsFirstResponder: Bool { isEnabled }
     public init(id: String,label: String,symbol: String,pointSize: CGFloat,weight: NSFont.Weight = .regular) {
         controlID = id; self.symbol = symbol; self.pointSize = pointSize; self.weight = weight
-        super.init(frame: .zero); super.title = ""; symbolPhase = SiteControlMetrics.symbolRasterPhase[symbol] ?? .zero; wantsLayer = true; title = ""; isBordered = false; focusRingType = .none
+        super.init(frame: .zero); super.title = ""; symbolPhase = SiteControlMetrics.symbolRasterPhase[symbol] ?? .zero; title = ""; isBordered = false; focusRingType = .none
         setButtonType(.momentaryPushIn); target = self; action = #selector(pressed)
         setAccessibilityElement(true); setAccessibilityRole(.button); setAccessibilityLabel(label); identifier = .init(id)
-        for l in [wellShadow,gradient,ring,highlight,glyph,text,focus] { layer?.addSublayer(l) }
-        gradient.mask = gradientMask
+        wantsLayer = true
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
     @objc private func pressed() { guard isEnabled else { return }; invoke?() }
@@ -193,12 +415,22 @@ public class SiteControlButton: NSButton {
         if let tooltipTitle { TooltipController.shared.schedule(Tooltip(title: tooltipTitle,keys: tooltipKeys,style: .defaultTheme(system: contentAppearance)),for: self) }
     }
     public override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true; TooltipController.shared.cancel(for: self) }
-    public override func mouseDown(with event: NSEvent) { guard isEnabled else { return }; TooltipController.shared.cancel(for: self); showsKeyboardFocus = false; trackingPress = true; isHighlighted = true; needsDisplay = true }
+    public override func mouseDown(with event: NSEvent) { guard isEnabled else { return }; TooltipController.shared.cancel(for: self); activationPoint = convert(event.locationInWindow,from: nil); showsKeyboardFocus = false; trackingPress = true; isHighlighted = true; needsDisplay = true }
     public override func mouseUp(with event: NSEvent) { let activate = trackingPress && bounds.contains(convert(event.locationInWindow,from: nil)); trackingPress = false; isHighlighted = false; needsDisplay = true; if activate && isEnabled { sendAction(action,to: target) } }
     public override func becomeFirstResponder() -> Bool { needsDisplay = true; return true }
     public override func resignFirstResponder() -> Bool { needsDisplay = true; return true }
-    public override func keyDown(with event: NSEvent) { if !event.modifierFlags.contains(.command) && [36,49].contains(event.keyCode) { showsKeyboardFocus = true; performClick(nil) } else { super.keyDown(with: event) } }
+    public override func keyDown(with event: NSEvent) { activationPoint = nil; if onKey?(event) == true { return }; if !event.modifierFlags.contains(.command) && [36,49].contains(event.keyCode) { showsKeyboardFocus = true; performClick(nil) } else { super.keyDown(with: event) } }
     public override func updateLayer() {
+        guard bounds.intersects(visibleRect) else { return }
+        if style == .circle {
+            updateCircleLayers()
+            return
+        }
+        if !layersAttached {
+            for item in [wellShadow,gradient,ring,highlight,glyph,text,focus] { layer?.addSublayer(item) }
+            gradient.mask = gradientMask; layersAttached = true
+        }
+        for item in [wellShadow,gradient,ring,highlight,text] { item.isHidden = false }
         let m = SiteControlMetrics.self, appearance = contentAppearance, scale = window?.backingScaleFactor ?? 1
         let radius = style == .more || style == .circle ? bounds.height/2 : style == .pill ? m.pillRadius : m.actionRadius
         let path = SiteControlShape.path(in: bounds,radius: radius)
@@ -224,13 +456,9 @@ public class SiteControlButton: NSButton {
             highlight.add(fade,forKey: "hover")
         }
         highlight.strokeColor = highlightColor
-        let resolved = tint.resolved(appearance).nsColor, alpha = isEnabled || statusOnly ? 1 : m.disabledAlpha
+        let resolved = tint.resolved(appearance).nsColor, alpha = isEnabled || statusOnly ? 1 : disabledOpacity
         let color = resolved.withAlphaComponent(resolved.alphaComponent*alpha)
-        if style == .circle {
-            var disc = (circleOn ? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
-            if isHighlighted { disc = SiteControlGlyphRenderer.adjust(disc,levels: m.circlePressedLevels) }
-            glyph.frame = bounds; glyph.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: bounds.size,pointSize: pointSize,disc: disc,sparkles: sparkles,scale: scale)
-        } else if let image = SiteControlGlyphRenderer.symbol(symbol,size: pointSize,weight: weight,color: color,sparkles: sparkles,scale: scale,fit: symbolInk,phase: symbolPhase) {
+        if let image = SiteControlGlyphRenderer.symbol(symbol,size: pointSize,weight: weight,color: color,sparkles: sparkles,scale: scale,fit: symbolInk,phase: symbolPhase) {
             let x = title.isEmpty ? ((bounds.width-image.ink.width)/2*scale).rounded()/scale-image.ink.minX : m.pillPadding-image.ink.minX
             let y = ((bounds.height-image.ink.height)/2*scale).rounded()/scale-image.ink.minY
             glyph.frame = CGRect(x: x,y: y,width: image.size.width,height: image.size.height); glyph.contents = image.image
@@ -241,6 +469,28 @@ public class SiteControlButton: NSButton {
         let focusRect = bounds.insetBy(dx: -m.focusOutset,dy: -m.focusOutset)
         focus.frame = bounds; focus.path = style == .circle || style == .more ? CGPath(ellipseIn: focusRect,transform: nil) : SiteControlShape.path(in: focusRect,radius: radius+m.focusOutset)
         focus.fillColor = nil; focus.lineWidth = m.focusWidth; focus.strokeColor = showsKeyboardFocus && window?.firstResponder === self ? Core.focusRing.cgColor(appearance) : nil
+    }
+    private func updateCircleLayers() {
+        // A Boost toggle needs two layers, not an unused action-button well,
+        // gradient, mask, rim, highlight, shadow and caption for every row.
+        if !circleLayersAttached {
+            layer?.addSublayer(glyph); layer?.addSublayer(focus); circleLayersAttached = true
+        }
+        let m = SiteControlMetrics.self, appearance = contentAppearance, scale = window?.backingScaleFactor ?? 1
+        CATransaction.begin(); CATransaction.setDisableActions(true); defer { CATransaction.commit() }
+        if layersAttached { for item in [wellShadow,gradient,ring,highlight,text] { item.isHidden = true } }
+        var disc = (circleOn ? SiteControlColors.circleOn : SiteControlColors.circleOff).resolved(appearance).nsColor
+        if isHighlighted { disc = SiteControlGlyphRenderer.adjust(disc,levels: m.circlePressedLevels) }
+        let previous = glyph.contents
+        glyph.frame = bounds; glyph.contentsScale = scale
+        glyph.contents = SiteControlGlyphRenderer.circle(symbol: symbol,size: bounds.size,pointSize: pointSize,disc: disc,sparkles: sparkles,scale: scale,phase: symbolPhase)
+        if animateCircleChange,let previous {
+            let fade = CABasicAnimation(keyPath: "contents"); fade.fromValue = previous; fade.toValue = glyph.contents; fade.duration = Motion.selectionFade; glyph.add(fade,forKey: "toggle")
+        }
+        animateCircleChange = false
+        focus.frame = bounds; focus.path = CGPath(ellipseIn: bounds.insetBy(dx: -m.focusOutset,dy: -m.focusOutset),transform: nil)
+        focus.fillColor = nil; focus.lineWidth = m.focusWidth
+        focus.strokeColor = showsKeyboardFocus && window?.firstResponder === self ? Core.focusRing.cgColor(appearance) : nil
     }
 }
 
@@ -256,10 +506,12 @@ enum SiteControlGlyphRenderer {
         c.scaleBy(x: scale,y: scale); NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = NSGraphicsContext(cgContext: c,flipped: false); draw(c); NSGraphicsContext.restoreGraphicsState(); return c.makeImage()
     }
     static func sparkle(_ c: CGContext,at p: CGPoint,size: CGFloat,alpha: CGFloat) { let path = CGMutablePath(); path.move(to: CGPoint(x: p.x,y: p.y-size/2)); path.addQuadCurve(to: CGPoint(x: p.x+size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y+size/2),control: p); path.addQuadCurve(to: CGPoint(x: p.x-size/2,y: p.y),control: p); path.addQuadCurve(to: CGPoint(x: p.x,y: p.y-size/2),control: p); c.setAlpha(alpha); c.addPath(path); c.fillPath(); c.setAlpha(1) }
-    static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero) -> Image? {
-        let key = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)"
+    static func symbol(_ name: String,size: CGFloat,weight: NSFont.Weight,color: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,fit: CGSize? = nil,phase: CGPoint = .zero,symbolScale: NSImage.SymbolScale? = nil) -> Image? {
+        let baseKey = "\(name)|\(size)|\(weight.rawValue)|\(color)|\(sparkles)|\(scale)|\(String(describing: fit))|\(phase)"
+        let key = symbolScale.map { baseKey+"|\($0.rawValue)" } ?? baseKey
         if let cached = symbols[key] { return cached }
-        guard let source = NSImage(systemSymbolName: name,accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: size,weight: weight)) else { return nil }
+        let configuration = symbolScale.map { NSImage.SymbolConfiguration(pointSize: size,weight: weight,scale: $0) } ?? .init(pointSize: size,weight: weight)
+        guard let source = NSImage(systemSymbolName: name,accessibilityDescription: nil)?.withSymbolConfiguration(configuration) else { return nil }
         let nativeSize = CGSize(width: ceil(source.size.width),height: ceil(source.size.height))
         func draw(_ c: CGContext) {
             source.draw(in: CGRect(origin: .zero,size: source.size),from: .zero,operation: .sourceOver,fraction: 1,respectFlipped: false,hints: nil)
@@ -292,13 +544,17 @@ enum SiteControlGlyphRenderer {
         } }
         return maxX>minX && maxY>minY ? CGRect(x: CGFloat(minX)/scale,y: CGFloat(minY)/scale,width: CGFloat(maxX-minX)/scale,height: CGFloat(maxY-minY)/scale) : .zero
     }
-    static func circle(symbol name: String,size: CGSize,pointSize: CGFloat,disc: NSColor,sparkles: SiteControlSparkles,scale: CGFloat) -> CGImage? {
-        let key = "\(name)|\(size)|\(pointSize)|\(disc)|\(sparkles)|\(scale)"
+    static func circle(symbol name: String,size: CGSize,pointSize: CGFloat,disc: NSColor,sparkles: SiteControlSparkles,scale: CGFloat,phase: CGPoint = .zero) -> CGImage? {
+        let key = "\(name)|\(size)|\(pointSize)|\(disc)|\(sparkles)|\(scale)|\(phase)"
         if let image = circles[key] { return image }
         let image = canvas(size,scale: scale) { c in
             c.setFillColor(disc.cgColor); c.fillEllipse(in: CGRect(origin: .zero,size: size))
             c.setBlendMode(.destinationOut)
-            if let source = NSImage(systemSymbolName: name,accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: pointSize,weight: .regular)) { let rect = CGRect(x: (size.width-source.size.width)/2,y: (size.height-source.size.height)/2,width: source.size.width,height: source.size.height); source.draw(in: rect,from: .zero,operation: .destinationOut,fraction: 1,respectFlipped: false,hints: nil) }
+            let fit: CGSize? = name == "gearshape.fill" ? SiteControlMetrics.gearInk : nil
+            if let icon = symbol(name,size: pointSize,weight: .regular,color: .white,sparkles: .none,scale: scale,fit: fit,phase: phase) {
+                let rect = CGRect(x: ((size.width-icon.ink.width)/2*scale).rounded()/scale-icon.ink.minX+(name == "gearshape.fill" ? -1/scale : 0),y: ((size.height-icon.ink.height)/2*scale).rounded()/scale-icon.ink.minY,width: icon.size.width,height: icon.size.height)
+                c.draw(icon.image,in: rect)
+            }
             if sparkles == .boost { c.setFillColor(NSColor.white.cgColor); sparkle(c,at: CGPoint(x: 9,y: 23),size: 4,alpha: SiteControlMetrics.sparkleOpacity.topLeft); sparkle(c,at: CGPoint(x: 24,y: 24),size: 4,alpha: SiteControlMetrics.sparkleOpacity.topRight); sparkle(c,at: CGPoint(x: 24,y: 8),size: 4,alpha: SiteControlMetrics.sparkleOpacity.bottomRight) }
         }
         if circles.count > 256 { circles.removeAll(keepingCapacity: true) }; circles[key] = image; return image

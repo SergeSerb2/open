@@ -1,0 +1,99 @@
+SiteControl: snapshot or geometry unavailable for tab C5037E88-6A9D-4D46-82F9-A83F50B212BE
+SiteControl: snapshot or geometry unavailable for tab 476D504E-E00F-4987-B476-E8FB679E1C00
+SiteControl: snapshot or geometry unavailable for tab 429917EA-C659-4627-8312-6E689A7D0F3C
+SiteControl: snapshot or geometry unavailable for tab EE5CDDF7-F882-41E4-8C17-E1C3C41A3280
+SiteControl: snapshot or geometry unavailable for tab EE5CDDF7-F882-41E4-8C17-E1C3C41A3280
+| Result | Check |
+|---|---|
+| PASS | F1 anchor presents |
+| PASS | F1 second anchor click closes and is consumed |
+| PASS | F2 Escape closes and restores focus |
+| PASS | F2 outside click closes and reaches page |
+| PASS | outside NSEventType(rawValue: 3) dismisses and forwards to the page |
+| PASS | outside NSEventType(rawValue: 25) dismisses and forwards to the page |
+| PASS | outside click reaches a real native target/action exactly once |
+| PASS | F21 native AX role and label pairs, host description, favicon hidden |
+| PASS | Step 2 More is enabled |
+| PASS | missing capture capability disables both actions |
+| PASS | two windows observe a shared source independently |
+| PASS | third window registers its own observer |
+| PASS | window teardown removes only its own observer |
+| PASS | F22 missing geometry stays closed and logs once |
+| PASS | F22 geometry lost while open closes and logs once |
+| PASS | F22 missing snapshot stays closed and logs once |
+| PASS | successful presentation resets once-per-failure-episode reporting |
+| PASS | close fades both layers and disables hit testing immediately |
+| PASS | old close completion cannot hide a new presentation |
+| PASS | host is exposed once in native AX |
+| PASS | security label policy for https |
+| PASS | security label policy for http |
+| PASS | security label policy for chrome |
+| PASS | security label policy for open |
+| PASS | security label policy for chrome-extension |
+| PASS | security label policy for about |
+| PASS | security label policy for data |
+| PASS | security label policy for file |
+| PASS | F23 sidebar width 228.0 gives arrow and body geometry |
+| PASS | F23 sidebar width 300.0 gives arrow and body geometry |
+| PASS | F23 sidebar width 500.0 gives arrow and body geometry |
+| PASS | F23 narrow/short window clamps height inside margins |
+| PASS | content anchor has no arrow |
+| PASS | F3 complete captured section/row Tab order |
+| PASS | F3 Tab wraps |
+| PASS | F3 Shift+Tab reverses |
+| PASS | F3 Right arrow stays inside actions |
+| PASS | F3 Down moves to the next row and Space toggles |
+| PASS | F4 ad blocker On/Off/On with exactly one Reload row |
+| PASS | reload closes and calls host once |
+| PASS | F5 unavailable blocker opens Settings without writing |
+| PASS | F6 permission Allowed to Blocked updates checkbox |
+| PASS | F7 circle toggles without opening editor |
+| PASS | F7 row, chevron and Return each open the same editor |
+| PASS | F8 New Boost action and menu with scc-no-boosts |
+| PASS | F8 New Boost action and menu with scc-boost |
+| PASS | F9 exact captured menu always includes both Boost commands |
+| PASS | F9 E2 capability adds Clear Cache |
+| PASS | F9 clear data kinds are distinct and keep reload row |
+| PASS | F9 Manage Boosts… routes and closes |
+| PASS | F9 Manage Extensions… routes and closes |
+| PASS | F9 Add Extension… routes and closes |
+| PASS | F9 All Site Settings encodes only the origin |
+| PASS | internal page keeps four actions, Extensions and More; no security |
+| PASS | F20 private window disables creation, toggle, and edit |
+| PASS | global-off note and disabled circle |
+| PASS | long body scrolls focused rows and clamps at 640 |
+| PASS | scroll exposes freshly drawn last Settings title |
+| PASS | picker focuses + without opening a menu |
+| PASS | picker host guard requires the first real item when extensions land |
+| PASS | picker Return runs Add Extension |
+| PASS | F21 heading child has a real window and nonzero frame |
+| PASS | F21 native section, checkbox, and Boost edit roles |
+| PASS | F21 action AX precedes sections; host exposed once |
+| PASS | live removal restores focus to panel |
+| PASS | Tab works after focused row removal |
+| PASS | Command+36 never activates contentBlocking |
+| PASS | Command+49 never activates contentBlocking |
+| PASS | Command+36 never activates boost.00000000-0000-0000-0000-000000000001.row |
+| PASS | Command+49 never activates boost.00000000-0000-0000-0000-000000000001.row |
+| PASS | retained native menu cannot act on a later presentation generation |
+| PASS | native menu Return selects Clear Cookies and keeps Reload |
+| PASS | native menu Esc dismisses with menuCancelled |
+| PASS | window resize cancels structure motion and applies the current clamp |
+| PASS | motion open keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion open keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion open keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | open spring peak 1.0129, settles by 0.30 s |
+| PASS | motion close keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion close keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion close keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | close ends by 0.20 s |
+| PASS | height grow keeps arrow tip and action row fixed |
+| PASS | height grow keeps arrow tip and action row fixed |
+| PASS | height grow keeps arrow tip and action row fixed |
+| PASS | height grow uses configured 0.2s curve |
+| PASS | height shrink keeps arrow tip and action row fixed |
+| PASS | height shrink keeps arrow tip and action row fixed |
+| PASS | height shrink keeps arrow tip and action row fixed |
+| PASS | height shrink uses configured 0.25s curve |
+
+90/90 passed

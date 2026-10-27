@@ -1,0 +1,3 @@
+default ONLY EXIT 1
+FAIL: removed preview delay default was registered
+default source restored; real renderer rebuilt without warnings
