@@ -1188,3 +1188,10 @@ unchecked Remember box. Remembered decisions remain in the engine context.
 The permission flow verifies both remembered choices and a one-shot decision
 across a real relaunch; durable nondefault-profile engine storage remains the
 separate root_cache_path follow-up from Step B.
+
+Capture review found that `screencapture -l` returned success for a completely
+transparent JS-sheet image. The e2e capture helper now uses the owned-window
+snapshot path and waits for nonblank pixels. Explicit missing window IDs fail
+instead of silently capturing the main window. The original transparent image
+is not visual evidence of the sheet. Capture intervals keep the native
+interruption guard; retries do not change the expected drawing.

@@ -322,21 +322,23 @@ class Open:
 
 
 def shot(app, name, window=None, max_px=1100):
-    """PNG of one of OUR windows. The main window uses the in-app snapshot
-    (includes Chrome-style child windows and real page pixels); other
-    windows (panels, Chromium dialogs) use `screencapture -l <our window>`,
-    falling back to the in-app snapshot."""
+    """Capture only an owned window, waiting for actual nonblank drawing.
+
+    WindowSnapshot composites live page pixels and native AppKit surfaces. Its
+    window-server path rejects transparent captures and falls back to the real
+    view drawing. A successful screencapture exit alone is not pixel evidence.
+    """
     app.begin_timing("window capture")
-    path = os.path.join(OUT, name)
-    raw = path + ".raw.png"
-    if window is None:
-        app.call("snapshot", path=raw)
-    else:
-        rc = subprocess.call(["screencapture", "-l", str(window), "-o", "-x", raw])
-        if rc != 0 or not os.path.exists(raw):
-            app.call("snapshot", path=raw, window=window)
-    subprocess.call(["sips", "-Z", str(max_px), raw, "--out", path], stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL)
+    path = os.path.join(OUT, name); raw = path + ".raw.png"
+    def drawn():
+        app.call("snapshot", **dict(path=raw, **({"window":window} if window is not None else {})))
+        width,height,pixel=read_image(raw)
+        samples=[pixel(x*width/64,y*height/64) for y in range(64) for x in range(64)]
+        return any(max(c[i] for c in samples)-min(c[i] for c in samples)>8 for i in range(3))
+    if not wait_until(drawn,timeout=5,step=.05):
+        raise RuntimeError("Owned window capture remained blank: " + name)
+    subprocess.run(["sips", "-Z", str(max_px), raw, "--out", path],check=True,
+                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     os.remove(raw)
     return name
 
@@ -755,7 +757,13 @@ def page_chrome_checks(factory, results, tmp):
             app.call('context-menu-cancel');app.call('rightclick',tab=tab,x=pos[0],y=pos[1])
             menu=wait_until(lambda:(lambda s:s if s['items'] and not s['completed'] else None)(app.call('context-menu-state')),timeout=5,step=.02)
             assert menu,app.call('context-menu-state');return menu
-        menu=context('#page-target');results['page_context_page']={'ok': any(r['engine'] for r in menu['items']) and not any(r['key']=='link-copy' for r in menu['items']), 'items':menu['items']};app.call('context-menu-cancel')
+        app.eval(tab,'window.contextReloadMarker="old-document";true')
+        menu=context('#page-target')
+        reload_item=next((r for r in menu['items'] if r['engine'] and r['enabled'] and r['title'].replace('&','').lower()=='reload'),None)
+        assert reload_item,menu
+        selected=app.call('context-menu-select',key=reload_item['key'])
+        reloaded=wait_until(lambda:app.eval(tab,'typeof window.contextReloadMarker === "undefined" && document.readyState === "complete" && document.title === "Page chrome fixture"'),timeout=5,step=.02)
+        results['page_context_page']={'ok':selected and bool(reloaded) and not any(r['key']=='link-copy' for r in menu['items']), 'items':menu['items']}
         menu=context('#link-target');app.call('pasteboard-write',text='LINK NOT COPIED');picked=app.call('context-menu-select',key='link-copy')
         results['page_context_link']={'ok':picked and app.call('pasteboard')==origin+'/link' and all(any(r['key']==key for r in menu['items']) for key in ('link-open','link-new-tab','link-peek','link-copy')), 'items':menu['items']}
         menu=context('#image-target');app.call('pasteboard-write',text='IMAGE NOT COPIED');picked=app.call('context-menu-select',key='image-copy-url')

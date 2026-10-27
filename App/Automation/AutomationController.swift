@@ -186,6 +186,9 @@
         let page = try content(a, w)
         guard let origin = (a["origin"] as? String).flatMap(URL.init(string:)) else { throw Failure(message: "missing origin") }
         let kind = OEPermissionKind(rawValue: a["kind"] as? UInt32 ?? OEPermissionKind.notifications.rawValue)
+        guard PermissionPromptPresenter.kinds.contains(where: { $0.0 == kind }), PermissionPromptPresenter.canPersist(kind) else {
+          throw Failure(message: "permission kind has no persistent setting")
+        }
         if let state = a["state"] as? Int, let value = OEPermissionState(rawValue: state) { page.context.setPermissionState(value, for: kind, origin: origin) }
         return page.context.permissionState(for: kind, origin: origin).rawValue
       case "context-menu-state": return w.contextMenuSession?.state ?? ["items": [], "completed": true]
@@ -1143,8 +1146,9 @@
         return ["path": path, "method": "devtools"]
       }
       let number = a["window"] as? Int
-      guard let target = number.flatMap({ n in NSApp.windows.first { $0.windowNumber == n } }) ?? w.window
-      else { throw Failure(message: "no window") }
+      let requestedWindow = number.flatMap { n in NSApp.windows.first { $0.windowNumber == n } }
+      guard let target = number == nil ? w.window : requestedWindow
+      else { throw Failure(message: "requested owned window no longer exists") }
       let method = try await WindowSnapshot.capture(target, to: url)
       return ["path": path, "method": method]
     }
