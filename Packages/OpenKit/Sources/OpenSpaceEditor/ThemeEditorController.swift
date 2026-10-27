@@ -7,6 +7,9 @@ import OpenModel
 public final class ThemeEditorController {
     public let panel = ThemeEditorPanel()
     public private(set) var state: ThemeEditorState
+    /// May close or release the owner. Called only after the complete commit.
+    public var onCommit: (@MainActor () -> Void)? { didSet { editorUndo.onModelRestore = onCommit } }
+    public private(set) var session: ThemeEditSession?
     public var onClose: (@MainActor () -> Void)?
     public private(set) var previewCount = 0
     public private(set) var frameCount = 0
@@ -23,8 +26,12 @@ public final class ThemeEditorController {
     private var lastWritten: SpaceTheme
     private var pendingPreview = false
     private var pendingFinish = false
+    private var liveGesture = false
+    private var isClosing = false
     private var displayLink: CADisplayLink?
     private var frameTarget: EditorFrameTarget?
+    private var lifecycleObservers: [NSObjectProtocol] = []
+    private var outsideMonitor: Any?
 
     public convenience init(model: BrowserModel, spaceID: SpaceID, window: NSWindow,
                             anchor: ThemeEditorAnchor) {
@@ -49,6 +56,7 @@ public final class ThemeEditorController {
                  onChange: (@MainActor (SpaceStyle?) -> Void)?) {
         self.model = model; self.spaceID = spaceID; self.ownerWindow = window; self.anchor = anchor
         self.baseline = baseline; lastWritten = baseline
+        if let model, let spaceID { session = ThemeEditSession(model: model, spaceID: spaceID) }
         let initial = ThemeEditorState(style: draft); state = initial; baselineState = initial
         draftChange = onChange
         editorUndo = EditorUndoRelay(onRestore: onChange)
@@ -62,7 +70,11 @@ public final class ThemeEditorController {
         observeTheme()
     }
 
-    isolated deinit { displayLink?.invalidate() }
+    isolated deinit {
+        displayLink?.invalidate(); session?.close()
+        if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }
+        lifecycleObservers.forEach(NotificationCenter.default.removeObserver)
+    }
 
     public func show() {
         guard let window = ownerWindow, !isClosed else { return }
@@ -77,6 +89,7 @@ public final class ThemeEditorController {
             position = window.convertPoint(toScreen: CGPoint(x: card.maxX, y: card.maxY))
             frame.origin = CGPoint(x: position.x, y: position.y - frame.height)
         }
+        if panel.renderScale == nil { panel.renderScale = window.backingScaleFactor }
         if let screen = window.screen?.visibleFrame {
             let band = ThemeEditorMetrics.contentInset
             frame.origin.x = min(max(frame.minX, screen.minX + 8 - band), screen.maxX - frame.width - 8 + band)
@@ -90,12 +103,15 @@ public final class ThemeEditorController {
             animateOpen()
         }
         panel.makeFirstResponder(panel.editorView.pad)
+        observeLifecycle()
     }
 
     public func close() {
-        guard !isClosed else { return }
+        guard !isClosed, !isClosing else { return }; isClosing = true
         finishBeforeExternalAction()
-        isClosed = true; displayLink?.invalidate(); displayLink = nil
+        isClosed = true; displayLink?.invalidate(); displayLink = nil; session?.close()
+        if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor); self.outsideMonitor = nil }
+        lifecycleObservers.forEach(NotificationCenter.default.removeObserver); lifecycleObservers.removeAll()
         let panel = panel
         let hide: @MainActor () -> Void = {
             if let parent = panel.parent { parent.removeChildWindow(panel) }
@@ -118,7 +134,7 @@ public final class ThemeEditorController {
     }
 
     public func apply(_ action: ThemeEditorAction) {
-        guard !isClosed else { return }
+        guard !isClosed, !isClosing else { return }
         if pendingFinish && !state.isGestureInProgress { flushPreviewFrame() }
         switch action {
         case .setAppearance, .addColor, .removeColor, .selectPreset, .cycleTexture:
@@ -129,7 +145,7 @@ public final class ThemeEditorController {
         let previous = state.style
         switch action {
         case .beginKeyboardGesture, .dragKnob, .setIntensity(_, final: false), .setNoise(_, final: false):
-            if !wasGesture { finishBeforeExternalAction(); captureBaseline() }
+            if !wasGesture { finishBeforeExternalAction(); captureBaseline() }; liveGesture = true
         default: break
         }
         state.apply(action)
@@ -173,26 +189,26 @@ public final class ThemeEditorController {
     }
     private func captureBaseline() {
         baseline = model.flatMap { model in spaceID.flatMap { model.space(id: $0)?.theme } } ?? SpaceTheme(style: state.style)
-        baselineState = state
+        baselineState = state; session?.captureBaseline()
     }
     private func writePreview() {
         let theme = state.style.map { SpaceTheme(style: $0) } ?? SpaceTheme()
         guard theme != lastWritten else { return }
         lastWritten = theme; previewCount += 1
-        if let model, let spaceID { model.previewSpaceTheme(id: spaceID, theme: theme) }
+        if let session { session.preview(state.style, live: liveGesture) }
         else { draftChange?(state.style) }
     }
     private func commit() {
         let current = model.flatMap { model in spaceID.flatMap { model.space(id: $0)?.theme } } ?? SpaceTheme(style: state.style)
-        guard current != baseline else { return }
+        guard current != baseline else { _ = session?.commit(); liveGesture = false; return }
         let manager = panel.undoManager
         let group = manager.map { $0.groupingLevel == 0 && !$0.isUndoing && !$0.isRedoing } ?? false
         if group { manager?.beginUndoGrouping() }
         defer { if group { manager?.endUndoGrouping() } }
         let old = EditorUndoSnapshot(state: baselineState, theme: baseline)
         let new = EditorUndoSnapshot(state: state, theme: current)
-        if let model, let spaceID {
-            if model.commitSpaceTheme(id: spaceID, from: baseline) {
+        if let session {
+            if session.commit() {
                 // Same undo group as the model write. Undo restores this state
                 // first, then the model; redo reverses that order. Observation
                 // sees lastWritten and does not reconstruct the pad range.
@@ -203,7 +219,8 @@ public final class ThemeEditorController {
             editorUndo.record(manager: manager, from: old, to: new); commitCount += 1
         }
         if manager?.groupingLevel ?? 0 > 0 { manager?.setActionName("Update Theme") }
-        baseline = current; baselineState = state
+        baseline = current; baselineState = state; liveGesture = false
+        onCommit?()
     }
     private func requestFrame() {
         guard displayLink == nil else { return }
@@ -223,6 +240,7 @@ public final class ThemeEditorController {
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self, !self.isClosed else { return }
+                if let model = self.model, let id = self.spaceID, model.space(id: id) == nil { self.close(); return }
                 self.synchronizeFromModel(); self.observeTheme()
             }
         }
@@ -233,6 +251,7 @@ public final class ThemeEditorController {
         let page = state.presetPage
         state = ThemeEditorState(style: SpaceStyle.seed(from: theme)); state.presetPage = page
         baselineState = state
+        session?.restored(theme)
         renderState()
     }
     fileprivate func restoreEditor(_ snapshot: EditorUndoSnapshot) {
@@ -240,7 +259,29 @@ public final class ThemeEditorController {
         pendingPreview = false; pendingFinish = false
         state = snapshot.state; baselineState = state
         baseline = snapshot.theme; lastWritten = snapshot.theme
+        session?.restored(snapshot.theme, publish: false)
         renderState()
+    }
+    private func observeLifecycle() {
+        guard lifecycleObservers.isEmpty else { return }
+        let center = NotificationCenter.default
+        for (name, object) in [(NSApplication.didResignActiveNotification, nil),
+                               (NSApplication.willTerminateNotification, nil),
+                               (NSWindow.willCloseNotification, ownerWindow)] as [(Notification.Name, Any?)] {
+            lifecycleObservers.append(center.addObserver(forName: name, object: object, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.close() }
+            })
+        }
+        outsideMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] event in
+            MainActor.assumeIsolated {
+                if let self, event.window !== self.panel { self.close() }
+            }
+            return event
+        }
+    }
+    fileprivate func publishRestoredTheme() {
+        guard !isClosed, let model, let id = spaceID, model.space(id: id) != nil else { return }
+        session?.registry.publish(id)
     }
     private func announceCount() {
         NSAccessibility.post(element: panel.editorView.pad, notification: .announcementRequested,
@@ -273,6 +314,7 @@ fileprivate struct EditorUndoSnapshot {
 
 @MainActor private final class EditorUndoRelay: NSObject {
     weak var controller: ThemeEditorController?
+    var onModelRestore: (@MainActor () -> Void)?
     let onRestore: (@MainActor (SpaceStyle?) -> Void)?
     init(onRestore: (@MainActor (SpaceStyle?) -> Void)?) { self.onRestore = onRestore }
     func record(manager: UndoManager, from old: EditorUndoSnapshot, to new: EditorUndoSnapshot) {
@@ -283,6 +325,13 @@ fileprivate struct EditorUndoSnapshot {
                 // The draft callback may close or release the editor. Resolve
                 // the weak controller only afterwards; closed editors ignore it.
                 relay.onRestore?(old.state.style); relay.controller?.restoreEditor(old)
+                relay.onModelRestore?()
+                // Undo restores editor state before the model. Publish only after
+                // the full undo group has restored the model's theme.
+                Task { @MainActor [weak controller = relay.controller] in
+                    guard let controller, !controller.isClosed else { return }
+                    controller.publishRestoredTheme()
+                }
                 if let manager { relay.record(manager: manager, from: new, to: old) }
             }
         }

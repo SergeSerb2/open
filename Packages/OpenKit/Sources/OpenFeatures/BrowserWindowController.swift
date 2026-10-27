@@ -5,6 +5,7 @@ import OpenDesign
 import OpenSidebar
 import OpenCommands
 import OpenStore
+import OpenSpaceEditor
 
 @MainActor
 public final class BrowserWindowController: NSWindowController, NSWindowDelegate, SidebarDelegate, CommandDispatcher {
@@ -14,6 +15,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     let root: BrowserRootView
     public let background = ThemeBackgroundView(frame: .zero)
     public let sidebar: SidebarView
+    public private(set) var themeEditor: ThemeEditorController?
     public let context: SidebarContext
     public let container: WebContentContainer
     public let splitController: SplitViewController
@@ -200,6 +202,8 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         DispatchQueue.main.async { [weak self] in guard let self, self.observing else { return }; self.refreshPending = false; self.refresh() }
     }
     public func refresh() {
+        if let editor = themeEditor, let id = editor.session?.spaceID,
+           model.space(id: id) == nil || context.window?.focusedSpaceID != id { closeThemeEditor() }
         guard let space = context.focusedSpace else { return }
         if !observationArmed {
         observationArmed = true
@@ -211,7 +215,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         } onChange: { [weak self] in Task { @MainActor [weak self] in self?.observationArmed = false; self?.scheduleRefresh() } }
         }
         // Sidebar's pager owns theme transitions. Never reset its cross-fade here.
-        if background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true) }
+        if background.targetStyle != context.style(for: space) { background.crossfade(to: context.style(for: space), animated: window?.isVisible == true && !context.isLiveThemePreview(space.id)) }
         container.style = context.style(for: space)
         let style = context.style(for: space)
         peekStorage?.overlay.controlsFill = style.lightPalette?.title.nsColor ?? PeekMetrics.defaultControls.nsColor
@@ -541,7 +545,14 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     /// Shared window-local key path. Focus comes from AppKit's current responder.
     @discardableResult public func handleKeyDown(_ event: NSEvent, unconsumed: Bool = false) -> Bool {
         guard let eventWindow = event.window,
-              eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
+              eventWindow === window || eventWindow === themeEditor?.panel || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
+        // Editor keys stay on its responder chain. App-level commands first
+        // close and flush it, then use the browser's existing key router.
+        if eventWindow === themeEditor?.panel {
+            if event.modifierFlags.contains(.command), [13, 17, 37].contains(event.keyCode) {
+                closeThemeEditor()
+            } else { return false }
+        }
         let flags = event.modifierFlags.rawValue
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
@@ -593,8 +604,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
         return true
     }
-    private func handles(_ id: String) -> Bool { ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
+    private func handles(_ id: String) -> Bool { ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space", "go-back", "go-forward"].contains(id) || id.hasPrefix("focus-split-pane-") }
     public func performCommand(_ id: String) {
+        if id == "edit-theme" { if let space = context.focusedSpace { _ = editSpaceTheme(space.id) }; return }
         if onCommand?(id) == true { return }
         if id == "open-in-current-space", peekStorage?.isShown == true {
             let menu = NSMenu(title: "Open in Space")
@@ -611,6 +623,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         performCommand(id)
     }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+        if id == "edit-theme" { return context.focusedSpace != nil }
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
         if id == "open-in-current-space" { return peekStorage?.isShown == true }
         if id == "go-back" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoBack == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoBack == true }
@@ -618,6 +631,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         return splitController.isCommandEnabled(id, enabledKey: enabledKey)
     }
     public func sidebar(_ sidebar: SidebarView, didRequest intent: SidebarIntent) -> Bool {
+        if case .editSpaceTheme(let id) = intent { return editSpaceTheme(id) }
         if let handled = onSidebarIntent?(intent) { return handled }
         switch intent {
         case .toggleSidebar: toggleSidebar(); return true
@@ -636,7 +650,32 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         }
         refresh(); changed(); return true
     }
-    public func windowWillClose(_ notification: Notification) { saveWindowState(); visibilityOverride = .closed; removeRevealCard(); container.closeAll(); onClose?(); onVisibilityChange?() }
+    /// One editor per browser window. A context-menu target is focused first.
+    @discardableResult public func editSpaceTheme(_ id: SpaceID) -> Bool {
+        guard model.space(id: id) != nil, let window else { return false }
+        closeThemeEditor()
+        if context.window?.focusedSpaceID != id {
+            let undo = model.undoManager; undo?.disableUndoRegistration()
+            model.focusSpace(windowID: windowID, spaceID: id)
+            undo?.enableUndoRegistration(); refresh(); snapshotStore?.scheduleSave(model: model)
+        }
+        let frame = sidebar.isHidden ? CGRect(x: 0, y: 0, width: context.sidebarWidth, height: root.bounds.height) : sidebar.frame
+        let editor = ThemeEditorController(model: model, spaceID: id, window: window,
+                                          anchor: .sidebarTrailingEdge(sidebarFrameInWindow: frame))
+        themeEditor = editor
+        // Undo records can outlive this window. Keep the store, not the window,
+        // so undo from another window still saves after the editor has closed.
+        editor.onCommit = { [weak model, store = snapshotStore] in
+            guard let model else { return }; store?.scheduleSave(model: model)
+        }
+        editor.onClose = { [weak self, weak editor] in
+            guard let self, self.themeEditor === editor else { return }
+            self.themeEditor = nil
+        }
+        editor.show(); context.isWindowActive = window.isKeyWindow || editor.panel.isKeyWindow; return true
+    }
+    public func closeThemeEditor() { themeEditor?.close(); themeEditor = nil }
+    public func windowWillClose(_ notification: Notification) { closeThemeEditor(); saveWindowState(); visibilityOverride = .closed; removeRevealCard(); container.closeAll(); onClose?(); onVisibilityChange?() }
     public var onTextUndoManager: ((NSWindow) -> UndoManager?)?
     private lazy var nativeTextUndoManager = UndoManager()
     public func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? {
@@ -660,7 +699,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         // Back from another app or a hide (Cmd+H): the pointer may have left the buttons meanwhile.
         dimmedLights.syncWithPointer()
     }
-    public func windowDidResignKey(_ notification: Notification) { context.isWindowActive = false; background.isWindowActive = false; positionTrafficLights() }
+    public func windowDidResignKey(_ notification: Notification) { let active = themeEditor != nil && NSApp.isActive; context.isWindowActive = active; background.isWindowActive = active; positionTrafficLights() }
     public func windowDidChangeBackingProperties(_ notification: Notification) { positionTrafficLights() }
     public func windowDidBecomeMain(_ notification: Notification) { context.isWindowActive = true }
     public func windowDidResignMain(_ notification: Notification) { context.isWindowActive = window?.isKeyWindow == true }

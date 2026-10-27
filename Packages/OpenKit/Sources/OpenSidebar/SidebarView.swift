@@ -32,6 +32,7 @@ public final class SidebarView: NSView {
     public let mediaControls: MediaControlsView
     private var cardBackground: ThemeBackgroundView?
     private var pointerTracking: NSTrackingArea?
+    private var themePreviewObserver: UUID?
     private var observerID: UUID?
     private var loops: [ObservationLoop] = []
     private var modifierMonitor: Any?
@@ -91,6 +92,13 @@ public final class SidebarView: NSView {
         preferencesObserver = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.syncBanner() }
         }
+        themePreviewObserver = ThemePreviewRegistry.shared.addObserver { [weak self] id in
+            guard let self, self.context.focusedSpace?.id == id else { return }
+            self.syncTheme()
+            if self.context.isLiveThemePreview(id) {
+                (self.presentation == .floatingCard ? self.cardBackground : self.themeBackground)?.prepareForSnapshot()
+            }
+        }
         syncTheme()
         syncPeekDim()
         syncBanner()
@@ -104,6 +112,7 @@ public final class SidebarView: NSView {
         if let preferencesObserver { NotificationCenter.default.removeObserver(preferencesObserver) }
         context.existingHoverPreviews?.dismiss()
         if let observerID { context.model.removeObserver(observerID) }
+        if let themePreviewObserver { ThemePreviewRegistry.shared.removeObserver(themePreviewObserver) }
         loops.forEach { $0.cancel() }
     }
 
@@ -196,7 +205,7 @@ public final class SidebarView: NSView {
         bg?.isWindowActive = context.isWindowActive
         // A theme edit on the focused Space shows at once; Space switches cross-fade in the pager.
         if let bg, bg.targetStyle != context.style(for: space), pager.currentPage?.space === space {
-            bg.crossfade(to: context.style(for: space), animated: animatesSidebarChanges)
+            bg.crossfade(to: context.style(for: space), animated: animatesSidebarChanges && !context.isLiveThemePreview(space.id), duration: Motion.themeCrossfade)
         }
         for v in [toolbar, urlField, favorites, bottomBar] as [NSView] { v.needsDisplay = true; v.needsLayout = true }
     }

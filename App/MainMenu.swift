@@ -33,7 +33,7 @@ enum MainMenu {
 @MainActor
 enum AppCommand {
   static let helpURL = URL(string: "https://github.com/SergeSerb2/open/blob/main/docs/commands.md")!
-  static let featureIDs: Set<String> = ["add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
+  static let featureIDs: Set<String> = ["edit-theme", "add-split-view", "close-split-pane", "expand-current-split", "separate-from-split-view", "next-split-pane", "previous-split-pane", "open-in-current-space"]
   static func canonicalID(_ id: String) -> String {
     ["reveal-tab-in-sidebar": "reveal-current-tab", "keyboard-shortcuts": "keyboard-shortcuts-edu"][id] ?? id
   }

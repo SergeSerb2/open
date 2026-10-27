@@ -33,6 +33,8 @@ public final class ThemeBackgroundView: NSView {
     private var displayTarget: ThemeDisplayTarget?
     private var resizing = false
     public private(set) var fieldRebuildCount = 0
+    public private(set) var animatedThemeChangeCount = 0
+    public var isCrossfading: Bool { incoming?.animation(forKey: "opacity") != nil }
 
     isolated deinit { displayLink?.invalidate() }
 
@@ -153,6 +155,7 @@ public final class ThemeBackgroundView: NSView {
             refresh()
             return
         }
+        animatedThemeChangeCount += 1
         beginTransition(to: style)
         if let incoming { finish(to: incoming, duration: duration) }
     }

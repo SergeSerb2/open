@@ -73,6 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, OEEngineDelegate, OEBr
     terminationRequested = true
     if let commandWindowObserver { NotificationCenter.default.removeObserver(commandWindowObserver) }; commandWindowObserver = nil
     hotkeyService?.unregister(); afterPaintTask?.cancel(); menuRebuildTask?.cancel()
+    for controller in windowControllers { controller.closeThemeEditor() }
     saveState()
     prepareForEngineShutdown()
     if !wasEngineReady { CFRunLoopStop(CFRunLoopGetMain()) }
