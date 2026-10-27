@@ -260,10 +260,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         if background.frame != root.bounds { background.frame = root.bounds }
         if emptyPanelHost.frame != root.bounds { emptyPanelHost.frame = root.bounds }
         emptyPanelHost.isHidden = !container.isHidden
-        let oldPanel = container.layer?.presentation()?.frame ?? container.frame
-        let oldOffset = sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat
-            ?? (sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0)
         let animate = animated && window?.isVisible == true && !Motion.reducesMotion
+        // Presentation reads are needed only to start/reverse a visible animation,
+        // never while building the first window or following a plain width/resize tick.
+        let oldPanel = animate ? (container.layer?.presentation()?.frame ?? container.frame) : container.frame
+        let modelOffset = sidebar.layer?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? 0
+        let oldOffset = animate ? (sidebar.layer?.presentation()?.value(forKeyPath: "transform.translation.x") as? CGFloat ?? modelOffset) : modelOffset
         if cardState != .off {
             let card = WindowMetrics.revealCardFrame(windowSize: size, sidebarWidth: width)
             if sidebar.frame != card { sidebar.frame = card }

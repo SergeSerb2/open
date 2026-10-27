@@ -2272,12 +2272,12 @@ RING_COLORS = {"light": [(219, 59, 60), (212, 162, 1), (47, 181, 19)], "dark": [
 
 
 def dimmed_look(png, scale, centers, mode, ring=True):
-    """Rest look at each button against the expected composite over the background sampled
-    between buttons: the fill at the center (±5 levels) and, on dark content, the ring at
-    r 6.5. `ring` is the expectation: in an active window the colored ring (±12 levels: an
-    anti-aliased pixel), in an inactive one none (the pixel nearer the plain background than
-    the colored ring). On light content the ring is only 0.06, so it is not checked."""
-    _, _, px = read_image(png)
+    """Core fill stays within ±5 levels of its composite. Dark rings use the measured
+    session-2 r 6.5–7.5 band at ΔE00 <= 1, including rasterization/color management.
+    A single anti-aliased edge pixel is not a plain token/background alpha blend.
+    Inactive rings must be nearer the plain background than the active capture.
+    Light rings remain too faint for this check (alpha 0.06)."""
+    _, _, px = read_image(png, srgb=True)
     tok, fill_a, ring_a = DIMMED_LOOK[mode]
     rows, ok = [], True
     for index, (cx, cy) in enumerate(centers):
@@ -2287,9 +2287,23 @@ def dimmed_look(png, scale, centers, mode, ring=True):
         fill_err = max(abs(core[k] - expected[k]) for k in range(3))
         ring_px = px((cx - 6.5) * scale, cy * scale)
         ring_expected = [bg[k] * (1 - ring_a) + RING_COLORS[mode][index][k] * ring_a for k in range(3)]
-        ring_err = max(abs(ring_px[k] - ring_expected[k]) for k in range(3))
-        plain_err = max(abs(ring_px[k] - bg[k]) for k in range(3))
-        ring_ok = mode == "light" or (ring_err <= 12 if ring else plain_err < ring_err)
+        if mode == "dark":
+            # Facts from S2 03/0003 and 05/0009 (docs/design.md §23.3), not the
+            # implementation's ring token or a one-pixel compositing estimate.
+            anchored = [[83.6041667, 56.5208333, 69.7083333], [83.1041667, 73.5, 56.9791667], [51.7291667, 74.5833333, 59.125]]
+            floating = [[84.0833333, 57, 70.4166667], [84.0833333, 74.3541667, 57.8125], [53.5208333, 75.5833333, 60.6875]]
+            ring_expected = (floating if centers[0][0] == 25 else anchored)[index]
+            samples = [px(x, y) for y in range(int((cy-8)*scale), int((cy+8)*scale))
+                       for x in range(int((cx-8)*scale), int((cx+8)*scale))
+                       if 6.5 <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < 7.5]
+            ring_px = [statistics.mean(c[k] for c in samples) for k in range(3)]
+            ring_err = chrome_delta_e(ring_px, ring_expected)
+            plain_err = chrome_delta_e(ring_px, bg)
+            ring_ok = ring_err <= 1 if ring else plain_err < ring_err
+        else:
+            ring_err = max(abs(ring_px[k] - ring_expected[k]) for k in range(3))
+            plain_err = max(abs(ring_px[k] - bg[k]) for k in range(3))
+            ring_ok = True
         good = fill_err <= 5 and ring_ok
         ok = ok and good
         rows.append({"center": [cx, cy], "core": [round(v) for v in core], "expected": [round(v) for v in expected],
