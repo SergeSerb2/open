@@ -20,7 +20,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     private var peekStorage: PeekController?
     public var peekController: PeekController {
         if let peekStorage { return peekStorage }
-        let peek = PeekController(model: model, splitController: splitController, factory: factory, defaults: defaults)
+        let peek = PeekController(model: model, splitController: splitController, factory: factory, defaults: defaults, installsKeyMonitor: false)
         peekStorage = peek
         root.addSubview(peek.overlay.backdrop, positioned: .below, relativeTo: sidebar)
         root.addSubview(peek.overlay, positioned: .below, relativeTo: toast)
@@ -46,6 +46,9 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
     public var isCommandBarPresented = false
     public var keyBindingOverrides = KeyBindingStore.empty
     private var lastKeyRoute: (window: Int, code: UInt16, flags: UInt, timestamp: TimeInterval, handled: Bool)?
+    /// App-owned field editors can retain plain editing keys before Peek and
+    /// window shortcuts. Returning true defers to AppKit; it does not consume.
+    public var shouldDeferKeyToFirstResponder: ((NSEvent) -> Bool)?
     public var onStateChange: (() -> Void)?
     public var onClose: (() -> Void)?
     public var onFocus: (() -> Void)?
@@ -543,6 +546,12 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         guard let eventWindow = event.window,
               eventWindow === window || ownsAdditionalKeyWindow?(eventWindow) == true else { return false }
         let flags = event.modifierFlags.rawValue
+        if shouldDeferKeyToFirstResponder?(event) == true {
+            // Keep the editor's ownership if AppKit re-offers this same event
+            // after the editor hides itself and changes the first responder.
+            lastKeyRoute = (eventWindow.windowNumber, event.keyCode, flags, event.timestamp, true)
+            return false
+        }
         if let last = lastKeyRoute, last.window == eventWindow.windowNumber, last.code == event.keyCode,
            last.flags == flags, unconsumed || (event.timestamp > 0 && last.timestamp == event.timestamp) { return last.handled }
         if event.keyCode == 53, !isCommandBarPresented, let peek = peekStorage, peek.isShown {
@@ -611,6 +620,7 @@ public final class BrowserWindowController: NSWindowController, NSWindowDelegate
         performCommand(id)
     }
     public func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
+        guard window?.attachedSheet == nil else { return false }
         if let enabled = onCommandValidation?(id, enabledKey) { return enabled }
         if id == "open-in-current-space" { return peekStorage?.isShown == true }
         if id == "go-back" { return peekStorage?.isShown == true ? peekStorage?.stack.last?.host?.canGoBack == true : splitController.focusedTab.flatMap { container.host(for: $0.id) }?.canGoBack == true }

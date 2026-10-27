@@ -1195,3 +1195,21 @@ snapshot path and waits for nonblank pixels. Explicit missing window IDs fail
 instead of silently capturing the main window. The original transparent image
 is not visual evidence of the sheet. Capture intervals keep the native
 interruption guard; retries do not change the expected drawing.
+
+Step D's review-checklist pass found two real key defects. Peek had its own key
+monitor in addition to the composed window router, so it consumed Escape before
+Find. Composed windows now use one router and defer Find's plain editing keys
+to its field editor. Native JS prompt Return was not connected to OK. Its field
+editor delegate now validates the text and presses the sheet's actual default
+button; Return/Enter accept and Escape cancels. A single-button alert has a
+sheet responder for Escape. Browser Cmd+W/T/L are disabled while a sheet owns
+the window. Native key checks use OEApplication.sendEvent, not window injection.
+
+The stuck test was `dialog_native_text_return`: it polled a blocked renderer
+before checking whether the prompt closed. It now checks the socket's pending
+state first and fails in one second. Every dialog case has unconditional cleanup:
+set dismiss policy, complete pending engine callbacks, dismiss native sheets,
+verify owned windows, and kill owned process trees on timeout. A forced early
+prompt assertion was recorded as FAIL, with zero remaining CGWindowList windows,
+zero forced kills and zero foreground interruptions. The harness was restored.
+No human interaction was needed for that control or the protected old-code run.

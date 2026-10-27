@@ -20,6 +20,7 @@ import argparse
 import atexit
 import base64
 import ctypes
+from contextlib import contextmanager
 import json
 import math
 import glob
@@ -37,6 +38,11 @@ import tempfile
 import time
 import traceback
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from owned_processes import executable as owned_executable, process_tree, kill_known, on_screen_windows, wait_no_windows, run_owned_process
+
+_SUBPROCESS_CLEANUPS = []
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 OUT = os.path.join(ROOT, "docs", "engine-spike")
@@ -58,7 +64,7 @@ class FocusInterruption(RuntimeError):
 
 
 class FocusTracker:
-    """Native input and every timed polling/capture interval keep separate trace bounds."""
+    """Native input and measured timing/capture intervals keep separate trace bounds."""
     def __init__(self):
         self.apps = []
         self.checkpoints = {}
@@ -70,6 +76,7 @@ class FocusTracker:
         for app in self.apps:
             checkpoint = self.checkpoints.get(app.pid, 0)
             steps = app.native_steps[checkpoint:] + [t["start"] for t in app.timing_steps[self.timing_checkpoints.get(app.pid, 0):]]
+            focus_sensitive = bool(steps)
             if not steps:
                 observations = app.observation_steps[self.observation_checkpoints.get(app.pid, 0):]
                 steps = observations[:1]
@@ -80,7 +87,7 @@ class FocusTracker:
             for event in events:
                 resigned = event["event"] == "NSApplicationDidResignActiveNotification"
                 outside = event["event"] == "frontmostChanged" and event.get("frontmostPID") not in (None, 0, app.pid)
-                if event["uptime"] >= min(steps) and (resigned or outside or event["event"] == "hardwareInteraction"):
+                if event["uptime"] >= min(steps) and ((focus_sensitive and (resigned or outside)) or event["event"] == "hardwareInteraction"):
                     interruptions.append(dict(event, openPID=app.pid))
         return interruptions
 
@@ -137,10 +144,11 @@ class Open:
         self.timing_steps = []
         self.observation_steps = []
         self.activation_trace = []
+        self.dialog_cleanup_reports = []
         self.focus_tracker = None
         env = dict(os.environ, OPEN_USER_DATA=user_data, OPEN_AUTOMATION_VIRTUAL_INPUT="1")
         env.update(extra_env or {})
-        args = [app, "--style=%s" % style] + list(urls) + extra_args
+        args = [app, "--user-data-dir=" + user_data, "--style=%s" % style] + list(urls) + extra_args
         self.log = open(log_path, "a")
         self.started = time.time()
         # A raw executable launch can have a visible window but no foreground
@@ -157,21 +165,34 @@ class Open:
                 launch += ["--env", key + "=" + value]
         launch += ["--args"] + args[1:]
         self.proc = subprocess.Popen(launch, stdout=self.log, stderr=subprocess.STDOUT)
-        deadline = time.time() + 60
-        while time.time() < deadline:
-            try:
-                self.pid = self.call("ping")["pid"]
-                return
-            except (OSError, json.JSONDecodeError):
-                time.sleep(0.1)
-            if self.proc.poll() is not None:
-                # LaunchServices may fail its -W GetProcessPID wait independently
-                # of launching the app. Only the real socket establishes readiness.
-                self.launch_waiter_ended_before_automation = True
-        self.proc.kill()
-        self.proc.wait()
-        self.log.close()
-        raise RuntimeError("Open automation was not ready within 60 s (launcher exit %s); see %s" % (self.proc.returncode, log_path))
+        deadline = time.time() + 20
+        try:
+            while time.time() < deadline:
+                try:
+                    self.pid = self.call("ping")["pid"]
+                    atexit.register(self.quit)
+                    return
+                except (OSError, json.JSONDecodeError):
+                    time.sleep(0.1)
+                if self.proc.poll() is not None:
+                    # LaunchServices may fail its -W GetProcessPID wait independently
+                    # of launching the app. Only the real socket establishes readiness.
+                    self.launch_waiter_ended_before_automation = True
+        except BaseException:
+            self.cleanup_failed_launch();raise
+        self.cleanup_failed_launch()
+        raise RuntimeError("Open automation was not ready within 20 s (launcher exit %s); see %s" % (self.proc.returncode, log_path))
+
+    def cleanup_failed_launch(self):
+        candidates=subprocess.run(['pgrep','-f',re.escape(self.user_data)],capture_output=True,text=True,timeout=3)
+        known={}
+        for value in candidates.stdout.split():
+            if value.isdigit() and owned_executable(int(value))==os.path.realpath(self.executable):
+                known.update(process_tree(int(value)))
+        kill_known(known)
+        remaining=wait_no_windows(known)
+        self.proc.kill();self.proc.wait();self.log.close();self.closed=True
+        if remaining:raise RuntimeError('Owned windows survived failed launch cleanup: '+json.dumps(remaining))
 
     def call(self, cmd, timeout=120, **args):
         foreground_input = cmd in ("key", "focus") or (cmd == "window-focus" and args.get("activate"))
@@ -185,15 +206,16 @@ class Open:
                 raise FocusInterruption("Exact-PID activation refused: " + activation.stdout.strip() + " " + activation.stderr.strip(), [native])
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.settimeout(timeout)
-        s.connect(self.sock)
-        s.sendall((json.dumps({"id": 1, "cmd": cmd, "args": args}) + "\n").encode())
-        buf = b""
-        while not buf.endswith(b"\n"):
-            chunk = s.recv(1 << 20)
-            if not chunk:
-                break
-            buf += chunk
-        s.close()
+        try:
+            s.connect(self.sock)
+            s.sendall((json.dumps({"id": 1, "cmd": cmd, "args": args}) + "\n").encode())
+            buf = b""
+            while not buf.endswith(b"\n"):
+                chunk = s.recv(1 << 20)
+                if not chunk:
+                    break
+                buf += chunk
+        finally:s.close()
         resp = json.loads(buf)
         if resp.get("observationStart", 0) > 0:
             self.observation_steps.append(resp["observationStart"])
@@ -263,46 +285,73 @@ class Open:
                     raise
                 time.sleep(1)
 
-    def quit(self):
-        if self.closed:
-            return
+    def cleanup_dialogs(self, label):
+        report={'label':label,'ok':False,'remaining':[]}
+        try:report['windowsBefore']=on_screen_windows([self.pid])
+        except Exception as error:report['windowQueryError']=str(error)
         try:
-            self.activation_trace = self.call("activation-events")
-        except Exception:
-            pass
-        self.quit_report = {}
-        try:
-            self.quit_report["reply"] = self.call("quit")
+            self.call('policy',timeout=1,dialogs='dismiss')
+            state_before=self.call('page-dialog-state',timeout=.5)
+            dialog_ids={state_before['window']} if state_before.get('visible') and state_before.get('window',0)>0 else set()
+            deadline=time.monotonic()+3
+            while time.monotonic()<deadline:
+                state=self.call('page-dialog-state',timeout=.5)
+                if 'pendingBefore' not in report:report['pendingBefore']=state.get('pending',0)
+                if state.get('pending',0):self.call('dialog',timeout=.5,accept=False)
+                self.call('dismiss',timeout=.5)
+                windows=self.call('windows',timeout=.5)
+                remaining=[{'number':w['number'],'title':w.get('title',''),'class':w.get('class','')} for w in windows if w.get('visible') and (w.get('sheet') or 'Alert' in w.get('class',''))]
+                report['remaining']=remaining
+                if not remaining and not self.call('page-dialog-state',timeout=.5).get('pending',0):
+                    deadline_pixels=time.monotonic()+2
+                    while True:
+                        visible=[w for w in on_screen_windows([self.pid]) if w['number'] in dialog_ids]
+                        if not visible or time.monotonic()>=deadline_pixels:break
+                        time.sleep(.02)
+                    report['remaining']=visible;report['ok']=not visible;break
+                report['remaining']=remaining;time.sleep(.02)
         except Exception as error:
-            self.quit_report["error"] = str(error)
-        # The launch waiter may have been interrupted independently of its app.
-        # Wait for the actual app PID too, and never kill another executable.
-        def still_ours():
-            if not self.pid:
-                return False
-            path = ctypes.create_string_buffer(4096)
-            libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
-            size = libproc.proc_pidpath(self.pid, path, len(path))
-            actual = os.path.realpath(os.fsdecode(path.value)) if size > 0 else ""
-            if "observedExecutable" not in self.quit_report:
-                self.quit_report["observedExecutable"] = actual
-                self.quit_report["expectedExecutable"] = os.path.realpath(self.executable)
-            return size > 0 and actual == os.path.realpath(self.executable)
-        deadline = time.monotonic() + 15
-        while still_ours() and time.monotonic() < deadline:
-            time.sleep(.05)
-        self.quit_report["forced"] = still_ours()
-        if self.quit_report["forced"]:
-            os.kill(self.pid, signal.SIGKILL)
+            report['error']=str(error)
+            # A suite may legitimately have closed its last window already.
+            try:
+                if not on_screen_windows([self.pid]):report['ok']=True
+            except Exception as window_error:report['windowQueryError']=str(window_error)
+        self.dialog_cleanup_reports.append(report)
+        if not report['ok']:
+            try:known=process_tree(self.pid)
+            except Exception:known={self.pid:os.path.realpath(self.executable)}
+            report['killed']=kill_known(known)
+            report['remainingAfterKill']=wait_no_windows(known)
+            raise RuntimeError('Dialog cleanup failed: '+json.dumps(report))
+        return report
+
+    def quit(self):
+        if self.closed:return
+        self.quit_report={}
+        try:known=process_tree(self.pid) if self.pid else {}
+        except Exception:known={self.pid:os.path.realpath(self.executable)} if self.pid else {}
         try:
-            self.proc.wait(2)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait()
-        if os.path.exists(self.launch_log_path):
-            self.log.write(Path(self.launch_log_path).read_text(errors="replace"))
-        self.log.close()
-        self.closed = True
+            if self.pid and owned_executable(self.pid)==os.path.realpath(self.executable):
+                self.cleanup_dialogs('suite quit')
+                self.activation_trace=self.call('activation-events',timeout=1)
+                self.quit_report['reply']=self.call('quit',timeout=1)
+        except Exception as error:self.quit_report['error']=str(error)
+        deadline=time.monotonic()+5
+        while self.pid and owned_executable(self.pid)==os.path.realpath(self.executable) and time.monotonic()<deadline:time.sleep(.05)
+        self.quit_report['forced']=bool(self.pid and owned_executable(self.pid)==os.path.realpath(self.executable))
+        try:remaining=on_screen_windows(known)
+        except Exception as error:remaining=[{'windowQueryError':str(error)}]
+        self.quit_report['windowsBeforeKill']=remaining
+        # All descendants belong to the PID verified from this run's socket.
+        # Kill leftovers even when the root exited and a helper was orphaned.
+        self.quit_report['killed']=kill_known(known)
+        try:self.quit_report['remainingWindows']=wait_no_windows(known)
+        except Exception as error:self.quit_report['remainingWindows']=[{'windowQueryError':str(error)}]
+        self.quit_report['ok']=not self.quit_report.get('forced') and not self.quit_report['remainingWindows'] and all(r['ok'] for r in self.dialog_cleanup_reports)
+        try:self.proc.wait(2)
+        except subprocess.TimeoutExpired:self.proc.kill();self.proc.wait()
+        if os.path.exists(self.launch_log_path):self.log.write(Path(self.launch_log_path).read_text(errors='replace'))
+        self.log.close();self.closed=True
 
     def tab(self, tab_id):
         return [t for t in self.call("tabs") if t["id"] == tab_id][0]
@@ -346,8 +395,10 @@ def shot(app, name, window=None, max_px=1100):
     return name
 
 
-def wait_until(fn, timeout=20, step=0.5):
-    if _ACTIVE_FOCUS_TRACKER:
+def wait_until(fn, timeout=20, step=0.5, timing=False):
+    # State synchronization is not a foreground performance measurement.
+    # Native key steps retain their guard through the next assertion.
+    if timing and _ACTIVE_FOCUS_TRACKER:
         _ACTIVE_FOCUS_TRACKER.begin_timed_poll()
     deadline = time.monotonic() + timeout
     last = None
@@ -566,6 +617,13 @@ def webstore_install(app, style):
 # Engine feature checks (no extensions needed)
 
 
+@contextmanager
+def dialog_case(app,label):
+    """Every exit, including assertion, socket timeout and interruption, cancels."""
+    try:yield
+    finally:app.cleanup_dialogs(label)
+
+
 def page_chrome_checks(factory, results, tmp):
     """Real page chrome flows. Policies expose caller choices, never fake engine replies."""
     import http.server
@@ -610,7 +668,7 @@ def page_chrome_checks(factory, results, tmp):
         def key(name=None, **args): return app.call('key', **dict(args, **({'key': name} if name else {})))
         def find_state(): return app.call('find-state')
         def open_find(text):
-            app.call('focus', tab=tab); key('f', modifiers=['cmd'], route='window')
+            app.call('focus', tab=tab); key('f', modifiers=['cmd'])
             assert wait_until(lambda: find_state()['visible'], timeout=3, step=.02), find_state()
             key(text=text)
         open_find('needle')
@@ -683,6 +741,7 @@ def page_chrome_checks(factory, results, tmp):
         results['extension_chrome_model_pending']={'status':'BLOCKED','reason':'pending #93: native Chrome toolbar action/popup implementation is not on main'}
 
         def start_dialog(script):
+            app.call('policy',dialogs='')
             app.eval(tab, 'window.outcome="pending";setTimeout(()=>{window.outcome=(' + script + ');},0);true')
             return wait_until(lambda: (lambda s: s if s['visible'] else None)(app.call('page-dialog-state')), timeout=5, step=.02)
         for name, script, accepted, text, expected, kind in [
@@ -691,41 +750,50 @@ def page_chrome_checks(factory, results, tmp):
             ('confirm_accept', 'confirm("page chrome confirm")', True, None, True, 1),
             ('prompt_accept', 'prompt("page chrome prompt","seed")', True, 'typed response', 'typed response', 2),
             ('prompt_cancel', 'prompt("page chrome prompt","seed")', False, 'ignored', None, 2)]:
-            visible = start_dialog(script); assert visible, app.call('page-dialog-state')
-            if name == 'prompt_accept': shot(app, 'page-chrome-dialog.png', window=visible['window'])
-            response = app.call('page-dialog-press', accept=accepted, text=text)
-            done = wait_until(lambda: app.eval(tab, 'window.outcome') == expected, timeout=5, step=.02)
-            results['dialog_' + name] = {'ok': visible['kind'] == kind and response and bool(done)
-                and (kind != 2 or visible['text'] == 'seed'), 'sheet': visible, 'result': app.eval(tab, 'window.outcome')}
-        app.call('policy', dialogs='dismiss')
-        dismissed = app.eval(tab, '[confirm("dismiss policy"),prompt("dismiss prompt","seed")]')
-        results['dialog_dismiss_policy'] = {'ok': dismissed == [False, None] and app.call('page-dialog-state')['pending'] == 0, 'result': dismissed}
-        app.call('policy', dialogs='hold')
-        app.eval(tab, 'setTimeout(()=>{window.outcome=confirm("held confirm")},0);true')
-        held = wait_until(lambda: (lambda s: s if s['pending'] == 1 and s['held'] else None)(app.call('page-dialog-state')), timeout=5, step=.02)
-        answered = app.call('dialog', accept=True)
-        results['dialog_hold_policy'] = {'ok': bool(held) and not held['visible'] and answered and bool(wait_until(lambda: app.eval(tab,'window.outcome') is True, timeout=3, step=.02))}
-        unanswered = app.call('open',url=origin+'/page?unanswered')['id'];app.call('wait',tab=unanswered)
-        app.eval(unanswered,'setTimeout(()=>confirm("unanswered close"),0);true')
-        assert wait_until(lambda:app.call('page-dialog-state')['pending']==1,timeout=5,step=.02)
-        app.call('close',tab=unanswered)
-        removed_unanswered=wait_until(lambda:all(t['id']!=unanswered for t in app.call('tabs')),timeout=5,step=.02)
-        results['dialog_unanswered_host_close']={'ok':bool(removed_unanswered) and app.call('page-dialog-state')['pending']==0}
+            with dialog_case(app,'page-chrome dialog button'):
+                visible = start_dialog(script); assert visible, app.call('page-dialog-state')
+                if name == 'prompt_accept': shot(app, 'page-chrome-dialog.png', window=visible['window'])
+                response = app.call('page-dialog-press', accept=accepted, text=text)
+                closed = wait_until(lambda: app.call('page-dialog-state')['pending']==0, timeout=2, step=.02)
+                done = bool(closed) and app.eval(tab, 'window.outcome',timeout=2) == expected
+                results['dialog_' + name] = {'ok': visible['kind'] == kind and response and bool(done)
+                    and (kind != 2 or visible['text'] == 'seed'), 'sheet': visible, 'closed':bool(closed), 'result': app.eval(tab, 'window.outcome',timeout=2) if closed else 'pending'}
+        with dialog_case(app,'dialog dismiss policy'):
+            app.call('policy', dialogs='dismiss')
+            dismissed = app.eval(tab, '[confirm("dismiss policy"),prompt("dismiss prompt","seed")]',timeout=3)
+            results['dialog_dismiss_policy'] = {'ok': dismissed == [False, None] and app.call('page-dialog-state')['pending'] == 0, 'result': dismissed}
+        with dialog_case(app,'dialog hold policy'):
+            app.call('policy', dialogs='hold')
+            app.eval(tab, 'setTimeout(()=>{window.outcome=confirm("held confirm")},0);true')
+            held = wait_until(lambda: (lambda s: s if s['pending'] == 1 and s['held'] else None)(app.call('page-dialog-state')), timeout=5, step=.02)
+            answered = app.call('dialog', accept=True)
+            results['dialog_hold_policy'] = {'ok': bool(held) and not held['visible'] and answered and bool(wait_until(lambda: app.eval(tab,'window.outcome') is True, timeout=3, step=.02))}
+        with dialog_case(app,'unanswered host close'):
+            app.call('policy',dialogs='hold')
+            unanswered = app.call('open',url=origin+'/page?unanswered')['id'];app.call('wait',tab=unanswered)
+            app.eval(unanswered,'setTimeout(()=>confirm("unanswered close"),0);true')
+            assert wait_until(lambda:app.call('page-dialog-state')['pending']==1,timeout=5,step=.02)
+            app.call('close',tab=unanswered)
+            removed_unanswered=wait_until(lambda:all(t['id']!=unanswered for t in app.call('tabs')),timeout=5,step=.02)
+            results['dialog_unanswered_host_close']={'ok':bool(removed_unanswered) and app.call('page-dialog-state')['pending']==0}
         app.call('policy', dialogs='')
         closing = app.call('open', url=origin + '/page?unsaved')['id']; app.call('wait', tab=closing); app.call('focus', tab=closing)
         app.call('click', tab=closing, selector='#unload'); before_hosts = app.call('host-counts')['created']
-        app.call('close', tab=closing)
-        unload = wait_until(lambda: (lambda s: s if s.get('visible') and s.get('kind') == 3 else None)(app.call('page-dialog-state')), timeout=5, step=.02)
-        assert unload, app.call('page-dialog-state')
-        app.call('page-dialog-press', accept=False)
-        stayed = wait_until(lambda: not app.call('page-dialog-state')['visible'], timeout=3, step=.02)
-        results['dialog_beforeunload_stay'] = {'ok': bool(stayed) and any(t['id'] == closing for t in app.call('tabs'))
-            and app.eval(closing,'document.title') == 'Page chrome fixture' and app.call('host-counts')['created'] == before_hosts, 'sheet': unload}
-        app.call('close', tab=closing)
-        assert wait_until(lambda: app.call('page-dialog-state').get('kind') == 3 and app.call('page-dialog-state')['visible'], timeout=5, step=.02)
-        app.call('page-dialog-press', accept=True)
-        removed = wait_until(lambda: all(t['id'] != closing for t in app.call('tabs')), timeout=5, step=.02)
-        results['dialog_beforeunload_leave'] = {'ok': bool(removed) and app.call('page-dialog-state')['pending'] == 0}
+        with dialog_case(app,'beforeunload Stay'):
+            app.call('close', tab=closing)
+            unload = wait_until(lambda: (lambda s: s if s.get('visible') and s.get('kind') == 3 else None)(app.call('page-dialog-state')), timeout=5, step=.02)
+            assert unload, app.call('page-dialog-state')
+            app.call('page-dialog-press', accept=False)
+            stayed = wait_until(lambda: not app.call('page-dialog-state')['visible'], timeout=3, step=.02)
+            results['dialog_beforeunload_stay'] = {'ok': bool(stayed) and any(t['id'] == closing for t in app.call('tabs'))
+                and app.eval(closing,'document.title',timeout=2) == 'Page chrome fixture' and app.call('host-counts')['created'] == before_hosts, 'sheet': unload}
+        with dialog_case(app,'beforeunload Leave'):
+            app.call('policy',dialogs='')
+            app.call('close', tab=closing)
+            assert wait_until(lambda: app.call('page-dialog-state').get('kind') == 3 and app.call('page-dialog-state')['visible'], timeout=5, step=.02)
+            app.call('page-dialog-press', accept=True)
+            removed = wait_until(lambda: all(t['id'] != closing for t in app.call('tabs')), timeout=5, step=.02)
+            results['dialog_beforeunload_leave'] = {'ok': bool(removed) and app.call('page-dialog-state')['pending'] == 0}
         app.call('select', tab=tab); app.call('focus', tab=tab)
 
         # A policy denial must reach the real permission callback and draw no UI.
@@ -761,6 +829,35 @@ def page_chrome_checks(factory, results, tmp):
             outcomes.append(app.eval(known,'Notification.requestPermission()'))
         results['permission_stored_no_prompt'] = {'ok': outcomes == [r[2] for r in remembered] and not app.call('permission-state')['visible'] and app.call('permission-state')['decisions'] == old_decisions, 'outcomes': outcomes}
         app.call('select',tab=tab);app.call('focus',tab=tab)
+        # Caller boundaries use real page dialogs. Oversize data is refused
+        # before it becomes App-owned alert text or enters the pending queue.
+        app.call('policy',dialogs='hold')
+        for kind,limit,expression in [('message',16384,'alert("x".repeat(N))'),('prompt',4096,'prompt("bounded prompt","x".repeat(N))')]:
+            with dialog_case(app,'dialog size boundary'):
+                app.call('policy',dialogs='hold')
+                app.call('events')
+                app.eval(tab,'setTimeout(()=>{'+expression.replace('N',str(limit))+';window.boundaryDone=true},0);true')
+                accepted=wait_until(lambda:app.call('page-dialog-state')['pending']==1,timeout=5,step=.02)
+                assert accepted,app.call('page-dialog-state');app.call('dialog',accept=False)
+                assert wait_until(lambda:app.call('page-dialog-state')['pending']==0,timeout=3,step=.02)
+                app.eval(tab,'window.boundaryDone=false;setTimeout(()=>{'+expression.replace('N',str(limit+1))+';window.boundaryDone=true},0);true')
+                done=wait_until(lambda:app.eval(tab,'window.boundaryDone') is True,timeout=3,step=.02)
+                ev=app.call('events')
+                results['dialog_'+kind+'_limit']={'ok':bool(accepted) and bool(done) and app.call('page-dialog-state')['pending']==0 and any(e['type']=='pageChromeRefused' for e in ev),'atBytes':limit,'overBytes':limit+1}
+        with dialog_case(app,'dialog queue boundary'):
+            app.call('policy',dialogs='hold')
+            queued=[]
+            for i in range(8):
+                q=app.call('open',url=origin+'/page?queue='+str(i))['id'];queued.append(q);app.call('wait',tab=q)
+                app.eval(q,'setTimeout(()=>alert("queued '+str(i)+'"),0);true')
+                assert wait_until(lambda:app.call('page-dialog-state')['pending']==i+1,timeout=5,step=.02)
+            overflow=app.call('open',url=origin+'/page?queue=overflow')['id'];queued.append(overflow);app.call('wait',tab=overflow);app.call('events')
+            app.eval(overflow,'window.overflowDone=false;setTimeout(()=>{alert("overflow");window.overflowDone=true},0);true')
+            refused=wait_until(lambda:app.eval(overflow,'window.overflowDone') is True,timeout=3,step=.02)
+            results['dialog_queue_limit']={'ok':bool(refused) and app.call('page-dialog-state')['pending']==8 and any(e['type']=='pageChromeRefused' for e in app.call('events')),'at':8,'over':9}
+            for q in queued:app.call('close',tab=q)
+            assert wait_until(lambda:app.call('page-dialog-state')['pending']==0 and not {t['id'] for t in app.call('tabs')}.intersection(queued),timeout=8,step=.02)
+        app.call('select',tab=tab);app.call('focus',tab=tab);app.call('policy',dialogs='')
         # Actual engine context menu events; selections use the same NSMenu items.
         def context(selector, selection=False):
             if selection:app.eval(tab,'(()=>{const r=document.createRange();r.selectNodeContents(document.querySelector('+json.dumps(selector)+'));const s=getSelection();s.removeAllRanges();s.addRange(r);return true})()')
@@ -786,6 +883,18 @@ def page_chrome_checks(factory, results, tmp):
         assert opened,app.call('tabs');app.call('select',tab=opened['id']);app.call('wait',tab=opened['id'])
         results['page_context_new_tab_engine']={'ok':app.eval(opened['id'],'document.title')=='Linked fixture' and opened['profile']==app.tab(tab)['profile']}
         app.call('select',tab=tab);app.call('focus',tab=tab)
+        for length in [65536,65537]:
+            address=origin+'/'+'x'*(length-len(origin)-1)
+            app.eval(tab,'document.querySelector("#link-target").href='+json.dumps(address)+';true')
+            if length==65536:
+                bounded=context('#link-target');picked=app.call('context-menu-select',key='link-copy')
+                results['context_url_limit_at']={'ok':picked and len(app.call('pasteboard').encode())==length,'bytes':length}
+            else:
+                app.call('events');pos=app.eval(tab,'(()=>{let r=document.querySelector("#link-target").getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()')
+                app.call('rightclick',tab=tab,x=pos[0],y=pos[1])
+                refused=wait_until(lambda:next((e for e in app.call('events') if e['type']=='pageChromeRefused'),None),timeout=3,step=.02)
+                results['context_url_limit_over']={'ok':bool(refused) and app.call('context-menu-state')['completed'] and app.call('context-menu-state')['items']==[],'bytes':length}
+        app.eval(tab,'document.querySelector("#link-target").href="/link";true')
         app.call('site-controls');site=app.call('site-controls-state')
         results['site_control_host_pending']={'status':'BLOCKED','reason':'pending #69','hostRequest':site}
         assert not site['available'] and site['requests']>0 and site['request']['profile']==app.tab(tab)['profile'] and site['request']['anchor'][2:]==[30,30],site
@@ -836,6 +945,79 @@ def page_chrome_checks(factory, results, tmp):
         for server in servers:server.shutdown();server.server_close()
 
 
+def page_key_checks(factory, results, tmp):
+    """New editing contexts use OEApplication.sendEvent, never route=window."""
+    import http.server, threading
+    handler=lambda *a,**kw:http.server.SimpleHTTPRequestHandler(*a,directory=str(Path(ROOT)/'tools/e2e/fixtures/page-chrome'),**kw)
+    server=http.server.ThreadingHTTPServer(('127.0.0.1',0),handler)
+    threading.Thread(target=server.serve_forever,daemon=True).start()
+    url='http://127.0.0.1:%d/page.html'%server.server_address[1]
+    app=factory(urls=(url,),fresh=True)
+    def key(k=None,**a):return app.call('key',**dict(a,**({'key':k} if k else {})))
+    def find():
+        key('f',modifiers=['cmd']);assert wait_until(lambda:app.call('find-state')['visible'],timeout=3,step=.02)
+        key(text='needle');assert wait_until(lambda:app.call('find-state')['count']==3,timeout=5,step=.02)
+    try:
+        tab=app.call('tabs')[0]['id'];app.call('wait',tab=tab);app.call('focus',tab=tab)
+        app.call('peek-open',tab=tab,url=url+'?peek')
+        assert wait_until(lambda:app.call('peek-state')['shown'],timeout=5,step=.02)
+        find();key('escape')
+        escaped=wait_until(lambda:not app.call('find-state')['visible'],timeout=3,step=.02)
+        results['find_escape_precedes_peek']={'ok':bool(escaped) and app.call('peek-state')['shown'],'find':app.call('find-state'),'peekShown':app.call('peek-state')['shown']}
+        app.call('peek-close')
+        if app.call('find-state')['visible']:key('escape')
+        app.call('focus',tab=tab)
+        for letter,mode in [('t','newTab'),('l','editCurrentURL')]:
+            find();before={t['id'] for t in app.call('tabs')};key(letter,modifiers=['cmd'])
+            bar=wait_until(lambda:(lambda s:s if s.get('presented') else None)(app.call('commandbar-state')),timeout=3,step=.02)
+            results['find_cmd_'+letter]={'ok':bool(bar) and bar['mode']==mode and before=={t['id'] for t in app.call('tabs')},'bar':bar}
+            key('escape')
+        temp=app.call('open',url=url+'?close')['id'];app.call('wait',tab=temp);app.call('focus',tab=temp);find()
+        before={t['id'] for t in app.call('tabs')};key('w',modifiers=['cmd'])
+        closed=wait_until(lambda:all(t['id']!=temp for t in app.call('tabs')),timeout=5,step=.02)
+        results['find_cmd_w_once']={'ok':bool(closed) and {t['id'] for t in app.call('tabs')}==before-{temp} and not app.call('find-state')['visible']}
+        app.call('select',tab=tab);app.call('focus',tab=tab);app.call('policy',dialogs='')
+        def sheet(expression):
+            app.call('policy',dialogs='')
+            app.eval(tab,'window.keyOutcome="pending";setTimeout(()=>{window.keyOutcome=('+expression+')},0);true')
+            state=wait_until(lambda:(lambda s:s if s['visible'] and s['window']>0 else None)(app.call('page-dialog-state')),timeout=5,step=.02)
+            assert state,app.call('page-dialog-state');return state
+        with dialog_case(app,'native confirm keys'):
+            dialog=sheet('confirm("native key sheet")');before={t['id'] for t in app.call('tabs')}
+            for letter in ['t','l','w']:
+                key(letter,modifiers=['cmd'],window=dialog['window'])
+                results['dialog_blocks_cmd_'+letter]={'ok':app.call('page-dialog-state')['pending']==1 and not app.call('commandbar-state').get('presented',False) and {t['id'] for t in app.call('tabs')}==before}
+            key('escape',window=dialog['window'])
+            closed=wait_until(lambda:app.call('page-dialog-state')['pending']==0,timeout=1,step=.02)
+            results['dialog_native_escape']={'ok':bool(closed) and app.eval(tab,'window.keyOutcome',timeout=2) is False}
+        with dialog_case(app,'native prompt Return'):
+            dialog=sheet('prompt("native prompt","seed")')
+            key('a',modifiers=['cmd'],window=dialog['window']);key(text='native response',window=dialog['window']);key('return',window=dialog['window'])
+            closed=wait_until(lambda:app.call('page-dialog-state')['pending']==0,timeout=1,step=.02)
+            results['dialog_native_text_return']={'ok':bool(closed) and app.eval(tab,'window.keyOutcome',timeout=2)=='native response','closedByKey':bool(closed)}
+        for name,expression,pressed,expected in [
+            ('prompt_enter','prompt("native Enter","seed")','enter','seed'),
+            ('prompt_escape','prompt("native Escape","seed")','escape',None),
+            ('alert_return','(alert("native alert Return"),"done")','return','done'),
+            ('alert_escape','(alert("native alert Escape"),"done")','escape','done'),
+            ('confirm_return','confirm("native confirm Return")','return',True)]:
+            with dialog_case(app,'native '+name):
+                dialog=sheet(expression);key(pressed,window=dialog['window'])
+                closed=wait_until(lambda:app.call('page-dialog-state')['pending']==0,timeout=1,step=.02)
+                results['dialog_native_'+name]={'ok':bool(closed) and app.eval(tab,'window.keyOutcome',timeout=2)==expected,'closedByKey':bool(closed)}
+        unsaved=app.call('open',url=url+'?native-unload')['id'];app.call('wait',tab=unsaved);app.call('focus',tab=unsaved)
+        app.call('click',tab=unsaved,selector='#unload')
+        for pressed,leaves in [('escape',False),('return',True)]:
+            with dialog_case(app,'native beforeunload '+pressed):
+                app.call('policy',dialogs='');key('w',modifiers=['cmd'])
+                dialog=wait_until(lambda:(lambda s:s if s.get('visible') and s.get('kind')==3 else None)(app.call('page-dialog-state')),timeout=3,step=.02)
+                assert dialog,app.call('page-dialog-state');key(pressed,window=dialog['window'])
+                closed=wait_until(lambda:app.call('page-dialog-state')['pending']==0,timeout=1,step=.02)
+                removed=wait_until(lambda:all(t['id']!=unsaved for t in app.call('tabs')),timeout=3,step=.02) if leaves and closed else False
+                results['dialog_native_beforeunload_'+pressed]={'ok':bool(closed) and (bool(removed) if leaves else any(t['id']==unsaved for t in app.call('tabs'))),'closedByKey':bool(closed)}
+    finally:app.quit();server.shutdown();server.server_close()
+
+
 def feature_checks(app, style, results, tmp):
     t = new_tab(app, "https://en.wikipedia.org/wiki/Web_browser")
     app.call("policy", dialogs="accept", prompt="hello", permissions="grant", contextMenu="record",
@@ -850,10 +1032,11 @@ def feature_checks(app, style, results, tmp):
             results[name] = {"ok": False, "error": str(e), "trace": traceback.format_exc()[-600:]}
 
     def dialogs():
-        app.call("events")
-        r = app.eval(t, '(() => { alert("a"); return [confirm("c?"), prompt("p?", "d")]; })()')
-        ev = [e for e in app.call("events") if e["type"] == "dialog"]
-        return {"ok": r == [True, "hello"] and len(ev) == 3, "result": r, "events": [e["kind"] for e in ev]}
+        with dialog_case(app,'legacy alert confirm prompt'):
+            app.call("events")
+            r = app.eval(t, '(() => { alert("a"); return [confirm("c?"), prompt("p?", "d")]; })()',timeout=3)
+            ev = [e for e in app.call("events") if e["type"] == "dialog"]
+            return {"ok": r == [True, "hello"] and len(ev) == 3, "result": r, "events": [e["kind"] for e in ev]}
 
     def permissions():
         app.call("events")
@@ -3091,12 +3274,14 @@ def sidebar_checks(factory, results, tmp):
                                       and unpinned["section"] == "today" and not unpinned["page"]["browserPinned"]
                                       and check_page(app, b, "Sidebar B")}
         app.call("close", tab=b)
+        wait_until(lambda: not any(t["id"] == b for t in app.call("tabs")), timeout=5, step=.02)
         archived = app.call("archive")
         results["close_today_archives"] = {"ok": not any(t["id"] == b for t in app.call("tabs"))
                                                and any(t["id"] == b for t in archived) and check_page(app, a, "Sidebar A")}
         app.call("pin", tab=a)
         old_page = app.page(a)["identifier"]
         app.call("close", tab=a)
+        wait_until(lambda: not app.tab(a)["hasWebContent"], timeout=5, step=.02)
         unloaded = app.tab(a)
         results["close_pinned_unloads"] = {"ok": unloaded["section"] == "pinned" and not unloaded["loaded"]
                                                and not unloaded["hasWebContent"] and unloaded["sleepPhase"] == "placeholder"}
@@ -3269,8 +3454,9 @@ def startup_failure_checks(factory, results, tmp):
     early_data = os.path.join(tmp, "early-quit")
     log = os.path.join(tmp, "early-quit.log")
     with open(log, "w") as stream:
-        proc = subprocess.run([app_path, "--user-data-dir=" + early_data],
+        proc = run_owned_process([app_path, "--user-data-dir=" + early_data],
             env=dict(os.environ, OPEN_AUTOMATION_QUIT_BEFORE_ENGINE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    _SUBPROCESS_CLEANUPS.append(proc.cleanup)
     text = open(log).read()
     results["quit_before_engine"] = {"ok": proc.returncode == 0 and "termination before engine" in text
         and "engineStart" not in text and os.path.isfile(os.path.join(early_data, "State", "browser.json"))
@@ -3298,9 +3484,13 @@ def startup_failure_checks(factory, results, tmp):
     shutil.rmtree(os.path.join(failed_bundle, "Contents", "Frameworks", "Chromium Embedded Framework.framework"))
     failure_data = os.path.join(tmp, "engine-failure")
     failure_log = os.path.join(tmp, "engine-failure.log")
+    if b"engine failure alert shown; button=Quit" not in Path(app_path).read_bytes():
+        results['engine_failure_alert']={'ok':False,'error':'Refused alert launch: automation dismissal is compiled out'}
+        shutil.rmtree(failed_bundle);return
     with open(failure_log, "w") as stream:
-        failed = subprocess.run([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
+        failed = run_owned_process([os.path.join(failed_bundle, "Contents", "MacOS", "Open"), "--user-data-dir=" + failure_data],
             env=dict(os.environ, OPEN_AUTOMATION_DISMISS_ENGINE_FAILURE="1"), stdout=stream, stderr=subprocess.STDOUT, timeout=15)
+    _SUBPROCESS_CLEANUPS.append(failed.cleanup)
     text = open(failure_log).read()
     results["engine_failure_alert"] = {"ok": failed.returncode == 1 and "engine failed to start" in text
         and "engine failure alert shown; button=Quit" in text, "exit": failed.returncode}
@@ -3766,7 +3956,7 @@ def commandbar_checks(factory, results, tmp, config):
         results['lazy_commandbar'] = {'ok': state().get('created') is False}
         app.call('focus', tab=tab)
         opened = bar('t', 'window')
-        first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02)
+        first_open = wait_until(lambda: state() if state().get('openFirstResultsMs',-1) >= 0 else None, step=.02, timing=True)
         results['first_open_results_budget'] = {'ok': bool(first_open) and first_open['openFirstResultsMs'] <= 50, 'milliseconds': first_open.get('openFirstResultsMs') if first_open else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
         results['cmd_t_mode'] = {'ok': opened['mode'] == 'newTab' and opened['newTabHighlighted'], 'state': opened}
         typed = type_query(origin.removeprefix('http://') + '/new')
@@ -3873,7 +4063,7 @@ def commandbar_checks(factory, results, tmp, config):
         return_routing = press('return')
         switched = wait_until(lambda: app.call('window-state') if app.call('window-state')['space'] == second_space and app.call('window-state')['selected'] == target else None, timeout=3, step=.1)
         results['switch_tab_across_spaces'] = {'ok': bool(switched) and app.eval(target, 'document.title') == 'Shell C /cross', 'state': app.call('window-state'), 'expectedSpace': second_space, 'expectedTab': target, 'rows': cross['rows'], 'barAfterReturn':state(), 'returnRouting':return_routing}
-        bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02)
+        bar('t'); timings = wait_until(lambda: state() if state().get('openFirstResultsMs', -1) >= 0 else None, step=.02, timing=True)
         results['first_results_budget'] = {'ok': bool(timings) and timings['openFirstResultsMs'] <= 50, 'milliseconds': timings.get('openFirstResultsMs') if timings else None, 'scope': 'showCommandBar entry to first snapshot applied; excludes preceding key routing, socket transport and frame presentation'}
         shot(app, 'commandbar-live-%s.png' % config.lower(), window=app.call('window-state')['number'])
         press('escape'); time.sleep(.3)
@@ -4025,7 +4215,7 @@ def main():
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "actions", "profiles", "page-chrome"],
+                                       "commandbar", "actions", "profiles", "page-chrome", "page-keys"],
                     required=True)
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -4109,6 +4299,9 @@ def main():
         elif opts.only in ("commandbar", "actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "page-keys":
+            results[opts.only] = CheckedResults(tracker)
+            page_key_checks(factory, results[opts.only], tmp)
         elif opts.only == "page-chrome":
             results[opts.only] = CheckedResults(tracker)
             page_chrome_checks(factory, results[opts.only], tmp)
@@ -4143,6 +4336,7 @@ def main():
                 app.quit()
             if opts.only == "features":
                 page_chrome_checks(factory, results["features"], tmp)
+                page_key_checks(factory, results["features"], tmp)
 
     interrupted_attempts = []
     for attempt in range(1, 4):
@@ -4164,6 +4358,10 @@ def main():
         finally:
             for instance in tracker.apps:
                 instance.quit()
+            cleanup=[{'pid':a.pid,'quit':a.quit_report,'dialogs':a.dialog_cleanup_reports} for a in tracker.apps]
+            dict.__setitem__(results.setdefault(opts.only,{}),'owned_window_cleanup',{
+                'ok':all(a.quit_report.get('ok',False) for a in tracker.apps) and all(x['ok'] for x in _SUBPROCESS_CLEANUPS),
+                'apps':cleanup,'subprocesses':list(_SUBPROCESS_CLEANUPS)})
         if interruption is None:
             break
         interrupted_attempts.append(dict(interruption, attempt=attempt, status="INTERRUPTED",
@@ -4177,14 +4375,14 @@ def main():
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome", "page-keys"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "page-chrome")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome", "page-keys")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)

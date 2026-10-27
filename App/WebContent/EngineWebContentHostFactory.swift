@@ -130,6 +130,13 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
   func attach(_ controller: BrowserWindowController) {
     self.controller = controller
     extensionPopup.onWillDismiss = { [weak self] page in self?.pageWillClose(page) }
+    controller.shouldDeferKeyToFirstResponder = { [weak self] event in
+      guard let self, self.findFieldCreated, self.findBar?.isHidden == false,
+            event.window === self.window,
+            event.window?.firstResponder === self.findField.currentEditor(),
+            event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+      return [36, 76, 53].contains(event.keyCode)
+    }
     controller.onTextUndoManager = { [weak self] window in
       self?.commandBarSession?.controller?.editingUndoManager(for: window.firstResponder)
     }
@@ -493,6 +500,7 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     events.append(event); if events.count > 2000 { events.removeFirst(events.count - 2000) }
   }
   func pageWillClose(_ page: OEWebContent) {
+    if findPage === page { hideFind(restoreFocus: false) }
     if contextMenuSession?.belongs(to: page) == true { contextMenuSession?.cancel() }
     dialogPresenter?.cancel(page: page); permissionPresenter?.cancel(page: page)
   }
@@ -671,6 +679,7 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    if extensionPopup.panel?.isKeyWindow == true { extensionPopup.dismiss(); return }
     if let panel = NSApp.keyWindow as? NSPanel, let page = auxiliaryPages.first(where: { $0.panel === panel }) { closeAuxiliary(page); return }
     if let tab = selectedTab { closeTab(id: tab.id) }
   }
@@ -741,13 +750,13 @@ extension EngineWebContentHostFactory {
     findBar?.isHidden = false; findField.isHidden = false; layoutViews()
     findPage = selectedContent; window?.makeFirstResponder(findField); findField.selectText(nil)
   }
-  func hideFind() {
+  func hideFind(restoreFocus: Bool = true) {
     guard findFieldCreated else { return }
     findPage?.stopFinding(clearSelection: true); findPage = nil; findQuery = ""; activatedFindMatch = false
     findBar?.resetEditing(); findField.stringValue = ""; findField.isHidden = true; findBar?.isHidden = true
     findBar?.update(count: 0, active: 0); layoutViews()
     // This is an explicit user dismissal, never an async load completion.
-    if NSApp.isActive, window?.isKeyWindow == true { selectedContent?.focusPage() }
+    if restoreFocus, NSApp.isActive, window?.isKeyWindow == true { selectedContent?.focusPage() }
   }
   private func searchFind(forward: Bool) {
     guard app.engineReady, !isClosing, findFieldCreated, !findField.stringValue.isEmpty, let page = selectedContent else { return }
@@ -760,7 +769,10 @@ extension EngineWebContentHostFactory {
   func findPrevious() { searchFind(forward: false) }
   @objc func findNext(_ sender: Any?) { searchFind(forward: true) }
   @objc private func findFieldChanged(_ sender: NSSearchField) {
-    if sender.stringValue.isEmpty { hideFind() } else { searchFind(forward: true) }
+    if sender.stringValue.utf8.count > 4096 {
+      record("pageChromeRefused", findPage, ["reason": "Find exceeds 4096 UTF-8 bytes."])
+      hideFind(); controller?.showToast("Find text is too long", undo: nil)
+    } else if sender.stringValue.isEmpty { hideFind() } else { searchFind(forward: true) }
   }
   var findState: [String: Any] {
     ["visible": findBar?.isHidden == false, "text": findFieldCreated ? findField.stringValue : "",
@@ -905,6 +917,15 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
   }
 
   func webContent(_ webContent: OEWebContent, runJavaScriptDialog dialog: OEJavaScriptDialog) -> Bool {
+    if let reason = PageChromeLimits.dialogFailure(dialog) {
+      record("pageChromeRefused", webContent, ["reason": reason]); dialog.complete(accepted: false, text: nil)
+      if dialog.kind == .beforeUnload, let id = tabID(for: webContent) { closeRequests[id]?.cancel(); closeRequests[id] = nil }
+      return true
+    }
+    if dialogPolicy != "accept", dialogPolicy != "dismiss", pendingDialogs.count >= PageChromeLimits.pendingRequests {
+      record("pageChromeRefused", webContent, ["reason": "Too many pending page dialogs."]); dialog.complete(accepted: false, text: nil)
+      if dialog.kind == .beforeUnload, let id = tabID(for: webContent) { closeRequests[id]?.cancel(); closeRequests[id] = nil }; return true
+    }
     record("dialog", webContent, ["kind": dialog.kind.rawValue, "message": dialog.message, "default": dialog.defaultPromptText])
     if isClosing { dialog.complete(accepted: false, text: nil); return true }
     switch dialogPolicy {
@@ -926,7 +947,10 @@ extension EngineWebContentHostFactory: OEWebContentDelegate {
     return true
   }
   func webContent(_ webContent: OEWebContent, showContextMenu menu: OEContextMenu) -> Bool {
-    contextMenuSession?.cancel()
+    contextMenuSession?.cancel(); contextMenuSession = nil
+    if let reason = PageChromeLimits.menuFailure(menu) {
+      record("pageChromeRefused", webContent, ["reason": reason]); menu.cancel(); return true
+    }
     let session = PageContextMenuSession(request: menu, page: webContent, owner: self); contextMenuSession = session
     func commands(_ items: [OEContextMenuItem], in submenu: String = "") -> [[String: Any]] {
       items.flatMap { item -> [[String: Any]] in
@@ -1230,7 +1254,8 @@ extension EngineWebContentHostFactory: OEBrowserContextDelegate {
     guard !isClosing, app.engineReady else { completion(nil); return }
     let profile = app.settingsPresenter.profile(for: context) ?? focusedProfile
     let name = URL(fileURLWithPath: suggestedFilename).lastPathComponent
-    let filename = name.isEmpty || name == "." ? "download" : name
+    let filename = name.isEmpty || name == "." || name == ".." ? "download" : name
+    guard filename.utf8.count <= 255 else { record("downloadDestinationError", download.webContent, ["message": "Filename exceeds 255 UTF-8 bytes."]); completion(nil); return }
     if downloadDirectory == nil, profile?.settings.askWhereToSaveEachFile == true, let window {
       let id = UUID()
       let choice = DownloadDestinationChoice { [weak self] url in

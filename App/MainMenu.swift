@@ -19,6 +19,7 @@ enum MainMenu {
   static func performReservedShortcut(_ event: NSEvent) -> Bool {
     guard event.type == .keyDown, let app = NSApp.delegate as? AppDelegate else { return false }
     app.prepareCommandServices()
+    if event.window?.sheetParent != nil || event.window?.attachedSheet != nil { return false }
     if let window = event.window, let factory = app.factory(forKeyWindow: window) {
       return factory.controller?.handleKeyDown(event) == true
     }

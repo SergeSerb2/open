@@ -15,6 +15,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   private var finishing = false
   private var presentedRequest: OEPermissionRequest?
   private var activationObserver: (any NSObjectProtocol)?
+  private var windowObservers: [any NSObjectProtocol] = []
   private(set) var decisions = 0
 
   init(owner: EngineWebContentHostFactory) {
@@ -29,6 +30,11 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     activationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.presentPending() }
     }
+    for notification in [NSWindow.didBecomeKeyNotification, NSWindow.didEndSheetNotification] {
+      windowObservers.append(NotificationCenter.default.addObserver(forName: notification, object: nil, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.presentPending() }
+      })
+    }
   }
   static let kinds: [(OEPermissionKind, String)] = [(.camera, "camera"), (.microphone, "microphone"),
     (.geolocation, "location"), (.notifications, "notifications"), (.clipboard, "clipboard"), (.MIDI, "MIDI devices"),
@@ -40,6 +46,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   static func canPersist(_ kind: OEPermissionKind) -> Bool { kind != .screenCapture && kind != .other }
   func request(_ request: OEPermissionRequest, page: OEWebContent) {
     guard let owner, !owner.isClosing, owner.app.engineReady else { request.dismiss(); return }
+    guard pending.count < PageChromeLimits.pendingRequests, request.origin.absoluteString.utf8.count <= PageChromeLimits.urlBytes,
+          request.kinds.rawValue != 0, request.kinds.rawValue & ~UInt32(0x80000fff) == 0 else {
+      owner.record("pageChromeRefused", page, ["reason": "Permission request exceeds queue, origin or kind limits."]); request.dismiss(); return
+    }
     let previous = Dictionary(uniqueKeysWithValues: Self.kinds.filter { request.kinds.contains($0.0) && Self.canPersist($0.0) }.map {
       ($0.0.rawValue, page.context.permissionState(for: $0.0, origin: request.origin))
     })
@@ -49,7 +59,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     pending.append(Pending(page: page, request: request, previous: previous)); presentPending()
   }
   func presentPending() {
-    guard !popover.isShown, let owner, !owner.isClosing, NSApp.isActive else { return }
+    guard !popover.isShown, let owner, !owner.isClosing, owner.window?.attachedSheet == nil, NSApp.isActive else { return }
     func anchor(for page: OEWebContent) -> NSView? {
       let view: NSView?
       if owner.selectedContent === page { view = owner.controller?.container }
@@ -66,7 +76,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     let names = Self.kinds.filter { first.request.kinds.contains($0.0) }.map(\.1)
     view.message.stringValue = "Wants to use \(names.isEmpty ? "additional permissions" : names.joined(separator: " and "))"
     view.remember.state = .off; view.remember.isEnabled = !first.previous.isEmpty; presentedRequest = first.request
-    popover.show(relativeTo: CGRect(x: min(160, anchor.bounds.midX), y: anchor.isFlipped ? 0 : anchor.bounds.maxY, width: 1, height: 1), of: anchor, preferredEdge: anchor.isFlipped ? .maxY : .minY)
+    popover.show(relativeTo: CGRect(x: min(160, anchor.bounds.midX), y: anchor.isFlipped ? anchor.bounds.minY : anchor.bounds.maxY - 1, width: 1, height: 1), of: anchor, preferredEdge: anchor.isFlipped ? .maxY : .minY)
   }
   func answer(_ state: OEPermissionState?) {
     guard !finishing, !pending.isEmpty else { return }
@@ -99,6 +109,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     for item in pending { item.request.dismiss() }; pending.removeAll(); popover.close()
     finishing = false
     if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) }; activationObserver = nil
+    windowObservers.forEach(NotificationCenter.default.removeObserver); windowObservers.removeAll()
   }
   func popoverDidClose(_ notification: Notification) {
     if !finishing, !popover.isShown, let presentedRequest, pending.first?.request === presentedRequest { answer(nil) }
@@ -119,7 +130,10 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
       "selectedPage": owner?.selectedContent?.identifier ?? 0, "pendingPage": pending.first?.page.identifier ?? 0,
       "keyWindow": NSApp.keyWindow?.windowNumber ?? 0]
   }
-  isolated deinit { if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) } }
+  isolated deinit {
+    if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) }
+    windowObservers.forEach(NotificationCenter.default.removeObserver)
+  }
 }
 
 /// No permission prompt appears in the supplied captures. These dimensions,

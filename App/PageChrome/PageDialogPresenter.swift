@@ -5,7 +5,8 @@ import OpenEngine
 /// are absent from the RE captures; native macOS sheet styling is a guess.
 @MainActor
 final class PageDialogPresenter {
-  final class Entry {
+  @MainActor
+  final class Entry: NSResponder, NSTextFieldDelegate {
     let page: OEWebContent
     let dialog: OEJavaScriptDialog
     let held: Bool
@@ -13,7 +14,29 @@ final class PageDialogPresenter {
     var field: NSTextField?
     var completed = false
     init(page: OEWebContent, dialog: OEJavaScriptDialog, held: Bool) {
-      self.page = page; self.dialog = dialog; self.held = held
+      self.page = page; self.dialog = dialog; self.held = held; super.init()
+    }
+    override var acceptsFirstResponder: Bool { true }
+    override func keyDown(with event: NSEvent) {
+      // A one-button NSAlert has no Cancel key equivalent. Keep Escape on
+      // this sheet's responder chain and invoke its real default button.
+      if dialog.kind == .alert, !completed,
+         event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+         [36, 76, 53].contains(event.keyCode) { alert?.buttons.first?.performClick(nil); return }
+      super.keyDown(with: event)
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+      guard !completed, !textView.hasMarkedText(), let alert else { return false }
+      switch NSStringFromSelector(selector) {
+      case "insertNewline:", "insertNewlineIgnoringFieldEditor:":
+        control.validateEditing()
+        alert.buttons.first?.performClick(nil) // the sheet's real OK/default button
+        return true
+      case "cancelOperation:":
+        alert.buttons.last?.performClick(nil)
+        return true
+      default: return false
+      }
     }
   }
   weak var window: NSWindow?
@@ -51,6 +74,7 @@ final class PageDialogPresenter {
   private func finish(_ entry: Entry, accepted: Bool, text: String?) {
     guard !entry.completed else { return }; entry.completed = true
     entries.removeAll { $0 === entry }
+    entry.nextResponder = nil
     if let sheet = entry.alert?.window, sheet.sheetParent != nil { window?.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil) }
     entry.dialog.complete(accepted: accepted, text: entry.dialog.kind == .prompt ? text : nil)
     onDecision?(entry.page, entry.dialog.kind, accepted)
@@ -71,10 +95,14 @@ final class PageDialogPresenter {
     alert.messageText = entry.dialog.kind == .beforeUnload ? "Leave this page?" : entry.dialog.originURL?.host() ?? "This page says"
     alert.informativeText = entry.dialog.kind == .beforeUnload ? "Changes you made may not be saved." : entry.dialog.message
     alert.addButton(withTitle: entry.dialog.kind == .beforeUnload ? "Leave" : "OK")
-    if entry.dialog.kind != .alert { alert.addButton(withTitle: entry.dialog.kind == .beforeUnload ? "Stay" : "Cancel") }
+    if entry.dialog.kind != .alert {
+      let cancel = alert.addButton(withTitle: entry.dialog.kind == .beforeUnload ? "Stay" : "Cancel")
+      cancel.keyEquivalent = "\u{1b}"
+    }
     if entry.dialog.kind == .prompt {
       let field = NSTextField(string: entry.dialog.defaultPromptText)
       field.frame.size = NSSize(width: 280, height: 24); entry.field = field
+      field.delegate = entry
       field.setAccessibilityLabel("Response"); alert.accessoryView = field
     }
     alert.beginSheetModal(for: window) { [weak self, weak entry] response in
@@ -82,6 +110,7 @@ final class PageDialogPresenter {
       self.finish(entry, accepted: response == .alertFirstButtonReturn, text: entry.field?.stringValue)
     }
     if let field = entry.field { alert.window.makeFirstResponder(field); field.selectText(nil) }
+    else if entry.dialog.kind == .alert { entry.nextResponder = alert.window; alert.window.makeFirstResponder(entry) }
   }
   var state: [String: Any] {
     guard let entry = entries.first else { return ["pending": 0, "visible": false] }

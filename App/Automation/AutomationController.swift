@@ -559,13 +559,13 @@
         var dismissed: [String] = []
         if let modal = NSApp.modalWindow {
           dismissed.append("modal:" + String(describing: type(of: modal)))
-          NSApp.abortModal()
+          NSApp.abortModal(); modal.orderOut(nil)
         }
         let ours = Set(app.windowControllers.compactMap { $0.window.map(ObjectIdentifier.init) })
         for win in NSApp.windows {
           if let sheet = win.attachedSheet {
             dismissed.append("sheet:" + String(describing: type(of: sheet)))
-            win.endSheet(sheet, returnCode: .cancel)
+            win.endSheet(sheet, returnCode: .cancel); sheet.orderOut(nil)
           }
           // Chromium's own windows (DevTools, Chrome windows, Picture in
           // Picture) are Views windows.
@@ -1093,7 +1093,7 @@
               windowNumber: target.windowNumber, context: nil, characters: String(ch),
               charactersIgnoringModifiers: String(ch), isARepeat: false, keyCode: ch == "\r" ? 36 : 0)
             {
-              app.activationTrace.deliverSyntheticKey(event, to: target)
+              app.activationTrace.deliverSyntheticKey(event, to: a["route"] as? String == "window" ? target : nil)
             }
           }
         }
@@ -1101,7 +1101,7 @@
         return ["firstResponder": target.firstResponder.map { String(describing: type(of: $0)) } ?? "none"]
       }
       let keys: [String: (String, UInt16)] = [
-        "backspace": ("\u{7f}", 51), "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
+        "enter": ("\u{3}", 76), "backspace": ("\u{7f}", 51), "return": ("\r", 36), "escape": ("\u{1b}", 53), "tab": ("\t", 48), "space": (" ", 49),
         "o": ("o", 31), ",": (",", 43), "z": ("z", 6), "n": ("n", 45), "t": ("t", 17), "w": ("w", 13), "l": ("l", 37), "f": ("f", 3), "s": ("s", 1), "a": ("a", 0),
         "v": ("v", 9), "x": ("x", 7), "c": ("c", 8), "d": ("d", 2), "1": ("1", 18), "2": ("2", 19), "=": ("=", 24),
         "down": (String(Character(UnicodeScalar(NSDownArrowFunctionKey)!)), 125),
@@ -1119,6 +1119,7 @@
         }
       }
       if code >= 123 { mods.insert([.function, .numericPad]) }
+      if code == 76 { mods.insert(.numericPad) }
       let route = a["route"] as? String ?? "app"
       for type in [NSEvent.EventType.keyDown, .keyUp] {
         guard

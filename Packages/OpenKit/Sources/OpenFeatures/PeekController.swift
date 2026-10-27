@@ -53,6 +53,9 @@ public final class PeekController {
     @ObservationIgnored private let factory: any WebContentHostFactory
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var keyMonitor: Any?
+    /// Composed browser windows route keys themselves; standalone Peek hosts
+    /// retain the local monitor. Never install two owners for the same Escape.
+    @ObservationIgnored private let installsKeyMonitor: Bool
     @ObservationIgnored private var undoItem: (URL, ItemID, Date)?
     @ObservationIgnored private var undoTask: Task<Void, Never>?
     @ObservationIgnored private var expandingGeneration = 0
@@ -64,7 +67,8 @@ public final class PeekController {
     /// The top Peek's URL, history, loading state, or favicon changed (sidebar badge, URL field, toolbar).
     public var onPageChange: (() -> Void)?
     public var peekBadgeTabIDs: Set<ItemID> { Set(stack.map(\.sourceTabID)) }
-    public init(model: BrowserModel, splitController: SplitViewController, factory: any WebContentHostFactory, defaults: UserDefaults) {
+    public init(model: BrowserModel, splitController: SplitViewController, factory: any WebContentHostFactory, defaults: UserDefaults, installsKeyMonitor: Bool = true) {
+        self.installsKeyMonitor = installsKeyMonitor
         self.model = model; self.splitController = splitController; self.factory = factory; self.defaults = defaults
         defaults.register(defaults: ["open.peek.otherSites": true, "open.peek.shiftClick": true])
         overlay.isHidden = true; overlay.onDismiss = { [weak self] in self?.dismissTop() }
@@ -125,7 +129,7 @@ public final class PeekController {
     }
     private func duration(_ value: Double) -> Double { overlay.window?.isVisible == true && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? value : 0 }
     private func installKeys() {
-        guard keyMonitor == nil else { return }
+        guard installsKeyMonitor, keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let consumed = MainActor.assumeIsolated {
                 guard let self, event.window === self.overlay.window, self.isShown else { return false }

@@ -431,6 +431,7 @@ extension AppDelegate: CommandDispatcher {
   }
   func isCommandEnabled(_ id: String, enabledKey: String) -> Bool {
     if SystemCommandActions.selectors[id] != nil { return SystemCommandActions.isEnabled(id) }
+    if NSApp.keyWindow?.sheetParent != nil || NSApp.keyWindow?.attachedSheet != nil { return false }
     if ["archive-tab", "close-window"].contains(id) { return NSApp.keyWindow != nil }
     return ["new-window", "blank-window", "new-tab", "settings", "search-settings", "air-traffic-control", "import-from-browser", "set-default-browser", "check-for-updates", "view-archive", "view-history", "view-library", "view-downloads", "view-boosts", "quit-open", "new-little-open-window", "little-open-global", "about-open", "hide-open", "hide-others", "show-all", "help-center", "keyboard-shortcuts-edu", "show-shortcuts-overlay", "getting-started", "release-notes", "contact-team"].contains(id)
   }

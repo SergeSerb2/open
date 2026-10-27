@@ -21,8 +21,9 @@ final class ActivationTrace {
         let dropKey = MainActor.assumeIsolated {
           if self?.syntheticKey === event { return false }
           if event.type == .leftMouseDown || event.type == .rightMouseDown {
+            let sourcePID = event.cgEvent?.getIntegerValueField(.eventSourceUnixProcessID)
             if self?.syntheticPointerTags.remove(event.eventNumber) == nil {
-              self?.append(["event": "hardwareInteraction", "kind": "pointer", "uptime": ProcessInfo.processInfo.systemUptime])
+              self?.append(["event": "hardwareInteraction", "kind": "pointer", "sourcePID": sourcePID ?? -1, "duringSyntheticKey": self?.syntheticKey != nil, "uptime": ProcessInfo.processInfo.systemUptime])
             }
             return false
           }
