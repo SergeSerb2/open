@@ -1,0 +1,1257 @@
+SiteControl: snapshot or geometry unavailable for tab 385EC7D5-FA80-4E8B-A98A-ED637FE00FEC
+SiteControl: snapshot or geometry unavailable for tab EFBC90BB-95C2-493D-83FD-8E4317FFCF02
+SiteControl: snapshot or geometry unavailable for tab F428EB95-5802-4609-80EB-5EE7B6B1DCFC
+SiteControl: snapshot or geometry unavailable for tab F5D40188-4326-4787-8990-2E2F600FF353
+SiteControl: snapshot or geometry unavailable for tab F5D40188-4326-4787-8990-2E2F600FF353
+skeleton open: 2x; 30 samples, 5 warmups; CPU p95 11.271 ms; wall p95 22.595 ms; load1 8.07; CPU target lateness 3.271 ms (diagnostic; product target <8 ms)
+cold open: 2x; 30 samples, 5 warmups; CPU p95 17.057 ms; wall p95 20.042 ms; load1 8.07; CPU target lateness 9.057 ms (diagnostic; product target <8 ms)
+| Result | Check |
+|---|---|
+| PASS | F1 anchor presents |
+| PASS | F1 second anchor click closes and is consumed |
+| PASS | F2 Escape closes and restores focus |
+| PASS | F2 outside click closes and reaches page |
+| PASS | outside NSEventType(rawValue: 3) dismisses and forwards to the page |
+| PASS | outside NSEventType(rawValue: 25) dismisses and forwards to the page |
+| PASS | outside click reaches a real native target/action exactly once |
+| PASS | F21 native AX role and label pairs, host description, favicon hidden |
+| PASS | Step 2 More is enabled |
+| PASS | missing capture capability disables both actions |
+| PASS | two windows observe a shared source independently |
+| PASS | third window registers its own observer |
+| PASS | window teardown removes only its own observer |
+| PASS | F22 missing geometry stays closed and logs once |
+| PASS | F22 geometry lost while open closes and logs once |
+| PASS | F22 missing snapshot stays closed and logs once |
+| PASS | successful presentation resets once-per-failure-episode reporting |
+| PASS | close fades both layers and disables hit testing immediately |
+| PASS | old close completion cannot hide a new presentation |
+| PASS | host is exposed once in native AX |
+| PASS | security label policy for https |
+| PASS | security label policy for http |
+| PASS | security label policy for chrome |
+| PASS | security label policy for open |
+| PASS | security label policy for chrome-extension |
+| PASS | security label policy for about |
+| PASS | security label policy for data |
+| PASS | security label policy for file |
+| PASS | F23 sidebar width 228.0 gives arrow and body geometry |
+| PASS | F23 sidebar width 300.0 gives arrow and body geometry |
+| PASS | F23 sidebar width 500.0 gives arrow and body geometry |
+| PASS | F23 narrow/short window clamps height inside margins |
+| PASS | content anchor has no arrow |
+| PASS | F3 complete captured section/row Tab order |
+| PASS | F3 Tab wraps |
+| PASS | F3 Shift+Tab reverses |
+| PASS | F3 Right arrow stays inside actions |
+| PASS | F3 Down moves to the next row and Space toggles |
+| PASS | F4 ad blocker On/Off/On with exactly one Reload row |
+| PASS | reload closes and calls host once |
+| PASS | F5 unavailable blocker opens Settings without writing |
+| PASS | F6 permission Allowed to Blocked updates checkbox |
+| PASS | F7 circle toggles without opening editor |
+| PASS | F7 row, chevron and Return each open the same editor |
+| PASS | F8 New Boost action and menu with scc-no-boosts |
+| PASS | F8 New Boost action and menu with scc-boost |
+| PASS | F9 exact captured menu always includes both Boost commands |
+| PASS | F9 E2 capability adds Clear Cache |
+| PASS | F9 clear data kinds are distinct and keep reload row |
+| PASS | F9 Manage Boosts… routes and closes |
+| PASS | F9 Manage Extensions… routes and closes |
+| PASS | F9 Add Extension… routes and closes |
+| PASS | F9 All Site Settings encodes only the origin |
+| PASS | internal page keeps four actions, Extensions and More; no security |
+| PASS | F20 private window disables creation, toggle, and edit |
+| PASS | global-off note and disabled circle |
+| PASS | long body scrolls focused rows and clamps at 640 |
+| PASS | scroll exposes freshly drawn last Settings title |
+| PASS | picker focuses + without opening a menu |
+| PASS | picker host guard requires the first real item when extensions land |
+| PASS | picker Return runs Add Extension |
+| PASS | F21 heading child has a real window and nonzero frame |
+| PASS | F21 native section, checkbox, and Boost edit roles |
+| PASS | F21 action AX precedes sections; host exposed once |
+| PASS | live removal restores focus to panel |
+| PASS | Tab works after focused row removal |
+| PASS | Command+36 never activates contentBlocking |
+| PASS | Command+49 never activates contentBlocking |
+| PASS | Command+36 never activates boost.00000000-0000-0000-0000-000000000001.row |
+| PASS | Command+49 never activates boost.00000000-0000-0000-0000-000000000001.row |
+| PASS | retained native menu cannot act on a later presentation generation |
+| PASS | native menu Return selects Clear Cookies and keeps Reload |
+| PASS | native menu Esc dismisses with menuCancelled |
+| PASS | window resize cancels structure motion and applies the current clamp |
+| PASS | motion open keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion open keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion open keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | open spring peak 1.0129, settles by 0.30 s |
+| PASS | motion close keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion close keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | motion close keeps visible arrow tip fixed (201.0,81.0; 201.00,81.00; 201.00,81.00) |
+| PASS | close ends by 0.20 s |
+| PASS | height grow keeps arrow tip and action row fixed |
+| PASS | height grow keeps arrow tip and action row fixed |
+| PASS | height grow keeps arrow tip and action row fixed |
+| PASS | height grow uses configured 0.2s curve |
+| PASS | height shrink keeps arrow tip and action row fixed |
+| PASS | height shrink keeps arrow tip and action row fixed |
+| PASS | height shrink keeps arrow tip and action row fixed |
+| PASS | height shrink uses configured 0.25s curve |
+| PASS | scc-no-boosts light 1x 236 pt body; height fits content and window |
+| PASS | scc-no-boosts light 1x complete opaque capture |
+| PASS | scc-no-boosts light 1x four 48x32 actions at measured positions |
+| PASS | scc-no-boosts light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-no-boosts light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-no-boosts light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-no-boosts light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-no-boosts light 2x 236 pt body; height fits content and window |
+| PASS | scc-no-boosts light 2x complete opaque capture |
+| PASS | scc-no-boosts light 2x four 48x32 actions at measured positions |
+| PASS | scc-no-boosts light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-no-boosts light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-no-boosts light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-no-boosts light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-no-boosts dark 1x 236 pt body; height fits content and window |
+| PASS | scc-no-boosts dark 1x complete opaque capture |
+| PASS | scc-no-boosts dark 1x four 48x32 actions at measured positions |
+| PASS | scc-no-boosts dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-no-boosts dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-no-boosts dark 1x action outer ring is darker than material |
+| PASS | scc-no-boosts dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-no-boosts dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-no-boosts dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-no-boosts dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-no-boosts dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-no-boosts dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-no-boosts dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-no-boosts dark 1x fallback formula regression only P1/P2 DE 0.33 / 1.47 |
+| PASS | scc-no-boosts dark 1x real Settings gear knock-out equals nearby material DE 0.00 |
+| PASS | scc-no-boosts dark 1x 297 pt no-Boosts stack |
+| PASS | scc-no-boosts dark 2x 236 pt body; height fits content and window |
+| PASS | scc-no-boosts dark 2x complete opaque capture |
+| PASS | scc-no-boosts dark 2x four 48x32 actions at measured positions |
+| PASS | scc-no-boosts dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-no-boosts dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-no-boosts dark 2x action outer ring is darker than material |
+| PASS | scc-no-boosts dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-no-boosts dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-no-boosts dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-no-boosts dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-no-boosts dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-no-boosts dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-no-boosts dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-no-boosts dark 2x fallback formula regression only P1/P2 DE 0.33 / 1.47 |
+| PASS | scc-no-boosts dark 2x real Settings gear knock-out equals nearby material DE 0.00 |
+| PASS | scc-no-boosts dark 2x 297 pt no-Boosts stack |
+| PASS | scc-boost light 1x 236 pt body; height fits content and window |
+| PASS | scc-boost light 1x complete opaque capture |
+| PASS | scc-boost light 1x four 48x32 actions at measured positions |
+| PASS | scc-boost light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boost light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boost light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boost light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boost light 1x 372 pt one-Boost stack |
+| PASS | scc-boost light 2x 236 pt body; height fits content and window |
+| PASS | scc-boost light 2x complete opaque capture |
+| PASS | scc-boost light 2x four 48x32 actions at measured positions |
+| PASS | scc-boost light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boost light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boost light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boost light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boost light 2x 372 pt one-Boost stack |
+| PASS | scc-boost dark 1x 236 pt body; height fits content and window |
+| PASS | scc-boost dark 1x complete opaque capture |
+| PASS | scc-boost dark 1x four 48x32 actions at measured positions |
+| PASS | scc-boost dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-boost dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-boost dark 1x action outer ring is darker than material |
+| PASS | scc-boost dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boost dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boost dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-boost dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boost dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boost dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boost dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boost dark 1x 372 pt one-Boost stack |
+| PASS | scc-boost dark 2x 236 pt body; height fits content and window |
+| PASS | scc-boost dark 2x complete opaque capture |
+| PASS | scc-boost dark 2x four 48x32 actions at measured positions |
+| PASS | scc-boost dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-boost dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-boost dark 2x action outer ring is darker than material |
+| PASS | scc-boost dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boost dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boost dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-boost dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boost dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boost dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boost dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boost dark 2x 372 pt one-Boost stack |
+| PASS | scc-adblock-on light 1x 236 pt body; height fits content and window |
+| PASS | scc-adblock-on light 1x complete opaque capture |
+| PASS | scc-adblock-on light 1x four 48x32 actions at measured positions |
+| PASS | scc-adblock-on light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-on light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-on light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-on light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-on light 2x 236 pt body; height fits content and window |
+| PASS | scc-adblock-on light 2x complete opaque capture |
+| PASS | scc-adblock-on light 2x four 48x32 actions at measured positions |
+| PASS | scc-adblock-on light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-on light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-on light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-on light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-on dark 1x 236 pt body; height fits content and window |
+| PASS | scc-adblock-on dark 1x complete opaque capture |
+| PASS | scc-adblock-on dark 1x four 48x32 actions at measured positions |
+| PASS | scc-adblock-on dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-adblock-on dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-adblock-on dark 1x action outer ring is darker than material |
+| PASS | scc-adblock-on dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-on dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-on dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-adblock-on dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-on dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-on dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-on dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-on dark 2x 236 pt body; height fits content and window |
+| PASS | scc-adblock-on dark 2x complete opaque capture |
+| PASS | scc-adblock-on dark 2x four 48x32 actions at measured positions |
+| PASS | scc-adblock-on dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-adblock-on dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-adblock-on dark 2x action outer ring is darker than material |
+| PASS | scc-adblock-on dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-on dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-on dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-adblock-on dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-on dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-on dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-on dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-excluded light 1x 236 pt body; height fits content and window |
+| PASS | scc-adblock-excluded light 1x complete opaque capture |
+| PASS | scc-adblock-excluded light 1x four 48x32 actions at measured positions |
+| PASS | scc-adblock-excluded light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-excluded light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-excluded light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-excluded light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-excluded light 2x 236 pt body; height fits content and window |
+| PASS | scc-adblock-excluded light 2x complete opaque capture |
+| PASS | scc-adblock-excluded light 2x four 48x32 actions at measured positions |
+| PASS | scc-adblock-excluded light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-excluded light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-excluded light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-excluded light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-excluded dark 1x 236 pt body; height fits content and window |
+| PASS | scc-adblock-excluded dark 1x complete opaque capture |
+| PASS | scc-adblock-excluded dark 1x four 48x32 actions at measured positions |
+| PASS | scc-adblock-excluded dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-adblock-excluded dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-adblock-excluded dark 1x action outer ring is darker than material |
+| PASS | scc-adblock-excluded dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-excluded dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-excluded dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-adblock-excluded dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-excluded dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-excluded dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-excluded dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-excluded dark 2x 236 pt body; height fits content and window |
+| PASS | scc-adblock-excluded dark 2x complete opaque capture |
+| PASS | scc-adblock-excluded dark 2x four 48x32 actions at measured positions |
+| PASS | scc-adblock-excluded dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-adblock-excluded dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-adblock-excluded dark 2x action outer ring is darker than material |
+| PASS | scc-adblock-excluded dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-excluded dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-excluded dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-adblock-excluded dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-excluded dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-excluded dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-excluded dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-unavailable light 1x 236 pt body; height fits content and window |
+| PASS | scc-adblock-unavailable light 1x complete opaque capture |
+| PASS | scc-adblock-unavailable light 1x four 48x32 actions at measured positions |
+| PASS | scc-adblock-unavailable light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-unavailable light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-unavailable light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-unavailable light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-unavailable light 2x 236 pt body; height fits content and window |
+| PASS | scc-adblock-unavailable light 2x complete opaque capture |
+| PASS | scc-adblock-unavailable light 2x four 48x32 actions at measured positions |
+| PASS | scc-adblock-unavailable light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-unavailable light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-unavailable light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-unavailable light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-unavailable dark 1x 236 pt body; height fits content and window |
+| PASS | scc-adblock-unavailable dark 1x complete opaque capture |
+| PASS | scc-adblock-unavailable dark 1x four 48x32 actions at measured positions |
+| PASS | scc-adblock-unavailable dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-adblock-unavailable dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-adblock-unavailable dark 1x action outer ring is darker than material |
+| PASS | scc-adblock-unavailable dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-unavailable dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-unavailable dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-adblock-unavailable dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-unavailable dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-unavailable dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-unavailable dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-adblock-unavailable dark 2x 236 pt body; height fits content and window |
+| PASS | scc-adblock-unavailable dark 2x complete opaque capture |
+| PASS | scc-adblock-unavailable dark 2x four 48x32 actions at measured positions |
+| PASS | scc-adblock-unavailable dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-adblock-unavailable dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-adblock-unavailable dark 2x action outer ring is darker than material |
+| PASS | scc-adblock-unavailable dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-unavailable dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-adblock-unavailable dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-adblock-unavailable dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-adblock-unavailable dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-adblock-unavailable dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-adblock-unavailable dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-insecure light 1x 236 pt body; height fits content and window |
+| PASS | scc-insecure light 1x complete opaque capture |
+| PASS | scc-insecure light 1x four 48x32 actions at measured positions |
+| PASS | scc-insecure light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-insecure light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-insecure light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-insecure light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-insecure light 2x 236 pt body; height fits content and window |
+| PASS | scc-insecure light 2x complete opaque capture |
+| PASS | scc-insecure light 2x four 48x32 actions at measured positions |
+| PASS | scc-insecure light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-insecure light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-insecure light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-insecure light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-insecure dark 1x 236 pt body; height fits content and window |
+| PASS | scc-insecure dark 1x complete opaque capture |
+| PASS | scc-insecure dark 1x four 48x32 actions at measured positions |
+| PASS | scc-insecure dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-insecure dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-insecure dark 1x action outer ring is darker than material |
+| PASS | scc-insecure dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-insecure dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-insecure dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-insecure dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-insecure dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-insecure dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-insecure dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-insecure dark 2x 236 pt body; height fits content and window |
+| PASS | scc-insecure dark 2x complete opaque capture |
+| PASS | scc-insecure dark 2x four 48x32 actions at measured positions |
+| PASS | scc-insecure dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-insecure dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-insecure dark 2x action outer ring is darker than material |
+| PASS | scc-insecure dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-insecure dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-insecure dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-insecure dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-insecure dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-insecure dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-insecure dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boosts-off light 1x 236 pt body; height fits content and window |
+| PASS | scc-boosts-off light 1x complete opaque capture |
+| PASS | scc-boosts-off light 1x four 48x32 actions at measured positions |
+| PASS | scc-boosts-off light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boosts-off light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boosts-off light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boosts-off light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boosts-off light 2x 236 pt body; height fits content and window |
+| PASS | scc-boosts-off light 2x complete opaque capture |
+| PASS | scc-boosts-off light 2x four 48x32 actions at measured positions |
+| PASS | scc-boosts-off light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boosts-off light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boosts-off light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boosts-off light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boosts-off dark 1x 236 pt body; height fits content and window |
+| PASS | scc-boosts-off dark 1x complete opaque capture |
+| PASS | scc-boosts-off dark 1x four 48x32 actions at measured positions |
+| PASS | scc-boosts-off dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-boosts-off dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-boosts-off dark 1x action outer ring is darker than material |
+| PASS | scc-boosts-off dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boosts-off dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boosts-off dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-boosts-off dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boosts-off dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boosts-off dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boosts-off dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-boosts-off dark 2x 236 pt body; height fits content and window |
+| PASS | scc-boosts-off dark 2x complete opaque capture |
+| PASS | scc-boosts-off dark 2x four 48x32 actions at measured positions |
+| PASS | scc-boosts-off dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-boosts-off dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-boosts-off dark 2x action outer ring is darker than material |
+| PASS | scc-boosts-off dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boosts-off dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-boosts-off dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-boosts-off dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-boosts-off dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-boosts-off dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-boosts-off dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-incognito light 1x 236 pt body; height fits content and window |
+| PASS | scc-incognito light 1x complete opaque capture |
+| PASS | scc-incognito light 1x four 48x32 actions at measured positions |
+| PASS | scc-incognito light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-incognito light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-incognito light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-incognito light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-incognito light 2x 236 pt body; height fits content and window |
+| PASS | scc-incognito light 2x complete opaque capture |
+| PASS | scc-incognito light 2x four 48x32 actions at measured positions |
+| PASS | scc-incognito light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-incognito light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-incognito light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-incognito light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-incognito dark 1x 236 pt body; height fits content and window |
+| PASS | scc-incognito dark 1x complete opaque capture |
+| PASS | scc-incognito dark 1x four 48x32 actions at measured positions |
+| PASS | scc-incognito dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-incognito dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-incognito dark 1x action outer ring is darker than material |
+| PASS | scc-incognito dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-incognito dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-incognito dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-incognito dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-incognito dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-incognito dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-incognito dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-incognito dark 2x 236 pt body; height fits content and window |
+| PASS | scc-incognito dark 2x complete opaque capture |
+| PASS | scc-incognito dark 2x four 48x32 actions at measured positions |
+| PASS | scc-incognito dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-incognito dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-incognito dark 2x action outer ring is darker than material |
+| PASS | scc-incognito dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-incognito dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-incognito dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-incognito dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-incognito dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-incognito dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-incognito dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-internal-page light 1x 236 pt body; height fits content and window |
+| PASS | scc-internal-page light 1x complete opaque capture |
+| PASS | scc-internal-page light 1x four 48x32 actions at measured positions |
+| PASS | scc-internal-page light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-internal-page light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-internal-page light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-internal-page light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-internal-page light 2x 236 pt body; height fits content and window |
+| PASS | scc-internal-page light 2x complete opaque capture |
+| PASS | scc-internal-page light 2x four 48x32 actions at measured positions |
+| PASS | scc-internal-page light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-internal-page light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-internal-page light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-internal-page light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-internal-page dark 1x 236 pt body; height fits content and window |
+| PASS | scc-internal-page dark 1x complete opaque capture |
+| PASS | scc-internal-page dark 1x four 48x32 actions at measured positions |
+| PASS | scc-internal-page dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-internal-page dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-internal-page dark 1x action outer ring is darker than material |
+| PASS | scc-internal-page dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-internal-page dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-internal-page dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-internal-page dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-internal-page dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-internal-page dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-internal-page dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-internal-page dark 2x 236 pt body; height fits content and window |
+| PASS | scc-internal-page dark 2x complete opaque capture |
+| PASS | scc-internal-page dark 2x four 48x32 actions at measured positions |
+| PASS | scc-internal-page dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-internal-page dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-internal-page dark 2x action outer ring is darker than material |
+| PASS | scc-internal-page dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-internal-page dark 2x separator additive RGB lift [35, 34, 35] ~= +35 |
+| PASS | scc-internal-page dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-internal-page dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-internal-page dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-internal-page dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-internal-page dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-many light 1x 236 pt body; height fits content and window |
+| PASS | scc-many light 1x complete opaque capture |
+| PASS | scc-many light 1x four 48x32 actions at measured positions |
+| PASS | scc-many light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-many light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-many light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-many light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-many light 2x 236 pt body; height fits content and window |
+| PASS | scc-many light 2x complete opaque capture |
+| PASS | scc-many light 2x four 48x32 actions at measured positions |
+| PASS | scc-many light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-many light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-many light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-many light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-many dark 1x 236 pt body; height fits content and window |
+| PASS | scc-many dark 1x complete opaque capture |
+| PASS | scc-many dark 1x four 48x32 actions at measured positions |
+| PASS | scc-many dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-many dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-many dark 1x action outer ring is darker than material |
+| PASS | scc-many dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-many dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-many dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-many dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-many dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-many dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-many dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-many dark 2x 236 pt body; height fits content and window |
+| PASS | scc-many dark 2x complete opaque capture |
+| PASS | scc-many dark 2x four 48x32 actions at measured positions |
+| PASS | scc-many dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-many dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-many dark 2x action outer ring is darker than material |
+| PASS | scc-many dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-many dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-many dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-many dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-many dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-many dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-many dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-pane-anchor light 1x 236 pt body; height fits content and window |
+| PASS | scc-pane-anchor light 1x complete opaque capture |
+| PASS | scc-pane-anchor light 1x four 48x32 actions at measured positions |
+| PASS | scc-pane-anchor light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-pane-anchor light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-pane-anchor light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-pane-anchor light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-pane-anchor light 2x 236 pt body; height fits content and window |
+| PASS | scc-pane-anchor light 2x complete opaque capture |
+| PASS | scc-pane-anchor light 2x four 48x32 actions at measured positions |
+| PASS | scc-pane-anchor light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-pane-anchor light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-pane-anchor light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-pane-anchor light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-pane-anchor dark 1x 236 pt body; height fits content and window |
+| PASS | scc-pane-anchor dark 1x complete opaque capture |
+| PASS | scc-pane-anchor dark 1x four 48x32 actions at measured positions |
+| PASS | scc-pane-anchor dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-pane-anchor dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-pane-anchor dark 1x action outer ring is darker than material |
+| PASS | scc-pane-anchor dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-pane-anchor dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-pane-anchor dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-pane-anchor dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-pane-anchor dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-pane-anchor dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-pane-anchor dark 2x 236 pt body; height fits content and window |
+| PASS | scc-pane-anchor dark 2x complete opaque capture |
+| PASS | scc-pane-anchor dark 2x four 48x32 actions at measured positions |
+| PASS | scc-pane-anchor dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-pane-anchor dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-pane-anchor dark 2x action outer ring is darker than material |
+| PASS | scc-pane-anchor dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-pane-anchor dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-pane-anchor dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-pane-anchor dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-pane-anchor dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-pane-anchor dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-clamped light 1x 236 pt body; height fits content and window |
+| PASS | scc-clamped light 1x complete opaque capture |
+| PASS | scc-clamped light 1x four 48x32 actions at measured positions |
+| PASS | scc-clamped light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-clamped light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-clamped light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-clamped light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-clamped light 2x 236 pt body; height fits content and window |
+| PASS | scc-clamped light 2x complete opaque capture |
+| PASS | scc-clamped light 2x four 48x32 actions at measured positions |
+| PASS | scc-clamped light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-clamped light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-clamped light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-clamped light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-clamped dark 1x 236 pt body; height fits content and window |
+| PASS | scc-clamped dark 1x complete opaque capture |
+| PASS | scc-clamped dark 1x four 48x32 actions at measured positions |
+| PASS | scc-clamped dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-clamped dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-clamped dark 1x action outer ring is darker than material |
+| PASS | scc-clamped dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-clamped dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-clamped dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-clamped dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-clamped dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-clamped dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-clamped dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-clamped dark 2x 236 pt body; height fits content and window |
+| PASS | scc-clamped dark 2x complete opaque capture |
+| PASS | scc-clamped dark 2x four 48x32 actions at measured positions |
+| PASS | scc-clamped dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-clamped dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-clamped dark 2x action outer ring is darker than material |
+| PASS | scc-clamped dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-clamped dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-clamped dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-clamped dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-clamped dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-clamped dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-clamped dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-light light 1x 236 pt body; height fits content and window |
+| PASS | scc-light light 1x complete opaque capture |
+| PASS | scc-light light 1x four 48x32 actions at measured positions |
+| PASS | scc-light light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-light light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-light light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-light light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-light light 2x 236 pt body; height fits content and window |
+| PASS | scc-light light 2x complete opaque capture |
+| PASS | scc-light light 2x four 48x32 actions at measured positions |
+| PASS | scc-light light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-light light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-light light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-light light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-light dark 1x 236 pt body; height fits content and window |
+| PASS | scc-light dark 1x complete opaque capture |
+| PASS | scc-light dark 1x four 48x32 actions at measured positions |
+| PASS | scc-light dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-light dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-light dark 1x action outer ring is darker than material |
+| PASS | scc-light dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-light dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-light dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-light dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-light dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-light dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-light dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-light dark 2x 236 pt body; height fits content and window |
+| PASS | scc-light dark 2x complete opaque capture |
+| PASS | scc-light dark 2x four 48x32 actions at measured positions |
+| PASS | scc-light dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-light dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-light dark 2x action outer ring is darker than material |
+| PASS | scc-light dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-light dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-light dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-light dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-light dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-light dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-light dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-label light 1x 236 pt body; height fits content and window |
+| PASS | scc-hover-label light 1x complete opaque capture |
+| PASS | scc-hover-label light 1x four 48x32 actions at measured positions |
+| PASS | scc-hover-label light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-label light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-label light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-label light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-label light 2x 236 pt body; height fits content and window |
+| PASS | scc-hover-label light 2x complete opaque capture |
+| PASS | scc-hover-label light 2x four 48x32 actions at measured positions |
+| PASS | scc-hover-label light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-label light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-label light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-label light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-label dark 1x 236 pt body; height fits content and window |
+| PASS | scc-hover-label dark 1x complete opaque capture |
+| PASS | scc-hover-label dark 1x four 48x32 actions at measured positions |
+| PASS | scc-hover-label dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-hover-label dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-hover-label dark 1x action outer ring is darker than material |
+| PASS | scc-hover-label dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-label dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-label dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-hover-label dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-label dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-label dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-label dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-label dark 2x 236 pt body; height fits content and window |
+| PASS | scc-hover-label dark 2x complete opaque capture |
+| PASS | scc-hover-label dark 2x four 48x32 actions at measured positions |
+| PASS | scc-hover-label dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-hover-label dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-hover-label dark 2x action outer ring is darker than material |
+| PASS | scc-hover-label dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-label dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-label dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-hover-label dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-label dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-label dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-label dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-boost light 1x 236 pt body; height fits content and window |
+| PASS | scc-hover-boost light 1x complete opaque capture |
+| PASS | scc-hover-boost light 1x four 48x32 actions at measured positions |
+| PASS | scc-hover-boost light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-boost light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-boost light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-boost light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-boost light 2x 236 pt body; height fits content and window |
+| PASS | scc-hover-boost light 2x complete opaque capture |
+| PASS | scc-hover-boost light 2x four 48x32 actions at measured positions |
+| PASS | scc-hover-boost light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-boost light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-boost light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-boost light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-boost dark 1x 236 pt body; height fits content and window |
+| PASS | scc-hover-boost dark 1x complete opaque capture |
+| PASS | scc-hover-boost dark 1x four 48x32 actions at measured positions |
+| PASS | scc-hover-boost dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-hover-boost dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-hover-boost dark 1x action outer ring is darker than material |
+| PASS | scc-hover-boost dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-boost dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-boost dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-hover-boost dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-boost dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-boost dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-boost dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-boost dark 2x 236 pt body; height fits content and window |
+| PASS | scc-hover-boost dark 2x complete opaque capture |
+| PASS | scc-hover-boost dark 2x four 48x32 actions at measured positions |
+| PASS | scc-hover-boost dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-hover-boost dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-hover-boost dark 2x action outer ring is darker than material |
+| PASS | scc-hover-boost dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-boost dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-boost dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-hover-boost dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-boost dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-boost dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-boost dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-action light 1x 236 pt body; height fits content and window |
+| PASS | scc-hover-action light 1x complete opaque capture |
+| PASS | scc-hover-action light 1x four 48x32 actions at measured positions |
+| PASS | scc-hover-action light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-action light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-action light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-action light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-action light 2x 236 pt body; height fits content and window |
+| PASS | scc-hover-action light 2x complete opaque capture |
+| PASS | scc-hover-action light 2x four 48x32 actions at measured positions |
+| PASS | scc-hover-action light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-action light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-action light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-action light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-action dark 1x 236 pt body; height fits content and window |
+| PASS | scc-hover-action dark 1x complete opaque capture |
+| PASS | scc-hover-action dark 1x four 48x32 actions at measured positions |
+| PASS | scc-hover-action dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-hover-action dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-hover-action dark 1x action outer ring is darker than material |
+| PASS | scc-hover-action dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-action dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-action dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-hover-action dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-action dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-action dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-action dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-hover-action dark 2x 236 pt body; height fits content and window |
+| PASS | scc-hover-action dark 2x complete opaque capture |
+| PASS | scc-hover-action dark 2x four 48x32 actions at measured positions |
+| PASS | scc-hover-action dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-hover-action dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-hover-action dark 2x action outer ring is darker than material |
+| PASS | scc-hover-action dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-action dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-hover-action dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-hover-action dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-hover-action dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-hover-action dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-hover-action dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-keyboard-focus light 1x 236 pt body; height fits content and window |
+| PASS | scc-keyboard-focus light 1x complete opaque capture |
+| PASS | scc-keyboard-focus light 1x four 48x32 actions at measured positions |
+| PASS | scc-keyboard-focus light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-keyboard-focus light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-keyboard-focus light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-keyboard-focus light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-keyboard-focus light 2x 236 pt body; height fits content and window |
+| PASS | scc-keyboard-focus light 2x complete opaque capture |
+| PASS | scc-keyboard-focus light 2x four 48x32 actions at measured positions |
+| PASS | scc-keyboard-focus light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-keyboard-focus light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-keyboard-focus light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-keyboard-focus light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-keyboard-focus dark 1x 236 pt body; height fits content and window |
+| PASS | scc-keyboard-focus dark 1x complete opaque capture |
+| PASS | scc-keyboard-focus dark 1x four 48x32 actions at measured positions |
+| PASS | scc-keyboard-focus dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-keyboard-focus dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-keyboard-focus dark 1x action outer ring is darker than material |
+| PASS | scc-keyboard-focus dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-keyboard-focus dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-keyboard-focus dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-keyboard-focus dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-keyboard-focus dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-keyboard-focus dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-keyboard-focus dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-keyboard-focus dark 2x 236 pt body; height fits content and window |
+| PASS | scc-keyboard-focus dark 2x complete opaque capture |
+| PASS | scc-keyboard-focus dark 2x four 48x32 actions at measured positions |
+| PASS | scc-keyboard-focus dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-keyboard-focus dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-keyboard-focus dark 2x action outer ring is darker than material |
+| PASS | scc-keyboard-focus dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-keyboard-focus dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-keyboard-focus dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-keyboard-focus dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-keyboard-focus dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-keyboard-focus dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-keyboard-focus dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-reload light 1x 236 pt body; height fits content and window |
+| PASS | scc-reload light 1x complete opaque capture |
+| PASS | scc-reload light 1x four 48x32 actions at measured positions |
+| PASS | scc-reload light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-reload light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-reload light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-reload light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-reload light 2x 236 pt body; height fits content and window |
+| PASS | scc-reload light 2x complete opaque capture |
+| PASS | scc-reload light 2x four 48x32 actions at measured positions |
+| PASS | scc-reload light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-reload light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-reload light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-reload light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-reload dark 1x 236 pt body; height fits content and window |
+| PASS | scc-reload dark 1x complete opaque capture |
+| PASS | scc-reload dark 1x four 48x32 actions at measured positions |
+| PASS | scc-reload dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-reload dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-reload dark 1x action outer ring is darker than material |
+| PASS | scc-reload dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-reload dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-reload dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-reload dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-reload dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-reload dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-reload dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-reload dark 2x 236 pt body; height fits content and window |
+| PASS | scc-reload dark 2x complete opaque capture |
+| PASS | scc-reload dark 2x four 48x32 actions at measured positions |
+| PASS | scc-reload dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-reload dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-reload dark 2x action outer ring is darker than material |
+| PASS | scc-reload dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-reload dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-reload dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-reload dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-reload dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-reload dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-reload dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-menu light 1x 236 pt body; height fits content and window |
+| PASS | scc-menu light 1x complete opaque capture |
+| PASS | scc-menu light 1x four 48x32 actions at measured positions |
+| PASS | scc-menu light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-menu light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-menu light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-menu light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-menu light 2x 236 pt body; height fits content and window |
+| PASS | scc-menu light 2x complete opaque capture |
+| PASS | scc-menu light 2x four 48x32 actions at measured positions |
+| PASS | scc-menu light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-menu light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-menu light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-menu light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-menu dark 1x 236 pt body; height fits content and window |
+| PASS | scc-menu dark 1x complete opaque capture |
+| PASS | scc-menu dark 1x four 48x32 actions at measured positions |
+| PASS | scc-menu dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-menu dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-menu dark 1x action outer ring is darker than material |
+| PASS | scc-menu dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-menu dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-menu dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-menu dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-menu dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-menu dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-menu dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-menu dark 2x 236 pt body; height fits content and window |
+| PASS | scc-menu dark 2x complete opaque capture |
+| PASS | scc-menu dark 2x four 48x32 actions at measured positions |
+| PASS | scc-menu dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-menu dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-menu dark 2x action outer ring is darker than material |
+| PASS | scc-menu dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-menu dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-menu dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-menu dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-menu dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-menu dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-menu dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-picker light 1x 236 pt body; height fits content and window |
+| PASS | scc-picker light 1x complete opaque capture |
+| PASS | scc-picker light 1x four 48x32 actions at measured positions |
+| PASS | scc-picker light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-picker light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-picker light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-picker light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-picker light 2x 236 pt body; height fits content and window |
+| PASS | scc-picker light 2x complete opaque capture |
+| PASS | scc-picker light 2x four 48x32 actions at measured positions |
+| PASS | scc-picker light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-picker light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-picker light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-picker light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-picker dark 1x 236 pt body; height fits content and window |
+| PASS | scc-picker dark 1x complete opaque capture |
+| PASS | scc-picker dark 1x four 48x32 actions at measured positions |
+| PASS | scc-picker dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-picker dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-picker dark 1x action outer ring is darker than material |
+| PASS | scc-picker dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-picker dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-picker dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-picker dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-picker dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-picker dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-picker dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-picker dark 2x 236 pt body; height fits content and window |
+| PASS | scc-picker dark 2x complete opaque capture |
+| PASS | scc-picker dark 2x four 48x32 actions at measured positions |
+| PASS | scc-picker dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-picker dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-picker dark 2x action outer ring is darker than material |
+| PASS | scc-picker dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-picker dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-picker dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-picker dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-picker dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-picker dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-picker dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip light 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip light 1x complete opaque capture |
+| PASS | scc-tooltip light 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip light 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip light 2x complete opaque capture |
+| PASS | scc-tooltip light 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip dark 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip dark 1x complete opaque capture |
+| PASS | scc-tooltip dark 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-tooltip dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-tooltip dark 1x action outer ring is darker than material |
+| PASS | scc-tooltip dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip dark 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip dark 2x complete opaque capture |
+| PASS | scc-tooltip dark 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-tooltip dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-tooltip dark 2x action outer ring is darker than material |
+| PASS | scc-tooltip dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-on light 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-on light 1x complete opaque capture |
+| PASS | scc-tooltip-on light 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-on light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-on light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-on light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-on light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-on light 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-on light 2x complete opaque capture |
+| PASS | scc-tooltip-on light 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-on light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-on light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-on light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-on light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-on dark 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-on dark 1x complete opaque capture |
+| PASS | scc-tooltip-on dark 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-on dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-tooltip-on dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-on dark 1x action outer ring is darker than material |
+| PASS | scc-tooltip-on dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-on dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-on dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-on dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-on dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-on dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-on dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-on dark 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-on dark 2x complete opaque capture |
+| PASS | scc-tooltip-on dark 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-on dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-tooltip-on dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-on dark 2x action outer ring is darker than material |
+| PASS | scc-tooltip-on dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-on dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-on dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-on dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-on dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-on dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-on dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-off light 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-off light 1x complete opaque capture |
+| PASS | scc-tooltip-off light 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-off light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-off light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-off light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-off light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-off light 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-off light 2x complete opaque capture |
+| PASS | scc-tooltip-off light 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-off light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-off light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-off light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-off light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-off dark 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-off dark 1x complete opaque capture |
+| PASS | scc-tooltip-off dark 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-off dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-tooltip-off dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-off dark 1x action outer ring is darker than material |
+| PASS | scc-tooltip-off dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-off dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-off dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-off dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-off dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-off dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-off dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-off dark 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-off dark 2x complete opaque capture |
+| PASS | scc-tooltip-off dark 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-off dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-tooltip-off dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-off dark 2x action outer ring is darker than material |
+| PASS | scc-tooltip-off dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-off dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-off dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-off dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-off dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-off dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-off dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-unavailable light 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-unavailable light 1x complete opaque capture |
+| PASS | scc-tooltip-unavailable light 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-unavailable light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-unavailable light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-unavailable light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-unavailable light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-unavailable light 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-unavailable light 2x complete opaque capture |
+| PASS | scc-tooltip-unavailable light 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-unavailable light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-unavailable light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-unavailable light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-unavailable light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-unavailable dark 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-unavailable dark 1x complete opaque capture |
+| PASS | scc-tooltip-unavailable dark 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-unavailable dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-tooltip-unavailable dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-unavailable dark 1x action outer ring is darker than material |
+| PASS | scc-tooltip-unavailable dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-unavailable dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-unavailable dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-unavailable dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-unavailable dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-unavailable dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-unavailable dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-unavailable dark 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-unavailable dark 2x complete opaque capture |
+| PASS | scc-tooltip-unavailable dark 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-unavailable dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-tooltip-unavailable dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-unavailable dark 2x action outer ring is darker than material |
+| PASS | scc-tooltip-unavailable dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-unavailable dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-unavailable dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-unavailable dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-unavailable dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-unavailable dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-unavailable dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-private light 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-private light 1x complete opaque capture |
+| PASS | scc-tooltip-private light 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-private light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-private light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-private light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-private light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-private light 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-private light 2x complete opaque capture |
+| PASS | scc-tooltip-private light 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-private light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-private light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-private light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-private light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-private dark 1x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-private dark 1x complete opaque capture |
+| PASS | scc-tooltip-private dark 1x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-private dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-tooltip-private dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-private dark 1x action outer ring is darker than material |
+| PASS | scc-tooltip-private dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-private dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-private dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-private dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-private dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-private dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-private dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-tooltip-private dark 2x 236 pt body; height fits content and window |
+| PASS | scc-tooltip-private dark 2x complete opaque capture |
+| PASS | scc-tooltip-private dark 2x four 48x32 actions at measured positions |
+| PASS | scc-tooltip-private dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-tooltip-private dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-tooltip-private dark 2x action outer ring is darker than material |
+| PASS | scc-tooltip-private dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-private dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-tooltip-private dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-tooltip-private dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-tooltip-private dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-tooltip-private dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-tooltip-private dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-focus-boost light 1x 236 pt body; height fits content and window |
+| PASS | scc-focus-boost light 1x complete opaque capture |
+| PASS | scc-focus-boost light 1x four 48x32 actions at measured positions |
+| PASS | scc-focus-boost light 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-focus-boost light 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-focus-boost light 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-focus-boost light 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-focus-boost light 2x 236 pt body; height fits content and window |
+| PASS | scc-focus-boost light 2x complete opaque capture |
+| PASS | scc-focus-boost light 2x four 48x32 actions at measured positions |
+| PASS | scc-focus-boost light 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-focus-boost light 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-focus-boost light 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-focus-boost light 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-focus-boost dark 1x 236 pt body; height fits content and window |
+| PASS | scc-focus-boost dark 1x complete opaque capture |
+| PASS | scc-focus-boost dark 1x four 48x32 actions at measured positions |
+| PASS | scc-focus-boost dark 1x action gradient top [37, 37, 37] ~= #272727 |
+| PASS | scc-focus-boost dark 1x action gradient bottom [22, 23, 23] ~= #161616 |
+| PASS | scc-focus-boost dark 1x action outer ring is darker than material |
+| PASS | scc-focus-boost dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-focus-boost dark 1x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-focus-boost dark 1x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-focus-boost dark 1x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-focus-boost dark 1x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-focus-boost dark 1x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-focus-boost dark 1x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | scc-focus-boost dark 2x 236 pt body; height fits content and window |
+| PASS | scc-focus-boost dark 2x complete opaque capture |
+| PASS | scc-focus-boost dark 2x four 48x32 actions at measured positions |
+| PASS | scc-focus-boost dark 2x action gradient top [38, 38, 38] ~= #272727 |
+| PASS | scc-focus-boost dark 2x action gradient bottom [23, 23, 23] ~= #161616 |
+| PASS | scc-focus-boost dark 2x action outer ring is darker than material |
+| PASS | scc-focus-boost dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-focus-boost dark 2x separator additive RGB lift [35, 35, 35] ~= +35 |
+| PASS | scc-focus-boost dark 2x white 0.20 rim [115, 113, 142] ~= #75738F |
+| PASS | scc-focus-boost dark 2x rendered arrow tip+1 width 8.00 ~= 9.0 |
+| PASS | scc-focus-boost dark 2x rendered arrow tip+3 width 12.00 ~= 12.3 |
+| PASS | scc-focus-boost dark 2x rendered arrow tip+5 width 16.00 ~= 16.3 |
+| PASS | scc-focus-boost dark 2x rendered arrow tip+7 width 20.00 ~= 20.3 |
+| PASS | committed SHA256 scc-adblock-excluded-dark@1x.png |
+| PASS | committed SHA256 scc-adblock-excluded-dark@2x.png |
+| PASS | committed SHA256 scc-adblock-excluded-light@1x.png |
+| PASS | committed SHA256 scc-adblock-excluded-light@2x.png |
+| PASS | committed SHA256 scc-adblock-on-dark@1x.png |
+| PASS | committed SHA256 scc-adblock-on-dark@2x.png |
+| PASS | committed SHA256 scc-adblock-on-light@1x.png |
+| PASS | committed SHA256 scc-adblock-on-light@2x.png |
+| PASS | committed SHA256 scc-adblock-unavailable-dark@1x.png |
+| PASS | committed SHA256 scc-adblock-unavailable-dark@2x.png |
+| PASS | committed SHA256 scc-adblock-unavailable-light@1x.png |
+| PASS | committed SHA256 scc-adblock-unavailable-light@2x.png |
+| PASS | committed SHA256 scc-boost-dark@1x.png |
+| PASS | committed SHA256 scc-boost-dark@2x.png |
+| PASS | committed SHA256 scc-boost-light@1x.png |
+| PASS | committed SHA256 scc-boost-light@2x.png |
+| PASS | committed SHA256 scc-boosts-off-dark@1x.png |
+| PASS | committed SHA256 scc-boosts-off-dark@2x.png |
+| PASS | committed SHA256 scc-boosts-off-light@1x.png |
+| PASS | committed SHA256 scc-boosts-off-light@2x.png |
+| PASS | committed SHA256 scc-clamped-dark@1x.png |
+| PASS | committed SHA256 scc-clamped-dark@2x.png |
+| PASS | committed SHA256 scc-clamped-light@1x.png |
+| PASS | committed SHA256 scc-clamped-light@2x.png |
+| PASS | committed SHA256 scc-focus-boost-dark@1x.png |
+| PASS | committed SHA256 scc-focus-boost-dark@2x.png |
+| PASS | committed SHA256 scc-focus-boost-light@1x.png |
+| PASS | committed SHA256 scc-focus-boost-light@2x.png |
+| PASS | committed SHA256 scc-hover-action-dark@1x.png |
+| PASS | committed SHA256 scc-hover-action-dark@2x.png |
+| PASS | committed SHA256 scc-hover-action-light@1x.png |
+| PASS | committed SHA256 scc-hover-action-light@2x.png |
+| PASS | committed SHA256 scc-hover-boost-dark@1x.png |
+| PASS | committed SHA256 scc-hover-boost-dark@2x.png |
+| PASS | committed SHA256 scc-hover-boost-light@1x.png |
+| PASS | committed SHA256 scc-hover-boost-light@2x.png |
+| PASS | committed SHA256 scc-hover-label-dark@1x.png |
+| PASS | committed SHA256 scc-hover-label-dark@2x.png |
+| PASS | committed SHA256 scc-hover-label-light@1x.png |
+| PASS | committed SHA256 scc-hover-label-light@2x.png |
+| PASS | committed SHA256 scc-incognito-dark@1x.png |
+| PASS | committed SHA256 scc-incognito-dark@2x.png |
+| PASS | committed SHA256 scc-incognito-light@1x.png |
+| PASS | committed SHA256 scc-incognito-light@2x.png |
+| PASS | committed SHA256 scc-insecure-dark@1x.png |
+| PASS | committed SHA256 scc-insecure-dark@2x.png |
+| PASS | committed SHA256 scc-insecure-light@1x.png |
+| PASS | committed SHA256 scc-insecure-light@2x.png |
+| PASS | committed SHA256 scc-internal-page-dark@1x.png |
+| PASS | committed SHA256 scc-internal-page-dark@2x.png |
+| PASS | committed SHA256 scc-internal-page-light@1x.png |
+| PASS | committed SHA256 scc-internal-page-light@2x.png |
+| PASS | committed SHA256 scc-keyboard-focus-dark@1x.png |
+| PASS | committed SHA256 scc-keyboard-focus-dark@2x.png |
+| PASS | committed SHA256 scc-keyboard-focus-light@1x.png |
+| PASS | committed SHA256 scc-keyboard-focus-light@2x.png |
+| PASS | committed SHA256 scc-light-dark@1x.png |
+| PASS | committed SHA256 scc-light-dark@2x.png |
+| PASS | committed SHA256 scc-light-light@1x.png |
+| PASS | committed SHA256 scc-light-light@2x.png |
+| PASS | committed SHA256 scc-many-dark@1x.png |
+| PASS | committed SHA256 scc-many-dark@2x.png |
+| PASS | committed SHA256 scc-many-light@1x.png |
+| PASS | committed SHA256 scc-many-light@2x.png |
+| PASS | committed SHA256 scc-menu-dark@1x.png |
+| PASS | committed SHA256 scc-menu-dark@2x.png |
+| PASS | committed SHA256 scc-menu-light@1x.png |
+| PASS | committed SHA256 scc-menu-light@2x.png |
+| PASS | committed SHA256 scc-no-boosts-dark@1x.png |
+| PASS | committed SHA256 scc-no-boosts-dark@2x.png |
+| PASS | committed SHA256 scc-no-boosts-light@1x.png |
+| PASS | committed SHA256 scc-no-boosts-light@2x.png |
+| PASS | committed SHA256 scc-pane-anchor-dark@1x.png |
+| PASS | committed SHA256 scc-pane-anchor-dark@2x.png |
+| PASS | committed SHA256 scc-pane-anchor-light@1x.png |
+| PASS | committed SHA256 scc-pane-anchor-light@2x.png |
+| PASS | committed SHA256 scc-picker-dark@1x.png |
+| PASS | committed SHA256 scc-picker-dark@2x.png |
+| PASS | committed SHA256 scc-picker-light@1x.png |
+| PASS | committed SHA256 scc-picker-light@2x.png |
+| PASS | committed SHA256 scc-reload-dark@1x.png |
+| PASS | committed SHA256 scc-reload-dark@2x.png |
+| PASS | committed SHA256 scc-reload-light@1x.png |
+| PASS | committed SHA256 scc-reload-light@2x.png |
+| PASS | committed SHA256 scc-tooltip-dark@1x.png |
+| PASS | committed SHA256 scc-tooltip-dark@2x.png |
+| PASS | committed SHA256 scc-tooltip-light@1x.png |
+| PASS | committed SHA256 scc-tooltip-light@2x.png |
+| PASS | committed SHA256 scc-tooltip-off-dark@1x.png |
+| PASS | committed SHA256 scc-tooltip-off-dark@2x.png |
+| PASS | committed SHA256 scc-tooltip-off-light@1x.png |
+| PASS | committed SHA256 scc-tooltip-off-light@2x.png |
+| PASS | committed SHA256 scc-tooltip-on-dark@1x.png |
+| PASS | committed SHA256 scc-tooltip-on-dark@2x.png |
+| PASS | committed SHA256 scc-tooltip-on-light@1x.png |
+| PASS | committed SHA256 scc-tooltip-on-light@2x.png |
+| PASS | committed SHA256 scc-tooltip-private-dark@1x.png |
+| PASS | committed SHA256 scc-tooltip-private-dark@2x.png |
+| PASS | committed SHA256 scc-tooltip-private-light@1x.png |
+| PASS | committed SHA256 scc-tooltip-private-light@2x.png |
+| PASS | committed SHA256 scc-tooltip-unavailable-dark@1x.png |
+| PASS | committed SHA256 scc-tooltip-unavailable-dark@2x.png |
+| PASS | committed SHA256 scc-tooltip-unavailable-light@1x.png |
+| PASS | committed SHA256 scc-tooltip-unavailable-light@2x.png |
+| PASS | complete committed render receipts |
+| INFO | skeleton timing is diagnostic; the full cold workload owns the instruction gate |
+| PASS | cold open main-thread median 102089289 instructions <= 104539565 (ceil(95035968 x1.10)); Apple M5 Pro / 26B5112a |
+
+1244/1244 passed
+1 INFO (no acceptance result for these entries)
