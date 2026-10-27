@@ -893,6 +893,31 @@ final class SidebarOutlineView: NSOutlineView {
         super.reloadData()
     }
 
+    override func insertItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.insertItems(at: indexes, inParent: parent, withAnimation: animationOptions)
+    }
+
+    override func removeItems(at indexes: IndexSet, inParent parent: Any?, withAnimation animationOptions: NSTableView.AnimationOptions) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.removeItems(at: indexes, inParent: parent, withAnimation: animationOptions)
+    }
+
+    override func moveItem(at fromIndex: Int, inParent oldParent: Any?, to toIndex: Int, inParent newParent: Any?) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.moveItem(at: fromIndex, inParent: oldParent, to: toIndex, inParent: newParent)
+    }
+
+    override func reloadItem(_ item: Any?, reloadChildren: Bool) {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.reloadItem(item, reloadChildren: reloadChildren)
+    }
+
+    override func noteNumberOfRowsChanged() {
+        SidebarDiagnostics.outlineItemUpdates += 1
+        super.noteNumberOfRowsChanged()
+    }
+
     override func validateProposedFirstResponder(_ responder: NSResponder, for event: NSEvent?) -> Bool {
         if responder is PlateButton || responder is RenameField || responder is DividerCellView { return true }
         return super.validateProposedFirstResponder(responder, for: event)

@@ -325,6 +325,8 @@ public protocol SidebarDelegate: AnyObject {
 public enum SidebarDiagnostics {
     /// `reloadData` calls on any tab list. One per page build; model changes add none.
     public internal(set) static var fullReloads = 0
+    /// Native incremental outline update calls. One plain main-actor increment per call.
+    public internal(set) static var outlineItemUpdates = 0
     /// One plain main-actor integer increment per page build or layout callback.
     /// No lock, allocation, or logging occurs at these diagnostic hook sites.
     public internal(set) static var spacePageBuilds = 0

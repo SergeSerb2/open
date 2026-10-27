@@ -9,18 +9,21 @@ enum SM6Fixture {
     struct Work: Codable {
         let pageBuilds: Int
         let fullReloads: Int
+        let outlineItemUpdates: Int
         let managerLayouts: Int
         let pageLayouts: Int
         let rowLayouts: Int
 
         @MainActor static func snapshot() -> Work {
             Work(pageBuilds: SidebarDiagnostics.spacePageBuilds, fullReloads: SidebarDiagnostics.fullReloads,
+                 outlineItemUpdates: SidebarDiagnostics.outlineItemUpdates,
                  managerLayouts: SidebarDiagnostics.spaceManagerLayouts, pageLayouts: SidebarDiagnostics.spacePageLayouts,
                  rowLayouts: SidebarDiagnostics.tabRowLayouts)
         }
 
         func subtracting(_ before: Work) -> Work {
             Work(pageBuilds: pageBuilds - before.pageBuilds, fullReloads: fullReloads - before.fullReloads,
+                 outlineItemUpdates: outlineItemUpdates - before.outlineItemUpdates,
                  managerLayouts: managerLayouts - before.managerLayouts, pageLayouts: pageLayouts - before.pageLayouts,
                  rowLayouts: rowLayouts - before.rowLayouts)
         }
@@ -129,6 +132,8 @@ enum SM6Fixture {
                      "SM6 page builds equal 1...4 built visible columns (builds \(work.pageBuilds), columns \(built))")
         Checks.check(work.fullReloads == work.pageBuilds,
                      "SM6 exactly one full outline load per page build (reloads \(work.fullReloads), builds \(work.pageBuilds))")
+        Checks.check(work.outlineItemUpdates == 0,
+                     "SM6 first layout uses only the data-source load (outline item updates \(work.outlineItemUpdates))")
         Checks.check(rows.count == built && rows.allSatisfy { $0.actual == $0.expected },
                      "SM6 actual outline rows equal model: \(rows.map { "space \($0.spaceIndex + 1)=\($0.actual)/\($0.expected)" }.joined(separator: ", "))")
         print("  INFO SM6 work manager-layouts=\(work.managerLayouts) page-layouts=\(work.pageLayouts) row-layouts=\(work.rowLayouts) (unpinned AppKit callbacks)")
