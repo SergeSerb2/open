@@ -1878,7 +1878,9 @@ def window_flow_checks(factory, results, tmp):
             peer.quit()
         app.call("key", key="s", modifiers=["cmd"], route="app")
         results["toggle_sidebar"] = {"ok": bool(sidebar_anchored(app))}
-        app.call("mouse", **{"from": [228, 300], "to": [300, 300]})
+        # Drag-hide now preserves 190 from before that drag, rather than writing 228.
+        drag_start = app.call("window-state")["sidebarWidth"]
+        app.call("mouse", **{"from": [drag_start, 300], "to": [300, 300]})
         app.call("key", key="s", modifiers=["cmd"], route="app")
         sidebar_hidden(app)
         app.call("key", key="n", modifiers=["cmd"], route="app")
@@ -2609,6 +2611,7 @@ def window_chrome_followup_checks(factory, results, tmp):
     private = tempfile.mkdtemp(prefix="window-chrome-104-", dir=tmp)
     app = factory(urls=(white_fixture("Window chrome"),), fresh=True)
     down = False
+    snapshot_methods = {}
     def state():
         return app.call("window-state")
     def pointer(action, x, count=1):
@@ -2632,7 +2635,8 @@ def window_chrome_followup_checks(factory, results, tmp):
                 and (path is None or a.get("keyPath") == path))
     def snap(name):
         path = os.path.join(private, name + ".png")
-        app.call("snapshot", path=path)
+        receipt = app.call("snapshot", path=path)
+        snapshot_methods[name] = receipt["method"]
         return path
     try:
         app.call("window-focus", id=state()["id"], activate=True)
@@ -2748,7 +2752,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         results["motion_reduce_motion"] = {"ok": reduced_hide["sidebar"] == reduced_show["sidebar"] == reduced_card["card"] == {}
             and reduced_space["space"] == {} and all(m["active"] == {"panel": [], "sidebar": []} for m in (reduced_hide, reduced_card, reduced_show)),
             "hide": reduced_hide["active"], "card": reduced_card["active"], "show": reduced_show["active"], "space": reduced_space["space"]}
-        results["chrome_snapshot_files"] = {"files": [rest_png, mid_png, hidden_png, show_png, card_png]}
+        results["chrome_snapshot_files"] = {"files": [rest_png, mid_png, hidden_png, show_png, card_png], "methods": snapshot_methods}
         # Retain only our synthetic real-window snapshots outside the transient data root.
         saved = os.path.join(ROOT, ".re", "window-chrome-104", "snapshots")
         shutil.copytree(private, saved, dirs_exist_ok=True)
