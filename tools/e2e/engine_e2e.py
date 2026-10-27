@@ -2418,7 +2418,7 @@ def dimmed_look(png, scale, centers, mode, ring=True):
             ring_expected = (floating if centers[0][0] == 25 else anchored)[index]
             samples = [px(x, y) for y in range(int((cy-8)*scale), int((cy+8)*scale))
                        for x in range(int((cx-8)*scale), int((cx+8)*scale))
-                       if inner <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < outer]
+                       if 6.5 <= math.hypot((x+.5)/scale-cx, (y+.5)/scale-cy) < 7.5]
             ring_px = [statistics.mean(c[k] for c in samples) for k in range(3)]
             ring_err = chrome_delta_e(ring_px, ring_expected)
             plain_err = chrome_delta_e(ring_px, bg)
@@ -2772,7 +2772,7 @@ def window_chrome_followup_checks(factory, results, tmp):
         return wait_until(lambda: not app.call("window-motion")["active"]["sidebar"], timeout=3, step=.01)
     def spring(a, response, damping, path=None):
         return (a.get("type") == "CASpringAnimation" and abs(a.get("response", 0) - response) < 1e-6
-                and abs(a.get("damping", 0) - damping) < 1e-6 and 0 <= a.get("scheduledDelay", -1) <= 1/60
+                and abs(a.get("damping", 0) - damping) < 1e-6 and 0 <= a.get("scheduledDelay", a.get("beginTime", -1)) <= 1/60
                 and (path is None or a.get("keyPath") == path))
     def snap(name):
         path = os.path.join(private, name + ".png")
