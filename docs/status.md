@@ -5,7 +5,7 @@ Open work read with `git` (not edited): PR #45 `f11822b`, PR #52 `6c4e7ee`, PR #
 
 This file lists every v1 line item from the RE catalog (`docs/re/`), the AGENTS.md v1 scope, and the platform basics a browser needs. For each item it names the plan, the library code, the App wiring, and the evidence. It is an inventory. It changes no code.
 
-Update 2026-10-26 (Arc capture session 2, `re/interaction-states.md` §20, `re/capture-session-2-results.md`): only the rows and gaps that the session-2 plan amendments close or change were edited. Their notes start with "S2 (2026-10-26)". The rest of the file is still the 2026-10-25 audit.
+Update 2026-10-26 (Arc capture session 2, `re/interaction-states.md` §20, `re/capture-session-2-results.md`): only the rows and gaps that the session-2 plan amendments close or change were edited. Their notes start with "S2 (2026-10-26)". The rest of the file is still the 2026-10-25 audit. Review r1 also folded in the folder hover-card video sample (V 46.11–46.46 s) and the Essential Keyboard Shortcuts row.
 
 ## 0. How to read this file
 
@@ -67,7 +67,7 @@ Row count by status (283 rows in §1 after the 2026-10-26 update; a "(partial)" 
 | 1.5 Folders | 0 | 4 | 2 | 3 | 0 |
 | 1.6 Archive | 1 | 0 | 3 | 1 | 0 |
 | 1.7 Command bar | 0 | 0 | 12 | 3 | 1 |
-| 1.8 Menus and hotkeys | 0 | 2 | 5 | 1 | 0 |
+| 1.8 Menus and hotkeys | 0 | 2 | 6 | 0 | 0 |
 | 1.9 Split View, Peek, Little Open | 0 | 15 | 12 | 1 | 1 |
 | 1.10 Profiles | 0 | 2 | 8 | 0 | 0 |
 | 1.11 Air Traffic Control | 0 | 0 | 5 | 1 | 0 |
@@ -80,7 +80,7 @@ Row count by status (283 rows in §1 after the 2026-10-26 update; a "(partial)" 
 | 1.18 Settings and Library | 0 | 0 | 10 | 0 | 2 |
 | 1.19 First run | 0 | 0 | 4 | 0 | 0 |
 | 1.20 Release | 0 | 1 | 8 | 0 | 0 |
-| **Total** | **23** | **61** | **145** | **45** | **9** |
+| **Total** | **23** | **61** | **146** | **44** | **9** |
 
 ## 1. Feature tables
 
@@ -100,7 +100,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Recording indicator on rows (camera or microphone in use) | FC §1.2 r10 (2026-10-25 update); FA §8 | media-pip | none | none | none | planned | |
 | Tidy titles for known sites (for example Gmail fragment → "Inbox") | FC §1.2 r9 | none | none | none | none | unplanned | Non-AI rule table. |
 | Unread badge on rows added in the background | FC §1.2 r12 | none | model field `Tab.isUnread` (`OpenModel/LiveNodes.swift`), set by import; the sidebar does not draw it | none | none | unplanned (partial) | |
-| Hover Previews of folder, pinned, and favorite rows | FC §1.2 r13; IS §18 General, §20.13 | sidebar-completion §3.6 (S5, #102); App in A2; settings §5.1.1 | `OpenSidebar` `HoverPreviewTracker`, `FolderPreviewView` (#102); `OpenSettings` sheet | none | `sidebar-render` HP1–HP6 (#102) | planned | S2 (2026-10-26): lead decision — two Previews sources, "Folders" and "Pinned tabs and Favorites" (Open product choice). Arc's other sources (Google and Outlook Calendar and Mail, Recent pages on Linear, Notion, Figma, Notion Calendar) are live-data integrations: post-v1. No delay setting, as in Arc: the delay is fixed at 0.5 s (lead ruling; sidebar-completion Step S5b). The folder card is still not captured. |
+| Hover Previews of folder, pinned, and favorite rows | FC §1.2 r13; IS §18 General, §20.13 | sidebar-completion §3.6 (S5, #102); App in A2; settings §5.1.1 | `OpenSidebar` `HoverPreviewTracker`, `FolderPreviewView` (#102); `OpenSettings` sheet | none | `sidebar-render` HP1–HP6 (#102) | planned | S2 (2026-10-26): lead decision — two Previews sources, "Folders" and "Pinned tabs and Favorites" (Open product choice). Arc's other sources (Google and Outlook Calendar and Mail, Recent pages on Linear, Notion, Figma, Notion Calendar) are live-data integrations: post-v1. No delay setting, as in Arc: the delay is fixed at 0.5 s, an Open choice (lead ruling; one Arc sample ≈ 0.42 s at V 46.11–46.46 s; sidebar-completion Step S5b). The folder card was seen once in the video (V 46.11–46.46 s): ≈ 240 pt wide, a "Search \<folder\>…" field, rows with "N minutes ago" (positions only; sidebar-completion §3.6). |
 | Rename a row inline (double-click, "Rename…", Return, Esc) | FC §1.3 r15–16 | design.md §5.6 | `SpacePageView.swift` (`doubleAction` → `beginRename`); model `renameNode` | PR #52 (model intent) | `sidebar-render check` (menus); no e2e check | in PR | |
 | Row context menus: Today tab, pinned tab, favorite, folder, split row, Space, plus | IS §15; MH "Context menus", "Split row menu" | design.md §5.6 | `OpenSidebar/SidebarMenus.swift` | PR #52 (partial) | `sidebar-render check` (order for 4 targets) | in PR (partial) | PR #52 returns `false` for 16 intents: Site Control, Library, Manage Spaces, Space icon, theme, New Profile, Share Space, Export into Folder, Edit Pinned URL, Share, Change Icon, Customize Page, Duplicate, Copy All Links, Turn Folder into Space, Move to New Space (`App/WebContent/EngineWebContentHostFactory.swift` `performSidebar`, PR #52). Favorite and plus menus are guesses (design.md §5.6). |
 | Multi-select rows (Shift/Cmd click) and New Folder from Selection | FC §1.5 r24; MH "Gestures and mouse" | none | none: the outline uses single selection (`SpacePageView.swift`); model `createFolder(withNodes:)` already takes several nodes | none | none | unplanned | |
@@ -241,7 +241,7 @@ Columns: feature · RE doc + section · plan · library code · App wiring · ve
 | Custom shortcuts: record, conflicts, reset, priority | MH "Custom shortcuts"; FC §7.2 Shortcuts | settings §5.4 | `OpenCommands/KeyBindings.swift`; `OpenSettings/ShortcutsPane.swift` | none | `commands-dump` (overrides); `settings-preview` `shortcuts-save` | planned | |
 | Global Little Open hotkey (Cmd+Opt+N) | MH "Global hotkey and Little Arc" | app-shell §4.3 | `OpenCommands/GlobalHotkey.swift` | none | `commands-dump` (register, unregister) | planned | S2 (2026-10-26): every press opens a new Little Open window (routing §9.2). |
 | Dynamic Spaces and Tabs menu sections | MH "Menu bar at a glance" | commands.md | `MenuBuilder.swift` | none | `commands-dump` | planned | |
-| Essential Keyboard Shortcuts window | MH Help | app-shell §4.2 (placeholder: open the Help Center) | none | none | none | unplanned (window) | |
+| Essential Keyboard Shortcuts window | MH Help | commandbar-completion §4.5 (Step 6) | none | none | none | planned | S2 (2026-10-26): reached from Help, the command bar action, and Settings ▸ Shortcuts; the (i) button opens the privacy footer instead (CC-42). |
 | Reference table complete | MH | — | `OpenCommands/Resources/expected-menu.json` | — | this audit (§2.3) | in PR (partial) | The table lacks Tabs ▸ "Reveal Tab in Sidebar". |
 
 ### 1.9 Split View, Peek, Little Open
@@ -560,7 +560,7 @@ Ranking is by user impact for an Arc user who switches to Open. **P0** blocks da
 16. **Zoom level toast** ("110%"). Evidence: IS §16. Belongs in: app-shell §3.7.
 17. **Expand / Collapse All Folders; Reset all tabs in this Space.** Registry only. Evidence: FC §1.5 r23, §3.2 r8. Belongs in: app-shell §4.3 (model loops).
 18. **Turn folder into Space; Export Space into folder; Turn Space into folder.** Intents and menu items exist; no model command. Evidence: FC §2.2 r7; IS §15. Belongs in: `OpenModel` plus app-shell §4.1.
-19. **Hover Previews** of folder, pinned, and favorite rows. The Settings switch exists (`OpenSettings`). Evidence: FC §1.2 r13. Belongs in: `OpenSidebar` plus `OpenFeatures` (reuse the Peek host). **S2 (2026-10-26): planned** (sidebar-completion §3.6; library in #102, App in A2). Lead decision: two Previews sources ("Folders", "Pinned tabs and Favorites"); Arc's live-data sources are post-v1; no delay setting (fixed 0.5 s, Step S5b).
+19. **Hover Previews** of folder, pinned, and favorite rows. The Settings switch exists (`OpenSettings`). Evidence: FC §1.2 r13. Belongs in: `OpenSidebar` plus `OpenFeatures` (reuse the Peek host). **S2 (2026-10-26): planned** (sidebar-completion §3.6; library in #102, App in A2). Lead decision: two Previews sources ("Folders", "Pinned tabs and Favorites"); Arc's live-data sources are post-v1; no delay setting (fixed 0.5 s, an Open choice; one Arc sample ≈ 0.42 s, V 46.11–46.46 s; Step S5b).
 20. **Tidy titles** for known sites. Evidence: FC §1.2 r9. Belongs in: `OpenSidebar` or `OpenModel` (an Open-written rule table).
 21. **Unread badge** on rows added in the background (field exists, never drawn). Evidence: FC §1.2 r12. Belongs in: `OpenSidebar`.
 22. **Inline autocomplete** in the command bar. Evidence: IS §9.3. Belongs in: `OpenCommandBar` and `OpenSuggest` (commandbar.md §10 gap 3). **S2 (2026-10-26): planned** in commandbar-completion §4.1; Backspace rule captured (CC-40).

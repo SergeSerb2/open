@@ -103,7 +103,7 @@ Marks: **fact** (string, symbol, field, or pixel proves it), **derived** (follow
 | Views | `PreviewView{backgroundView: PreviewBackgroundView, folderPreviewHostView, dataProvider, previewPresenter, previewContent: NSView}`, `FolderPreviewView{contentViewHeight, selectedItemID, searchQuery, previewPresenter}`, `StandardPreviewViewHost` | fact: reflection |
 | Color | `PreviewBackgroundColor`: light `#FFFFFF`, dark `#212222` (main `Assets.car`) | fact: `.re/design/all-colors.txt` |
 | Settings sheet (runtime) | General ▸ "Previews Settings…" (the row has no switch) opens a 422 x 370 sheet: "Show Arc Previews:", the copy above with a "Learn more" link, and 7 checkboxes, all on by default: Arc Folders · Google Calendar · Google Mail · Outlook Calendar · Outlook Mail · Recent pages on Linear, Notion, and Figma · Notion Calendar; then "Done". | measured: capture session 2, S2 02/0050 AX (`interaction-states.md` §20.13) |
-| Look, size, delay | Not captured. In capture session 2 the folder preview did not appear for synthetic pointer events (5 s on a collapsed folder with Arc Folders on). | guess; notes 10:23:34 (`interaction-states.md` §20.4) |
+| Look, size, delay | Item 8's 5 s synthetic hover did not open it. The session-2 video caught the folder card once (positions only): ≈ 240 pt wide, 4 pt right of the sidebar, centered on the row, a "Search \<folder\>…" field, rows ≈ 45 pt with "N minutes ago", hover-to-card ≈ 0.42 s. Colors, radius, and type not captured. | measured once: V 45.69, 46.11–46.46 s (`interaction-states.md` §20.4); notes 10:23:34 |
 
 Note: Arc's pinned and favorite previews are site-specific glance views (mail, calendar, recent pages). Peek (`features-advanced.md` §2) is a different feature.
 

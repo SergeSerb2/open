@@ -271,8 +271,12 @@ These rows replace the "Speaker button" row above and the trailing slot logic:
 (row-relative), `titleShift 26`, `recordingSlotWidth 14`, `recordingDot 7`;
 `gapAfterTitle` and `glyphInsetX` are deleted.
 
-Lead review decisions (2026-10-26): speaker images share a left anchor at
-slot x + 2 pt on one fixed image-view frame in both states. Keep native
+Lead review decisions (2026-10-26): ~~speaker images share a left anchor at
+slot x + 2 pt on one fixed image-view frame in both states.~~ **Superseded
+2026-10-26 (capture session 2, C18; review r1 F8):** in the 26 pt leading
+button both glyphs are centered (ink x 44–62 audible and 46–61 muted, centers
+53.0 and 53.5 against the button center 54, S2 12/0022, 0027); keep one fixed
+image-view frame equal to the button, centered. Keep native
 replace outside a disable-actions transaction (lead clarification 2026-10-26).
 If the unwrapped native call is proven to start no symbol-effect animation,
 a finite 0.25 s Core Animation cross-fade is allowed as a fallback (lead

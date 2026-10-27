@@ -108,7 +108,7 @@ assumptions in §7. Phase A must not block on either.
 | LA-S2-3 | Each ⌥⌘N opens a **new** window at the same first frame (490 × 329 at (2050, 50)), on top of the earlier one; the earlier window had a loaded page. (S2 19/0029; notes 10:34:58) | §9.2, §9.5 |
 | LA-S2-4 | Title bar, 47 pt: window buttons at `[9 / 32 / 55, 16, 16, 16]`; a URL capsule `[84, 8, W − 289, 31]` (right edge W − 205) that holds the Profile chip (AX `littleBrowserProfileIndicator`: 14 pt icon at x 97 + the Profile name at x 114), the host centered (`[497.5, 15.5, 129, 16]` at W 1185), and a copy-link button `[W − 228, 16, 16, 16]`; then a dark pill `[W − 196, 8, 188, 30]` with "Open in **\<Space\>** ⌘O" (AX button `[994, 15, 148, 17]`) and a chevron `[W − 29, 15, 16, 16]` (tooltip "More Spaces"). No back, forward, reload, or URL text field. The page fills `[0, 47, W, H − 47]` edge to edge. (S2 19/0011, 0025; pixel bounds of the capsule and pill measured on 0011) | §9.3 |
 | LA-S2-5 | The chevron opens a dark popover (≈ 244 wide, at the window's top-right): a "Search Spaces…" field, then the Spaces with their icons on colored rounded squares, the current Space first and highlighted, rows 46 pt apart. (S2 19/0023) | §9.3, §9.4 |
-| LA-S2-6 | On disk Arc anchors the window by its top-right corner: `style.little.session.preferredFrame = {anchor: {topRight: …}, size: …}`, `entryPoint: {externalLink: true}` also for ⌥⌘N, `shouldShowProfileIndicators: true`. ([interaction-states.md §20.10](../re/interaction-states.md); `appsupport/s2-little-arc-open/StorableWindows.json`) | §9.3 (frame model); import plan (window style) |
+| LA-S2-6 | On disk Arc anchors the window by its top-right corner: `style.little.session.preferredFrame = {anchor: {topRight: …}, size: …}`, `entryPoint: {externalLink: true}` also for ⌥⌘N, `shouldShowProfileIndicators: true`. The stored values (topRight (2544, 1394), size 500 × 300, AppKit points) match **neither** observed frame: the bar state's top-right is (2540, 1390) at 490 × 329, and the page state is 1185 × 832. That is one reason §14 Q2 stays open. ([interaction-states.md §20.10](../re/interaction-states.md); `appsupport/s2-little-arc-open/StorableWindows.json`) | §9.3 (frame model); import plan (window style) |
 
 ---
 
@@ -161,11 +161,16 @@ App/Info.plist                                  §8.2 (edit if it already exists
 App/ExternalLink/ExternalLinkIntake.swift       §8.5
 App/ExternalLink/DefaultBrowserService.swift    §8.4
 App/ExternalLink/SourceAppResolver.swift        §8.6
-App/LittleOpen/LittleOpenSession.swift          §9.1
-App/LittleOpen/LittleOpenCoordinator.swift      §9.2
-App/LittleOpen/LittleOpenWindowController.swift §9.3
-App/LittleOpen/LittleOpenWebContent.swift       §7 (engine adapter protocol)
+App/LittleOpen/LittleOpenWebContent.swift       §7 (engine adapter only)
 ```
+
+2026-10-26 (review r1, F7): `LittleOpenSession`, `LittleOpenCoordinator`, and
+`LittleOpenWindowController` live in `OpenFeatures/` (the M4 plan's Step 6
+built them there: `Packages/OpenKit/Sources/OpenFeatures/LittleOpen*.swift`).
+Do not create App copies. Only the engine adapter stays in the App target.
+The registry ids are `new-little-open-window` and `little-open-global`
+(`OpenCommands/CommandRegistry.swift`); §2.3 and §3.5 keep the pre-rename
+names for history.
 
 If the App target already has an `AppDelegate` (or equivalent), edit it in
 place for §8.3 and §9.5 instead of creating a parallel delegate. Never create
@@ -1132,7 +1137,7 @@ a link *lands*; it owns nothing after landing.
 
 ## 9. Phase B — Little Open window
 
-### 9.1 Session model — `App/LittleOpen/LittleOpenSession.swift`
+### 9.1 Session model — `OpenFeatures/LittleOpenSession.swift`
 
 One window shows one page (LA-1). A session is that page, outside any Space:
 
@@ -1163,7 +1168,7 @@ Deliberate choices:
   what Show/Close All act on, and what the sweeper archives from. There is
   no list inside the Little Open window itself (LA-1: no tab strip).
 
-### 9.2 Coordinator — `App/LittleOpen/LittleOpenCoordinator.swift`
+### 9.2 Coordinator — `OpenFeatures/LittleOpenCoordinator.swift`
 
 ```swift
 @MainActor
@@ -1254,17 +1259,36 @@ window id, S2 19/0003 → 0011).
 | Frame model | Anchor by the top-right corner, like Arc's `preferredFrame.anchor.topRight` (LA-S2-6). A user move or resize applies to that window only. No autosave name in v1: new windows always use the fixed frames above. | anchor measured; per-window only guess (Arc's `LittleBrowserWindow_size` value is still unknown, §14 Q2) |
 | Minimum size | Page state 360 × 240. The bar state is not resizable. | Plan choice |
 | Style | `.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView`; transparent title bar; `titleVisibility = .hidden`. Bar state: the three standard buttons hidden, not resizable, movable by background. Page state: the buttons show at `[9 / 32 / 55, 16, 16, 16]` (3 pt left of the main window's 12 / 35 / 58). No sidebar, no tab strip, no Space switcher. | measured button frames (S2 19/0011); mechanism guess; LA-1 |
-| Title bar (page state) | 47 pt, the window's dark chrome color (default dark theme in the capture). Which Space theme colors it is not known (both test Spaces had the default theme): use the theme of the Space named in the pill (guess). | height measured (page starts at y 47) |
-| URL capsule | `[84, 8, W − 289, 31]` (right edge W − 205), radius 8 continuous (visual), fill a little lighter than the bar. It holds the Profile chip at its left, the host in the middle, and the copy-link button at its right. A click on the host opens the command bar over this window in `.editCurrentURL` mode, panel width min(766, W − 40) (guess: Cmd+L does the same). | frame measured (pixel bounds on S2 19/0011); click guess |
+| Title bar (page state) | 47 pt. Measured fill (sRGB, S2 19/0011, default dark theme): ≈ `#202335` … `#2F2B38`, varying by about ±8 levels across the bar, so it is probably a translucent material over the window background (**guess**). Which Space theme colors it is not known (both test Spaces had the default theme): use the theme of the Space named in the pill (guess). | height measured (page starts at y 47); fill range measured away from text and corners |
+| URL capsule | `[84, 8, W − 289, 31]` (right edge W − 205), radius 8 continuous (visual). Measured fill ≈ `#383948` … `#42414D` (sRGB, S2 19/0011, away from text), lighter than the bar; probably translucent like the bar (**guess**). It holds the Profile chip at its left, the host in the middle, and the copy-link button at its right. A click on the host opens the command bar over this window in `.editCurrentURL` mode, panel width min(766, W − 40) (guess: Cmd+L does the same). | frame measured (pixel bounds on S2 19/0011); click guess |
 | Profile chip | Profile icon 14 pt at `[97, 17]` and the Profile name (13 Medium, white ≈ 0.8) at x 114, inside the capsule; shown only when two or more Profiles exist (guess, like the Space Manager chip). Click: the profile menu (LA-7, §9.2). | frames measured (AX `littleBrowserProfileIndicator`); visibility rule and click guess |
 | Host | The page host without `www.`, 13 Regular, centered between the chip's right end and the copy-link button (`[497.5, 15.5, 129, 16]` at W 1185, center x 562). | frame measured; centering rule fitted |
 | Copy-link button | `[W − 228, 16, 16, 16]`, SF `link` glyph; click copies the URL and shows the "Copied Current URL" toast in this window. | frame measured; action and toast guess (same as the main window) |
-| "Open in" pill | Dark capsule `[W − 196, 8, 188, 30]`. Left part: a button "Open in **\<Space\>**" + keycap "⌘O" (`[W − 191, 15, 148, 17]`); a 1 pt divider; right part: a chevron button `[W − 29, 15, 16, 16]`, tooltip "More Spaces". `<Space>` = the most recently focused Space of the window's Profile (guess: it showed the main window's focused Space). The button and ⌘O run §9.4 with that Space. | frames and text measured (S2 19/0011, 0025); Space choice guess |
+| "Open in" pill | Dark capsule `[W − 196, 8, 188, 30]`, opaque fill `#050627` (sRGB, uniform across the pill, S2 19/0011). Left part: a button "Open in **\<Space\>**" + keycap "⌘O" (`[W − 191, 15, 148, 17]`); a 1 pt divider; right part: a chevron button `[W − 29, 15, 16, 16]`, tooltip "More Spaces". `<Space>` = the most recently focused Space of the window's Profile (guess: it showed the main window's focused Space). The button and ⌘O run §9.4 with that Space. | frames and text measured (S2 19/0011, 0025); Space choice guess |
 | Space picker | The chevron opens a dark popover (≈ 244 wide) anchored at the window's top-right: a "Search Spaces…" field (focused; typing filters by Space title), then every Space of the window's Profile with its icon on a colored rounded square, the current Space first and highlighted, rows 46 pt apart. Return or a click runs §9.4 with that Space. Esc closes the popover. | layout measured (S2 19/0023); filter, Profile scope, and keys guess |
 | Back, forward, reload | No buttons. ⌘[ / ⌘] / ⌘R work through the key router (guess: not captured). | absence measured |
 | Downloads | No button while there are no downloads (Arc stores `downloads: []`); downloads stay deferred (§0.2). | absence measured; trigger guess |
 | Title | The page title when loaded; "Little Open" in the bar state. It is not drawn (hidden title); the Window menu and AX use it. | Plan choice (Arc's AX title is "Space 1" before load) |
 | First-run intro (LA-9) | A dismissible banner under the title bar in the first page-state window, once per install: our own words, one line plus "Got it". Gate: `open.links.littleOpenNUXSeen` (§10.4). | LA-9 |
+
+**Little Open command bar intents** (2026-10-26, review r1 F5). The
+`CommandBarDelegate` of a Little Open window's bar is its
+`LittleOpenWindowController`, for the bar state and for the overlay bar of the
+page state (host click or Cmd+L). Window-level work goes through two new
+coordinator closures that the App sets: `onSwitchToTab: (ItemID, SpaceID?) -> Void`
+and `performCommand: (String, SpaceID?) -> Void`.
+
+| Intent | Bar state | Page state (overlay bar) | Mark |
+|---|---|---|---|
+| `.open(url, _, modifiers)`, `.search(_, url, _, _, modifiers)` | Load `url` in this window's host; the first commit switches to the page state | Load `url` in this window's host | Open choice: modifiers and destination are ignored (one page per window) |
+| `.switchToTab(id, spaceID)` | `coordinator.onSwitchToTab(id, spaceID)` (the App selects the tab in a main window, creating or focusing one as in §9.4 step 5), then close this window with no archive | Same, and this window closes with no archive (the page was not moved) | Open choice |
+| `.runAction(id, spaceID)` | `coordinator.performCommand(id, spaceID)` (the App's `CommandDispatcher`); the bar's `isActionEnabled` hides commands that need a standard window | Same | Open choice |
+| `.copy(text)` | Pasteboard only; no toast (Little Open has no toast center in v1) | Same | Open choice |
+| `.dismissed(.escape)` | Close this window (blank, no archive) | Close the overlay bar; focus returns to the page | Esc closes the bar state: guess |
+| `.dismissed(.clickOutside)` | Not sent: the embedded bar fills the window | Close the overlay bar | — |
+| `.dismissed(.programmatic)` | No action | No action | — |
+| `.openSearchSettings`, footer | Not sent: Little Open shows no (i) and no footer | Same | Open choice |
+| The close "x" | Same as `.dismissed(.escape)` | Not shown | measured position (S2 19/0003) |
 
 Web content fills `[0, 47, W, H − 47]` edge to edge in the page state, with no
 10 pt inset and no inner corner (LA-S2-4: page pixels reach x 0, x W − 1, and
@@ -1606,12 +1630,12 @@ quit open first: osascript -e "tell application id \"$BID\" to quit" || true
 | B1 | Handler registered | `open -a "$APP" https://example.com/route-check` with Open set as default (B2 done first on a dev profile) **or**, without changing the user's default: `osascript -e 'tell application id "app.open" to open location "https://example.com/route-check"'` | Open launches/foregrounds and the URL lands per the current rules (default: Little Open). Repeat with Open already running and with Open quit (cold-launch queue, §8.5). |
 | B2 | Set as default | In Open: Open menu → Set as Default Browser; accept the **system** dialog. Then `open https://example.com/default-check` from Terminal. | The link opens in Open (per rules). Declining the system dialog leaves the previous browser default and Open's Links status reads not-default (§8.4). |
 | B3 | Source detection | `open -a "$APP" https://example.com/from-terminal` (sender: Terminal/`open`), then trigger the same URL from another app (for example a Mail draft link) if available. | Decision log (§6, surfaced by whatever debug UI the App exposes; at minimum the unified log via `log show --last 5m --predicate 'subsystem == "app.open"'` if the App logs there) shows the Terminal run's source bundle id and `unknown` for any `application(_:open:)` delivery. A rule with that source (§4.2, created in Settings data) matches only the known-source delivery. |
-| B4 | Little Open lifecycle | Global hotkey (Cmd+Opt+N) from another app; type a URL, Enter. Click the same external link again. | Fresh Little Open with the field focused; page loads; second click resurfaces the same window (window count unchanged — count with `osascript -e 'tell application "System Events" to count windows of (first process whose bundle identifier is "app.open")'` filtered to Little Open titles, or by the app's own Window menu). |
+| B4 | Little Open lifecycle | Agent path, through the automation socket only (2026-10-26, F11): `menu-perform id=new-little-open-window`; `key window=<number> text=example.com\r` (synthetic key events sent inside the app); then deliver one external URL twice with `open -a "$APP" <url>` (a delivery the test causes). User-run only: a real ⌥⌘N press from another app (agents never drive the desktop; `hotkey-state` shows the global hotkey registered). | Fresh Little Open with the field focused; page loads; the second delivery resurfaces the same window (`little-open-state` session count unchanged). |
 | B5 | Open in Space | In that window: press ⌘O (the pill's Space); in a second Little Open page window, open the chevron picker, type part of another Space's title, press Return. | Main window appears (created if it was closed), focused on the chosen Space (the pill's Space for ⌘O, the picked Space for the picker), page present as the top Today tab and selected; Little Open window closed; no archive row created for it (`openkit archive-list` on the data dir shows no new row). |
 | B6 | No-main-window matrix | Quit Open. `open -a "$APP" <URL-that-routes-to-Little-Open>`: only a Little Open window. Close all main windows, leave Little Open open: app stays running. Then Open in Space: main window is created. | Each row of §9.7's table holds. |
 | B7 | Auto-archive | Step 7 adds a debug-only menu item "Archive Expired Little Open Windows Now" (Help → Troubleshooting pattern). It calls the same `archiveExpired(now:)` the Timer calls, with `now` advanced by 31 days so a 1-hour-threshold window counts as expired without waiting. Set the threshold to 1 hour, open a Little Open page, run the item. Then set Never, reopen the page, run the item again. | First run: window closes; `openkit archive-list` shows the page; restoring it lands in the focused Space's Today (§9.6). Second run: window stays. The debug item is the only clock shortcut; production code never advances `now`. |
-| B9 | Frames (LA-S2-1…3) | Read window frames with `osascript -e 'tell application "System Events" to get {position, size} of windows of (first process whose bundle identifier is "io.github.sergeserb2.open")'` (a state read). Global hotkey → read; type `example.com`, Return, wait for load → read; global hotkey again → read. | First read: one Little Open window 490 × 329 whose right edge is 20 pt left of the screen's visible right edge and whose top is 20 pt below the menu bar. Second: the same window 1185 × 832 with the same top-right corner. Third: a second window 490 × 329 at the first frame; the first window is unchanged. |
-| B10 | Title bar (LA-S2-4) | `features-render render --scene little-page` and the App `snapshot` of a page-state window, compared with S2 19/0011 by the `docs/design.md` §7 method (page masked, Profile name masked). | Every element of LA-S2-4 within 1 pt; capsule and pill fills within ΔE00 2. |
+| B9 | Frames (LA-S2-1…3) | Through Open's automation socket only; no desktop input and no System Events (AGENTS.md rule 4). `menu-perform id=new-little-open-window` (the window-scope twin of the global hotkey) → `little-open-state` (new automation command, Step 6: per session the id, window number, screen frame, state `bar` / `page`, and the screen's `visibleFrame`) → read 1. `key window=<that number> text=example.com\r` (synthetic key events sent with `NSWindow.sendEvent` inside the app), `wait` until `little-open-state` reports `page` → read 2. `menu-perform id=new-little-open-window` again → read 3. The Carbon global hotkey is not pressed: `hotkey-state` must report `registered: true`. | First read: one Little Open window 490 × 329 whose right edge is 20 pt left of the screen's visible right edge and whose top is 20 pt below the menu bar. Second: the same window 1185 × 832 with the same top-right corner. Third: a second window 490 × 329 at the first frame; the first window is unchanged. |
+| B10 | Title bar (LA-S2-4) | `features-render render --scene little-page` and the App `snapshot` of a page-state window, compared with S2 19/0011 by the `docs/design.md` §7 method (page masked, Profile name masked). | Every element of LA-S2-4 within 1 pt. Pill fill within ΔE00 2 of `#050627`. Bar and capsule (probably translucent, guess): every sampled pixel inside the measured range widened by 4 levels per channel (bar `#202335` … `#2F2B38`, capsule `#383948` … `#42414D`); no ΔE00 target until the material is modeled. |
 | B8 | Default-off routing | Toggle "Links from other apps open in Little Open" off, default destination Little Open. Deliver an external link. | Link lands as a tab in the most recent Space (§5.5 R7); decision log via reads `defaultSuppressedByToggle` in formatter words. Toggle back on: next link opens Little Open. |
 
 Record the output of B1–B8 in the PR description (commands + one-line
@@ -1710,10 +1734,11 @@ link lands) is part of B1 and is not optional.
 
 ### Step 6 — Little Open window (§9.1–§9.5)
 
-Files: `App/LittleOpen/LittleOpenSession.swift`,
-`App/LittleOpen/LittleOpenCoordinator.swift`,
-`App/LittleOpen/LittleOpenWindowController.swift`,
-`App/LittleOpen/LittleOpenWebContent.swift` (E-adapter, §7),
+Files (2026-10-26, F7: the first three already exist in `OpenFeatures`;
+Step 6 wires them, it does not recreate them): `OpenFeatures/LittleOpenSession.swift`,
+`OpenFeatures/LittleOpenCoordinator.swift`,
+`OpenFeatures/LittleOpenWindowController.swift`,
+`App/LittleOpen/LittleOpenWebContent.swift` (E-adapter, §7, the only App file),
 hotkey + entry-point wiring (§9.5), executor's Little Open half (real now).
 
 Acceptance: §12 B4, B5, B6, B9, B10. Plus: with no main window open, the global
@@ -1732,22 +1757,43 @@ frames, title bar, full-bleed page), `OpenFeatures/LittleOpenTitleBarView.swift`
 (new: capsule, Profile chip, host, copy-link, "Open in" pill, chevron),
 `OpenFeatures/LittleOpenSpacePicker.swift` (new: the popover),
 `OpenFeatures/LittleOpenCoordinator.swift` (no blank reuse, no cascade,
-same-press guard), `OpenCommandBar` (`CommandBarMode.littleOpen`, an embedded
-presentation that fills a host view at width 490 with the close "x" instead of
-(i)), `OpenDesign/Metrics.swift` (`LittleOpenMetrics`: every frame of §9.3),
-`Package.swift` (`OpenFeatures` gains the `OpenCommandBar` dependency; keep
-both sides on conflict), `features-render` (scenes `little-bar`, `little-page`,
-`little-picker`; check L1 rewritten, new L4–L6), `docs/m4.md` (Little Open
-limits).
+same-press guard, `onSwitchToTab` and `performCommand` closures, the screen
+provider below), `OpenDesign/Metrics.swift` (`LittleOpenMetrics`: every frame
+of §9.3), `Package.swift` (`OpenFeatures` gains the `OpenCommandBar`
+dependency; keep both sides on conflict), `features-render` (scenes
+`little-bar`, `little-page`, `little-picker`; check L1 rewritten, new L4–L7),
+`docs/m4.md` (Little Open limits).
+
+`OpenCommandBar` files (review r1 F5):
+
+| File | Change |
+|---|---|
+| `CommandBarTypes.swift` | Add `CommandBarMode.littleOpen` (raw value "littleOpen"); its `suggestMode` (an exhaustive `switch`) maps it to `.newTab` |
+| `CommandBarController.swift` | Treat `.littleOpen` like `.newTab` for the empty input and the placeholder; its destination is `.currentTab` (line with `r.mode == .editCurrentURL ? .currentTab : .newTab`); `present` takes a presentation parameter (below) |
+| `CommandBarView.swift` | New `CommandBarPresentation`: `.overlay` (today) and `.embedded(width:)`: the panel sits at the host view's origin, fills it, and draws no shadow and no backdrop (the window has its own) |
+| `InputRowView.swift` | In `.embedded`, the trailing accessory is a close "x" button at `[W − 47, 19, 26, 26]` (with a plate) instead of (i) |
+| `OpenDesign/CommandBarTokens.swift` | `CommandBarMetrics.littleOpenWidth` 490, `littleOpenRows` 5 (329 = 79 + 50 × 5), close-button frame |
+
+Other users of `CommandBarMode` that the new case reaches: `Presentation.row(_:mode:currentSpaceID:currentURL:currentTitle:)` (mode-dependent row text; `.littleOpen` = `.newTab`); `commandbar-render` `Flows.swift`, `Scenes.swift`, `Stage.swift` (add a `little-open` scene and flows; existing ones unchanged); the App's `AppCommandBarSession.stateForAutomation` (reports `mode.rawValue`, so automation can now see "littleOpen") and `didChangePresentation` (compares with `.newTab` only, unaffected). No App file switches exhaustively over `CommandBarMode`.
+
+Screen provider for L1 (review r1 F5): `LittleOpenCoordinator` gains an init
+parameter `screenProvider: () -> LittleOpenScreen`, where
+`struct LittleOpenScreen { var frame: CGRect; var visibleFrame: CGRect }` in
+AppKit screen coordinates. The default reads the `NSScreen` that holds
+`NSEvent.mouseLocation`. Frames are computed from the provider only.
+`features-render` passes a fixed value and never orders a window front
+(`presentWindows = false`, as today): offscreen only, never the real desktop.
+The App e2e (B9) uses the real screen through the automation socket.
 
 Acceptance:
 
 | # | Check (`features-render check`, offscreen, real views) |
 |---|---|
-| L1 | `openBlank` on a fake 2560 × 1440 screen with a 30 pt menu bar: one window 490 × 329 at screen (2050, 50) in the bar state (no window buttons, field focused, "x" at `[443, 19, 26, 26]`, no (i)); a second `openBlank` makes a second window at the same frame; the same canonical URL opened twice still resurfaces (LA-2). Replaces the old "720x540" and "blank reuse" checks. |
+| L1 | `openBlank` with `screenProvider` returning `LittleOpenScreen(frame: [0, 0, 2560, 1440], visibleFrame: [0, 0, 2560, 1410])` (AppKit coordinates; a 30 pt menu bar), offscreen: one window 490 × 329 whose AppKit frame is `[2050, 1061, 490, 329]` (= top-left screen point (2050, 50)) in the bar state (no window buttons, field focused, "x" at `[443, 19, 26, 26]`, no (i)); a second `openBlank` makes a second window at the same frame; the same canonical URL opened twice still resurfaces (LA-2). Replaces the old "720x540" and "blank reuse" checks. |
 | L4 | A committed navigation turns the window into the page state at 1185 × 832 with the top-right corner unchanged; the web content frame is `[0, 47, W, H − 47]`; LA-S2-4 element frames within 0.5 pt at W 1185 and at W 800. |
 | L5 | The pill shows the most recent Space's title; pressing it (or `open-in-current-space`) calls `moveToSpace` with that Space; the chevron opens the picker; typing filters rows; Return calls `moveToSpace` with the highlighted Space. |
 | L6 | Two `openBlank` calls with the same key-down timestamp make one window; two with timestamps 0.2 s apart make two. |
+| L7 | Bar intents (table in §9.3) with a fake host: `.open` and `.search` load in this window and ignore modifiers; `.switchToTab` calls `onSwitchToTab` once and closes the window; `.runAction` calls `performCommand` once; `.copy` writes the pasteboard; `.dismissed(.escape)` and the "x" close a bar-state window and only close the overlay bar in the page state. |
 
 Then `tools/verify-all.sh` and the B10 compare once the App can show the window.
 
