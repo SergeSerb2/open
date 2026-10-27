@@ -19,7 +19,7 @@ final class SiteControlsHost {
     var origin = URLComponents(url: url, resolvingAgainstBaseURL: false)
     origin?.path = ""; origin?.query = nil; origin?.fragment = nil
     let permissions = PermissionPromptPresenter.kinds.map { kind, name in
-      ["kind": kind.rawValue, "name": name, "state": page.context.permissionState(for: kind, origin: origin?.url ?? url).rawValue] as [String: Any]
+      ["kind": kind.rawValue, "name": name, "state": PermissionPromptPresenter.canPersist(kind) ? page.context.permissionState(for: kind, origin: origin?.url ?? url).rawValue : OEPermissionState.ask.rawValue, "persistent": PermissionPromptPresenter.canPersist(kind)] as [String: Any]
     }
     requests += 1
     lastRequest = ["tab": tab.id.description, "profile": owner.profile(for: tab.id)?.id.description ?? "",

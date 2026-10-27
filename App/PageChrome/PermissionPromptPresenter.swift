@@ -6,6 +6,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   struct Pending {
     let page: OEWebContent
     let request: OEPermissionRequest
+    let previous: [UInt32: OEPermissionState]
   }
   weak var owner: EngineWebContentHostFactory?
   private(set) var pending: [Pending] = []
@@ -34,40 +35,55 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     (.screenCapture, "screen capture"), (.multipleDownloads, "multiple downloads"), (.storageAccess, "storage"),
     (.windowManagement, "window placement"), (.localFonts, "local fonts"), (.idleDetection, "idle detection"), (.other, "additional access")]
 
+  // Screen capture is a transient system picker, not a Chromium content
+  // setting. Passing DISPLAY_CAPTURE to the engine settings API is invalid.
+  static func canPersist(_ kind: OEPermissionKind) -> Bool { kind != .screenCapture && kind != .other }
   func request(_ request: OEPermissionRequest, page: OEWebContent) {
     guard let owner, !owner.isClosing, owner.app.engineReady else { request.dismiss(); return }
-    let states = Self.kinds.filter { request.kinds.contains($0.0) }.map { page.context.permissionState(for: $0.0, origin: request.origin) }
+    let previous = Dictionary(uniqueKeysWithValues: Self.kinds.filter { request.kinds.contains($0.0) && Self.canPersist($0.0) }.map {
+      ($0.0.rawValue, page.context.permissionState(for: $0.0, origin: request.origin))
+    })
+    let states = Self.kinds.filter { request.kinds.contains($0.0) }.map { previous[$0.0.rawValue] ?? .ask }
     if states.contains(.block) { request.deny(); return }
     if !states.isEmpty, states.allSatisfy({ $0 == .allow }) { request.grant(); return }
-    pending.append(Pending(page: page, request: request)); presentPending()
+    pending.append(Pending(page: page, request: request, previous: previous)); presentPending()
   }
   func presentPending() {
-    guard !popover.isShown, let owner, !owner.isClosing, let first = pending.first,
-          NSApp.isActive else { return }
-    let anchor: NSView
-    if owner.selectedContent === first.page, let container = owner.controller?.container { anchor = container }
-    else if owner.extensionPopup.owns(first.page) || owner.auxiliaryPages.contains(where: { $0.content === first.page }) { anchor = first.page.view }
-    else { return }
-    guard anchor.window?.isKeyWindow == true else { return }
+    guard !popover.isShown, let owner, !owner.isClosing, NSApp.isActive else { return }
+    func anchor(for page: OEWebContent) -> NSView? {
+      let view: NSView?
+      if owner.selectedContent === page { view = owner.controller?.container }
+      else if owner.extensionPopup.owns(page) || owner.auxiliaryPages.contains(where: { $0.content === page }) { view = page.view }
+      else { view = nil }
+      return view?.window?.isKeyWindow == true ? view : nil
+    }
+    // A background request must not block a later request from the visible page.
+    guard let index = pending.firstIndex(where: { anchor(for: $0.page) != nil }) else { return }
+    let first = pending.remove(at: index); pending.insert(first, at: 0)
+    guard let anchor = anchor(for: first.page) else { return }
     let origin = first.request.origin
     view.origin.stringValue = (origin.host() ?? origin.absoluteString) + (origin.port.map { ":\($0)" } ?? "")
     let names = Self.kinds.filter { first.request.kinds.contains($0.0) }.map(\.1)
     view.message.stringValue = "Wants to use \(names.isEmpty ? "additional permissions" : names.joined(separator: " and "))"
-    view.remember.state = .off; presentedRequest = first.request
+    view.remember.state = .off; view.remember.isEnabled = !first.previous.isEmpty; presentedRequest = first.request
     popover.show(relativeTo: CGRect(x: min(160, anchor.bounds.midX), y: anchor.isFlipped ? 0 : anchor.bounds.maxY, width: 1, height: 1), of: anchor, preferredEdge: anchor.isFlipped ? .maxY : .minY)
   }
   func answer(_ state: OEPermissionState?) {
     guard !finishing, !pending.isEmpty else { return }
     finishing = true
     let first = pending.removeFirst(); presentedRequest = nil
-    if let state, view.remember.state == .on {
-      for (kind, _) in Self.kinds where first.request.kinds.contains(kind) {
-        first.page.context.setPermissionState(state, for: kind, origin: first.request.origin)
-      }
-    }
+    let remember = view.remember.state == .on
     if state == .allow { first.request.grant() }
     else if state == .block { first.request.deny() }
     else { first.request.dismiss() }
+    // Native button delivery occurs after the engine prompt callback returns.
+    // Chromium synchronously persists its answer. Restore prior settings for a
+    // one-shot answer; preserve the current page's permission response.
+    if let state {
+      for (kind, _) in Self.kinds where first.request.kinds.contains(kind) && Self.canPersist(kind) {
+        first.page.context.setPermissionState(remember ? state : first.previous[kind.rawValue] ?? .ask, for: kind, origin: first.request.origin)
+      }
+    }
     decisions += 1
     popover.close(); finishing = false; presentPending()
   }

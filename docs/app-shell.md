@@ -1177,3 +1177,14 @@ then refuse presentation. #93/#94 supply native Chrome extension action/popup
 support. Current OpenEngine popup callbacks are wired to anchored child panels
 with auto-size, Escape, outside-click and lifecycle handling. Passing the current
 fixture does not claim the pending native Chrome implementation has landed.
+
+The first full local run exposed a real Site Control preparation crash:
+OpenEngine's settings bridge maps screen capture to `DISPLAY_CAPTURE`, which
+Chromium rejects as a persistent content setting. The host now marks transient
+screen capture/unknown permissions as nonpersistent and does not query that
+setting. Native permission buttons also restore prior settings after a one-shot
+answer: Chromium's prompt callback otherwise stores Allow/Block despite the
+unchecked Remember box. Remembered decisions remain in the engine context.
+The permission flow verifies both remembered choices and a one-shot decision
+across a real relaunch; durable nondefault-profile engine storage remains the
+separate root_cache_path follow-up from Step B.

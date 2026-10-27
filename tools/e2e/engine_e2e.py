@@ -742,9 +742,11 @@ def page_chrome_checks(factory, results, tmp):
                 'prompt': prompt, 'stored': stored, 'expectedStored': wanted}
             if remember: remembered.append((origins[index],wanted,outcome))
         old_decisions = app.call('permission-state')['decisions']
-        known = app.call('open',url=origins[1]+'/page?remembered')['id'];app.call('wait',tab=known)
-        actual = app.eval(known,'Notification.requestPermission()')
-        results['permission_stored_no_prompt'] = {'ok': actual == 'granted' and not app.call('permission-state')['visible'] and app.call('permission-state')['decisions'] == old_decisions}
+        outcomes = []
+        for known_origin, _, expected_outcome in remembered:
+            known = app.call('open',url=known_origin+'/page?remembered')['id'];app.call('wait',tab=known)
+            outcomes.append(app.eval(known,'Notification.requestPermission()'))
+        results['permission_stored_no_prompt'] = {'ok': outcomes == [r[2] for r in remembered] and not app.call('permission-state')['visible'] and app.call('permission-state')['decisions'] == old_decisions, 'outcomes': outcomes}
         app.call('select',tab=tab);app.call('focus',tab=tab)
         # Actual engine context menu events; selections use the same NSMenu items.
         def context(selector, selection=False):
@@ -772,6 +774,8 @@ def page_chrome_checks(factory, results, tmp):
         app.call('save');app.quit();app=factory(urls=());app.call('wait');app.call('select',tab=tab);app.call('wait',tab=tab)
         values=[app.call('permission-setting',tab=tab,origin=o,kind=8) for o,_,_ in remembered]
         results['permission_remember_relaunch']={'ok':values==[v for _,v,_ in remembered],'values':values}
+        once_state=app.call('permission-setting',tab=tab,origin=origin,kind=8)
+        results['permission_one_shot_relaunch']={'ok':once_state==0,'stored':once_state}
         app.call('policy',dialogs='',permissions='',contextMenu='hold');app.call('focus',tab=tab)
         directory=Path(app.user_data)/'downloads';directory.mkdir(exist_ok=True)
         app.call('download-profile-options',directory=str(directory),ask=False)
