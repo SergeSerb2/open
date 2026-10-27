@@ -4613,6 +4613,7 @@ def main():
         if not os.path.isfile(path):
             return ''
         digest = hashlib.sha256()
+        # Largest Python read buffer: 8 MiB; never load the whole framework.
         with open(path, 'rb') as stream:
             for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
                 digest.update(chunk)
@@ -4706,6 +4707,10 @@ def main():
                 if opts.only == "extensions":
                     extension_checks(app, opts.style, results["extensions"])
                 elif opts.only == "tabstrip":
+                    # LaunchServices can answer the socket before granting
+                    # foreground focus. Establish the real window precondition
+                    # through the same exact-PID activation path as native keys.
+                    app.call("window-focus", id=app.call("window-state")["id"], activate=True)
                     tabstrip_checks(app, results["tabstrip"])
                 elif opts.only == "actions":
                     actions_checks(app, results["actions"])
