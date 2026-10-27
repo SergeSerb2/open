@@ -753,6 +753,26 @@ def page_chrome_checks(factory, results, tmp):
             results['extension_popup_outside_click']={'ok':bool(outside)}
             if app.call('downloads-state')['visible']:app.call('downloads-show')
             app.call('focus',tab=tab)
+            # Every popup key enters OEApplication.sendEvent with the panel key.
+            for pressed in ['escape','w','t','l','return']:
+                before={t['id'] for t in app.call('tabs')}
+                app.call('extension-toolbar-press',extension=action['id'])
+                panel=wait_until(lambda:(lambda s:s if s['visible'] and s['content'] else None)(app.call('extension-popup-state')),timeout=5,step=.02)
+                assert panel,app.call('extension-popup-state');app.call('wait',tab=panel['content'])
+                if pressed=='return':
+                    app.eval(panel['content'],'window.returnKeys=0;document.querySelector("#edit").addEventListener("keydown",e=>{if(e.key==="Enter")window.returnKeys++});true')
+                    app.call('click',tab=panel['content'],selector='#edit')
+                key(pressed,window=panel['window'],**({'modifiers':['cmd']} if pressed in ['w','t','l'] else {}))
+                if pressed=='return':
+                    ok=app.call('extension-popup-state')['visible'] and app.eval(panel['content'],'window.returnKeys')==1
+                elif pressed in ['t','l']:
+                    bar=wait_until(lambda:(lambda s:s if s.get('presented') else None)(app.call('commandbar-state')),timeout=3,step=.02)
+                    ok=bool(bar) and bar['mode']==('newTab' if pressed=='t' else 'editCurrentURL') and not app.call('extension-popup-state')['visible']
+                    if bar:key('escape')
+                else:ok=bool(wait_until(lambda:not app.call('extension-popup-state')['visible'],timeout=3,step=.02))
+                results['extension_popup_key_'+pressed]={'ok':ok and before=={t['id'] for t in app.call('tabs')}}
+                if app.call('extension-popup-state')['visible']:app.call('extension-toolbar-press',extension=action['id'])
+                app.call('focus',tab=tab)
         else:
             installed=app.call('extensions')
             assert any(e['name']=='Open page chrome fixture' for e in installed['installed']), installed
@@ -922,6 +942,26 @@ def page_chrome_checks(factory, results, tmp):
         shot(app,'page-chrome-site-control.png')
         key('escape');hidden=wait_until(lambda:not app.call('site-controls-state')['visible'],timeout=2,step=.02)
         results['site_control_escape']={'ok':bool(hidden)}
+        for pressed in ['return','t','l','w']:
+            candidate=tab if pressed!='w' else app.call('open',url=origin+'/page?scc-close')['id']
+            app.call('wait',tab=candidate);app.call('focus',tab=candidate)
+            anchor=app.call('site-controls-state')['anchor']
+            app.call('mouse',action='move',x=anchor[0]+15,y=anchor[1]+15)
+            assert app.call('site-controls'),app.call('site-controls-state')
+            before={t['id'] for t in app.call('tabs')}
+            key(pressed,**({'modifiers':['cmd']} if pressed!='return' else {}))
+            if pressed=='return':
+                ok=app.call('site-controls-state')['visible'] and before=={t['id'] for t in app.call('tabs')}
+                key('escape')
+            elif pressed in ['t','l']:
+                bar=wait_until(lambda:(lambda s:s if s.get('presented') else None)(app.call('commandbar-state')),timeout=3,step=.02)
+                ok=bool(bar) and bar['mode']==('newTab' if pressed=='t' else 'editCurrentURL') and before=={t['id'] for t in app.call('tabs')}
+                if bar:key('escape')
+            else:
+                removed=wait_until(lambda:all(t['id']!=candidate for t in app.call('tabs')),timeout=3,step=.02)
+                ok=bool(removed) and {t['id'] for t in app.call('tabs')}==before-{candidate}
+            results['site_control_key_'+pressed]={'ok':bool(ok) and not app.call('site-controls-state')['visible']}
+        app.call('select',tab=tab);app.call('focus',tab=tab)
         results['site_control_sections_pending']={'status':'BLOCKED','reason':'pending #96 sections / #103 editor; merged #69 shell is presented'}
         # Relauch proves the remembered default-context values are durable.
         app.call('save');app.quit();app=factory(urls=());app.call('wait');app.call('select',tab=tab);app.call('wait',tab=tab)
@@ -1001,7 +1041,15 @@ def page_key_checks(factory, results, tmp):
         before={t['id'] for t in app.call('tabs')};key('w',modifiers=['cmd'])
         closed=wait_until(lambda:all(t['id']!=temp for t in app.call('tabs')),timeout=5,step=.02)
         results['find_cmd_w_once']={'ok':bool(closed) and {t['id'] for t in app.call('tabs')}==before-{temp} and not app.call('find-state')['visible']}
-        app.call('select',tab=tab);app.call('focus',tab=tab);app.call('policy',dialogs='')
+        app.call('select',tab=tab);app.call('focus',tab=tab)
+        key('f',modifiers=['cmd']);key(text='x'*4096)
+        at=wait_until(lambda:(lambda s:s if s['visible'] and len(s['text'].encode())==4096 else None)(app.call('find-state')),timeout=3,step=.02)
+        results['find_text_limit_at']={'ok':bool(at),'bytes':4096}
+        app.call('events');key('a',modifiers=['cmd']);key(text='x'*4097)
+        over=wait_until(lambda:not app.call('find-state')['visible'] and not app.call('find-state')['text'],timeout=3,step=.02)
+        ev=app.call('events')
+        results['find_text_limit_over']={'ok':bool(over) and any(e['type']=='pageChromeRefused' for e in ev),'bytes':4097}
+        app.call('policy',dialogs='')
         def sheet(expression):
             app.call('policy',dialogs='')
             app.eval(tab,'window.keyOutcome="pending";setTimeout(()=>{window.keyOutcome=('+expression+')},0);true')

@@ -1171,9 +1171,11 @@ menus, not proof of page grouping); link/highlight behavior and Downloads data
 come from `docs/re/features-advanced.md` LK-1/LK-2 and DL-1. The plan supplies Find
 size and placement. Screenshots use only Open's synthetic fixtures.
 
-Pending dependencies: #69/#96 supply the reworked Site Control overlay. The URL
-button and sidebar intent currently prepare its real host inputs and anchor,
-then refuse presentation. #93/#94 supply native Chrome extension action/popup
+The merged #69 Site Control controller now presents its Step 1 overlay at the
+real URL-field button. It receives the selected tab, engine context, origin and
+profile through the App adapter. Escape and App commands dismiss it. The
+sections (#96), Boost editor (#103), certificate detail and non-cookie storage
+actions remain unavailable. #93/#94 supply native Chrome extension action/popup
 support. Current OpenEngine popup callbacks are wired to anchored child panels
 with auto-size, Escape, outside-click and lifecycle handling. Passing the current
 fixture does not claim the pending native Chrome implementation has landed.
@@ -1186,8 +1188,8 @@ setting. Native permission buttons also restore prior settings after a one-shot
 answer: Chromium's prompt callback otherwise stores Allow/Block despite the
 unchecked Remember box. Remembered decisions remain in the engine context.
 The permission flow verifies both remembered choices and a one-shot decision
-across a real relaunch; durable nondefault-profile engine storage remains the
-separate root_cache_path follow-up from Step B.
+across a real relaunch. Main now includes the profile engine-root integration
+(#88); the current run uses its isolated data and cache roots.
 
 Capture review found that `screencapture -l` returned success for a completely
 transparent JS-sheet image. The e2e capture helper now uses the owned-window

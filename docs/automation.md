@@ -366,9 +366,9 @@ The fixtures use private data roots and the default fork distribution.
   `download-profile-options(directory:ask:)` configures only the fixture profile.
   Finder verification ends at the real NSWorkspace request and observed Finder
   activation; the runner never drives or inspects Finder's selection UI.
-- `site-controls` records the selected tab, profile, origin and URL-button
-  anchor. `site-controls-state.available=false` means presentation is pending
-  #69; this is not a successful presentation result.
+- `site-controls` dispatches the sidebar intent to the merged #69 controller.
+  `site-controls-state` reports its actual presentation, selected tab, profile,
+  origin, URL-button anchor and panel frame. Sections/editor remain #96/#103.
 - `extension-toolbar-press` performs the actual extension toolbar button;
   `extension-popup-state` reports the live engine panel and size. Native Chrome
   popup work pending #93 is recorded separately from the current API flows.
@@ -382,3 +382,20 @@ are unchanged. `virtual-input-state` reports the opt-in; `queued-key-control`
 posts a fixed synthetic sentinel to verify the guard. A hardware interaction
 makes the affected assertion INTERRUPTED, never PASS. Each workflow allows at
 most three fresh attempts. No external application receives input.
+
+`--only page-keys` exercises OEApplication.sendEvent for the Find editor and
+native sheets. Return/Enter accepts prompt text through its field editor and
+the real OK button; Escape cancels. Alert Return/Escape and confirm
+Return/Escape run separately. A check first waits for the exact pending dialog
+to close, then reads the page result, so a blocked renderer cannot stall cleanup.
+Every dialog case has finally-based dismissal and bounded owned-process cleanup.
+The suite's final `owned_window_cleanup` row queries CGWindowList by verified
+owned PID and fails on leftovers. Any startup-alert subprocess has a hard
+process-tree timeout. An injected early assertion is a recorded FAIL control,
+not a product pass.
+
+The inherited features suite now checks `Widevine out of v1 (expected absent)`.
+It requires the fork release setting, no CDM library in the app or isolated
+profile/cache, a real EME NotSupportedError rejection, a live page/app and no
+dialog. It refuses a CDM found before, after or at app exit. Widevine playback is
+out of v1 per docs/engine-fork.md; no engine flag is changed by this check.
