@@ -5,7 +5,7 @@ import OpenSiteControl
 
 @MainActor
 enum Bench {
-    enum Fixture: String,CaseIterable { case skeleton,cold }
+    enum Fixture: String,CaseIterable { case cold,skeleton }
     struct Samples {
         var cpu: [Double] = []
         var wall: [Double] = []

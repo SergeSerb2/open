@@ -1,0 +1,14 @@
+| Result | Check |
+|---|---|
+| PASS | F25 pointer pad/buttons/font cells keep the native browser window key |
+| PASS | F24 advanced window frame is (-34,258,250,232) |
+| PASS | F25 advanced pointer use keeps browser key |
+| PASS | F24 Esc closes only the advanced popover |
+| PASS | F24 native outside click closes the advanced popover |
+| PASS | F25 rename text sheet becomes key |
+| PASS | F25 native floating-window key entry focuses Done |
+| PASS | F25 Tab follows Done with the name menu |
+| PASS | F25 Done returns key to the native browser window (closed=true, visible=false, parentKey=true, active=true, sheet=false) |
+| PASS | F25 native suite completes all nine checks and exits |
+
+10/10 passed

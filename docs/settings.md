@@ -106,13 +106,26 @@ The import fixture contains two Spaces, three tabs, one skipped easel, and two c
 | Downloads progress, Retry/Reveal IDs, missing-file guard | PASS |
 | Captures thumbnail/Save As/delete file+index; profile History search/open | PASS |
 | Four Library empty states: native hosted AX labels and valid PNGs | PASS |
-| `settings-preview check` | PASS — 30 checks, 0 failed ([current receipt](first-run/checks.txt)); the original 28 Settings/Library flows are retained |
+| `settings-preview check` | PASS — 37 checks, 0 failed ([current receipt](settings/checks.txt)); the original 28 Settings/Library flows are retained |
 | Renders | 86 PNGs: all panes/sections at both scales, General/Profiles in both appearances, distinct long-pane details, every requested sheet, import Choose/Review/Passwords/Report and engine-ready Passwords copy, Library empty states, shortcut states, suggestion notice, engine editor, and invalid rule |
 | `dump-keys` | PASS — synthetic-root guard; sorted persisted values |
 
 `tools/verify-all.sh` now includes `settings-preview` checks, all renders, dimension validation, and `dump-keys`. The PR contains the final full-gate summary after merging `origin/main`.
 
-No unit tests, desktop automation, engine build/sync, real import, or Keychain access ran. Real-app Cmd+,, menu delivery, browser effects, and engine download/capture operations remain the app-shell acceptance gate. These package/preview results do not claim that gate.
+No unit tests, desktop automation, engine build/sync, real import, or Keychain access ran for these package checks. Real-app Cmd+,, browser effects, and engine download/capture operations remain separate app-shell acceptance gates.
+
+### S5b Previews delay removal (2026-10-26)
+
+Previews uses the fixed `HoverPreviewMetrics.armDelay` of 0.5 seconds. The
+480×320 sheet keeps the master, Folders, and Pinned tabs and Favorites
+switches, followed by Done. It has no Delay row or registered delay default;
+an older stored value stays untouched. Both check receipts were regenerated
+from the same actual 37-flow acceptance command. The two Previews gallery
+renders and their SHA-256 entries were refreshed from that run too.
+
+The real App flow, native 2× rest/hover snapshots, supplied-capture comparison,
+and forced-failure cleanup proof are recorded in
+[the S5b evidence](sidebar-completion/s5b/README.md).
 
 ## Visual evidence
 

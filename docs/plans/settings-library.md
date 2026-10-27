@@ -138,6 +138,9 @@ except where a section says Save.
 | `open.advanced.allowWindowDraggingFromWebTop` | Bool | `false` | Advanced (Arc default unknown; Open choice OFF = safer) |
 | `open.advanced.showFullURLWithToolbar` | Bool | `false` | Advanced (unknown; Open choice OFF = trimmed) |
 | `open.advanced.enableBoosts` | Bool | `true` | Advanced; Boosts gate (feature plan owns detail) |
+| `open.boosts.hasDismissedInterstitial` | Bool | `false` | Boost editor first-run dismissal |
+| `open.boosts.hasDismissedJSNotice` | Bool | `false` | Boost code editor JS notice |
+| `open.boosts.codeEditorSize` | String | `"480x588"` | Boost code editor size |
 | `open.advanced.allowSitesThemeData` | Bool | `false` | Advanced (unknown; Open choice OFF = private by default) |
 | `open.advanced.enableSharedQuotes` | Bool | `true` | Advanced |
 | `open.advanced.playSoundEffects` | Bool | `false` | Advanced; Open-generated sounds (lead Q6: OFF, no general event caller) |

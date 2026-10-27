@@ -46,6 +46,8 @@ public struct SiteMatch: Codable, Hashable, Sendable {
         return path == pathPrefix || path.hasPrefix(pathPrefix + "/")
     }
 
+    public var targetsIPAddress: Bool { Self.isIP(domain) }
+
     static func isIP(_ host: String) -> Bool {
         if host.contains(":") || host.hasPrefix("[") { return true }
         let parts = host.split(separator: ".", omittingEmptySubsequences: false)
@@ -86,6 +88,63 @@ public struct ColorAdjustment: Codable, Hashable, Sendable {
     }
 }
 
+/// Editor inputs. Runtime filters are derived by BoostStore's normalization.
+public struct BoostColorWheel: Codable, Hashable, Sendable {
+    /// Zero at 3 o’clock, increasing clockwise on screen; runtime math is unchanged.
+    public var hue: Double
+    public var intensity: Double
+    public var baseHue: Double?
+    public var invertLightness: Bool
+    public var brightness: Double
+    public var contrast: Double
+    public var originalSaturation: Double
+
+    public init(hue: Double = 0, intensity: Double = 0, baseHue: Double? = nil, invertLightness: Bool = false,
+                brightness: Double = 1, contrast: Double = 1, originalSaturation: Double = 1) {
+        self.hue = hue; self.intensity = intensity; self.baseHue = baseHue; self.invertLightness = invertLightness
+        self.brightness = brightness; self.contrast = contrast; self.originalSaturation = originalSaturation
+    }
+    private enum CodingKeys: String, CodingKey { case hue, intensity, baseHue, invertLightness, brightness, contrast, originalSaturation }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(hue: try c.decodeIfPresent(Double.self, forKey: .hue) ?? 0,
+                  intensity: try c.decodeIfPresent(Double.self, forKey: .intensity) ?? 0,
+                  baseHue: try c.decodeIfPresent(Double.self, forKey: .baseHue),
+                  invertLightness: try c.decodeIfPresent(Bool.self, forKey: .invertLightness) ?? false,
+                  brightness: try c.decodeIfPresent(Double.self, forKey: .brightness) ?? 1,
+                  contrast: try c.decodeIfPresent(Double.self, forKey: .contrast) ?? 1,
+                  originalSaturation: try c.decodeIfPresent(Double.self, forKey: .originalSaturation) ?? 1)
+    }
+    public func clamped() -> BoostColorWheel {
+        func bounded(_ value: Double, _ range: ClosedRange<Double>, fallback: Double) -> Double {
+            value.isNaN ? fallback : min(range.upperBound, max(range.lowerBound, value))
+        }
+        func angle(_ value: Double) -> Double {
+            guard value.isFinite else { return 0 }
+            let wrapped = value.truncatingRemainder(dividingBy: 360)
+            return wrapped < 0 ? wrapped + 360 : wrapped
+        }
+        return BoostColorWheel(hue: angle(hue), intensity: bounded(intensity, 0...1, fallback: 0),
+            baseHue: baseHue.flatMap { $0.isFinite ? angle($0) : nil }, invertLightness: invertLightness,
+            brightness: bounded(brightness, 0.5...1.5, fallback: 1), contrast: bounded(contrast, 0.5...1.5, fallback: 1),
+            originalSaturation: bounded(originalSaturation, 0...2, fallback: 1))
+    }
+    public var isIdentity: Bool {
+        let w = clamped()
+        return w.intensity < 0.02 && !w.invertLightness && w.brightness == 1 && w.contrast == 1 && w.originalSaturation == 1
+    }
+    public var adjustment: ColorAdjustment? {
+        let w = clamped()
+        guard !w.isIdentity else { return nil }
+        let delta = (w.hue - (w.baseHue ?? 0) + 540).truncatingRemainder(dividingBy: 360) - 180
+        var rotation = w.intensity * delta + (w.invertLightness ? 180 : 0)
+        rotation = rotation.truncatingRemainder(dividingBy: 360)
+        if rotation < 0 { rotation += 360 }
+        return ColorAdjustment(hueRotateDegrees: rotation, saturation: min(3, max(0, w.originalSaturation * (1 + 0.5*w.intensity))),
+                               brightness: w.brightness, contrast: w.contrast, invert: w.invertLightness ? 1 : 0)
+    }
+}
+
 public struct ZappedElement: Codable, Hashable, Sendable {
     public var selector: String
     public var label: String
@@ -104,6 +163,7 @@ public struct Boost: Codable, Hashable, Sendable, Identifiable {
     public var css: String
     public var js: String
     public var colorAdjustment: ColorAdjustment?
+    public var colorWheel: BoostColorWheel?
     public var fontFamily: String?
     // Optional Codable fields accept missing keys from files written before text controls.
     public var textZoom: Double?
@@ -114,18 +174,18 @@ public struct Boost: Codable, Hashable, Sendable, Identifiable {
     public var forkedFromID: BoostID?
 
     public init(id: BoostID = BoostID(), name: String = "", siteMatch: SiteMatch, isEnabled: Bool = true,
-                css: String = "", js: String = "", colorAdjustment: ColorAdjustment? = nil,
+                css: String = "", js: String = "", colorAdjustment: ColorAdjustment? = nil, colorWheel: BoostColorWheel? = nil,
                 fontFamily: String? = nil, textZoom: Double? = nil, textTransform: String? = nil,
                 zaps: [ZappedElement] = [], createdAt: Date = Date(), updatedAt: Date = Date(), forkedFromID: BoostID? = nil) {
         self.id = id; self.name = name; self.siteMatch = siteMatch; self.isEnabled = isEnabled
-        self.css = css; self.js = js; self.colorAdjustment = colorAdjustment; self.fontFamily = fontFamily
+        self.css = css; self.js = js; self.colorAdjustment = colorAdjustment; self.colorWheel = colorWheel; self.fontFamily = fontFamily
         self.textZoom = textZoom; self.textTransform = textTransform; self.zaps = zaps
         self.createdAt = createdAt; self.updatedAt = updatedAt; self.forkedFromID = forkedFromID
     }
     public var containsJS: Bool { !js.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     public var isEmpty: Bool {
         css.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !containsJS &&
-        (colorAdjustment?.isIdentity ?? true) && (fontFamily?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
+        (colorAdjustment?.isIdentity ?? true) && (colorWheel?.isIdentity ?? true) && (fontFamily?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) &&
         textZoom == nil && textTransform == nil && zaps.isEmpty
     }
     @discardableResult public mutating func appendZap(_ zap: ZappedElement) -> Bool {

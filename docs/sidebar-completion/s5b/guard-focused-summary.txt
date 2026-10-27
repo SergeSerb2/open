@@ -1,0 +1,6 @@
+
+NAME                   RESULT SECONDS
+build                  PASS   30
+settings-preview       PASS   74
+
+Logs: /Users/m1-dev/.t3/worktrees/open/t3-802603f2/.re/s5b/guard-minimal/

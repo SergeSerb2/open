@@ -1,0 +1,8 @@
+{
+  "mergedMain": "4c40ebd965cc8e0ce4895bf3e94c5d85a4fffb59",
+  "exportedBaselineMain": "7e689d560c8cc7d08e85d079eb245158c6839c33",
+  "exportedPackageTree": "7267f5b33b9781db1de999017a4f82696253f5b8",
+  "mergedPackageTree": "7267f5b33b9781db1de999017a4f82696253f5b8",
+  "baselineBinarySHA256": "034f5cd3a525cc5b749186ab5836293302445eed9d2ee52a2873fa5b91d9ce3f",
+  "note": "Reused the focused gate unmodified-main binary because the entire package tree is identical. Full gate retains every check and unchanged comparison limits."
+}

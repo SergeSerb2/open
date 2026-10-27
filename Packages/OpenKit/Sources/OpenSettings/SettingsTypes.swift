@@ -71,7 +71,7 @@ public extension AutoArchiveInterval {
     public static let values: [String: Any] = [
         "open.settings.lastPane": "general", "open.general.automaticallyUpdate": true,
         "open.general.warnBeforeQuitting": true, "open.general.previewsEnabled": true,
-        "open.general.previewsFolders": true, "open.general.previewsPages": true, "open.general.previewsDelaySeconds": 0.5,
+        "open.general.previewsFolders": true, "open.general.previewsPages": true,
         "open.general.searchSuggestNoticeDismissed": false,
         "open.links.externalInLittleOpen": true, "open.links.littleOpenHotkeyEnabled": true,
         "open.links.optionCommandClickLittleOpen": true, "open.links.openPeekOtherSites": true,
@@ -79,6 +79,8 @@ public extension AutoArchiveInterval {
         "open.pip.autoDisabledHosts": [String](), "open.pip.keepOnTop": true,
         "open.advanced.enablePictureInPictureOnLeave": true, "open.advanced.allowWindowDraggingFromWebTop": false,
         "open.advanced.showFullURLWithToolbar": false, "open.advanced.enableBoosts": true,
+        "open.boosts.hasDismissedInterstitial": false, "open.boosts.hasDismissedJSNotice": false,
+        "open.boosts.codeEditorSize": "480x588",
         "open.advanced.allowSitesThemeData": false, "open.advanced.enableSharedQuotes": true,
         "open.advanced.playSoundEffects": false, "open.advanced.hapticOnTabReorder": true,
         "open.advanced.tabSleepMode": "automatic", "open.appIcon.selectedID": "openDefault",

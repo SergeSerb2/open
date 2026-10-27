@@ -1,0 +1,3 @@
+ui ONLY EXIT 1
+FAIL Previews sheet restored the removed Delay control
+ui source restored; real renderer rebuilt without warnings
