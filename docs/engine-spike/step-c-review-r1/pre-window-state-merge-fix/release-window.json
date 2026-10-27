@@ -1,0 +1,446 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "embeddedUUID": "4C4C4432-5555-3144-A144-B678285BC5F4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
+  },
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "cpu_count": 18,
+        "load_average": [
+          17.76611328125,
+          35.712890625,
+          24.8857421875
+        ],
+        "window_before_engine_0": {
+          "assertion": {
+            "evidence": {
+              "contextsBeforeEngine": 0,
+              "pagesBeforeEngine": 0,
+              "sidebarClass": "OpenSidebar.SidebarView",
+              "visibleWindows": 1
+            },
+            "ok": true
+          },
+          "focus": [
+            {
+              "event": "frontmostChanged",
+              "frontmostApp": "UserNotificationCenter",
+              "frontmostPID": 1624,
+              "openPID": 31692,
+              "uptime": 142713.97087658333
+            },
+            {
+              "active": false,
+              "event": "NSApplicationDidResignActiveNotification",
+              "frontmostApp": "UserNotificationCenter",
+              "frontmostPID": 1624,
+              "keyWindow": 0,
+              "openPID": 31692,
+              "uptime": 142713.98003475
+            }
+          ],
+          "status": "INTERRUPTED"
+        }
+      },
+      "focus": [
+        {
+          "event": "frontmostChanged",
+          "frontmostApp": "UserNotificationCenter",
+          "frontmostPID": 1624,
+          "openPID": 31692,
+          "uptime": 142713.97087658333
+        },
+        {
+          "active": false,
+          "event": "NSApplicationDidResignActiveNotification",
+          "frontmostApp": "UserNotificationCenter",
+          "frontmostPID": 1624,
+          "keyWindow": 0,
+          "openPID": 31692,
+          "uptime": 142713.98003475
+        }
+      ],
+      "reason": "foreground lost during window_before_engine_0",
+      "status": "INTERRUPTED"
+    }
+  ],
+  "started": "2026-10-26 15:35:53",
+  "style": "chrome",
+  "window": {
+    "close_unloaded_pinned": {
+      "after_close": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "after_unload": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "before": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true
+    },
+    "cold_fresh_profile": {
+      "median_ms": {
+        "engineStart": 314,
+        "engineStarted": 394,
+        "firstContentfulPaint": 536,
+        "main": 165,
+        "modelLoaded": 167,
+        "sidebarDrawn": 313
+      },
+      "ok": false,
+      "samples": 5
+    },
+    "cpu_count": 18,
+    "first_frame_timeout_continues": {
+      "hosts": {
+        "created": 1,
+        "engineContents": 1,
+        "retained": 1
+      },
+      "ok": true,
+      "timing": {
+        "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+        "didFinishLaunching": 3414,
+        "engineInitialized": 3406,
+        "engineStart": 3315,
+        "engineStarted": 3400,
+        "firstContentfulPaint": 3542,
+        "firstFrameConfirmed": false,
+        "firstFrameWaitTimedOut": 3314,
+        "firstLoadEnd": 3516,
+        "firstPaintClockUncertaintyMs": 0.27,
+        "kernelProcessStart": true,
+        "main": 174,
+        "modelLoaded": 176,
+        "windowShown": 271
+      }
+    },
+    "kernel_process_start": {
+      "ok": true,
+      "samples": 10
+    },
+    "launch_runs": {
+      "cold_fresh_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 345,
+          "engineInitialized": 341,
+          "engineStart": 261,
+          "engineStarted": 338,
+          "firstContentfulPaint": 481,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 469,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 166,
+          "modelLoaded": 168,
+          "sidebarDrawn": 260,
+          "windowShown": 227
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 400,
+          "engineInitialized": 397,
+          "engineStart": 314,
+          "engineStarted": 394,
+          "firstContentfulPaint": 536,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 519,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 165,
+          "modelLoaded": 167,
+          "sidebarDrawn": 313,
+          "windowShown": 252
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 416,
+          "engineInitialized": 413,
+          "engineStart": 334,
+          "engineStarted": 410,
+          "firstContentfulPaint": 552,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 537,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 163,
+          "modelLoaded": 165,
+          "sidebarDrawn": 333,
+          "windowShown": 268
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 415,
+          "engineInitialized": 413,
+          "engineStart": 332,
+          "engineStarted": 409,
+          "firstContentfulPaint": 540,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 513,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 173,
+          "modelLoaded": 174,
+          "sidebarDrawn": 331,
+          "windowShown": 276
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 339,
+          "engineInitialized": 335,
+          "engineStart": 257,
+          "engineStarted": 332,
+          "firstContentfulPaint": 475,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 460,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 116,
+          "modelLoaded": 117,
+          "sidebarDrawn": 256,
+          "windowShown": 206
+        }
+      ],
+      "warm_existing_profile": [
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 393,
+          "engineInitialized": 385,
+          "engineStart": 302,
+          "engineStarted": 382,
+          "firstContentfulPaint": 538,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 520,
+          "firstPaintClockUncertaintyMs": 0.1,
+          "kernelProcessStart": true,
+          "main": 175,
+          "modelLoaded": 177,
+          "sidebarDrawn": 301,
+          "windowShown": 247
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 411,
+          "engineInitialized": 407,
+          "engineStart": 328,
+          "engineStarted": 402,
+          "firstContentfulPaint": 543,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 527,
+          "firstPaintClockUncertaintyMs": 0.19,
+          "kernelProcessStart": true,
+          "main": 175,
+          "modelLoaded": 177,
+          "sidebarDrawn": 327,
+          "windowShown": 272
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 343,
+          "engineInitialized": 339,
+          "engineStart": 256,
+          "engineStarted": 335,
+          "firstContentfulPaint": 464,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 441,
+          "firstPaintClockUncertaintyMs": 0.09,
+          "kernelProcessStart": true,
+          "main": 104,
+          "modelLoaded": 106,
+          "sidebarDrawn": 255,
+          "windowShown": 209
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 412,
+          "engineInitialized": 408,
+          "engineStart": 332,
+          "engineStarted": 405,
+          "firstContentfulPaint": 545,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 531,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 174,
+          "modelLoaded": 176,
+          "sidebarDrawn": 331,
+          "windowShown": 272
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 412,
+          "engineInitialized": 408,
+          "engineStart": 331,
+          "engineStarted": 405,
+          "firstContentfulPaint": 546,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 531,
+          "firstPaintClockUncertaintyMs": 0.12,
+          "kernelProcessStart": true,
+          "main": 183,
+          "modelLoaded": 185,
+          "sidebarDrawn": 331,
+          "windowShown": 283
+        }
+      ]
+    },
+    "load_average": [
+      16.74365234375,
+      35.20263671875,
+      24.76904296875
+    ],
+    "selected_only_0": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_1": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_2": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_3": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "selected_only_4": {
+      "ok": true,
+      "tabs": [
+        {
+          "loaded": false,
+          "selected": false,
+          "title": "Unselected"
+        },
+        {
+          "loaded": true,
+          "selected": true,
+          "title": "Open launch fixture"
+        }
+      ]
+    },
+    "suite": {
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "ok": false
+    },
+    "warm_existing_profile": {
+      "median_ms": {
+        "engineStart": 328,
+        "engineStarted": 402,
+        "firstContentfulPaint": 543,
+        "main": 175,
+        "modelLoaded": 177,
+        "sidebarDrawn": 327
+      },
+      "ok": false,
+      "samples": 5
+    },
+    "window_before_engine_0": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_1": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_2": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_3": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_before_engine_4": {
+      "evidence": {
+        "contextsBeforeEngine": 0,
+        "pagesBeforeEngine": 0,
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "visibleWindows": 1
+      },
+      "ok": true
+    },
+    "window_png": {
+      "file": "window-startup.png",
+      "ok": true
+    }
+  }
+}

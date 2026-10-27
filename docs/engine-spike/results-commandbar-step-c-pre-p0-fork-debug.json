@@ -1,0 +1,414 @@
+{
+  "commandbar": {
+    "action_pin-tab": {
+      "ok": true
+    },
+    "action_unpin-tab": {
+      "ok": true
+    },
+    "calculator_copy": {
+      "clipboard": "84",
+      "ok": true
+    },
+    "cmd_l_selection": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "final": true,
+        "firstResultsMs": 7.055666666666639,
+        "mode": "editCurrentURL",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 9.933624999999665,
+        "presented": true,
+        "profile": "C90658DB-F9BB-4E8C-9A22-CA68D2FBB811",
+        "range": [
+          0,
+          26
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "typed:url",
+            "kind": "navigate",
+            "space": "",
+            "tab": "",
+            "title": "http://127.0.0.1:60986/new",
+            "url": "http://127.0.0.1:60986/new"
+          }
+        ],
+        "selected": 0,
+        "space": "88AB12FC-0590-4664-9ACB-C77F4CA55E94",
+        "text": "http://127.0.0.1:60986/new"
+      }
+    },
+    "cmd_s_page_swallowing_keys": {
+      "ok": true
+    },
+    "cmd_t_mode": {
+      "ok": true,
+      "state": {
+        "created": true,
+        "final": false,
+        "firstResultsMs": 28.202541666666548,
+        "mode": "newTab",
+        "newTabHighlighted": true,
+        "openFirstResultsMs": 33.96604166666657,
+        "presented": true,
+        "profile": "C90658DB-F9BB-4E8C-9A22-CA68D2FBB811",
+        "range": [
+          0,
+          0
+        ],
+        "rows": [],
+        "selected": -1,
+        "space": "88AB12FC-0590-4664-9ACB-C77F4CA55E94",
+        "text": ""
+      }
+    },
+    "command_return_background": {
+      "ok": true
+    },
+    "custom_search_engine_navigation": {
+      "expectedURL": "http://127.0.0.1:60986/search?q=local%20custom%20query",
+      "ok": true
+    },
+    "double_press_shared_router": {
+      "first": false,
+      "ok": true,
+      "second": true
+    },
+    "duplicate_folder_lazy": {
+      "folders": [
+        {
+          "children": [
+            {
+              "id": "D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+              "kind": "tab",
+              "loaded": true,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:60986/cross"
+            }
+          ],
+          "id": "25DDCAAB-DD76-44FB-B23E-32AC81E7084E",
+          "kind": "folder",
+          "title": "Copy subtree"
+        },
+        {
+          "children": [
+            {
+              "id": "7CE646BD-7493-4A2D-9E90-7556736C2929",
+              "kind": "tab",
+              "loaded": false,
+              "title": "Shell C /cross",
+              "url": "http://127.0.0.1:60986/cross"
+            }
+          ],
+          "id": "E8FA09E2-E5A6-4DF2-9115-EFB9D9671993",
+          "kind": "folder",
+          "title": "Copy subtree"
+        }
+      ],
+      "ok": true
+    },
+    "duplicate_single_undo": {
+      "ok": true
+    },
+    "duplicate_split_lazy": {
+      "copy": {
+        "children": [
+          {
+            "id": "168A33E9-BE10-4DAE-B2FB-B2116B9C5DC9",
+            "kind": "tab",
+            "loaded": false,
+            "title": "",
+            "url": "http://127.0.0.1:60986/split"
+          },
+          {
+            "id": "C1147A36-1154-4E97-AFD9-0F071791F491",
+            "kind": "tab",
+            "loaded": false,
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:60986/cross"
+          }
+        ],
+        "id": "6E1AC94F-88E6-4C59-A965-770BBE6BB6A0",
+        "kind": "split"
+      },
+      "ok": true
+    },
+    "duplicate_tab_lazy": {
+      "copies": [
+        {
+          "id": "C292CB7D-4329-45A2-B63A-35AAF86971CC",
+          "kind": "tab",
+          "loaded": false,
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:60986/cross"
+        }
+      ],
+      "ok": true
+    },
+    "dynamic_menus": {
+      "entries": 167,
+      "ok": true
+    },
+    "edit_current_tab": {
+      "ok": true,
+      "title": "Shell C /edited"
+    },
+    "escape_then_page": {
+      "keys": [
+        "Escape"
+      ],
+      "ok": true
+    },
+    "first_open_results_budget": {
+      "milliseconds": 33.96604166666657,
+      "ok": true
+    },
+    "first_results_budget": {
+      "milliseconds": 22.57524999999987,
+      "ok": true
+    },
+    "global_hotkey_toggle": {
+      "off": {
+        "attempts": 5,
+        "enabled": false,
+        "error": "",
+        "prepared": true,
+        "registered": false
+      },
+      "ok": true,
+      "on": {
+        "attempts": 6,
+        "enabled": true,
+        "error": "",
+        "prepared": true,
+        "registered": true
+      }
+    },
+    "invalid_overrides_fallback": {
+      "ok": true
+    },
+    "lazy_commandbar": {
+      "ok": true
+    },
+    "library_archive_restore": {
+      "ok": true
+    },
+    "library_history_profile_open": {
+      "ok": true
+    },
+    "library_shared_window": {
+      "ok": true
+    },
+    "override_menu_and_router": {
+      "ok": true
+    },
+    "save_page_sheet": {
+      "last": {
+        "number": 19319,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      },
+      "ok": true,
+      "state": {
+        "number": 19319,
+        "pending": true,
+        "requests": 1,
+        "visible": true
+      }
+    },
+    "settings_persist_relaunch": {
+      "ok": true
+    },
+    "settings_shared_window": {
+      "ok": true
+    },
+    "suggest_profile_isolation": {
+      "ok": true
+    },
+    "switch_tab_across_spaces": {
+      "barAfterReturn": {
+        "created": true,
+        "final": true,
+        "firstResultsMs": 10.132333333333918,
+        "mode": "newTab",
+        "newTabHighlighted": false,
+        "openFirstResultsMs": 20.086583333333692,
+        "presented": false,
+        "profile": "C90658DB-F9BB-4E8C-9A22-CA68D2FBB811",
+        "range": [
+          -1,
+          0
+        ],
+        "rows": [
+          {
+            "action": "",
+            "id": "tab:D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+            "kind": "switchToTab",
+            "space": "9ED328F3-0A66-4FF2-B0B0-98266EE1D14F",
+            "tab": "D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+            "title": "Shell C /cross",
+            "url": "http://127.0.0.1:60986/cross"
+          },
+          {
+            "action": "",
+            "id": "typed:search",
+            "kind": "search",
+            "space": "",
+            "tab": "",
+            "title": "Shell C /cross",
+            "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+          }
+        ],
+        "selected": 0,
+        "space": "88AB12FC-0590-4664-9ACB-C77F4CA55E94",
+        "text": "Shell C /cross"
+      },
+      "expectedSpace": "9ED328F3-0A66-4FF2-B0B0-98266EE1D14F",
+      "expectedTab": "D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+      "ok": true,
+      "returnRouting": {
+        "firstResponder": "RenderWidgetHostViewCocoa"
+      },
+      "rows": [
+        {
+          "action": "",
+          "id": "tab:D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+          "kind": "switchToTab",
+          "space": "9ED328F3-0A66-4FF2-B0B0-98266EE1D14F",
+          "tab": "D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+          "title": "Shell C /cross",
+          "url": "http://127.0.0.1:60986/cross"
+        },
+        {
+          "action": "",
+          "id": "typed:search",
+          "kind": "search",
+          "space": "",
+          "tab": "",
+          "title": "Shell C /cross",
+          "url": "https://www.google.com/search?q=Shell%20C%20%2Fcross"
+        }
+      ],
+      "state": {
+        "engineSelected": 4,
+        "engineURL": "http://127.0.0.1:60986/cross",
+        "frame": [
+          100,
+          100,
+          1280,
+          800
+        ],
+        "fullscreen": false,
+        "fullscreenChanges": 0,
+        "fullscreenTransition": false,
+        "hiddenTitle": true,
+        "id": "FDE85D52-2160-4DBF-8923-A8A558921518",
+        "number": 19281,
+        "pageFullscreen": false,
+        "paneBackgrounds": [
+          {
+            "color": [],
+            "tab": "D704F7B1-ACD6-426A-BCFE-0231F77805EC"
+          }
+        ],
+        "panel": [
+          228,
+          10,
+          1042,
+          780
+        ],
+        "peekCreated": false,
+        "revealed": false,
+        "selected": "D704F7B1-ACD6-426A-BCFE-0231F77805EC",
+        "shownPages": [
+          "D704F7B1-ACD6-426A-BCFE-0231F77805EC"
+        ],
+        "sidebarClass": "OpenSidebar.SidebarView",
+        "sidebarMode": "anchored",
+        "sidebarVisible": true,
+        "sidebarWidth": 228,
+        "space": "9ED328F3-0A66-4FF2-B0B0-98266EE1D14F",
+        "titled": true,
+        "trafficLights": [
+          [
+            12,
+            16
+          ],
+          [
+            35,
+            16
+          ],
+          [
+            58,
+            16
+          ]
+        ]
+      }
+    },
+    "typed_top_today": {
+      "ok": true,
+      "tab": "E3E412B9-19FD-49EB-9DAC-B8E7F11325BC"
+    },
+    "unsupported_disabled": {
+      "ok": true
+    },
+    "view-archive_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 19316,
+        "librarySection": "archive",
+        "sameSnapshot": true,
+        "settings": 19315,
+        "sharedArchives": true
+      }
+    },
+    "view-downloads_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 19316,
+        "librarySection": "downloads",
+        "sameSnapshot": true,
+        "settings": 19315,
+        "sharedArchives": true
+      }
+    },
+    "view-history_real_library": {
+      "ok": true,
+      "state": {
+        "archive": [],
+        "archiveRows": 0,
+        "external": true,
+        "historyRows": 3,
+        "hotkey": true,
+        "library": 19316,
+        "librarySection": "history",
+        "sameSnapshot": true,
+        "settings": 19315,
+        "sharedArchives": true
+      }
+    }
+  },
+  "config": "Debug",
+  "engine": {
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+  },
+  "started": "2026-10-25 23:08:42",
+  "style": "alloy"
+}

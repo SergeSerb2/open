@@ -1,0 +1,91 @@
+{
+  "config": "Release",
+  "engine": {
+    "distributionUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "embeddedUUID": "4C4C44FE-5555-3144-A175-7398C5A1D4B4",
+    "source": "fork",
+    "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1792989125"
+  },
+  "shell": {
+    "fresh_model": {
+      "ok": true,
+      "spaces": [
+        {
+          "focused": true,
+          "id": "F8B3442D-F5FA-4411-9A48-F273AB7F2643",
+          "pinned": 0,
+          "title": "Space",
+          "today": 0
+        }
+      ],
+      "tabs": []
+    },
+    "keyboard": {
+      "ok": true,
+      "restored_same_id": true,
+      "routes": {
+        "cmd_l_window": "CommandBarFieldEditor",
+        "cmd_t_app": "CommandBarFieldEditor"
+      },
+      "tabs": [
+        3,
+        4,
+        3
+      ]
+    },
+    "persistence": {
+      "loaded_after_launch": [
+        "https://example.com/"
+      ],
+      "ok": true,
+      "snapshot": "State/browser.json",
+      "tabs": 4
+    },
+    "split_view": {
+      "ok": true,
+      "panes": [
+        "https://example.org/",
+        "https://example.net/"
+      ],
+      "screenshot": "shell-split-view.png"
+    },
+    "tab_strip_mirror": {
+      "ok": true,
+      "sidebar": [
+        [
+          "pinned",
+          "https://example.com/"
+        ],
+        [
+          "today",
+          "https://www.iana.org/help/example-domains"
+        ],
+        [
+          "today",
+          "https://example.org/"
+        ]
+      ],
+      "strip": [
+        [
+          0,
+          "CF93820D-1DC1-407E-8E5F-4952E4228E57"
+        ],
+        [
+          1,
+          "506E672E-EA87-4ED1-92A6-8BD37AE25F77"
+        ],
+        [
+          2,
+          "65A8F825-968F-49E1-A693-62A469B74992"
+        ]
+      ]
+    },
+    "window_png": {
+      "file": "shell-window.png",
+      "method": "windowserver+devtools",
+      "ok": true
+    }
+  },
+  "started": "2026-10-25 23:10:43",
+  "style": "alloy"
+}

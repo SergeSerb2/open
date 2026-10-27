@@ -143,6 +143,14 @@ targets:
       - package: OpenKit
         product: OpenFeatures
       - package: OpenKit
+        product: OpenSettings
+      - package: OpenKit
+        product: OpenCommandBar
+      - package: OpenKit
+        product: OpenCommands
+      - package: OpenKit
+        product: OpenSuggest
+      - package: OpenKit
         product: OpenSidebar
       - package: OpenKit
         product: OpenDesign
