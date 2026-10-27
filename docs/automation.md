@@ -372,6 +372,14 @@ the action snapshot before yielding. `window-close releaseBrowsers=true` drops
 the mirror's browsers without calling `OEBrowser.close` and reports whether they
 were released; this covers the destructor path with an open popup.
 
+The tabstrip fixture includes `visible: false` and a disabled extension submenu
+with an enabled child. `context_menu_allowlist` checks delivered top-level and
+leaf titles on each target; `context_menu_disabled_submenu_refused` sends the
+child's raw command id and requires both the engine refusal log and no extension
+click event. These use the same real context-menu policy/selection path as the
+existing hidden-native-command check. Live refusal logs are read from the
+LaunchServices stderr file before app quit.
+
 For a revision-specific engine gate, pass `--engine-sha256 <64 lowercase hex>`.
 The runner requires the complete Vendor framework to match that exact digest.
 Xcode re-signs the embedded copy, so it also compares every byte of both binaries
@@ -382,3 +390,9 @@ Vendor hash, UUIDs and source stamp. UUID equality alone does not identify an
 engine revision. Real app/Vendor bundles are never modified by the comparison.
 
 `window-motion sidebarDelay=0.29` is a process-only negative control: it delays the actual sidebar layer animations, while the controller records a separate request time before model/layout work. `scheduledDelay` is layer begin time minus that independent request time; normal input must schedule within one frame. Reset the control to zero after use. `snapshot toggleSidebar=true` prepares page underlays, dispatches Cmd+S through `OEApplication.sendEvent`, and captures the window server image after a scheduled 25 ms; `capturedAfterKey` reports the capture request time for load/lateness evidence. This avoids the ordinary snapshot preparation wait hiding a short window animation.
+
+Focused context-menu guard proofs call `context_menu_commands(..., run_all_commands=False)`.
+They still capture all six real menu models and run the disabled-child and hidden-native
+command selections. The regular tabstrip suite keeps the complete command smoke loop.
+The probe popup storage check waits for the extension API, since `isLive` precedes
+its document/API injection. Foreground-interruption checks stay enabled in both flows.

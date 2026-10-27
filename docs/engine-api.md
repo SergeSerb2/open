@@ -166,12 +166,47 @@ Commands: `load(_:)`, `goBack()`, `goForward()`, `reload()`, `reloadIgnoringCach
 | `webContent(_:handleKeyEventBeforePage:)`, `webContent(_:handleUnconsumedKeyEvent:)` | Keyboard, above |
 | `webContent(_:runJavaScriptDialog:)` | `alert`/`confirm`/`prompt`/`beforeunload`. Return `true` and call `complete(accepted:text:)` later. An unanswered dialog is cancelled when released. |
 | `webContent(_:decidePermissionRequest:)` | Camera, microphone, screen, notifications, geolocation, ... `grant()`, `deny()`, `dismiss()` |
-| `webContent(_:showContextMenu:)` | `OEContextMenu`: targets, media type, location, link, source, selection, spelling, and Chromium's own items (including extension items). Show our NSMenu and call `select(command:)` or `cancel()`. |
+| `webContent(_:showContextMenu:)` | `OEContextMenu`: targets, media type, location, link, source, selection, spelling, and Chromium's own items (including extension items), filtered by Open's allowlist ("Context menu items" below). Show our NSMenu and call `select(command:)` or `cancel()`. |
 | `webContent(_:didUpdateFindResult:)` | Match count, active index |
 | `webContent(_:didRequestFullscreen:)` | HTML fullscreen: hide the sidebar |
 | `webContent(_:didRequestContentSize:)` | Auto-resize (Peek-style panels) |
 | `webContent(_:didFinishLoadWithStatus:)`, `webContent(_:didFailLoadWithError:)` | Main frame |
 | `webContent(_:didReceiveDevToolsEvent:parameters:)`, `webContent(_:didLogConsoleMessage:level:source:line:)` | Diagnostics, automation |
+
+### Context menu items
+
+A Chrome style page gets Chrome's full page context menu. OpenEngine keeps only the items on an explicit allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`, applied in `OEClient::OnBeforeContextMenu`). It then removes empty submenus and extra separators. An item a later Chromium adds stays hidden until it is added to the list. Alloy style menus are CEF's short list and are not filtered. The shell adds Open's own items (Capture, Share, Copy URL, Little Open, Split View, and Arc's "Manage Extensions", EX-18) to what remains. `select(command:)` runs only the id of an enabled item in the delivered `items` (submenus included); any other id is refused, logged, and the menu is cancelled, because CEF would run it directly without checking the list. Not filtered: Alloy pages (Peek; CEF's short list, by design) and the short-lived Chrome windows that `chrome.windows.create` still opens (`OEDefaultClient`, P1 follow-up).
+
+Kept (Chromium `IDC_*` ids):
+
+| Target | Items |
+|---|---|
+| Page | Back, Forward, Reload, Reload Frame, Exit Full Screen, Save As…, Print…, View Page Source, View Frame Source, Inspect, Inspect background page (extension pages) |
+| Link | Open Link in New Tab, Open Link in New Window (both become Open tabs through P1), Open Link With (the page's protocol handlers), Save Link As…, Copy Link Address, Copy Link Text |
+| Image | Open Image in New Tab, Open Original Image in New Tab, Load Image, Save Image As…, Copy Image, Copy Image Address |
+| Audio, video, plugin | Loop, Show All Controls, Picture in Picture, Open Video/Audio in New Tab, Save Video/Audio As…, Copy Video/Audio Address, Video Frame (Copy, Save), Save plugin as, Rotate |
+| Selection | Copy, Go to <URL>, Copy Link to Highlight, Remove Highlight, Reshare Highlight, Look Up |
+| Editable | Undo, Redo, Cut, Copy, Paste, Paste and Match Style, Delete, Select All, Emoji & Symbols, Start Dictation; spelling suggestions, Add to / Remove from Dictionary, No Suggestions, Spelling and Grammar (submenu) |
+| Passwords | Select Password, Use a Passkey from Another Device (Chromium's own fill UI stays: plans/passwords-autofill.md D-3) |
+| macOS | Speech and Writing Direction submenus |
+| Others | Items the page adds and items extensions add (`chrome.contextMenus`) |
+
+Removed, and why (all seen in Open before this list, Chromium 156):
+
+| Item | Why |
+|---|---|
+| Cast… | Chrome's Cast dialog anchors to a toolbar that Open's hidden window does not have. Open's Cast entry is View ▸ Cast… (Arc: docs/re/page-platform.md PG-12). |
+| Open in Reading Mode | Chrome's Read Anything side panel; Open has no Chrome side panels (Chromium patch 0302 only keeps it from crashing in hidden windows). |
+| Create QR Code for this Page / Image / Link | Chrome's QR code bubble anchors to the toolbar (Chromium patch 0301 removes its controller without a toolbar). |
+| Search Image / Video Frame with Google, Google Lens items, Translate Image | Google Lens and its side panel or overlay. |
+| Translate to …, Translate selection | Chrome's translate bubble needs Chrome's toolbar; Open's own translation UI is planned (plans/page-platform.md, Arc PG-7). |
+| Open Link in Split View | Chrome's split tabs; Open's Split View has its own item (shell). |
+| Open Link in Incognito Window, Open Link as <profile> | Chrome windows and Chrome profiles; Open's windows and profiles are its own. |
+| Send to Your Devices, Shared clipboard, Add to Reading List, Follow/Unfollow | Sync, sign-in and Chrome features Open does not have. |
+| Import Passwords, Suggest Strong Password, Show All Passwords | Chrome's password manager pages; generation is off (plans/passwords-autofill.md D-7). |
+| Language Settings, Protocol handler settings, Page Info | Chrome settings pages and bubbles. |
+| Search <engine> for “…” (current or new tab) | It uses Chromium's default search engine (Google), not the search engine of the page's profile. App-shell Step D adds Open's own "Search <engine> for “…”" item (`docs/followups.md`). |
+| Get Image Descriptions from Google, Live Caption, PDF OCR, Listen to This Page, Gemini, Ask Google, Compose, AI items | Google services and AI (out of v1 scope). |
 
 ### Page background color
 
@@ -198,3 +233,8 @@ Each has a fork patch in [engine-patches.md](engine-patches.md):
 ## Debugging crashes
 
 The CEF framework is stripped. CEF publishes the matching symbols: `https://cef-builds.spotifycdn.com/cef_binary_<version>_macosarm64_release_symbols.tar.bz2` (2.1 GB for 156.0.14). Check the UUID with `dwarfdump --uuid` against the crash report's image UUID, then `atos -o "<dSYM>/Contents/Resources/DWARF/Chromium Embedded Framework" -arch arm64 -l 0x0 <imageOffset>...` with the offsets from the `.ips` report. Chromium's zombie detector (`CrZombie` in a stack) means a message to a freed Objective-C object.
+
+Chrome page-menu filtering removes invisible items before delivery. The execution
+allowlist contains only delivered, enabled leaf commands and does not descend
+through a disabled submenu. An invisible item or an enabled child under a
+disabled parent therefore cannot be selected through OpenEngine.

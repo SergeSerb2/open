@@ -403,3 +403,21 @@ Chrome and CEF internals directly:
 - Chrome's popup size limits, 25×25 to 800×600 (`extension_popup_types.h`),
   copied into `open_extension_popup.cc` and `OEBrowser.mm`.
 
+### Context-menu allowlist (`Engine/OpenEngine/src/OEContextMenuAllowlist.mm`)
+
+The ids come from CEF's generated `include/cef_command_ids.h` and follow a
+rebase. Five range bounds are copies of Chromium constants that CEF does not
+export:
+
+| Bound in Open | Chromium 156 source | Value |
+|---|---|---|
+| spelling suggestions `IDC_SPELLCHECK_SUGGESTION_0 + 4` | `kMaxSpellingSuggestionsLimit` (5), `chrome/browser/renderer_context_menu/render_view_context_menu.cc:430` and `spelling_menu_observer.cc:47` | 41000–41004 |
+| extension items `IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1000` | `kMaxExtensionCustomCommands` (1000), `chrome/browser/extensions/context_menu_matcher.cc:32` | 49000–50000 |
+| page items `IDC_CONTENT_CONTEXT_CUSTOM_FIRST + 1000` | `kMaxContentCustomCommands` (1000), `render_view_context_menu.cc:418` | 47000–48000 |
+| protocol handlers `IDC_CONTENT_CONTEXT_PROTOCOL_HANDLER_FIRST + 199` | `kMaxProtocolHandlers` (200), `render_view_context_menu.cc:422`; stops before `IDC_CONTENT_CONTEXT_PROTOCOL_HANDLER_SETTINGS` (52200), so "Open Link With ▸ Settings…" is dropped on purpose | 52000–52199 |
+| macOS text services 100–106 | `ui::TextServicesContextMenu::MenuCommands`, `ui/menus/cocoa/text_services_context_menu.h:28-35` | 100–106 |
+
+Also re-check that no new Chromium item duplicates a kept item's job (a new
+item stays hidden until it is listed: e2e `--only tabstrip` →
+`context_menu_allowlist` names what each target shows).
+
