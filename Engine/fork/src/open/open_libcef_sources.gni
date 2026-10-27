@@ -6,6 +6,10 @@
 # wired in by Engine/fork/patches/cef/0302-open-hosted-tabs.patch. They get
 # libcef's configs and deps, so they may include cef/libcef and chrome headers.
 open_libcef_mac_sources = [
+  "//open/browser/extensions/open_extension_popup.cc",
+  "//open/browser/extensions/open_extension_popup.h",
+  "//open/browser/extensions/open_extensions_toolbar.cc",
+  "//open/browser/extensions/open_extensions_toolbar.h",
   "//open/browser/tab_strip/hidden_browser.h",
   "//open/browser/tab_strip/open_browser_window.h",
   "//open/browser/tab_strip/open_browser_window.mm",

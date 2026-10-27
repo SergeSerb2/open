@@ -219,6 +219,14 @@ class OEApp : public CefApp,
                                             sw.substr(eq + 1));
       }
     }
+    // Chromium features Open turns on, added to any --enable-features list:
+    // ExtensionsPinnedByDefault pins a new install's action (extensions UI
+    // plan Q4; the profile pref extensions.pinned_by_default defaults on).
+    std::string features = command_line->GetSwitchValue("enable-features");
+    for (const char* feature : {"ExtensionsPinnedByDefault"}) {
+      features += features.empty() ? feature : std::string(",") + feature;
+    }
+    command_line->AppendSwitchWithValue("enable-features", features);
   }
 
   // CefBrowserProcessHandler
