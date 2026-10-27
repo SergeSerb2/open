@@ -71,6 +71,13 @@ enum SectionFlows {
         let many = Stage(state: "scc-many")
         for _ in many.controller.view.panel.focusOrder { many.key(code: 48,characters: "\t") }
         check("long body scrolls focused rows and clamps at 640",many.controller.view.panel.scroll.contentView.bounds.minY > 0 && many.controller.view.panelFrame.height == 640)
+        let lastSetting = many.source.value!.tiles.last!
+        let lastControl = many.controller.view.panel.control(id: lastSetting.id)!
+        many.controller.view.panel.focus(lastControl)
+        let scrolledImage = many.render(scale: 1)
+        let textOrigin = lastControl.convert(CGPoint(x: 50,y: 0),to: many.root)
+        let blank = CLI.pixel(scrolledImage,x: Int(textOrigin.x-4),y: Int(textOrigin.y+5))
+        check("scroll exposes freshly drawn last Settings title",CLI.hasInk(scrolledImage,rect: CGRect(x: textOrigin.x,y: textOrigin.y,width: 155,height: 15),scale: 1,fill: blank))
         let picker = Stage(open: false); var menuOpens = 0; picker.controller.onMenu = { _,_ in menuOpens += 1 }
         picker.controller.present(anchor: .urlField,tabID: picker.source.tabID,mode: .extensionPicker,animated: false)
         check("picker focuses + without opening a menu",picker.controller.mode == .extensionPicker && picker.focusedID == "extension.add" && menuOpens == 0)
