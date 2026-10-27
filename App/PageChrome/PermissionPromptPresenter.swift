@@ -111,7 +111,13 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
   var state: [String: Any] {
     ["visible": popover.isShown, "pending": pending.count, "decisions": decisions,
       "origin": pending.first?.request.origin.absoluteString ?? "", "kinds": pending.first?.request.kinds.rawValue ?? 0,
-      "remember": view.remember.state == .on, "window": view.window?.windowNumber ?? 0]
+      "remember": view.remember.state == .on, "window": view.window?.windowNumber ?? 0,
+      "appActive": NSApp.isActive, "ownerKey": owner?.window?.isKeyWindow == true,
+      "ownerSheet": owner?.window?.attachedSheet != nil,
+      "containerWindow": owner?.controller?.container.window?.windowNumber ?? 0,
+      "containerKey": owner?.controller?.container.window?.isKeyWindow == true,
+      "selectedPage": owner?.selectedContent?.identifier ?? 0, "pendingPage": pending.first?.page.identifier ?? 0,
+      "keyWindow": NSApp.keyWindow?.windowNumber ?? 0]
   }
   isolated deinit { if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) } }
 }
