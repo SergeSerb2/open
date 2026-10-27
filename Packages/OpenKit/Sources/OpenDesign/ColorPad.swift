@@ -1,5 +1,10 @@
 import AppKit
 
+public enum ColorPadGeometry {
+    nonisolated public static func relative(_ point: CGPoint,startPointer: CGPoint,startKnob: CGPoint) -> CGPoint {
+        CGPoint(x: startKnob.x+point.x-startPointer.x,y: startKnob.y+point.y-startPointer.y)
+    }
+}
 public struct ColorPadKnob {
     public let position: CGPoint
     public let fill: CGColor
@@ -44,7 +49,7 @@ open class ColorPadView: NSView {
     public var onInput: (@MainActor (ColorPadInput) -> Void)?
     public var onPoint: (@MainActor (CGPoint,Bool) -> Void)?
     public private(set) var layoutPassCount = 0
-    public var renderScale: CGFloat = 1 { didSet { refreshAppearance() } }
+    public var renderScale: CGFloat = 1 { didSet { if oldValue != renderScale { refreshAppearance() } } }
     public var showsKeyboardFocus = false { didSet { needsDisplay = true } }
     public var interactionEnabled = true
     public let style: ColorPadStyle
@@ -53,6 +58,7 @@ open class ColorPadView: NSView {
     private lazy var plate = CALayer()
     public var ringLayer: CALayer? { didSet { oldValue?.removeFromSuperlayer(); if let ringLayer { layer?.insertSublayer(ringLayer,at: 0) } } }
     public var guideLayer: CALayer? { didSet { oldValue?.removeFromSuperlayer(); if let guideLayer { layer?.insertSublayer(guideLayer,below: knobs.last!.outer) } } }
+    public var plateOverlayLayer: CALayer? { didSet { oldValue?.removeFromSuperlayer(); if let plateOverlayLayer { plate.insertSublayer(plateOverlayLayer,below: dots) } } }
     private var keyboardActive = false
     private var keyboardEnd: DispatchWorkItem?
     private var arrowKeys: Set<UInt16> = []
@@ -77,6 +83,11 @@ open class ColorPadView: NSView {
     isolated deinit { keyboardEnd?.cancel() }
     open override var isFlipped: Bool { true }
     open override var acceptsFirstResponder: Bool { interactionEnabled }
+    open override func hitTest(_ point: NSPoint) -> NSView? {
+        guard style.plateInset>0 else { return super.hitTest(point) }
+        let local = convert(point,from: superview)
+        return bounds.contains(local) || primaryKnobFrame?.insetBy(dx: -4,dy: -4).contains(local) == true ? self : nil
+    }
     open override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     open override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: -style.focusOutset,dy: -style.focusOutset) }
     open override func drawFocusRingMask() { NSBezierPath(roundedRect: focusRingMaskBounds, xRadius: style.cornerRadius+style.focusOutset, yRadius: style.cornerRadius+style.focusOutset).fill() }
@@ -106,6 +117,13 @@ open class ColorPadView: NSView {
         values = Array(law.knobs(for: state).prefix(3)); isGestureInProgress = gestureInProgress
         onPoint = { point,relative in onValue(law.value(at: point,relative: relative)) }
         paintKnobs()
+    }
+    public func animateKnobs(from positions: [CGPoint],duration: TimeInterval) {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        for (knob,position) in zip(knobs,positions) where !knob.outer.isHidden {
+            let animation = CABasicAnimation(keyPath: "position"); animation.fromValue = NSValue(point: position); animation.toValue = NSValue(point: knob.outer.position)
+            animation.duration = duration; animation.timingFunction = Motion.easeOut; knob.outer.add(animation,forKey: "reset")
+        }
     }
     public var primaryKnobCenter: CGPoint? {
         values.first.map { CGPoint(x: bounds.midX + $0.position.x * style.radius,y: bounds.midY + $0.position.y * style.radius) }
