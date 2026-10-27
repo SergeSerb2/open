@@ -314,6 +314,13 @@ PY
     if [[ $SKIP_ENGINE == 0 ]]; then "$ROOT/tools/fetch-engine.sh" --run; fi
     [[ -f "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" ]] || die 'Vendor/cef has no framework; run tools/fetch-engine.sh --run after Step 10'
     cmp "$official_fw" "$ROOT/Vendor/cef/Release/Chromium Embedded Framework.framework/Chromium Embedded Framework" || die 'Vendor/cef does not hold the official framework'
+    # Development-only ad-block switches (--open-adblock-dir/-selftest) must
+    # not ship: CEF patch 0310 reads them only without OFFICIAL_BUILD
+    # (ad-block review 100-3). grep reads all input, so pipefail sees no
+    # SIGPIPE from strings.
+    if strings -a "$official_fw" | grep 'open-adblock-' > /dev/null; then
+        die 'official framework contains open-adblock- development switches'
+    fi
     mkdir -p "$REL/symbols"
     while IFS= read -r -d '' d; do ditto "$d" "$REL/symbols/$(basename "$d")"; done < <(find "$SRC/$OUT_DIR_RELEASE" -maxdepth 4 -name '*.dSYM' -type d -print0)
     find "$SRC/$OUT_DIR_RELEASE" -maxdepth 4 -name '*.sym' -type f -exec cp {} "$REL/symbols/" \;
