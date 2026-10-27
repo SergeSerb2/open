@@ -75,7 +75,7 @@ takes 1–3 seconds. Host load, cold compiler caches, npm, and list downloads ca
 increase these estimates. The final table and each log give actual times/results.
 Performance budgets are never retried or relaxed by the runner.
 
-### SM6 instruction measurement (calibration pending)
+### SM6 instruction measurement (diagnostic only)
 
 `sidebar-render sm6-measure` runs only the real 10-Space × 100-row Library
 construction and first layout in a fresh process. It shares its fixture and
@@ -94,7 +94,11 @@ same counter wrapper once, still enforces the original 120 ms wall budget, and
 keeps the lazy-column and reload protections. It does not yet run SM6 in a
 child process; its caches and helper threads differ from the standalone command.
 
-Build before sampling, through the machine's heavy wrapper. For example:
+Build before sampling, through the machine's heavy wrapper.
+On M1, wrap each build, proof, or validation job once with
+`/usr/bin/lockf /tmp/open-m1-validation.lock` to exclude other M1 validation
+work; keep the heavy and on-screen locks inside it. Do not acquire it recursively.
+For example:
 
 ```sh
 ~/Library/Caches/OpenRE/scripts/heavy.sh tools/verify-all.sh --only build
@@ -126,12 +130,13 @@ any low/high median instruction shift over 5% to the lead. A separate process
 alone does not prove clean counts. Cold process caches can also change this
 workload from the original suite's cached SM6 section.
 
-M5 calibration remains a later step: compare the identical standalone code on
-both OS builds, then use the M5 reference count `I_ref` and
-`B = ceil(I_ref × 120 / 70)` with no extra padding. The 70 ms reference is the
-median of 15 historical same-section M5 runs (59.7…87.2 ms), not the earlier
-33.7…36 ms Library-build number. OS drift outside measured noise must be
-reported. No instruction gate or negative threshold crossing is claimed here.
+The initial M1 run measured a −12.56% median instruction shift under burners,
+with busy helper threads even in the standalone process. The lead rejected a
+process-wide instruction budget on that evidence. These counters stay diagnostic;
+the existing 120 ms wall gate remains until an explicit replacement is approved.
+The historical 15-run same-section M5 wall range was 59.7…87.2 ms (median ≈70 ms),
+which must not be confused with the earlier 33.7…36 ms Library-build number.
+No instruction threshold or negative threshold crossing is claimed here.
 Instructions measure work; later timeout gates must still assert schedules and
 behavior because waiting alone retires little work.
 

@@ -62,7 +62,7 @@ def main():
         signal.signal(number, interrupted)
     try:
         if args.load == "high":
-            cpus = int(subprocess.check_output(["/usr/sbin/sysctl", "-n", "hw.activecpu"], text=True))
+            cpus = int(subprocess.check_output(["/usr/sbin/sysctl", "-n", "hw.activecpu"], text=True, timeout=5))
             if not 1 <= cpus <= 64:
                 raise RuntimeError(f"unexpected active CPU count: {cpus}")
             for _ in range(2 * cpus):
@@ -147,7 +147,7 @@ def main():
         for job in reversed(commands + burners):
             try:
                 if job in burners and job.poll() is None:
-                    command = subprocess.check_output(["/bin/ps", "-p", str(job.pid), "-o", "command="], text=True).strip()
+                    command = subprocess.check_output(["/bin/ps", "-p", str(job.pid), "-o", "command="], text=True, timeout=5).strip()
                     if command != "/usr/bin/yes":
                         raise RuntimeError(f"owned burner PID {job.pid} changed command: {command}")
                 stop_owned(job)
