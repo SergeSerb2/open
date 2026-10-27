@@ -1,0 +1,382 @@
+{
+  "title_source": "Synthetic.model only; no --media-title-from-ax",
+  "generator": "render-scenes.py",
+  "generator_sha256": "58bae297367dc59c8b7214da649f83b210725ec541982084dd65dcee1fcb3818",
+  "renderer_sha256": "3bbc42df2a29902b6801f235d983978992288ce684faf7975796b671a7bec6fb",
+  "main_ref": "ebea09f54ea64a926c3af80d899548f1852894b6",
+  "images": [
+    {
+      "file": "R-rest-dark-228.png",
+      "width_px": 1728,
+      "height_px": 1084,
+      "sha256": "d462d3ff440f9d79bcb93e2363b4233edaf5a9c4783727ef99afe073fe9b9242"
+    },
+    {
+      "file": "R-stack-dark-228.png",
+      "width_px": 1728,
+      "height_px": 1084,
+      "sha256": "1ac42093a9da37b5be6b37e0271b69abab3fd3946ec1c0c455013d5b5ef6c44b"
+    },
+    {
+      "file": "R-stack-expanded-dark-228.png",
+      "width_px": 1728,
+      "height_px": 1084,
+      "sha256": "0d5d5f49b54e5f68919e20d4e5533ec545e4cb1ed410dab560c74d8850d341a3"
+    },
+    {
+      "file": "R-video-expanded-dark-228.png",
+      "width_px": 1728,
+      "height_px": 1084,
+      "sha256": "4eea0218457ff11022289a52eb42a5dab42ea7c0a90855fe15b5dbcde072decc"
+    },
+    {
+      "file": "audio-expanded-dark-228.png",
+      "width_px": 456,
+      "height_px": 272,
+      "sha256": "75f74601322483c720e4ec442f259833d5873ac51b9fe33112a65818853a3c7c"
+    },
+    {
+      "file": "audio-expanded-dark-500.png",
+      "width_px": 1000,
+      "height_px": 272,
+      "sha256": "81c286cfc63c2862c7d73b7fcd6df2c1566c8456e4e2c123f36614d9cc922e62"
+    },
+    {
+      "file": "audio-expanded-light-228.png",
+      "width_px": 456,
+      "height_px": 272,
+      "sha256": "618727a1433be17cc2a109da5a2861a4333487307c999f377e7859beefd7bbd6"
+    },
+    {
+      "file": "audio-expanded-light-500.png",
+      "width_px": 1000,
+      "height_px": 272,
+      "sha256": "2f8042a8c03d5eccee424515900d38fe8f6d597f66476929b23d442ef7a71577"
+    },
+    {
+      "file": "button-pressed-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "bf1038eb67df5362a8d709644e62bbbcf5060e11369d415f1e6368b0268dc8cd"
+    },
+    {
+      "file": "button-pressed-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "6ee7adc8f80aa67da8e887f8373d6b891f3ed1d407819d9c5c0f45bd19fd89e7"
+    },
+    {
+      "file": "button-pressed-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "ebd71378d88218f39edb3948f3a93ed7d43598fd6b87ab6b5213d743f0fa5354"
+    },
+    {
+      "file": "button-pressed-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "2987a9ab4fff916985446c9eaccc5ba5462a47366a342c2f16eecf9a85cf82c0"
+    },
+    {
+      "file": "disabled-tracks-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "73b26996ba0d8c1352f7f07dc14223454355fb7537e4ea7008d08e87d4de0005"
+    },
+    {
+      "file": "disabled-tracks-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "53e4b2200da07333431503561a24f374a76abf711b5e9fff6fc421534a715247"
+    },
+    {
+      "file": "disabled-tracks-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "f095f0f4efaf43099e95a22b76663aa9bda317f6275f7e757a31bb919b5a8647"
+    },
+    {
+      "file": "disabled-tracks-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "71650aaf85dbd264420c85a85f5f20d4cd799103cbee6706f53e03d26e247abd"
+    },
+    {
+      "file": "drawer-dark-228.png",
+      "width_px": 456,
+      "height_px": 338,
+      "sha256": "448e5156f24f52a5c8e0c86e667e1eb698e69fd50c6758822f89e7b18173ce61"
+    },
+    {
+      "file": "drawer-dark-500.png",
+      "width_px": 1000,
+      "height_px": 338,
+      "sha256": "a623dfe20c15e4bf0b348fdac0c952f8d98bdc94b73e172b203cf115d8290fd9"
+    },
+    {
+      "file": "drawer-light-228.png",
+      "width_px": 456,
+      "height_px": 338,
+      "sha256": "4b4affaa932312c6c919009cb95dabd22ddee61cc94ea960bcbd12b1fac26b8f"
+    },
+    {
+      "file": "drawer-light-500.png",
+      "width_px": 1000,
+      "height_px": 338,
+      "sha256": "0b03b929fc1cdd36c19115ef244b16099a5c7335bea549a9ebfb361a7c2f9c35"
+    },
+    {
+      "file": "expanded-dark-164.png",
+      "width_px": 328,
+      "height_px": 272,
+      "sha256": "449fa65454195fd33c44d1e012c019846f7377c907b66181708e0992c5be4cc3"
+    },
+    {
+      "file": "expanded-light-164.png",
+      "width_px": 328,
+      "height_px": 272,
+      "sha256": "5fc4456eda0590efb3fcf96a123c80cf70935aaf36c9b08772f24a9fff016de7"
+    },
+    {
+      "file": "increase-contrast-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "8e43b1fd9af702b4b46b178a198d865baf8b635243c1536586019f59159cfe02"
+    },
+    {
+      "file": "increase-contrast-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "17257ebfd86f9daa1ce62b2a8cbfba89833fbe1f25c0f5d89b727ab9baedf037"
+    },
+    {
+      "file": "increase-contrast-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "6829b01b627195407bba6f89b4b4f45c704c18413a1ae0c07ccfac498cdf5a5a"
+    },
+    {
+      "file": "increase-contrast-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "b4a84b6502b63978c4a753265cec0eaf3cc96aa9c3352091c1814bd597807cc6"
+    },
+    {
+      "file": "muted-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "9d9b4da900a5b168fe0f29056ab77b653868fe058f9b0cb79355d9532cf08444"
+    },
+    {
+      "file": "muted-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "177ac6b10dd56a1ac147d17a805901ef01a5347503e436b270170aa46f8357fe"
+    },
+    {
+      "file": "muted-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "9e2154fac5cfe0bb4db538b3d8fbb5eb1830783a875152a4a524211cb5ccaab5"
+    },
+    {
+      "file": "muted-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "8b848d75db8f402782efefec39d3d059eab9c6280c684314916d0a50adbb1157"
+    },
+    {
+      "file": "paused-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "8b2f9c9c75a3d7ee428056c1d6b9982df40be9dd327fe21e6261420f1e2f9f7d"
+    },
+    {
+      "file": "paused-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "6d1ed0881af885c712a4ea091838a55f54cd044c9c7727b8c5f63c2f84fd84e3"
+    },
+    {
+      "file": "paused-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "98f9304d3b1ba76c0c5de0b295a4d47965655cddbca8b03474e02a29e64c941c"
+    },
+    {
+      "file": "paused-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "f7f5f916f41bbad99d520419c0f54fad7f8c67190ac4a3f69ee2f21e44906f91"
+    },
+    {
+      "file": "recording-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "bf6cb6285ea1ecee94e806c10b51ce0ba0a735619e9261094b3842d82dfae3d2"
+    },
+    {
+      "file": "recording-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "3ca48e47c581a734649d681fe8441f5c0be256e9868bf774991c89916a5c86b6"
+    },
+    {
+      "file": "recording-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "242a8da9d5c6045ac33cd6ceb00edba2757f24d1886ef0e3bafeeef78d77391e"
+    },
+    {
+      "file": "recording-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "853c5e07ca335164724406dc4ab0f8f2120777e0a83e314f6c3949d744100844"
+    },
+    {
+      "file": "red-dark-228.png",
+      "width_px": 456,
+      "height_px": 272,
+      "sha256": "12fe910cbb4b061dd7b227d4ac38d3eb909ca8c26d4f12bfe8a66cea47da811e"
+    },
+    {
+      "file": "red-light-228.png",
+      "width_px": 456,
+      "height_px": 272,
+      "sha256": "feafd1725c7fd6ff95325b025b729415aaf0537537526c0094e989009821d3ed"
+    },
+    {
+      "file": "rest-dark-164.png",
+      "width_px": 328,
+      "height_px": 206,
+      "sha256": "5e75a2d75ff20d55cb3683e2017261f8eae20018c4f2b614a9995487b19ed80b"
+    },
+    {
+      "file": "rest-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "73b26996ba0d8c1352f7f07dc14223454355fb7537e4ea7008d08e87d4de0005"
+    },
+    {
+      "file": "rest-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "53e4b2200da07333431503561a24f374a76abf711b5e9fff6fc421534a715247"
+    },
+    {
+      "file": "rest-light-164.png",
+      "width_px": 328,
+      "height_px": 206,
+      "sha256": "28a831a5885aaf433aa7da257823b54e094404706e005aff47c60cea6b8f65cb"
+    },
+    {
+      "file": "rest-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "f095f0f4efaf43099e95a22b76663aa9bda317f6275f7e757a31bb919b5a8647"
+    },
+    {
+      "file": "rest-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "71650aaf85dbd264420c85a85f5f20d4cd799103cbee6706f53e03d26e247abd"
+    },
+    {
+      "file": "stack-collapsed-dark-228.png",
+      "width_px": 456,
+      "height_px": 234,
+      "sha256": "1833bedceb9d1f0e94e326b493ee14d447f28f988e0241f48c0200927794c45e"
+    },
+    {
+      "file": "stack-collapsed-dark-500.png",
+      "width_px": 1000,
+      "height_px": 234,
+      "sha256": "5fd7cbecefd170274212957de9c7974f20bdfd5d41e1027d185aaca322b8f93a"
+    },
+    {
+      "file": "stack-collapsed-light-228.png",
+      "width_px": 456,
+      "height_px": 234,
+      "sha256": "888877069ab1a27a4c7416213caf6b4d12a12f15bf614e93ae3431a44b69dbee"
+    },
+    {
+      "file": "stack-collapsed-light-500.png",
+      "width_px": 1000,
+      "height_px": 234,
+      "sha256": "227666bbb02bd45cdc18064e1801c7c774f7bf087ad7e44bb9673dda95ee9ec9"
+    },
+    {
+      "file": "stack-expanded-dark-228.png",
+      "width_px": 456,
+      "height_px": 556,
+      "sha256": "3b245a26897a81e603ed6e431d13237ef9691344c1618496fe00b87f8c082c67"
+    },
+    {
+      "file": "stack-expanded-dark-500.png",
+      "width_px": 1000,
+      "height_px": 556,
+      "sha256": "39a9a29e3eaae4b7e2b46c8e78399b086af97b0a44d5ea206809917959ac822b"
+    },
+    {
+      "file": "stack-expanded-light-228.png",
+      "width_px": 456,
+      "height_px": 556,
+      "sha256": "93360734fb1b22e9f516a6483f5671aaedadc4039f0a7307140c24c0eada4da5"
+    },
+    {
+      "file": "stack-expanded-light-500.png",
+      "width_px": 1000,
+      "height_px": 556,
+      "sha256": "c85aad5af47be5ea968deebd9e330714b0d5adca499e2222a27a61de30bd44ae"
+    },
+    {
+      "file": "tooltip-dark-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "dda1aac00367013e976b0b563094373bd2ac5b8bde8b52ec0d945ccc5527cf7c"
+    },
+    {
+      "file": "tooltip-dark-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "b3319a67fa1a159803c4c20c4c8748ef452657f813b1d9d70eb8f67b4f3777c4"
+    },
+    {
+      "file": "tooltip-light-228.png",
+      "width_px": 456,
+      "height_px": 206,
+      "sha256": "c74e8deddb27b26f822deaac4e1d8f4e1221c0f258be2e94848a9f514801788d"
+    },
+    {
+      "file": "tooltip-light-500.png",
+      "width_px": 1000,
+      "height_px": 206,
+      "sha256": "0a7cd5da39ec3f01afb5b6f2987e105494c1d5f79c77b4ebbc8aae956ea5c830"
+    },
+    {
+      "file": "video-expanded-dark-228.png",
+      "width_px": 456,
+      "height_px": 272,
+      "sha256": "16839b17c800f9b9cf57a6ff37bcda8eaca1cc9680d21e462244161b9fa5057e"
+    },
+    {
+      "file": "video-expanded-dark-500.png",
+      "width_px": 1000,
+      "height_px": 272,
+      "sha256": "ec425064a2a048503bcaf5e944b36c8db301ac0cb2a37608f2c4bc229fc74b99"
+    },
+    {
+      "file": "video-expanded-light-228.png",
+      "width_px": 456,
+      "height_px": 272,
+      "sha256": "fac962b7faf67b4b271a812212036b9c90f1120d1e20ec22273003d1ea72c275"
+    },
+    {
+      "file": "video-expanded-light-500.png",
+      "width_px": 1000,
+      "height_px": 272,
+      "sha256": "90a4d0cc96cffeeb0346e66334f180850d8bab0a08915ece46699da001f009c0"
+    }
+  ],
+  "review": "PR110 code r1: C1-C4/C6; C5 manual pointer check pending; tooltip token inherited from main #113"
+}

@@ -1,0 +1,30 @@
+{
+  "source_ref": "c0f4e1fcc9d364bf86d1c35c5a074f0ebadbe369",
+  "main_ref": "9e3473cbda56e98abcd809a1c18f5f4c5033639a",
+  "renderer_sha256": "35eafba0a74604af8b79cff4aa24431287e0d4c087d73fc430ea0acc85145387",
+  "verify": {
+    "passed": 20,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sidebar": {
+    "passed": 559,
+    "failed": 0
+  },
+  "motion": {
+    "passed": 49,
+    "failed": 0
+  },
+  "lifecycle": {
+    "passed": 30,
+    "failed": 0
+  },
+  "concurrent_exit_codes": [
+    0,
+    0
+  ],
+  "mc8_cpu_percent": 0.023,
+  "mc9": "PASS",
+  "synthetic_images": 62,
+  "unchanged_image_count": 62
+}

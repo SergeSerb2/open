@@ -9,6 +9,20 @@ import OpenModel
 @MainActor
 final class TextLabel: NSView {
     private(set) var lastDrawnText = ""
+    /// Optional receipt for a real Core Text draw. Only mini-player titles install it.
+    var onDrawnLine: (@MainActor (CTLine, String, Bool, CGFloat) -> Void)?
+    private static let truncationToken = NSAttributedString.Key("OpenTextLabelTruncationToken")
+
+    static func visibleText(_ line: CTLine, original: String) -> String {
+        let source = original as NSString
+        return (CTLineGetGlyphRuns(line) as! [CTRun]).map { run in
+            let attrs = CTRunGetAttributes(run) as NSDictionary
+            if attrs[truncationToken.rawValue] as? Bool == true { return "…" }
+            let range = CTRunGetStringRange(run)
+            guard range.location >= 0, range.length >= 0, range.location + range.length <= source.length else { return "" }
+            return source.substring(with: NSRange(location: range.location, length: range.length))
+        }.joined()
+    }
     var text: @MainActor () -> String = { "" } { didSet { needsDisplay = true } }
     var color: @MainActor () -> NSColor = { .labelColor } { didSet { needsDisplay = true } }
     var font: NSFont = Typography.tabTitle.font { didSet { needsDisplay = true } }
@@ -45,12 +59,15 @@ final class TextLabel: NSView {
         var line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attrs))
         let available = bounds.width - inset - trailingInset
         let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        var wasTruncated = false
         if width > available {
             // Tail truncation, like Arc's titles ("Keepi…", F0079). A box too narrow
             // for even "…" (four-pane split rows) draws nothing rather than overflow.
-            let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: attrs))
+            var tokenAttrs = attrs
+            if onDrawnLine != nil { tokenAttrs[Self.truncationToken] = true }
+            let token = CTLineCreateWithAttributedString(NSAttributedString(string: "…", attributes: tokenAttrs))
             guard available > 0, let truncated = CTLineCreateTruncatedLine(line, available, .end, token) else { return }
-            line = truncated
+            line = truncated; wasTruncated = true
         }
         let lineWidth = CTLineGetTypographicBounds(line, nil, nil, nil)
         var x = inset
@@ -60,6 +77,7 @@ final class TextLabel: NSView {
         ctx.textPosition = CGPoint(x: x, y: baseline)
         CTLineDraw(line, ctx)
         lastDrawnText = string
+        onDrawnLine?(line, string, wasTruncated, lineWidth)
         ctx.restoreGState()
     }
 }

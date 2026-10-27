@@ -1,0 +1,24 @@
+{
+  "old_production_ref": "3504776726b9021fc0fb7fd96025a8f061577c69",
+  "fixed_source_ref": "2a9eaaaf9ba6fbfb9d7623a3ec37c33948749a03",
+  "production_sidebar_files_verified": 24,
+  "identical_harness_sha256": {
+    "Checks.swift": "a1765e1208a36d0bcb1063d352ec0a87a9ef4e7146c992e27f0989a522489c4c",
+    "MediaLifecycleChecks.swift": "036624ba3c4c953edcffdab319f6bf5bb875dd9a65c5b0232419473101dd83e5"
+  },
+  "old_renderer_sha256": "1c950b090ca40a5460433a59885621d314bfa8564f392240e6049c4245917f3d",
+  "final_renderer_sha256": "3bbc42df2a29902b6801f235d983978992288ce684faf7975796b671a7bec6fb",
+  "final_main_ref": "ebea09f54ea64a926c3af80d899548f1852894b6",
+  "old_result": {
+    "passed": 12,
+    "failed": 18
+  },
+  "fixed_focused_result": {
+    "passed": 30,
+    "failed": 0
+  },
+  "full_sidebar_result": {
+    "passed": 558,
+    "failed": 0
+  }
+}
