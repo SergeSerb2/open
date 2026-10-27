@@ -239,6 +239,16 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
   _oe_hostBrowserIdentifier = browser ? browser.identifier : 0;
 }
 
+- (instancetype)initOEForExtensionPopupInBrowser:(OEBrowser*)browser
+                                       extension:(NSString*)extensionIdentifier {
+  if ((self = [self initOEForChromiumTabInBrowser:browser])) {
+    // Not a tab: it never joins the strip; resize and close go to `browser`.
+    self.oe_popupOwner = browser;
+    self.oe_popupExtension = extensionIdentifier;
+  }
+  return self;
+}
+
 - (instancetype)initOEForChromiumTabInBrowser:(OEBrowser*)browser {
   OEWebContentConfiguration* config =
       [[OEWebContentConfiguration alloc] initWithContext:browser.context];
@@ -773,6 +783,16 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 #pragma mark Navigation
 
 - (void)loadURL:(NSURL*)URL {
+  // An action popup shows only its own extension's pages (Chrome blocks the
+  // page's own cross-site navigations; this blocks ours).
+  NSString* extension = _oe_popupOwner ? _oe_popupExtension : nil;
+  if (extension &&
+      !([URL.scheme isEqualToString:@"chrome-extension"] &&
+        [URL.host isEqualToString:extension])) {
+    NSLog(@"OEWebContent: refused to load %@ in the popup of %@",
+          URL.absoluteString, extension);
+    return;
+  }
   if (!_browser) {
     _pendingURL = URL;
     return;
@@ -1043,6 +1063,13 @@ typedef void (^OEDevToolsCompletion)(NSDictionary* _Nullable, NSError* _Nullable
 }
 
 - (void)close {
+  // An action popup: the engine owns its page (CloseBrowser does nothing for
+  // it), so close it as the popup.
+  OEBrowser* owner = _oe_popupOwner;
+  if (owner && owner.extensionPopup == self) {
+    [owner closeExtensionPopup];
+    return;
+  }
   if (_closeRequested && !_browser) {
     return;
   }

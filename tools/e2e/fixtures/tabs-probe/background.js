@@ -28,3 +28,27 @@ chrome.windows.onFocusChanged.addListener((windowId) => record("focus", { window
 
 chrome.action.setBadgeText({ text: "P1" });
 chrome.action.setBadgeBackgroundColor({ color: "#3366ff" });
+
+// Calls that switch tabs run here, not in the popup: a tab switch closes the
+// action popup (as in Chrome), which would end a popup-side call before its
+// result arrives. The result goes to chrome.storage.session.lastOp.
+const handledOps = new Set();
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message && message.seq !== undefined) {
+    if (handledOps.has(message.seq)) {
+      reply(true);
+      return;
+    }
+    handledOps.add(message.seq);
+  }
+  const done = (result) => chrome.storage.session.set({ lastOp: { seq: message.seq, ...result } });
+  if (message && message.op === "create") {
+    chrome.tabs.create(message.props).then(
+      (t) => done({ id: t.id, windowId: t.windowId }), (e) => done({ error: String(e.message || e) }));
+    reply(true);
+  } else if (message && message.op === "activate") {
+    chrome.tabs.update(message.tabId, { active: true }).then(
+      (t) => done({ id: t.id }), (e) => done({ error: String(e.message || e) }));
+    reply(true);
+  }
+});
