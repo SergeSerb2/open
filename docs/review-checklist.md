@@ -31,6 +31,7 @@ A PR gets at most two review rounds. After round 2, the lead fixes or verifies a
 - [ ] A check that says "dialog X appears" checks for that specific window, not any window.
 - [ ] Timing checks assert the configured delay or deadline (the scheduled value), not the wall clock. At most one real-time check per behavior, with up to 3 attempts, and it prints the lateness and the load average. Never widen a logic tolerance to make a check pass.
 - [ ] Each run uses its own data root, cache, profile, preferences domain, and port (`mktemp -d`, an ephemeral port). Two runs at the same time both pass.
+- [ ] A suite never needs a human. Every dialog, alert, sheet, or confirmation window that a check opens is answered or closed by the suite in a `finally` path, also when the check fails or times out. At the end of the suite, no window of a process the suite started is still on screen; the suite kills those processes and fails if a dialog was left. Show it once: force an early failure in a dialog case and confirm that nothing stays on screen. (Found 2026-10-26: Step D alert dialogs stayed open until the user clicked OK.)
 
 ## 5. UI and motion
 
