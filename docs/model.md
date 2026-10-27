@@ -120,7 +120,13 @@ additive default from the later main-branch keep-alive change. The source
 fixture and its PNGs never change during verification. The window-buttons
 change (PR #104) re-rendered the PNGs: every changed pixel lies in the
 stand-in window buttons (x 13–73, y 17–31), which now draw the dimmed rest
-look; all other pixels equal the pre-Step-1 renders.
+look; all other pixels equal the pre-Step-1 renders. The window-chrome
+follow-up refits the dark minimize/zoom rings against live session-2 pixels:
+only `Fixtures/space-schema1/window-2.png` changes, by 168 pixels inside
+x 36–72, y 17–30, all within the two ring bands. Spaces 0 and 1 remain
+byte-identical. The bundled editor baselines are unchanged (`space-editor`
+still passes). Evidence: the `space-legacy` real render and the pixel diff
+recorded in the follow-up PR; live comparison in `design.md` §23.3.
 The sidebar offscreen renderer supplies its Metal command queue to
 `CARenderer` and synchronizes readback on that same queue. This prevents a
 read-before-render race exposed by P1; 24 consecutive renders matched the

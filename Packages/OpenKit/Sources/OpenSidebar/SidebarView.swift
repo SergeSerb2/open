@@ -28,6 +28,8 @@ public final class SidebarView: NSView {
     let urlField: URLFieldView
     let favorites: FavoritesView
     let pager: SpacePagerView
+    /// Last Space slide, read back from the real pager layer when scheduled.
+    public var spaceSlideAnimation: CAAnimation? { pager.lastSlideAnimation }
     let bottomBar: BottomBarView
     public let mediaControls: MediaControlsView
     private var cardBackground: ThemeBackgroundView?
@@ -478,6 +480,9 @@ extension SidebarView {
 
     /// Back, forward, and reload show in the sidebar toolbar.
     public var toolbarNavigationVisible: Bool { !toolbar.back.isHidden && !toolbar.forward.isHidden && !toolbar.reload.isHidden }
+    public var toolbarGeometry: [String: CGRect] {
+        ["toggle": toolbar.toggle.frame, "back": toolbar.back.frame, "forward": toolbar.forward.frame, "reload": toolbar.reload.frame]
+    }
 
     /// Toolbar row and bottom bar opacity (a Peek's dim lowers both).
     public var chromeOpacity: (toolbar: CGFloat, bottomBar: CGFloat) { (toolbar.alphaValue, bottomBar.alphaValue) }
@@ -540,7 +545,7 @@ extension SidebarView {
         opacity.fromValue = wanted ? 0 : 1; opacity.toValue = wanted ? 1 : 0; opacity.duration = duration
         let group = CAAnimationGroup(); group.animations = [opacity]; group.duration = duration
         group.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+        if !Motion.reducesMotion {
             let slide = CABasicAnimation(keyPath: "transform.translation.y")
             slide.fromValue = wanted ? 12 : 0; slide.toValue = wanted ? 0 : 12; slide.duration = duration
             group.animations?.append(slide)

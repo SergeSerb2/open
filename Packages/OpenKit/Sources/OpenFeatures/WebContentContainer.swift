@@ -65,6 +65,14 @@ public final class PaneSlotView: NSView {
 @MainActor
 public final class WebContentContainer: NSView {
     public static let maxCachedHiddenHosts = 8
+    /// The render server resizes this background with the panel while page
+    /// layout stays at its final width. Clip the wider hide frame temporarily.
+    public func setSidebarSliding(_ sliding: Bool) {
+        layer?.backgroundColor = sliding ? (focused.flatMap { cache[$0]?.pageBackgroundColor } ?? NSColor.white).cgColor : nil
+        layer?.cornerRadius = sliding ? PanelMetrics.cornerRadius : 0
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = sliding
+    }
     let factory: any WebContentHostFactory
     public var tabProvider: ((ItemID) -> Tab?) = { _ in nil }
     public var style = SpaceThemeStyle.defaultTheme(system: .dark)
