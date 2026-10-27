@@ -964,29 +964,59 @@ captured weakly at show time, so resignation still dismisses after the owner
 view is gone. A real-time timer check advances the main run loop in 5 ms slices
 for at most 0.6 s and requires the 0.5 s deadline within ±50 ms.
 
-## 22. Media tokens (review r1, 2026-10-26)
+## 22. Media tokens (review r1, 2026-10-26; mini player from capture session 2)
 
-No Arc capture yet shows these surfaces. **Code** means a value decoded from
-Arc's types; **fact** means a measured existing sidebar token; **guess** means
-Open's provisional design pending capture session 2. The full specification
-and evidence pointers are in [media-pip.md](plans/media-pip.md) §4 and
-[features-advanced.md](re/features-advanced.md) §8 (PP-1…PP-22).
+**Code** means a value decoded from Arc's types or strings (PP-n). **fact**
+means measured in a capture frame (cited; S2 = capture session 2,
+notation in [interaction-states.md](re/interaction-states.md) §20.0); a
+**fit** is the best candidate against a frame. **guess** means Open's
+provisional design. The full mini-player spec, with the evidence and the
+method, is [media-pip.md](plans/media-pip.md) §13 (Step 3b); the PiP spec
+is §4.4. Rules PP-1…PP-22 are in
+[features-advanced.md](re/features-advanced.md) §8.
+
+Mini player (Step 3b). Frames: S2 14b/0012 (no card), 14b/0014 (rest),
+14b/0024 (expanded, volume plate), 16/0005 (collapsed stack), 16/0012
+(expanded stack).
+
+| Token | Value | Status |
+|---|---|---|
+| Container | `C = 8 + stackHeight`: 8 pt between the tab list and the stack, 0 pt to the bottom bar | fact S2 14b/0014 (card `[8, 1001, 212, 33]`; the pager ends at 993) |
+| Row and card height | rows 33; a card is 33 at rest, 66 expanded (title row + controls row) | fact S2 14b/0014, 14b/0024 |
+| Card frame | x 8, width W − 16 | fact S2 14b/0014 |
+| Corner | 10, continuous | fit S2 14b/0014, 14b/0024 (Core Animation renders; RMS 0.139 vs 0.148 at 9 and 0.163 at 10 circular) |
+| Fill | the Space palette's `backgroundExtra` for the content appearance, opaque. Default theme: dark `#050627`, light `#FDFDFF` | dark default fact S2 14b/0014; themed dark derived (media-pip §13.4.2); light guess |
+| Shadow | black 0.21, radius 4, offset 0 | fit S2 14b/0014 vs 14b/0012 (dark); light guess |
+| Controls | 5 slots of 24 × 24 at row y 5; `x = 10 + k·(cardW − 44)/4` on the pixel grid: favicon, previous, play/pause, next, volume | fact S2 14b/0014, 16/0005 (three card widths) |
+| Favicon | 16 pt, centered in slot 0 | fact S2 14b/0014 |
+| Glyphs | SF 14 pt Medium: `backward.end.fill`, `play.fill`/`pause.fill`, `forward.end.fill`, `speaker.wave.3.fill` (muted `speaker.slash.fill`), `xmark`; `pip` 12 pt Medium | sizes Code PP-16; names fact (AX symbol descriptions, S2 14b/0014, 14b/0024); weight fit (ink mass); muted guess |
+| Glyph color | white 0.66 / black 0.50 (`PlaybackControlForeground`) | Code design-tokens §1.8; dark fact S2 14b/0014 (ΔE00 0.65) |
+| Disabled glyph | white 0.22 / black 0.17 | dark fact S2 14b/0014 (ΔE00 0.43); light guess |
+| Hover plate | 24 × 24, radius 6; `GrayA4` (white 0.08 / black 0.07); pressed `GrayA6` | dark fact S2 14b/0024, 16/0012 (ΔE00 0.49); light and pressed guess |
+| Title row | title x 14, baseline 22, ends 10 pt before PiP `[cardW − 58, 5]`; Close `[cardW − 34, 5]`; shown only while expanded | fact S2 14b/0024, 16/0012 |
+| Title type | 13 Regular; `ForegroundPrimary` (white 0.80 / `#0E0F10` 0.90); one line, tail "…"; no marquee | dark fact S2 14b/0024 (ΔE00 0.24; Core Text fit); light guess |
+| Collapsed stack | back card i: 7·i pt up, 5·i pt inset per side, opacity 1 − 0.2·i, not masked | geometry fact S2 16/0005 (AX); opacity fit (ΔE00 0.46 / 0.52) |
+| Expanded stack | 66 pt cards, 5 pt apart, newest at the bottom; one card also expands on hover | fact S2 16/0012; the single-card hover derived (S2 14b/0024 vs 0025) |
+| Media tooltip | beside the pointer; delay 0.45 s | placement fact S2 14b/0024; delay Code PP-6; titles Code PP-16 |
+| Motion | hover: spring response 0.3 / damping 1, collapse 0.3 s after exit; title rows fade in 0.15 s, out 0.12 s; first card 0.22 s; Reduce Motion 0.1 s fades | guess (no capture timed it) |
+| Volume drawer | a 33 pt row above the controls while expanded (card 99); track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | guess (not captured; behind EM-2) |
+
+Removed by Step 3b (superseded by S2 facts): the 68 pt card with an
+always-on title row, the hover fill, the 4/4 margins, the stack values
+5 / 6 / 1 − 0.3i with a mask and a 0.5 pt top edge, the 6 pt gap, the
+marquee (fade 4 / 8, delay 3 s, 30 pt/s, gap 32), and the `.above` tooltip.
+
+Picture in Picture:
 
 | Surface / token | Value | Status |
 |---|---|---|
-| Mini-player card | Insets 8/4, height 68, corner 10; title 13 Medium | Insets/corner reuse sidebar facts; height/font/fill guess |
-| Mini-player controls | 24×24, radius 6; foreground black .50 / white .66 | Code PP-16 / design-tokens §1.8; placement guess |
-| Media tooltip | Above, delay .45 s | Code PP-6; title wording PP-16 |
-| Volume drawer | +28 pt; track 4 pt, knob 12 pt; centers 6…trackWidth−6; values 0…1 by .05 | Guess; inset correction from design r1 |
-| Collapsed stack | Offset 5, width inset 6, opacity 1−.3i; back-card top edge .5 pt separator | Guess; top edge added by design r1, confirm S6 |
-| Expanded stack | Gap 6; collapse delay .3 s; spring response .3/damping 1 | Guess, PP-14 names states |
-| Marquee | Fade 4 left/8 right; delay 3 s; speed 30 pt/s; gap 32 | Left fade code PP-17; remainder guess |
 | PiP window | Corner 12, minimum 284×160 landscape / 160×284 portrait, max half visible screen; compact below 300 | Minimum Chromium constant; other geometry guess/Open lead limits (§4.4.2) |
 | PiP corners | Buttons 28×28, padding 8 compact / 10 regular | Code PP-6 |
 | PiP scrubber | Bar 4/6 pt, hit 20; precision step 40 pt, cap 8× | Hit height code PP-7; other geometry/math Open design |
 | Document PiP header | Height 28; #212123; white .20 one-pixel hairline; host 12 Medium white .85 | Colors code design-tokens §1.8; geometry/font guess |
 
-Keep guesses marked until S1–S8/S10/S11 establish pixel and timing evidence.
+Keep guesses marked until S1, S2, S4, S5, S7, S8, S10, and S11 establish
+pixel and timing evidence (media-pip §11, §13.7).
 
 Media review-r1 PiP refinements (Open design; no Arc capture yet): SF skip glyphs
 20/16 pt, hidden below 168 pt; no center plate at rest; whole-window black .25
