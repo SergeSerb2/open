@@ -80,7 +80,7 @@ Arguments are `key=value`; values that parse as JSON are sent as JSON.
 | `pages` | — | Every live page: identifier, kind (`tab`, `popup`, `extensionPopup`, `unowned`), url, title, style (`alloy`/`chrome`), context (profile), browser id and index (the `OEBrowser` tab strip), hidden, crash state |
 | `spaces` | — | Spaces with focus and counts |
 | `space` | `space` | Focus a Space |
-| `space-create` | `title`, `profile` | New Space; a new `profile` name creates an Open profile (`BrowserModel.createProfile`) with its own engine context in `Profiles/<dir>/Engine` |
+| `space-create` | `title`, `profile` | New Space; a new `profile` name creates an Open profile (`BrowserModel.createProfile`) with its own engine context in `Engine/<dir>` |
 | `open` | `url`, `background` | New Today tab at the top (Arc placement) |
 | `select` | `tab` or `index` | Select a tab |
 | `close` | `tab` (id or page number) | Like Cmd-W on that tab; a page number closes that popup |
@@ -160,7 +160,7 @@ OPEN_AUTOMATION=1 ~/Library/Caches/OpenRE/scripts/heavy.sh nice -n 10 tools/buil
 /usr/bin/lockf /tmp/open-onscreen-e2e.lock python3 tools/e2e/engine_e2e.py --only measure --config Release    # launch, memory, idle CPU
 ```
 
-Each suite uses a fresh worktree-private data root under `.re/e2e-<suite>-<style>/user-data` and writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
+Every run is isolated, because several agents run the harness at once: it gets its own data root `~/Library/Application Support/Open-E2E-<suite>-<style>-<pid>-<random>`, the matching Chromium cache root `~/Library/Caches/<same name>` (Chromium's rule for roots under Application Support), and a scratch folder in the system temp folder. All three are deleted when the run ends, also after `timeout` or Ctrl-C; `--keep` keeps them and prints their paths. A run also deletes the folders of earlier runs whose process is gone. No folder name is shared between runs. Each suite writes `docs/engine-spike/results-*.json` plus screenshots. `tabs` reports `page.chromeTabId` and `page.chromeWindowId` (the `chrome.tabs`/`chrome.windows` ids of a hosted tab, else -1). The `tabstrip` suite loads `tools/e2e/fixtures/tabs-probe` (records tab events, sets a badge) and Bitwarden. Extensions come from `.re/ext/unpacked/{ublock-lite,darkreader,1password,bitwarden}` (CRX files from the Chrome Web Store, unpacked with `tools/crx-unpack.py`, which keeps the store ID).
 
 Startup regression flags exist only in automation builds:
 `OPEN_AUTOMATION_SKIP_DISPLAY_LINK=1` leaves the real three-second first-frame
@@ -182,8 +182,31 @@ Only the per-element measurement tables are written to `docs/engine-spike/`.
 The window suite reports `kernel_process_start` separately and requires the
 kernel timestamp in all ten benchmark launches. Debug timing rows print named
 SKIP results with a Release-only reason. Sidebar `space_switch_wrapper` proves
-the live page and wrapper context; `durable_profile_storage` remains BLOCKED on
-the CEF `root_cache_path` follow-up in docs/followups.md.
+the live page and wrapper context; `durable_profile_storage` points to the
+`profiles` suite.
+
+`tools/e2e/engine_e2e.py --only profiles` checks the engine data layout
+(`<root>/Engine`, docs/plans/profiles.md §6.2):
+- each profile's copy of the tabs probe sees only its own tabs and windows
+  (both directions), with the default profile's probe allowed in incognito;
+- every disk profile is on disk (its `Preferences`, a `Local State` entry, a
+  Chrome window);
+- a second profile's persistent and session cookies and localStorage survive
+  a relaunch;
+- a legacy layout (the default profile's Chromium files in `Profiles/Default`,
+  installation files in `Profiles/`, the cache in `~/Library/Caches/<root>/
+  Profiles/Default`) migrates with an identical file inventory and a
+  byte-identical `browser.json`, also with unreadable files; a locked file
+  gives one launch in the old layout, then migrates;
+- `Engine/Default` already in use is left alone and reported;
+- a crash at each step (`OPENKIT_DEBUG_MIGRATION_CRASH=engine-journaled|
+  engine-moved|engine-installation|engine-staged|engine-published|
+  engine-cleanup`) leaves every file in exactly one place and finishes on
+  the next launch.
+
+`OPENKIT_DEBUG_MIGRATION_FAIL=engine-publish` simulates an I/O error at the
+publish rename (the rollback path). `openkit profiles DIR engine-layout
+[--json]` runs the App's layout step alone and prints its timing.
 
 ### App shell commands and Settings (Step C)
 
