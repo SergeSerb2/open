@@ -246,7 +246,7 @@
   "postMergeCodeHead": "db508fae2be08b48b3787b6c0a57b273376fff2e",
   "postMergeValidationLimits": [
     "Focused package build/settings-preview/sidebar-render and real Manager positive/early-failure were rerun after main f668a90.",
-    "Five negative proofs are before the last main merge. Their AppDelegate/AppSettingsActions source hashes and the complete Manager e2e function region are unchanged.",
+    "Five negative proofs ran before removal of the optional browserless keyboard path and before the last main merge. Their AppDelegate/AppSettingsActions hashes are unchanged, and all five expected failure points precede that removed path. The whole Manager e2e region is unchanged since fix commit9a649d8 (after that trim); final merged positive and early-failure flows were rerun.",
     "No new full gate, Site Control/context-menu/extension suite, load campaign or reviewer was started. Protected main changes retain their M5 ownership.",
     "Prior full gate at 7c07aa6/main49b5660 remains historical. No PR or merge readiness claim."
   ],
