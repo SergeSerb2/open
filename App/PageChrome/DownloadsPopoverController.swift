@@ -16,12 +16,14 @@ final class DownloadsPopoverController: NSObject {
     let controller = NSViewController(); controller.view = body
     popover.contentViewController = controller; popover.animates = false; popover.behavior = .transient
     button.onPress = { [weak self] in self?.toggle() }
+    body.onEscape = { [weak self] in self?.dismiss() }
   }
   func toggle() { if popover.isShown { popover.close() } else { show() } }
   func show() {
     guard let owner, owner.app.engineReady, !owner.isClosing, button.window != nil else { return }
     refresh(rebuild: true)
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .maxY)
+    body.window?.makeFirstResponder(body)
   }
   func refresh(rebuild: Bool = false) {
     guard let owner, owner.app.engineReady, !owner.isClosing else { rows = []; return }
@@ -47,7 +49,9 @@ final class DownloadsPopoverController: NSObject {
     }
     refresh(); return true
   }
-  func close() { popover.close(); rows = [] }
+  func owns(_ window: NSWindow) -> Bool { popover.isShown && body.window === window }
+  func dismiss() { popover.close() }
+  func close() { dismiss(); rows = [] }
   var state: [String: Any] {
     refresh()
     let buttonFrame = owner?.controller.map { $0.contentView.convert(button.bounds, from: button) }
@@ -60,7 +64,7 @@ final class DownloadsPopoverController: NSObject {
 }
 
 @MainActor
-private final class DownloadsBodyView: NSView {
+private final class DownloadsBodyView: PageChromePopoverView {
   override var isFlipped: Bool { true }
   init() {
     super.init(frame: CGRect(x: 0, y: 0, width: 340, height: 140))

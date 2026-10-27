@@ -27,6 +27,8 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     view.allow.onPress = { [weak self] in self?.answer(.allow) }
     view.block.onPress = { [weak self] in self?.answer(.block) }
     view.close.onPress = { [weak self] in self?.answer(nil) }
+    view.onReturn = { [weak self] in self?.view.allow.performClick(nil) }
+    view.onEscape = { [weak self] in self?.view.close.performClick(nil) }
     activationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
       MainActor.assumeIsolated { self?.presentPending() }
     }
@@ -59,7 +61,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     pending.append(Pending(page: page, request: request, previous: previous)); presentPending()
   }
   func presentPending() {
-    guard !popover.isShown, let owner, !owner.isClosing, owner.window?.attachedSheet == nil, NSApp.isActive else { return }
+    guard !popover.isShown, let owner, !owner.isClosing, owner.window?.attachedSheet == nil, owner.commandBarSession?.isPresented != true, NSApp.isActive else { return }
     func anchor(for page: OEWebContent) -> NSView? {
       let view: NSView?
       if owner.selectedContent === page { view = owner.controller?.container }
@@ -77,7 +79,9 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
     view.message.stringValue = "Wants to use \(names.isEmpty ? "additional permissions" : names.joined(separator: " and "))"
     view.remember.state = .off; view.remember.isEnabled = !first.previous.isEmpty; presentedRequest = first.request
     popover.show(relativeTo: CGRect(x: min(160, anchor.bounds.midX), y: anchor.isFlipped ? anchor.bounds.minY : anchor.bounds.maxY - 1, width: 1, height: 1), of: anchor, preferredEdge: anchor.isFlipped ? .maxY : .minY)
+    view.window?.makeFirstResponder(view)
   }
+  func owns(_ window: NSWindow) -> Bool { popover.isShown && view.window === window }
   func answer(_ state: OEPermissionState?) {
     guard !finishing, !pending.isEmpty else { return }
     finishing = true
@@ -139,7 +143,7 @@ final class PermissionPromptPresenter: NSObject, NSPopoverDelegate {
 /// No permission prompt appears in the supplied captures. These dimensions,
 /// charcoal fill and spacing are explicit Arc-like guesses (app-shell §4.9).
 @MainActor
-private final class PermissionPromptView: NSView {
+private final class PermissionPromptView: PageChromePopoverView {
   let origin = NSTextField(labelWithString: "")
   let message = NSTextField(wrappingLabelWithString: "")
   let remember = NSButton(checkboxWithTitle: "Remember for this site", target: nil, action: nil)

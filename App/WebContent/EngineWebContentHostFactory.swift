@@ -55,7 +55,9 @@ final class EngineWebContentHostFactory: NSResponder, WebContentHostFactory {
     let requestedAt = LaunchTiming.shared.elapsedMilliseconds
     app.prepareCommandServices()
     if commandBarSession == nil { commandBarSession = AppCommandBarSession(factory: self) }
-    siteControlsHost?.dismiss(); extensionPopup.dismiss()
+    siteControlsHost?.dismiss(); downloadsPresenter?.dismiss()
+    if let page = selectedContent { permissionPresenter?.cancel(page: page) }
+    extensionPopup.dismiss()
     commandBarSession?.show(mode, requestedAt: requestedAt)
   }
   private var enteredWindowFullscreenForPage = false
@@ -608,6 +610,7 @@ extension EngineWebContentHostFactory {
 
   func ownsKeyWindow(_ candidate: NSWindow) -> Bool {
     candidate === window || candidate === popupPanel || auxiliaryPages.contains { $0.panel === candidate }
+      || downloadsPresenter?.owns(candidate) == true || permissionPresenter?.owns(candidate) == true
   }
   func navigateFromCommandBar(_ url: URL, current: Bool, background: Bool = false) {
     if current, selectedContent != nil || selectedTab != nil {
@@ -682,6 +685,12 @@ extension EngineWebContentHostFactory {
   }
 
   @objc func closeTab(_ sender: Any?) {
+    if let key = NSApp.keyWindow, downloadsPresenter?.owns(key) == true { downloadsPresenter?.dismiss(); return }
+    if let key = NSApp.keyWindow, permissionPresenter?.owns(key) == true, let page = permissionPresenter?.pending.first?.page {
+      permissionPresenter?.cancel(page: page)
+      if let id = tabID(for: page) { closeTab(id: id) } else { close(page: page) }
+      return
+    }
     if extensionPopup.panel?.isKeyWindow == true { extensionPopup.dismiss(); return }
     if let panel = NSApp.keyWindow as? NSPanel, let page = auxiliaryPages.first(where: { $0.panel === panel }) { closeAuxiliary(page); return }
     if let tab = selectedTab { closeTab(id: tab.id) }

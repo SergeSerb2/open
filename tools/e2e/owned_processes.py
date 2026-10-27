@@ -69,25 +69,33 @@ def wait_no_windows(pids,timeout=3):
         time.sleep(.05)
 
 def run_owned_process(command,**kwargs):
-    """Subprocesses that may show an alert always own a killable session."""
+    """Subprocesses that may show an alert own a bounded, killable tree."""
     timeout=kwargs.pop('timeout',15)
     proc=subprocess.Popen(command,start_new_session=True,**kwargs)
-    timed_out=False;before=[]
+    timed_out=False;before=[];known={};deadline=time.monotonic()+timeout
     try:
-        try:proc.wait(timeout)
-        except subprocess.TimeoutExpired:
-            timed_out=True
-            try:before=on_screen_windows([proc.pid])
-            except Exception as error:before=[{'error':str(error)}]
-            os.killpg(proc.pid,signal.SIGKILL);proc.wait(3)
+        while proc.poll() is None:
+            known.update(process_tree(proc.pid))
+            remaining=deadline-time.monotonic()
+            if remaining<=0:
+                timed_out=True
+                try:before=on_screen_windows(known)
+                except Exception as error:before=[{'error':str(error)}]
+                try:os.killpg(proc.pid,signal.SIGKILL)
+                except ProcessLookupError:pass
+                kill_known(known);proc.wait(3);break
+            try:proc.wait(min(.2,remaining))
+            except subprocess.TimeoutExpired:pass
     finally:
         if proc.poll() is None:
-            os.killpg(proc.pid,signal.SIGKILL);proc.wait(3)
-    remaining=wait_no_windows([proc.pid])
-    if remaining:
-        try:os.killpg(proc.pid,signal.SIGKILL)
-        except ProcessLookupError:pass
-        remaining=wait_no_windows([proc.pid])
+            known.update(process_tree(proc.pid))
+            try:os.killpg(proc.pid,signal.SIGKILL)
+            except ProcessLookupError:pass
+            kill_known(known);proc.wait(3)
+        # Children can have their own process groups or outlive a normal root
+        # exit. Exact executable checks protect against recycled PIDs.
+        kill_known(known)
+    remaining=wait_no_windows(known)
     result=subprocess.CompletedProcess(command,proc.returncode)
     result.cleanup={'pid':proc.pid,'timeout':timed_out,'windowsAtTimeout':before,'remainingWindows':remaining,'ok':not timed_out and not remaining}
     return result

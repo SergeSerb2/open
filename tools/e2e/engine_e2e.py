@@ -1000,8 +1000,11 @@ def page_chrome_checks(factory, results, tmp):
         def download(name):return next((r for r in app.call('downloads-state')['rows'] if r['name']==name),None)
         started=wait_until(lambda:(lambda r:r if r and r['state']=='inProgress' and r['received']>0 and r['received']<len(payload) else None)(download('page-chrome.bin')),timeout=10,step=.05)
         assert started,app.call('downloads-state');app.call('downloads-show')
-        shot(app, 'page-chrome-downloads.png')
-        results['downloads_start_progress']={'ok':started['total']==len(payload) and started['path'].startswith(str(directory)) and app.call('downloads-state')['visible'],'row':started}
+        # The tray is a child popover window, not part of the document image.
+        trays=[w for w in app.call('windows') if w['visible'] and 'Popover' in w['class']]
+        assert len(trays)==1,trays
+        shot(app, 'page-chrome-downloads.png',window=trays[0]['number'])
+        results['downloads_start_progress']={'ok':started['total']==len(payload) and started['path'].startswith(str(directory)) and app.call('downloads-state')['visible'],'row':started,'window':trays[0]}
         assert app.call('downloads-action',id=started['id'],action='pause')['performed']
         last=[None,time.monotonic()]
         def bytes_stable():
@@ -1111,6 +1114,67 @@ def page_key_checks(factory, results, tmp):
                 removed=wait_until(lambda:all(t['id']!=unsaved for t in app.call('tabs')),timeout=3,step=.02) if leaves and closed else False
                 results['dialog_native_beforeunload_'+pressed]={'ok':bool(closed) and (bool(removed) if leaves else any(t['id']==unsaved for t in app.call('tabs'))),'closedByKey':bool(closed)}
     finally:app.quit();server.shutdown();server.server_close()
+
+
+def page_popover_checks(factory, results, tmp):
+    """Native child-window focus, through OEApplication.sendEvent only."""
+    import http.server,threading
+    body=b'<title>Popover key fixture</title><input id="edit"><a id="download" href="/file">Download</a><script>window.keys=0;document.addEventListener("keydown",()=>window.keys++)</script>'
+    payload=b'Open popover key download\n'
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            data=payload if self.path=='/file' else body
+            self.send_response(200);self.send_header('Content-Type','application/octet-stream' if self.path=='/file' else 'text/html')
+            if self.path=='/file':self.send_header('Content-Disposition','attachment; filename="popover.bin"')
+            self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
+        def log_message(self,*args):pass
+    servers=[]
+    def origin():
+        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);servers.append(server)
+        threading.Thread(target=server.serve_forever,daemon=True).start()
+        return 'http://127.0.0.1:%d'%server.server_address[1]
+    url=origin();app=factory(urls=(url,),fresh=True)
+    def key(k,window=None):return app.call('key',key=k,**dict({'modifiers':['cmd']} if k in ['w','t','l'] else {},**({'window':window} if window else {})))
+    try:
+        tab=app.call('tabs')[0]['id'];app.call('wait',tab=tab);app.call('focus',tab=tab)
+        directory=Path(app.user_data)/'downloads';directory.mkdir(exist_ok=True)
+        app.call('download-profile-options',directory=str(directory),ask=False);app.call('click',tab=tab,selector='#download')
+        assert wait_until(lambda:any(r['state']=='completed' for r in app.call('downloads-state')['rows']),timeout=5,step=.02)
+        for pressed in ['return','escape','w','t','l']:
+            app.call('focus',tab=tab);app.call('downloads-show')
+            assert app.call('downloads-state')['visible']
+            windows=[w for w in app.call('windows') if w['visible'] and 'Popover' in w['class']];assert len(windows)==1,windows
+            before={t['id'] for t in app.call('tabs')};count=app.eval(tab,'window.keys')
+            key(pressed,windows[0]['number'])
+            if pressed=='return':
+                ok=app.call('downloads-state')['visible'] and app.eval(tab,'window.keys')==count
+            elif pressed in ['t','l']:
+                bar=wait_until(lambda:(lambda s:s if s.get('presented') else None)(app.call('commandbar-state')),timeout=2,step=.02)
+                ok=bool(bar) and bar['mode']==('newTab' if pressed=='t' else 'editCurrentURL') and not app.call('downloads-state')['visible']
+                if bar:key('escape')
+            else:ok=bool(wait_until(lambda:not app.call('downloads-state')['visible'],timeout=2,step=.02))
+            results['downloads_native_'+pressed]={'ok':bool(ok) and before=={t['id'] for t in app.call('tabs')},'window':windows[0]['number']}
+            if app.call('downloads-state')['visible']:app.call('downloads-show')
+        for pressed in ['return','escape','w','t','l']:
+            target_origin=origin();target=app.call('open',url=target_origin)['id'];app.call('wait',tab=target);app.call('focus',tab=target)
+            app.call('policy',permissions='');app.eval(target,'window.answer="pending";Notification.requestPermission().then(v=>window.answer=v);true')
+            prompt=wait_until(lambda:(lambda s:s if s['visible'] else None)(app.call('permission-state')),timeout=5,step=.02);assert prompt,app.call('permission-state')
+            before={t['id'] for t in app.call('tabs')};key(pressed,prompt['window'])
+            if pressed in ['return','escape']:
+                closed=wait_until(lambda:app.call('permission-state')['pending']==0,timeout=2,step=.02)
+                ok=bool(closed) and app.eval(target,'window.answer',timeout=1)==('granted' if pressed=='return' else 'default')
+            elif pressed in ['t','l']:
+                bar=wait_until(lambda:(lambda s:s if s.get('presented') else None)(app.call('commandbar-state')),timeout=2,step=.02)
+                ok=bool(bar) and bar['mode']==('newTab' if pressed=='t' else 'editCurrentURL') and app.call('permission-state')['pending']==0
+                if bar:key('escape')
+            else:ok=bool(wait_until(lambda:all(t['id']!=target for t in app.call('tabs')),timeout=3,step=.02)) and app.call('permission-state')['pending']==0
+            remaining={t['id'] for t in app.call('tabs')}
+            results['permission_native_'+pressed]={'ok':bool(ok) and remaining==(before-{target} if pressed=='w' else before),'window':prompt['window']}
+            if app.call('permission-state')['visible']:app.call('permission-press',allow=False,remember=False)
+            if target in remaining:app.call('close',tab=target)
+    finally:
+        app.quit()
+        for server in servers:server.shutdown();server.server_close()
 
 
 def feature_checks(app, style, results, tmp):
@@ -4340,7 +4404,7 @@ def main():
     ap.add_argument("--config", default="Debug")
     ap.add_argument("--extensions", default=os.path.join(ROOT, ".re", "ext", "unpacked"))
     ap.add_argument("--only", choices=["shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek",
-                                       "commandbar", "actions", "profiles", "page-chrome", "page-keys"],
+                                       "commandbar", "actions", "profiles", "page-chrome", "page-keys", "page-popovers"],
                     required=True)
     ap.add_argument("--keep", action="store_true",
                     help="keep this run's data root, cache root and scratch folder (paths printed at the end)")
@@ -4424,6 +4488,9 @@ def main():
         elif opts.only in ("commandbar", "actions"):
             results[opts.only] = CheckedResults(tracker)
             commandbar_checks(factory, results[opts.only], tmp, opts.config)
+        elif opts.only == "page-popovers":
+            results[opts.only] = CheckedResults(tracker)
+            page_popover_checks(factory, results[opts.only], tmp)
         elif opts.only == "page-keys":
             results[opts.only] = CheckedResults(tracker)
             page_key_checks(factory, results[opts.only], tmp)
@@ -4500,14 +4567,14 @@ def main():
                                    else opts.config.lower())
     with open(os.path.join(OUT, name), "w") as f:
         json.dump(results, f, indent=2, sort_keys=True)
-    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome", "page-keys"):
+    for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome", "page-keys", "page-popovers"):
         for k, v in results.get(group, {}).items():
             if isinstance(v, dict) and "ok" in v:
                 print("%-24s %s" % (k, "PASS" if v.get("ok") else "FAIL"))
             elif isinstance(v, dict) and v.get("status") in ("SKIP", "BLOCKED", "INTERRUPTED"):
                 print("%-24s %s: %s" % (k, v["status"], v.get("reason", "")))
     print("wrote", os.path.join(OUT, name))
-    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome", "page-keys")
+    failures = [k for group in ("shell", "extensions", "features", "measure", "tabstrip", "window", "sidebar", "peek", "commandbar", "actions", "profiles", "page-chrome", "page-keys", "page-popovers")
                 for k, v in results.get(group, {}).items() if isinstance(v, dict) and v.get("ok") is False]
     if failures:
         sys.exit(1)
