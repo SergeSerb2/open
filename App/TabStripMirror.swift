@@ -42,6 +42,18 @@ final class TabStripMirror {
   }
 
   func close() { for browser in browsers.values { browser.close() }; browsers.removeAll() }
+  #if OPEN_AUTOMATION
+  /// Exercise OEBrowser.dealloc, not its explicit -close path. Web contents
+  /// and the engine registry hold only weak browser references.
+  func releaseWithoutClosingForAutomation() -> [String: Any] {
+    let weakBrowsers = NSHashTable<OEBrowser>.weakObjects()
+    for browser in browsers.values { weakBrowsers.add(browser) }
+    let count = browsers.count
+    let hadPopup = browsers.values.contains { $0.extensionPopup != nil }
+    browsers.removeAll()
+    return ["released": count, "remaining": weakBrowsers.allObjects.count, "hadPopup": hadPopup]
+  }
+  #endif
   func snapshot() -> [[String: Any]] {
     browsers.map { profile, browser in
       ["profile": profile.description, "context": browser.context.identifier,

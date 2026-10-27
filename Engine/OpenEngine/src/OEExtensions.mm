@@ -218,24 +218,63 @@ NSDictionary* ReadJSON(NSURL* url) {
   if ((self = [super init])) {
     _extensionIdentifier = [extension.identifier copy];
     _title = [extension.oe_actionTitle ?: extension.name copy];
+    _extensionName = [extension.name copy];
+    _accessibleName = _title;
+    _tooltip = _title;
     _icon = extension.oe_actionIcon;
     _enabled = extension.enabled;
     _popupURL = [extension.oe_actionPopupURL copy];
     _hasPopup = _popupURL != nil;
+    _pinnedIndex = -1;
   }
   return self;
 }
 
-- (void)oe_applyBadgeText:(NSString*)badgeText
-               badgeColor:(NSColor*)badgeColor
-                    title:(NSString*)title
-                  enabled:(BOOL)enabled {
-  _badgeText = badgeText.length ? [badgeText copy] : nil;
-  _badgeBackgroundColor = badgeColor;
-  if (title.length) {
-    _title = [title copy];
+static NSColor* OEColorFromARGB(int argb) {
+  const uint32_t c = static_cast<uint32_t>(argb);
+  return [NSColor colorWithSRGBRed:((c >> 16) & 0xff) / 255.0
+                             green:((c >> 8) & 0xff) / 255.0
+                              blue:(c & 0xff) / 255.0
+                             alpha:((c >> 24) & 0xff) / 255.0];
+}
+
+- (instancetype)initOEWithIdentifier:(NSString*)identifier
+                               state:(CefRefPtr<CefDictionaryValue>)state
+                        toolbarImage:(nullable NSImage*)toolbarImage
+                                icon:(nullable NSImage*)icon {
+  if ((self = [super init])) {
+    _extensionIdentifier = [identifier copy];
+    _extensionName = OEString(state->GetString("name"));
+    NSString* title = OEString(state->GetString("title"));
+    _title = title.length ? title : _extensionName;
+    _accessibleName = OEString(state->GetString("accessibleName"));
+    _tooltip = OEString(state->GetString("tooltip"));
+    _icon = icon;
+    _toolbarImage = toolbarImage;
+    NSString* badge = OEString(state->GetString("badgeText"));
+    _badgeText = badge.length ? badge : nil;
+    const int background = state->GetInt("badgeBackgroundColor");
+    _badgeBackgroundColor = (static_cast<uint32_t>(background) >> 24)
+                                ? OEColorFromARGB(background)
+                                : nil;
+    _badgeTextColor = state->HasKey("badgeTextColor")
+                          ? OEColorFromARGB(state->GetInt("badgeTextColor"))
+                          : nil;
+    _enabled = state->GetBool("enabled");
+    _hasPopup = state->GetBool("hasPopup");
+    _pinned = state->GetBool("pinned");
+    _pinnedIndex = state->GetInt("pinnedIndex");
+    _wantsToRun = state->GetBool("wantsToRun");
+    _siteAccess = static_cast<OEExtensionSiteAccess>(state->GetInt("siteAccess"));
+    _showingPopup = state->GetBool("showingPopup");
+    _live = state->GetBool("live");
   }
-  _enabled = _enabled && enabled;
+  return self;
+}
+
+- (NSString*)description {
+  return [NSString stringWithFormat:@"<OEExtensionAction %@ pinned=%d badge=%@>",
+                                    _extensionIdentifier, _pinned, _badgeText];
 }
 
 @end
