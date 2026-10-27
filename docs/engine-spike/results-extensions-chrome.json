@@ -6,57 +6,24 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          64332,
-          64377,
-          64378,
-          64385,
-          64528,
-          64529,
-          64551,
-          64552,
-          64553,
-          64557,
-          64560,
-          64716,
-          65494,
-          65546,
-          65596,
-          65988,
-          65990,
-          65998,
-          66224
-        ],
-        "remaining_processes": [],
-        "reply": true,
-        "windows_after_quit": {
-          "count": 0,
-          "windows": []
-        },
-        "windows_before_quit": 2
-      },
-      {
-        "forced": false,
-        "ok": true,
-        "owned_pids": [
-          67378,
-          67405,
-          67406,
-          67408,
-          67477,
-          67478,
-          67484,
-          67485,
-          67486,
-          67491,
-          67538,
-          67772,
-          68633,
-          68942,
-          69559,
-          71792,
-          71858,
-          71936,
-          72557
+          10507,
+          10901,
+          10902,
+          10907,
+          11073,
+          11074,
+          11087,
+          11088,
+          11089,
+          11090,
+          11094,
+          11399,
+          12852,
+          13138,
+          13517,
+          13895,
+          13899,
+          14961
         ],
         "remaining_processes": [],
         "reply": true,
@@ -85,7 +52,7 @@
     "content_scripts": {
       "darkreader": {
         "mode": "dynamic",
-        "styles": 26
+        "styles": 30
       },
       "isolated_worlds": [
         "1Password \u2013 Password Manager",
@@ -218,7 +185,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2043950336,
+            "current": 806005317,
             "windows": 1
           }
         },
@@ -242,7 +209,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2043950336,
+            "current": 806005317,
             "windows": 1
           }
         },
@@ -266,7 +233,7 @@
               "https://darkreader.org/help/en/",
               "https://en.wikipedia.org/wiki/Web_browser"
             ],
-            "current": 2043950336,
+            "current": 806005317,
             "windows": 1
           }
         }
@@ -309,7 +276,7 @@
           "frame": "{{1056, 910}, {448, 196}}",
           "key": true,
           "level": 0,
-          "number": 156180,
+          "number": 158522,
           "parent": 0,
           "sheet": false,
           "title": "",
@@ -337,353 +304,24 @@
       "https://darkreader.org/help/en/"
     ]
   },
-  "interrupted_attempts": [
-    {
-      "attempt": 1,
-      "checks": {
-        "chrome_extensions_page": {
-          "items": 4,
-          "ok": true,
-          "screenshot": "chrome-chrome-extensions.png"
-        },
-        "chrome_extensions_page_url": "chrome://extensions/",
-        "content_scripts": {
-          "darkreader": {
-            "mode": "dynamic",
-            "styles": 27
-          },
-          "isolated_worlds": [
-            "1Password \u2013 Password Manager",
-            "Bitwarden Password Manager",
-            "Dark Reader",
-            "uBlock Origin Lite"
-          ],
-          "ok": true,
-          "screenshot": "chrome-content-script-darkreader.png"
-        },
-        "dnr_blocking": {
-          "ok": true,
-          "probe": {
-            "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js": "blocked",
-            "https://securepubads.g.doubleclick.net/tag/js/gpt.js": "blocked"
-          }
-        },
-        "enumerate": {
-          "actions": [
-            {
-              "badge": null,
-              "enabled": true,
-              "icon": 1444,
-              "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
-              "popup": false,
-              "title": "1Password"
-            },
-            {
-              "badge": "4",
-              "enabled": true,
-              "icon": 1132,
-              "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
-              "popup": true,
-              "title": "uBlock Origin Lite"
-            },
-            {
-              "badge": null,
-              "enabled": true,
-              "icon": 2894,
-              "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
-              "popup": true,
-              "title": "Dark Reader"
-            },
-            {
-              "badge": null,
-              "enabled": true,
-              "icon": 1412,
-              "id": "nngceckbapebfimnlniiiahkandclblb",
-              "popup": true,
-              "title": "Bitwarden"
-            }
-          ],
-          "extensions": [
-            {
-              "enabled": true,
-              "icon": "128x128",
-              "id": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
-              "name": "1Password \u2013 Password Manager",
-              "options": "",
-              "version": "8.12.42.36"
-            },
-            {
-              "enabled": true,
-              "icon": "128x128",
-              "id": "nngceckbapebfimnlniiiahkandclblb",
-              "name": "Bitwarden Password Manager",
-              "options": "",
-              "version": "2026.10.0"
-            },
-            {
-              "enabled": true,
-              "icon": "128x128",
-              "id": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
-              "name": "Dark Reader",
-              "options": "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/ui/popup/index.html",
-              "version": "4.9.133"
-            },
-            {
-              "enabled": true,
-              "icon": "96x96",
-              "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
-              "name": "uBlock Origin Lite",
-              "options": "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/dashboard.html",
-              "version": "2026.1021.1354"
-            }
-          ],
-          "ok": true
-        },
-        "options_pages": {
-          "ok": true,
-          "pages": {
-            "Dark Reader": {
-              "elements": 422,
-              "ok": true,
-              "screenshot": "chrome-options-darkreader.png",
-              "title": "Dark Reader settings",
-              "url": "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/ui/popup/index.html"
-            },
-            "uBlock Origin Lite": {
-              "elements": 300,
-              "ok": true,
-              "title": "uBO Lite \u2014 Dashboard",
-              "url": "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/dashboard.html"
-            }
-          }
-        },
-        "popups": {
-          "by_extension": {
-            "1password": {
-              "ok": true,
-              "on_clicked_tab": "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en"
-            },
-            "bitwarden": {
-              "console_errors": [],
-              "ok": true,
-              "screenshot": "chrome-popup-bitwarden.png",
-              "state": {
-                "elements": 124,
-                "h": 600,
-                "text": "Make Bitwarden your browser's default password manager\n1\n\nSelect Continue.\n\n2\n\nSelect Allow from the browser prompt to g",
-                "w": 480
-              },
-              "tabs_api": {
-                "active": [
-                  "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en"
-                ],
-                "all": [
-                  "https://bitwarden.com/browser-start/",
-                  "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en",
-                  "https://darkreader.org/help/en/",
-                  "https://en.wikipedia.org/wiki/Web_browser"
-                ],
-                "current": 577362180,
-                "windows": 1
-              }
-            },
-            "darkreader": {
-              "console_errors": [],
-              "ok": true,
-              "screenshot": "chrome-popup-darkreader.png",
-              "state": {
-                "elements": 395,
-                "h": 580,
-                "text": "Loading, please wait\nDark Reader\n en.wikipedia.org\nConfigure website toggling\nOn\nOff\nConfigure automation\nFilter\nSite li",
-                "w": 276
-              },
-              "tabs_api": {
-                "active": [
-                  "https://en.wikipedia.org/wiki/Web_browser"
-                ],
-                "all": [
-                  "https://bitwarden.com/browser-start/",
-                  null,
-                  "https://darkreader.org/help/en/",
-                  "https://en.wikipedia.org/wiki/Web_browser"
-                ],
-                "current": 577362180,
-                "windows": 1
-              }
-            },
-            "ublock": {
-              "console_errors": [],
-              "ok": true,
-              "screenshot": "chrome-popup-ublock.png",
-              "state": {
-                "elements": 65,
-                "h": 374,
-                "text": "en.wikipedia.org\nfiltering mode\noptimal\nOn this website\nRemove an element\nCreate a custom filter\nReport an issue",
-                "w": 273
-              },
-              "tabs_api": {
-                "active": [
-                  "https://en.wikipedia.org/wiki/Web_browser"
-                ],
-                "all": [
-                  "https://bitwarden.com/browser-start/",
-                  null,
-                  "https://darkreader.org/help/en/",
-                  "https://en.wikipedia.org/wiki/Web_browser"
-                ],
-                "current": 577362180,
-                "windows": 1
-              }
-            }
-          },
-          "ok": true
-        },
-        "service_workers": {
-          "all_target_types": [
-            "page",
-            "service_worker"
-          ],
-          "ok": true,
-          "workers": [
-            "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/background/background.js",
-            "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/js/background.js",
-            "chrome-extension://eimadpbcbfnmbkopoojfekhnkhdbieeh/background/index.js",
-            "chrome-extension://nngceckbapebfimnlniiiahkandclblb/background.js"
-          ]
-        },
-        "webstore_install": {
-          "assertion": {
-            "button": "Add to Chrome",
-            "click": [
-              1048.0078125,
-              282
-            ],
-            "console": [
-              "Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
-              "%c%s color: red; background: yellow; font-size: 24px; WARNING!",
-              "%c%s font-size: 18px; Using this console may allow attackers to impersonate you and steal your information using an attack called Self-XSS.\nDo not enter or paste code that you do not understand.",
-              "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
-              "Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received"
-            ],
-            "dialog_click": true,
-            "installed": true,
-            "new_windows": [
-              {
-                "attachedSheet": 0,
-                "class": "NativeWidgetMacNSWindow",
-                "firstResponder": "BridgedContentView",
-                "frame": "{{1056, 910}, {448, 196}}",
-                "key": true,
-                "level": 0,
-                "number": 156110,
-                "parent": 0,
-                "sheet": false,
-                "title": "",
-                "visible": true
-              }
-            ],
-            "ok": true,
-            "pinned": true,
-            "screenshot_dialog": "chrome-webstore-dialog.png",
-            "screenshot_store": "chrome-webstore-page.png",
-            "windows_after": [
-              [
-                "BrowserWindow",
-                "{{80, 60}, {1360, 860}}"
-              ],
-              [
-                "NativeWidgetMacNSWindow",
-                "{{-224, 1278}, {448, 132}}"
-              ]
-            ]
-          },
-          "focus": [
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 42462,
-              "openPID": 64332,
-              "uptime": 160082.2341695
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 42462,
-              "keyWindow": 0,
-              "openPID": 64332,
-              "uptime": 160082.2376136667
-            },
-            {
-              "event": "frontmostChanged",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 42462,
-              "openPID": 64332,
-              "uptime": 160089.315019625
-            },
-            {
-              "active": false,
-              "event": "NSApplicationDidResignActiveNotification",
-              "frontmostApp": "T3 Pretty Internal (Nightly)",
-              "frontmostPID": 42462,
-              "keyWindow": 0,
-              "openPID": 64332,
-              "uptime": 160089.31782633334
-            }
-          ],
-          "status": "INTERRUPTED"
-        },
-        "welcome_tabs": [
-          "https://bitwarden.com/browser-start/",
-          "chrome-extension://aeblfdkhhhdcdjpifhhbdiojplfjncoa/app/app.html#/page/welcome?language=en",
-          "https://darkreader.org/help/en/"
-        ]
-      },
-      "focus": [
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 42462,
-          "openPID": 64332,
-          "uptime": 160082.2341695
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 42462,
-          "keyWindow": 0,
-          "openPID": 64332,
-          "uptime": 160082.2376136667
-        },
-        {
-          "event": "frontmostChanged",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 42462,
-          "openPID": 64332,
-          "uptime": 160089.315019625
-        },
-        {
-          "active": false,
-          "event": "NSApplicationDidResignActiveNotification",
-          "frontmostApp": "T3 Pretty Internal (Nightly)",
-          "frontmostPID": 42462,
-          "keyWindow": 0,
-          "openPID": 64332,
-          "uptime": 160089.31782633334
-        }
-      ],
-      "reason": "foreground lost during webstore_install",
-      "status": "INTERRUPTED"
-    }
-  ],
+  "interrupted_attempts": [],
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 67378,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-64316-b5988136",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-64316-b5988136/Engine"
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 10507,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-10361-bc733df5",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-extensions-chrome-10361-bc733df5/Engine"
   },
-  "started": "2026-10-26 20:24:52",
+  "started": "2026-10-26 20:46:22",
   "style": "chrome"
 }

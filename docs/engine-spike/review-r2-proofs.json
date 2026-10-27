@@ -163,6 +163,53 @@
   },
   "date": "2026-10-26 America/Vancouver",
   "engine_uuid": "4C4C4432-5555-3144-A144-B678285BC5F4",
+  "final_engine_sha256": "698076ef8f79e7052db3d9f3a5ea668fa6c4ebfc4b96bfb24b6be6e9e9a289fd",
+  "final_verification": {
+    "code_head": "6f06197",
+    "main": "7e689d5",
+    "suites": {
+      "actions": {
+        "cleanup_ok": true,
+        "owned_window_counts": [
+          0,
+          0
+        ],
+        "pass": 26,
+        "remaining_process_counts": [
+          0,
+          0
+        ],
+        "total": 26
+      },
+      "extensions": {
+        "cleanup_ok": true,
+        "owned_window_counts": [
+          0
+        ],
+        "pass": 8,
+        "remaining_process_counts": [
+          0
+        ],
+        "total": 8
+      },
+      "tabstrip": {
+        "cleanup_ok": true,
+        "owned_window_counts": [
+          0
+        ],
+        "pass": 25,
+        "remaining_process_counts": [
+          0
+        ],
+        "total": 25
+      }
+    },
+    "verify_all": {
+      "fail": 0,
+      "pass": 21,
+      "skip": 0
+    }
+  },
   "split_pane_sync": {
     "fixed": {
       "expected_tab": 1372129401,

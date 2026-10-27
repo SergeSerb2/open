@@ -4,7 +4,7 @@
       "first": {
         "bytes": 5120,
         "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-        "object": -5756685694632923857,
+        "object": -6521548396694226634,
         "pixels": [
           [
             16,
@@ -21,7 +21,7 @@
       "tab_b": {
         "bytes": 5120,
         "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-        "object": -5756685694632923857,
+        "object": -6521548396694226634,
         "pixels": [
           [
             16,
@@ -92,7 +92,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
-          "object": 1359576433273512143,
+          "object": 6863168434738917349,
           "pixels": [
             [
               16,
@@ -116,7 +116,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
-          "object": -1448426495241194140,
+          "object": 6616950469291048930,
           "pixels": [
             [
               28,
@@ -162,7 +162,7 @@
           "content": 0,
           "extension": "jihnllejimhgcmfmcnchbekapeajboik",
           "tab": "",
-          "time": 1793071438.568993,
+          "time": 1793072083.74206,
           "type": "extensionMenuRequest"
         }
       ]
@@ -203,7 +203,7 @@
         "icon": {
           "bytes": 5120,
           "hash": "7d646905a308a8e5b9980dfc80bd46121f3e499467c0e735cb5d1356aff5b950",
-          "object": -3581155946469968497,
+          "object": -588808500196232491,
           "pixels": [
             [
               16,
@@ -227,7 +227,7 @@
         "toolbarImage": {
           "bytes": 15680,
           "hash": "20aa85807abe2fed5aa5a6379ef514a083f80c9b9f7a0a43120ac5b8ab4a6e5c",
-          "object": 3336997553507925616,
+          "object": 430068381324783262,
           "pixels": [
             [
               28,
@@ -257,7 +257,7 @@
       "popup_opened": false,
       "storage": {
         "clicks": 1,
-        "lastClickTab": 483073726
+        "lastClickTab": 311135649
       }
     },
     "open_popup_api": {
@@ -317,7 +317,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793071445.0918899,
+              "time": 1793072090.387424,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -333,7 +333,7 @@
               "phase": "open",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793071445.1609101,
+              "time": 1793072090.477397,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -349,7 +349,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793071446.421756,
+              "time": 1793072091.68538,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -365,7 +365,7 @@
               "phase": "ready",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793071446.991296,
+              "time": 1793072092.255042,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -381,7 +381,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793071445.274895,
+              "time": 1793072090.574867,
               "toggle": false,
               "type": "popupCallbackClose"
             }
@@ -397,7 +397,7 @@
               "phase": "resize",
               "stillOpenInsideCallback": true,
               "tab": "",
-              "time": 1793071445.852756,
+              "time": 1793072091.132355,
               "toggle": true,
               "type": "popupCallbackClose"
             }
@@ -463,11 +463,11 @@
       "ok": true
     },
     "split_pane_action_and_menu": {
-      "expected_tab": 483073728,
+      "expected_tab": 311135651,
       "menu_action_title": "Split right",
       "ok": true,
       "popup_stayed_open": true,
-      "popup_tab": 483073728
+      "popup_tab": 311135651
     },
     "tab_switch_closes_popup": {
       "ok": true
@@ -507,46 +507,25 @@
         "forced": false,
         "ok": true,
         "owned_pids": [
-          59038,
-          59055,
-          59056,
-          59057,
-          59068,
-          59069,
-          59071,
-          59072,
-          59077,
-          59107,
-          59108,
-          59109,
-          59113,
-          59126,
-          59149,
-          59179,
-          59223,
-          59232,
-          59242,
-          59244,
-          59331,
-          59333,
-          59335,
-          59338,
-          59340,
-          59342,
-          59417,
-          59423,
-          59431,
-          59462,
-          59665,
-          59669,
-          59688,
-          59691,
-          59694,
-          59746,
-          59753,
-          59755,
-          59759,
-          59764
+          17182,
+          17204,
+          17205,
+          17206,
+          17223,
+          17225,
+          17229,
+          17230,
+          17238,
+          17240,
+          17241,
+          17242,
+          17246,
+          17273,
+          17275,
+          17280,
+          17287,
+          17339,
+          17395
         ],
         "remaining_processes": [],
         "reply": true,
@@ -554,7 +533,60 @@
           "count": 0,
           "windows": []
         },
-        "windows_before_quit": 2
+        "windows_before_quit": 1
+      },
+      {
+        "forced": false,
+        "ok": true,
+        "owned_pids": [
+          17576,
+          17597,
+          17598,
+          17601,
+          17607,
+          17608,
+          17610,
+          17611,
+          17648,
+          17862,
+          17864,
+          17868,
+          17893,
+          17896,
+          17898,
+          17901,
+          17903,
+          18553,
+          20286,
+          20442,
+          21198,
+          21228,
+          21252,
+          21451,
+          21611,
+          21654,
+          21674,
+          21682,
+          21687,
+          21825,
+          23516,
+          23565,
+          23747,
+          23786,
+          24017,
+          24431,
+          24999,
+          25012,
+          25037,
+          25584
+        ],
+        "remaining_processes": [],
+        "reply": true,
+        "windows_after_quit": {
+          "count": 0,
+          "windows": []
+        },
+        "windows_before_quit": 1
       }
     ]
   },
@@ -565,14 +597,193 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
-  "interrupted_attempts": [],
+  "interrupted_attempts": [
+    {
+      "attempt": 1,
+      "checks": {
+        "action_image_cache": {
+          "first": {
+            "bytes": 5120,
+            "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+            "object": 1516685882019578915,
+            "pixels": [
+              [
+                16,
+                16
+              ],
+              [
+                32,
+                32
+              ]
+            ],
+            "width": 16
+          },
+          "ok": true,
+          "tab_b": {
+            "bytes": 5120,
+            "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+            "object": 1516685882019578915,
+            "pixels": [
+              [
+                16,
+                16
+              ],
+              [
+                32,
+                32
+              ]
+            ],
+            "width": 16
+          }
+        },
+        "actions_list": {
+          "ids": [
+            "jihnllejimhgcmfmcnchbekapeajboik",
+            "nngceckbapebfimnlniiiahkandclblb"
+          ],
+          "ok": true,
+          "probe": {
+            "accessibleName": "Action probe",
+            "badge": "",
+            "badgeColor": null,
+            "badgeTextColor": null,
+            "enabled": true,
+            "hasPopup": true,
+            "icon": {
+              "bytes": 5120,
+              "hash": "562998a981ed6661a9258dd52c9bf0c615933f170c986853f8bf429eaf1cff6c",
+              "object": -4817090256992164707,
+              "pixels": [
+                [
+                  16,
+                  16
+                ],
+                [
+                  32,
+                  32
+                ]
+              ],
+              "width": 16
+            },
+            "id": "jihnllejimhgcmfmcnchbekapeajboik",
+            "live": true,
+            "name": "Open action probe",
+            "pinned": false,
+            "pinnedIndex": -1,
+            "showingPopup": false,
+            "siteAccess": 0,
+            "title": "Action probe",
+            "toolbarImage": {
+              "bytes": 15680,
+              "hash": "c4ede19eb9ae69945177729de707be016351e6351aa582ae9d848ec71f097243",
+              "object": 5623719575409878885,
+              "pixels": [
+                [
+                  28,
+                  28
+                ],
+                [
+                  56,
+                  56
+                ]
+              ],
+              "width": 28
+            },
+            "tooltip": "Action probe",
+            "wantsToRun": false
+          }
+        },
+        "disabled_action_requests_menu": {
+          "ok": true,
+          "ran": true,
+          "requests": [
+            {
+              "content": 0,
+              "extension": "jihnllejimhgcmfmcnchbekapeajboik",
+              "tab": "",
+              "time": 1793072066.644105,
+              "type": "extensionMenuRequest"
+            }
+          ]
+        },
+        "on_clicked": {
+          "ok": true,
+          "popup_less_on_tab": true,
+          "popup_opened": false,
+          "storage": {
+            "clicks": 1,
+            "lastClickTab": 1308234101
+          }
+        },
+        "per_tab_state": {
+          "ok": true,
+          "tab_a": {
+            "badge": "7",
+            "badgeColor": "#ff0000ff",
+            "enabled": true,
+            "title": "Probe A"
+          },
+          "tab_b": {
+            "badge": "",
+            "enabled": false,
+            "title": "Action probe"
+          }
+        },
+        "popup_is_chrome_popup": {
+          "current_tab": "https://example.com/?a",
+          "document_size": [
+            320,
+            253
+          ],
+          "last_size": [
+            320,
+            253
+          ],
+          "ok": true,
+          "opened": true,
+          "popup_views": 1,
+          "ready": true,
+          "showing_popup": true,
+          "source": "user"
+        },
+        "split_pane_action_and_menu": {
+          "expected_tab": 1308234103,
+          "menu_action_title": "Split right",
+          "ok": true,
+          "popup_stayed_open": true,
+          "popup_tab": 1308234103
+        }
+      },
+      "focus": [
+        {
+          "active": false,
+          "frontmostApp": "UserNotificationCenter",
+          "frontmostPID": 1624,
+          "keyWindow": 0,
+          "uptime": 160632.51384250002
+        }
+      ],
+      "reason": "window-focus: key focus not ready: active=false target=156942 targetIsKey=false key=0 keySameObject=false frontmost=UserNotificationCenter frontmostPID=1624",
+      "status": "INTERRUPTED"
+    }
+  ],
   "ping": {
     "cef": "156.0.14+g4fa4ab5+chromium-156.0.8078.48",
     "chromium": "156.0.8078.48",
-    "pid": 59038,
-    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-59021-d39440a0",
-    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-59021-d39440a0/Engine"
+    "mallocZones": [
+      "PartitionAlloc",
+      "objc-class_rw_t",
+      "DefaultMallocZone",
+      "DefaultPurgeableMallocZone",
+      "QuartzCore",
+      "LSBindingEvaluator",
+      "AttributeGraph",
+      "AttributeGraph graph data"
+    ],
+    "pid": 17576,
+    "root": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-17178-c1dbaf3b",
+    "userData": "/Users/serge/Library/Application Support/Open-E2E-actions-chrome-17178-c1dbaf3b/Engine"
   },
-  "started": "2026-10-26 20:23:46",
+  "started": "2026-10-26 20:34:15",
   "style": "chrome"
 }
