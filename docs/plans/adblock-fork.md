@@ -583,6 +583,14 @@ mod ffi {
         resources_loaded: u32,
         resources_error: String,  // "" or a short kind ("json", "too-large")
         list_count: u32,
+        refused: String,          // "" or why the build was refused before parsing (R3-2)
+    }
+
+    struct OpenHiddenSelectors {  // review R3-4
+        selectors: Vec<String>,      // sanitized like hide_selectors (§8.3), sorted
+        dropped_procedural: u32,
+        dropped_unsafe: u32,
+        dropped_over_cap: u32,
     }
 
     struct OpenCosmeticResources {
@@ -612,9 +620,12 @@ mod ffi {
             -> Box<OpenAdblockEngine>;
         fn open_adblock_build_report(engine: &OpenAdblockEngine) -> OpenBuildReport;
         fn open_adblock_serialize(engine: &OpenAdblockEngine) -> Vec<u8>;
-        // false when dat.len() <= 4 (98-3) or on any error; then use_resources(resources_json).
+        // false when the DAT walk refuses it (R2-1, R3-1, R3-5) or on any error;
+        // then use_resources(resources_json).
         fn open_adblock_deserialize(engine: &mut OpenAdblockEngine, dat: &[u8],
                                     resources_json: &str) -> bool;
+        // The DAT walk's verdict: "" or the first problem (logs, self-test).
+        fn open_adblock_dat_check(dat: &[u8]) -> String;
         // Matcher sequence only (§7.6).
         fn open_adblock_check(engine: &OpenAdblockEngine, url: &str, source_url: &str,
                               request_type: OpenRequestType, max_input_bytes: u32)
@@ -624,7 +635,7 @@ mod ffi {
         // Output sanitized like hide_selectors (§8.3).
         fn open_adblock_hidden_selectors(engine: &OpenAdblockEngine, classes: &[String],
                                          ids: &[String], exceptions: &[String])
-            -> Vec<String>;
+            -> OpenHiddenSelectors;
         fn open_adblock_info(engine: &OpenAdblockEngine) -> OpenEngineInfo;
     }
 }
@@ -634,6 +645,13 @@ Rules that bind this surface:
 
 - `source_url` is the request initiator as an origin URL (§7.3); pass `url`
   itself when no initiator exists (first-party by construction).
+- Input limits are enforced **in the shim** (reviews R2-1, R3-1, R3-2): a DAT
+  passes a walk before the crate reads it (every length and count fits in the
+  bytes left, at most 2^24 values and 32 levels, nothing after the root
+  value), and `open_adblock_build` refuses more than 2^21 list lines or more
+  than 64 MiB of cosmetic selector copies before it parses; C++ turns a
+  refused build into a failed load. `docs/engine-patches.md` P8 has the
+  measured worst allocations under PartitionAlloc's ceiling.
 - The 256 KiB payload cap is enforced **in the shim**, in
   `open_adblock_cosmetic`: the unit is the sum of the UTF-8 bytes of the
   kept hide selectors, without the fixed declaration that the renderer
