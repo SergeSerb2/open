@@ -262,7 +262,7 @@ app.run()
     try visit(root)
     let expected = ["Show Open Previews:", "Folders", "Pinned tabs and Favorites", "Done"]
     try require(expected.allSatisfy(text.contains), "Previews sheet is missing controls (\(visited.count) AX/view nodes): \(text.sorted())")
-    try require(!text.contains("Delay") && popups == 0, "Previews sheet restored the removed Delay control")
+    try require(!text.contains("Delay") && popups == 0, "Previews sheet has unexpected controls: popups=\(popups), labels=\(text.sorted())")
     print("PREVIEWS-CONTROLS delay=absent popups=\(popups) expected-labels=present")
 }
 
