@@ -333,5 +333,5 @@ extension Tab {
 
 
 public enum SidebarMediaHover: Equatable, Sendable {
-    case stack, card(ItemID), title(ItemID)
+    case expanded, title(ItemID)
 }
