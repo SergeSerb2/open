@@ -1,0 +1,151 @@
+{
+  "main_sampled_cpu_ms": 2194.0,
+  "open_sampled_cpu_ms": 1482.0,
+  "open_samples": 1482,
+  "groups_ms": [
+    [
+      "section / row construction and attachment",
+      594.0
+    ],
+    [
+      "first native layer display",
+      577.0
+    ],
+    [
+      "other open work",
+      168.0
+    ],
+    [
+      "controller / chrome construction",
+      93.0
+    ],
+    [
+      "layout and geometry",
+      50.0
+    ]
+  ],
+  "inclusive_symbols_ms": [
+    [
+      "@objc SiteControlView.mouseDown(with:)",
+      1332.0
+    ],
+    [
+      "SiteControlController.present(anchor:tabID:mode:animated:)",
+      1329.0
+    ],
+    [
+      "@objc SiteControlButton.pressed()",
+      1329.0
+    ],
+    [
+      "SiteControlButton.pressed()",
+      1329.0
+    ],
+    [
+      "SiteControlButton.mouseUp(with:)",
+      1329.0
+    ],
+    [
+      "SiteControlView.prepareAnimationAnchor()",
+      650.0
+    ],
+    [
+      "SiteControlController.animateOpen(_:)",
+      650.0
+    ],
+    [
+      "SiteControlPanelView.apply(_:)",
+      598.0
+    ],
+    [
+      "SiteControlPanelView.rebuildSections(_:animated:)",
+      594.0
+    ],
+    [
+      "SiteControlButton.init(id:label:symbol:pointSize:weight:)",
+      465.0
+    ],
+    [
+      "SiteControlBoostRow.init(_:)",
+      342.0
+    ],
+    [
+      "SiteControlRow.init(_:)",
+      229.0
+    ],
+    [
+      "specialized SiteControlRow.init(_:)",
+      229.0
+    ],
+    [
+      "@objc SiteControlPanelView.layout()",
+      173.0
+    ],
+    [
+      "SiteControlButton.updateLayer()",
+      152.0
+    ],
+    [
+      "SiteControlController.init(source:actions:)",
+      122.0
+    ],
+    [
+      "SiteControlController.__allocating_init(source:actions:)",
+      122.0
+    ],
+    [
+      "SiteControlView.init(frame:)",
+      120.0
+    ]
+  ],
+  "leaf_symbols_ms": [
+    [
+      "objc_msgSend",
+      164.0
+    ],
+    [
+      "pow",
+      50.0
+    ],
+    [
+      "<deduplicated_symbol>",
+      25.0
+    ],
+    [
+      "CA::AttrList::get(unsigned int, _CAValueType, void*) const",
+      25.0
+    ],
+    [
+      "_platform_memmove",
+      24.0
+    ],
+    [
+      "__kdebug_trace64",
+      23.0
+    ],
+    [
+      "_xzm_xzone_malloc_tiny",
+      21.0
+    ],
+    [
+      "__CFStringHash",
+      19.0
+    ],
+    [
+      "mach_msg2_trap",
+      16.0
+    ],
+    [
+      "objc_autorelease",
+      16.0
+    ],
+    [
+      "___CFBasicHashFindBucket_Linear",
+      15.0
+    ],
+    [
+      "__CFStringEqual",
+      14.0
+    ]
+  ]
+}

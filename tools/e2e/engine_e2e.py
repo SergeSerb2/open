@@ -298,6 +298,15 @@ class Open:
                                 capture_output=True, text=True, timeout=10, check=True)
         return json.loads(result.stdout)
 
+    def log_text(self):
+        self.log.flush()
+        # LaunchServices writes the live app's stderr to this separate file;
+        # quit later appends it to the aggregate log. Read it before quit too.
+        # The aggregate may contain an earlier attempt with the same menu
+        # command id. A refusal must come from this app instance's stderr.
+        paths = [self.launch_log_path]
+        return "\n".join(Path(path).read_text(errors="replace") for path in paths if os.path.exists(path))
+
     def cleanup_surfaces(self):
         for cmd in ("dismiss", "popup-close"):
             try:
@@ -1496,19 +1505,45 @@ def new_window_outlives_opener(app, results):
 # (Character Viewer, speech, other apps through Services, the spelling
 # panel). Everything else Chromium puts in the menu runs.
 CONTEXT_MENU_SKIP_TITLES = ("Emoji & Symbols", "Show Spelling and Grammar")
-CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services")
+CONTEXT_MENU_SKIP_SUBMENUS = ("Speech", "Services", "Disabled tabs probe submenu")
+# Open's context-menu allowlist (docs/engine-api.md, "Context menu items"):
+# Chrome items that must be gone, as letter-only fragments of their titles,
+# and items each target must still show.
+CONTEXT_MENU_DROPPED = ("cast", "readingmode", "qrcode", "withgoogle", "lens", "splitview", "incognito",
+                        "importpasswords", "languagesettings", "sendto", "readinglist", "translate", "searchgoogle")
+CONTEXT_MENU_KEPT = {
+    "page": ("Reload", "Save As…", "Print…", "View Page Source", "Inspect", "Tabs probe item"),
+    "link": ("Open Link in New Tab", "Open Link in New Window", "Save Link As…", "Copy Link Address", "Inspect",
+             "Tabs probe item"),
+    "image": ("Open Image in New Tab", "Save Image As…", "Copy Image", "Copy Image Address", "Tabs probe item"),
+    "selection": ("Copy", "Copy Link to Highlight", "Look Up", "Tabs probe item"),
+    "editable": ("Cut", "Copy", "Paste", "Paste and Match Style", "Select All", "Tabs probe item"),
+    "video": ("Loop", "Show All Controls", "Picture in Picture", "Save Video As…", "Copy Video Address",
+              "Tabs probe item"),
+}
+
+
+def _command_id(name):
+    """A Chromium command id from CEF's generated header."""
+    header = os.path.join(ROOT, "Vendor", "cef", "include", "cef_command_ids.h")
+    for line in open(header):
+        parts = line.split()
+        if len(parts) == 3 and parts[:2] == ["#define", name]:
+            return int(parts[2])
+    raise RuntimeError("no %s in %s" % (name, header))
 
 
 def menu_key(title):
-    """Titles compared by letters only: AppKit drops "&" ("Emoji  Symbols")."""
+    """Titles compared by letters only ("Emoji & Symbols": Chromium writes "&&")."""
     return "".join(ch for ch in title.lower() if ch.isalnum())
 
 
-def context_menu_commands(app, results):
+def context_menu_commands(app, results, *, run_all_commands=True):
     """Runs every Chrome context-menu command in a hosted tab, for each kind
     of target (page, link, image, video, selection, editable). None may
     crash the app (PR #53 review: toast and QR code paths). Dialogs and
-    windows a command opens are dismissed through automation."""
+    windows a command opens are dismissed through automation. A focused guard
+    proof can capture the real menus/refusals without the general smoke loop."""
     import http.server
     import tempfile
     import threading
@@ -1576,6 +1611,8 @@ def context_menu_commands(app, results):
 
     tab = new_tab(app, index)
     report = {"targets": {}, "ran": 0, "skipped": [], "dismissed": [], "failures": []}
+    menus = {}
+    menu_commands = {}
     home_windows = [x["id"] for x in app.call("shell-windows")]
 
     def close_new_windows():
@@ -1616,8 +1653,12 @@ def context_menu_commands(app, results):
             right_click(prepare(target))
             menu = wait_until(lambda: [e for e in app.call("events") if e["type"] == "contextMenu"], timeout=5)
             commands = menu[0].get("commands", []) if menu else []
+            menus[target] = menu[0].get("items", []) if menu else []
+            menu_commands[target] = commands
             ran = []
             for command in commands:
+                if not run_all_commands:
+                    break  # Focused guard proof still checks all six real models.
                 label = (command["submenu"] + " > " if command["submenu"] else "") + command["title"]
                 if (not command["enabled"] or menu_key(command["title"]) in {menu_key(x) for x in CONTEXT_MENU_SKIP_TITLES}
                         or menu_key(command["submenu"]) in {menu_key(x) for x in CONTEXT_MENU_SKIP_SUBMENUS}):
@@ -1626,23 +1667,75 @@ def context_menu_commands(app, results):
                 current = "%s: %s" % (target, label)
                 point = prepare(target)
                 app.call("policy", contextMenu="run:%d" % command["id"])
-                right_click(point)
-                time.sleep(1.5)
-                if app.proc.poll() is not None:
-                    crashed = "%s: %s" % (target, label)
-                    break
-                dismissed = app.call("dismiss") + close_new_windows()
-                if dismissed:
-                    report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
-                app.call("ping")
-                r = row()
-                if r and r["crashed"]:
-                    report["failures"].append("%s: %s (renderer crashed)" % (target, label))
-                ran.append(label)
-                report["ran"] += 1
+                try:
+                    right_click(point)
+                    time.sleep(1.5)
+                    if app.proc.poll() is not None:
+                        crashed = "%s: %s" % (target, label)
+                        break
+                    dismissed = app.call("dismiss") + close_new_windows()
+                    if dismissed:
+                        report["dismissed"].append({"command": "%s: %s" % (target, label), "closed": dismissed})
+                    app.call("ping")
+                    r = row()
+                    if r and r["crashed"]:
+                        report["failures"].append("%s: %s (renderer crashed)" % (target, label))
+                    ran.append(label)
+                    report["ran"] += 1
+                finally:
+                    app.cleanup_surfaces()
+                    # Close Open windows even if the command or its check
+                    # throws before the normal dismissal step.
+                    if app.pid and app.process_path(app.pid) == app.executable:
+                        try:
+                            extra = close_new_windows()
+                            if extra:
+                                report["dismissed"].append({"command": current, "closed": extra})
+                        except Exception as error:
+                            report["failures"].append("cleanup: %s" % error)
             report["targets"][target] = ran
             if crashed:
                 break
+        if not crashed:
+            # Run an enabled child of a disabled parent by its real delivered
+            # command id. The execution allowlist must reject it too.
+            children = [c for c in menu_commands.get("page", []) if c["title"] == "Disabled child probe item"]
+            disabled = {"found": len(children) == 1}
+            if children:
+                child_id = children[0]["id"]
+                app.call("events")
+                point = prepare("page")
+                app.call("policy", contextMenu="run:%d" % child_id)
+                try:
+                    right_click(point)
+                    time.sleep(.3)
+                    app.call("policy", contextMenu="record")
+                    pop = app.call("popup", extension=PROBE)["identifier"]
+                    # isLive precedes the extension document/API injection.
+                    # Read storage only after the actual popup API is ready.
+                    if not wait_until(lambda: app.eval(pop, "typeof chrome !== 'undefined' && !!(chrome.storage && chrome.storage.session)"), timeout=20):
+                        raise RuntimeError("tabs-probe popup storage API not ready")
+                    disabled["clicks"] = app.eval(pop, "chrome.storage.session.get('events').then(r => (r.events || []).filter(e => e.type === 'menu' && e.id === 'probe-disabled-child').length)")
+                    disabled["id"] = child_id
+                finally:
+                    app.cleanup_surfaces()
+                    app.call("policy", contextMenu="record")
+            report["disabled_submenu"] = disabled
+            hidden_id = _command_id("IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD")
+            # A hidden item cannot run either: the engine runs only ids of
+            # the delivered items, so selecting "Open Link in Incognito
+            # Window" by id is refused and opens no window.
+            home_ids = [x["id"] for x in app.call("shell-windows")]
+            app.call("events")
+            point = prepare("link")
+            app.call("policy", contextMenu="run:%d" % hidden_id)
+            right_click(point)
+            time.sleep(2)
+            report["hidden_command"] = {
+                "id": hidden_id,
+                "new_windows": [x for x in app.call("shell-windows") if x["id"] not in home_ids],
+                "window_requests": [e for e in app.call("events") if e["type"] == "window-request"],
+                "foreign_windows": app.call("dismiss")}
     except Exception as e:
         try:
             app.proc.wait(5)
@@ -1653,6 +1746,7 @@ def context_menu_commands(app, results):
         else:
             report["failures"].append("harness: %s" % e)
     finally:
+        app.cleanup_surfaces()
         server.shutdown()
         subprocess.run(["pbcopy"], input=clipboard)
         shutil.rmtree(root, ignore_errors=True)
@@ -1660,8 +1754,43 @@ def context_menu_commands(app, results):
             app.call("policy", contextMenu="record")
     report["crashed"] = crashed
     report["video"] = video
-    report["ok"] = not crashed and not report["failures"] and report["ran"] >= 20 and len(report["targets"]) == len(setups)
+    report["scope"] = "all_commands" if run_all_commands else "models_and_refusals"
+    report["ok"] = not crashed and not report["failures"] and (not run_all_commands or report["ran"] >= 20) and len(report["targets"]) == len(setups)
     results["context_menu_commands"] = report
+
+    # The allowlist: no dropped Chrome item, the kept ones, extension items,
+    # and no empty, leading, trailing or doubled separators.
+    allow = {"menus": menus, "dropped_seen": {}, "kept_missing": {}, "separators": {}}
+    for target, items in menus.items():
+        # Several extension items may be grouped under its name. Check
+        # delivered leaf titles too, while separators still use each root menu.
+        titles = [x for x in items if x] + [c["title"] for c in menu_commands.get(target, [])]
+        seen = [x for x in titles if any(d in menu_key(x) for d in CONTEXT_MENU_DROPPED)]
+        seen += [x for x in titles if x == "Invisible tabs probe item"]
+        missing = [k for k in CONTEXT_MENU_KEPT.get(target, ())
+                   if not any(menu_key(x).startswith(menu_key(k)) for x in titles)]
+        bad = (items[:1] == [""] or items[-1:] == [""]
+               or any(a == b == "" for a, b in zip(items, items[1:])))
+        if seen:
+            allow["dropped_seen"][target] = seen
+        if missing:
+            allow["kept_missing"][target] = missing
+        if bad:
+            allow["separators"][target] = items
+    allow["ok"] = (len(menus) == len(CONTEXT_MENU_KEPT) - (0 if "video" in menus else 1)
+                   and not allow["dropped_seen"] and not allow["kept_missing"] and not allow["separators"])
+    results["context_menu_allowlist"] = allow
+    hidden = report.get("hidden_command") or {}
+    log_text = app.log_text()
+    disabled = report.get("disabled_submenu") or {}
+    results["context_menu_disabled_submenu_refused"] = {
+        "ok": disabled.get("found") is True and disabled.get("clicks") == 0
+              and ("refused command %d" % disabled.get("id", -1)) in log_text,
+        **disabled}
+    results["context_menu_hidden_command_refused"] = {
+        "ok": bool(hidden) and not hidden["new_windows"] and not hidden["window_requests"]
+              and not hidden["foreign_windows"] and ("refused command %d" % hidden.get("id")) in log_text,
+        **hidden}
 
 
 # ----------------------------------------------------------------------------

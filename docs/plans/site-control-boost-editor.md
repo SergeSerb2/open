@@ -264,6 +264,14 @@ Body padding 10 on every side (S2 09/0010). Blocks from the top (S2 09/0010 with
 Section label: baseline 14 pt above the section's first item (S2 09/0010). A section with no items
 is removed with its gap. Order: Extensions, Boosts, Settings (D-11 superseded; S2-2).
 
+**Separator, measured 2026-10-26 (lead ruling).** In S2 09/0010 at y 335,
+(98, 334) / (98, 335) read (67, 65, 86) / (102, 100, 121), and
+(263, 334) / (263, 335) read (122, 122, 123) / (157, 157, 158).
+Both materials gain 35 sRGB levels in every channel. Draw the Dark separator with
+`#232323` and plus-lighter compositing, replacing the earlier white 0.22 guess.
+The Light alpha value stays a guess. This is the separator's compositing rule,
+not a change to the material fallback or the white 0.20 rim.
+
 ### 3.4 Action row
 
 Four buttons, 48 × 32, gap 8, from x 10 (x 10, 66, 122, 178) (S2 09/0010). Each button is a
@@ -374,7 +382,7 @@ Row (one per matching Boost, matcher order) — the shared `SiteControlRow` (§3
 | Subtitle | "Enabled" / "Disabled", 13 pt Regular, #9F9EA9 | S2 11/0005 (SC-13); size from ink widths (§3.8) |
 | Hover | No row plate. `chevron.right` 11 pt Semibold #9F9EA9 at x `236 − 10 − 11`. Focus ring (keyboard): the text area `[46, −4, 180, 40]` relative to the row, corner 8. | chevron measured (notes 10:47:57); no plate and style guess |
 | Sparkles | Three Open-drawn 4-point sparkles on the circle, at the brush's top-left, top-right, and bottom-right, knocked out like the glyph. Static: the top-right at full opacity, the top-left and bottom-right at 0.35 (the average look of the captured frames; no frame shows all three at full). Each opacity is one token, so the Q15 follow-up can animate the same layers. Arc fades them in and out one by one while the panel is open, but the motion is **not measurable** from session 2: the two recorders give frame pairs 0.03–0.2 s apart with 1.6–2.5 s gaps, and the video does not show the panel. Q15 ruling: static until a capture measures it (`docs/followups.md`). | S2 11/0004–0017 (sheet in `.re/scb-design/`); IS §20.15; Q15 |
-| Global off | `open.advanced.enableBoosts` false: rows draw at 50 % alpha, circles do nothing, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." 13 pt Regular #9F9EA9. | Open choice |
+| Global off | `open.advanced.enableBoosts` false: rows draw at 50 % alpha, circles do nothing, and a 28 pt note above the rows: "Boosts are off. Turn them on in Settings." 13 pt Regular #9F9EA9, with two baselines at +11 / +26 (15 pt pitch), within the 28 pt band. | Open choice; baseline geometry guess, lead ruling 2026-10-26 |
 | Incognito | Circle and row actions disabled; tooltip "Boosts can't be edited in a private window." | D-10 |
 
 Actions (guesses on Arc's click targets; Open choice):
@@ -1191,7 +1199,23 @@ three heavy pages, which the engine plan names, within the budget it sets.
 
 ### 8.1 Offscreen renders and flows: `sitecontrol-render`
 
-Commands unchanged (`render`, `ax`, `flows`, `check`, `bench`, `screens`, `motion`, `compare`).
+Commands: `render`, `ax`, `flows`, `check`, `bench`, `screens`, `motion`, `compare`.
+`bench --fixture cold` gates the median main-thread retired instructions for the
+20-Boost/12-row native open span at 2x, after 5 discarded warmups and 30 measured
+opens. The machine/build fixture records the accepted count; the limit is
+`ceil(accepted × 1.10)`. M5 Pro / 26B5112a: accepted 95,035,968, limit 104,539,565
+(lead ruling, 2026-10-26 21:21). Unknown machine/build entries print the count and
+reason as INFO, never PASS. Missing/invalid counters fail. The lighter
+`bench --fixture skeleton` is retained as a diagnostic; the full cold workload
+owns the acceptance gate. `check` runs both. CPU p95, wall p95, load1, and CPU
+lateness remain diagnostics. The absolute product target is still p95 <8 ms;
+the lead will measure it on a quiet M5 before merge and require more optimization
+if it misses. See `docs/verification.md` for the offscreen perf-gate method.
+
+`cold-measure --thread-instructions` prints all 30 instruction samples for A/B
+profiling of the same span. The dynamically resolved `thread_selfcounts`
+THSC_CPI=1 helper validates the ABI and exists only in this harness executable.
+No counter code is linked into App or library targets.
 
 States: `scc-no-boosts` (S2 09/0010 content: "+", Developer Mode hidden, one allowed setting),
 `scc-boost` (S2 11/0005 content plus one Boost), `scc-adblock-on`, `scc-adblock-excluded`,
@@ -1464,7 +1488,7 @@ non-pad work (window, header, grid, buttons) can start at once; its pad work wai
 | Area | Change | Stays |
 |---|---|---|
 | `OpenSiteControl/SiteControlTiles.swift` → `SiteControlRows.swift` | Replace `SiteControlTileButton` (2-column 142 × 48 tiles, two-line titles) with `SiteControlRow` (32 pt disc with a **knocked-out** glyph, 14 pt Semibold title, 13 pt Regular subtitle, pitch 43, one-line truncation, no hover plate, pressed disc −8 levels). Rebuild `SiteControlBoostRow` on `SiteControlRow`: `BoostGlyph.fill` knocked out, static sparkles (top-right 1.0, others 0.35), circle toggles, row and hover chevron (#9F9EA9) open the editor; delete `SiteControlSwitch` and the edit button. `SiteControlSectionButton` becomes the label row (14 pt Semibold; accessory text 13 pt Regular #9F9EA9, no chevron). Add the "+" extension tile (corner 6, row pitch 40). Focus-ring shapes per §3.4–§3.9. | `SiteControlButton` base, `SiteControlDrawing` caches, keyboard-only focus rings |
-| `OpenSiteControl/SiteControlView.swift` | Section order Extensions, Boosts, Settings with the §3.3 gaps; Extensions shows the "+" tile without `OpenExtensionsUI`; reload row and global-off note keep their baselines (row top + 20) at 13 pt; height changes follow the §3.11 curves and choreography. | height animation of surface, mask, shadow, viewport, footer |
+| `OpenSiteControl/SiteControlView.swift` | Section order Extensions, Boosts, Settings with the §3.3 gaps; Extensions shows the "+" tile without `OpenExtensionsUI`; reload baseline stays at row top +20 (13 pt); the two-line global-off note uses +11/+26 baselines inside its 28 pt band (13 pt, 15 pt pitch; guess, lead ruling 2026-10-26); height changes follow the §3.11 curves and choreography. | height animation of surface, mask, shadow, viewport, footer |
 | `OpenSiteControl/SiteControlController.swift` | ⋯ menu always lists Manage Boosts… and New Boost… (New Boost… disabled when not allowed); open the menu at the click point; picker fallback focuses the "+" tile (Return runs `add-extension`). | native `NSMenu` routing, cancellation handling, Command-modifier rejection, Return/Space fall-through |
 | `OpenSiteControl/SiteControlTypes.swift`, `SiteControlDataSource.swift` | `SiteSettingTile.symbol` default `gearshape.fill`. | `openAdBlockSettings`, observer tokens |
 | `sitecontrol-render/*` | New state list (§8.1); flows F3–F9 rewritten for rows; height probes 297 / 372; the knock-out probe; delete tile and two-line-title renders. | `NativeOverlayCapture` (popup readiness wait) |
@@ -1564,7 +1588,7 @@ public enum SiteControlColors {            // macOS Dark measured (IS §20.15); 
     public static let circleOn = DesignColor(light: RGBA(hex: 0x2B2A3C), dark: RGBA(hex: 0xECEDFF))  // disc; glyph is a knock-out
     public static let circleOff = DesignColor(light: .black(0.10), dark: .white(0.28))     // disc; glyph is a knock-out
     public static let tileFill = DesignColor(light: .black(0.05), dark: .white(0.08))
-    public static let separator = DesignColor(light: .black(0.12), dark: .white(0.22))
+    public static let separator = DesignColor(light: .black(0.12), dark: RGBA(hex: 0x232323)) // m: additive +35, plus-lighter in Dark
     public static let pillFill = DesignColor(light: .black(0.04), dark: .white(0.05))
     public static let moreFill = DesignColor(light: .black(0.10), dark: .black(0.28))
 }
