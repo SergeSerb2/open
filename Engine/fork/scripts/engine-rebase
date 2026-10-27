@@ -19,7 +19,7 @@ checklist() {
 3. Sync new pins; read cef/CHROMIUM_UPDATE.txt and follow CEF's documented update flow.
 4. Re-apply each Open series; resolve -> engine-refresh-patches -> engine-apply -> continue.
 5. Redo Rust fragments/vendor/gen if crates or the Chromium Rust toolchain moved.
-6. Check overlay paths for upstream collisions; retain pre-rebase-tree.diff.
+6. Check overlay paths for upstream collisions; re-check docs/engine-fork.md "Rebase watch list"; retain pre-rebase-tree.diff.
 7. Build dev, run engine-status and smoke checks, prove release if unblocked.
 8. Open one PR: old/new pins, each patch outcome, build time, smoke, known gaps.
 9. Keep old outputs and snapshot until merge; rollback with old pins, bootstrap, apply, build.
