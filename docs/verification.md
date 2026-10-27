@@ -86,13 +86,20 @@ reload checks run after measurement. The host stays at −20000,−20000, is nev
 ordered front, and closes in `defer`, including `--fail-after-host` (expected
 exit 1). Unknown or extra arguments fail before host creation.
 
-The command prints `SM6_JSON` with positive process-wide retired instructions,
-cycles, wall and main-thread CPU diagnostics, load1, and raw before/after Mach
-thread census data. Counter errors, zero values, and backward deltas fail;
-there is no CPU-time fallback or instruction threshold yet. `check` uses the
-same counter wrapper once, still enforces the original 120 ms wall budget, and
-keeps the lazy-column and reload protections. It does not yet run SM6 in a
-child process; its caches and helper threads differ from the standalone command.
+Both `check` and `sm6-measure` gate page builds equal to the 1–4 built visible
+columns, exactly one full outline reload per built page, and each built outline's
+actual row count equal to the model. Existing scroll-builds-once and rename-no-
+reload checks remain. Manager/page/row layout callback counts are printed but
+unpinned until all samples on both Macs/loads agree exactly. The three new
+production hook sites each execute one main-actor integer increment, with no
+lock, allocation, or logging.
+
+`SM6_JSON` retains raw counters, work deltas, per-outline rows, wall/main-thread
+CPU/load diagnostics, and Mach thread censuses. Wall lateness versus 120 ms is
+informational. Unavailable/zero/backward cost counters are explicitly reported;
+they never become a CPU fallback or a structural gate. Cost inside an unchanged
+count, drawing/GPU/CA completion, and deferred work remain unbounded; see
+`docs/followups.md`. No other check's gate or tolerance changes.
 
 Build before sampling, through the machine's heavy wrapper.
 On M1, wrap each build, proof, or validation job once with
@@ -130,10 +137,26 @@ any low/high median instruction shift over 5% to the lead. A separate process
 alone does not prove clean counts. Cold process caches can also change this
 workload from the original suite's cached SM6 section.
 
-The initial M1 run measured a −12.56% median instruction shift under burners,
+The initial M1 run measured a −12.56% median process-instruction shift under burners,
 with busy helper threads even in the standalone process. The lead rejected a
-process-wide instruction budget on that evidence. These counters stay diagnostic;
-the existing 120 ms wall gate remains until an explicit replacement is approved.
+process-wide instruction budget on that evidence. These counters stay diagnostic.
+M5 subsequently approved the structural gate above and one bounded main-thread
+instruction probe, confined to sidebar-render. `sm6-measure --thread-instructions`
+resolves `thread_selfcounts` from libSystem with `dlsym`; missing/unsupported
+symbols print `unavailable`. The ABI comes from Apple's pinned
+[XNU resource_private.h](https://github.com/apple-oss-distributions/xnu/blob/xnu-12377.1.9/bsd/sys/resource_private.h#L36-L108):
+`THSC_CPI=1`, two UInt64 fields (instructions, cycles), and an int return from
+`thread_selfcounts(uint32_t, void *, size_t)`. There is no private symbol lookup
+in App or an OpenKit library.
+
+The M1 driver's `--thread-probe` campaign stops at 2026-10-27 04:35:40 UTC,
+including research/build/wait time. It converts remaining absolute time to a
+monotonic deadline once per job and reserves cleanup time. Five low and five
+burner samples must all have valid positive monotonic thread counters, with
+combined `(max-min)/median ≤0.03`. Failure, unavailability, or expiration ends
+the probe; there is no replacement probe or padding. M5 must verify the same
+command before any instruction budget exists. No callback constant is pinned
+and the runtime cost gap stays open pending that evidence.
 The historical 15-run same-section M5 wall range was 59.7…87.2 ms (median ≈70 ms),
 which must not be confused with the earlier 33.7…36 ms Library-build number.
 No instruction threshold or negative threshold crossing is claimed here.

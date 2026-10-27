@@ -47,7 +47,7 @@ enum RenderCLI {
       sidebar-render bench [--rows N] [--selection] [--bulk N] [--expand-all N] [--row-media mixed] [--media-card|--media-stack]
       sidebar-render compare-media --arc FILE.png --ours FILE.png --out DIR --state rest|expanded|stack|stack-expanded
       sidebar-render check
-      sidebar-render sm6-measure [--fail-after-host]
+      sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]
     """
 
     static func value(_ args: [String], _ name: String) -> String? {

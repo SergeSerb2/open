@@ -150,17 +150,12 @@ enum SpaceManagerChecks {
     private static func checkLargeManager() {
         let model = SM6Fixture.makeModel()
         do {
-            let measured = try SM6Fixture.measure(model: model)
+            let measured = SM6Fixture.measure(model: model)
             let manager = measured.manager, host = measured.host
             defer { host.contentView = nil; host.close() }
-            print(String(format: "  .. SM6 first layout instructions %llu; wall %.3f ms, main-thread CPU %.3f ms, load1 %.2f (instructions informational; budget pending M5)",
-                         measured.after.instructions - measured.before.instructions, measured.wallMS,
-                         measured.mainCPUMS, Checks.loadAverage1()))
-            // Stage A retains the original wall gate. No instruction budget yet.
-            Checks.check(measured.wallMS <= 120 && manager.builtColumnIDs.count <= 4, "SM6 10×100 Library to first layout \(Bench.ms(measured.wallMS / 1000)) ≤ 120 ms; only \(manager.builtColumnIDs.count) visible columns built")
+            SM6Fixture.printDiagnostics(measured)
+            SM6Fixture.checkStructure(measured, rows: SM6Fixture.outlineRows(model: model, manager: manager))
             checkLargeManagerUpdates(model: model, manager: manager)
-        } catch {
-            Checks.check(false, "SM6 instructions unavailable: \(error)")
         }
     }
 

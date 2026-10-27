@@ -94,6 +94,7 @@ public final class SpaceManagerView: NSView {
 
     public override func layout() {
         super.layout()
+        SidebarDiagnostics.spaceManagerLayouts += 1
         refreshVisibleColumns()
         scrollView.frame = bounds
         let m = SpaceManagerMetrics.self

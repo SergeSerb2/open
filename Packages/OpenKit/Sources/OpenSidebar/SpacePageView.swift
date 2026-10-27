@@ -37,6 +37,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
         self.menus = menus
         header = SpaceHeaderView(context: context, space: space)
         super.init(frame: .zero)
+        SidebarDiagnostics.spacePageBuilds += 1
         wantsLayer = true
         header.page = self
         addSubview(header)
@@ -105,6 +106,7 @@ final class SpacePageView: NSView, NSOutlineViewDataSource, NSOutlineViewDelegat
 
     override func layout() {
         super.layout()
+        SidebarDiagnostics.spacePageLayouts += 1
         let w = bounds.width
         header.frame = CGRect(x: 0, y: 0, width: w, height: SpaceListMetrics.headerHeight)
         let headerHeight = displaysHeader ? SpaceListMetrics.headerHeight : 0

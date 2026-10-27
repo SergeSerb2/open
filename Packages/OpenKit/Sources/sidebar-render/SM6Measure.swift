@@ -6,13 +6,47 @@ import OpenSidebar
 /// Shared with the existing wall-clock check. No fixture creation is measured.
 @MainActor
 enum SM6Fixture {
+    struct Work: Codable {
+        let pageBuilds: Int
+        let fullReloads: Int
+        let managerLayouts: Int
+        let pageLayouts: Int
+        let rowLayouts: Int
+
+        @MainActor static func snapshot() -> Work {
+            Work(pageBuilds: SidebarDiagnostics.spacePageBuilds, fullReloads: SidebarDiagnostics.fullReloads,
+                 managerLayouts: SidebarDiagnostics.spaceManagerLayouts, pageLayouts: SidebarDiagnostics.spacePageLayouts,
+                 rowLayouts: SidebarDiagnostics.tabRowLayouts)
+        }
+
+        func subtracting(_ before: Work) -> Work {
+            Work(pageBuilds: pageBuilds - before.pageBuilds, fullReloads: fullReloads - before.fullReloads,
+                 managerLayouts: managerLayouts - before.managerLayouts, pageLayouts: pageLayouts - before.pageLayouts,
+                 rowLayouts: rowLayouts - before.rowLayouts)
+        }
+    }
+
+    struct OutlineRows: Codable {
+        let spaceIndex: Int
+        let actual: Int
+        let expected: Int
+    }
+
     struct Measurement {
         let manager: SpaceManagerView
         let host: ScaledWindow
-        let before: SM6Counters.ProcessSample
-        let after: SM6Counters.ProcessSample
+        let before: SM6Counters.ProcessSample?
+        let after: SM6Counters.ProcessSample?
+        let instructions: UInt64?
+        let cycles: UInt64?
+        let processStatus: String
+        let threadBefore: SM6ThreadInstructions.Sample?
+        let threadAfter: SM6ThreadInstructions.Sample?
+        let threadInstructions: UInt64?
+        let threadStatus: String
         let wallMS: Double
-        let mainCPUMS: Double
+        let mainCPUMS: Double?
+        let work: Work
     }
 
     static func makeModel() -> BrowserModel {
@@ -36,24 +70,76 @@ enum SM6Fixture {
         return (manager, host)
     }
 
-    static func measure(model: BrowserModel, preferences: UserDefaults = .standard) throws -> Measurement {
-        let before = try SM6Counters.process()
-        let cpuStart = try SM6Counters.mainCPU()
+    static func measure(model: BrowserModel, preferences: UserDefaults = .standard,
+                        probeThreadInstructions: Bool = false) -> Measurement {
+        let workBefore = Work.snapshot()
+        let threadBefore = probeThreadInstructions ? SM6ThreadInstructions.read() : nil
+        let beforeRead = Result { try SM6Counters.process() }
+        let cpuStart = try? SM6Counters.mainCPU()
         let wallStart = CACurrentMediaTime()
         let (manager, host) = firstLayout(model: model, preferences: preferences)
         let wallEnd = CACurrentMediaTime()
-        // Install cleanup before any fallible post-layout read. The caller owns
-        // the host only after every counter is valid.
-        var transferred = false
-        defer { if !transferred { host.contentView = nil; host.close() } }
-        let cpuEnd = try SM6Counters.mainCPU()
-        let after = try SM6Counters.process()
-        guard after.instructions > before.instructions, after.cycles > before.cycles, cpuEnd >= cpuStart else {
-            throw CLIError(description: "SM6 counter delta is zero/backward: instructions \(before.instructions) → \(after.instructions), cycles \(before.cycles) → \(after.cycles)")
+        let work = Work.snapshot().subtracting(workBefore)
+        let cpuEnd = try? SM6Counters.mainCPU()
+        let afterRead = Result { try SM6Counters.process() }
+        let threadAfter = probeThreadInstructions ? SM6ThreadInstructions.read() : nil
+        let before = try? beforeRead.get(), after = try? afterRead.get()
+        var instructions: UInt64?, cycles: UInt64?
+        var processStatus = "unavailable: counter read failed"
+        if let before, let after, after.instructions > before.instructions, after.cycles > before.cycles {
+            instructions = after.instructions - before.instructions
+            cycles = after.cycles - before.cycles
+            processStatus = "available"
+        } else if before != nil, after != nil {
+            processStatus = "unavailable: zero/backward process counter delta"
+        } else {
+            for read in [beforeRead, afterRead] {
+                if case .failure(let error) = read { processStatus += "; \(error)" }
+            }
         }
-        transferred = true
+        var threadInstructions: UInt64?
+        var threadStatus = threadBefore?.status ?? "unavailable: probe not requested"
+        if let first = threadBefore?.sample, let last = threadAfter?.sample {
+            if last.instructions > first.instructions, last.cycles > first.cycles {
+                threadInstructions = last.instructions - first.instructions
+                threadStatus = "available"
+            } else { threadStatus = "unavailable: zero/backward thread counter delta" }
+        } else if let threadAfter, threadAfter.sample == nil { threadStatus = threadAfter.status }
+        let cpu = cpuStart.flatMap { start in cpuEnd.flatMap { end in end >= start ? (end - start) * 1000 : nil } }
         return Measurement(manager: manager, host: host, before: before, after: after,
-                           wallMS: (wallEnd - wallStart) * 1000, mainCPUMS: (cpuEnd - cpuStart) * 1000)
+                           instructions: instructions, cycles: cycles, processStatus: processStatus,
+                           threadBefore: threadBefore?.sample, threadAfter: threadAfter?.sample,
+                           threadInstructions: threadInstructions, threadStatus: threadStatus,
+                           wallMS: (wallEnd - wallStart) * 1000, mainCPUMS: cpu, work: work)
+    }
+
+    static func outlineRows(model: BrowserModel, manager: SpaceManagerView) -> [OutlineRows] {
+        let built = manager.builtColumnIDs
+        // outline(spaceID:) can materialize an unbuilt page, so read only the built set.
+        return model.spaces.enumerated().compactMap { index, space in
+            guard built.contains(space.id) else { return nil }
+            return OutlineRows(spaceIndex: index, actual: manager.outline(spaceID: space.id)?.numberOfRows ?? -1,
+                               expected: Checks.expectedRows(space: space).count)
+        }
+    }
+
+    static func checkStructure(_ measured: Measurement, rows: [OutlineRows]) {
+        let built = measured.manager.builtColumnIDs.count, work = measured.work
+        Checks.check((1...4).contains(built) && work.pageBuilds == built,
+                     "SM6 page builds equal 1...4 built visible columns (builds \(work.pageBuilds), columns \(built))")
+        Checks.check(work.fullReloads == work.pageBuilds,
+                     "SM6 exactly one full outline load per page build (reloads \(work.fullReloads), builds \(work.pageBuilds))")
+        Checks.check(rows.count == built && rows.allSatisfy { $0.actual == $0.expected },
+                     "SM6 actual outline rows equal model: \(rows.map { "space \($0.spaceIndex + 1)=\($0.actual)/\($0.expected)" }.joined(separator: ", "))")
+        print("  INFO SM6 work manager-layouts=\(work.managerLayouts) page-layouts=\(work.pageLayouts) row-layouts=\(work.rowLayouts) (unpinned AppKit callbacks)")
+    }
+
+    static func printDiagnostics(_ measured: Measurement) {
+        let instructions = measured.instructions.map(String.init) ?? measured.processStatus
+        let thread = measured.threadInstructions.map(String.init) ?? measured.threadStatus
+        let cpu = measured.mainCPUMS.map { String(format: "%.3f", $0) } ?? "unavailable"
+        print(String(format: "  INFO SM6 process instructions %@; main-thread instructions %@; wall %.3f ms; lateness versus 120 ms %+.3f ms; main-thread CPU %@ ms; load1 %.2f (diagnostic only)",
+                     instructions, thread, measured.wallMS, measured.wallMS - 120, cpu, Checks.loadAverage1()))
     }
 }
 
@@ -142,12 +228,19 @@ enum SM6Measure {
     }
 
     private struct Result: Codable {
-        let instructions: UInt64
-        let cycles: UInt64
-        let before: SM6Counters.ProcessSample
-        let after: SM6Counters.ProcessSample
+        let instructions: UInt64?
+        let cycles: UInt64?
+        let before: SM6Counters.ProcessSample?
+        let after: SM6Counters.ProcessSample?
+        let processStatus: String
+        let mainThreadBefore: SM6ThreadInstructions.Sample?
+        let mainThreadAfter: SM6ThreadInstructions.Sample?
+        let mainThreadInstructions: UInt64?
+        let mainThreadStatus: String
+        let work: SM6Fixture.Work
+        let outlineRows: [SM6Fixture.OutlineRows]
         let wallMS: Double
-        let mainCPUMS: Double
+        let mainCPUMS: Double?
         let load1: Double
         let censusWallMS: Double
         let threadsBefore: [SM6Counters.ThreadSample]
@@ -159,10 +252,11 @@ enum SM6Measure {
     }
 
     /// One fresh process, one fixed construction, no run-loop turn until clocks stop.
-    /// No instruction budget exists yet; the default check keeps its 120 ms gate.
+    /// Structure gates acceptance; all costs remain diagnostic pending M5 evidence.
     static func run(_ args: [String]) throws {
-        guard args.isEmpty || args == ["--fail-after-host"] else {
-            throw CLIError(description: "usage: sidebar-render sm6-measure [--fail-after-host]")
+        guard args.count <= 2, Set(args).count == args.count,
+              args.allSatisfy({ ["--fail-after-host", "--thread-instructions"].contains($0) }) else {
+            throw CLIError(description: "usage: sidebar-render sm6-measure [--fail-after-host] [--thread-instructions]")
         }
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("open-sm6-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -184,7 +278,8 @@ enum SM6Measure {
         let load = Checks.loadAverage1()
         let censusStart = CACurrentMediaTime()
         let threadsBefore = try SM6Counters.threads()
-        let measured = try SM6Fixture.measure(model: model, preferences: preferences)
+        let measured = SM6Fixture.measure(model: model, preferences: preferences,
+                                          probeThreadInstructions: args.contains("--thread-instructions"))
         let manager = measured.manager, host = measured.host
         var cleaned = false
         func closeHost() {
@@ -197,7 +292,7 @@ enum SM6Measure {
         defer { closeHost() }
         let threadsAfter = try SM6Counters.threads()
         let censusEnd = CACurrentMediaTime()
-        if args == ["--fail-after-host"] { throw CLIError(description: "SM6 forced failure after host") }
+        if args.contains("--fail-after-host") { throw CLIError(description: "SM6 forced failure after host") }
         let previous = Dictionary(uniqueKeysWithValues: threadsBefore.map { ($0.id, $0) })
         let deltas = try threadsAfter.map { thread in
             let old = previous[thread.id]
@@ -205,22 +300,24 @@ enum SM6Measure {
             return ThreadDelta(id: thread.id, name: thread.name, main: thread.id == mainID, born: old == nil,
                                cpuMS: Double(thread.cpuNS - (old?.cpuNS ?? 0)) / 1_000_000)
         }
-        var result = Result(instructions: measured.after.instructions - measured.before.instructions,
-                            cycles: measured.after.cycles - measured.before.cycles,
-                            before: measured.before, after: measured.after, wallMS: measured.wallMS,
+        let rows = SM6Fixture.outlineRows(model: model, manager: manager)
+        var result = Result(instructions: measured.instructions, cycles: measured.cycles,
+                            before: measured.before, after: measured.after, processStatus: measured.processStatus,
+                            mainThreadBefore: measured.threadBefore, mainThreadAfter: measured.threadAfter,
+                            mainThreadInstructions: measured.threadInstructions, mainThreadStatus: measured.threadStatus,
+                            work: measured.work, outlineRows: rows, wallMS: measured.wallMS,
                             mainCPUMS: measured.mainCPUMS, load1: load,
                             censusWallMS: (censusEnd - censusStart) * 1000,
                             threadsBefore: threadsBefore, threadsAfter: threadsAfter, threadDeltas: deltas,
                             exitedThreadIDs: threadsBefore.filter { old in !threadsAfter.contains { $0.id == old.id } }.map(\.id),
                             builtColumns: manager.builtColumnIDs.count)
-        print(String(format: "SM6 first layout instructions %llu; cycles %llu; wall %.3f ms, main-thread CPU %.3f ms, load1 %.2f (diagnostic; budget pending M5)",
-                     result.instructions, result.cycles, result.wallMS, result.mainCPUMS, result.load1))
+        SM6Fixture.printDiagnostics(measured)
         for delta in deltas {
             print(String(format: "SM6 thread id=%llu name=%@ main=%@ born=%@ cpu=%.3f ms (census interval)",
                          delta.id, delta.name.isEmpty ? "<unnamed>" : delta.name,
                          String(delta.main), String(delta.born), delta.cpuMS))
         }
-        Checks.check((1...4).contains(manager.builtColumnIDs.count), "SM6 isolated first layout builds 1...4 visible columns (\(manager.builtColumnIDs.count))")
+        SM6Fixture.checkStructure(measured, rows: rows)
         SpaceManagerChecks.checkLargeManagerUpdates(model: model, manager: manager)
         closeHost()
         guard !host.isVisible, host.contentView == nil, !NSApp.windows.contains(where: \.isVisible) else {
