@@ -301,7 +301,9 @@ class Open:
         self.log.flush()
         # LaunchServices writes the live app's stderr to this separate file;
         # quit later appends it to the aggregate log. Read it before quit too.
-        paths = [self.log.name, self.launch_log_path]
+        # The aggregate may contain an earlier attempt with the same menu
+        # command id. A refusal must come from this app instance's stderr.
+        paths = [self.launch_log_path]
         return "\n".join(Path(path).read_text(errors="replace") for path in paths if os.path.exists(path))
 
     def cleanup_surfaces(self):
