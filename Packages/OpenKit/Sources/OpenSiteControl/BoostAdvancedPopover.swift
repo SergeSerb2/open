@@ -36,10 +36,11 @@ public final class BoostAdvancedPopover {
         if wasKey { panel.makeKey();panel.makeFirstResponder(surface.sliders.first) }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown,.rightMouseDown,.otherMouseDown]) { [weak self] event in
             MainActor.assumeIsolated {
-                guard let self,self.isPresented,let window = event.window else { return event }
+                guard let self,self.isPresented,let window = event.window else { return }
                 let point = window.convertPoint(toScreen: event.locationInWindow),anchor = self.parent.convertToScreen(self.anchor.convert(self.anchor.bounds,to: nil))
-                if !self.panel.frame.contains(point) && !anchor.contains(point) { self.close() };return event
+                if !self.panel.frame.contains(point) && !anchor.contains(point) { self.close() }
             }
+            return event
         }
     }
     public func refresh() { surface.refresh() }
@@ -48,7 +49,7 @@ public final class BoostAdvancedPopover {
         surface.sliders.forEach { $0.finish() }
         if let monitor { NSEvent.removeMonitor(monitor);self.monitor = nil }
         let panel = panel,parent = parent
-        let finish = { parent.removeChildWindow(panel);panel.orderOut(nil);panel.close() }
+        let finish: @MainActor @Sendable ()->Void = { parent.removeChildWindow(panel);panel.orderOut(nil);panel.close() }
         if animated { CATransaction.begin();CATransaction.setCompletionBlock { MainActor.assumeIsolated { finish() } };surface.animate(open: false);CATransaction.commit() } else { finish() }
         if wasKey { parent.makeKey() };onClose?()
     }
@@ -59,14 +60,14 @@ private final class AdvancedSurface: NSView {
     let sliders: [EditorSlider]
     let session: BoostEditorSession
     var arrowX: CGFloat = 125.5 { didSet { needsLayout = true } }
-    private let effect = NSVisualEffectView(),shadow = CALayer(),rim = CAShapeLayer(),mask = CAShapeLayer(),fallback = CALayer()
+    private let effect = NSVisualEffectView(),surfaceShadow = CALayer(),rim = CAShapeLayer(),mask = CAShapeLayer(),fallback = CALayer()
     var offscreenMaterial: CGImage? { didSet { effect.isHidden = offscreenMaterial != nil;fallback.contents = offscreenMaterial } }
     override var isFlipped: Bool { true }
     override var wantsUpdateLayer: Bool { true }
     init(session: BoostEditorSession) {
         self.session = session;sliders = [1,0,2].map { EditorSlider(session: session,component: $0) };super.init(frame: .zero);wantsLayer = true
         effect.material = PopoverMaterial.material;effect.blendingMode = PopoverMaterial.blending;effect.state = .active;effect.appearance = .init(named: .aqua);effect.wantsLayer = true;effect.layer?.mask = mask
-        layer?.addSublayer(shadow);addSubview(effect);layer?.addSublayer(fallback);layer?.addSublayer(rim)
+        layer?.addSublayer(surfaceShadow);addSubview(effect);layer?.addSublayer(fallback);layer?.addSublayer(rim)
         sliders.forEach(addSubview);setAccessibilityElement(false);refresh()
     }
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -76,7 +77,7 @@ private final class AdvancedSurface: NSView {
         effect.frame = bounds;mask.frame = bounds;mask.path = path;fallback.frame = bounds
         let fmask = CAShapeLayer();fmask.path = path;fallback.mask = fmask
         rim.path = path;rim.fillColor = nil;rim.strokeColor = SiteControlColors.rim.cgColor(.light);rim.lineWidth = 1/(window?.backingScaleFactor ?? 1)
-        shadow.frame = bounds;shadow.shadowPath = path;shadow.shadowColor = NSColor.black.cgColor;shadow.shadowOpacity = PopoverMaterial.shadowOpacity;shadow.shadowRadius = PopoverMaterial.shadowRadius;shadow.shadowOffset = CGSize(width: 0,height: PopoverMaterial.shadowOffsetY)
+        surfaceShadow.frame = bounds;surfaceShadow.shadowPath = path;surfaceShadow.shadowColor = NSColor.black.cgColor;surfaceShadow.shadowOpacity = PopoverMaterial.shadowOpacity;surfaceShadow.shadowRadius = PopoverMaterial.shadowRadius;surfaceShadow.shadowOffset = CGSize(width: 0,height: PopoverMaterial.shadowOffsetY)
         CATransaction.commit()
         for (i,slider) in sliders.enumerated() { slider.frame = CGRect(x: 32,y: 60+CGFloat(i)*62,width: 186,height: 16) }
     }

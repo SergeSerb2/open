@@ -149,8 +149,10 @@ public final class BoostColorPadView: OpenDesign.ColorPadView {
         self.pad = pad; self.hue = hue; super.init()
         setAccessibilityRole(.slider); setAccessibilityLabel(hue ? "Hue" : "Intensity"); setAccessibilityParent(pad)
     }
-    override func accessibilityFrame() -> NSRect { pad.map { $0.window?.convertToScreen($0.convert($0.bounds,to: nil)) ?? .zero } ?? .zero }
-    override func accessibilityValue() -> Any? { pad.map { hue ? $0.session.displayWheel.hue : $0.session.displayWheel.intensity*100 } }
-    override func accessibilityPerformIncrement() -> Bool { pad?.accessibilityStep(hue: hue ? 5 : nil,radius: hue ? nil : 0.03) ?? false }
-    override func accessibilityPerformDecrement() -> Bool { pad?.accessibilityStep(hue: hue ? -5 : nil,radius: hue ? nil : -0.03) ?? false }
+    nonisolated override func accessibilityFrame() -> NSRect { MainActor.assumeIsolated { pad.map { $0.window?.convertToScreen($0.convert($0.bounds,to: nil)) ?? .zero } ?? .zero } }
+    nonisolated override func accessibilityValue() -> Any? {
+        let value: Double? = MainActor.assumeIsolated { pad.map { hue ? $0.session.displayWheel.hue : $0.session.displayWheel.intensity*100 } }; return value
+    }
+    nonisolated override func accessibilityPerformIncrement() -> Bool { MainActor.assumeIsolated { pad?.accessibilityStep(hue: hue ? 5 : nil,radius: hue ? nil : 0.03) ?? false } }
+    nonisolated override func accessibilityPerformDecrement() -> Bool { MainActor.assumeIsolated { pad?.accessibilityStep(hue: hue ? -5 : nil,radius: hue ? nil : -0.03) ?? false } }
 }
