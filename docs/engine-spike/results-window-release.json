@@ -6,78 +6,85 @@
     "source": "fork",
     "stamp": "fork /Users/serge/Developer/open-engine/chromium_git/chromium/src/cef/binary_distrib/cef_binary_156.0.14+g4fa4ab5+chromium-156.0.8078.48_macosarm64_minimal 1793036548"
   },
-  "started": "2026-10-26 16:05:24",
+  "interrupted_attempts": [],
+  "started": "2026-10-26 16:34:44",
   "style": "chrome",
   "window": {
     "all_spaces_strip_order": {
       "first_after": [
         {
-          "active": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
+          "active": "F0AD56DD-487E-4770-84FA-41384F6EEE82",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
+          "profile": "6162DDEB-3840-4446-ADF1-D066C4A60EDE",
           "tabs": [
-            "E6ECB25B-F822-4D66-8BF0-C087573334ED",
-            "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
+            "F0AD56DD-487E-4770-84FA-41384F6EEE82",
+            "8DB32A9F-4F24-4F47-B9B5-5E2447162A75"
           ]
         }
       ],
       "first_before": [
         {
-          "active": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
+          "active": "F0AD56DD-487E-4770-84FA-41384F6EEE82",
           "activeIsMember": true,
           "contents": [
             2,
             1
           ],
           "context": "Default",
-          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
+          "profile": "6162DDEB-3840-4446-ADF1-D066C4A60EDE",
           "tabs": [
-            "E6ECB25B-F822-4D66-8BF0-C087573334ED",
-            "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
+            "F0AD56DD-487E-4770-84FA-41384F6EEE82",
+            "8DB32A9F-4F24-4F47-B9B5-5E2447162A75"
           ]
         }
       ],
       "ok": true,
       "second_after": [
         {
-          "active": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+          "active": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
+          "profile": "6162DDEB-3840-4446-ADF1-D066C4A60EDE",
           "tabs": [
-            "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
-            "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+            "8DB32A9F-4F24-4F47-B9B5-5E2447162A75",
+            "5A070C30-DD59-46D1-8F78-CF168BF920FE"
           ]
         }
       ],
       "second_before": [
         {
-          "active": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
+          "active": "8DB32A9F-4F24-4F47-B9B5-5E2447162A75",
           "activeIsMember": true,
           "contents": [
             4,
             3
           ],
           "context": "Default",
-          "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
+          "profile": "6162DDEB-3840-4446-ADF1-D066C4A60EDE",
           "tabs": [
-            "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
-            "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+            "8DB32A9F-4F24-4F47-B9B5-5E2447162A75",
+            "5A070C30-DD59-46D1-8F78-CF168BF920FE"
           ]
         }
       ]
     },
     "background_lazy": {
       "ok": true
+    },
+    "background_tagged_pointer": {
+      "hidden": true,
+      "inactive": true,
+      "ok": true,
+      "revealed": true
     },
     "card_edges_1x": {
       "corner_symmetry_max": 0.083,
@@ -2990,6 +2997,16 @@
       },
       "skipped": []
     },
+    "chrome_activation_events": [
+      {
+        "active": true,
+        "event": "NSApplicationDidBecomeActiveNotification",
+        "frontmostApp": "Open",
+        "frontmostPID": 1410,
+        "keyWindow": 131825,
+        "uptime": 146322.82217766668
+      }
+    ],
     "close_unloaded_pinned": {
       "after_close": {
         "created": 1,
@@ -3013,12 +3030,12 @@
     },
     "cold_fresh_profile": {
       "median_ms": {
-        "engineStart": 263,
-        "engineStarted": 372,
-        "firstContentfulPaint": 579,
-        "main": 133,
-        "modelLoaded": 136,
-        "sidebarDrawn": 262
+        "engineStart": 349,
+        "engineStarted": 427,
+        "firstContentfulPaint": 580,
+        "main": 176,
+        "modelLoaded": 178,
+        "sidebarDrawn": 348
       },
       "ok": false,
       "samples": 5
@@ -3202,18 +3219,172 @@
       "ok": true,
       "timing": {
         "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-        "didFinishLaunching": 3563,
-        "engineInitialized": 3559,
-        "engineStart": 3424,
-        "engineStarted": 3552,
+        "didFinishLaunching": 3376,
+        "engineInitialized": 3370,
+        "engineStart": 3283,
+        "engineStarted": 3362,
+        "firstContentfulPaint": 3495,
         "firstFrameConfirmed": false,
-        "firstFrameWaitTimedOut": 3422,
-        "firstLoadEnd": 3730,
+        "firstFrameWaitTimedOut": 3282,
+        "firstLoadEnd": 3470,
+        "firstPaintClockUncertaintyMs": 0.28,
         "kernelProcessStart": true,
-        "main": 123,
-        "modelLoaded": 125,
-        "windowShown": 213
+        "main": 149,
+        "modelLoaded": 151,
+        "windowShown": 233
       }
+    },
+    "focus_preserves_find": {
+      "after": {
+        "findText": "keep-find-focus",
+        "findVisible": true,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "find",
+        "responder": "NSTextView",
+        "sheet": false
+      },
+      "before": {
+        "findText": "keep-find-focus",
+        "findVisible": true,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 0,
+        "owner": "find",
+        "responder": "NSTextView",
+        "sheet": false
+      },
+      "loadDelivery": {
+        "findText": "keep-find-focus",
+        "findVisible": true,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "find",
+        "responder": "NSTextView",
+        "sheet": false
+      },
+      "native": {
+        "active": true,
+        "frontmostApp": "Open",
+        "frontmostPID": 400,
+        "keyWindow": 131781,
+        "uptime": 146312.85718929168
+      },
+      "ok": true,
+      "peerPID": null
+    },
+    "focus_preserves_inactive_dismiss": {
+      "after": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "window",
+        "responder": "BrowserWindow",
+        "sheet": false
+      },
+      "before": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 0,
+        "owner": "commandbar",
+        "responder": "CommandBarFieldEditor",
+        "sheet": false
+      },
+      "loadDelivery": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "commandbar",
+        "responder": "CommandBarFieldEditor",
+        "sheet": false
+      },
+      "native": {
+        "active": false,
+        "frontmostApp": "Open",
+        "frontmostPID": 1319,
+        "keyWindow": 0,
+        "uptime": 146321.57133195834
+      },
+      "ok": true,
+      "peerPID": 1319
+    },
+    "focus_preserves_inactive_load": {
+      "after": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "sidebar",
+        "responder": "SidebarOutlineView",
+        "sheet": false
+      },
+      "before": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 0,
+        "owner": "sidebar",
+        "responder": "SidebarOutlineView",
+        "sheet": false
+      },
+      "loadDelivery": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "sidebar",
+        "responder": "SidebarOutlineView",
+        "sheet": false
+      },
+      "native": {
+        "active": false,
+        "frontmostApp": "Open",
+        "frontmostPID": 1062,
+        "keyWindow": 0,
+        "uptime": 146317.44547500001
+      },
+      "ok": true,
+      "peerPID": 1062
+    },
+    "focus_preserves_sidebar": {
+      "after": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "sidebar",
+        "responder": "SidebarOutlineView",
+        "sheet": false
+      },
+      "before": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 0,
+        "owner": "sidebar",
+        "responder": "SidebarOutlineView",
+        "sheet": false
+      },
+      "loadDelivery": {
+        "findText": "",
+        "findVisible": false,
+        "lastNavigationRestored": false,
+        "navigationDecisions": 1,
+        "owner": "sidebar",
+        "responder": "SidebarOutlineView",
+        "sheet": false
+      },
+      "native": {
+        "active": true,
+        "frontmostApp": "Open",
+        "frontmostPID": 221,
+        "keyWindow": 131771,
+        "uptime": 146311.18794595834
+      },
+      "ok": true,
+      "peerPID": null
     },
     "frame_save_debounced": {
       "before": {
@@ -3243,23 +3414,24 @@
       "ok": true
     },
     "fullscreen_hover_reveal": {
-      "dismissed_on_selection_s": 0.562,
+      "dismissed_on_selection_s": 0.585,
       "hidden": "hidden",
       "ok": true,
-      "revealed_s": 0.845
+      "revealed_s": 0.853
     },
     "hide_reveal": {
-      "dismissed_s": 0.67,
+      "dismissed_s": 0.72,
       "hidden": "hidden",
-      "left_s": 0.845,
+      "left_s": 0.746,
       "ok": true,
       "panel_x": 10,
-      "revealed_again_s": 0.789,
-      "revealed_s": 0.828,
+      "revealed_again_s": 1.217,
+      "revealed_s": 1.002,
       "selected": true
     },
     "html_fullscreen_from_window": {
       "after_exit": {
+        "activationPolicy": 0,
         "appActive": true,
         "automationPointer": [
           3,
@@ -3322,6 +3494,7 @@
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
           300,
           200,
@@ -3332,16 +3505,18 @@
         "fullscreenChanges": 4,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
+        "id": "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8",
+        "isKeyWindow": true,
         "key": true,
-        "layoutPasses": 235,
+        "keyWindow": 131731,
+        "layoutPasses": 241,
         "miniaturized": false,
-        "number": 127336,
+        "number": 131731,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+            "tab": "5A070C30-DD59-46D1-8F78-CF168BF920FE"
           }
         ],
         "panel": [
@@ -3358,7 +3533,7 @@
             0,
             0
           ],
-          "dwell": 0.15622595831518993,
+          "dwell": 0.15408991667209193,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3367,15 +3542,21 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "shownPages": [
-          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+          "5A070C30-DD59-46D1-8F78-CF168BF920FE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D",
         "titlebar": [
           0,
           0,
@@ -3441,10 +3622,12 @@
           false
         ],
         "trafficLightsHovered": false,
+        "visible": true,
         "zoomed": false
       },
       "ok": true,
       "page_state": {
+        "activationPolicy": 0,
         "appActive": true,
         "automationPointer": [
           3,
@@ -3507,6 +3690,7 @@
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
           0,
           0,
@@ -3517,16 +3701,18 @@
         "fullscreenChanges": 3,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
+        "id": "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8",
+        "isKeyWindow": true,
         "key": true,
-        "layoutPasses": 209,
+        "keyWindow": 131731,
+        "layoutPasses": 215,
         "miniaturized": false,
-        "number": 127336,
+        "number": 131731,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+            "tab": "5A070C30-DD59-46D1-8F78-CF168BF920FE"
           }
         ],
         "panel": [
@@ -3543,7 +3729,7 @@
             0,
             0
           ],
-          "dwell": 0.15622595831518993,
+          "dwell": 0.15408991667209193,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3552,15 +3738,21 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "shownPages": [
-          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+          "5A070C30-DD59-46D1-8F78-CF168BF920FE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D",
         "titlebar": [
           0,
           0,
@@ -3626,11 +3818,13 @@
           true
         ],
         "trafficLightsHovered": false,
+        "visible": true,
         "zoomed": false
       }
     },
     "html_fullscreen_in_native": {
       "after_exit": {
+        "activationPolicy": 0,
         "appActive": true,
         "automationPointer": [
           3,
@@ -3693,6 +3887,7 @@
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
           0,
           0,
@@ -3703,16 +3898,18 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
+        "id": "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8",
+        "isKeyWindow": true,
         "key": true,
-        "layoutPasses": 164,
+        "keyWindow": 131731,
+        "layoutPasses": 172,
         "miniaturized": false,
-        "number": 127336,
+        "number": 131731,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+            "tab": "5A070C30-DD59-46D1-8F78-CF168BF920FE"
           }
         ],
         "panel": [
@@ -3729,7 +3926,7 @@
             0,
             0
           ],
-          "dwell": 0.15622595831518993,
+          "dwell": 0.15408991667209193,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3738,15 +3935,21 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "shownPages": [
-          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+          "5A070C30-DD59-46D1-8F78-CF168BF920FE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D",
         "titlebar": [
           0,
           0,
@@ -3812,10 +4015,12 @@
           false
         ],
         "trafficLightsHovered": false,
+        "visible": true,
         "zoomed": false
       },
       "ok": true,
       "page_state": {
+        "activationPolicy": 0,
         "appActive": true,
         "automationPointer": [
           3,
@@ -3878,6 +4083,7 @@
         ],
         "engineSelected": 3,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20C%3C/title%3E%3Ch1%3EWindow%20C%3C/h1%3E",
+        "firstResponder": "RenderWidgetHostViewCocoa",
         "frame": [
           0,
           0,
@@ -3888,16 +4094,18 @@
         "fullscreenChanges": 1,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
+        "id": "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8",
+        "isKeyWindow": true,
         "key": true,
-        "layoutPasses": 157,
+        "keyWindow": 131731,
+        "layoutPasses": 165,
         "miniaturized": false,
-        "number": 127336,
+        "number": 131731,
         "pageFullscreen": true,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+            "tab": "5A070C30-DD59-46D1-8F78-CF168BF920FE"
           }
         ],
         "panel": [
@@ -3914,7 +4122,7 @@
             0,
             0
           ],
-          "dwell": 0.15622595831518993,
+          "dwell": 0.15408991667209193,
           "hides": 1,
           "offset": null,
           "phase": "idle",
@@ -3923,15 +4131,21 @@
           "zone": "innerEdge"
         },
         "revealed": false,
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "shownPages": [
-          "9260AA09-F0BA-4944-A3AF-8DE455EE7009"
+          "5A070C30-DD59-46D1-8F78-CF168BF920FE"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": false,
         "sidebarWidth": 228,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D",
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D",
         "titlebar": [
           0,
           0,
@@ -3997,6 +4211,7 @@
           false
         ],
         "trafficLightsHovered": false,
+        "visible": true,
         "zoomed": false
       }
     },
@@ -4016,11 +4231,11 @@
           1000,
           700
         ],
-        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D"
       },
       "ok": true,
       "restored": {
@@ -4030,11 +4245,11 @@
           1000,
           700
         ],
-        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D"
       }
     },
     "last_window_reopen": {
@@ -4046,11 +4261,11 @@
           1000,
           700
         ],
-        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D"
       },
       "no_windows_after_close": true,
       "ok": true,
@@ -4061,183 +4276,189 @@
           1000,
           700
         ],
-        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-        "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+        "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+        "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
         "sidebarMode": "hidden",
         "sidebarWidth": 300,
-        "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
+        "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D"
       }
     },
     "launch_runs": {
       "cold_fresh_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 528,
-          "engineInitialized": 525,
-          "engineStart": 316,
-          "engineStarted": 517,
-          "firstContentfulPaint": 697,
+          "didFinishLaunching": 522,
+          "engineInitialized": 519,
+          "engineStart": 361,
+          "engineStarted": 516,
+          "firstContentfulPaint": 652,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 664,
+          "firstLoadEnd": 626,
           "firstPaintClockUncertaintyMs": 0.11,
           "kernelProcessStart": true,
-          "main": 139,
-          "modelLoaded": 142,
-          "sidebarDrawn": 315,
-          "windowShown": 240
+          "main": 176,
+          "modelLoaded": 178,
+          "sidebarDrawn": 361,
+          "windowShown": 308
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 437,
-          "engineInitialized": 433,
-          "engineStart": 309,
-          "engineStarted": 420,
-          "firstContentfulPaint": 604,
+          "didFinishLaunching": 428,
+          "engineInitialized": 426,
+          "engineStart": 344,
+          "engineStarted": 421,
+          "firstContentfulPaint": 567,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 569,
-          "firstPaintClockUncertaintyMs": 0.3,
+          "firstLoadEnd": 547,
+          "firstPaintClockUncertaintyMs": 0.08,
           "kernelProcessStart": true,
-          "main": 164,
-          "modelLoaded": 167,
-          "sidebarDrawn": 308,
-          "windowShown": 256
+          "main": 179,
+          "modelLoaded": 181,
+          "sidebarDrawn": 343,
+          "windowShown": 286
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 318,
-          "engineInitialized": 313,
-          "engineStart": 189,
-          "engineStarted": 305,
-          "firstContentfulPaint": 528,
+          "didFinishLaunching": 433,
+          "engineInitialized": 429,
+          "engineStart": 349,
+          "engineStarted": 426,
+          "firstContentfulPaint": 568,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 504,
+          "firstLoadEnd": 553,
+          "firstPaintClockUncertaintyMs": 0.11,
+          "kernelProcessStart": true,
+          "main": 174,
+          "modelLoaded": 177,
+          "sidebarDrawn": 348,
+          "windowShown": 273
+        },
+        {
+          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
+          "didFinishLaunching": 438,
+          "engineInitialized": 431,
+          "engineStart": 345,
+          "engineStarted": 427,
+          "firstContentfulPaint": 580,
+          "firstFrameConfirmed": true,
+          "firstLoadEnd": 554,
           "firstPaintClockUncertaintyMs": 0.12,
           "kernelProcessStart": true,
-          "main": 52,
-          "modelLoaded": 54,
-          "sidebarDrawn": 188,
-          "windowShown": 127
+          "main": 176,
+          "modelLoaded": 178,
+          "sidebarDrawn": 344,
+          "windowShown": 273
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 386,
-          "engineInitialized": 379,
-          "engineStart": 261,
-          "engineStarted": 372,
-          "firstContentfulPaint": 565,
+          "didFinishLaunching": 464,
+          "engineInitialized": 449,
+          "engineStart": 360,
+          "engineStarted": 445,
+          "firstContentfulPaint": 603,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 528,
-          "firstPaintClockUncertaintyMs": 0.09,
-          "kernelProcessStart": true,
-          "main": 116,
-          "modelLoaded": 119,
-          "sidebarDrawn": 260,
-          "windowShown": 207
-        },
-        {
-          "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 384,
-          "engineInitialized": 380,
-          "engineStart": 263,
-          "engineStarted": 372,
-          "firstContentfulPaint": 579,
-          "firstFrameConfirmed": true,
-          "firstLoadEnd": 536,
+          "firstLoadEnd": 578,
           "firstPaintClockUncertaintyMs": 0.12,
           "kernelProcessStart": true,
-          "main": 133,
-          "modelLoaded": 136,
-          "sidebarDrawn": 262,
-          "windowShown": 205
+          "main": 191,
+          "modelLoaded": 194,
+          "sidebarDrawn": 360,
+          "windowShown": 299
         }
       ],
       "warm_existing_profile": [
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 340,
-          "engineInitialized": 330,
-          "engineStart": 209,
-          "engineStarted": 324,
-          "firstContentfulPaint": 535,
+          "didFinishLaunching": 438,
+          "engineInitialized": 434,
+          "engineStart": 352,
+          "engineStarted": 431,
+          "firstContentfulPaint": 560,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 517,
-          "firstPaintClockUncertaintyMs": 0.2,
+          "firstLoadEnd": 538,
+          "firstPaintClockUncertaintyMs": 0.11,
           "kernelProcessStart": true,
-          "main": 65,
-          "modelLoaded": 71,
-          "sidebarDrawn": 208,
-          "windowShown": 149
+          "main": 177,
+          "modelLoaded": 180,
+          "sidebarDrawn": 351,
+          "windowShown": 304
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 528,
-          "engineInitialized": 521,
-          "engineStart": 380,
-          "engineStarted": 502,
-          "firstContentfulPaint": 702,
+          "didFinishLaunching": 456,
+          "engineInitialized": 452,
+          "engineStart": 358,
+          "engineStarted": 437,
+          "firstContentfulPaint": 597,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 676,
-          "firstPaintClockUncertaintyMs": 0.13,
+          "firstLoadEnd": 578,
+          "firstPaintClockUncertaintyMs": 0.27,
           "kernelProcessStart": true,
-          "main": 141,
-          "modelLoaded": 144,
-          "sidebarDrawn": 379,
-          "windowShown": 281
+          "main": 177,
+          "modelLoaded": 179,
+          "sidebarDrawn": 357,
+          "windowShown": 297
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 423,
-          "engineInitialized": 416,
-          "engineStart": 301,
-          "engineStarted": 406,
-          "firstContentfulPaint": 603,
+          "didFinishLaunching": 446,
+          "engineInitialized": 427,
+          "engineStart": 346,
+          "engineStarted": 423,
+          "firstContentfulPaint": 584,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 572,
-          "firstPaintClockUncertaintyMs": 0.23,
+          "firstLoadEnd": 567,
+          "firstPaintClockUncertaintyMs": 0.08,
           "kernelProcessStart": true,
-          "main": 144,
-          "modelLoaded": 148,
-          "sidebarDrawn": 299,
-          "windowShown": 228
+          "main": 176,
+          "modelLoaded": 178,
+          "sidebarDrawn": 345,
+          "windowShown": 285
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 455,
-          "engineInitialized": 448,
-          "engineStart": 325,
-          "engineStarted": 439,
-          "firstContentfulPaint": 664,
+          "didFinishLaunching": 413,
+          "engineInitialized": 409,
+          "engineStart": 323,
+          "engineStarted": 404,
+          "firstContentfulPaint": 545,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 645,
-          "firstPaintClockUncertaintyMs": 0.45,
+          "firstLoadEnd": 531,
+          "firstPaintClockUncertaintyMs": 0.08,
           "kernelProcessStart": true,
-          "main": 126,
-          "modelLoaded": 129,
+          "main": 177,
+          "modelLoaded": 180,
           "sidebarDrawn": 323,
-          "windowShown": 247
+          "windowShown": 273
         },
         {
           "clock": "mach_continuous_time; kernel ri_proc_start_abstime",
-          "didFinishLaunching": 308,
-          "engineInitialized": 302,
-          "engineStart": 193,
-          "engineStarted": 296,
-          "firstContentfulPaint": 468,
+          "didFinishLaunching": 418,
+          "engineInitialized": 413,
+          "engineStart": 329,
+          "engineStarted": 408,
+          "firstContentfulPaint": 552,
           "firstFrameConfirmed": true,
-          "firstLoadEnd": 443,
-          "firstPaintClockUncertaintyMs": 0.1,
+          "firstLoadEnd": 539,
+          "firstPaintClockUncertaintyMs": 0.12,
           "kernelProcessStart": true,
-          "main": 62,
-          "modelLoaded": 65,
-          "sidebarDrawn": 192,
-          "windowShown": 133
+          "main": 188,
+          "modelLoaded": 190,
+          "sidebarDrawn": 328,
+          "windowShown": 282
         }
       ]
     },
+    "launch_waiter_early_exit": {
+      "actualAppPID": 97694,
+      "launcherExit": 0,
+      "ok": true,
+      "waiterEndedBeforeAutomation": true
+    },
     "load_average": [
-      9.45947265625,
-      10.10546875,
-      13.07470703125
+      82.41943359375,
+      43.06298828125,
+      24.77685546875
     ],
     "multiple_window_png": {
       "file": "window-multiple.png",
@@ -4247,19 +4468,20 @@
       "ok": true,
       "windows": [
         {
-          "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-          "number": 127311
+          "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+          "number": 131684
         },
         {
-          "id": "4AEEF782-2112-4BE9-909D-2472487DEE53",
-          "number": 127336
+          "id": "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8",
+          "number": 131731
         }
       ]
     },
     "native_window": {
       "ok": true,
       "state": {
-        "appActive": false,
+        "activationPolicy": 0,
+        "appActive": true,
         "automationPointer": null,
         "axWindowButtons": [
           {
@@ -4318,6 +4540,7 @@
         ],
         "engineSelected": 0,
         "engineURL": "",
+        "firstResponder": "FavoritesCollectionView",
         "frame": [
           100,
           100,
@@ -4328,11 +4551,13 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-        "key": false,
-        "layoutPasses": 8,
+        "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+        "isKeyWindow": true,
+        "key": true,
+        "keyWindow": 131684,
+        "layoutPasses": 7,
         "miniaturized": false,
-        "number": 127311,
+        "number": 131684,
         "pageFullscreen": false,
         "paneBackgrounds": [],
         "panel": [
@@ -4358,13 +4583,19 @@
           "zone": ""
         },
         "revealed": false,
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
         "selected": "",
         "shownPages": [],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 228,
-        "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4",
+        "space": "DEF16CF5-F2A6-4A55-99C9-AD66542CD3ED",
         "titlebar": [
           0,
           0,
@@ -4430,6 +4661,7 @@
           false
         ],
         "trafficLightsHovered": false,
+        "visible": true,
         "zoomed": false
       }
     },
@@ -4450,7 +4682,8 @@
     "resize_300": {
       "ok": true,
       "state": {
-        "appActive": false,
+        "activationPolicy": 0,
+        "appActive": true,
         "automationPointer": null,
         "axWindowButtons": [
           {
@@ -4509,6 +4742,7 @@
         ],
         "engineSelected": 1,
         "engineURL": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
+        "firstResponder": "FavoritesCollectionView",
         "frame": [
           80,
           60,
@@ -4519,16 +4753,18 @@
         "fullscreenChanges": 0,
         "fullscreenTransition": false,
         "hiddenTitle": true,
-        "id": "99533131-61DB-4E1D-B0E6-2A04B8AA32A3",
-        "key": false,
-        "layoutPasses": 146,
+        "id": "DFF0CC0E-D4AC-4A44-A748-C024D512CE05",
+        "isKeyWindow": true,
+        "key": true,
+        "keyWindow": 131684,
+        "layoutPasses": 158,
         "miniaturized": false,
-        "number": 127311,
+        "number": 131684,
         "pageFullscreen": false,
         "paneBackgrounds": [
           {
             "color": [],
-            "tab": "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
+            "tab": "8DB32A9F-4F24-4F47-B9B5-5E2447162A75"
           }
         ],
         "panel": [
@@ -4554,15 +4790,21 @@
           "zone": ""
         },
         "revealed": false,
-        "selected": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
+        "screenFrame": [
+          0,
+          0,
+          2560,
+          1440
+        ],
+        "selected": "8DB32A9F-4F24-4F47-B9B5-5E2447162A75",
         "shownPages": [
-          "A0911F89-5CDF-44B6-90D7-BCB741A5F988"
+          "8DB32A9F-4F24-4F47-B9B5-5E2447162A75"
         ],
         "sidebarClass": "OpenSidebar.SidebarView",
         "sidebarMode": "anchored",
         "sidebarVisible": true,
         "sidebarWidth": 300,
-        "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4",
+        "space": "DEF16CF5-F2A6-4A55-99C9-AD66542CD3ED",
         "titlebar": [
           0,
           0,
@@ -4628,6 +4870,7 @@
           false
         ],
         "trafficLightsHovered": false,
+        "visible": true,
         "zoomed": false
       }
     },
@@ -4641,7 +4884,7 @@
         228,
         790
       ],
-      "dwell_s": 0.225,
+      "dwell_s": 0.157,
       "edge_walk": [
         [
           2,
@@ -4749,7 +4992,7 @@
           2
         ]
       ],
-      "exit_to_idle_s": 0.241,
+      "exit_to_idle_s": 0.16,
       "held": {
         "card": [
           5,
@@ -4757,7 +5000,7 @@
           228,
           790
         ],
-        "dwell": 0.22488483332563192,
+        "dwell": 0.1565837083326187,
         "hides": 2,
         "offset": 0,
         "phase": "shown",
@@ -4780,10 +5023,16 @@
           29.0
         ]
       ],
+      "native_state_at_reveal": {
+        "appActive": true,
+        "firstResponder": "BrowserWindow",
+        "fullscreenTransition": false,
+        "isKeyWindow": true
+      },
       "ok": true,
       "pass_by_without_reveal": true,
-      "settled_s": 0.905,
-      "slide_out_s": 0.622
+      "settled_s": 0.864,
+      "slide_out_s": 0.553
     },
     "selected_only_0": {
       "ok": true,
@@ -5772,39 +6021,39 @@
             "appActive": true,
             "automationPointer": [
               66,
-              824
+              24
             ],
             "frame": [
-              0,
-              0,
-              2560,
-              1440
+              90,
+              80,
+              1000,
+              640
             ],
-            "fullscreen": true,
+            "fullscreen": false,
             "key": true,
             "miniaturized": false,
             "trafficLightFrames": [
               [
-                0,
-                0,
+                13,
+                17,
                 14,
                 14
               ],
               [
-                0,
-                0,
+                36,
+                17,
                 14,
                 14
               ],
               [
-                0,
-                0,
+                59,
+                17,
                 14,
                 14
               ]
             ],
             "trafficLightsDimmed": false,
-            "trafficLightsHovered": false,
+            "trafficLightsHovered": true,
             "zoomed": false
           },
           "before_click": {
@@ -6284,16 +6533,16 @@
       ],
       "drawn_launch": [
         [
-          19.99,
-          23.99
-        ],
-        [
-          43.0,
+          20.0,
           24.0
         ],
         [
+          42.99,
+          24.01
+        ],
+        [
           66.0,
-          23.99
+          24.0
         ]
       ],
       "expected_centers": [
@@ -6370,12 +6619,12 @@
     },
     "warm_existing_profile": {
       "median_ms": {
-        "engineStart": 301,
-        "engineStarted": 406,
-        "firstContentfulPaint": 603,
-        "main": 126,
-        "modelLoaded": 129,
-        "sidebarDrawn": 299
+        "engineStart": 346,
+        "engineStarted": 423,
+        "firstContentfulPaint": 560,
+        "main": 177,
+        "modelLoaded": 180,
+        "sidebarDrawn": 345
       },
       "ok": false,
       "samples": 5
@@ -6434,7 +6683,7 @@
         "crashed": false,
         "favicon": false,
         "hasWebContent": true,
-        "id": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
+        "id": "8DB32A9F-4F24-4F47-B9B5-5E2447162A75",
         "loaded": true,
         "loading": false,
         "page": {
@@ -6443,15 +6692,15 @@
           "browserIndex": 1,
           "browserPinned": false,
           "canGoBack": false,
-          "chromeTabId": 599454374,
-          "chromeWindowId": 599454366,
+          "chromeTabId": 1729720929,
+          "chromeWindowId": 1729720919,
           "context": "Default",
           "crash": 0,
           "extension": "",
           "favicon": false,
           "fullscreen": false,
           "hidden": true,
-          "hostTab": "A0911F89-5CDF-44B6-90D7-BCB741A5F988",
+          "hostTab": "8DB32A9F-4F24-4F47-B9B5-5E2447162A75",
           "identifier": 3,
           "kind": "tab",
           "live": true,
@@ -6469,12 +6718,12 @@
           "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
           "zoom": 0
         },
-        "profile": "2641DC52-0C3F-4F48-8B78-F8A9AB7E6C03",
+        "profile": "6162DDEB-3840-4446-ADF1-D066C4A60EDE",
         "progress": 1,
         "section": "today",
         "selected": false,
         "sleepPhase": "live",
-        "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4",
+        "space": "DEF16CF5-F2A6-4A55-99C9-AD66542CD3ED",
         "title": "Window A",
         "url": "data:text/html,%3Ctitle%3EWindow%20A%3C/title%3E%3Ch1%3EWindow%20A%3C/h1%3E",
         "visible": false
@@ -6482,56 +6731,56 @@
     },
     "window_persistence": {
       "expected": {
-        "4AEEF782-2112-4BE9-909D-2472487DEE53": {
+        "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+          "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
+          "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D"
         },
-        "99533131-61DB-4E1D-B0E6-2A04B8AA32A3": {
+        "DFF0CC0E-D4AC-4A44-A748-C024D512CE05": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
+          "selected": "F0AD56DD-487E-4770-84FA-41384F6EEE82",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4"
+          "space": "DEF16CF5-F2A6-4A55-99C9-AD66542CD3ED"
         }
       },
       "ok": true,
       "restored": {
-        "4AEEF782-2112-4BE9-909D-2472487DEE53": {
+        "8A77C7CE-8C7E-4DC9-AC6F-C7AEFBABA4C8": {
           "frame": [
             300,
             200,
             900,
             600
           ],
-          "selected": "9260AA09-F0BA-4944-A3AF-8DE455EE7009",
+          "selected": "5A070C30-DD59-46D1-8F78-CF168BF920FE",
           "sidebarMode": "anchored",
           "sidebarWidth": 228,
-          "space": "B351A1B4-B1FE-4733-8E6B-4F2CE763EF7D"
+          "space": "551B1F5C-FD98-4328-8FF8-1512273A5A2D"
         },
-        "99533131-61DB-4E1D-B0E6-2A04B8AA32A3": {
+        "DFF0CC0E-D4AC-4A44-A748-C024D512CE05": {
           "frame": [
             80,
             60,
             1000,
             700
           ],
-          "selected": "E6ECB25B-F822-4D66-8BF0-C087573334ED",
+          "selected": "F0AD56DD-487E-4770-84FA-41384F6EEE82",
           "sidebarMode": "hidden",
           "sidebarWidth": 300,
-          "space": "B59932A9-9C89-4624-B829-952EFF7ED6A4"
+          "space": "DEF16CF5-F2A6-4A55-99C9-AD66542CD3ED"
         }
       }
     },
