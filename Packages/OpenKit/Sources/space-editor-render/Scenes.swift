@@ -18,14 +18,18 @@ final class OffscreenRenderer {
         device = d
     }
 
-    /// Lays out, displays, and renders `view` at `scale`. Returns sRGB RGBA8 pixels.
+    static let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+
+    /// Lays out, displays, and renders `view` at `scale`. Returns RGBA8 pixels
+    /// in `colorSpace`, the space Core Animation composites in: sRGB by
+    /// default, or a capture's display profile to stand in for that display.
     ///
     /// The view goes into a borderless window that is never ordered on screen, so
     /// AppKit builds and draws the layer tree normally. The window reports the
     /// requested backing scale, so 2x renders work on a 1x display.
-    func render(_ view: NSView, scale: CGFloat) -> CGImage {
+    func render(_ view: NSView, scale: CGFloat, colorSpace: CGColorSpace = OffscreenRenderer.sRGB) -> CGImage {
         let window = Self.host(view, scale: scale)
-        let image = snapshot(view, scale: scale)
+        let image = snapshot(view, scale: scale, colorSpace: colorSpace)
         window.contentView = nil
         window.close()
         return image
@@ -62,7 +66,7 @@ final class OffscreenRenderer {
 
     /// Renders a view that is already in a window. With `presentation`, layers use
     /// their in-flight animation values (to capture a frame of a transition).
-    func snapshot(_ view: NSView, scale: CGFloat, presentation: Bool = false) -> CGImage {
+    func snapshot(_ view: NSView, scale: CGFloat, presentation: Bool = false, colorSpace: CGColorSpace = OffscreenRenderer.sRGB) -> CGImage {
         let size = view.bounds.size
         guard let rootLayer = view.layer else { fatalError("view is not layer-backed") }
         let w = Int((size.width * scale).rounded()), h = Int((size.height * scale).rounded())
@@ -75,7 +79,7 @@ final class OffscreenRenderer {
         // Contract: QuartzCore/CARenderer.h, kCARendererMetalCommandQueue.
         let queue = device.makeCommandQueue()!
         let renderer = CARenderer(mtlTexture: texture, options: [
-            kCARendererColorSpace as String: CGColorSpace(name: CGColorSpace.sRGB)!,
+            kCARendererColorSpace as String: colorSpace,
             kCARendererMetalCommandQueue as String: queue,
         ])
         // The window's context owns the live layers, so render a plain deep copy.
@@ -123,9 +127,59 @@ final class OffscreenRenderer {
         }
         let provider = CGDataProvider(data: Data(rgba) as CFData)!
         return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
-                       space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                       space: colorSpace,
                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+    }
+
+    private typealias CreateFromArray = @convention(c) (CGRect, CFArray, UInt32) -> Unmanaged<CGImage>?
+
+    /// Real-window snapshot: the window server composites `view` on the main
+    /// display, in that display's space, and returns the window's pixels at
+    /// 1x geometry (2x displays are box-averaged). Callers hold the on-screen
+    /// lock (`/usr/bin/lockf /tmp/open-onscreen-e2e.lock`). Our own window
+    /// needs no Screen Recording permission (as the App's `snapshot`).
+    static func onscreen(_ view: NSView) throws -> CGImage {
+        guard let screen = NSScreen.main else { throw CLIError(description: "no main display") }
+        let size = view.bounds.size
+        let window = NSWindow(contentRect: CGRect(x: screen.frame.minX, y: screen.frame.maxY - size.height, width: size.width, height: size.height),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.hasShadow = false
+        window.contentView = view
+        view.frame = CGRect(origin: .zero, size: size)
+        window.setFrame(CGRect(x: screen.frame.minX, y: screen.frame.maxY - size.height, width: size.width, height: size.height), display: false)
+        window.orderFrontRegardless()
+        defer { window.orderOut(nil); window.contentView = nil; window.close() }
+        settle(view, runLoop: 0.1)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+        guard let lib = dlopen("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics", RTLD_LAZY),
+              let symbol = dlsym(lib, "CGWindowListCreateImageFromArray") else { throw CLIError(description: "no window capture") }
+        let create = unsafeBitCast(symbol, to: CreateFromArray.self)
+        var pointers = [UnsafeRawPointer(bitPattern: UInt(window.windowNumber))]
+        guard let array = CFArrayCreate(nil, &pointers, 1, nil),
+              let image = create(.null, array, (1 << 0) | (1 << 3))?.takeRetainedValue() else { throw CLIError(description: "window capture failed") }
+        let w = Int(size.width.rounded()), h = Int(size.height.rounded())
+        guard image.width >= w, image.height >= h, let space = image.colorSpace else { throw CLIError(description: "window capture is \(image.width)x\(image.height)") }
+        guard image.width != w || image.height != h else { return image }
+        // Box-average the integer backing scale to window points.
+        let factor = image.width / w
+        guard factor * w == image.width, factor * h == image.height,
+              let source = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                     space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+            throw CLIError(description: "window capture scale is not an integer")
+        }
+        source.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let input = source.data!.assumingMemoryBound(to: UInt8.self)
+        var output = [UInt8](repeating: 0, count: w * h * 4)
+        for y in 0..<h { for x in 0..<w { for c in 0..<4 {
+            var sum = 0
+            for dy in 0..<factor { for dx in 0..<factor { sum += Int(input[((y * factor + dy) * image.width + x * factor + dx) * 4 + c]) } }
+            output[(y * w + x) * 4 + c] = UInt8((Double(sum) / Double(factor * factor)).rounded())
+        } } }
+        return CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: space,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: CGDataProvider(data: Data(output) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
     }
 
     static func writePNG(_ image: CGImage, to url: URL) {
@@ -175,6 +229,7 @@ enum LayerCloner {
         dst.isGeometryFlipped = src.isGeometryFlipped
         dst.isHidden = src.isHidden
         dst.opacity = src.opacity
+        dst.allowsGroupOpacity = src.allowsGroupOpacity
         dst.contents = src.contents
         dst.contentsRect = src.contentsRect
         dst.contentsCenter = src.contentsCenter

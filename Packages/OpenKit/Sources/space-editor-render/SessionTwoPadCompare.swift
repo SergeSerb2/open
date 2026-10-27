@@ -41,6 +41,19 @@ enum SessionTwoPadCompare {
             folders = found.sorted { $0.lastPathComponent < $1.lastPathComponent }
         }
         func image(_ number: Int, window: String) throws -> Bitmap {
+            let image = try CaptureLimits.image(url(number, window: window))
+            let result = Bitmap(image: image, colorSpace: p3)
+            print("Input F\(String(format: "%04d", number)) accepted: \(image.width)x\(image.height), decoded \(image.bytesPerRow * image.height) bytes")
+            return result
+        }
+        /// The capture's embedded display profile.
+        func colorSpace(_ number: Int, window: String) throws -> CGColorSpace {
+            guard let space = try CaptureLimits.image(url(number, window: window)).colorSpace else {
+                throw CLIError(description: "capture frame \(number) has no color space")
+            }
+            return space
+        }
+        private func url(_ number: Int, window: String) throws -> URL {
             guard let folder = folders.first(where: { $0.lastPathComponent.hasPrefix(String(format: "%04d-", number)) }) else {
                 throw CLIError(description: "missing session-2 gate frame \(number)")
             }
@@ -53,10 +66,7 @@ enum SessionTwoPadCompare {
                 }
                 url = previous.appendingPathComponent(name + ".png")
             }
-            let image = try CaptureLimits.image(url)
-            let result = Bitmap(image: image, colorSpace: p3)
-            print("Input F\(String(format: "%04d", number)) accepted: \(image.width)x\(image.height), decoded \(image.bytesPerRow * image.height) bytes")
-            return result
+            return url
         }
         func panel(_ number: Int) throws -> Bitmap {
             let input = try image(number, window: "70352")
@@ -118,10 +128,18 @@ enum SessionTwoPadCompare {
     }
     static func run(_ args: [String]) throws {
         var flags = Set<String>()
-        guard args.count == 6 else { throw CLIError(description: "session2-pad requires exactly --spec, --capture-root, and --out") }
+        guard args.count % 2 == 0, (6...10).contains(args.count) else {
+            throw CLIError(description: "session2-pad requires --spec, --capture-root, and --out, with optional --renderer and --blend")
+        }
         for index in stride(from: 0, to: args.count, by: 2) {
-            guard ["--spec", "--capture-root", "--out"].contains(args[index]), flags.insert(args[index]).inserted,
+            guard ["--spec", "--capture-root", "--out", "--renderer", "--blend"].contains(args[index]), flags.insert(args[index]).inserted,
                   !args[index + 1].isEmpty else { throw CLIError(description: "unknown or duplicate session2-pad option") }
+        }
+        // Diagnostics: a real window composited by the window server on this
+        // Mac's display, and #120's precomputed P3 mix for A/B tables.
+        let renderer = RenderCLI.value(args, "--renderer") ?? "offscreen", blend = RenderCLI.value(args, "--blend") ?? "display"
+        guard ["offscreen", "onscreen"].contains(renderer), ["display", "fixed-p3"].contains(blend) else {
+            throw CLIError(description: "session2-pad --renderer offscreen|onscreen, --blend display|fixed-p3")
         }
         guard let root = RenderCLI.value(args, "--capture-root"), let output = RenderCLI.value(args, "--out") else {
             throw CLIError(description: "compare --spec session2-pad --capture-root SESSION17 --out .re/DIR")
@@ -170,10 +188,18 @@ enum SessionTwoPadCompare {
         func render(_ style: SpaceStyle, frame: Int, name: String) throws -> (Bitmap, Bitmap) {
             let arc = try captures.image(frame, window: "70352")
             let data = try JSONEncoder().encode(style), json = String(decoding: data, as: UTF8.self)
-            let scene = try RenderCLI.scene(model: RenderCLI.fixtureModel(), args: ["--style", json], size: CGSize(width: arc.width, height: arc.height))
-            scene.background.renderScale = 1
+            // The exact style, so other Macs can render the same window.
+            try data.write(to: out.appendingPathComponent(name + ".style.json"))
+            let scene = try RenderCLI.scene(model: RenderCLI.fixtureModel(), args: ["--style", json] + (blend == "fixed-p3" ? ["--fixed-p3-blend"] : []),
+                                            size: CGSize(width: arc.width, height: arc.height))
             let ownURL = out.appendingPathComponent(name + ".png")
-            OffscreenRenderer.writePNG(OffscreenRenderer().render(scene, scale: 1), to: ownURL)
+            if renderer == "onscreen" {
+                OffscreenRenderer.writePNG(try OffscreenRenderer.onscreen(scene), to: ownURL)
+            } else {
+                scene.background.renderScale = 1
+                // Composite in the capture's display space, as that display did.
+                OffscreenRenderer.writePNG(OffscreenRenderer().render(scene, scale: 1, colorSpace: try captures.colorSpace(frame, window: "70352")), to: ownURL)
+            }
             return (arc, try Bitmap(path: ownURL.path, colorSpace: p3))
         }
         for (frame, key, intensity) in [(92, 92, 0.8), (93, 93, 0.8), (95, 98, 0.8), (98, 98, 0.0), (100, 98, 0.495), (102, 98, 1.0), (65, 65, 0.8)] {

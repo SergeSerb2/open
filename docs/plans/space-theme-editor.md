@@ -1244,6 +1244,7 @@ on both pages; the same editor in macOS Light.
 | 7 | | |
 | 8 | | |
 | 9 | 2026-10-26 | §17: 29/29 session2-pad rows; color max ΔE00 1.034, preset raster max 1 pt, texture L* sd errors ≤0.042. Editor 172/172, including exact range/saturation/knob undo and redo. Break proofs: old laws fail 31 native and 26 capture rows; missing paired undo fails the existing redo-knob and new state-restoration rows; restored source passes. Merged focused build, space-legacy, space-editor, sidebar-render, and all 13 byte-identical sidebar tables PASS. F0069 legacy/diagnostic 2.38/2.29, legacy retained; F0139 editor-style diagnostic 0.84→1.89 reported below. Full verification and review-checklist receipts are in the PR body. Steps 5–8 remain deferred. |
+| 9 blend | 2026-10-26 | §17.5 display-space blend adopted: worst ΔE00 M5 real window 1.868 → 1.325, M1 1.802 → 1.707; F0139 gate tool 1.89 → 1.24. Editor checks 186/186 with B1–B4 (break proofs recorded in §17.5); session2-pad 33 PASS + 4 INFO; P1 3/3 and 13/13 sidebar tables byte-identical. |
 
 ## 17. Step 9 calibration — decoded Arc pad, intensity, and texture law (2026-10-26)
 
@@ -1332,6 +1333,8 @@ pixel       = a · key + (1 − a) · underlay                   gamma-encoded D
   convert the result to extended sRGB for the field image. The pad-center
   frame fits at ΔE00 1.23 in P3 and 2.55 in sRGB (**fit**). For gradients,
   convert the OKLab result to P3 before the final mix with the underlay.
+  **Superseded by §17.5:** CoreAnimation now does this mix in the display's
+  own encoded space. On a Display P3 display the result is this P3 law.
 - Legacy imports and mapped stops (`usesLegacyIntensity`): keep 0.64 and the
   sRGB path in this PR. Run F0069 (stored intensity 1.0) with `a = 0.75` and
   the P3 mix. Switch legacy themes only if F0069's worst ΔE00 stays ≤ 2.38
@@ -1439,11 +1442,108 @@ Implementation notes (Step 9):
   of six regions). The new encoded-P3 fill and calibrated grain replace the
   prior sRGB-clamped fit. This is the §17.3 report-change branch; it is not
   described as preserving the old 0.84 fit or as changing the legacy tables.
+  Superseded by §17.5: the display-space blend gives 1.24.
 - The private compare input is bounded to 512 root entries, 64 MiB per PNG,
   4096×4096 pixels, 4096 chunks, and a 128 MiB decoded source. The synthetic
   CLI boundary driver is `Fixtures/space-editor-step9/check-inputs.py` in
   OpenKit. It includes the accepted limits, one-over refusals, and trailing
   data/unknown-option refusals. Capture pixels remain local and uncommitted.
+
+### 17.5 Display-space blend (2026-10-26, adopted)
+
+Decision: editor fills are no longer mixed with the underlay in fixed
+Display P3. `ThemeLayer` draws an opaque underlay layer (the washed gray)
+and, above it, the unblended fill: a solid P3 key as the field's
+`backgroundColor` with alpha `a(i)`, or for gradients a 64×64 P3 image
+premultiplied by its per-pixel coverage. CoreAnimation blends them in the
+encoded space of the window's destination, which is the display's space.
+`ThemeLayer.allowsGroupOpacity` is true, so a Space cross-fade still mixes
+two whole opaque themes. Legacy imports, mapped stops, and the default theme
+keep `ThemeField.makeImage` unchanged. API: `ThemeField.composition(...)`,
+public `Evaluator.fill(u:v:)`, and `ThemeBackgroundView.composesInDisplaySpace`
+(default `true`; `false` restores #120's fixed P3 mix for A/B diagnostics only).
+
+Why (**guess, strong**; the review r1 finding 3 model, now measured): Arc
+draws the theme with SwiftUI opacity layers, and CoreAnimation blends them
+in the display's encoded space. The capture profile is the M5's display
+profile (`kCGColorSpaceITUR_2020_sRGBGamma`, AW2726DM; same XYZ primaries as
+the live display profile, checked with ColorSync conversions). Fixed P3 is
+correct only on P3 displays.
+
+Evidence. Worst ΔE00 against Arc. Float means in each image's own profile:
+session 2 sidebar rows at x 30–200, y 820–1020, and the six F0139
+`theme-window` regions. Arc captures are from the M5 display, so the M1 rows
+compare a different panel with them.
+
+| Mac, renderer, blend | F0092 | F0093 | F0095 | F0098 i 0 | F0100 | F0102 | F0065 | F0139 |
+|---|---|---|---|---|---|---|---|---|
+| M5 real window, fixed P3 (#120) | 0.793 | 0.169 | 0.220 | 0.768 | 0.455 | 0.282 | 0.528 | **1.868** |
+| M5 real window, display-space | 0.458 | 0.298 | 0.419 | 0.864 | 0.448 | 0.292 | 0.411 | **1.325** |
+| M5 offscreen in capture profile, fixed P3 | 0.813 | 0.233 | 0.220 | 0.763 | 0.455 | 0.282 | 0.469 | 1.856 |
+| M5 offscreen in capture profile, display-space | 0.458 | 0.298 | 0.419 | 0.864 | 0.448 | 0.292 | 0.411 | 1.321 |
+| M1 real window, fixed P3 (#120) | 0.777 | 0.317 | 0.235 | 0.790 | 0.487 | 0.205 | 0.555 | **1.802** |
+| M1 real window, display-space | 0.869 | 0.080 | 0.213 | 0.548 | 0.344 | 0.171 | 0.818 | **1.707** |
+
+- The worst value falls on both Macs: M5 1.868 → 1.325, M1 1.802 → 1.707.
+  The session 2 rows stay at the 8-bit noise floor in both blends. The
+  largest one (F0098 at intensity 0, `a` = 0.2) is an underlay residual that
+  both blends share.
+- F0139 with the gate tool (`compare --spec theme-window`, 8-bit sRGB means):
+  1.89 → **1.24** in the capture profile (Arc `#9A7D3B`; #120 `#9A7D31`; now
+  `#9B7D35`). The M5 real window gives the same 1.24. This closes the
+  F0139 follow-up.
+- Offscreen = real window: on the M5, `window --color-space-of CAPTURE`
+  (CARenderer in the capture profile) and `window --onscreen` (a real
+  borderless window that the window server composites on the display,
+  captured with `CGWindowListCreateImageFromArray`) give 99.7 % identical
+  pixels in flat windows. Only text edges differ; grain differs by ≤ 1 level.
+  The ΔE00 values agree to 0.004.
+- Cost per drag tick (`space-editor-render bench-blend --ticks 240`,
+  retired instructions of the main-thread-only harness, p50 / p95): one
+  color 1.49 M / 1.55 M → 0.86 M / 0.91 M; three colors 9.19 M / 9.26 M →
+  5.51 M / 5.58 M on the M5. The M1 gives 1.46 M → 0.83 M and 9.12 M →
+  5.45 M (p50). Thread CPU p95 falls from 0.225 to 0.128 ms (one color, M5).
+  At rest nothing changes per frame. A theme change now recomposites one more
+  full-window layer (the opaque underlay) in the window server.
+- Legacy: P1 3/3 legacy window PNGs and the 13 sidebar tables stay
+  byte-identical (`verify-all --only space-legacy,space-editor,space-pad-compare,sidebar-compare`).
+
+New checks in `space-editor-render check` (they do not need captures):
+B1 renders an editor fill into a BT.2020 sRGB-curve target. The pixel must
+equal the encoded mix in that target within 1.5 levels. The olive and green
+keys are chosen so that the #120 mix is at least 2.5 levels away. B2 renders
+into Display P3 and must equal the fixed P3 law. B3 checks that legacy stops
+keep the precomputed field and have no composition. B4 checks that a
+cross-fade at 0.5 equals the mean of the two themes. Break proofs: with
+`composesInDisplaySpace` defaulting to `false` (#120's path), B1 fails for
+olive (blue 66 vs 68.0) and green (red 130 vs 134.2). With
+`allowsGroupOpacity = false`, B4 fails (130/123/154 vs 125.5/115.0/136.0).
+
+Harness changes: `OffscreenRenderer.render(_:scale:colorSpace:)` composites
+in a chosen profile (default sRGB, so existing renders are unchanged).
+`session2-pad` renders in each capture's own profile and accepts
+`--renderer offscreen|onscreen` and `--blend display|fixed-p3` for
+diagnostics. It writes each row's `*.style.json`, so another Mac can render
+the same window. `window` accepts `--color-space-of PNG`, `--onscreen`, and
+`--fixed-p3-blend`. Run on-screen modes under
+`/usr/bin/lockf /tmp/open-onscreen-e2e.lock`.
+
+Reproduction (local captures, never committed):
+
+```sh
+BIN=Packages/OpenKit/.build/release/space-editor-render
+ARC="$SESSION1/0139-213404/win-5245.png"
+STYLE='{"keyColor":{"red":0.570741951,"green":0.392751396,"blue":-0.130948484,"alpha":1},"intensityFactor":0.8,"noiseFactor":0.45}'
+$BIN window --synthetic --size 2216x1394 --scale 1 --width 500 --style "$STYLE" --color-space-of "$ARC" --out .re/blend/F0139.png
+$BIN compare --spec theme-window --arc "$ARC" --ours .re/blend/F0139.png --out .re/blend/F0139
+/usr/bin/lockf /tmp/open-onscreen-e2e.lock $BIN compare --spec session2-pad --capture-root "$SESSION17" --out .re/blend/win --renderer onscreen
+$BIN bench-blend --ticks 240
+```
+
+Open items: Window-chrome Part B puts the card material in the underlay
+layer. The light-scheme white wash and the inactive underlay are still
+guesses (§17.2). The denim and sand own-art redraw is still open
+(`docs/followups.md`).
 
 ## Appendix — Lead decisions (2026-10-25)
 

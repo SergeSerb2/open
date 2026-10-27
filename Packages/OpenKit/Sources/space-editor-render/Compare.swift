@@ -387,6 +387,15 @@ struct Bitmap {
         data = [UInt8](repeating: fill, count: width * height * 4)
     }
 
+    /// The embedded profile of a PNG (a capture's display space).
+    static func colorSpace(of path: String) throws -> CGColorSpace {
+        guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil), let space = image.colorSpace else {
+            throw CLIError(description: "cannot read the color space of \(path)")
+        }
+        return space
+    }
+
     /// Loads a PNG through its embedded profile into the requested color space.
     init(path: String, colorSpace: CGColorSpace = CGColorSpace(name: CGColorSpace.sRGB)!) throws {
         guard let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),

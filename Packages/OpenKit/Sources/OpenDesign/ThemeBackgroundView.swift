@@ -6,9 +6,11 @@ import OpenModel
 /// CALayers. Place it behind the sidebar and the web panel so it fills the whole
 /// window; the field is defined in window uv space.
 ///
-/// Cost: the field is a 64×64 float image stretched by the GPU, rebuilt only when
-/// the theme, the active state, or the window aspect changes. Grain is one 100 pt
-/// tile repeated by replicator layers (shared contents, no large bitmaps).
+/// Cost: the field is one solid color or a 64×64 float image stretched by the
+/// GPU, rebuilt only when the theme, the active state, or the window aspect
+/// changes. Editor fills sit over an opaque underlay layer, so the window
+/// server blends them in the display's space. Grain is one tile repeated by
+/// replicator layers (shared contents, no large bitmaps).
 ///
 /// Space switches cross-fade two theme layers. `beginTransition(to:)` +
 /// `setTransitionProgress(_:)` drive it from a swipe; `crossfade(to:)` animates it.
@@ -26,6 +28,11 @@ public final class ThemeBackgroundView: NSView {
     }
     /// Scale used for the grain tile. Set by renderers without a window.
     public var renderScale: CGFloat? { didSet { refresh() } }
+    /// Editor fills blend in the destination's space (§17). `false` restores
+    /// #120's precomputed Display P3 mix for the harness's A/B diagnostics.
+    public var composesInDisplaySpace = true {
+        didSet { if composesInDisplaySpace != oldValue { [current, incoming].compactMap { $0 }.forEach { $0.invalidateField() }; refresh() } }
+    }
 
     private var current = ThemeLayer(style: .defaultTheme(system: .light))
     private var incoming: ThemeLayer?
@@ -106,7 +113,7 @@ public final class ThemeBackgroundView: NSView {
         CATransaction.setDisableActions(true)
         for l in [current, incoming].compactMap({ $0 }) {
             l.frame = bounds
-            if l.update(size: bounds.size, active: isWindowActive, scale: scale) { fieldRebuildCount += 1 }
+            if l.update(size: bounds.size, active: isWindowActive, scale: scale, displaySpace: composesInDisplaySpace) { fieldRebuildCount += 1 }
         }
         CATransaction.commit()
     }
@@ -188,9 +195,12 @@ private final class ThemeDisplayTarget: NSObject {
     @objc func tick(_ link: CADisplayLink) { owner?.displayFrame() }
 }
 
-/// One theme: the gradient field plus the grain tile layers.
+/// One theme: the underlay, the gradient field, and the grain tile layers.
+/// Editor fills keep the field unblended over an opaque underlay, so the
+/// layer tree is opaque and cross-fades as one group.
 final class ThemeLayer: CALayer {
     var theme: SpaceThemeStyle { didSet { if theme != oldValue { fieldKey = nil; grainKey = nil } } }
+    private let underlay = CALayer()
     private let field = CALayer()
     private let grainColumns = CAReplicatorLayer()
     private let grainRows = CAReplicatorLayer()
@@ -198,13 +208,16 @@ final class ThemeLayer: CALayer {
     private var fieldKey: FieldKey?
     private var grainKey: GrainKey?
 
-    private struct FieldKey: Equatable { var active: Bool; var aspect: Int }
+    private struct FieldKey: Equatable { var active: Bool; var aspect: Int; var displaySpace: Bool }
     private struct GrainKey: Equatable { var noise: Double; var scale: CGFloat; var texture: SpaceStyleTexture }
 
     init(style: SpaceThemeStyle) {
         self.theme = style
         super.init()
         anchorPoint = .zero
+        allowsGroupOpacity = true
+        underlay.anchorPoint = .zero
+        underlay.isHidden = true
         field.contentsGravity = .resize
         field.magnificationFilter = .linear
         field.minificationFilter = .linear
@@ -213,6 +226,7 @@ final class ThemeLayer: CALayer {
         grainColumns.addSublayer(grainRows)
         grainColumns.isHidden = true
         grainColumns.masksToBounds = true
+        addSublayer(underlay)
         addSublayer(field)
         addSublayer(grainColumns)
     }
@@ -224,7 +238,10 @@ final class ThemeLayer: CALayer {
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
+    func invalidateField() { fieldKey = nil }
+
     @MainActor func resize(to size: CGSize) {
+        underlay.frame = CGRect(origin: .zero, size: size)
         field.frame = CGRect(origin: .zero, size: size)
         let t = theme.usesLegacyIntensity ? Grain.tilePoints : ThemeTexture.period(theme.texture)
         grainTile.frame = CGRect(x: 0, y: 0, width: t, height: t)
@@ -236,15 +253,25 @@ final class ThemeLayer: CALayer {
         grainColumns.instanceTransform = CATransform3DMakeTranslation(t, 0, 0)
     }
 
-    @MainActor func update(size: CGSize, active: Bool, scale: CGFloat) -> Bool {
+    @MainActor func update(size: CGSize, active: Bool, scale: CGFloat, displaySpace: Bool) -> Bool {
         guard size.width > 0, size.height > 0 else { return false }
         resize(to: size)
         // Rebuild when the aspect ratio moves by more than 0.5 %.
-        let key = FieldKey(active: active, aspect: Int((size.width / size.height * 200).rounded()))
+        let key = FieldKey(active: active, aspect: Int((size.width / size.height * 200).rounded()), displaySpace: displaySpace)
         let rebuilt = key != fieldKey
         if rebuilt {
             fieldKey = key
-            field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
+            if displaySpace, let c = ThemeField.composition(style: theme, windowSize: size, isActive: active) {
+                underlay.backgroundColor = c.underlay
+                underlay.isHidden = false
+                field.backgroundColor = c.solid
+                field.contents = c.image
+            } else {
+                underlay.isHidden = true
+                underlay.backgroundColor = nil
+                field.backgroundColor = nil
+                field.contents = ThemeField.makeImage(style: theme, windowSize: size, isActive: active)
+            }
         }
         let noise = theme.noiseFactor
         grainTile.opacity = theme.usesLegacyIntensity ? 1 : Float(ThemeTexture.layerAlpha(theme.texture, noiseFactor: noise))
